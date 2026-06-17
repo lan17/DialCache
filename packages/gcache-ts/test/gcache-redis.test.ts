@@ -84,22 +84,32 @@ describe("GCache Redis TTL layer", () => {
     const redis = new FakeRedis();
     const writer = new GCache({ redis: { client: redis } });
     let writerCalls = 0;
-    const writeUser = writer.cached({
-      keyType: "user_id",
-      useCase: "RedisLocalPopulate",
-      id: ([userId]: [string]) => userId,
-      defaultConfig: GCacheKeyConfig.enabled(60),
-    })(async (userId: string) => ({ userId, calls: ++writerCalls }));
+    const writeUser = writer.define(
+      {
+        keyType: "user_id",
+        useCase: "RedisLocalPopulate",
+        defaultConfig: GCacheKeyConfig.enabled(60),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ userId, calls: ++writerCalls }),
+      }),
+    );
     await writer.enable(async () => await writeUser("123"));
 
     const reader = new GCache({ redis: { client: redis } });
     let readerCalls = 0;
-    const readUser = reader.cached({
-      keyType: "user_id",
-      useCase: "RedisLocalPopulate",
-      id: ([userId]: [string]) => userId,
-      defaultConfig: GCacheKeyConfig.enabled(60),
-    })(async (userId: string) => ({ userId, calls: ++readerCalls }));
+    const readUser = reader.define(
+      {
+        keyType: "user_id",
+        useCase: "RedisLocalPopulate",
+        defaultConfig: GCacheKeyConfig.enabled(60),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ userId, calls: ++readerCalls }),
+      }),
+    );
     redis.getCalls = 0;
 
     // When a second process reads the same key twice.
@@ -118,12 +128,17 @@ describe("GCache Redis TTL layer", () => {
     // Given one process has already written a value into the shared Redis cache.
     const redis = new FakeRedis();
     const writer = new GCache({ redis: { client: redis } });
-    const writeUser = writer.cached({
-      keyType: "user_id",
-      useCase: "RedisNoDisabledLocalPopulate",
-      id: ([userId]: [string]) => userId,
-      defaultConfig: GCacheKeyConfig.enabled(60),
-    })(async (userId: string) => ({ userId, source: "redis" }));
+    const writeUser = writer.define(
+      {
+        keyType: "user_id",
+        useCase: "RedisNoDisabledLocalPopulate",
+        defaultConfig: GCacheKeyConfig.enabled(60),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ userId, source: "redis" }),
+      }),
+    );
     await writer.enable(async () => await writeUser("123"));
 
     // And the reader sees local cache disabled for the first read, then enabled afterward.
@@ -136,11 +151,16 @@ describe("GCache Redis TTL layer", () => {
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
     const reader = new GCache({ redis: { client: redis }, cacheConfigProvider, logger });
     let readerCalls = 0;
-    const readUser = reader.cached({
-      keyType: "user_id",
-      useCase: "RedisNoDisabledLocalPopulate",
-      id: ([userId]: [string]) => userId,
-    })(async (userId: string) => ({ userId, source: `fallback-${++readerCalls}` }));
+    const readUser = reader.define(
+      {
+        keyType: "user_id",
+        useCase: "RedisNoDisabledLocalPopulate",
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ userId, source: `fallback-${++readerCalls}` }),
+      }),
+    );
     redis.getCalls = 0;
 
     // When the first read hits Redis while local is disabled and the next read cannot reach Redis.
@@ -162,12 +182,17 @@ describe("GCache Redis TTL layer", () => {
     const redis = new FakeRedis();
     const gcache = new GCache({ redis: { client: redis, keyPrefix: "gcache:" } });
     let calls = 0;
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "RedisEnvelopeWrite",
-      id: ([userId]: [string]) => userId,
-      defaultConfig: GCacheKeyConfig.enabled(30),
-    })(async (userId: string) => ({ userId, calls: ++calls }));
+    const getUser = gcache.define(
+      {
+        keyType: "user_id",
+        useCase: "RedisEnvelopeWrite",
+        defaultConfig: GCacheKeyConfig.enabled(30),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ userId, calls: ++calls }),
+      }),
+    );
 
     // When Redis misses and the fallback succeeds.
     const value = await gcache.enable(async () => await getUser("123"));
@@ -203,12 +228,17 @@ describe("GCache Redis TTL layer", () => {
       logger,
     });
     let calls = 0;
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "RedisClientFactoryRetry",
-      id: ([userId]: [string]) => userId,
-      defaultConfig: GCacheKeyConfig.enabled(60),
-    })(async (userId: string) => ({ userId, calls: ++calls }));
+    const getUser = gcache.define(
+      {
+        keyType: "user_id",
+        useCase: "RedisClientFactoryRetry",
+        defaultConfig: GCacheKeyConfig.enabled(60),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ userId, calls: ++calls }),
+      }),
+    );
 
     // When the first call fails open and the second call retries Redis.
     const first = await gcache.enable(async () => await getUser("123"));
@@ -234,12 +264,17 @@ describe("GCache Redis TTL layer", () => {
       },
     });
     let calls = 0;
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "RedisClientFactory",
-      id: ([userId]: [string]) => userId,
-      defaultConfig: GCacheKeyConfig.enabled(60),
-    })(async (userId: string) => ({ userId, calls: ++calls }));
+    const getUser = gcache.define(
+      {
+        keyType: "user_id",
+        useCase: "RedisClientFactory",
+        defaultConfig: GCacheKeyConfig.enabled(60),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ userId, calls: ++calls }),
+      }),
+    );
 
     // When multiple cache operations need Redis.
     await gcache.enable(async () => {
@@ -260,15 +295,20 @@ describe("GCache Redis TTL layer", () => {
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
     const gcache = new GCache({ redis: { client: redis }, logger });
     let calls = 0;
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "RedisFailOpen",
-      id: ([userId]: [string]) => userId,
-      defaultConfig: new GCacheKeyConfig({
-        ttlSec: { [CacheLayer.LOCAL]: 0, [CacheLayer.REMOTE]: 60 },
-        ramp: { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 100 },
+    const getUser = gcache.define(
+      {
+        keyType: "user_id",
+        useCase: "RedisFailOpen",
+        defaultConfig: new GCacheKeyConfig({
+          ttlSec: { [CacheLayer.LOCAL]: 0, [CacheLayer.REMOTE]: 60 },
+          ramp: { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 100 },
+        }),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ userId, calls: ++calls }),
       }),
-    })(async (userId: string) => ({ userId, calls: ++calls }));
+    );
 
     // When the cached function is called while cache reads and writes fail.
     const first = await gcache.enable(async () => await getUser("123"));
@@ -292,24 +332,34 @@ describe("GCache Redis TTL layer", () => {
       }),
     };
     const writer = new GCache({ redis: { client: redis } });
-    const readFromWriter = writer.cached({
-      keyType: "user_id",
-      useCase: "RedisCustomSerializer",
-      id: ([userId]: [string]) => userId,
-      defaultConfig: GCacheKeyConfig.enabled(60),
-      serializer,
-    })(async (userId: string) => ({ id: userId, source: "fallback" }));
+    const readFromWriter = writer.define(
+      {
+        keyType: "user_id",
+        useCase: "RedisCustomSerializer",
+        defaultConfig: GCacheKeyConfig.enabled(60),
+        serializer,
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ id: userId, source: "fallback" }),
+      }),
+    );
     await writer.enable(async () => await readFromWriter("123"));
 
     const reader = new GCache({ redis: { client: redis } });
     let readerCalls = 0;
-    const readFromRedis = reader.cached({
-      keyType: "user_id",
-      useCase: "RedisCustomSerializer",
-      id: ([userId]: [string]) => userId,
-      defaultConfig: GCacheKeyConfig.enabled(60),
-      serializer,
-    })(async (userId: string) => ({ id: userId, source: `fallback-${++readerCalls}` }));
+    const readFromRedis = reader.define(
+      {
+        keyType: "user_id",
+        useCase: "RedisCustomSerializer",
+        defaultConfig: GCacheKeyConfig.enabled(60),
+        serializer,
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ id: userId, source: `fallback-${++readerCalls}` }),
+      }),
+    );
 
     // When another process reads the value from Redis.
     const value = await reader.enable(async () => await readFromRedis("123"));
@@ -335,13 +385,18 @@ describe("GCache Redis TTL layer", () => {
     };
     const gcache = new GCache({ redis: { client: redis }, logger });
     let calls = 0;
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "RedisSerializerDumpFailure",
-      id: ([userId]: [string]) => userId,
-      defaultConfig: GCacheKeyConfig.enabled(60),
-      serializer,
-    })(async (userId: string) => ({ userId, calls: ++calls }));
+    const getUser = gcache.define(
+      {
+        keyType: "user_id",
+        useCase: "RedisSerializerDumpFailure",
+        defaultConfig: GCacheKeyConfig.enabled(60),
+        serializer,
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ userId, calls: ++calls }),
+      }),
+    );
 
     // When Redis write serialization fails on the first miss and the same key is read again.
     const first = await gcache.enable(async () => await getUser("123"));
@@ -382,16 +437,21 @@ describe("GCache Redis TTL layer", () => {
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
     const gcache = new GCache({ redis: { client: redis }, logger });
     let calls = 0;
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "RedisSerializerLoadFailure",
-      id: ([userId]: [string]) => userId,
-      defaultConfig: new GCacheKeyConfig({
-        ttlSec: { [CacheLayer.LOCAL]: 0, [CacheLayer.REMOTE]: 60 },
-        ramp: { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 100 },
+    const getUser = gcache.define(
+      {
+        keyType: "user_id",
+        useCase: "RedisSerializerLoadFailure",
+        defaultConfig: new GCacheKeyConfig({
+          ttlSec: { [CacheLayer.LOCAL]: 0, [CacheLayer.REMOTE]: 60 },
+          ramp: { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 100 },
+        }),
+        serializer,
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ userId, source: `fallback-${++calls}` }),
       }),
-      serializer,
-    })(async (userId: string) => ({ userId, source: `fallback-${++calls}` }));
+    );
 
     // When the first Redis hit cannot deserialize and a later read sees the refreshed value.
     const first = await gcache.enable(async () => await getUser("123"));
@@ -433,12 +493,17 @@ describe("GCache Redis TTL layer", () => {
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
     const gcache = new GCache({ redis: { client: redis }, logger });
     let calls = 0;
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "RedisBadEnvelope",
-      id: ([userId]: [string]) => userId,
-      defaultConfig: GCacheKeyConfig.enabled(60),
-    })(async (userId: string) => ({ userId, calls: ++calls }));
+    const getUser = gcache.define(
+      {
+        keyType: "user_id",
+        useCase: "RedisBadEnvelope",
+        defaultConfig: GCacheKeyConfig.enabled(60),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ userId, calls: ++calls }),
+      }),
+    );
 
     // When both keys are read through the Redis chain.
     const stale = await gcache.enable(async () => await getUser("stale"));
@@ -474,15 +539,20 @@ describe("GCache Redis TTL layer", () => {
     };
     const gcache = new GCache({ redis: { client: redis }, logger, metrics });
     let calls = 0;
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "RedisMissingRemoteTtl",
-      id: ([userId]: [string]) => userId,
-      defaultConfig: new GCacheKeyConfig({
-        ttlSec: { [CacheLayer.LOCAL]: 0 },
-        ramp: { [CacheLayer.LOCAL]: 100 },
+    const getUser = gcache.define(
+      {
+        keyType: "user_id",
+        useCase: "RedisMissingRemoteTtl",
+        defaultConfig: new GCacheKeyConfig({
+          ttlSec: { [CacheLayer.LOCAL]: 0 },
+          ramp: { [CacheLayer.LOCAL]: 100 },
+        }),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ userId, calls: ++calls }),
       }),
-    })(async (userId: string) => ({ userId, calls: ++calls }));
+    );
 
     // When cache reads/writes and explicit maintenance operations cannot use Redis safely.
     const value = await gcache.enable(async () => await getUser("123"));
@@ -546,12 +616,17 @@ describe("GCache Redis TTL layer", () => {
       [missingSetClient, "RedisMissingSetCommand"],
     ] as const) {
       const gcache = new GCache({ redis: { client }, logger });
-      const getValue = gcache.cached({
-        keyType: "user_id",
-        useCase,
-        id: ([userId]: [string]) => userId,
-        defaultConfig: GCacheKeyConfig.enabled(60),
-      })(async (userId: string) => ({ userId }));
+      const getValue = gcache.define(
+        {
+          keyType: "user_id",
+          useCase,
+          defaultConfig: GCacheKeyConfig.enabled(60),
+        },
+        (userId: string) => ({
+          cacheKey: userId,
+          loader: async () => ({ userId }),
+        }),
+      );
       await gcache.enable(async () => await getValue("123"));
       await gcache.flushAll();
     }
@@ -574,15 +649,20 @@ describe("GCache Redis TTL layer", () => {
     } satisfies RedisCommandClient;
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
     const gcache = new GCache({ redis: { client }, logger });
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "RedisMissingFlushCommand",
-      id: ([userId]: [string]) => userId,
-      defaultConfig: new GCacheKeyConfig({
-        ttlSec: { [CacheLayer.LOCAL]: 0, [CacheLayer.REMOTE]: 60 },
-        ramp: { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 100 },
+    const getUser = gcache.define(
+      {
+        keyType: "user_id",
+        useCase: "RedisMissingFlushCommand",
+        defaultConfig: new GCacheKeyConfig({
+          ttlSec: { [CacheLayer.LOCAL]: 0, [CacheLayer.REMOTE]: 60 },
+          ramp: { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 100 },
+        }),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ userId }),
       }),
-    })(async (userId: string) => ({ userId }));
+    );
 
     // When flushAll is requested after Redis has been used.
     await gcache.enable(async () => await getUser("123"));
@@ -606,12 +686,17 @@ describe("GCache Redis TTL layer", () => {
     const redis = new FakeRedis();
     const gcache = new GCache({ redis: { client: redis } });
     let calls = 0;
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "RedisDeleteAndFlush",
-      id: ([userId]: [string]) => userId,
-      defaultConfig: GCacheKeyConfig.enabled(60),
-    })(async (userId: string) => ({ userId, calls: ++calls }));
+    const getUser = gcache.define(
+      {
+        keyType: "user_id",
+        useCase: "RedisDeleteAndFlush",
+        defaultConfig: GCacheKeyConfig.enabled(60),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ userId, calls: ++calls }),
+      }),
+    );
     await gcache.enable(async () => {
       await getUser("123");
       await getUser("456");

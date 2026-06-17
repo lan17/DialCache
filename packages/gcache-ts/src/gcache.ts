@@ -10,17 +10,30 @@ import { LocalCache } from "./internal/local-cache.js";
 import { RedisCache } from "./internal/redis-cache.js";
 
 type Awaitable<T> = T | Promise<T>;
-type CacheableArgs = readonly unknown[];
 type CacheArgs = Record<string, string | number | boolean | bigint | null | undefined>;
+type Id = string | number | bigint;
 
-export interface CachedOptions<Args extends CacheableArgs> {
+/** A cache-key spec: a bare id, or an id plus extra key dimensions. */
+export type CacheKeySpec = Id | { readonly id: Id; readonly args?: CacheArgs };
+
+/** What a cached function's plan returns: the key parts plus a loader thunk. */
+export interface Plan<Value> {
+  readonly cacheKey: CacheKeySpec;
+  readonly loader: () => Awaitable<Value>;
+}
+
+export interface DefineOptions {
   readonly keyType: string;
   readonly useCase: string;
-  readonly id: (args: Args) => string | number | bigint;
-  readonly args?: (args: Args) => CacheArgs;
   readonly defaultConfig?: import("./config.js").GCacheKeyConfig | null;
   readonly serializer?: Serializer<unknown> | null;
   readonly trackForInvalidation?: boolean;
+}
+
+export interface DefinedCache<Args extends readonly unknown[], Value> {
+  (...args: Args): Promise<Value>;
+  invalidate(id: Id, options?: InvalidateOptions): Promise<void>;
+  delete(id: Id, args?: CacheArgs): Promise<boolean>;
 }
 
 const DEFAULT_LOCAL_MAX_SIZE = 10_000;
@@ -84,45 +97,54 @@ export class GCache {
     return this.context.isEnabled();
   }
 
-  cached<Args extends CacheableArgs>(
-    options: CachedOptions<Args>,
-  ): <Value>(fn: (...args: Args) => Awaitable<Value>) => (...args: Args) => Promise<Value> {
+  define<Args extends readonly unknown[], Value>(
+    options: DefineOptions,
+    plan: (...args: Args) => Plan<Value>,
+  ): DefinedCache<Args, Value> {
     this.registerUseCase(options.useCase);
 
-    return <Value>(fn: (...args: Args) => Awaitable<Value>) => {
-      return async (...args: Args): Promise<Value> => {
-        if (!this.isEnabled()) {
-          this.metrics?.disabled({
-            useCase: options.useCase,
-            keyType: options.keyType,
-            layer: "noop",
-            reason: "context",
-          });
-          return await fn(...args);
-        }
+    const run = async (...args: Args): Promise<Value> => {
+      const { cacheKey, loader } = plan(...args);
+      const fallback = async (): Promise<Value> => await loader();
 
-        let key: GCacheKey;
-        try {
-          key = this.createKey(options, args);
-        } catch (error) {
-          this.logger.error("Could not construct GCache key", error);
-          this.metrics?.error({
-            useCase: options.useCase,
-            keyType: options.keyType,
-            layer: "noop",
-            error: errorName(error),
-            inFallback: false,
-          });
-          return await this.callFallback({ useCase: options.useCase, keyType: options.keyType, layer: "noop" }, async () => await fn(...args));
-        }
+      if (!this.isEnabled()) {
+        this.metrics?.disabled({
+          useCase: options.useCase,
+          keyType: options.keyType,
+          layer: "noop",
+          reason: "context",
+        });
+        return await fallback();
+      }
 
-        if (this.redisCache === null) {
-          return await this.getThroughLocalOnly(key, async () => await fn(...args));
-        }
+      let key: GCacheKey;
+      try {
+        key = this.buildKey(options, cacheKey);
+      } catch (error) {
+        this.logger.error("Could not construct GCache key", error);
+        this.metrics?.error({
+          useCase: options.useCase,
+          keyType: options.keyType,
+          layer: "noop",
+          error: errorName(error),
+          inFallback: false,
+        });
+        return await this.callFallback({ useCase: options.useCase, keyType: options.keyType, layer: "noop" }, fallback);
+      }
 
-        return await this.getThroughRedisChain(key, async () => await fn(...args));
-      };
+      if (this.redisCache === null) {
+        return await this.getThroughLocalOnly(key, fallback);
+      }
+
+      return await this.getThroughRedisChain(key, fallback);
     };
+
+    return Object.assign(run, {
+      invalidate: (id: Id, invalidateOptions?: InvalidateOptions): Promise<void> =>
+        this.invalidate(options.keyType, id, invalidateOptions),
+      delete: (id: Id, args?: CacheArgs): Promise<boolean> =>
+        this.delete(this.buildKey(options, args === undefined ? id : { id, args })),
+    });
   }
 
   async delete(key: GCacheKey): Promise<boolean> {
@@ -315,12 +337,13 @@ export class GCache {
     this.useCases.add(useCase);
   }
 
-  private createKey<Args extends CacheableArgs>(options: CachedOptions<Args>, args: Args): GCacheKey {
+  private buildKey(options: DefineOptions, cacheKey: CacheKeySpec): GCacheKey {
+    const spec = typeof cacheKey === "object" ? cacheKey : { id: cacheKey };
     return new GCacheKey({
       keyType: options.keyType,
-      id: String(options.id(args)),
+      id: String(spec.id),
       useCase: options.useCase,
-      args: normalizeArgs(options.args?.(args) ?? {}),
+      args: normalizeArgs(spec.args ?? {}),
       urnPrefix: this.urnPrefix,
       defaultConfig: options.defaultConfig ?? null,
       serializer: (options.serializer as Serializer<unknown> | null | undefined) ?? null,

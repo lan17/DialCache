@@ -97,18 +97,28 @@ describe("GCache observability metrics", () => {
     const registry = new Registry();
     const firstCache = new GCache({ metricsRegistry: registry });
     const secondCache = new GCache({ metricsRegistry: registry });
-    const first = firstCache.cached({
-      keyType: "user_id",
-      useCase: "DuplicateMetricRegistrationFirst",
-      id: ([userId]: [string]) => userId,
-      defaultConfig: localOnly(),
-    })(async (userId: string) => ({ userId }));
-    const second = secondCache.cached({
-      keyType: "user_id",
-      useCase: "DuplicateMetricRegistrationSecond",
-      id: ([userId]: [string]) => userId,
-      defaultConfig: localOnly(),
-    })(async (userId: string) => ({ userId }));
+    const first = firstCache.define(
+      {
+        keyType: "user_id",
+        useCase: "DuplicateMetricRegistrationFirst",
+        defaultConfig: localOnly(),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ userId }),
+      }),
+    );
+    const second = secondCache.define(
+      {
+        keyType: "user_id",
+        useCase: "DuplicateMetricRegistrationSecond",
+        defaultConfig: localOnly(),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ userId }),
+      }),
+    );
 
     // When both caches emit request metrics.
     await firstCache.enable(async () => await first("123"));
@@ -126,12 +136,17 @@ describe("GCache observability metrics", () => {
     const metrics = new RecordingMetrics();
     const gcache = new GCache({ metrics });
     let calls = 0;
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "CustomMetricsAdapter",
-      id: ([userId]: [string]) => userId,
-      defaultConfig: localOnly(),
-    })(async (userId: string) => ({ userId, calls: ++calls }));
+    const getUser = gcache.define(
+      {
+        keyType: "user_id",
+        useCase: "CustomMetricsAdapter",
+        defaultConfig: localOnly(),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ userId, calls: ++calls }),
+      }),
+    );
 
     // When a local miss is followed by a local hit.
     const first = await gcache.enable(async () => await getUser("123"));
@@ -161,12 +176,17 @@ describe("GCache observability metrics", () => {
     };
     const gcache = new GCache({ metrics: throwingMetrics });
     let calls = 0;
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "ThrowingMetricsFailOpen",
-      id: ([userId]: [string]) => userId,
-      defaultConfig: localOnly(),
-    })(async (userId: string) => ({ userId, calls: ++calls }));
+    const getUser = gcache.define(
+      {
+        keyType: "user_id",
+        useCase: "ThrowingMetricsFailOpen",
+        defaultConfig: localOnly(),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ userId, calls: ++calls }),
+      }),
+    );
 
     // When metrics emission fails around a cache miss and hit.
     const first = await gcache.enable(async () => await getUser("123"));
@@ -181,32 +201,52 @@ describe("GCache observability metrics", () => {
     // Given one cache call is outside context and other enabled calls have disabled layer config.
     const metrics = new RecordingMetrics();
     const gcache = new GCache({ metrics });
-    const contextDisabled = gcache.cached({
-      keyType: "user_id",
-      useCase: "DisabledByContext",
-      id: ([userId]: [string]) => userId,
-      defaultConfig: localOnly(),
-    })(async (userId: string) => userId);
-    const missingConfig = gcache.cached({
-      keyType: "user_id",
-      useCase: "DisabledByMissingConfig",
-      id: ([userId]: [string]) => userId,
-    })(async (userId: string) => userId);
-    const invalidTtl = gcache.cached({
-      keyType: "user_id",
-      useCase: "DisabledByInvalidTtl",
-      id: ([userId]: [string]) => userId,
-      defaultConfig: localOnly(0),
-    })(async (userId: string) => userId);
-    const rampedDown = gcache.cached({
-      keyType: "user_id",
-      useCase: "DisabledByRamp",
-      id: ([userId]: [string]) => userId,
-      defaultConfig: new GCacheKeyConfig({
-        ttlSec: { [CacheLayer.LOCAL]: 60 },
-        ramp: { [CacheLayer.LOCAL]: 0 },
+    const contextDisabled = gcache.define(
+      {
+        keyType: "user_id",
+        useCase: "DisabledByContext",
+        defaultConfig: localOnly(),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => userId,
       }),
-    })(async (userId: string) => userId);
+    );
+    const missingConfig = gcache.define(
+      {
+        keyType: "user_id",
+        useCase: "DisabledByMissingConfig",
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => userId,
+      }),
+    );
+    const invalidTtl = gcache.define(
+      {
+        keyType: "user_id",
+        useCase: "DisabledByInvalidTtl",
+        defaultConfig: localOnly(0),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => userId,
+      }),
+    );
+    const rampedDown = gcache.define(
+      {
+        keyType: "user_id",
+        useCase: "DisabledByRamp",
+        defaultConfig: new GCacheKeyConfig({
+          ttlSec: { [CacheLayer.LOCAL]: 60 },
+          ramp: { [CacheLayer.LOCAL]: 0 },
+        }),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => userId,
+      }),
+    );
 
     // When each path is called.
     await contextDisabled("123");
@@ -232,21 +272,31 @@ describe("GCache observability metrics", () => {
     const failingRedis = new FakeRedis();
     failingRedis.failGet = true;
     const cacheFailure = new GCache({ redis: { client: failingRedis }, metrics, logger });
-    const readThroughFailure = cacheFailure.cached({
-      keyType: "user_id",
-      useCase: "CacheErrorClassification",
-      id: ([userId]: [string]) => userId,
-      defaultConfig: remoteOnly(),
-    })(async (userId: string) => ({ userId }));
+    const readThroughFailure = cacheFailure.define(
+      {
+        keyType: "user_id",
+        useCase: "CacheErrorClassification",
+        defaultConfig: remoteOnly(),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ userId }),
+      }),
+    );
     const fallbackCache = new GCache({ redis: { client: new FakeRedis() }, metrics, logger });
-    const fallbackFailure = fallbackCache.cached({
-      keyType: "user_id",
-      useCase: "FallbackErrorClassification",
-      id: ([userId]: [string]) => userId,
-      defaultConfig: remoteOnly(),
-    })(async () => {
-      throw new TypeError("database failed");
-    });
+    const fallbackFailure = fallbackCache.define(
+      {
+        keyType: "user_id",
+        useCase: "FallbackErrorClassification",
+        defaultConfig: remoteOnly(),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => {
+          throw new TypeError("database failed");
+        },
+      }),
+    );
 
     // When the cache error fails open and the fallback error escapes.
     await cacheFailure.enable(async () => await readThroughFailure("123"));
@@ -277,12 +327,17 @@ describe("GCache observability metrics", () => {
     const redis = new FakeRedis();
     const gcache = new GCache({ redis: { client: redis }, metricsRegistry: registry, metricsPrefix: "test_" });
     let calls = 0;
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "PrometheusMetricExport",
-      id: ([userId]: [string]) => userId,
-      defaultConfig: remoteOnly(),
-    })(async (userId: string) => ({ userId, calls: ++calls }));
+    const getUser = gcache.define(
+      {
+        keyType: "user_id",
+        useCase: "PrometheusMetricExport",
+        defaultConfig: remoteOnly(),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ userId, calls: ++calls }),
+      }),
+    );
 
     // When the first read misses Redis and the second read hits Redis.
     const first = await gcache.enable(async () => await getUser("123"));

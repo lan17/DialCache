@@ -18,14 +18,13 @@ import { GCache, GCacheKeyConfig } from "@rungalileo/gcache";
 
 const gcache = new GCache();
 
-const getUser = gcache.cached({
-  keyType: "user_id",
-  useCase: "GetUser",
-  id: ([userId]: [string]) => userId,
-  defaultConfig: GCacheKeyConfig.enabled(60),
-})(async (userId: string) => {
-  return db.fetchUser(userId);
-});
+const getUser = gcache.define(
+  { keyType: "user_id", useCase: "GetUser", defaultConfig: GCacheKeyConfig.enabled(60) },
+  (userId: string) => ({
+    cacheKey: userId,
+    loader: () => db.fetchUser(userId),
+  }),
+);
 
 // Caching is disabled by default.
 await getUser("123");
@@ -89,27 +88,29 @@ type RedisValueEnvelope = {
 
 ## Targeted invalidation and watermarks
 
-Mutable Redis-backed use cases can opt into targeted invalidation by setting `trackForInvalidation: true` on the cached function and calling `invalidate(keyType, id)` after writes:
+Mutable Redis-backed use cases can opt into targeted invalidation by setting `trackForInvalidation: true` in the define options and calling `invalidate` after writes — either `gcache.invalidate(keyType, id)` or the handle shortcut `handle.invalidate(id)`:
 
 ```ts
 import { CacheLayer, GCache, GCacheKeyConfig } from "@rungalileo/gcache";
 
 const gcache = new GCache({ redis: { client: redisClient } });
 
-const getUser = gcache.cached({
-  keyType: "user_id",
-  useCase: "GetMutableUser",
-  id: ([userId]: [string]) => userId,
-  trackForInvalidation: true,
-  // Strongly invalidated mutable data should usually disable local cache.
-  defaultConfig: new GCacheKeyConfig({
-    ttlSec: { [CacheLayer.REMOTE]: 300 },
-    ramp: { [CacheLayer.REMOTE]: 100 },
-  }),
-})(async (userId: string) => db.fetchUser(userId));
+const getUser = gcache.define(
+  {
+    keyType: "user_id",
+    useCase: "GetMutableUser",
+    trackForInvalidation: true,
+    // Strongly invalidated mutable data should usually disable local cache.
+    defaultConfig: new GCacheKeyConfig({
+      ttlSec: { [CacheLayer.REMOTE]: 300 },
+      ramp: { [CacheLayer.REMOTE]: 100 },
+    }),
+  },
+  (userId: string) => ({ cacheKey: userId, loader: () => db.fetchUser(userId) }),
+);
 
 await updateUser("123", patch);
-await gcache.invalidate("user_id", "123");
+await getUser.invalidate("123"); // handle shortcut for gcache.invalidate("user_id", "123")
 ```
 
 Invalidation writes a Redis watermark at `{encodedUrnPrefix:encodedKeyType:encodedId}#watermark`. Tracked Redis cache entries use the same Redis Cluster hash tag, for example `{urn:user_id:123}?locale=en#GetMutableUser`, so the value key and watermark key live in the same slot. Key components are percent-encoded before joining so delimiters inside IDs or args cannot collide with delimiters in the key format. Components may not contain `{` or `}` because those characters would corrupt the hash tag.
@@ -163,20 +164,18 @@ await gcache.enable(async () => {
 - Enabled state is async-scope-local, not process-global.
 - Nested `enable` / `disable` scopes restore the previous behavior when the callback completes.
 
-## Explicit key builders
+## Keys with extra dimensions
 
-TypeScript does not have safe Python-style function argument introspection after transpilation/bundling. Use explicit key builders instead:
+`define(meta, plan)` couples a use case with its loader: `plan` receives the call arguments and returns the `cacheKey` plus a `loader` thunk. The first key component is the `id` (the unit of invalidation); pass `{ id, args }` to add named, secondary dimensions. Anything the loader needs that should _not_ be part of the key (a db handle, an `AbortSignal`) is simply closed over by the `loader` and never reaches the key.
 
 ```ts
-const searchPosts = gcache.cached({
-  keyType: "user_id",
-  useCase: "SearchPosts",
-  id: ([userId]: [string, number, string]) => userId,
-  args: ([, page, filter]) => ({ page, filter }),
-  defaultConfig: GCacheKeyConfig.enabled(60),
-})(async (userId: string, page: number, filter: string) => {
-  return db.searchPosts(userId, page, filter);
-});
+const searchPosts = gcache.define(
+  { keyType: "user_id", useCase: "SearchPosts", defaultConfig: GCacheKeyConfig.enabled(60) },
+  (userId: string, page: number, filter: string) => ({
+    cacheKey: { id: userId, args: { page, filter } },
+    loader: () => db.searchPosts(userId, page, filter),
+  }),
+);
 ```
 
 ## Metrics

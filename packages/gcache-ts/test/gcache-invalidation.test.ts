@@ -159,13 +159,18 @@ describe("GCache targeted invalidation watermarks", () => {
     });
     const gcache = new GCache({ redis: { client: redis } });
     let calls = 0;
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "TrackedAtomicRead",
-      id: ([userId]: [string]) => userId,
-      trackForInvalidation: true,
-      defaultConfig: remoteOnly(),
-    })(async (userId: string) => ({ userId, calls: ++calls }));
+    const getUser = gcache.define(
+      {
+        keyType: "user_id",
+        useCase: "TrackedAtomicRead",
+        trackForInvalidation: true,
+        defaultConfig: remoteOnly(),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ userId, calls: ++calls }),
+      }),
+    );
 
     // When the tracked key is read from Redis.
     const value = await gcache.enable(async () => await getUser("123"));
@@ -311,20 +316,30 @@ describe("GCache targeted invalidation watermarks", () => {
     const gcache = new GCache({ redis: { client: redis } });
     let profileVersion = 1;
     let permissionsVersion = 1;
-    const getProfile = gcache.cached({
-      keyType: "user_id",
-      useCase: "InvalidateProfile",
-      id: ([userId]: [string]) => userId,
-      trackForInvalidation: true,
-      defaultConfig: remoteOnly(),
-    })(async (userId: string) => ({ userId, profileVersion }));
-    const getPermissions = gcache.cached({
-      keyType: "user_id",
-      useCase: "InvalidatePermissions",
-      id: ([userId]: [string]) => userId,
-      trackForInvalidation: true,
-      defaultConfig: remoteOnly(),
-    })(async (userId: string) => ({ userId, permissionsVersion }));
+    const getProfile = gcache.define(
+      {
+        keyType: "user_id",
+        useCase: "InvalidateProfile",
+        trackForInvalidation: true,
+        defaultConfig: remoteOnly(),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ userId, profileVersion }),
+      }),
+    );
+    const getPermissions = gcache.define(
+      {
+        keyType: "user_id",
+        useCase: "InvalidatePermissions",
+        trackForInvalidation: true,
+        defaultConfig: remoteOnly(),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ userId, permissionsVersion }),
+      }),
+    );
     await gcache.enable(async () => {
       await getProfile("123");
       await getPermissions("123");
@@ -355,13 +370,18 @@ describe("GCache targeted invalidation watermarks", () => {
     const redis = new FakeRedis();
     const gcache = new GCache({ redis: { client: redis } });
     let calls = 0;
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "FutureBufferUser",
-      id: ([userId]: [string]) => userId,
-      trackForInvalidation: true,
-      defaultConfig: localAndRemote(),
-    })(async (userId: string) => ({ userId, calls: ++calls }));
+    const getUser = gcache.define(
+      {
+        keyType: "user_id",
+        useCase: "FutureBufferUser",
+        trackForInvalidation: true,
+        defaultConfig: localAndRemote(),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ userId, calls: ++calls }),
+      }),
+    );
     await gcache.invalidate("user_id", "123", { futureBufferMs: 1_000 });
 
     // When the fallback runs during the active invalidation window.
@@ -382,17 +402,22 @@ describe("GCache targeted invalidation watermarks", () => {
     const redis = new FakeRedis();
     const gcache = new GCache({ redis: { client: redis } });
     let calls = 0;
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "FutureBufferFallbackRace",
-      id: ([userId]: [string]) => userId,
-      trackForInvalidation: true,
-      defaultConfig: localAndRemote(),
-    })(async (userId: string) => {
-      calls += 1;
-      await gcache.invalidate("user_id", userId, { futureBufferMs: 1_000 });
-      return { userId, calls };
-    });
+    const getUser = gcache.define(
+      {
+        keyType: "user_id",
+        useCase: "FutureBufferFallbackRace",
+        trackForInvalidation: true,
+        defaultConfig: localAndRemote(),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => {
+          calls += 1;
+          await gcache.invalidate("user_id", userId, { futureBufferMs: 1_000 });
+          return { userId, calls };
+        },
+      }),
+    );
 
     // When the fallback writes a future-buffer watermark before returning its result.
     const first = await gcache.enable(async () => await getUser("123"));
@@ -412,13 +437,18 @@ describe("GCache targeted invalidation watermarks", () => {
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
     const gcache = new GCache({ redis: { client: redis }, logger });
     let calls = 0;
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "TrackedMalformedEnvelope",
-      id: ([userId]: [string]) => userId,
-      trackForInvalidation: true,
-      defaultConfig: localAndRemote(),
-    })(async (userId: string) => ({ userId, calls: ++calls }));
+    const getUser = gcache.define(
+      {
+        keyType: "user_id",
+        useCase: "TrackedMalformedEnvelope",
+        trackForInvalidation: true,
+        defaultConfig: localAndRemote(),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ userId, calls: ++calls }),
+      }),
+    );
 
     // When the malformed value is read twice.
     const first = await gcache.enable(async () => await getUser("123"));
@@ -454,14 +484,18 @@ describe("GCache targeted invalidation watermarks", () => {
       urnPrefix: "urn:galileo:test",
       redis: { client: redis, keyPrefix: "gcache:", watermarkTtlSec: 42 },
     });
-    const getUser = gcache.cached({
-      keyType: "User",
-      useCase: "ClusterSlotUser",
-      id: ([userId]: [string, string]) => userId,
-      args: ([, locale]: [string, string]) => ({ locale }),
-      trackForInvalidation: true,
-      defaultConfig: remoteOnly(),
-    })(async (userId: string, locale: string) => ({ userId, locale }));
+    const getUser = gcache.define(
+      {
+        keyType: "User",
+        useCase: "ClusterSlotUser",
+        trackForInvalidation: true,
+        defaultConfig: remoteOnly(),
+      },
+      (userId: string, locale: string) => ({
+        cacheKey: { id: userId, args: { locale } },
+        loader: async () => ({ userId, locale }),
+      }),
+    );
 
     // When a tracked value and its watermark are written.
     await gcache.enable(async () => await getUser("123", "en"));
@@ -485,13 +519,18 @@ describe("GCache targeted invalidation watermarks", () => {
     const redis = new FakeRedis();
     const gcache = new GCache({ redis: { client: redis } });
     let version = 1;
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "LocalInvalidationLimit",
-      id: ([userId]: [string]) => userId,
-      trackForInvalidation: true,
-      defaultConfig: localAndRemote(),
-    })(async (userId: string) => ({ userId, version }));
+    const getUser = gcache.define(
+      {
+        keyType: "user_id",
+        useCase: "LocalInvalidationLimit",
+        trackForInvalidation: true,
+        defaultConfig: localAndRemote(),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ userId, version }),
+      }),
+    );
     const before = await gcache.enable(async () => await getUser("123"));
     version = 2;
 
@@ -529,13 +568,18 @@ describe("GCache targeted invalidation watermarks", () => {
     const readMetrics = new RecordingMetrics();
     const readGCache = new GCache({ redis: { client: readRedis }, logger, metrics: readMetrics });
     let calls = 0;
-    const getUser = readGCache.cached({
-      keyType: "user_id",
-      useCase: "WatermarkReadFailOpen",
-      id: ([userId]: [string]) => userId,
-      trackForInvalidation: true,
-      defaultConfig: localAndRemote(),
-    })(async (userId: string) => ({ userId, calls: ++calls }));
+    const getUser = readGCache.define(
+      {
+        keyType: "user_id",
+        useCase: "WatermarkReadFailOpen",
+        trackForInvalidation: true,
+        defaultConfig: localAndRemote(),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ userId, calls: ++calls }),
+      }),
+    );
 
     // When the cached function runs while the watermark read is unavailable.
     const first = await readGCache.enable(async () => await getUser("123"));
@@ -559,13 +603,18 @@ describe("GCache targeted invalidation watermarks", () => {
     const metrics = new RecordingMetrics();
     const gcache = new GCache({ redis: { client: redis }, logger, metrics });
     let calls = 0;
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "MalformedWatermarkFailOpen",
-      id: ([userId]: [string]) => userId,
-      trackForInvalidation: true,
-      defaultConfig: localAndRemote(),
-    })(async (userId: string) => ({ userId, calls: ++calls }));
+    const getUser = gcache.define(
+      {
+        keyType: "user_id",
+        useCase: "MalformedWatermarkFailOpen",
+        trackForInvalidation: true,
+        defaultConfig: localAndRemote(),
+      },
+      (userId: string) => ({
+        cacheKey: userId,
+        loader: async () => ({ userId, calls: ++calls }),
+      }),
+    );
 
     // When the tracked function runs while watermark state cannot be trusted.
     const first = await gcache.enable(async () => await getUser("123"));
@@ -580,5 +629,34 @@ describe("GCache targeted invalidation watermarks", () => {
       name: "error",
       labels: { useCase: "MalformedWatermarkFailOpen", keyType: "user_id", layer: CacheLayer.REMOTE, error: "Error", inFallback: false },
     });
+  });
+});
+
+describe("DefinedCache invalidate/delete handle sugar", () => {
+  it("invalidate(id) and delete(id) act on the handle's keyType", async () => {
+    const redis = new FakeRedis();
+    const gcache = new GCache({ redis: { client: redis } });
+    let calls = 0;
+    const getUser = gcache.define(
+      {
+        keyType: "user_id",
+        useCase: "HandleSugar",
+        trackForInvalidation: true,
+        defaultConfig: new GCacheKeyConfig({ ttlSec: { [CacheLayer.REMOTE]: 300 }, ramp: { [CacheLayer.REMOTE]: 100 } }),
+      },
+      (id: string) => ({ cacheKey: id, loader: async () => ({ id, calls: ++calls }) }),
+    );
+
+    // Populate, then confirm a cached hit does not re-run the loader.
+    expect(await gcache.enable(() => getUser("123"))).toEqual({ id: "123", calls: 1 });
+    expect(await gcache.enable(() => getUser("123"))).toEqual({ id: "123", calls: 1 });
+
+    // handle.invalidate(id) writes the watermark for user_id:123, so the next read re-runs the loader.
+    await getUser.invalidate("123");
+    expect(await gcache.enable(() => getUser("123"))).toEqual({ id: "123", calls: 2 });
+
+    // handle.delete(id) removes the entry, so the next read re-runs the loader again.
+    await getUser.delete("123");
+    expect(await gcache.enable(() => getUser("123"))).toEqual({ id: "123", calls: 3 });
   });
 });
