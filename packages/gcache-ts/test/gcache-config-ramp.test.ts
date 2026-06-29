@@ -52,7 +52,7 @@ describe("GCache runtime config and ramp controls", () => {
     expect(remote).not.toBe(first);
   });
 
-  it("falls back to decorator defaultConfig when the provider returns null", async () => {
+  it("falls back to cached-function defaultConfig when the provider returns null", async () => {
     // Given a runtime config provider that has no dynamic config for this key.
     const cacheConfigProvider = vi.fn(async () => null);
     const gcache = new GCache({ cacheConfigProvider });
@@ -68,7 +68,7 @@ describe("GCache runtime config and ramp controls", () => {
     const first = await gcache.enable(async () => await getUser("123"));
     const second = await gcache.enable(async () => await getUser("123"));
 
-    // Then the decorator defaultConfig keeps the local cache active.
+    // Then the cached-function defaultConfig keeps the local cache active.
     expect(first).toEqual({ userId: "123", calls: 1 });
     expect(second).toEqual({ userId: "123", calls: 1 });
     expect(calls).toBe(1);

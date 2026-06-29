@@ -42,7 +42,7 @@ describe("GCache local-only MVP", () => {
     let calls = 0;
     const getUser = gcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
       keyType: "user_id",
-      useCase: "DisabledContextSkipsKeySelector",
+      useCase: "DisabledContextSkipsCacheKeySelector",
       cacheKey: () => {
         throw new Error("cacheKey selector should not run outside an enabled context");
       },
@@ -294,7 +294,7 @@ describe("GCache local-only MVP", () => {
     let calls = 0;
     const getUser = gcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
       keyType: "user_id",
-      useCase: "KeySelectorFailure",
+      useCase: "CacheKeySelectorFailure",
       cacheKey: () => {
         throw new Error("bad selector");
       },

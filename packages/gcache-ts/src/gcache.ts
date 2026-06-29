@@ -2,12 +2,12 @@ import { performance } from "node:perf_hooks";
 
 import {
   CacheLayer,
-  GCacheKeyConfig,
   deterministicRampSampler,
   type Awaitable,
   type CacheConfigProvider,
   type CacheRampSampler,
   type GCacheConfig,
+  type GCacheKeyConfig,
   type Logger,
 } from "./config.js";
 import { GCacheContext } from "./context.js";
@@ -19,33 +19,31 @@ import { LocalCache } from "./internal/local-cache.js";
 import { RedisCache } from "./internal/redis-cache.js";
 import { fetchKeyConfig } from "./internal/runtime-config.js";
 
-type CacheArgs = Record<string, string | number | boolean | bigint | null | undefined>;
+type CacheKeyArgs = Record<string, string | number | boolean | bigint | null | undefined>;
 type Id = string | number | bigint;
 
 /** A cache-key spec: a bare id, or an id plus extra (secondary) key dimensions. */
-export type CacheKeySpec = Id | { readonly id: Id; readonly args?: CacheArgs };
+export type CacheKeySpec = Id | { readonly id: Id; readonly args?: CacheKeyArgs };
 
 // "Any function" without using `any`, so Parameters/ReturnType still apply.
 type AnyFn = (...args: never[]) => unknown;
 /** The cached value type, derived from the wrapped function's return. */
 export type CachedValue<Fn extends AnyFn> = Awaited<ReturnType<Fn>>;
-type KeySelector<Fn extends AnyFn> = (...args: Parameters<Fn>) => CacheKeySpec;
+type CacheKeySelector<Fn extends AnyFn> = (...args: Parameters<Fn>) => CacheKeySpec;
 
 export interface CachedOptions<Fn extends AnyFn> {
   readonly keyType: string;
   readonly useCase: string;
-  readonly defaultConfig?: import("./config.js").GCacheKeyConfig | null;
+  readonly defaultConfig?: GCacheKeyConfig | null;
   readonly serializer?: Serializer<CachedValue<Fn>> | null;
   readonly trackForInvalidation?: boolean;
   // Coalesce concurrent misses for this use case into one in-flight fallback.
   // Defaults to the instance's coalesceByDefault (true); runtime config wins.
   readonly coalesce?: boolean;
-  readonly cacheKey: KeySelector<Fn>;
+  readonly cacheKey: CacheKeySelector<Fn>;
 }
 
-export interface CachedFn<Fn extends AnyFn> {
-  (...args: Parameters<Fn>): Promise<CachedValue<Fn>>;
-}
+export type CachedFn<Fn extends AnyFn> = (...args: Parameters<Fn>) => Promise<CachedValue<Fn>>;
 
 const DEFAULT_LOCAL_MAX_SIZE = 10_000;
 const defaultConfigProvider: CacheConfigProvider = () => null;
@@ -117,14 +115,10 @@ export class GCache {
     const run = async (...args: Parameters<Fn>): Promise<CachedValue<Fn>> => {
       // `fn`'s awaited result is the cached value by construction; the generic `Fn` erases it to `unknown`.
       const fallback = async (): Promise<CachedValue<Fn>> => (await fn(...args)) as CachedValue<Fn>;
+      const noopLabels = { useCase: options.useCase, keyType: options.keyType, layer: CacheLayer.NOOP } as const;
 
       if (!this.isEnabled()) {
-        this.metrics?.disabled({
-          useCase: options.useCase,
-          keyType: options.keyType,
-          layer: "noop",
-          reason: "context",
-        });
+        this.metrics?.disabled({ ...noopLabels, reason: "context" });
         return await fallback();
       }
 
@@ -134,13 +128,11 @@ export class GCache {
       } catch (error) {
         this.logger.error("Could not construct GCache key", error);
         this.metrics?.error({
-          useCase: options.useCase,
-          keyType: options.keyType,
-          layer: "noop",
+          ...noopLabels,
           error: errorName(error),
           inFallback: false,
         });
-        return await this.callFallback({ useCase: options.useCase, keyType: options.keyType, layer: "noop" }, fallback);
+        return await this.callFallback(noopLabels, fallback);
       }
 
       let keyConfig: GCacheKeyConfig | null;
@@ -149,19 +141,15 @@ export class GCache {
       } catch (error) {
         // Provider failure: fail open and run uncached, mirroring the per-layer config_error path.
         this.logger.warn("Could not resolve GCache key config", error);
-        this.metrics?.disabled({
-          useCase: options.useCase,
-          keyType: options.keyType,
-          layer: "noop",
-          reason: "config_error",
-        });
-        return await this.callFallback({ useCase: options.useCase, keyType: options.keyType, layer: "noop" }, fallback);
+        this.metrics?.disabled({ ...noopLabels, reason: "config_error" });
+        return await this.callFallback(noopLabels, fallback);
       }
 
+      const redisCache = this.redisCache;
       const runThroughCache = (): Promise<CachedValue<Fn>> =>
-        this.redisCache === null
+        redisCache === null
           ? this.getThroughLocalOnly(key, keyConfig, fallback)
-          : this.getThroughRedisChain(key, keyConfig, fallback);
+          : this.getThroughRedisChain(redisCache, key, keyConfig, fallback);
 
       if (keyConfig?.coalesce ?? options.coalesce ?? this.coalesceByDefault) {
         return await this.singleFlight(key, runThroughCache);
@@ -230,13 +218,18 @@ export class GCache {
     return value;
   }
 
-  private async getThroughRedisChain<T>(key: GCacheKey, keyConfig: GCacheKeyConfig | null, fallback: () => Promise<T>): Promise<T> {
+  private async getThroughRedisChain<T>(
+    redisCache: RedisCache,
+    key: GCacheKey,
+    keyConfig: GCacheKeyConfig | null,
+    fallback: () => Promise<T>,
+  ): Promise<T> {
     const local = await this.readLocal<T>(key, keyConfig);
     if (local.status === "hit") {
       return local.value;
     }
 
-    const remote = await this.readRemote<T>(key, keyConfig);
+    const remote = await this.readRemote<T>(redisCache, key, keyConfig);
     if (remote.status === "hit") {
       if (local.status === "miss") {
         await this.putLocalFailOpen(key, remote.value, local.config);
@@ -251,7 +244,7 @@ export class GCache {
     let suppressCacheWrite = skipCacheWrite;
     if (!suppressCacheWrite && (remote.status === "miss" || remoteErrored)) {
       try {
-        const wroteRemote = await this.redisCache?.put(key, value, remote.status === "miss" ? remote.config : undefined);
+        const wroteRemote = await redisCache.put(key, value, remote.status === "miss" ? remote.config : undefined);
         suppressCacheWrite = wroteRemote === false;
       } catch (error) {
         this.logger.warn("Error putting value in Redis cache", error);
@@ -288,13 +281,10 @@ export class GCache {
     }
   }
 
-  private async readRemote<T>(key: GCacheKey, keyConfig: GCacheKeyConfig | null) {
+  private async readRemote<T>(redisCache: RedisCache, key: GCacheKey, keyConfig: GCacheKeyConfig | null) {
     const start = performance.now();
     try {
-      const result = await this.redisCache?.getResult<T>(key, keyConfig);
-      if (result === undefined) {
-        return { status: "disabled", reason: "missing_config" } as const;
-      }
+      const result = await redisCache.getResult<T>(key, keyConfig);
       if (result.status === "disabled") {
         this.metrics?.disabled({ ...labelsFor(key, CacheLayer.REMOTE), reason: result.reason });
         return result;

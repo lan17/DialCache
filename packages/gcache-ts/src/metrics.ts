@@ -3,7 +3,7 @@ import { Counter, Histogram, type Registry, register as defaultRegistry } from "
 import { CacheLayer } from "./config.js";
 import type { GCacheKey } from "./key.js";
 
-export type MetricLayer = CacheLayer | "noop";
+export type MetricLayer = CacheLayer;
 export type DisabledReason = "context" | "missing_config" | "invalid_ttl" | "ramped_down" | "config_error";
 
 export interface CacheMetricLabels {
