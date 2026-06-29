@@ -362,7 +362,7 @@ describe("GCache targeted invalidation watermarks", () => {
       trackForInvalidation: true,
       defaultConfig: localAndRemote(),
     });
-    await gcache.invalidate("user_id", "123", { futureBufferMs: 1_000 });
+    await gcache.invalidate("user_id", "123", 1_000);
 
     // When the fallback runs during the active invalidation window.
     vi.setSystemTime(new Date("2026-05-12T18:10:00.500Z"));
@@ -385,7 +385,7 @@ describe("GCache targeted invalidation watermarks", () => {
     const getUser = gcache.cached(
       async (userId: string) => {
         calls += 1;
-        await gcache.invalidate("user_id", userId, { futureBufferMs: 1_000 });
+        await gcache.invalidate("user_id", userId, 1_000);
         return { userId, calls };
       },
       {
@@ -585,8 +585,8 @@ describe("GCache targeted invalidation watermarks", () => {
   });
 });
 
-describe("CachedFn invalidate/delete handle sugar", () => {
-  it("invalidate(id) and delete(id) act on the handle's keyType", async () => {
+describe("CachedFn delete handle sugar", () => {
+  it("delete(id) acts on the handle's keyType", async () => {
     const redis = new FakeRedis();
     const gcache = new GCache({ redis: { client: redis } });
     let calls = 0;
@@ -605,8 +605,8 @@ describe("CachedFn invalidate/delete handle sugar", () => {
     expect(await gcache.enable(() => getUser("123"))).toEqual({ id: "123", calls: 1 });
     expect(await gcache.enable(() => getUser("123"))).toEqual({ id: "123", calls: 1 });
 
-    // handle.invalidate(id) writes the watermark for user_id:123, so the next read re-runs the loader.
-    await getUser.invalidate("123");
+    // Class-level invalidation writes the watermark for user_id:123, so the next read re-runs the loader.
+    await gcache.invalidate("user_id", "123");
     expect(await gcache.enable(() => getUser("123"))).toEqual({ id: "123", calls: 2 });
 
     // handle.delete(id) removes the entry, so the next read re-runs the loader again.

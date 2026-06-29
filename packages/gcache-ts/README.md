@@ -88,7 +88,7 @@ type RedisValueEnvelope = {
 
 ## Targeted invalidation and watermarks
 
-Mutable Redis-backed use cases can opt into targeted invalidation by setting `trackForInvalidation: true` in the options and calling `invalidate` after writes — either `gcache.invalidate(keyType, id)` or the handle shortcut `getUser.invalidate(id)`:
+Mutable Redis-backed use cases can opt into targeted invalidation by setting `trackForInvalidation: true` in the options and calling `gcache.invalidate(keyType, id)` after writes:
 
 ```ts
 import { CacheLayer, GCache, GCacheKeyConfig } from "@rungalileo/gcache";
@@ -111,12 +111,12 @@ const getUser = gcache.cached(
 );
 
 await updateUser("123", patch);
-await getUser.invalidate("123"); // handle shortcut for gcache.invalidate("user_id", "123")
+await gcache.invalidate("user_id", "123");
 ```
 
 Invalidation writes a Redis watermark at `{encodedUrnPrefix:encodedKeyType:encodedId}#watermark`. Tracked Redis cache entries use the same Redis Cluster hash tag, for example `{urn:user_id:123}?locale=en#GetMutableUser`, so the value key and watermark key live in the same slot. Key components are percent-encoded before joining so delimiters inside IDs or args cannot collide with delimiters in the key format. Components may not contain `{` or `}` because those characters would corrupt the hash tag.
 
-A cached Redis value whose `createdAtMs` is older than or equal to the watermark is treated as stale and refreshed through fallback. `invalidate(keyType, id, { futureBufferMs })` can extend the watermark into the future during write races; while the watermark is still in the future, fallback results are returned but not written to Redis or local cache.
+A cached Redis value whose `createdAtMs` is older than or equal to the watermark is treated as stale and refreshed through fallback. `invalidate(keyType, id, futureBufferMs)` can extend the watermark into the future during write races; while the watermark is still in the future, fallback results are returned but not written to Redis or local cache.
 
 Watermarks use `DEFAULT_WATERMARK_TTL_SEC` (4 hours) by default. You can override it with `redis.watermarkTtlSec`, but it must exceed the maximum Redis cache TTL for invalidation-tracked data; otherwise a watermark can expire before old cached values do.
 
@@ -207,7 +207,7 @@ const searchPosts = gcache.cached(
 await gcache.enable(() => searchPosts("u1", 2, "active"));
 ```
 
-- **`keyType` + `id` is the invalidation unit.** `gcache.invalidate("user_id", "123")` (or `searchPosts.invalidate("123")`) busts **every** entry for that user, across all `args` variants. `useCase` identifies the individual cache (it's the metrics label and part of the stored key); caches sharing a `keyType` are invalidated together.
+- **`keyType` + `id` is the invalidation unit.** `gcache.invalidate("user_id", "123")` busts **every** entry for that user, across all `args` variants. `useCase` identifies the individual cache (it's the metrics label and part of the stored key); caches sharing a `keyType` are invalidated together.
 - **`args` are part of the cache key** — different `args` produce different entries — but invalidation is by `id` only.
 - **Non-key inputs** (a db handle, an `AbortSignal`) are simply parameters the `key` selector ignores; they still reach `fn`.
 - **Methods:** pass `obj.method.bind(obj)` (or `(...a) => obj.method(...a)`) — a bare `obj.method` reference loses `this`.
@@ -270,7 +270,7 @@ Included:
 - Serialization latency and cached payload size metrics for Redis values
 - Logger injection for cache operational failures
 - `trackForInvalidation` on cached functions
-- `invalidate(keyType, id, { futureBufferMs })` Redis watermark API
+- `invalidate(keyType, id, futureBufferMs)` Redis watermark API
 - Redis Cluster hash-tagged value/watermark keys for invalidation-tracked entries
 - Configurable Redis watermark TTL via `redis.watermarkTtlSec` with `DEFAULT_WATERMARK_TTL_SEC`
 - Future-buffer behavior that avoids cache writes during active invalidation windows

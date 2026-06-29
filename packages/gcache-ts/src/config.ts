@@ -62,10 +62,6 @@ export type CacheConfigProvider = (key: GCacheKey) => Promise<GCacheKeyConfig | 
 
 export type Logger = Pick<Console, "debug" | "error" | "warn">;
 
-export interface InvalidateOptions {
-  readonly futureBufferMs?: number;
-}
-
 export interface GCacheConfig {
   readonly cacheConfigProvider?: CacheConfigProvider;
   readonly urnPrefix?: string;
