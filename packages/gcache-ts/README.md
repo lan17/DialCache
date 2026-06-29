@@ -1,6 +1,6 @@
 # @rungalileo/gcache
 
-TypeScript port of GCache. Milestone 5 ships explicit enabled contexts, stable key construction, local/Redis TTL caching, runtime config providers, gradual rollout ramp controls, single-flight request coalescing, Prometheus-ready observability, and Redis watermark-based targeted invalidation.
+TypeScript port of GCache. Milestone 5 ships explicit enabled contexts, stable key construction, local/Redis TTL caching, runtime config providers, gradual rollout ramp controls, Prometheus-ready observability, and Redis watermark-based targeted invalidation.
 
 > [!NOTE]
 > TypeScript support is experimental for now. This package is intended for early validation and feedback before treating the API and operational behavior as stable.
@@ -126,6 +126,8 @@ Local cache limitation: targeted invalidation is enforced by Redis watermarks. E
 
 Every cached function can provide a per-use-case `defaultConfig`; a `cacheConfigProvider` can override it at runtime. If the provider returns `null`, GCache falls back to the cached function's `defaultConfig`. If neither exists, or a layer's TTL/ramp is missing or disabled, only that layer is skipped.
 
+`cacheConfigProvider` is called for every enabled cached-function invocation before GCache checks local or Redis. Keep it cheap, cache any remote/config-store reads inside the provider, and avoid work that would erase the benefit of a cache hit.
+
 ```ts
 import { CacheLayer, GCache, GCacheKeyConfig } from "@rungalileo/gcache";
 
@@ -144,32 +146,6 @@ const gcache = new GCache({
 ```
 
 `ramp` values are percentages from 0 to 100. `0` disables the layer, `100` enables it, and intermediate values use `rampSampler`; the default sampler is deterministic by cache key and layer, so the same key is consistently sampled in or out of a partial rollout. Provider errors fail open and execute the fallback function.
-
-## Single-flight coalescing
-
-When caching is enabled, concurrent misses for the same key are coalesced. The first caller (the leader) runs the whole read-through chain and the fallback; every other caller for that key awaits the same in-flight result instead of running its own fallback. This protects the source of truth from a thundering herd on hot keys.
-
-```ts
-const getUser = gcache.cached(
-  (userId: string) => db.fetchUser(userId),
-  {
-    keyType: "user_id",
-    useCase: "GetUser",
-    cacheKey: (userId) => userId,
-    defaultConfig: GCacheKeyConfig.enabled(60),
-    coalesce: true, // default; set false to opt a use case out
-  },
-);
-```
-
-- **Scope** — in-process only. Across a fleet you get at most one fallback per instance per key while a value is being computed; once any instance populates Redis the rest get remote hits. Cross-process coalescing (a distributed lock) is not provided.
-- **Default and opt-out** — on by default. Set `coalesce: false` on a cached function to opt it out, or change the instance default with `new GCache({ coalesceByDefault: false })`.
-- **Runtime control** — a `cacheConfigProvider` may set `coalesce` on the returned `GCacheKeyConfig` to flip it without a redeploy (a kill switch). Precedence is `runtime ?? perUseCase ?? coalesceByDefault`.
-- **Failure handling** — if the leader's fallback rejects, all waiters reject with the same error and the in-flight entry is cleared, so the next call retries.
-- **Observability** — each coalesced waiter increments `gcache_coalesced_counter` (labels `use_case`, `key_type`); the fallback timer still records once per leader.
-
-> [!WARNING]
-> Coalescing shares the leader's single result with every concurrent waiter, so only use it when the cache key fully determines the result. Set `coalesce: false` for fallbacks that are **side-effecting / non-idempotent** (each call must run) or whose result depends on **per-request context not captured by the key** (for example, the calling user's own permissions). Note that at `ramp: 0` concurrent calls are still deduped even though nothing is cached.
 
 ## Enabled context
 
@@ -231,6 +207,8 @@ GCache registers Prometheus metrics by default via `prom-client`. Metric names i
 | `gcache_serialization_timer` | Histogram | `use_case`, `key_type`, `layer`, `operation` | Redis serializer dump/load latency |
 | `gcache_size_histogram` | Histogram | `use_case`, `key_type`, `layer` | Serialized Redis payload size in bytes |
 
+The `layer` label is usually `local` or `remote`. Disabled-context, key-construction, and config-provider failures use `noop` because no cache layer was reached.
+
 Use a custom registry or prefix when embedding GCache in an app with its own metrics endpoint:
 
 ```ts
@@ -277,11 +255,11 @@ Included:
 - Redis Cluster hash-tagged value/watermark keys for invalidation-tracked entries
 - Configurable Redis watermark TTL via `redis.watermarkTtlSec` with `DEFAULT_WATERMARK_TTL_SEC`
 - Future-buffer behavior that avoids cache writes during active invalidation windows
-- In-process single-flight coalescing with per-use-case opt-out, instance default, and runtime kill switch
 
 Not included yet:
 
 - Framework middleware helpers/integrations
 - `cachedObject`
+- Request coalescing / single-flight
 - Expanded examples
 - Release hardening

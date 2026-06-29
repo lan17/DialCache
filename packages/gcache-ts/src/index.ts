@@ -4,7 +4,6 @@ export { GCacheContext } from "./context.js";
 export { PrometheusGCacheMetrics, createPrometheusGCacheMetrics } from "./metrics.js";
 export type {
   CacheMetricLabels,
-  CoalescedMetricLabels,
   DisabledMetricLabels,
   DisabledReason,
   ErrorMetricLabels,

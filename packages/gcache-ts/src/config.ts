@@ -5,7 +5,6 @@ import type { GCacheMetricsAdapter } from "./metrics.js";
 import type { RedisConfig } from "./internal/redis-cache.js";
 
 export enum CacheLayer {
-  NOOP = "noop",
   LOCAL = "local",
   REMOTE = "remote",
 }
@@ -32,15 +31,10 @@ export const DEFAULT_WATERMARK_TTL_SEC = 3600 * 4;
 export class GCacheKeyConfig {
   readonly ttlSec: LayerConfig;
   readonly ramp: LayerConfig;
-  // Single-flight toggle for the whole read-through chain. Chain-level, not
-  // per-layer. When set here (via the runtime provider) it overrides the
-  // per-use-case `coalesce` option on the cached function.
-  readonly coalesce?: boolean | undefined;
 
-  constructor(config: { ttlSec: LayerConfig; ramp: LayerConfig; coalesce?: boolean }) {
+  constructor(config: { ttlSec: LayerConfig; ramp: LayerConfig }) {
     this.ttlSec = { ...config.ttlSec };
     this.ramp = { ...config.ramp };
-    this.coalesce = config.coalesce;
   }
 
   static enabled(ttlSec: number): GCacheKeyConfig {
@@ -48,12 +42,10 @@ export class GCacheKeyConfig {
       ttlSec: {
         [CacheLayer.LOCAL]: ttlSec,
         [CacheLayer.REMOTE]: ttlSec,
-        [CacheLayer.NOOP]: ttlSec,
       },
       ramp: {
         [CacheLayer.LOCAL]: 100,
         [CacheLayer.REMOTE]: 100,
-        [CacheLayer.NOOP]: 100,
       },
     });
   }
@@ -73,9 +65,6 @@ export interface GCacheConfig {
   readonly metrics?: GCacheMetricsAdapter | false;
   readonly metricsPrefix?: string;
   readonly metricsRegistry?: Registry;
-  // Fleet-wide default for single-flight coalescing. Defaults to true; a
-  // per-use-case option or the runtime provider can override it.
-  readonly coalesceByDefault?: boolean;
 }
 
 function stablePercent(value: string): number {

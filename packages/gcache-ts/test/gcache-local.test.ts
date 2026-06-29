@@ -10,6 +10,21 @@ import {
   UseCaseNameIsReservedError,
 } from "../src/index.js";
 
+interface Deferred<T> {
+  readonly promise: Promise<T>;
+  resolve: (value: T) => void;
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
 describe("GCache local-only MVP", () => {
   beforeEach(() => {
     vi.useRealTimers();
@@ -172,6 +187,40 @@ describe("GCache local-only MVP", () => {
       { userId: "123", calls: 1 },
     ]);
     expect(calls).toBe(1);
+  });
+
+  it("runs every concurrent fallback for the same uncached key", async () => {
+    // Given two concurrent requests miss the same local cache key.
+    const gate = deferred<void>();
+    const gcache = new GCache();
+    let calls = 0;
+    const getUser = gcache.cached(
+      async (userId: string) => {
+        calls += 1;
+        const call = calls;
+        await gate.promise;
+        return { userId, calls: call };
+      },
+      {
+        keyType: "user_id",
+        useCase: "ConcurrentMissesPassThrough",
+        cacheKey: (userId) => userId,
+        defaultConfig: GCacheKeyConfig.enabled(60),
+      },
+    );
+
+    // When both requests run before either fallback can populate the cache.
+    const inflight = gcache.enable(async () => await Promise.all([getUser("123"), getUser("123")]));
+    await tick();
+    gate.resolve();
+    const results = await inflight;
+
+    // Then each request runs the fallback; GCache does not single-flight/coalesce.
+    expect(results).toEqual([
+      { userId: "123", calls: 1 },
+      { userId: "123", calls: 2 },
+    ]);
+    expect(calls).toBe(2);
   });
 
   it("keeps delimiter-containing ids and args in distinct local cache keys", async () => {

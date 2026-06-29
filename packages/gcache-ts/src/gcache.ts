@@ -37,9 +37,6 @@ export interface CachedOptions<Fn extends AnyFn> {
   readonly defaultConfig?: GCacheKeyConfig | null;
   readonly serializer?: Serializer<CachedValue<Fn>> | null;
   readonly trackForInvalidation?: boolean;
-  // Coalesce concurrent misses for this use case into one in-flight fallback.
-  // Defaults to the instance's coalesceByDefault (true); runtime config wins.
-  readonly coalesce?: boolean;
   readonly cacheKey: CacheKeySelector<Fn>;
 }
 
@@ -59,15 +56,12 @@ export class GCache {
   private readonly rampSampler: CacheRampSampler;
   private readonly redisCache: RedisCache | null;
   private readonly metrics: GCacheMetricsAdapter | null;
-  private readonly coalesceByDefault: boolean;
-  private readonly inFlight = new Map<string, Promise<unknown>>();
 
   constructor(config: GCacheConfig = {}) {
     this.configProvider = config.cacheConfigProvider ?? defaultConfigProvider;
     this.urnPrefix = config.urnPrefix ?? "urn";
     this.logger = config.logger ?? defaultLogger;
     this.rampSampler = config.rampSampler ?? deterministicRampSampler;
-    this.coalesceByDefault = config.coalesceByDefault ?? true;
     const metrics =
       config.metrics === false
         ? null
@@ -115,7 +109,7 @@ export class GCache {
     const run = async (...args: Parameters<Fn>): Promise<CachedValue<Fn>> => {
       // `fn`'s awaited result is the cached value by construction; the generic `Fn` erases it to `unknown`.
       const fallback = async (): Promise<CachedValue<Fn>> => (await fn(...args)) as CachedValue<Fn>;
-      const noopLabels = { useCase: options.useCase, keyType: options.keyType, layer: CacheLayer.NOOP } as const;
+      const noopLabels = { useCase: options.useCase, keyType: options.keyType, layer: "noop" } as const;
 
       if (!this.isEnabled()) {
         this.metrics?.disabled({ ...noopLabels, reason: "context" });
@@ -146,16 +140,9 @@ export class GCache {
       }
 
       const redisCache = this.redisCache;
-      const runThroughCache = (): Promise<CachedValue<Fn>> =>
-        redisCache === null
-          ? this.getThroughLocalOnly(key, keyConfig, fallback)
-          : this.getThroughRedisChain(redisCache, key, keyConfig, fallback);
-
-      if (keyConfig?.coalesce ?? options.coalesce ?? this.coalesceByDefault) {
-        return await this.singleFlight(key, runThroughCache);
-      }
-
-      return await runThroughCache();
+      return redisCache === null
+        ? await this.getThroughLocalOnly(key, keyConfig, fallback)
+        : await this.getThroughRedisChain(redisCache, key, keyConfig, fallback);
     };
 
     return run;
@@ -351,26 +338,6 @@ export class GCache {
       trackForInvalidation: options.trackForInvalidation ?? false,
     });
   }
-
-  // In-process single-flight: the first caller for a urn runs the chain; concurrent
-  // callers share its in-flight promise. The entry is cleared on settle (success or
-  // reject) so a failed leader never poisons later callers.
-  private singleFlight<T>(key: GCacheKey, run: () => Promise<T>): Promise<T> {
-    const existing = this.inFlight.get(key.urn);
-    if (existing !== undefined) {
-      this.metrics?.coalesced?.({ useCase: key.useCase, keyType: key.keyType });
-      // Same urn implies the same logical value type as the leader.
-      return existing as Promise<T>;
-    }
-
-    const promise = run();
-    this.inFlight.set(key.urn, promise);
-    const clear = (): void => {
-      this.inFlight.delete(key.urn);
-    };
-    void promise.then(clear, clear);
-    return promise;
-  }
 }
 
 function elapsedSeconds(startMs: number): number {
@@ -394,7 +361,6 @@ function safeMetrics(metrics: GCacheMetricsAdapter | null): GCacheMetricsAdapter
     disabled: (labels) => callMetric(() => metrics.disabled(labels)),
     error: (labels) => callMetric(() => metrics.error(labels)),
     invalidation: (labels) => callMetric(() => metrics.invalidation(labels)),
-    coalesced: (labels) => callMetric(() => metrics.coalesced?.(labels)),
     observeGet: (labels, seconds) => callMetric(() => metrics.observeGet(labels, seconds)),
     observeFallback: (labels, seconds) => callMetric(() => metrics.observeFallback(labels, seconds)),
     observeSerialization: (labels, seconds) => callMetric(() => metrics.observeSerialization(labels, seconds)),
