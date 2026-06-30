@@ -6,7 +6,7 @@ import type { GCacheMetricsAdapter } from "../metrics.js";
 import { labelsFor } from "../metrics.js";
 import { JsonSerializer, type Serializer } from "../serializer.js";
 import type { CacheGetResult } from "./cache-result.js";
-import { fetchKeyConfig, resolveLayerConfigResult } from "./runtime-config.js";
+import { fetchKeyConfig, resolveLayerConfigResult, type ResolvedLayerConfig } from "./runtime-config.js";
 
 export type Awaitable<T> = T | Promise<T>;
 export type RedisStoredValue = string | Buffer;
@@ -88,11 +88,15 @@ export class RedisCache {
       return layerConfig;
     }
 
+    return await this.getWithResolvedConfig(key, layerConfig.config);
+  }
+
+  async getWithResolvedConfig<T>(key: GCacheKey, layerConfig: ResolvedLayerConfig): Promise<CacheGetResult<T>> {
     const client = await this.resolveClient();
     const redisKey = this.redisKey(key);
     const { raw, watermarkMs } = await this.getValueAndWatermark(client, key, redisKey);
     if (raw === null) {
-      return { status: "miss", config: layerConfig.config, ...(watermarkIsActive(watermarkMs) ? { skipCacheWrite: true } : {}) };
+      return { status: "miss", config: layerConfig, ...(watermarkIsActive(watermarkMs) ? { skipCacheWrite: true } : {}) };
     }
 
     let envelope: RedisValueEnvelope;
@@ -100,15 +104,15 @@ export class RedisCache {
       envelope = this.parseEnvelope(raw);
     } catch {
       await client.del(redisKey);
-      return { status: "miss", config: layerConfig.config, ...(watermarkIsActive(watermarkMs) ? { skipCacheWrite: true } : {}) };
+      return { status: "miss", config: layerConfig, ...(watermarkIsActive(watermarkMs) ? { skipCacheWrite: true } : {}) };
     }
     if (envelope.expiresAtMs <= Date.now()) {
       await client.del(redisKey);
-      return { status: "miss", config: layerConfig.config, ...(watermarkIsActive(watermarkMs) ? { skipCacheWrite: true } : {}) };
+      return { status: "miss", config: layerConfig, ...(watermarkIsActive(watermarkMs) ? { skipCacheWrite: true } : {}) };
     }
     if (watermarkMs !== null && watermarkMs >= envelope.createdAtMs) {
       await client.del(redisKey);
-      return { status: "miss", config: layerConfig.config, ...(watermarkIsActive(watermarkMs) ? { skipCacheWrite: true } : {}) };
+      return { status: "miss", config: layerConfig, ...(watermarkIsActive(watermarkMs) ? { skipCacheWrite: true } : {}) };
     }
 
     const start = performance.now();

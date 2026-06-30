@@ -19,9 +19,15 @@ const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0
 
 class FakeRedis implements RedisCommandClient {
   readonly values = new Map<string, RedisStoredValue>();
+  getCalls = 0;
   setCalls = 0;
+  getGate: Promise<void> | null = null;
 
   async get(key: string): Promise<RedisStoredValue | null> {
+    this.getCalls += 1;
+    if (this.getGate !== null) {
+      await this.getGate;
+    }
     return this.values.get(key) ?? null;
   }
 
@@ -94,14 +100,16 @@ describe("GCache request coalescing", () => {
   });
 
   it("coalesces concurrent Redis misses when the remote layer is active", async () => {
-    const gate = deferred<void>();
+    const redisGate = deferred<void>();
+    const fallbackGate = deferred<void>();
     const redis = new FakeRedis();
+    redis.getGate = redisGate.promise;
     const gcache = new GCache({ redis: { client: redis } });
     let calls = 0;
     const getUser = gcache.cached(
       async (id: string) => {
         calls += 1;
-        await gate.promise;
+        await fallbackGate.promise;
         return { id, calls };
       },
       {
@@ -117,11 +125,56 @@ describe("GCache request coalescing", () => {
 
     const inflight = gcache.enable(async () => await Promise.all([getUser("1"), getUser("1"), getUser("1")]));
     await tick();
-    gate.resolve();
+    expect(redis.getCalls).toBe(1);
+    redisGate.resolve();
+    await tick();
+    fallbackGate.resolve();
     const results = await inflight;
 
     expect(calls).toBe(1);
+    expect(redis.getCalls).toBe(1);
     expect(redis.setCalls).toBe(1);
+    expect(results).toEqual([
+      { id: "1", calls: 1 },
+      { id: "1", calls: 1 },
+      { id: "1", calls: 1 },
+    ]);
+  });
+
+  it("coalesces concurrent Redis hits when the remote layer is active", async () => {
+    const redisGate = deferred<void>();
+    const redis = new FakeRedis();
+    const gcache = new GCache({ redis: { client: redis } });
+    let calls = 0;
+    const getUser = gcache.cached(
+      async (id: string) => {
+        calls += 1;
+        return { id, calls };
+      },
+      {
+        keyType: "user_id",
+        useCase: "CoalesceRemoteHit",
+        cacheKey: (id) => id,
+        defaultConfig: new GCacheKeyConfig({
+          ttlSec: { [CacheLayer.REMOTE]: 60 },
+          ramp: { [CacheLayer.REMOTE]: 100 },
+        }),
+      },
+    );
+
+    await gcache.enable(async () => await getUser("1"));
+    calls = 0;
+    redis.getCalls = 0;
+    redis.getGate = redisGate.promise;
+
+    const inflight = gcache.enable(async () => await Promise.all([getUser("1"), getUser("1"), getUser("1")]));
+    await tick();
+    expect(redis.getCalls).toBe(1);
+    redisGate.resolve();
+    const results = await inflight;
+
+    expect(calls).toBe(0);
+    expect(redis.getCalls).toBe(1);
     expect(results).toEqual([
       { id: "1", calls: 1 },
       { id: "1", calls: 1 },
@@ -160,7 +213,7 @@ describe("GCache request coalescing", () => {
     ]);
   });
 
-  it("does not coalesce when every cache layer fails open", async () => {
+  it("coalesces Redis read failures after the remote layer is active", async () => {
     const gate = deferred<void>();
     const redis = new FailingReadRedis();
     const logger = { debug: vi.fn(), error: vi.fn(), warn: vi.fn() };
@@ -175,7 +228,7 @@ describe("GCache request coalescing", () => {
       },
       {
         keyType: "user_id",
-        useCase: "NoCoalesceFailOpen",
+        useCase: "CoalesceRemoteFailOpen",
         cacheKey: (id) => id,
         defaultConfig: new GCacheKeyConfig({
           ttlSec: { [CacheLayer.REMOTE]: 60 },
@@ -189,10 +242,10 @@ describe("GCache request coalescing", () => {
     gate.resolve();
     const results = await inflight;
 
-    expect(calls).toBe(2);
+    expect(calls).toBe(1);
     expect(results).toEqual([
       { id: "1", calls: 1 },
-      { id: "1", calls: 2 },
+      { id: "1", calls: 1 },
     ]);
   });
 });

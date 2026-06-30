@@ -22,9 +22,10 @@ import {
   type GCacheMetricsAdapter,
 } from "./metrics.js";
 import type { Serializer } from "./serializer.js";
+import type { CacheGetResult } from "./internal/cache-result.js";
 import { LocalCache } from "./internal/local-cache.js";
 import { RedisCache } from "./internal/redis-cache.js";
-import { fetchKeyConfig } from "./internal/runtime-config.js";
+import { fetchKeyConfig, resolveLayerConfigResult, type ResolvedLayerConfig } from "./internal/runtime-config.js";
 
 type CacheKeyArgs = Record<string, string | number | boolean | bigint | null | undefined>;
 type Id = string | number | bigint;
@@ -228,7 +229,39 @@ export class GCache {
       return local.value;
     }
 
+    if (local.status === "miss") {
+      return await this.singleFlight(key, async () => await this.getThroughRemoteAfterLocal(redisCache, key, local, keyConfig, fallback));
+    }
+
+    const remoteLayer = await this.resolveRemoteLayerConfig(key, keyConfig);
+    if (remoteLayer.status === "disabled") {
+      return await this.finishRedisChain(redisCache, key, local, remoteLayer, fallback);
+    }
+
+    return await this.singleFlight(key, async () => {
+      const remote = await this.readRemoteWithResolvedConfig<T>(redisCache, key, remoteLayer.config);
+      return await this.finishRedisChain(redisCache, key, local, remote, fallback);
+    });
+  }
+
+  private async getThroughRemoteAfterLocal<T>(
+    redisCache: RedisCache,
+    key: GCacheKey,
+    local: CacheGetResult<T>,
+    keyConfig: GCacheKeyConfig | null,
+    fallback: () => Promise<T>,
+  ): Promise<T> {
     const remote = await this.readRemote<T>(redisCache, key, keyConfig);
+    return await this.finishRedisChain(redisCache, key, local, remote, fallback);
+  }
+
+  private async finishRedisChain<T>(
+    redisCache: RedisCache,
+    key: GCacheKey,
+    local: CacheGetResult<T>,
+    remote: CacheGetResult<T>,
+    fallback: () => Promise<T>,
+  ): Promise<T> {
     if (remote.status === "hit") {
       if (local.status === "miss") {
         await this.putLocalFailOpen(key, remote.value, local.config);
@@ -237,7 +270,6 @@ export class GCache {
     }
 
     const remoteErrored = remote.status === "disabled" && remote.reason === "config_error";
-    const shouldCoalesce = local.status === "miss" || remote.status === "miss";
     const runFallback = async (): Promise<T> => {
       const fallbackLayer = remote.status === "miss" || remoteErrored ? CacheLayer.REMOTE : CacheLayer.LOCAL;
       const value = await this.callFallback(labelsFor(key, fallbackLayer), fallback);
@@ -259,7 +291,7 @@ export class GCache {
       return value;
     };
 
-    return shouldCoalesce ? await this.singleFlight(key, runFallback) : await runFallback();
+    return await runFallback();
   }
 
   private async readLocal<T>(key: GCacheKey, keyConfig: GCacheKeyConfig | null) {
@@ -285,15 +317,38 @@ export class GCache {
     }
   }
 
-  private async readRemote<T>(redisCache: RedisCache, key: GCacheKey, keyConfig: GCacheKeyConfig | null) {
-    const start = performance.now();
+  private async resolveRemoteLayerConfig(key: GCacheKey, keyConfig: GCacheKeyConfig | null) {
     try {
-      const result = await redisCache.getResult<T>(key, keyConfig);
+      const result = await resolveLayerConfigResult({
+        config: keyConfig,
+        key,
+        layer: CacheLayer.REMOTE,
+        rampSampler: this.rampSampler,
+      });
       if (result.status === "disabled") {
         this.metrics?.disabled({ ...labelsFor(key, CacheLayer.REMOTE), reason: result.reason });
-        return result;
       }
+      return result;
+    } catch (error) {
+      this.logger.warn("Error resolving Redis cache config", error);
+      this.recordError(key, CacheLayer.REMOTE, error, false);
+      return { status: "disabled", reason: "config_error", ...(key.trackForInvalidation ? { skipCacheWrite: true } : {}) } as const;
+    }
+  }
 
+  private async readRemote<T>(redisCache: RedisCache, key: GCacheKey, keyConfig: GCacheKeyConfig | null) {
+    const layerConfig = await this.resolveRemoteLayerConfig(key, keyConfig);
+    if (layerConfig.status === "disabled") {
+      return layerConfig;
+    }
+
+    return await this.readRemoteWithResolvedConfig<T>(redisCache, key, layerConfig.config);
+  }
+
+  private async readRemoteWithResolvedConfig<T>(redisCache: RedisCache, key: GCacheKey, layerConfig: ResolvedLayerConfig) {
+    const start = performance.now();
+    try {
+      const result = await redisCache.getWithResolvedConfig<T>(key, layerConfig);
       this.metrics?.request(labelsFor(key, CacheLayer.REMOTE));
       this.metrics?.observeGet(labelsFor(key, CacheLayer.REMOTE), elapsedSeconds(start));
       if (result.status === "miss") {

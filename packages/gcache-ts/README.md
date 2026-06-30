@@ -149,9 +149,9 @@ const gcache = new GCache({
 
 ## Request coalescing
 
-When caching is enabled and a call misses an active cache layer, concurrent callers for the same cache key share the same in-flight fallback. The leader runs the fallback and cache write; followers await that result. This protects the source of truth from a thundering herd on hot keys.
+When caching is enabled and a call misses local cache, concurrent callers for the same cache key share the same in-flight remote chain. The leader runs the Redis read and, on miss, the fallback/cache write; followers await that result. This protects Redis and the source of truth from a thundering herd on hot keys.
 
-Coalescing only applies after a real cache layer is active and misses. Calls outside `enable()` are true pass-through, calls where every layer is disabled by missing config, invalid TTL, or ramp are true pass-through, and cache read/config failures fail open independently.
+Coalescing only applies after a real cache layer is active. Calls outside `enable()` are true pass-through, and calls where every layer is disabled by missing config, invalid TTL, or ramp are true pass-through.
 
 ```ts
 const getUser = gcache.cached(
