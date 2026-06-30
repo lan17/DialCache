@@ -35,6 +35,12 @@ class FakeRedis implements RedisCommandClient {
   }
 }
 
+class FailingReadRedis extends FakeRedis {
+  override async get(_key: string): Promise<RedisStoredValue | null> {
+    throw new Error("redis unavailable");
+  }
+}
+
 function spyMetrics() {
   const coalesced = vi.fn();
   const metrics: GCacheMetricsAdapter = {
@@ -143,6 +149,42 @@ describe("GCache request coalescing", () => {
     );
 
     const inflight = Promise.all([getUser("1"), getUser("1")]);
+    await tick();
+    gate.resolve();
+    const results = await inflight;
+
+    expect(calls).toBe(2);
+    expect(results).toEqual([
+      { id: "1", calls: 1 },
+      { id: "1", calls: 2 },
+    ]);
+  });
+
+  it("does not coalesce when every cache layer fails open", async () => {
+    const gate = deferred<void>();
+    const redis = new FailingReadRedis();
+    const logger = { debug: vi.fn(), error: vi.fn(), warn: vi.fn() };
+    const gcache = new GCache({ redis: { client: redis }, logger });
+    let calls = 0;
+    const getUser = gcache.cached(
+      async (id: string) => {
+        calls += 1;
+        const call = calls;
+        await gate.promise;
+        return { id, calls: call };
+      },
+      {
+        keyType: "user_id",
+        useCase: "NoCoalesceFailOpen",
+        cacheKey: (id) => id,
+        defaultConfig: new GCacheKeyConfig({
+          ttlSec: { [CacheLayer.REMOTE]: 60 },
+          ramp: { [CacheLayer.REMOTE]: 100 },
+        }),
+      },
+    );
+
+    const inflight = gcache.enable(async () => await Promise.all([getUser("1"), getUser("1")]));
     await tick();
     gate.resolve();
     const results = await inflight;

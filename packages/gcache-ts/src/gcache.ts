@@ -13,7 +13,14 @@ import {
 import { GCacheContext } from "./context.js";
 import { UseCaseIsAlreadyRegisteredError, UseCaseNameIsReservedError } from "./errors.js";
 import { GCacheKey, normalizeArgs } from "./key.js";
-import { createPrometheusGCacheMetrics, errorName, labelsFor, type CacheMetricLabels, type GCacheMetricsAdapter } from "./metrics.js";
+import {
+  NO_CACHE_LAYER,
+  createPrometheusGCacheMetrics,
+  errorName,
+  labelsFor,
+  type CacheMetricLabels,
+  type GCacheMetricsAdapter,
+} from "./metrics.js";
 import type { Serializer } from "./serializer.js";
 import { LocalCache } from "./internal/local-cache.js";
 import { RedisCache } from "./internal/redis-cache.js";
@@ -110,10 +117,10 @@ export class GCache {
     const run = async (...args: Parameters<Fn>): Promise<CachedValue<Fn>> => {
       // `fn`'s awaited result is the cached value by construction; the generic `Fn` erases it to `unknown`.
       const fallback = async (): Promise<CachedValue<Fn>> => (await fn(...args)) as CachedValue<Fn>;
-      const noopLabels = { useCase: options.useCase, keyType: options.keyType, layer: "noop" } as const;
+      const noLayerLabels = { useCase: options.useCase, keyType: options.keyType, layer: NO_CACHE_LAYER } as const;
 
       if (!this.isEnabled()) {
-        this.metrics?.disabled({ ...noopLabels, reason: "context" });
+        this.metrics?.disabled({ ...noLayerLabels, reason: "context" });
         return await fallback();
       }
 
@@ -123,11 +130,11 @@ export class GCache {
       } catch (error) {
         this.logger.error("Could not construct GCache key", error);
         this.metrics?.error({
-          ...noopLabels,
+          ...noLayerLabels,
           error: errorName(error),
           inFallback: false,
         });
-        return await this.callFallback(noopLabels, fallback);
+        return await this.callFallback(noLayerLabels, fallback);
       }
 
       let keyConfig: GCacheKeyConfig | null;
@@ -136,8 +143,8 @@ export class GCache {
       } catch (error) {
         // Provider failure: fail open and run uncached, mirroring the per-layer config_error path.
         this.logger.warn("Could not resolve GCache key config", error);
-        this.metrics?.disabled({ ...noopLabels, reason: "config_error" });
-        return await this.callFallback(noopLabels, fallback);
+        this.metrics?.disabled({ ...noLayerLabels, reason: "config_error" });
+        return await this.callFallback(noLayerLabels, fallback);
       }
 
       const redisCache = this.redisCache;
@@ -230,7 +237,7 @@ export class GCache {
     }
 
     const remoteErrored = remote.status === "disabled" && remote.reason === "config_error";
-    const shouldCoalesce = local.status === "miss" || remote.status === "miss" || remoteErrored;
+    const shouldCoalesce = local.status === "miss" || remote.status === "miss";
     const runFallback = async (): Promise<T> => {
       const fallbackLayer = remote.status === "miss" || remoteErrored ? CacheLayer.REMOTE : CacheLayer.LOCAL;
       const value = await this.callFallback(labelsFor(key, fallbackLayer), fallback);
