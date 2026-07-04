@@ -1,6 +1,6 @@
 # @rungalileo/gcache
 
-TypeScript port of GCache. Milestone 5 ships explicit enabled contexts, stable key construction, local/Redis TTL caching, runtime config providers, gradual rollout ramp controls, request coalescing for active cache misses, Prometheus-ready observability, and Redis watermark-based targeted invalidation.
+TypeScript port of GCache. Milestone 5 ships explicit enabled contexts, stable key construction, local/Redis TTL caching, runtime config providers, gradual rollout ramp controls, request coalescing for active cache work after local misses, Prometheus-ready observability, and Redis watermark-based targeted invalidation.
 
 > [!NOTE]
 > TypeScript support is experimental for now. This package is intended for early validation and feedback before treating the API and operational behavior as stable.
@@ -149,7 +149,7 @@ const gcache = new GCache({
 
 ## Request coalescing
 
-When caching is enabled and a call misses local cache, concurrent callers for the same cache key share the same in-flight remote chain. The leader runs the Redis read and, on miss, the fallback/cache write; followers await that result. This protects Redis and the source of truth from a thundering herd on hot keys.
+When caching is enabled and a call misses local cache, concurrent callers for the same cache key share the same in-flight cache work. With Redis configured, the leader runs the Redis read and, on miss, the fallback/cache write; followers await that result. Local-only misses share the leader's fallback/cache write. This protects Redis and the source of truth from a thundering herd on hot keys.
 
 Coalescing only applies after a real cache layer is active. Calls outside `enable()` are true pass-through, and calls where every layer is disabled by missing config, invalid TTL, or ramp are true pass-through.
 
@@ -204,7 +204,7 @@ const searchPosts = gcache.cached(
 await gcache.enable(() => searchPosts("u1", 2, "active"));
 ```
 
-- **`keyType` + `id` is the invalidation unit.** `gcache.invalidate("user_id", "123")` busts **every** entry for that user, across all `args` variants. `useCase` identifies the individual cache (it's the metrics label and part of the stored key); caches sharing a `keyType` are invalidated together.
+- **`keyType` + `id` is the invalidation unit for tracked Redis entries.** `gcache.invalidate("user_id", "123")` writes one watermark for that user; any `trackForInvalidation` Redis entry with the same `keyType` and `id` is refreshed across all `args` variants when Redis is read. Existing local hits follow the local-cache limitation above, and untracked Redis entries do not consult the watermark. `useCase` identifies the individual cache (it's the metrics label and part of the stored key).
 - **`args` are part of the cache key** — different `args` produce different entries — but invalidation is by `id` only.
 - **Non-key inputs** (a db handle, an `AbortSignal`) are simply parameters the `cacheKey` selector ignores; they still reach `fn`.
 - **Methods:** pass `obj.method.bind(obj)` (or `(...a) => obj.method(...a)`) — a bare `obj.method` reference loses `this`.
@@ -220,7 +220,7 @@ GCache registers Prometheus metrics by default via `prom-client`. Metric names i
 | `gcache_disabled_counter` | Counter | `use_case`, `key_type`, `layer`, `reason` | Cache skips (`context`, `missing_config`, `invalid_ttl`, `ramped_down`, `config_error`) |
 | `gcache_error_counter` | Counter | `use_case`, `key_type`, `layer`, `error`, `in_fallback` | Cache/fallback errors, with `in_fallback` separating cache plumbing failures from application fallback failures |
 | `gcache_invalidation_counter` | Counter | `key_type`, `layer` | Invalidation calls for the layers touched today |
-| `gcache_coalesced_counter` | Counter | `use_case`, `key_type` | Requests that awaited an active in-flight cache miss |
+| `gcache_coalesced_counter` | Counter | `use_case`, `key_type` | Requests that awaited active in-flight cache work |
 | `gcache_get_timer` | Histogram | `use_case`, `key_type`, `layer` | Cache get latency in seconds |
 | `gcache_fallback_timer` | Histogram | `use_case`, `key_type`, `layer` | Time spent in the underlying function |
 | `gcache_serialization_timer` | Histogram | `use_case`, `key_type`, `layer`, `operation` | Redis serializer dump/load latency |
@@ -274,7 +274,7 @@ Included:
 - Redis Cluster hash-tagged value/watermark keys for invalidation-tracked entries
 - Configurable Redis watermark TTL via `redis.watermarkTtlSec` with `DEFAULT_WATERMARK_TTL_SEC`
 - Future-buffer behavior that avoids cache writes during active invalidation windows
-- Request coalescing for active cache misses
+- Request coalescing for active cache work after local misses
 
 Not included yet:
 

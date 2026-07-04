@@ -91,6 +91,8 @@ const remoteOnly = () =>
     ramp: { [CacheLayer.REMOTE]: 100 },
   });
 
+const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
 describe("GCache observability metrics", () => {
   it("reuses existing Prometheus collectors when multiple caches share a registry", async () => {
     // Given two GCache instances use the same custom Prometheus registry and metric names.
@@ -299,6 +301,67 @@ describe("GCache observability metrics", () => {
       sumMetric(registry, "test_gcache_serialization_timer", { use_case: "PrometheusMetricExport", layer: "remote" }),
     ).resolves.toBeGreaterThan(0);
     await expect(sumMetric(registry, "test_gcache_size_histogram", { use_case: "PrometheusMetricExport", layer: "remote" })).resolves.toBeGreaterThan(0);
+  });
+
+  it("exports Prometheus counters for disabled, error, invalidation, and coalesced events", async () => {
+    // Given a custom Prometheus registry and a Redis-backed cache that can exercise every documented counter family.
+    const registry = new Registry();
+    const redis = new FakeRedis();
+    const gcache = new GCache({ redis: { client: redis }, metricsRegistry: registry, metricsPrefix: "test_" });
+    const contextDisabled = gcache.cached(async (userId: string) => userId, {
+      keyType: "user_id",
+      useCase: "PrometheusDisabledMetric",
+      cacheKey: (userId) => userId,
+      defaultConfig: localOnly(),
+    });
+    const keyBuildFailure = gcache.cached(async (userId: string) => userId, {
+      keyType: "user_id",
+      useCase: "PrometheusErrorMetric",
+      cacheKey: () => {
+        throw new Error("bad key");
+      },
+      defaultConfig: localOnly(),
+    });
+    let releaseFallback: () => void = () => undefined;
+    const fallbackGate = new Promise<void>((resolve) => {
+      releaseFallback = resolve;
+    });
+    let coalescedCalls = 0;
+    const coalesced = gcache.cached(async (userId: string) => {
+      coalescedCalls += 1;
+      await fallbackGate;
+      return userId;
+    }, {
+      keyType: "user_id",
+      useCase: "PrometheusCoalescedMetric",
+      cacheKey: (userId) => userId,
+      defaultConfig: localOnly(),
+    });
+
+    // When each counter path emits once.
+    await contextDisabled("123");
+    await gcache.enable(async () => await keyBuildFailure("123"));
+    await gcache.invalidate("user_id", "123");
+    const inflight = gcache.enable(async () => await Promise.all([coalesced("456"), coalesced("456")]));
+    await tick();
+    releaseFallback();
+    await inflight;
+
+    // Then the Prometheus registry exposes the documented counter families with their operational labels.
+    expect(coalescedCalls).toBe(1);
+    await expect(
+      sumMetric(registry, "test_gcache_disabled_counter", { use_case: "PrometheusDisabledMetric", layer: "noop", reason: "context" }),
+    ).resolves.toBe(1);
+    await expect(
+      sumMetric(registry, "test_gcache_error_counter", {
+        use_case: "PrometheusErrorMetric",
+        layer: "noop",
+        error: "Error",
+        in_fallback: "false",
+      }),
+    ).resolves.toBe(1);
+    await expect(sumMetric(registry, "test_gcache_invalidation_counter", { key_type: "user_id", layer: "remote" })).resolves.toBe(1);
+    await expect(sumMetric(registry, "test_gcache_coalesced_counter", { use_case: "PrometheusCoalescedMetric", key_type: "user_id" })).resolves.toBe(1);
   });
 });
 
