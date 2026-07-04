@@ -334,7 +334,7 @@ describe("GCache targeted invalidation watermarks", () => {
 
     // When the shared key type/id is invalidated and both use cases read again after the watermark timestamp.
     vi.setSystemTime(new Date("2026-05-12T18:00:00.001Z"));
-    await gcache.invalidate("user_id", "123");
+    await gcache.invalidateRemote("user_id", "123");
     vi.setSystemTime(new Date("2026-05-12T18:00:00.002Z"));
     const [profile, permissions] = await gcache.enable(async () => [await getProfile("123"), await getPermissions("123")]);
 
@@ -362,7 +362,7 @@ describe("GCache targeted invalidation watermarks", () => {
       trackForInvalidation: true,
       defaultConfig: localAndRemote(),
     });
-    await gcache.invalidate("user_id", "123", 1_000);
+    await gcache.invalidateRemote("user_id", "123", 1_000);
 
     // When the fallback runs during the active invalidation window.
     vi.setSystemTime(new Date("2026-05-12T18:10:00.500Z"));
@@ -381,9 +381,9 @@ describe("GCache targeted invalidation watermarks", () => {
     const gcache = new GCache({ redis: { client: redis } });
 
     // When invalid buffers are passed.
-    await expect(gcache.invalidate("user_id", "123", -1)).rejects.toThrow("futureBufferMs");
-    await expect(gcache.invalidate("user_id", "123", Number.NaN)).rejects.toThrow("futureBufferMs");
-    await expect(gcache.invalidate("user_id", "123", Number.POSITIVE_INFINITY)).rejects.toThrow("futureBufferMs");
+    await expect(gcache.invalidateRemote("user_id", "123", -1)).rejects.toThrow("futureBufferMs");
+    await expect(gcache.invalidateRemote("user_id", "123", Number.NaN)).rejects.toThrow("futureBufferMs");
+    await expect(gcache.invalidateRemote("user_id", "123", Number.POSITIVE_INFINITY)).rejects.toThrow("futureBufferMs");
 
     // Then no watermark write reaches Redis.
     expect(redis.setCalls).toBe(0);
@@ -399,7 +399,7 @@ describe("GCache targeted invalidation watermarks", () => {
     const getUser = gcache.cached(
       async (userId: string) => {
         calls += 1;
-        await gcache.invalidate("user_id", userId, 1_000);
+        await gcache.invalidateRemote("user_id", userId, 1_000);
         return { userId, calls };
       },
       {
@@ -481,7 +481,7 @@ describe("GCache targeted invalidation watermarks", () => {
 
     // When a tracked value and its watermark are written.
     await gcache.enable(async () => await getUser("123", "en"));
-    await gcache.invalidate("User", "123");
+    await gcache.invalidateRemote("User", "123");
 
     // Then both Redis keys share the same hash tag, custom prefix, and configured watermark TTL.
     expect([...redis.values.keys()].sort()).toEqual([
@@ -512,7 +512,7 @@ describe("GCache targeted invalidation watermarks", () => {
     version = 2;
 
     // When Redis is invalidated but the same process still has a local cache hit.
-    await gcache.invalidate("user_id", "123");
+    await gcache.invalidateRemote("user_id", "123");
     const after = await gcache.enable(async () => await getUser("123"));
 
     // Then the local hit can remain stale, which is why strong invalidation should disable local cache.
@@ -529,7 +529,7 @@ describe("GCache targeted invalidation watermarks", () => {
     const writeGCache = new GCache({ redis: { client: writeRedis }, logger, metrics: writeMetrics });
 
     // When targeted invalidation cannot write its watermark.
-    await expect(writeGCache.invalidate("user_id", "123")).rejects.toThrow("redis set failed");
+    await expect(writeGCache.invalidateRemote("user_id", "123")).rejects.toThrow("redis set failed");
 
     // Then the API logs the operational failure and records both the invalidation attempt and error.
     expect(logger.warn).toHaveBeenCalledWith("Error writing GCache invalidation watermark", expect.any(Error));

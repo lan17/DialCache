@@ -59,7 +59,7 @@ local cache -> Redis cache -> fallback function
 - Local hits return immediately.
 - Local misses try Redis and populate local on a Redis hit.
 - Redis misses call the fallback and write both Redis and local.
-- Redis cache read/write failures are logged, counted in metrics, and fail open; fallback results still return when fallback succeeds. Explicit maintenance calls (`invalidate`, `flushAll`) log/count Redis failures and rethrow them so callers do not assume mutation succeeded.
+- Redis cache read/write failures are logged, counted in metrics, and fail open; fallback results still return when fallback succeeds. Explicit maintenance calls (`invalidateRemote`, `flushAll`) log/count Redis failures and rethrow them so callers do not assume mutation succeeded.
 - Missing per-layer config disables that layer, records a disabled reason, and falls through to the next layer/fallback.
 
 You can also provide `createClient` for lazy client construction:
@@ -88,7 +88,7 @@ type RedisValueEnvelope = {
 
 ## Targeted invalidation and watermarks
 
-Mutable Redis-backed use cases can opt into targeted invalidation by setting `trackForInvalidation: true` in the options and calling `gcache.invalidate(keyType, id)` after writes:
+Mutable Redis-backed use cases can opt into targeted invalidation by setting `trackForInvalidation: true` in the options and calling `gcache.invalidateRemote(keyType, id)` after writes:
 
 ```ts
 import { CacheLayer, GCache, GCacheKeyConfig } from "@rungalileo/gcache";
@@ -111,12 +111,12 @@ const getUser = gcache.cached(
 );
 
 await updateUser("123", patch);
-await gcache.invalidate("user_id", "123");
+await gcache.invalidateRemote("user_id", "123");
 ```
 
 Invalidation writes a Redis watermark at `{encodedUrnPrefix:encodedKeyType:encodedId}#watermark`. Tracked Redis cache entries use the same Redis Cluster hash tag, for example `{urn:user_id:123}?locale=en#GetMutableUser`, so the value key and watermark key live in the same slot. Key components are percent-encoded before joining so delimiters inside IDs or args cannot collide with delimiters in the key format. Components may not contain `{` or `}` because those characters would corrupt the hash tag.
 
-A cached Redis value whose `createdAtMs` is older than or equal to the watermark is treated as stale and refreshed through fallback. `invalidate(keyType, id, futureBufferMs)` can extend the watermark into the future during write races; while the watermark is still in the future, fallback results are returned but not written to Redis or local cache.
+A cached Redis value whose `createdAtMs` is older than or equal to the watermark is treated as stale and refreshed through fallback. `invalidateRemote(keyType, id, futureBufferMs)` can extend the watermark into the future during write races; while the watermark is still in the future, fallback results are returned but not written to Redis or local cache.
 
 Watermarks use `DEFAULT_WATERMARK_TTL_SEC` (4 hours) by default. You can override it with `redis.watermarkTtlSec`, but it must exceed the maximum Redis cache TTL for invalidation-tracked data; otherwise a watermark can expire before old cached values do.
 
@@ -152,6 +152,8 @@ const gcache = new GCache({
 When caching is enabled and a call misses local cache, concurrent callers for the same cache key share the same in-flight cache work. With Redis configured, the leader runs the Redis read and, on miss, the fallback/cache write; followers await that result. Local-only misses share the leader's fallback/cache write. This protects Redis and the source of truth from a thundering herd on hot keys.
 
 Coalescing only applies after a real cache layer is active. Calls outside `enable()` are true pass-through, and calls where every layer is disabled by missing config, invalid TTL, or ramp are true pass-through.
+
+Because coalescing is keyed by `cacheKey`, concurrent calls with the same key share the leader's execution. Any argument ignored by `cacheKey` must be safe to share this way; include inputs such as locale, auth context, or cancellation behavior in the key when they can change the returned value or whether the underlying function should run separately.
 
 ```ts
 const getUser = gcache.cached(
@@ -191,6 +193,8 @@ await gcache.enable(async () => {
 
 `cached(fn, options)` wraps a function; the wrapped callable has the same parameters and always returns a `Promise`. The cache key comes from a required `cacheKey` selector whose parameters are inferred from `fn`. Return a bare id, or return `{ id, args }` to extract a field or add secondary dimensions:
 
+The `cacheKey` selector is the value identity contract. It must include every input dimension that can affect the returned value; otherwise distinct calls can reuse the same cached value or share the same in-flight fallback through request coalescing.
+
 ```ts
 const searchPosts = gcache.cached(
   (userId: string, page: number, filter: string) => db.searchPosts(userId, page, filter),
@@ -204,9 +208,9 @@ const searchPosts = gcache.cached(
 await gcache.enable(() => searchPosts("u1", 2, "active"));
 ```
 
-- **`keyType` + `id` is the invalidation unit for tracked Redis entries.** `gcache.invalidate("user_id", "123")` writes one watermark for that user; any `trackForInvalidation` Redis entry with the same `keyType` and `id` is refreshed across all `args` variants when Redis is read. Existing local hits follow the local-cache limitation above, and untracked Redis entries do not consult the watermark. `useCase` identifies the individual cache (it's the metrics label and part of the stored key).
+- **`keyType` + `id` is the invalidation unit for tracked Redis entries.** `gcache.invalidateRemote("user_id", "123")` writes one watermark for that user; any `trackForInvalidation` Redis entry with the same `keyType` and `id` is refreshed across all `args` variants when Redis is read. Existing local hits follow the local-cache limitation above, and untracked Redis entries do not consult the watermark. `useCase` identifies the individual cache (it's the metrics label and part of the stored key).
 - **`args` are part of the cache key** — different `args` produce different entries — but invalidation is by `id` only.
-- **Non-key inputs** (a db handle, an `AbortSignal`) are simply parameters the `cacheKey` selector ignores; they still reach `fn`.
+- **Non-key inputs** (for example a db handle) are simply parameters the `cacheKey` selector ignores. They still reach `fn` for non-coalesced executions, but concurrent same-key cache misses share the leader's execution, so do not ignore values like `AbortSignal`, auth context, locale, or other request-scoped inputs unless sharing one result is correct.
 - **Methods:** pass `obj.method.bind(obj)` (or `(...a) => obj.method(...a)`) — a bare `obj.method` reference loses `this`.
 
 ## Metrics
@@ -258,7 +262,7 @@ Included:
 - Timestamped, versioned Redis envelope
 - JSON and custom serializer support for Redis values
 - Duplicate and reserved use-case validation
-- `invalidate` and `flushAll` across configured layers
+- `invalidateRemote` for Redis watermark invalidation and `flushAll` across configured layers
 - Fail-open behavior for key/config/cache read-write errors; maintenance mutations surface failures
 - Runtime config provider with fallback to cached-function `defaultConfig`
 - Per-layer TTL and ramp controls
@@ -270,7 +274,7 @@ Included:
 - Serialization latency and cached payload size metrics for Redis values
 - Logger injection for cache operational failures
 - `trackForInvalidation` on cached functions
-- `invalidate(keyType, id, futureBufferMs)` Redis watermark API
+- `invalidateRemote(keyType, id, futureBufferMs)` Redis watermark API
 - Redis Cluster hash-tagged value/watermark keys for invalidation-tracked entries
 - Configurable Redis watermark TTL via `redis.watermarkTtlSec` with `DEFAULT_WATERMARK_TTL_SEC`
 - Future-buffer behavior that avoids cache writes during active invalidation windows

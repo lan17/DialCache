@@ -341,7 +341,7 @@ describe("GCache observability metrics", () => {
     // When each counter path emits once.
     await contextDisabled("123");
     await gcache.enable(async () => await keyBuildFailure("123"));
-    await gcache.invalidate("user_id", "123");
+    await gcache.invalidateRemote("user_id", "123");
     const inflight = gcache.enable(async () => await Promise.all([coalesced("456"), coalesced("456")]));
     await tick();
     releaseFallback();

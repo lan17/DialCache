@@ -45,6 +45,10 @@ export interface CachedOptions<Fn extends AnyFn> {
   readonly defaultConfig?: GCacheKeyConfig | null;
   readonly serializer?: Serializer<CachedValue<Fn>> | null;
   readonly trackForInvalidation?: boolean;
+  /**
+   * Select every input dimension that can affect the returned value. Concurrent
+   * enabled calls with the same cache key may share one in-flight execution.
+   */
   readonly cacheKey: CacheKeySelector<Fn>;
 }
 
@@ -157,7 +161,12 @@ export class GCache {
     return run;
   }
 
-  async invalidate(keyType: string, id: Id, futureBufferMs = 0): Promise<void> {
+  /**
+   * Writes a remote invalidation watermark for Redis-tracked entries.
+   *
+   * This does not synchronously evict local cache hits or untracked Redis values.
+   */
+  async invalidateRemote(keyType: string, id: Id, futureBufferMs = 0): Promise<void> {
     assertValidFutureBufferMs(futureBufferMs);
 
     if (this.redisCache === null) {

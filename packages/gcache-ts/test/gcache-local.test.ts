@@ -85,7 +85,7 @@ describe("GCache local-only MVP", () => {
 
     // When local caching is used and targeted invalidation is requested without a Redis layer.
     const first = await gcache.enable(async () => await getUser("123"));
-    await gcache.invalidate("user_id", "123");
+    await gcache.invalidateRemote("user_id", "123");
     const second = await gcache.enable(async () => await getUser("123"));
 
     // Then no metrics adapter or Redis layer is required for the local path to work.
