@@ -1,6 +1,6 @@
 # @rungalileo/gcache
 
-TypeScript port of GCache. Milestone 5 ships explicit enabled contexts, stable key construction, local/Redis TTL caching, runtime config providers, gradual rollout ramp controls, single-flight request coalescing, Prometheus-ready observability, and Redis watermark-based targeted invalidation.
+TypeScript port of GCache. Milestone 5 ships explicit enabled contexts, stable key construction, local/Redis TTL caching, runtime config providers, gradual rollout ramp controls, request coalescing for active cache work after local misses, Prometheus-ready observability, and Redis watermark-based targeted invalidation.
 
 > [!NOTE]
 > TypeScript support is experimental for now. This package is intended for early validation and feedback before treating the API and operational behavior as stable.
@@ -18,22 +18,21 @@ import { GCache, GCacheKeyConfig } from "@rungalileo/gcache";
 
 const gcache = new GCache();
 
-const getUser = gcache.cached({
-  keyType: "user_id",
-  useCase: "GetUser",
-  id: ([userId]: [string]) => userId,
-  defaultConfig: GCacheKeyConfig.enabled(60),
-})(async (userId: string) => {
-  return db.fetchUser(userId);
-});
+const getUser = gcache.cached(
+  (userId: string) => db.fetchUser(userId),
+  {
+    keyType: "user_id",
+    useCase: "GetUser",
+    cacheKey: (userId) => userId,
+    defaultConfig: GCacheKeyConfig.enabled(60),
+  },
+);
 
-// Caching is disabled by default.
+// Caching is OFF outside an enable() scope (see "Enabled context"), so this runs the fn uncached:
 await getUser("123");
 
-// Enable caching for one async scope.
-const user = await gcache.enable(async () => {
-  return await getUser("123");
-});
+// Inside enable(), reads are cached. Enable once at your request boundary (not per call site):
+const user = await gcache.enable(() => getUser("123"));
 ```
 
 ## Redis-backed TTL cache
@@ -60,7 +59,7 @@ local cache -> Redis cache -> fallback function
 - Local hits return immediately.
 - Local misses try Redis and populate local on a Redis hit.
 - Redis misses call the fallback and write both Redis and local.
-- Redis cache read/write failures are logged, counted in metrics, and fail open; fallback results still return when fallback succeeds. Explicit maintenance calls (`delete`, `invalidate`, `flushAll`) log/count Redis failures and rethrow them so callers do not assume mutation succeeded.
+- Redis cache read/write failures are logged, counted in metrics, and fail open; fallback results still return when fallback succeeds. Explicit maintenance calls (`invalidateRemote`, `flushAll`) log/count Redis failures and rethrow them so callers do not assume mutation succeeded.
 - Missing per-layer config disables that layer, records a disabled reason, and falls through to the next layer/fallback.
 
 You can also provide `createClient` for lazy client construction:
@@ -89,32 +88,35 @@ type RedisValueEnvelope = {
 
 ## Targeted invalidation and watermarks
 
-Mutable Redis-backed use cases can opt into targeted invalidation by setting `trackForInvalidation: true` on the cached function and calling `invalidate(keyType, id)` after writes:
+Mutable Redis-backed use cases can opt into targeted invalidation by setting `trackForInvalidation: true` in the options and calling `gcache.invalidateRemote(keyType, id)` after writes:
 
 ```ts
 import { CacheLayer, GCache, GCacheKeyConfig } from "@rungalileo/gcache";
 
 const gcache = new GCache({ redis: { client: redisClient } });
 
-const getUser = gcache.cached({
-  keyType: "user_id",
-  useCase: "GetMutableUser",
-  id: ([userId]: [string]) => userId,
-  trackForInvalidation: true,
-  // Strongly invalidated mutable data should usually disable local cache.
-  defaultConfig: new GCacheKeyConfig({
-    ttlSec: { [CacheLayer.REMOTE]: 300 },
-    ramp: { [CacheLayer.REMOTE]: 100 },
-  }),
-})(async (userId: string) => db.fetchUser(userId));
+const getUser = gcache.cached(
+  (userId: string) => db.fetchUser(userId),
+  {
+    keyType: "user_id",
+    useCase: "GetMutableUser",
+    cacheKey: (userId) => userId,
+    trackForInvalidation: true,
+    // Strongly invalidated mutable data should usually disable local cache.
+    defaultConfig: new GCacheKeyConfig({
+      ttlSec: { [CacheLayer.REMOTE]: 300 },
+      ramp: { [CacheLayer.REMOTE]: 100 },
+    }),
+  },
+);
 
 await updateUser("123", patch);
-await gcache.invalidate("user_id", "123");
+await gcache.invalidateRemote("user_id", "123");
 ```
 
 Invalidation writes a Redis watermark at `{encodedUrnPrefix:encodedKeyType:encodedId}#watermark`. Tracked Redis cache entries use the same Redis Cluster hash tag, for example `{urn:user_id:123}?locale=en#GetMutableUser`, so the value key and watermark key live in the same slot. Key components are percent-encoded before joining so delimiters inside IDs or args cannot collide with delimiters in the key format. Components may not contain `{` or `}` because those characters would corrupt the hash tag.
 
-A cached Redis value whose `createdAtMs` is older than or equal to the watermark is treated as stale and refreshed through fallback. `invalidate(keyType, id, { futureBufferMs })` can extend the watermark into the future during write races; while the watermark is still in the future, fallback results are returned but not written to Redis or local cache.
+A cached Redis value whose `createdAtMs` is older than or equal to the watermark is treated as stale and refreshed through fallback. `invalidateRemote(keyType, id, futureBufferMs)` can extend the watermark into the future during write races; while the watermark is still in the future, fallback results are returned but not written to Redis or local cache.
 
 Watermarks use `DEFAULT_WATERMARK_TTL_SEC` (4 hours) by default. You can override it with `redis.watermarkTtlSec`, but it must exceed the maximum Redis cache TTL for invalidation-tracked data; otherwise a watermark can expire before old cached values do.
 
@@ -122,7 +124,9 @@ Local cache limitation: targeted invalidation is enforced by Redis watermarks. E
 
 ## Runtime config and ramp controls
 
-Every cached function can provide a decorator-local `defaultConfig`; a `cacheConfigProvider` can override it at runtime. If the provider returns `null`, GCache falls back to the cached function's `defaultConfig`. If neither exists, or a layer's TTL/ramp is missing or disabled, only that layer is skipped.
+Every cached function can provide a per-use-case `defaultConfig`; a `cacheConfigProvider` can override it at runtime. If the provider returns `null`, GCache falls back to the cached function's `defaultConfig`. If neither exists, or a layer's TTL/ramp is missing or disabled, only that layer is skipped.
+
+`cacheConfigProvider` is called for every enabled cached-function invocation before GCache checks local or Redis. Keep it cheap, cache any remote/config-store reads inside the provider, and avoid work that would erase the benefit of a cache hit.
 
 ```ts
 import { CacheLayer, GCache, GCacheKeyConfig } from "@rungalileo/gcache";
@@ -141,66 +145,73 @@ const gcache = new GCache({
 });
 ```
 
-`ramp` values are percentages from 0 to 100. `0` disables the layer, `100` enables it, and intermediate values use `rampSampler`; the default sampler is random. Provider errors fail open and execute the fallback function.
+`ramp` values are percentages from 0 to 100. `0` disables the layer, `100` enables it, and intermediate values use `rampSampler`; the default sampler is deterministic by cache key and layer, so the same key is consistently sampled in or out of a partial rollout. Provider errors fail open and execute the fallback function.
 
-## Single-flight coalescing
+## Request coalescing
 
-When caching is enabled, concurrent misses for the same key are coalesced. The first caller (the leader) runs the whole read-through chain and the fallback; every other caller for that key awaits the same in-flight result instead of running its own fallback. This protects the source of truth from a thundering herd on hot keys.
+When caching is enabled and a call misses local cache, concurrent callers for the same cache key share the same in-flight cache work. With Redis configured, the leader runs the Redis read and, on miss, the fallback/cache write; followers await that result. Local-only misses share the leader's fallback/cache write. This protects Redis and the source of truth from a thundering herd on hot keys.
+
+Coalescing only applies after a real cache layer is active. Calls outside `enable()` are true pass-through, and calls where every layer is disabled by missing config, invalid TTL, or ramp are true pass-through.
+
+Because coalescing is keyed by `cacheKey`, concurrent calls with the same key share the leader's execution. Any argument ignored by `cacheKey` must be safe to share this way; include inputs such as locale, auth context, or cancellation behavior in the key when they can change the returned value or whether the underlying function should run separately.
 
 ```ts
-const getUser = gcache.cached({
-  keyType: "user_id",
-  useCase: "GetUser",
-  id: ([userId]: [string]) => userId,
-  defaultConfig: GCacheKeyConfig.enabled(60),
-  coalesce: true, // default; set false to opt a use case out
-})(async (userId: string) => db.fetchUser(userId));
+const getUser = gcache.cached(
+  (userId: string) => db.fetchUser(userId),
+  {
+    keyType: "user_id",
+    useCase: "GetUser",
+    cacheKey: (userId) => userId,
+    defaultConfig: GCacheKeyConfig.enabled(60),
+  },
+);
 ```
-
-- **Scope** — in-process only. Across a fleet you get at most one fallback per instance per key while a value is being computed; once any instance populates Redis the rest get remote hits. Cross-process coalescing (a distributed lock) is not provided.
-- **Default and opt-out** — on by default. Set `coalesce: false` on a cached function to opt it out, or change the instance default with `new GCache({ coalesceByDefault: false })`.
-- **Runtime control** — a `cacheConfigProvider` may set `coalesce` on the returned `GCacheKeyConfig` to flip it without a redeploy (a kill switch). Precedence is `runtime ?? perUseCase ?? coalesceByDefault`.
-- **Failure handling** — if the leader's fallback rejects, all waiters reject with the same error and the in-flight entry is cleared, so the next call retries.
-- **Observability** — each coalesced waiter increments `gcache_coalesced_counter` (labels `use_case`, `key_type`); the fallback timer still records once per leader.
-
-> [!WARNING]
-> Coalescing shares the leader's single result with every concurrent waiter, so only use it when the cache key fully determines the result. Set `coalesce: false` for fallbacks that are **side-effecting / non-idempotent** (each call must run) or whose result depends on **per-request context not captured by the key** (for example, the calling user's own permissions). Note that at `ramp: 0` concurrent calls are still deduped even though nothing is cached.
 
 ## Enabled context
 
-The TypeScript port uses Node `AsyncLocalStorage` to mirror Python's `with gcache.enable():` safety model.
+Caching is **off by default** and only active inside a `gcache.enable(...)` scope. This is deliberate: it lets you turn caching **off in write paths** so a stale read can't be cached around a write. The TypeScript port uses Node `AsyncLocalStorage` to mirror Python's `with gcache.enable():` model.
+
+**Enable once at your request boundary** (e.g. a middleware that wraps read-request handling) so individual call sites don't each need it; wrap mutation handlers in `disable()`:
 
 ```ts
 await gcache.enable(async () => {
   await getUser("123"); // cached
 
   await gcache.disable(async () => {
-    await updateUser("123", patch); // uncached reads here
+    await updateUser("123", patch); // reads here are uncached
   });
 
   await getUser("123"); // cached again
 });
 ```
 
-- Default is disabled.
+- Default is disabled — a cached function called **outside** any `enable()` scope simply runs uncached (no error), so wrap your read paths to actually cache.
 - Enabled state is async-scope-local, not process-global.
 - Nested `enable` / `disable` scopes restore the previous behavior when the callback completes.
 
-## Explicit key builders
+## Keys, ids, and extra dimensions
 
-TypeScript does not have safe Python-style function argument introspection after transpilation/bundling. Use explicit key builders instead:
+`cached(fn, options)` wraps a function; the wrapped callable has the same parameters and always returns a `Promise`. The cache key comes from a required `cacheKey` selector whose parameters are inferred from `fn`. Return a bare id, or return `{ id, args }` to extract a field or add secondary dimensions:
+
+The `cacheKey` selector is the value identity contract. It must include every input dimension that can affect the returned value; otherwise distinct calls can reuse the same cached value or share the same in-flight fallback through request coalescing.
 
 ```ts
-const searchPosts = gcache.cached({
-  keyType: "user_id",
-  useCase: "SearchPosts",
-  id: ([userId]: [string, number, string]) => userId,
-  args: ([, page, filter]) => ({ page, filter }),
-  defaultConfig: GCacheKeyConfig.enabled(60),
-})(async (userId: string, page: number, filter: string) => {
-  return db.searchPosts(userId, page, filter);
-});
+const searchPosts = gcache.cached(
+  (userId: string, page: number, filter: string) => db.searchPosts(userId, page, filter),
+  {
+    keyType: "user_id",
+    useCase: "SearchPosts",
+    cacheKey: (userId, page, filter) => ({ id: userId, args: { page, filter } }),
+    defaultConfig: GCacheKeyConfig.enabled(60),
+  },
+);
+await gcache.enable(() => searchPosts("u1", 2, "active"));
 ```
+
+- **`keyType` + `id` is the invalidation unit for tracked Redis entries.** `gcache.invalidateRemote("user_id", "123")` writes one watermark for that user; any `trackForInvalidation` Redis entry with the same `keyType` and `id` is refreshed across all `args` variants when Redis is read. Existing local hits follow the local-cache limitation above, and untracked Redis entries do not consult the watermark. `useCase` identifies the individual cache (it's the metrics label and part of the stored key).
+- **`args` are part of the cache key** — different `args` produce different entries — but invalidation is by `id` only.
+- **Non-key inputs** (for example a db handle) are simply parameters the `cacheKey` selector ignores. They still reach `fn` for non-coalesced executions, but concurrent same-key cache misses share the leader's execution, so do not ignore values like `AbortSignal`, auth context, locale, or other request-scoped inputs unless sharing one result is correct.
+- **Methods:** pass `obj.method.bind(obj)` (or `(...a) => obj.method(...a)`) — a bare `obj.method` reference loses `this`.
 
 ## Metrics
 
@@ -212,11 +223,14 @@ GCache registers Prometheus metrics by default via `prom-client`. Metric names i
 | `gcache_miss_counter` | Counter | `use_case`, `key_type`, `layer` | Cache misses |
 | `gcache_disabled_counter` | Counter | `use_case`, `key_type`, `layer`, `reason` | Cache skips (`context`, `missing_config`, `invalid_ttl`, `ramped_down`, `config_error`) |
 | `gcache_error_counter` | Counter | `use_case`, `key_type`, `layer`, `error`, `in_fallback` | Cache/fallback errors, with `in_fallback` separating cache plumbing failures from application fallback failures |
-| `gcache_invalidation_counter` | Counter | `key_type`, `layer` | Delete/invalidation calls for the layers touched today |
+| `gcache_invalidation_counter` | Counter | `key_type`, `layer` | Invalidation calls for the layers touched today |
+| `gcache_coalesced_counter` | Counter | `use_case`, `key_type` | Requests that awaited active in-flight cache work |
 | `gcache_get_timer` | Histogram | `use_case`, `key_type`, `layer` | Cache get latency in seconds |
 | `gcache_fallback_timer` | Histogram | `use_case`, `key_type`, `layer` | Time spent in the underlying function |
 | `gcache_serialization_timer` | Histogram | `use_case`, `key_type`, `layer`, `operation` | Redis serializer dump/load latency |
 | `gcache_size_histogram` | Histogram | `use_case`, `key_type`, `layer` | Serialized Redis payload size in bytes |
+
+The `layer` label is usually `local` or `remote`. Disabled-context, key-construction, and config-provider failures use `noop` because no cache layer was reached.
 
 Use a custom registry or prefix when embedding GCache in an app with its own metrics endpoint:
 
@@ -248,11 +262,11 @@ Included:
 - Timestamped, versioned Redis envelope
 - JSON and custom serializer support for Redis values
 - Duplicate and reserved use-case validation
-- `delete` and `flushAll` across configured layers
+- `invalidateRemote` for Redis watermark invalidation and `flushAll` across configured layers
 - Fail-open behavior for key/config/cache read-write errors; maintenance mutations surface failures
 - Runtime config provider with fallback to cached-function `defaultConfig`
 - Per-layer TTL and ramp controls
-- Injectable ramp sampler for deterministic rollout tests
+- Deterministic default ramp sampler with injectable override hooks
 - Missing config disables only the relevant layer and falls through
 - Prometheus metrics with duplicate-registration safety
 - Custom metrics adapter/registry/prefix hooks
@@ -260,11 +274,11 @@ Included:
 - Serialization latency and cached payload size metrics for Redis values
 - Logger injection for cache operational failures
 - `trackForInvalidation` on cached functions
-- `invalidate(keyType, id, { futureBufferMs })` Redis watermark API
+- `invalidateRemote(keyType, id, futureBufferMs)` Redis watermark API
 - Redis Cluster hash-tagged value/watermark keys for invalidation-tracked entries
 - Configurable Redis watermark TTL via `redis.watermarkTtlSec` with `DEFAULT_WATERMARK_TTL_SEC`
 - Future-buffer behavior that avoids cache writes during active invalidation windows
-- In-process single-flight coalescing with per-use-case opt-out, instance default, and runtime kill switch
+- Request coalescing for active cache work after local misses
 
 Not included yet:
 

@@ -18,15 +18,19 @@ function deferred<T>(): Deferred<T> {
   return { promise, resolve, reject };
 }
 
-// Crossing a macrotask boundary drains every pending microtask, so all concurrent
-// callers reach the single-flight map and the leader is parked in its fallback.
 const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
 class FakeRedis implements RedisCommandClient {
   readonly values = new Map<string, RedisStoredValue>();
+  getCalls = 0;
   setCalls = 0;
+  getGate: Promise<void> | null = null;
 
   async get(key: string): Promise<RedisStoredValue | null> {
+    this.getCalls += 1;
+    if (this.getGate !== null) {
+      await this.getGate;
+    }
     return this.values.get(key) ?? null;
   }
 
@@ -40,9 +44,14 @@ class FakeRedis implements RedisCommandClient {
   }
 }
 
+class FailingReadRedis extends FakeRedis {
+  override async get(_key: string): Promise<RedisStoredValue | null> {
+    throw new Error("redis unavailable");
+  }
+}
+
 function spyMetrics() {
   const coalesced = vi.fn();
-  const observeFallback = vi.fn();
   const metrics: GCacheMetricsAdapter = {
     request: vi.fn(),
     miss: vi.fn(),
@@ -51,309 +60,274 @@ function spyMetrics() {
     invalidation: vi.fn(),
     coalesced,
     observeGet: vi.fn(),
-    observeFallback,
+    observeFallback: vi.fn(),
     observeSerialization: vi.fn(),
     observeSize: vi.fn(),
   };
-  return { metrics, coalesced, observeFallback };
+  return { metrics, coalesced };
 }
 
-const remoteOnly = new GCacheKeyConfig({ ttlSec: { [CacheLayer.REMOTE]: 60 }, ramp: { [CacheLayer.REMOTE]: 100 } });
-const disabledLayers = new GCacheKeyConfig({ ttlSec: { [CacheLayer.LOCAL]: 60 }, ramp: { [CacheLayer.LOCAL]: 0 } });
-
-describe("GCache single-flight coalescing", () => {
-  it("runs the fallback once for concurrent misses and shares the result (local-only)", async () => {
-    let calls = 0;
+describe("GCache request coalescing", () => {
+  it("coalesces concurrent local misses when the local layer is active", async () => {
     const gate = deferred<void>();
-    const gcache = new GCache();
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "Coalesce_ConcurrentMisses",
-      id: ([id]: [string]) => id,
-      defaultConfig: GCacheKeyConfig.enabled(60),
-    })(async (id: string) => {
-      calls += 1;
-      await gate.promise;
-      return { id, calls };
-    });
+    const { metrics, coalesced } = spyMetrics();
+    const gcache = new GCache({ metrics });
+    let calls = 0;
+    const getUser = gcache.cached(
+      async (id: string) => {
+        calls += 1;
+        await gate.promise;
+        return { id, calls };
+      },
+      {
+        keyType: "user_id",
+        useCase: "CoalesceLocalMiss",
+        cacheKey: (id) => id,
+        defaultConfig: GCacheKeyConfig.enabled(60),
+      },
+    );
 
-    const settled = await gcache.enable(async () => {
-      const inflight = Promise.all([getUser("1"), getUser("1"), getUser("1")]);
-      await tick();
-      gate.resolve();
-      return await inflight;
-    });
+    const inflight = gcache.enable(async () => await Promise.all([getUser("1"), getUser("1"), getUser("1")]));
+    await tick();
+    gate.resolve();
+    const results = await inflight;
 
     expect(calls).toBe(1);
-    expect(settled).toEqual([
+    expect(results).toEqual([
+      { id: "1", calls: 1 },
+      { id: "1", calls: 1 },
+      { id: "1", calls: 1 },
+    ]);
+    expect(coalesced).toHaveBeenCalledTimes(2);
+    expect(coalesced).toHaveBeenCalledWith({ useCase: "CoalesceLocalMiss", keyType: "user_id" });
+  });
+
+  it("coalesces concurrent Redis misses when the remote layer is active", async () => {
+    const redisGate = deferred<void>();
+    const fallbackGate = deferred<void>();
+    const redis = new FakeRedis();
+    redis.getGate = redisGate.promise;
+    const gcache = new GCache({ redis: { client: redis } });
+    let calls = 0;
+    const getUser = gcache.cached(
+      async (id: string) => {
+        calls += 1;
+        await fallbackGate.promise;
+        return { id, calls };
+      },
+      {
+        keyType: "user_id",
+        useCase: "CoalesceRemoteMiss",
+        cacheKey: (id) => id,
+        defaultConfig: new GCacheKeyConfig({
+          ttlSec: { [CacheLayer.REMOTE]: 60 },
+          ramp: { [CacheLayer.REMOTE]: 100 },
+        }),
+      },
+    );
+
+    const inflight = gcache.enable(async () => await Promise.all([getUser("1"), getUser("1"), getUser("1")]));
+    await tick();
+    expect(redis.getCalls).toBe(1);
+    redisGate.resolve();
+    await tick();
+    fallbackGate.resolve();
+    const results = await inflight;
+
+    expect(calls).toBe(1);
+    expect(redis.getCalls).toBe(1);
+    expect(redis.setCalls).toBe(1);
+    expect(results).toEqual([
       { id: "1", calls: 1 },
       { id: "1", calls: 1 },
       { id: "1", calls: 1 },
     ]);
   });
 
-  it("coalesces through the local -> redis -> fallback chain and writes redis once", async () => {
-    let calls = 0;
-    const gate = deferred<void>();
+  it("coalesces concurrent Redis hits when the remote layer is active", async () => {
+    const redisGate = deferred<void>();
     const redis = new FakeRedis();
     const gcache = new GCache({ redis: { client: redis } });
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "Coalesce_RedisChain",
-      id: ([id]: [string]) => id,
-      defaultConfig: remoteOnly,
-    })(async (id: string) => {
-      calls += 1;
-      await gate.promise;
-      return { id };
-    });
-
-    const settled = await gcache.enable(async () => {
-      const inflight = Promise.all([getUser("1"), getUser("1"), getUser("1")]);
-      await tick();
-      gate.resolve();
-      return await inflight;
-    });
-
-    expect(calls).toBe(1);
-    expect(redis.setCalls).toBe(1);
-    expect(settled).toEqual([{ id: "1" }, { id: "1" }, { id: "1" }]);
-  });
-
-  it("propagates a leader rejection to all followers, then clears the entry for retries", async () => {
-    let attempt = 0;
-    const gate = deferred<void>();
-    const gcache = new GCache();
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "Coalesce_LeaderRejects",
-      id: ([id]: [string]) => id,
-      defaultConfig: GCacheKeyConfig.enabled(60),
-    })(async (id: string) => {
-      attempt += 1;
-      if (attempt === 1) {
-        await gate.promise;
-        throw new Error("boom");
-      }
-      return { id, attempt };
-    });
-
-    const outcomes = await gcache.enable(async () => {
-      const inflight = Promise.all(
-        [getUser("1"), getUser("1")].map((p) => p.then(() => "ok", (error) => (error as Error).message)),
-      );
-      await tick();
-      gate.resolve();
-      return await inflight;
-    });
-
-    // Both followers observe the same single failure.
-    expect(outcomes).toEqual(["boom", "boom"]);
-    expect(attempt).toBe(1);
-
-    // Entry was cleared on rejection, so a later call re-invokes the fallback.
-    const retry = await gcache.enable(() => getUser("1"));
-    expect(retry).toEqual({ id: "1", attempt: 2 });
-  });
-
-  it("does not coalesce across distinct keys", async () => {
     let calls = 0;
+    const getUser = gcache.cached(
+      async (id: string) => {
+        calls += 1;
+        return { id, calls };
+      },
+      {
+        keyType: "user_id",
+        useCase: "CoalesceRemoteHit",
+        cacheKey: (id) => id,
+        defaultConfig: new GCacheKeyConfig({
+          ttlSec: { [CacheLayer.REMOTE]: 60 },
+          ramp: { [CacheLayer.REMOTE]: 100 },
+        }),
+      },
+    );
+
+    await gcache.enable(async () => await getUser("1"));
+    calls = 0;
+    redis.getCalls = 0;
+    redis.getGate = redisGate.promise;
+
+    const inflight = gcache.enable(async () => await Promise.all([getUser("1"), getUser("1"), getUser("1")]));
+    await tick();
+    expect(redis.getCalls).toBe(1);
+    redisGate.resolve();
+    const results = await inflight;
+
+    expect(calls).toBe(0);
+    expect(redis.getCalls).toBe(1);
+    expect(results).toEqual([
+      { id: "1", calls: 1 },
+      { id: "1", calls: 1 },
+      { id: "1", calls: 1 },
+    ]);
+  });
+
+  it("keeps different keys isolated while coalescing concurrent misses", async () => {
     const gate = deferred<void>();
     const gcache = new GCache();
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "Coalesce_DistinctKeys",
-      id: ([id]: [string]) => id,
-      defaultConfig: GCacheKeyConfig.enabled(60),
-    })(async (id: string) => {
-      calls += 1;
-      await gate.promise;
-      return id;
-    });
+    let calls = 0;
+    const getUser = gcache.cached(
+      async (id: string) => {
+        calls += 1;
+        const call = calls;
+        await gate.promise;
+        return { id, calls: call };
+      },
+      {
+        keyType: "user_id",
+        useCase: "CoalesceDistinctKeys",
+        cacheKey: (id) => id,
+        defaultConfig: GCacheKeyConfig.enabled(60),
+      },
+    );
 
-    const settled = await gcache.enable(async () => {
-      const inflight = Promise.all([getUser("1"), getUser("2")]);
-      await tick();
-      gate.resolve();
-      return await inflight;
-    });
+    const inflight = gcache.enable(async () => await Promise.all([getUser("1"), getUser("2")]));
+    await tick();
+    gate.resolve();
+    const results = await inflight;
 
     expect(calls).toBe(2);
-    expect(settled).toEqual(["1", "2"]);
+    expect(results).toEqual([
+      { id: "1", calls: 1 },
+      { id: "2", calls: 2 },
+    ]);
   });
 
-  it("clears the in-flight entry after settle so a later batch starts fresh", async () => {
-    let calls = 0;
+  it("clears in-flight state after a coalesced fallback rejects", async () => {
     let gate = deferred<void>();
     const gcache = new GCache();
-    // Layers disabled (ramp 0): nothing is cached, so coalescing is the only dedup.
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "Coalesce_FreshAfterSettle",
-      id: ([id]: [string]) => id,
-      defaultConfig: disabledLayers,
-    })(async (id: string) => {
-      calls += 1;
-      await gate.promise;
-      return `${id}:${calls}`;
-    });
-
-    const runBatch = () =>
-      gcache.enable(async () => {
-        const inflight = Promise.all([getUser("1"), getUser("1")]);
-        await tick();
-        gate.resolve();
-        return await inflight;
-      });
-
-    const first = await runBatch();
-    gate = deferred<void>();
-    const second = await runBatch();
-
-    expect(calls).toBe(2);
-    expect(first).toEqual(["1:1", "1:1"]);
-    expect(second).toEqual(["1:2", "1:2"]);
-  });
-
-  it("runs every fallback when coalesce is disabled for the use case", async () => {
     let calls = 0;
-    const gate = deferred<void>();
-    const gcache = new GCache();
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "Coalesce_DisabledStatic",
-      id: ([id]: [string]) => id,
-      coalesce: false,
-      defaultConfig: GCacheKeyConfig.enabled(60),
-    })(async (id: string) => {
-      calls += 1;
-      await gate.promise;
-      return id;
-    });
-
-    const settled = await gcache.enable(async () => {
-      const inflight = Promise.all([getUser("1"), getUser("1"), getUser("1")]);
-      await tick();
-      gate.resolve();
-      return await inflight;
-    });
-
-    expect(calls).toBe(3);
-    expect(settled).toEqual(["1", "1", "1"]);
-  });
-
-  it("lets the runtime config provider disable coalescing (kill switch overrides the static option)", async () => {
-    let calls = 0;
-    const gate = deferred<void>();
-    const gcache = new GCache({
-      cacheConfigProvider: async () =>
-        new GCacheKeyConfig({ ttlSec: { [CacheLayer.LOCAL]: 60 }, ramp: { [CacheLayer.LOCAL]: 100 }, coalesce: false }),
-    });
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "Coalesce_RuntimeKillSwitch",
-      id: ([id]: [string]) => id,
-      coalesce: true,
-      defaultConfig: GCacheKeyConfig.enabled(60),
-    })(async (id: string) => {
-      calls += 1;
-      await gate.promise;
-      return id;
-    });
-
-    await gcache.enable(async () => {
-      const inflight = Promise.all([getUser("1"), getUser("1")]);
-      await tick();
-      gate.resolve();
-      return await inflight;
-    });
-
-    expect(calls).toBe(2);
-  });
-
-  it("records a coalesced metric per follower and runs the fallback once", async () => {
-    let calls = 0;
-    const gate = deferred<void>();
-    const { metrics, coalesced, observeFallback } = spyMetrics();
-    const gcache = new GCache({ metrics });
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "Coalesce_Metrics",
-      id: ([id]: [string]) => id,
-      defaultConfig: GCacheKeyConfig.enabled(60),
-    })(async (id: string) => {
-      calls += 1;
-      await gate.promise;
-      return id;
-    });
-
-    await gcache.enable(async () => {
-      const inflight = Promise.all([getUser("1"), getUser("1"), getUser("1")]);
-      await tick();
-      gate.resolve();
-      return await inflight;
-    });
-
-    expect(calls).toBe(1);
-    expect(coalesced).toHaveBeenCalledTimes(2);
-    expect(coalesced).toHaveBeenCalledWith({ useCase: "Coalesce_Metrics", keyType: "user_id" });
-    expect(observeFallback).toHaveBeenCalledTimes(1);
-  });
-
-  it("fails open on a redis write error and still shares the value", async () => {
-    let calls = 0;
-    const gate = deferred<void>();
-    const redis: RedisCommandClient = {
-      get: async () => null,
-      setEx: async () => {
-        throw new Error("redis down");
+    const getUser = gcache.cached(
+      async (id: string) => {
+        calls += 1;
+        const call = calls;
+        await gate.promise;
+        return { id, calls: call };
       },
-      del: async () => 0,
-    };
-    const gcache = new GCache({ redis: { client: redis } });
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "Coalesce_RedisWriteError",
-      id: ([id]: [string]) => id,
-      defaultConfig: GCacheKeyConfig.enabled(60),
-    })(async (id: string) => {
-      calls += 1;
-      await gate.promise;
-      return id;
-    });
+      {
+        keyType: "user_id",
+        useCase: "CoalesceRejectCleanup",
+        cacheKey: (id) => id,
+        defaultConfig: GCacheKeyConfig.enabled(60),
+      },
+    );
 
-    const settled = await gcache.enable(async () => {
-      const inflight = Promise.all([getUser("1"), getUser("1")]);
+    const rejected = await gcache.enable(async () => {
+      const first = getUser("1");
+      const second = getUser("1");
       await tick();
-      gate.resolve();
-      return await inflight;
+      gate.reject(new Error("database failed"));
+      return await Promise.allSettled([first, second]);
     });
 
     expect(calls).toBe(1);
-    expect(settled).toEqual(["1", "1"]);
+    expect(rejected).toEqual([
+      { status: "rejected", reason: expect.any(Error) },
+      { status: "rejected", reason: expect.any(Error) },
+    ]);
+    for (const result of rejected) {
+      expect(result.status === "rejected" ? result.reason.message : undefined).toBe("database failed");
+    }
+
+    gate = deferred();
+    const retry = gcache.enable(async () => {
+      const value = getUser("1");
+      await tick();
+      gate.resolve();
+      return await value;
+    });
+
+    await expect(retry).resolves.toEqual({ id: "1", calls: 2 });
+    expect(calls).toBe(2);
   });
 
-  it("does not coalesce when caching is disabled (outside enable)", async () => {
-    let calls = 0;
+  it("does not coalesce outside an enabled context", async () => {
     const gate = deferred<void>();
     const gcache = new GCache();
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "Coalesce_DisabledContext",
-      id: ([id]: [string]) => id,
-      defaultConfig: GCacheKeyConfig.enabled(60),
-    })(async (id: string) => {
-      calls += 1;
-      await gate.promise;
-      return id;
-    });
+    let calls = 0;
+    const getUser = gcache.cached(
+      async (id: string) => {
+        calls += 1;
+        const call = calls;
+        await gate.promise;
+        return { id, calls: call };
+      },
+      {
+        keyType: "user_id",
+        useCase: "NoCoalesceDisabledContext",
+        cacheKey: (id) => id,
+        defaultConfig: GCacheKeyConfig.enabled(60),
+      },
+    );
 
     const inflight = Promise.all([getUser("1"), getUser("1")]);
     await tick();
     gate.resolve();
-    const settled = await inflight;
+    const results = await inflight;
 
     expect(calls).toBe(2);
-    expect(settled).toEqual(["1", "1"]);
+    expect(results).toEqual([
+      { id: "1", calls: 1 },
+      { id: "1", calls: 2 },
+    ]);
+  });
+
+  it("coalesces Redis read failures after the remote layer is active", async () => {
+    const gate = deferred<void>();
+    const redis = new FailingReadRedis();
+    const logger = { debug: vi.fn(), error: vi.fn(), warn: vi.fn() };
+    const gcache = new GCache({ redis: { client: redis }, logger });
+    let calls = 0;
+    const getUser = gcache.cached(
+      async (id: string) => {
+        calls += 1;
+        const call = calls;
+        await gate.promise;
+        return { id, calls: call };
+      },
+      {
+        keyType: "user_id",
+        useCase: "CoalesceRemoteFailOpen",
+        cacheKey: (id) => id,
+        defaultConfig: new GCacheKeyConfig({
+          ttlSec: { [CacheLayer.REMOTE]: 60 },
+          ramp: { [CacheLayer.REMOTE]: 100 },
+        }),
+      },
+    );
+
+    const inflight = gcache.enable(async () => await Promise.all([getUser("1"), getUser("1")]));
+    await tick();
+    gate.resolve();
+    const results = await inflight;
+
+    expect(calls).toBe(1);
+    expect(results).toEqual([
+      { id: "1", calls: 1 },
+      { id: "1", calls: 1 },
+    ]);
   });
 });

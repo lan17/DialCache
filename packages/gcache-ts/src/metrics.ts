@@ -3,7 +3,10 @@ import { Counter, Histogram, type Registry, register as defaultRegistry } from "
 import { CacheLayer } from "./config.js";
 import type { GCacheKey } from "./key.js";
 
-export type MetricLayer = CacheLayer | "noop";
+export const NO_CACHE_LAYER = "noop";
+
+type NoCacheLayer = typeof NO_CACHE_LAYER;
+export type MetricLayer = CacheLayer | NoCacheLayer;
 export type DisabledReason = "context" | "missing_config" | "invalid_ttl" | "ramped_down" | "config_error";
 
 export interface CacheMetricLabels {
@@ -102,12 +105,12 @@ export class PrometheusGCacheMetrics implements GCacheMetricsAdapter {
     });
     this.invalidationCounter = counter(registry, {
       name: `${prefix}gcache_invalidation_counter`,
-      help: "GCache invalidation/delete calls by key type and layer.",
+      help: "GCache invalidation calls by key type and layer.",
       labelNames: ["key_type", "layer"] as const,
     });
     this.coalescedCounter = counter(registry, {
       name: `${prefix}gcache_coalesced_counter`,
-      help: "GCache requests coalesced onto an in-flight single-flight leader.",
+      help: "GCache requests coalesced onto an in-flight cache miss.",
       labelNames: ["use_case", "key_type"] as const,
     });
     this.getTimer = histogram(registry, {

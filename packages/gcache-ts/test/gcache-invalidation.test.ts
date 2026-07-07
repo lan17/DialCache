@@ -17,6 +17,7 @@ import {
   type RedisStoredValue,
   type RedisValueEnvelope,
   type SerializationMetricLabels,
+  type Serializer,
 } from "../src/index.js";
 import { RedisCache } from "../src/internal/redis-cache.js";
 
@@ -159,13 +160,13 @@ describe("GCache targeted invalidation watermarks", () => {
     });
     const gcache = new GCache({ redis: { client: redis } });
     let calls = 0;
-    const getUser = gcache.cached({
+    const getUser = gcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
       keyType: "user_id",
       useCase: "TrackedAtomicRead",
-      id: ([userId]: [string]) => userId,
+      cacheKey: (userId) => userId,
       trackForInvalidation: true,
       defaultConfig: remoteOnly(),
-    })(async (userId: string) => ({ userId, calls: ++calls }));
+    });
 
     // When the tracked key is read from Redis.
     const value = await gcache.enable(async () => await getUser("123"));
@@ -311,20 +312,20 @@ describe("GCache targeted invalidation watermarks", () => {
     const gcache = new GCache({ redis: { client: redis } });
     let profileVersion = 1;
     let permissionsVersion = 1;
-    const getProfile = gcache.cached({
+    const getProfile = gcache.cached(async (userId: string) => ({ userId, profileVersion }), {
       keyType: "user_id",
       useCase: "InvalidateProfile",
-      id: ([userId]: [string]) => userId,
+      cacheKey: (userId) => userId,
       trackForInvalidation: true,
       defaultConfig: remoteOnly(),
-    })(async (userId: string) => ({ userId, profileVersion }));
-    const getPermissions = gcache.cached({
+    });
+    const getPermissions = gcache.cached(async (userId: string) => ({ userId, permissionsVersion }), {
       keyType: "user_id",
       useCase: "InvalidatePermissions",
-      id: ([userId]: [string]) => userId,
+      cacheKey: (userId) => userId,
       trackForInvalidation: true,
       defaultConfig: remoteOnly(),
-    })(async (userId: string) => ({ userId, permissionsVersion }));
+    });
     await gcache.enable(async () => {
       await getProfile("123");
       await getPermissions("123");
@@ -334,7 +335,7 @@ describe("GCache targeted invalidation watermarks", () => {
 
     // When the shared key type/id is invalidated and both use cases read again after the watermark timestamp.
     vi.setSystemTime(new Date("2026-05-12T18:00:00.001Z"));
-    await gcache.invalidate("user_id", "123");
+    await gcache.invalidateRemote("user_id", "123");
     vi.setSystemTime(new Date("2026-05-12T18:00:00.002Z"));
     const [profile, permissions] = await gcache.enable(async () => [await getProfile("123"), await getPermissions("123")]);
 
@@ -355,14 +356,14 @@ describe("GCache targeted invalidation watermarks", () => {
     const redis = new FakeRedis();
     const gcache = new GCache({ redis: { client: redis } });
     let calls = 0;
-    const getUser = gcache.cached({
+    const getUser = gcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
       keyType: "user_id",
       useCase: "FutureBufferUser",
-      id: ([userId]: [string]) => userId,
+      cacheKey: (userId) => userId,
       trackForInvalidation: true,
       defaultConfig: localAndRemote(),
-    })(async (userId: string) => ({ userId, calls: ++calls }));
-    await gcache.invalidate("user_id", "123", { futureBufferMs: 1_000 });
+    });
+    await gcache.invalidateRemote("user_id", "123", 1_000);
 
     // When the fallback runs during the active invalidation window.
     vi.setSystemTime(new Date("2026-05-12T18:10:00.500Z"));
@@ -375,6 +376,20 @@ describe("GCache targeted invalidation watermarks", () => {
     expect([...redis.values.keys()]).toEqual([watermarkKey]);
   });
 
+  it("rejects invalid future invalidation buffers before writing Redis", async () => {
+    // Given future invalidation buffers must represent finite nonnegative milliseconds.
+    const redis = new FakeRedis();
+    const gcache = new GCache({ redis: { client: redis } });
+
+    // When invalid buffers are passed.
+    await expect(gcache.invalidateRemote("user_id", "123", -1)).rejects.toThrow("futureBufferMs");
+    await expect(gcache.invalidateRemote("user_id", "123", Number.NaN)).rejects.toThrow("futureBufferMs");
+    await expect(gcache.invalidateRemote("user_id", "123", Number.POSITIVE_INFINITY)).rejects.toThrow("futureBufferMs");
+
+    // Then no watermark write reaches Redis.
+    expect(redis.setCalls).toBe(0);
+  });
+
   it("does not write Redis or local cache when a future invalidation arrives during fallback", async () => {
     // Given a tracked cache miss starts before any invalidation watermark exists.
     vi.useFakeTimers();
@@ -382,17 +397,20 @@ describe("GCache targeted invalidation watermarks", () => {
     const redis = new FakeRedis();
     const gcache = new GCache({ redis: { client: redis } });
     let calls = 0;
-    const getUser = gcache.cached({
-      keyType: "user_id",
-      useCase: "FutureBufferFallbackRace",
-      id: ([userId]: [string]) => userId,
-      trackForInvalidation: true,
-      defaultConfig: localAndRemote(),
-    })(async (userId: string) => {
-      calls += 1;
-      await gcache.invalidate("user_id", userId, { futureBufferMs: 1_000 });
-      return { userId, calls };
-    });
+    const getUser = gcache.cached(
+      async (userId: string) => {
+        calls += 1;
+        await gcache.invalidateRemote("user_id", userId, 1_000);
+        return { userId, calls };
+      },
+      {
+        keyType: "user_id",
+        useCase: "FutureBufferFallbackRace",
+        cacheKey: (userId) => userId,
+        trackForInvalidation: true,
+        defaultConfig: localAndRemote(),
+      },
+    );
 
     // When the fallback writes a future-buffer watermark before returning its result.
     const first = await gcache.enable(async () => await getUser("123"));
@@ -412,13 +430,13 @@ describe("GCache targeted invalidation watermarks", () => {
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
     const gcache = new GCache({ redis: { client: redis }, logger });
     let calls = 0;
-    const getUser = gcache.cached({
+    const getUser = gcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
       keyType: "user_id",
       useCase: "TrackedMalformedEnvelope",
-      id: ([userId]: [string]) => userId,
+      cacheKey: (userId) => userId,
       trackForInvalidation: true,
       defaultConfig: localAndRemote(),
-    })(async (userId: string) => ({ userId, calls: ++calls }));
+    });
 
     // When the malformed value is read twice.
     const first = await gcache.enable(async () => await getUser("123"));
@@ -429,6 +447,65 @@ describe("GCache targeted invalidation watermarks", () => {
     expect(second).toEqual({ userId: "123", calls: 1 });
     expect(calls).toBe(1);
     expect(logger.warn).not.toHaveBeenCalledWith("Error getting value from Redis cache", expect.any(Error));
+  });
+
+  it("refreshes tracked Redis entries when serializer load fails and no active watermark is present", async () => {
+    // Given a tracked key has a valid Redis envelope whose payload cannot be decoded by the configured serializer.
+    const redis = new FakeRedis();
+    const redisKey = valueKey("TrackedSerializerLoadFailure");
+    redis.values.set(redisKey, {
+      value: JSON.stringify({
+        version: 1,
+        createdAtMs: Date.now(),
+        expiresAtMs: Date.now() + 60_000,
+        encoding: "utf8",
+        payload: JSON.stringify({ userId: "123", source: "stale" }),
+      } satisfies RedisValueEnvelope),
+      ttlSec: 60,
+      expiresAtMs: Date.now() + 60_000,
+    });
+    let failNextLoad = true;
+    const serializer: Serializer<{ userId: string; source: string }> = {
+      dump: vi.fn(async (value) => JSON.stringify(value)),
+      load: vi.fn(async (value) => {
+        if (failNextLoad) {
+          failNextLoad = false;
+          throw new Error("load failed");
+        }
+        return JSON.parse(Buffer.isBuffer(value) ? value.toString("utf8") : value) as { userId: string; source: string };
+      }),
+    };
+    const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const metrics = new RecordingMetrics();
+    const gcache = new GCache({ redis: { client: redis }, logger, metrics });
+    let calls = 0;
+    const getUser = gcache.cached(async (userId: string) => ({ userId, source: `fallback-${++calls}` }), {
+      keyType: "user_id",
+      useCase: "TrackedSerializerLoadFailure",
+      cacheKey: (userId) => userId,
+      trackForInvalidation: true,
+      defaultConfig: localAndRemote(),
+      serializer,
+    });
+
+    // When the bad payload is read twice.
+    const first = await gcache.enable(async () => await getUser("123"));
+    const second = await gcache.enable(async () => await getUser("123"));
+
+    // Then the first read repairs Redis/local cache instead of turning the tracked key into a persistent bypass.
+    const envelope = JSON.parse(redis.raw(redisKey)) as RedisValueEnvelope;
+    expect(first).toEqual({ userId: "123", source: "fallback-1" });
+    expect(second).toEqual({ userId: "123", source: "fallback-1" });
+    expect(JSON.parse(envelope.payload)).toEqual({ userId: "123", source: "fallback-1" });
+    expect(calls).toBe(1);
+    expect(redis.delCalls).toBe(1);
+    expect(serializer.load).toHaveBeenCalledOnce();
+    expect(serializer.dump).toHaveBeenCalledOnce();
+    expect(logger.warn).not.toHaveBeenCalledWith("Error getting value from Redis cache", expect.any(Error));
+    expect(metrics.events).toContainEqual({
+      name: "error",
+      labels: { useCase: "TrackedSerializerLoadFailure", keyType: "user_id", layer: CacheLayer.REMOTE, error: "Error", inFallback: false },
+    });
   });
 
   it("keeps delimiter-containing tracked prefixes distinct", async () => {
@@ -454,18 +531,17 @@ describe("GCache targeted invalidation watermarks", () => {
       urnPrefix: "urn:galileo:test",
       redis: { client: redis, keyPrefix: "gcache:", watermarkTtlSec: 42 },
     });
-    const getUser = gcache.cached({
+    const getUser = gcache.cached(async (userId: string, locale: string) => ({ userId, locale }), {
       keyType: "User",
       useCase: "ClusterSlotUser",
-      id: ([userId]: [string, string]) => userId,
-      args: ([, locale]: [string, string]) => ({ locale }),
+      cacheKey: (userId, locale) => ({ id: userId, args: { locale } }),
       trackForInvalidation: true,
       defaultConfig: remoteOnly(),
-    })(async (userId: string, locale: string) => ({ userId, locale }));
+    });
 
     // When a tracked value and its watermark are written.
     await gcache.enable(async () => await getUser("123", "en"));
-    await gcache.invalidate("User", "123");
+    await gcache.invalidateRemote("User", "123");
 
     // Then both Redis keys share the same hash tag, custom prefix, and configured watermark TTL.
     expect([...redis.values.keys()].sort()).toEqual([
@@ -485,18 +561,18 @@ describe("GCache targeted invalidation watermarks", () => {
     const redis = new FakeRedis();
     const gcache = new GCache({ redis: { client: redis } });
     let version = 1;
-    const getUser = gcache.cached({
+    const getUser = gcache.cached(async (userId: string) => ({ userId, version }), {
       keyType: "user_id",
       useCase: "LocalInvalidationLimit",
-      id: ([userId]: [string]) => userId,
+      cacheKey: (userId) => userId,
       trackForInvalidation: true,
       defaultConfig: localAndRemote(),
-    })(async (userId: string) => ({ userId, version }));
+    });
     const before = await gcache.enable(async () => await getUser("123"));
     version = 2;
 
     // When Redis is invalidated but the same process still has a local cache hit.
-    await gcache.invalidate("user_id", "123");
+    await gcache.invalidateRemote("user_id", "123");
     const after = await gcache.enable(async () => await getUser("123"));
 
     // Then the local hit can remain stale, which is why strong invalidation should disable local cache.
@@ -513,7 +589,7 @@ describe("GCache targeted invalidation watermarks", () => {
     const writeGCache = new GCache({ redis: { client: writeRedis }, logger, metrics: writeMetrics });
 
     // When targeted invalidation cannot write its watermark.
-    await expect(writeGCache.invalidate("user_id", "123")).rejects.toThrow("redis set failed");
+    await expect(writeGCache.invalidateRemote("user_id", "123")).rejects.toThrow("redis set failed");
 
     // Then the API logs the operational failure and records both the invalidation attempt and error.
     expect(logger.warn).toHaveBeenCalledWith("Error writing GCache invalidation watermark", expect.any(Error));
@@ -529,13 +605,13 @@ describe("GCache targeted invalidation watermarks", () => {
     const readMetrics = new RecordingMetrics();
     const readGCache = new GCache({ redis: { client: readRedis }, logger, metrics: readMetrics });
     let calls = 0;
-    const getUser = readGCache.cached({
+    const getUser = readGCache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
       keyType: "user_id",
       useCase: "WatermarkReadFailOpen",
-      id: ([userId]: [string]) => userId,
+      cacheKey: (userId) => userId,
       trackForInvalidation: true,
       defaultConfig: localAndRemote(),
-    })(async (userId: string) => ({ userId, calls: ++calls }));
+    });
 
     // When the cached function runs while the watermark read is unavailable.
     const first = await readGCache.enable(async () => await getUser("123"));
@@ -559,13 +635,13 @@ describe("GCache targeted invalidation watermarks", () => {
     const metrics = new RecordingMetrics();
     const gcache = new GCache({ redis: { client: redis }, logger, metrics });
     let calls = 0;
-    const getUser = gcache.cached({
+    const getUser = gcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
       keyType: "user_id",
       useCase: "MalformedWatermarkFailOpen",
-      id: ([userId]: [string]) => userId,
+      cacheKey: (userId) => userId,
       trackForInvalidation: true,
       defaultConfig: localAndRemote(),
-    })(async (userId: string) => ({ userId, calls: ++calls }));
+    });
 
     // When the tracked function runs while watermark state cannot be trusted.
     const first = await gcache.enable(async () => await getUser("123"));

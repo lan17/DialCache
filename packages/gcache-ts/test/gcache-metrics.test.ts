@@ -91,24 +91,26 @@ const remoteOnly = () =>
     ramp: { [CacheLayer.REMOTE]: 100 },
   });
 
+const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
 describe("GCache observability metrics", () => {
   it("reuses existing Prometheus collectors when multiple caches share a registry", async () => {
     // Given two GCache instances use the same custom Prometheus registry and metric names.
     const registry = new Registry();
     const firstCache = new GCache({ metricsRegistry: registry });
     const secondCache = new GCache({ metricsRegistry: registry });
-    const first = firstCache.cached({
+    const first = firstCache.cached(async (userId: string) => ({ userId }), {
       keyType: "user_id",
       useCase: "DuplicateMetricRegistrationFirst",
-      id: ([userId]: [string]) => userId,
+      cacheKey: (userId) => userId,
       defaultConfig: localOnly(),
-    })(async (userId: string) => ({ userId }));
-    const second = secondCache.cached({
+    });
+    const second = secondCache.cached(async (userId: string) => ({ userId }), {
       keyType: "user_id",
       useCase: "DuplicateMetricRegistrationSecond",
-      id: ([userId]: [string]) => userId,
+      cacheKey: (userId) => userId,
       defaultConfig: localOnly(),
-    })(async (userId: string) => ({ userId }));
+    });
 
     // When both caches emit request metrics.
     await firstCache.enable(async () => await first("123"));
@@ -126,12 +128,12 @@ describe("GCache observability metrics", () => {
     const metrics = new RecordingMetrics();
     const gcache = new GCache({ metrics });
     let calls = 0;
-    const getUser = gcache.cached({
+    const getUser = gcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
       keyType: "user_id",
       useCase: "CustomMetricsAdapter",
-      id: ([userId]: [string]) => userId,
+      cacheKey: (userId) => userId,
       defaultConfig: localOnly(),
-    })(async (userId: string) => ({ userId, calls: ++calls }));
+    });
 
     // When a local miss is followed by a local hit.
     const first = await gcache.enable(async () => await getUser("123"));
@@ -161,12 +163,12 @@ describe("GCache observability metrics", () => {
     };
     const gcache = new GCache({ metrics: throwingMetrics });
     let calls = 0;
-    const getUser = gcache.cached({
+    const getUser = gcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
       keyType: "user_id",
       useCase: "ThrowingMetricsFailOpen",
-      id: ([userId]: [string]) => userId,
+      cacheKey: (userId) => userId,
       defaultConfig: localOnly(),
-    })(async (userId: string) => ({ userId, calls: ++calls }));
+    });
 
     // When metrics emission fails around a cache miss and hit.
     const first = await gcache.enable(async () => await getUser("123"));
@@ -181,32 +183,32 @@ describe("GCache observability metrics", () => {
     // Given one cache call is outside context and other enabled calls have disabled layer config.
     const metrics = new RecordingMetrics();
     const gcache = new GCache({ metrics });
-    const contextDisabled = gcache.cached({
+    const contextDisabled = gcache.cached(async (userId: string) => userId, {
       keyType: "user_id",
       useCase: "DisabledByContext",
-      id: ([userId]: [string]) => userId,
+      cacheKey: (userId) => userId,
       defaultConfig: localOnly(),
-    })(async (userId: string) => userId);
-    const missingConfig = gcache.cached({
+    });
+    const missingConfig = gcache.cached(async (userId: string) => userId, {
       keyType: "user_id",
       useCase: "DisabledByMissingConfig",
-      id: ([userId]: [string]) => userId,
-    })(async (userId: string) => userId);
-    const invalidTtl = gcache.cached({
+      cacheKey: (userId) => userId,
+    });
+    const invalidTtl = gcache.cached(async (userId: string) => userId, {
       keyType: "user_id",
       useCase: "DisabledByInvalidTtl",
-      id: ([userId]: [string]) => userId,
+      cacheKey: (userId) => userId,
       defaultConfig: localOnly(0),
-    })(async (userId: string) => userId);
-    const rampedDown = gcache.cached({
+    });
+    const rampedDown = gcache.cached(async (userId: string) => userId, {
       keyType: "user_id",
       useCase: "DisabledByRamp",
-      id: ([userId]: [string]) => userId,
+      cacheKey: (userId) => userId,
       defaultConfig: new GCacheKeyConfig({
         ttlSec: { [CacheLayer.LOCAL]: 60 },
         ramp: { [CacheLayer.LOCAL]: 0 },
       }),
-    })(async (userId: string) => userId);
+    });
 
     // When each path is called.
     await contextDisabled("123");
@@ -232,20 +234,20 @@ describe("GCache observability metrics", () => {
     const failingRedis = new FakeRedis();
     failingRedis.failGet = true;
     const cacheFailure = new GCache({ redis: { client: failingRedis }, metrics, logger });
-    const readThroughFailure = cacheFailure.cached({
+    const readThroughFailure = cacheFailure.cached(async (userId: string) => ({ userId }), {
       keyType: "user_id",
       useCase: "CacheErrorClassification",
-      id: ([userId]: [string]) => userId,
+      cacheKey: (userId) => userId,
       defaultConfig: remoteOnly(),
-    })(async (userId: string) => ({ userId }));
+    });
     const fallbackCache = new GCache({ redis: { client: new FakeRedis() }, metrics, logger });
-    const fallbackFailure = fallbackCache.cached({
+    const fallbackFailure = fallbackCache.cached(async (userId: string) => {
+      throw new TypeError("database failed");
+    }, {
       keyType: "user_id",
       useCase: "FallbackErrorClassification",
-      id: ([userId]: [string]) => userId,
+      cacheKey: (userId) => userId,
       defaultConfig: remoteOnly(),
-    })(async () => {
-      throw new TypeError("database failed");
     });
 
     // When the cache error fails open and the fallback error escapes.
@@ -277,12 +279,12 @@ describe("GCache observability metrics", () => {
     const redis = new FakeRedis();
     const gcache = new GCache({ redis: { client: redis }, metricsRegistry: registry, metricsPrefix: "test_" });
     let calls = 0;
-    const getUser = gcache.cached({
+    const getUser = gcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
       keyType: "user_id",
       useCase: "PrometheusMetricExport",
-      id: ([userId]: [string]) => userId,
+      cacheKey: (userId) => userId,
       defaultConfig: remoteOnly(),
-    })(async (userId: string) => ({ userId, calls: ++calls }));
+    });
 
     // When the first read misses Redis and the second read hits Redis.
     const first = await gcache.enable(async () => await getUser("123"));
@@ -299,6 +301,67 @@ describe("GCache observability metrics", () => {
       sumMetric(registry, "test_gcache_serialization_timer", { use_case: "PrometheusMetricExport", layer: "remote" }),
     ).resolves.toBeGreaterThan(0);
     await expect(sumMetric(registry, "test_gcache_size_histogram", { use_case: "PrometheusMetricExport", layer: "remote" })).resolves.toBeGreaterThan(0);
+  });
+
+  it("exports Prometheus counters for disabled, error, invalidation, and coalesced events", async () => {
+    // Given a custom Prometheus registry and a Redis-backed cache that can exercise every documented counter family.
+    const registry = new Registry();
+    const redis = new FakeRedis();
+    const gcache = new GCache({ redis: { client: redis }, metricsRegistry: registry, metricsPrefix: "test_" });
+    const contextDisabled = gcache.cached(async (userId: string) => userId, {
+      keyType: "user_id",
+      useCase: "PrometheusDisabledMetric",
+      cacheKey: (userId) => userId,
+      defaultConfig: localOnly(),
+    });
+    const keyBuildFailure = gcache.cached(async (userId: string) => userId, {
+      keyType: "user_id",
+      useCase: "PrometheusErrorMetric",
+      cacheKey: () => {
+        throw new Error("bad key");
+      },
+      defaultConfig: localOnly(),
+    });
+    let releaseFallback: () => void = () => undefined;
+    const fallbackGate = new Promise<void>((resolve) => {
+      releaseFallback = resolve;
+    });
+    let coalescedCalls = 0;
+    const coalesced = gcache.cached(async (userId: string) => {
+      coalescedCalls += 1;
+      await fallbackGate;
+      return userId;
+    }, {
+      keyType: "user_id",
+      useCase: "PrometheusCoalescedMetric",
+      cacheKey: (userId) => userId,
+      defaultConfig: localOnly(),
+    });
+
+    // When each counter path emits once.
+    await contextDisabled("123");
+    await gcache.enable(async () => await keyBuildFailure("123"));
+    await gcache.invalidateRemote("user_id", "123");
+    const inflight = gcache.enable(async () => await Promise.all([coalesced("456"), coalesced("456")]));
+    await tick();
+    releaseFallback();
+    await inflight;
+
+    // Then the Prometheus registry exposes the documented counter families with their operational labels.
+    expect(coalescedCalls).toBe(1);
+    await expect(
+      sumMetric(registry, "test_gcache_disabled_counter", { use_case: "PrometheusDisabledMetric", layer: "noop", reason: "context" }),
+    ).resolves.toBe(1);
+    await expect(
+      sumMetric(registry, "test_gcache_error_counter", {
+        use_case: "PrometheusErrorMetric",
+        layer: "noop",
+        error: "Error",
+        in_fallback: "false",
+      }),
+    ).resolves.toBe(1);
+    await expect(sumMetric(registry, "test_gcache_invalidation_counter", { key_type: "user_id", layer: "remote" })).resolves.toBe(1);
+    await expect(sumMetric(registry, "test_gcache_coalesced_counter", { use_case: "PrometheusCoalescedMetric", key_type: "user_id" })).resolves.toBe(1);
   });
 });
 
