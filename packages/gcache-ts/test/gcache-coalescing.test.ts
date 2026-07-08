@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { CacheLayer, GCache, GCacheKeyConfig, type GCacheMetricsAdapter, type RedisCommandClient, type RedisStoredValue } from "../src/index.js";
+import { CacheLayer, GCache, GCacheKeyConfig, type GCacheMetricsAdapter } from "../src/index.js";
+import { FakeRedis } from "./fake-redis.js";
 
 interface Deferred<T> {
   readonly promise: Promise<T>;
@@ -20,33 +21,10 @@ function deferred<T>(): Deferred<T> {
 
 const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
-class FakeRedis implements RedisCommandClient {
-  readonly values = new Map<string, RedisStoredValue>();
-  getCalls = 0;
-  setCalls = 0;
-  getGate: Promise<void> | null = null;
-
-  async get(key: string): Promise<RedisStoredValue | null> {
-    this.getCalls += 1;
-    if (this.getGate !== null) {
-      await this.getGate;
-    }
-    return this.values.get(key) ?? null;
-  }
-
-  async setEx(key: string, _ttlSec: number, value: RedisStoredValue): Promise<void> {
-    this.setCalls += 1;
-    this.values.set(key, value);
-  }
-
-  async del(key: string): Promise<number> {
-    return this.values.delete(key) ? 1 : 0;
-  }
-}
-
 class FailingReadRedis extends FakeRedis {
-  override async get(_key: string): Promise<RedisStoredValue | null> {
-    throw new Error("redis unavailable");
+  constructor() {
+    super();
+    this.failGet = true;
   }
 }
 

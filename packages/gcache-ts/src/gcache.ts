@@ -442,8 +442,8 @@ function elapsedSeconds(startMs: number): number {
 }
 
 function assertValidFutureBufferMs(futureBufferMs: number): void {
-  if (!Number.isFinite(futureBufferMs) || futureBufferMs < 0) {
-    throw new RangeError("GCache invalidation futureBufferMs must be a finite nonnegative number");
+  if (!Number.isSafeInteger(futureBufferMs) || futureBufferMs < 0) {
+    throw new RangeError("GCache invalidation futureBufferMs must be a nonnegative safe integer");
   }
 }
 
