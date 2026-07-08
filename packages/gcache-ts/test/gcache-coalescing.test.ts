@@ -273,6 +273,45 @@ describe("GCache request coalescing", () => {
     ]);
   });
 
+  it("does not coalesce or touch Redis when configured layers are ramped out", async () => {
+    const gate = deferred<void>();
+    const redis = new FakeRedis();
+    const { metrics, coalesced } = spyMetrics();
+    const gcache = new GCache({ redis: { client: redis }, metrics });
+    let calls = 0;
+    const getUser = gcache.cached(
+      async (id: string) => {
+        const call = ++calls;
+        await gate.promise;
+        return { id, calls: call };
+      },
+      {
+        keyType: "user_id",
+        useCase: "NoCoalesceRampedOut",
+        cacheKey: (id) => id,
+        defaultConfig: new GCacheKeyConfig({
+          ttlSec: { [CacheLayer.LOCAL]: 60, [CacheLayer.REMOTE]: 60 },
+          ramp: { [CacheLayer.LOCAL]: 0, [CacheLayer.REMOTE]: 0 },
+        }),
+      },
+    );
+
+    const inflight = gcache.enable(async () => await Promise.all([getUser("1"), getUser("1")]));
+    await tick();
+    gate.resolve();
+    const results = await inflight;
+
+    expect(calls).toBe(2);
+    expect(results).toEqual([
+      { id: "1", calls: 1 },
+      { id: "1", calls: 2 },
+    ]);
+    expect(coalesced).not.toHaveBeenCalled();
+    expect(redis.getCalls).toBe(0);
+    expect(redis.mGetCalls).toBe(0);
+    expect(redis.setCalls).toBe(0);
+  });
+
   it("coalesces Redis read failures after the remote layer is active", async () => {
     const gate = deferred<void>();
     const redis = new FailingReadRedis();

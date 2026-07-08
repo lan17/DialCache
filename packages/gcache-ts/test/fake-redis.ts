@@ -5,6 +5,7 @@ import type {
   RedisReadRequest,
   RedisWriteRequest,
 } from "../src/index.js";
+import { GCacheRedisPayloadEncodingError } from "../src/redis-client.js";
 
 const FRAME_VERSION = 1;
 const ENCODING_OFFSET = 9;
@@ -159,7 +160,7 @@ export class FakeRedis implements GCacheRedisClient {
     if (encoding === 1) {
       return { encoding: "base64", value: raw.subarray(PAYLOAD_OFFSET).toString("utf8") };
     }
-    throw new Error("Invalid GCache Redis payload encoding");
+    throw new GCacheRedisPayloadEncodingError("Invalid GCache Redis payload encoding");
   }
 
   private storeFrame(key: string, ttlMs: number, encoding: "utf8" | "base64", payload: string): void {

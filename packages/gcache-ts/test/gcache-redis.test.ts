@@ -423,6 +423,52 @@ describe("GCache Redis TTL layer", () => {
     );
   });
 
+  it("records the same payload encoding label for malformed FakeRedis frames", async () => {
+    const redis = new FakeRedis();
+    const redisKey = redisKeyFor("123", "RedisFakeBadPayloadEncoding");
+    redis.setRaw(redisKey, encodeFrame({ userId: "123", source: "stale" }, Date.now(), 2));
+    const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const metrics = {
+      request: vi.fn(),
+      miss: vi.fn(),
+      disabled: vi.fn(),
+      error: vi.fn(),
+      invalidation: vi.fn(),
+      observeGet: vi.fn(),
+      observeFallback: vi.fn(),
+      observeSerialization: vi.fn(),
+      observeSize: vi.fn(),
+    };
+    const gcache = new GCache({ redis: { client: redis }, logger, metrics });
+    let calls = 0;
+    const getUser = gcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "RedisFakeBadPayloadEncoding",
+      cacheKey: (userId) => userId,
+      defaultConfig: new GCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 100 },
+      }),
+    });
+
+    const value = await gcache.enable(async () => await getUser("123"));
+
+    expect(value).toEqual({ userId: "123", calls: 1 });
+    expect(calls).toBe(1);
+    expect(redis.getCalls).toBe(1);
+    expect(metrics.error).toHaveBeenCalledWith({
+      useCase: "RedisFakeBadPayloadEncoding",
+      keyType: "user_id",
+      layer: CacheLayer.REMOTE,
+      error: "GCacheRedisPayloadEncodingError",
+      inFallback: false,
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Error getting value from Redis cache",
+      expect.objectContaining({ name: "GCacheRedisPayloadEncodingError" }),
+    );
+  });
+
   it("falls through when remote config is missing and propagates Redis maintenance errors", async () => {
     // Given Redis is configured but the key has no remote TTL and maintenance commands fail.
     const redis = new FakeRedis();
