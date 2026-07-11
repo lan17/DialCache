@@ -209,6 +209,30 @@ describe("GCache targeted invalidation watermarks", () => {
     expect([...redis.values.keys()]).toEqual([watermarkKey]);
   });
 
+  it("blocks a same-millisecond write for a zero-length future buffer", async () => {
+    const redis = new FakeRedis();
+    const gcache = new GCache({ redis: { client: redis } });
+    let calls = 0;
+    const getUser = gcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "ZeroBufferBoundary",
+      cacheKey: (userId) => userId,
+      trackForInvalidation: true,
+      defaultConfig: remoteOnly(),
+    });
+
+    await gcache.invalidateRemote("user_id", "123", 0);
+    const blocked = await gcache.enable(async () => await getUser("123"));
+    vi.advanceTimersByTime(1);
+    const written = await gcache.enable(async () => await getUser("123"));
+    const cached = await gcache.enable(async () => await getUser("123"));
+
+    expect(blocked).toEqual({ userId: "123", calls: 1 });
+    expect(written).toEqual({ userId: "123", calls: 2 });
+    expect(cached).toEqual(written);
+    expect(calls).toBe(2);
+  });
+
   it("resumes tracked writes after the future buffer", async () => {
     const redis = new FakeRedis();
     const gcache = new GCache({ redis: { client: redis } });

@@ -58,12 +58,20 @@ local function parse_watermark(raw)
   return value
 end
 
-local cache_ttl_ms = math.ceil(tonumber(ARGV[1]) or 0)
+local function ceil_finite_number(raw)
+  local value = tonumber(raw)
+  if not value or value ~= value or value >= math.huge or value <= -math.huge then
+    return nil
+  end
+  return math.ceil(value)
+end
+
+local cache_ttl_ms = ceil_finite_number(ARGV[1])
 local encoding = tonumber(ARGV[2])
-if cache_ttl_ms <= 0 then
+if not cache_ttl_ms or cache_ttl_ms <= 0 then
   return redis.error_reply("ERR invalid GCache TTL")
 end
-if encoding ~= 0 and encoding ~= 1 then
+if not encoding or (encoding ~= 0 and encoding ~= 1) then
   return redis.error_reply("ERR invalid GCache payload encoding")
 end
 
@@ -74,8 +82,8 @@ local raw_watermark = false
 local watermark_ttl_floor_ms = nil
 
 if #KEYS == 2 then
-  watermark_ttl_floor_ms = math.ceil(tonumber(ARGV[4]) or 0)
-  if watermark_ttl_floor_ms <= 0 then
+  watermark_ttl_floor_ms = ceil_finite_number(ARGV[4])
+  if not watermark_ttl_floor_ms or watermark_ttl_floor_ms <= 0 then
     return redis.error_reply("ERR invalid GCache watermark TTL")
   end
 
@@ -127,12 +135,20 @@ local function parse_watermark(raw)
   return value
 end
 
-local future_buffer_ms = math.ceil(tonumber(ARGV[1]) or -1)
-local watermark_ttl_floor_ms = math.ceil(tonumber(ARGV[2]) or 0)
-if future_buffer_ms < 0 then
+local function ceil_finite_number(raw)
+  local value = tonumber(raw)
+  if not value or value ~= value or value >= math.huge or value <= -math.huge then
+    return nil
+  end
+  return math.ceil(value)
+end
+
+local future_buffer_ms = ceil_finite_number(ARGV[1])
+local watermark_ttl_floor_ms = ceil_finite_number(ARGV[2])
+if not future_buffer_ms or future_buffer_ms < 0 then
   return redis.error_reply("ERR invalid GCache future buffer")
 end
-if watermark_ttl_floor_ms <= 0 then
+if not watermark_ttl_floor_ms or watermark_ttl_floor_ms <= 0 then
   return redis.error_reply("ERR invalid GCache watermark TTL")
 end
 
