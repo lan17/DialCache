@@ -24,6 +24,7 @@ export { GCache } from "./gcache.js";
 export type { CacheKeySpec, CachedFn, CachedOptions, CachedValue } from "./gcache.js";
 export { GCacheKey, invalidationPrefix, normalizeArgs, redisClusterHashTag } from "./key.js";
 export type { GCacheKeyInit } from "./key.js";
+export { GCacheRedisPayloadEncodingError, GCacheRedisPayloadError } from "./redis-client.js";
 export type { RedisConfig } from "./internal/redis-cache.js";
 export type {
   GCacheRedisClient,

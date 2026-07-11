@@ -165,6 +165,8 @@ export class GCache {
    * Writes a remote invalidation watermark for Redis-tracked entries.
    *
    * This does not synchronously evict local cache hits or untracked Redis values.
+   *
+   * @param futureBufferMs Nonnegative safe integer covering fallback and replication lag.
    */
   async invalidateRemote(keyType: string, id: Id, futureBufferMs = 0): Promise<void> {
     assertValidFutureBufferMs(futureBufferMs);

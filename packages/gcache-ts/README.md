@@ -60,6 +60,9 @@ const gcache = new GCache({
 });
 ```
 
+> [!IMPORTANT]
+> The Lua protocol changes the experimental Redis client contract. Existing callers must wrap node-redis with `createNodeRedisGCacheClient`; raw command clients are no longer accepted by `redis.client` or `redis.createClient`. The former `RedisCommandClient`, `RedisStoredValue`, and `RedisValueEnvelope` exports have been replaced by the `GCacheRedisClient` semantic interface and its request/payload types.
+
 When caching is enabled, reads flow through:
 
 ```text
@@ -91,7 +94,7 @@ const gcache = new GCache({
 });
 ```
 
-The core Redis boundary is the client-agnostic `GCacheRedisClient` interface. Other clients can implement that semantic interface without changing GCache; the raw Lua sources and wire constants are available from `@rungalileo/gcache/redis-protocol`, so a Valkey GLIDE adapter can be added without depending on node-redis.
+The core Redis boundary is the client-agnostic `GCacheRedisClient` interface. Other clients can implement that semantic interface without changing GCache; the raw Lua sources and wire constants are available from `@rungalileo/gcache/redis-protocol`, so a Valkey GLIDE adapter can be added without depending on node-redis. Custom adapters can use the root-exported `GCacheRedisPayloadError` and `GCacheRedisPayloadEncodingError` classes to preserve the standard metrics labels.
 
 Redis values use a compact binary frame:
 
@@ -141,7 +144,7 @@ A cached Redis value whose Redis-created timestamp is older than or equal to the
 
 Tracked writes create a baseline watermark and extend its TTL to at least the value TTL plus one minute. Invalidation preserves that lifetime and extends it to cover the future buffer. `DEFAULT_WATERMARK_TTL_SEC` (4 hours) remains a configurable floor rather than a maximum, and reads do not extend watermark lifetime.
 
-Size `futureBufferMs` to cover the maximum fallback duration plus expected source-replication lag and a safety margin. Invalidate after the source mutation commits. The buffer prevents stale fallback results from being cached under those assumptions; it does not itself force the current fallback to read from an authoritative source.
+`futureBufferMs` must be a nonnegative safe integer. Size it to cover the maximum fallback duration plus expected source-replication lag and a safety margin. Invalidate after the source mutation commits. The buffer prevents stale fallback results from being cached under those assumptions; it does not itself force the current fallback to read from an authoritative source.
 
 Local cache limitation: targeted invalidation is enforced by Redis watermarks. Existing local cache hits are not synchronously invalidated across processes, so strongly invalidated mutable data should disable the local layer (or use very short local TTLs only when stale reads are acceptable).
 

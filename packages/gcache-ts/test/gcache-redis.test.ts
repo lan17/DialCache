@@ -5,14 +5,16 @@ import {
   GCache,
   GCacheKey,
   GCacheKeyConfig,
+  GCacheRedisPayloadEncodingError,
   type GCacheRedisClient,
   type Serializer,
 } from "../src/index.js";
-import { GCacheRedisPayloadEncodingError } from "../src/redis-client.js";
 import { decodeFrame, encodeFrame, FakeRedis } from "./fake-redis.js";
 
-const keyFor = (id: string, useCase: string): GCacheKey => new GCacheKey({ keyType: "user_id", id, useCase });
-const redisKeyFor = (id: string, useCase: string): string => `${keyFor(id, useCase).urn}:gcache-frame-v1`;
+const keyFor = (id: string, useCase: string, trackForInvalidation = false): GCacheKey =>
+  new GCacheKey({ keyType: "user_id", id, useCase, trackForInvalidation });
+const redisKeyFor = (id: string, useCase: string, trackForInvalidation = false): string =>
+  `${keyFor(id, useCase, trackForInvalidation).urn}:gcache-frame-v1`;
 
 describe("GCache Redis TTL layer", () => {
   beforeEach(() => {
@@ -293,11 +295,12 @@ describe("GCache Redis TTL layer", () => {
     expect(logger.warn).toHaveBeenCalledWith("Error putting value in Redis cache", expect.any(Error));
   });
 
-  it("refreshes Redis values when serializer load fails", async () => {
-    // Given Redis contains a frame whose payload cannot be decoded by the configured serializer.
+  it("refreshes tracked Redis values when serializer load fails", async () => {
+    // Given Redis contains a tracked frame whose payload cannot be decoded by the configured serializer.
     const redis = new FakeRedis();
-    const redisKey = redisKeyFor("123", "RedisSerializerLoadFailure");
+    const redisKey = redisKeyFor("123", "RedisSerializerLoadFailure", true);
     redis.setRaw(redisKey, encodeFrame({ userId: "123", source: "stale" }));
+    redis.setRaw("{urn:user_id:123}#watermark", "0");
     let failNextLoad = true;
     const serializer: Serializer<{ userId: string; source: string }> = {
       dump: vi.fn(async (value) => JSON.stringify(value)),
@@ -316,6 +319,7 @@ describe("GCache Redis TTL layer", () => {
       keyType: "user_id",
       useCase: "RedisSerializerLoadFailure",
       cacheKey: (userId) => userId,
+      trackForInvalidation: true,
       defaultConfig: new GCacheKeyConfig({
         ttlSec: { [CacheLayer.LOCAL]: 0, [CacheLayer.REMOTE]: 60 },
         ramp: { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 100 },

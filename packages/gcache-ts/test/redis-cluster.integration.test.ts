@@ -159,6 +159,8 @@ describe("GCache Lua protocol on Redis Cluster", () => {
     if (cluster === undefined) {
       throw new Error("Redis Cluster did not start");
     }
+    expect(gcacheRedisScripts.gcacheRead.IS_READ_ONLY).toBe(true);
+    expect(gcacheRedisScripts.gcacheReadTracked.IS_READ_ONLY).toBe(false);
     const scriptClient: GCacheRedisClient = createNodeRedisGCacheClient(cluster);
     const gcache = new GCache({ redis: { client: scriptClient, keyPrefix: "cluster:" } });
     let version = 1;

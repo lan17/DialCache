@@ -101,15 +101,12 @@ redis.call("SET", KEYS[1], frame, "PX", cache_ttl_ms)
 if #KEYS == 2 then
   local current_ttl_ms = redis.call("PTTL", KEYS[2])
   local desired_ttl_ms = math.max(watermark_ttl_floor_ms, cache_ttl_ms + WATERMARK_TTL_MARGIN_MS)
-  if current_ttl_ms > desired_ttl_ms then
-    desired_ttl_ms = current_ttl_ms
-  end
-
-  local encoded_watermark = string.format("%.0f", watermark)
-  if current_ttl_ms == -1 then
-    redis.call("SET", KEYS[2], encoded_watermark)
-  else
-    redis.call("SET", KEYS[2], encoded_watermark, "PX", desired_ttl_ms)
+  if not raw_watermark then
+    redis.call("SET", KEYS[2], "0", "PX", desired_ttl_ms)
+  elseif current_ttl_ms == -2 then
+    redis.call("SET", KEYS[2], raw_watermark, "PX", desired_ttl_ms)
+  elseif current_ttl_ms ~= -1 and current_ttl_ms < desired_ttl_ms then
+    redis.call("PEXPIRE", KEYS[2], desired_ttl_ms)
   end
 end
 
