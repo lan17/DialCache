@@ -3,9 +3,11 @@ import { defineScript } from "redis";
 import {
   INVALIDATE_CACHE_SCRIPT,
   READ_CACHE_SCRIPT,
+  READ_TRACKED_CACHE_SCRIPT,
   REDIS_ENCODING_BASE64,
   REDIS_ENCODING_UTF8,
   WRITE_CACHE_SCRIPT,
+  WRITE_TRACKED_CACHE_SCRIPT,
 } from "./internal/redis-scripts.js";
 import { GCacheRedisPayloadEncodingError, GCacheRedisPayloadError } from "./redis-client.js";
 import type { GCacheRedisClient, RedisCachePayload } from "./redis-client.js";
@@ -67,7 +69,7 @@ export const gcacheRedisScripts: GCacheNodeRedisScripts = {
     transformReply: readReply,
   }),
   gcacheReadTracked: defineGCacheScript({
-    SCRIPT: READ_CACHE_SCRIPT,
+    SCRIPT: READ_TRACKED_CACHE_SCRIPT,
     NUMBER_OF_KEYS: 2,
     FIRST_KEY_INDEX: 0,
     // Replica lag must not hide a newly-written invalidation watermark.
@@ -88,7 +90,7 @@ export const gcacheRedisScripts: GCacheNodeRedisScripts = {
     transformReply: integerReply,
   }),
   gcacheWriteTracked: defineGCacheScript({
-    SCRIPT: WRITE_CACHE_SCRIPT,
+    SCRIPT: WRITE_TRACKED_CACHE_SCRIPT,
     NUMBER_OF_KEYS: 2,
     FIRST_KEY_INDEX: 0,
     IS_READ_ONLY: false,

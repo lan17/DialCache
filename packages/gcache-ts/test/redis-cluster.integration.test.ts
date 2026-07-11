@@ -161,6 +161,8 @@ describe("GCache Lua protocol on Redis Cluster", () => {
     }
     expect(gcacheRedisScripts.gcacheRead.IS_READ_ONLY).toBe(true);
     expect(gcacheRedisScripts.gcacheReadTracked.IS_READ_ONLY).toBe(false);
+    expect(gcacheRedisScripts.gcacheRead.SHA1).not.toBe(gcacheRedisScripts.gcacheReadTracked.SHA1);
+    expect(gcacheRedisScripts.gcacheWrite.SHA1).not.toBe(gcacheRedisScripts.gcacheWriteTracked.SHA1);
     const scriptClient: GCacheRedisClient = createNodeRedisGCacheClient(cluster);
     const gcache = new GCache({ redis: { client: scriptClient, keyPrefix: "cluster:" } });
     let version = 1;

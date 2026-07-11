@@ -88,6 +88,32 @@ describe.each(engines)("GCache Lua protocol on $name", ({ image }) => {
     expect(binaryCalls).toBe(1);
   });
 
+  it("recovers every distinct read and write script after SCRIPT FLUSH", async () => {
+    if (client === undefined) {
+      throw new Error("Redis client did not start");
+    }
+    const scriptClient = createNodeRedisGCacheClient(client);
+    const valueKey = "script-recovery:{item:untracked}:value";
+
+    expect(gcacheRedisScripts.gcacheRead.SHA1).not.toBe(gcacheRedisScripts.gcacheReadTracked.SHA1);
+    expect(gcacheRedisScripts.gcacheWrite.SHA1).not.toBe(gcacheRedisScripts.gcacheWriteTracked.SHA1);
+
+    await client.scriptFlush();
+    expect(await client.gcacheWrite(valueKey, 60_000, 0, "untracked")).toBe(1);
+    await client.scriptFlush();
+    expect(await scriptClient.read({ valueKey })).toEqual({ encoding: "utf8", value: "untracked" });
+
+    const trackedValueKey = "script-recovery:{item:tracked}:value";
+    const watermarkKey = "script-recovery:{item:tracked}:watermark";
+    await client.scriptFlush();
+    expect(await client.gcacheWriteTracked(trackedValueKey, watermarkKey, 60_000, 0, "tracked", 60_000)).toBe(1);
+    await client.scriptFlush();
+    expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toEqual({
+      encoding: "utf8",
+      value: "tracked",
+    });
+  });
+
   it("treats every invalid read frame and watermark state as a miss", async () => {
     if (client === undefined) {
       throw new Error("Redis client did not start");

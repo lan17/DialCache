@@ -94,7 +94,7 @@ const gcache = new GCache({
 });
 ```
 
-The core Redis boundary is the client-agnostic `GCacheRedisClient` interface. Other clients can implement that semantic interface without changing GCache; the raw Lua sources and wire constants are available from `@rungalileo/gcache/redis-protocol`, so a Valkey GLIDE adapter can be added without depending on node-redis. Custom adapters can use the root-exported `GCacheRedisPayloadError` and `GCacheRedisPayloadEncodingError` classes to preserve the standard metrics labels.
+The core Redis boundary is the client-agnostic `GCacheRedisClient` interface. Other clients can implement that semantic interface without changing GCache; distinct untracked/tracked read and write Lua sources, the invalidation source, and wire constants are available from `@rungalileo/gcache/redis-protocol`, so a Valkey GLIDE adapter can be added without depending on node-redis. Custom adapters can use the root-exported `GCacheRedisPayloadError` and `GCacheRedisPayloadEncodingError` classes to preserve the standard metrics labels.
 
 Redis values use a compact binary frame:
 
