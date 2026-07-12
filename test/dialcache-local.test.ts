@@ -361,9 +361,9 @@ describe("DialCache local-only MVP", () => {
       }),
     });
 
-    // When wall time advances beyond the TTL without running scheduled timers.
+    // When wall time reaches the TTL boundary without running scheduled timers.
     const first = await dialcache.enable(async () => await getUser("123"));
-    vi.setSystemTime(new Date("2026-01-01T00:00:01.001Z"));
+    vi.setSystemTime(new Date("2026-01-01T00:00:01.000Z"));
     const afterTtl = await dialcache.enable(async () => await getUser("123"));
 
     // Then the current clock is authoritative and the stale entry is not returned.

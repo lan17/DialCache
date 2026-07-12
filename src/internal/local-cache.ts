@@ -72,7 +72,10 @@ export class LocalCache {
       return;
     }
 
-    this.cache?.set(key.urn, { value }, { size: 1, ttl: ttlSec * 1000 });
+    // lru-cache expires when age > ttl, while DialCache historically expired
+    // when its integer-millisecond clock reached the configured boundary.
+    const ttlMs = ttlSec * 1000 - 1;
+    this.cache?.set(key.urn, { value }, { size: 1, ttl: ttlMs });
   }
 
   async flushAll(): Promise<void> {
