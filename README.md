@@ -1,440 +1,318 @@
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-wordmark.png" />
-    <source media="(prefers-color-scheme: light)" srcset="assets/logo-wordmark-light.png" />
-    <img src="assets/logo-wordmark.png" alt="GCache" width="520" />
-  </picture>
-</p>
+# DialCache
 
-<p align="center">
-  <a href="https://badge.fury.io/py/gcache"><img src="https://badge.fury.io/py/gcache.svg" alt="PyPI version" /></a>
-  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
-  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+" /></a>
-  <a href="https://codecov.io/gh/rungalileo/gcache"><img src="https://codecov.io/gh/rungalileo/gcache/graph/badge.svg" alt="codecov" /></a>
-</p>
+Fine-grained TypeScript caching with explicit enabled contexts, stable key construction, local and Redis TTL caching, runtime rollout controls, request coalescing, Prometheus-ready observability, and Redis watermark-based targeted invalidation.
 
-A caching library built for moving fast without breaking things. GCache lets you rapidly add new caching use cases while maintaining structure and runtime control guardrails—so you can ramp up gradually, kill a bad cache instantly, and have full observability into what's cached across your system.
-
-## Why GCache?
-
-Most caching libraries give you a key-value store and leave the rest to you. GCache takes a different approach:
-
-- **Opinionated structure** — Enforced key format (`key_type` + ID + use case, e.g., `user_id:123`) keeps your caching organized and enables the features below
-- **Runtime controls** — Enable/disable caching per request, ramp from 0-100% per use case, adjust configuration without redeploying
-- **Targeted invalidation** — Invalidate all cache entries for a `key_type` + ID (e.g., all caches for a specific user, org, or project) with one call
-- **Full observability** — Prometheus metrics out of the box, broken down by use case and `key_type`
-
-## Installation
+## Install
 
 ```bash
-pip install gcache
+pnpm add dialcache
+# For Redis-backed caching:
+pnpm add redis@~4.7.1
 ```
 
-Requires Python 3.10+
+## Quick start
 
-## Quick Start
+```ts
+import { DialCache, DialCacheKeyConfig } from "dialcache";
 
-```python
-from gcache import GCache, GCacheConfig, GCacheKeyConfig, CacheLayer
+const dialcache = new DialCache();
 
-# Create the cache instance (singleton)
-gcache = GCache(GCacheConfig())
+const getUser = dialcache.cached(
+  (userId: string) => db.fetchUser(userId),
+  {
+    keyType: "user_id",
+    useCase: "GetUser",
+    cacheKey: (userId) => userId,
+    defaultConfig: DialCacheKeyConfig.enabled(60),
+  },
+);
 
-# Decorate your function
-@gcache.cached(
-    key_type="user_id",
-    id_arg="user_id",
-    use_case="GetUser",
-    default_config=GCacheKeyConfig(
-        ttl_sec={CacheLayer.LOCAL: 60, CacheLayer.REMOTE: 300},
-        ramp={CacheLayer.LOCAL: 100, CacheLayer.REMOTE: 100},
-    ),
-)
-async def get_user(user_id: str) -> dict:
-    return await db.fetch_user(user_id)  # Your expensive operation
+// Caching is OFF outside an enable() scope (see "Enabled context"), so this runs the fn uncached:
+await getUser("123");
 
-# Use it — caching only happens inside enable() blocks
-with gcache.enable():
-    user = await get_user("123")  # Cache key: urn:gcache:user_id:123#GetUser
+// Inside enable(), reads are cached. Enable once at your request boundary (not per call site):
+const user = await dialcache.enable(() => getUser("123"));
 ```
 
-That's it. The function works normally outside `enable()` blocks, and caches results inside them.
+## Redis-backed TTL cache
 
-## How It Works
+Register DialCache's native node-redis scripts when creating the client, then pass that client to DialCache:
 
-### Cache Layers
+```ts
+import { createClient } from "redis";
+import { DialCache, DialCacheKeyConfig } from "dialcache";
+import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "dialcache/node-redis";
 
-GCache uses a multi-layer read-through cache:
+const redisClient = createClient({
+  url: process.env.REDIS_URL,
+  scripts: dialcacheRedisScripts,
+});
+await redisClient.connect();
 
-```
-Request
-   │
-   ▼
-┌─────────────────┐
-│  LOCAL CACHE    │ ◄─── Hit? Return immediately
-│  (in-memory)    │
-└────────┬────────┘
-         │ Miss
-         ▼
-┌─────────────────┐
-│  REDIS CACHE    │ ◄─── Hit? Store in local, return
-│  (distributed)  │
-└────────┬────────┘
-         │ Miss
-         ▼
-┌─────────────────┐
-│  YOUR FUNCTION  │ ◄─── Execute, store in both caches, return
-└─────────────────┘
+const dialcache = new DialCache({
+  redis: {
+    client: createNodeRedisDialCacheClient(redisClient),
+    keyPrefix: "dialcache:",
+  },
+});
 ```
 
-Local cache is fast but per-instance. Redis is shared across your fleet. Use both for best performance, or just local if you don't need Redis.
+The `redis.client` and `redis.createClient` options accept the semantic `DialCacheRedisClient` interface. Node-redis users should register the supplied scripts and wrap their client with `createNodeRedisDialCacheClient` as shown above.
 
-### Key Format
+When caching is enabled, reads flow through:
 
-GCache constructs structured cache keys in URN format:
-
-```
-urn:prefix:key_type:id?arg1=val1&arg2=val2#use_case
+```text
+local cache -> Redis cache -> fallback function
 ```
 
-For example: `urn:gcache:user_id:123?page=1#GetUserPosts`
+- Local hits return immediately.
+- Local misses try Redis and populate local on a Redis hit.
+- Redis misses call the fallback and write both Redis and local.
+- Redis cache read/write failures are logged, counted in metrics, and fail open; fallback results still return when fallback succeeds. Explicit maintenance calls (`invalidateRemote`, `flushAll`) log/count Redis failures and rethrow them so callers do not assume mutation succeeded.
+- Missing per-layer config disables that layer, records a disabled reason, and falls through to the next layer/fallback.
 
-This structure is useful for:
-- **Debugging** — Keys are human-readable when inspecting Redis
-- **Grouping** — All caches for a `key_type:id` pair share a common prefix, making it easy to find related entries
-- **Targeted invalidation** — The structure enables invalidating all entries for a specific `key_type` + ID
+Node-redis computes each script's SHA, uses `EVALSHA`, and retries with `EVAL` after `NOSCRIPT`. Its cluster client routes scripts by their first key and performs that fallback on the selected shard. Tracked reads are deliberately routed to primaries so a lagging Redis replica cannot hide an invalidation watermark. The adapter also fans `flushAll()` across every cluster master instead of silently clearing one shard.
 
-### Runtime Controls
+You can also provide a lazy factory that returns a script-enabled client:
 
-Caching doesn't happen automatically—you control when it's active:
-
-- **`enable()` context** — Caching only happens inside `with gcache.enable():` blocks. Outside of them, your function runs normally. This lets you disable caching during write operations to avoid stale reads.
-
-- **`ramp` percentage** — Each cache layer has a ramp from 0-100%. At 50%, half the requests use the cache, half go straight to the source. Start at 0% when adding a new use case, then ramp up as you gain confidence.
-
-- **Dynamic config** — The config provider runs on each request, so you can adjust TTLs or ramp percentages without redeploying.
-
-### Why Explicit `enable()`?
-
-GCache requires you to explicitly enable caching with `with gcache.enable():`. This is intentional.
-
-Caching in write paths can cause subtle bugs—a stale read might get cached right before a write, leading to inconsistent data. By requiring explicit opt-in, GCache forces you to consciously decide where caching is safe:
-
-```python
-# Read path — caching is safe
-with gcache.enable():
-    user = await get_user(user_id)
-
-# Write path — no caching, function runs normally
-await update_user(user_id, new_data)
-await gcache.ainvalidate("user_id", user_id)
+```ts
+const dialcache = new DialCache({
+  redis: {
+    createClient: async () => {
+      const client = createClient({
+        url: process.env.REDIS_URL,
+        scripts: dialcacheRedisScripts,
+      });
+      await client.connect();
+      return createNodeRedisDialCacheClient(client);
+    },
+  },
+});
 ```
 
-This design prevents accidental caching in dangerous places.
+The core Redis boundary is the client-agnostic `DialCacheRedisClient` interface. Other clients can implement that semantic interface without changing DialCache; distinct untracked/tracked read and write Lua sources, the invalidation source, and wire constants are available from `dialcache/redis-protocol`, so a Valkey GLIDE adapter can be added without depending on node-redis. Custom adapters can use the root-exported `DialCacheRedisPayloadError` and `DialCacheRedisPayloadEncodingError` classes to preserve the standard metrics labels.
 
-## Runtime Configuration
+Redis values use a compact binary frame:
 
-For dynamic control, provide a config provider when creating GCache. This lets you adjust caching behavior without redeploying:
-
-```python
-from gcache import GCache, GCacheConfig, GCacheKeyConfig, GCacheKey, CacheLayer
-
-async def config_provider(key: GCacheKey) -> GCacheKeyConfig | None:
-    # Fetch from your config source: LaunchDarkly, database, config file, etc.
-    config = await config_service.get_cache_config(key.use_case)
-
-    if config is None:
-        return None  # Fall back to default_config on the decorator
-
-    return GCacheKeyConfig(
-        ttl_sec={CacheLayer.LOCAL: config.local_ttl, CacheLayer.REMOTE: config.remote_ttl},
-        ramp={CacheLayer.LOCAL: config.local_ramp, CacheLayer.REMOTE: config.remote_ramp},
-    )
-
-gcache = GCache(GCacheConfig(cache_config_provider=config_provider))
+```text
+byte 1      format version
+bytes 2-9   Redis-created timestamp in milliseconds (uint64, big-endian)
+byte 10     payload encoding (0 = UTF-8, 1 = base64)
+bytes 11... serialized payload
 ```
 
-This enables:
-- **Kill switches** — Set ramp to 0% to instantly disable a problematic cache
-- **Gradual rollout** — Start at 10%, monitor metrics, increase to 100%
-- **Per-use-case tuning** — Different TTLs and ramp percentages for different use cases
+Redis's Lua `struct` library packs and unpacks the timestamp. Redis TTL is authoritative, so expiry metadata is not duplicated in the frame. `payload` is produced by the cached function's serializer, or by `JsonSerializer` by default. Custom serializers can return either `string` or `Buffer`; Buffer payloads are base64 encoded and reconstructed before `serializer.load`.
 
-## The `@cached` Decorator
+## Targeted invalidation and watermarks
 
-The decorator handles both sync and async functions automatically.
+Mutable Redis-backed use cases can opt into targeted invalidation by setting `trackForInvalidation: true` in the options and calling `dialcache.invalidateRemote(keyType, id)` after writes:
 
-### Basic Usage
+```ts
+import { CacheLayer, DialCache, DialCacheKeyConfig } from "dialcache";
+import { createNodeRedisDialCacheClient } from "dialcache/node-redis";
 
-```python
-@gcache.cached(
-    key_type="user_id",           # What kind of entity is this?
-    id_arg="user_id",             # Which argument contains the ID?
-    use_case="GetUserProfile",    # Identifies this specific caching use case
-)
-async def get_user_profile(user_id: str) -> dict:
-    ...
+const dialcache = new DialCache({ redis: { client: createNodeRedisDialCacheClient(redisClient) } });
+
+const getUser = dialcache.cached(
+  (userId: string) => db.fetchUser(userId),
+  {
+    keyType: "user_id",
+    useCase: "GetMutableUser",
+    cacheKey: (userId) => userId,
+    trackForInvalidation: true,
+    // Strongly invalidated mutable data should usually disable local cache.
+    defaultConfig: new DialCacheKeyConfig({
+      ttlSec: { [CacheLayer.REMOTE]: 300 },
+      ramp: { [CacheLayer.REMOTE]: 100 },
+    }),
+  },
+);
+
+await updateUser("123", patch);
+await dialcache.invalidateRemote("user_id", "123");
 ```
 
-**Tip:** Always define `use_case` explicitly. It identifies the specific caching scenario (e.g., `GetUserProfile`, `ListOrgProjects`) and appears in cache keys, metrics, and logs. It defaults to `module.function_name`, but an explicit name ensures consistency if you refactor your code.
+Invalidation writes a Redis watermark at `{encodedUrnPrefix:encodedKeyType:encodedId}#watermark`. Tracked Redis cache entries use the same Redis Cluster hash tag, for example `{urn:user_id:123}?locale=en#GetMutableUser:dialcache-frame-v1`, so the value key and watermark key live in the same slot. Key components are percent-encoded before joining so delimiters inside IDs or args cannot collide with delimiters in the key format. Components may not contain `{` or `}` because those characters would corrupt the hash tag.
 
-### Working with Complex Arguments
+The internal `:dialcache-frame-v1` suffix identifies values written with DialCache's binary protocol. Watermarks are stored as decimal timestamps.
 
-Options for mapping function arguments to cache keys.
+A cached Redis value whose Redis-created timestamp is older than or equal to the watermark is treated as stale and refreshed through fallback. `invalidateRemote(keyType, id, futureBufferMs)` sets the watermark to the greater of its existing value and Redis's current time plus the buffer. While that future window is active, fallback results are returned but not written to Redis or local cache.
 
-#### `id_arg` (required)
+Tracked writes create a baseline watermark and extend its TTL to at least the value TTL plus one minute. Invalidation preserves that lifetime and extends it to cover the future buffer. `DEFAULT_WATERMARK_TTL_SEC` (4 hours) remains a configurable floor rather than a maximum, and reads do not extend watermark lifetime.
 
-Specifies which argument contains the entity ID for the cache key.
+`futureBufferMs` must be a nonnegative safe integer. Size it to cover the longest interval from invalidation until any fallback that could have read stale source data completes its Redis write. Include source-replication lag, remaining fallback work, `serializer.dump`, Redis client queue/network latency, script execution, and a safety margin. Invalidate after the source mutation commits. The buffer prevents stale fallback results from being cached under those assumptions; it does not itself force the current fallback to read from an authoritative source.
 
-**String form** — use when the argument itself is the ID:
-```python
-id_arg="user_id"  # user_id argument is the ID
+Local cache limitation: targeted invalidation is enforced by Redis watermarks. Existing local cache hits are not synchronously invalidated across processes, so strongly invalidated mutable data should disable the local layer (or use very short local TTLs only when stale reads are acceptable).
+
+## Runtime config and ramp controls
+
+Every cached function can provide a per-use-case `defaultConfig`; a `cacheConfigProvider` can override it at runtime. If the provider returns `null`, DialCache falls back to the cached function's `defaultConfig`. If neither exists, or a layer's TTL/ramp is missing or disabled, only that layer is skipped.
+
+`cacheConfigProvider` is called for every enabled cached-function invocation before DialCache checks local or Redis. Keep it cheap, cache any remote/config-store reads inside the provider, and avoid work that would erase the benefit of a cache hit.
+
+```ts
+import { CacheLayer, DialCache, DialCacheKeyConfig } from "dialcache";
+
+const dialcache = new DialCache({
+  cacheConfigProvider: async (key) => {
+    if (key.useCase === "GetUser") {
+      return new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.LOCAL]: 30, [CacheLayer.REMOTE]: 300 },
+        ramp: { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 25 },
+      });
+    }
+    return null; // use the cached function's defaultConfig
+  },
+  rampSampler: ({ key, layer }) => deterministicPercentFor(`${key.urn}:${layer}`),
+});
 ```
 
-**Tuple form** — use when the ID needs to be extracted from an object:
-```python
-id_arg=("user", lambda u: u.id)  # Extract ID from User object
+`ramp` values are percentages from 0 to 100. `0` disables the layer, `100` enables it, and intermediate values use `rampSampler`; the default sampler is deterministic by cache key and layer, so the same key is consistently sampled in or out of a partial rollout. Provider errors fail open and execute the fallback function.
+
+## Request coalescing
+
+When caching is enabled and a call misses local cache, concurrent callers for the same cache key share the same in-flight cache work. With Redis configured, the leader runs the Redis read and, on miss, the fallback/cache write; followers await that result. Local-only misses share the leader's fallback/cache write. This protects Redis and the source of truth from a thundering herd on hot keys.
+
+Coalescing only applies after a real cache layer is active. Calls outside `enable()` are true pass-through, and calls where every layer is disabled by missing config, invalid TTL, or ramp are true pass-through.
+
+Because coalescing is keyed by `cacheKey`, concurrent calls with the same key share the leader's execution. Any argument ignored by `cacheKey` must be safe to share this way; include inputs such as locale, auth context, or cancellation behavior in the key when they can change the returned value or whether the underlying function should run separately.
+
+```ts
+const getUser = dialcache.cached(
+  (userId: string) => db.fetchUser(userId),
+  {
+    keyType: "user_id",
+    useCase: "GetUser",
+    cacheKey: (userId) => userId,
+    defaultConfig: DialCacheKeyConfig.enabled(60),
+  },
+);
 ```
 
-#### `arg_adapters`
+## Enabled context
 
-Converts complex arguments to strings for the cache key. Only needed for non-primitive types.
+Caching is **off by default** and only active inside a `dialcache.enable(...)` scope. This is deliberate: it lets you turn caching **off in write paths** so a stale read can't be cached around a write. DialCache uses Node `AsyncLocalStorage` to keep enabled state scoped to the current asynchronous call chain.
 
-```python
-arg_adapters={
-    "filters": lambda f: f.to_cache_key(),  # Complex object
-    "page": str,                             # Simple conversion
-}
+**Enable once at your request boundary** (e.g. a middleware that wraps read-request handling) so individual call sites don't each need it; wrap mutation handlers in `disable()`:
+
+```ts
+await dialcache.enable(async () => {
+  await getUser("123"); // cached
+
+  await dialcache.disable(async () => {
+    await updateUser("123", patch); // reads here are uncached
+  });
+
+  await getUser("123"); // cached again
+});
 ```
 
-#### `ignore_args`
+- Default is disabled — a cached function called **outside** any `enable()` scope simply runs uncached (no error), so wrap your read paths to actually cache.
+- Enabled state is async-scope-local, not process-global.
+- Nested `enable` / `disable` scopes restore the previous behavior when the callback completes.
 
-Excludes arguments that don't affect the cached result.
+## Keys, ids, and extra dimensions
 
-```python
-ignore_args=["db_session", "logger"]
+`cached(fn, options)` wraps a function; the wrapped callable has the same parameters and always returns a `Promise`. The cache key comes from a required `cacheKey` selector whose parameters are inferred from `fn`. Return a bare id, or return `{ id, args }` to extract a field or add secondary dimensions:
+
+The `cacheKey` selector is the value identity contract. It must include every input dimension that can affect the returned value; otherwise distinct calls can reuse the same cached value or share the same in-flight fallback through request coalescing.
+
+```ts
+const searchPosts = dialcache.cached(
+  (userId: string, page: number, filter: string) => db.searchPosts(userId, page, filter),
+  {
+    keyType: "user_id",
+    useCase: "SearchPosts",
+    cacheKey: (userId, page, filter) => ({ id: userId, args: { page, filter } }),
+    defaultConfig: DialCacheKeyConfig.enabled(60),
+  },
+);
+await dialcache.enable(() => searchPosts("u1", 2, "active"));
 ```
 
-#### Example
-
-```python
-@gcache.cached(
-    key_type="user_id",
-    id_arg=("user", lambda u: u.id),
-    arg_adapters={"filters": lambda f: f.to_cache_key()},
-    ignore_args=["db_session", "logger"],
-)
-async def search_user_posts(
-    user: User,
-    filters: SearchFilters,
-    page: int,
-    db_session: Session,
-    logger: Logger,
-) -> list[Post]:
-    ...
-
-# Cache key: urn:gcache:user_id:123?filters=active&page=2#SearchUserPosts
-```
-
-The `id_arg` becomes `:123`, `arg_adapters` produce `?filters=active&page=2`, and `ignore_args` are excluded.
-
-### Sync Functions Work Too
-
-```python
-@gcache.cached(key_type="org_id", id_arg="org_id", use_case="GetOrgSettings")
-def get_org_settings(org_id: str) -> dict:  # No async needed
-    return db.query(...)
-```
-
-Under the hood, sync functions run through a thread pool to avoid blocking the event loop. This adds some overhead, so **prefer async functions when possible** for better performance.
-
-## Redis Configuration
-
-### No Redis (Local Only)
-
-```python
-gcache = GCache(GCacheConfig())
-```
-
-### With Redis
-
-```python
-from gcache import RedisConfig
-
-gcache = GCache(
-    GCacheConfig(
-        redis_config=RedisConfig(
-            host="redis.example.com",
-            port=6379,
-            password="secret",
-        ),
-    )
-)
-```
-
-### Custom Redis Factory
-
-For dynamic credentials, token refresh, or connection pooling:
-
-```python
-import threading
-from redis.asyncio import Redis
-
-def make_redis_factory():
-    local = threading.local()
-
-    def factory() -> Redis:
-        if not hasattr(local, "client"):
-            token = fetch_token_from_vault()
-            local.client = Redis.from_url(f"redis://:{token}@redis:6379")
-        return local.client
-
-    return factory
-
-gcache = GCache(
-    GCacheConfig(
-        redis_client_factory=make_redis_factory(),
-    )
-)
-```
-
-**Important:** Custom factories must use thread-local storage. Each thread needs its own client.
-
-## Invalidation
-
-When data changes, you need to invalidate the cache. GCache makes this easy with targeted invalidation.
-
-### Basic Invalidation
-
-```python
-# Mark the function for invalidation tracking
-@gcache.cached(
-    key_type="user_id",
-    id_arg="user_id",
-    track_for_invalidation=True,  # Enable this
-)
-async def get_user(user_id: str) -> dict:
-    ...
-
-# When data changes, invalidate all cached entries for that key_type + ID
-await gcache.ainvalidate(key_type="user_id", id="12345")
-
-# Sync version
-gcache.invalidate(key_type="user_id", id="12345")
-```
-
-This invalidates *all* cache entries for that `key_type` + ID—every use case, every argument combination.
-
-### Handling Race Conditions
-
-If a read happens right before a write, the stale data might get cached. Use a future buffer:
-
-```python
-await gcache.ainvalidate(
-    key_type="user_id",
-    id="12345",
-    future_buffer_ms=5000,  # Also invalidate anything cached in the next 5 seconds
-)
-```
-
-### Full Flush
-
-For testing or emergencies:
-
-```python
-gcache.flushall()       # Sync
-await gcache.aflushall()  # Async
-```
+- **`keyType` + `id` is the invalidation unit for tracked Redis entries.** `dialcache.invalidateRemote("user_id", "123")` writes one watermark for that user; any `trackForInvalidation` Redis entry with the same `keyType` and `id` is refreshed across all `args` variants when Redis is read. Existing local hits follow the local-cache limitation above, and untracked Redis entries do not consult the watermark. `useCase` identifies the individual cache (it's the metrics label and part of the stored key).
+- **`args` are part of the cache key** — different `args` produce different entries — but invalidation is by `id` only.
+- **Non-key inputs** (for example a db handle) are simply parameters the `cacheKey` selector ignores. They still reach `fn` for non-coalesced executions, but concurrent same-key cache misses share the leader's execution, so do not ignore values like `AbortSignal`, auth context, locale, or other request-scoped inputs unless sharing one result is correct.
+- **Methods:** pass `obj.method.bind(obj)` (or `(...a) => obj.method(...a)`) — a bare `obj.method` reference loses `this`.
 
 ## Metrics
 
-GCache exports Prometheus metrics automatically:
+DialCache registers Prometheus metrics by default via `prom-client`:
 
-| Metric | Type | Description |
-|--------|------|-------------|
-| `gcache_request_counter` | Counter | Total cache requests |
-| `gcache_miss_counter` | Counter | Cache misses |
-| `gcache_disabled_counter` | Counter | Requests where caching was skipped (labels: `reason`) |
-| `gcache_error_counter` | Counter | Errors during cache operations |
-| `gcache_invalidation_counter` | Counter | Invalidation calls |
-| `gcache_get_timer` | Histogram | Cache get latency |
-| `gcache_fallback_timer` | Histogram | Time spent in the underlying function |
-| `gcache_serialization_timer` | Histogram | Pickle serialization time |
-| `gcache_size_histogram` | Histogram | Size of cached values |
+| Metric | Type | Labels | Description |
+| --- | --- | --- | --- |
+| `dialcache_request_counter` | Counter | `use_case`, `key_type`, `layer` | Cache-layer requests that reached an enabled layer |
+| `dialcache_miss_counter` | Counter | `use_case`, `key_type`, `layer` | Cache misses |
+| `dialcache_disabled_counter` | Counter | `use_case`, `key_type`, `layer`, `reason` | Cache skips (`context`, `missing_config`, `invalid_ttl`, `ramped_down`, `config_error`) |
+| `dialcache_error_counter` | Counter | `use_case`, `key_type`, `layer`, `error`, `in_fallback` | Cache/fallback errors, with `in_fallback` separating cache plumbing failures from application fallback failures |
+| `dialcache_invalidation_counter` | Counter | `key_type`, `layer` | Invalidation calls for the layers touched today |
+| `dialcache_coalesced_counter` | Counter | `use_case`, `key_type` | Requests that awaited active in-flight cache work |
+| `dialcache_get_timer` | Histogram | `use_case`, `key_type`, `layer` | Cache get latency in seconds |
+| `dialcache_fallback_timer` | Histogram | `use_case`, `key_type`, `layer` | Time spent in the underlying function |
+| `dialcache_serialization_timer` | Histogram | `use_case`, `key_type`, `layer`, `operation` | Redis serializer dump/load latency |
+| `dialcache_size_histogram` | Histogram | `use_case`, `key_type`, `layer` | Serialized Redis payload size in bytes |
 
-All metrics include `use_case` and `key_type` labels for filtering.
+The `layer` label is usually `local` or `remote`. Disabled-context, key-construction, and config-provider failures use `noop` because no cache layer was reached.
 
-You can add a prefix to avoid collisions:
+Use a custom registry or prefix when embedding DialCache in an app with its own metrics endpoint:
 
-```python
-GCacheConfig(
-    metrics_prefix="myapp_",  # Metrics become myapp_gcache_request_counter, etc.
-)
+```ts
+import { Registry } from "prom-client";
+import { DialCache } from "dialcache";
+
+const registry = new Registry();
+const dialcache = new DialCache({
+  metricsRegistry: registry,
+  metricsPrefix: "myapp_", // myapp_dialcache_request_counter, etc.
+});
+
+app.get("/metrics", async (_req, res) => {
+  res.type(registry.contentType).send(await registry.metrics());
+});
 ```
 
-## Error Handling
+For non-Prometheus telemetry, inject a `DialCacheMetricsAdapter` through `new DialCache({ metrics })`. Pass `metrics: false` to disable metrics entirely. DialCache reuses existing collectors in a registry so repeated instances with the same prefix do not throw duplicate-registration errors.
 
-GCache is designed to fail open. If Redis is down or an error occurs:
+## Current scope
 
-1. The underlying function executes normally
-2. The error is logged and counted in `gcache_error_counter`
-3. Your request succeeds (just without caching)
+Included:
 
-This means a cache failure never breaks your application.
+- Local TTL cache
+- Redis TTL cache
+- Local → Redis → fallback read-through chain
+- Lazy Redis client factory support
+- Lua-backed Redis reads and writes with Redis-generated timestamps
+- Versioned binary Redis frames for UTF-8 and Buffer serializer output
+- Native node-redis script registration with automatic `NOSCRIPT` recovery
+- Standalone Redis, Valkey, and Redis Cluster support
+- JSON and custom serializer support for Redis values
+- Duplicate and reserved use-case validation
+- `invalidateRemote` for Redis watermark invalidation and `flushAll` across configured layers
+- Fail-open behavior for key/config/cache read-write errors; maintenance mutations surface failures
+- Runtime config provider with fallback to cached-function `defaultConfig`
+- Per-layer TTL and ramp controls
+- Deterministic default ramp sampler with injectable override hooks
+- Missing config disables only the relevant layer and falls through
+- Prometheus metrics with duplicate-registration safety
+- Custom metrics adapter/registry/prefix hooks
+- Cache-vs-fallback error classification through the `in_fallback` label
+- Serialization latency and cached payload size metrics for Redis values
+- Logger injection for cache operational failures
+- `trackForInvalidation` on cached functions
+- `invalidateRemote(keyType, id, futureBufferMs)` Redis watermark API
+- Redis Cluster hash-tagged value/watermark keys for invalidation-tracked entries
+- Dynamically extended watermark TTL with a configurable `DEFAULT_WATERMARK_TTL_SEC` floor
+- Future-buffer behavior that avoids cache writes during active invalidation windows
+- Request coalescing for active cache work after local misses
 
-## Caching Strategy Guide
+Not included yet:
 
-### When stale data is acceptable
+- Framework middleware helpers/integrations
+- `cachedObject`
+- Expanded examples
 
-Use both local and remote cache, rely on TTL:
+## Releasing
 
-```python
-GCacheKeyConfig(
-    ttl_sec={CacheLayer.LOCAL: 300, CacheLayer.REMOTE: 3600},
-    ramp={CacheLayer.LOCAL: 100, CacheLayer.REMOTE: 100},
-)
-```
+Publishing is driven by `.github/workflows/release.yaml`. Create a GitHub release whose tag exactly matches `v<package.json version>`; the workflow validates, builds, package-tests, and publishes the public npm package with provenance.
 
-Good for: feature flags, configuration, rarely-changing data.
-
-### When data must be fresh
-
-Use remote cache only (local can't be invalidated across instances), with invalidation:
-
-```python
-# In config
-GCacheKeyConfig(
-    ttl_sec={CacheLayer.LOCAL: 0, CacheLayer.REMOTE: 3600},  # No local cache
-    ramp={CacheLayer.LOCAL: 0, CacheLayer.REMOTE: 100},
-)
-
-# In your write path
-async def update_user(user_id: str, data: dict):
-    await db.update_user(user_id, data)
-    await gcache.ainvalidate(key_type="user_id", id=user_id)
-```
-
-Good for: user profiles, permissions, anything that needs immediate consistency.
-
-## Contributing
-
-Contributions are welcome! The project uses:
-
-- **pytest** for testing (`pytest tests/`)
-- **ruff** for formatting and linting
-- **mypy** for type checking
-- **pre-commit** for automated checks
-
-```bash
-# Setup
-poetry install
-
-# Run tests
-pytest tests/
-
-# Run all checks
-pre-commit run --all-files
-```
-
-## License
-
-MIT License — see [LICENSE](LICENSE) for details.
+The first publish requires a granular npm token in the repository's `NPM_TOKEN` secret because npm trusted publishing can only be configured after the package exists. After the bootstrap release, configure `lan17/DialCache` and `release.yaml` as the package's trusted GitHub publisher, then remove the long-lived token.

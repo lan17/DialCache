@@ -1,71 +1,51 @@
 # AGENTS.md
 
-## Project Overview
+## Project overview
 
-gcache is a fine-grained caching library with multi-layer support (local + Redis) and a decorator-based API. It works with both sync and async functions.
+DialCache is a TypeScript caching library with explicit request-scoped enablement, local and Redis layers, runtime rollout controls, request coalescing, targeted invalidation, and Prometheus-compatible observability.
 
 ## Structure
 
-```
-src/gcache/
-├── __init__.py              # Public API exports
-├── config.py                # GCacheKey, GCacheKeyConfig, GCacheConfig, RedisConfig, Serializer
-├── exceptions.py            # All exception classes
-├── gcache.py                # GCache main class and @cached decorator
-└── _internal/               # Implementation details (not public API)
-    ├── constants.py         # Named constants (cache sizes, TTLs, thresholds)
-    ├── event_loop_thread.py # EventLoopThread, EventLoopThreadPool
-    ├── local_cache.py       # LocalCache (TTLCache-based)
-    ├── metrics.py           # GCacheMetrics (Prometheus)
-    ├── redis_cache.py       # RedisCache
-    └── wrappers.py          # CacheController, CacheChain
-
-tests/
-├── conftest.py              # Fixtures (redis_server, gcache, cache_config_provider)
-└── test_*.py                # Test suites
+```text
+src/
+  dialcache.ts          # Main DialCache API and cached-function wrapper
+  config.ts             # Public configuration and rollout types
+  context.ts            # AsyncLocalStorage-based enabled context
+  key.ts                # Structured cache keys and Redis hash tags
+  metrics.ts            # Metrics adapter and Prometheus implementation
+  redis-client.ts       # Client-independent semantic Redis interface
+  node-redis.ts          # node-redis adapter and script registration
+  redis-protocol.ts      # Public Lua protocol exports
+  serializer.ts         # Serializer contract and JSON implementation
+  internal/             # Cache layers, runtime config, and Lua scripts
+test/                   # Unit and Redis integration tests
 ```
 
-## Key Components
+## Critical behavior
 
-- **GCache**: Singleton main class, provides `@cached` decorator
-- **CacheLayer**: Enum - `NOOP`, `LOCAL` (TTLCache), `REMOTE` (Redis)
-- **CacheChain**: Chains local → redis with read-through strategy
-- **EventLoopThreadPool**: Runs async code from sync cached functions (16 threads)
-- **GCacheKey**: Frozen dataclass for cache keys (key_type, id, use_case, args)
+- Caching is disabled by default and enabled only inside `dialcache.enable(...)`.
+- Disabled calls are true pass-through and must not build keys, resolve config, or coalesce work.
+- Active same-key misses are coalesced after the local-cache check.
+- Cache plumbing fails open; explicit maintenance operations surface mutation failures.
+- Tracked Redis values and invalidation watermarks share a Redis Cluster hash tag.
+- Tracked reads run on primaries so replica lag cannot hide invalidation.
+- Local entries are process-local and are not synchronously invalidated across instances.
 
-## Critical Patterns
+## Conventions
 
-1. **Context-based enable**: Cache is disabled by default - use `with gcache.enable():`
+- Preserve strict TypeScript settings and public abstraction boundaries.
+- Keep Redis client-specific behavior in adapters; core code depends on `DialCacheRedisClient`.
+- Public exports belong in `src/index.ts`, `src/node-redis.ts`, or `src/redis-protocol.ts`.
+- Use `corepack pnpm` for project commands.
+- Every Codex commit subject must start with `codex: `.
 
-2. **Sync functions use thread pool**: Sync `@cached` functions run through `EventLoopThreadPool`
-
-3. **Don't call sync cached functions from async**: Blocks event loop (logs warning)
-
-4. **No reentrant sync calls**: Raises `ReentrantSyncFunctionDetected` - convert to async
-
-5. **Thread-local Redis clients**: `RedisCache` stores client per-thread via `threading.local()`
-
-## Code Conventions
-
-- Type hints required, line length 120, ruff + mypy
-- Python 3.10+ (uses `|` union syntax)
-- Always use `poetry run` for all commands including git (e.g., `poetry run pytest`, `poetry run git push`)
-
-## Testing
+## Validation
 
 ```bash
-poetry run pytest tests/
+corepack pnpm install --frozen-lockfile
+corepack pnpm typecheck
+corepack pnpm test
+corepack pnpm build
+corepack pnpm test:package
+corepack pnpm test:integration
 ```
-
-## Common Gotchas
-
-- GCache is singleton - second instantiation raises `GCacheAlreadyInstantiated`
-- "watermark" is reserved use_case name
-- Local cache cannot be invalidated across instances (TTL-only)
-- `WATERMARK_TTL_SECONDS` (4 hours) must exceed your longest cache TTL for invalidation to work
-- uvloop is optional - falls back to asyncio on Windows/PyPy
-
-## Dependencies
-
-Core: pydantic, prometheus-client, cachetools, redis
-Optional: uvloop

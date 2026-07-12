@@ -1,0 +1,440 @@
+import { describe, expect, it, vi } from "vitest";
+
+import {
+  CacheLayer,
+  DialCache,
+  DialCacheKey,
+  DialCacheKeyConfig,
+  deterministicRampSampler,
+} from "../src/index.js";
+import { FakeRedis } from "./fake-redis.js";
+
+const configFor = (ttlSec: Partial<Record<CacheLayer, number>>, ramp: Partial<Record<CacheLayer, number>>) =>
+  new DialCacheKeyConfig({ ttlSec, ramp });
+
+describe("DialCache runtime config and ramp controls", () => {
+  it("uses a deterministic default ramp sample per cache key and layer", async () => {
+    // Given the built-in sampler is asked to sample the same key multiple times.
+    const key = new DialCacheKey({ keyType: "user_id", id: "123", useCase: "DeterministicRampSample" });
+
+    // When the key is sampled repeatedly for a partial rollout.
+    const first = await deterministicRampSampler({ key, layer: CacheLayer.LOCAL, ramp: 50 });
+    const second = await deterministicRampSampler({ key, layer: CacheLayer.LOCAL, ramp: 50 });
+    const remote = await deterministicRampSampler({ key, layer: CacheLayer.REMOTE, ramp: 50 });
+
+    // Then the sample is stable, bounded, and layer-specific.
+    expect(first).toBe(second);
+    expect(first).toBeGreaterThanOrEqual(0);
+    expect(first).toBeLessThan(100);
+    expect(remote).toBeGreaterThanOrEqual(0);
+    expect(remote).toBeLessThan(100);
+    expect(remote).not.toBe(first);
+  });
+
+  it("falls back to cached-function defaultConfig when the provider returns null", async () => {
+    // Given a runtime config provider that has no dynamic config for this key.
+    const cacheConfigProvider = vi.fn(async () => null);
+    const dialcache = new DialCache({ cacheConfigProvider });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "ProviderFallbackDefaultConfig",
+      cacheKey: (userId) => userId,
+      defaultConfig: DialCacheKeyConfig.enabled(60),
+    });
+
+    // When the same key is read twice inside an enabled scope.
+    const first = await dialcache.enable(async () => await getUser("123"));
+    const second = await dialcache.enable(async () => await getUser("123"));
+
+    // Then the cached-function defaultConfig keeps the local cache active.
+    expect(first).toEqual({ userId: "123", calls: 1 });
+    expect(second).toEqual({ userId: "123", calls: 1 });
+    expect(calls).toBe(1);
+    expect(cacheConfigProvider).toHaveBeenCalled();
+  });
+
+  it("applies runtime config changes to subsequent calls", async () => {
+    // Given a provider whose config can change without redeploying the cached function.
+    let runtimeConfig: DialCacheKeyConfig | null = DialCacheKeyConfig.enabled(60);
+    const dialcache = new DialCache({ cacheConfigProvider: async () => runtimeConfig });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "DynamicProviderConfig",
+      cacheKey: (userId) => userId,
+      defaultConfig: DialCacheKeyConfig.enabled(60),
+    });
+
+    // When the provider disables local caching after the first cached read.
+    const first = await dialcache.enable(async () => await getUser("123"));
+    runtimeConfig = configFor({}, {});
+    const second = await dialcache.enable(async () => await getUser("123"));
+
+    // Then the second call honors the new disabled config instead of returning the existing local entry.
+    expect(first).toEqual({ userId: "123", calls: 1 });
+    expect(second).toEqual({ userId: "123", calls: 2 });
+    expect(calls).toBe(2);
+  });
+
+  it("treats ramp 0 and 100 as deterministic layer controls", async () => {
+    // Given one local key is ramped out and another is fully ramped in.
+    const rampSampler = vi.fn(() => {
+      throw new Error("0/100 ramps should not need random sampling");
+    });
+    const dialcache = new DialCache({ rampSampler });
+    let disabledCalls = 0;
+    const disabled = dialcache.cached(async (userId: string) => ({ userId, calls: ++disabledCalls }), {
+      keyType: "user_id",
+      useCase: "LocalRampZero",
+      cacheKey: (userId) => userId,
+      defaultConfig: configFor({ [CacheLayer.LOCAL]: 60 }, { [CacheLayer.LOCAL]: 0 }),
+    });
+    let enabledCalls = 0;
+    const enabled = dialcache.cached(async (userId: string) => ({ userId, calls: ++enabledCalls }), {
+      keyType: "user_id",
+      useCase: "LocalRampHundred",
+      cacheKey: (userId) => userId,
+      defaultConfig: configFor({ [CacheLayer.LOCAL]: 60 }, { [CacheLayer.LOCAL]: 100 }),
+    });
+
+    // When each key is read twice.
+    const disabledFirst = await dialcache.enable(async () => await disabled("123"));
+    const disabledSecond = await dialcache.enable(async () => await disabled("123"));
+    const enabledFirst = await dialcache.enable(async () => await enabled("456"));
+    const enabledSecond = await dialcache.enable(async () => await enabled("456"));
+
+    // Then ramp 0 disables the layer, ramp 100 enables it, and neither path samples randomness.
+    expect(disabledFirst).toEqual({ userId: "123", calls: 1 });
+    expect(disabledSecond).toEqual({ userId: "123", calls: 2 });
+    expect(enabledFirst).toEqual({ userId: "456", calls: 1 });
+    expect(enabledSecond).toEqual({ userId: "456", calls: 1 });
+    expect(rampSampler).not.toHaveBeenCalled();
+  });
+
+  it("uses the injected sampler to make ramp 50 behavior testable", async () => {
+    // Given one sampler lands inside ramp 50 and another lands just outside it.
+    const passingSampler = vi.fn(() => 49);
+    const blockedSampler = vi.fn(() => 50);
+    const passingCache = new DialCache({ rampSampler: passingSampler });
+    const blockedCache = new DialCache({ rampSampler: blockedSampler });
+    let passingCalls = 0;
+    const passing = passingCache.cached(async (userId: string) => ({ userId, calls: ++passingCalls }), {
+      keyType: "user_id",
+      useCase: "LocalRampFiftyPassing",
+      cacheKey: (userId) => userId,
+      defaultConfig: configFor({ [CacheLayer.LOCAL]: 60 }, { [CacheLayer.LOCAL]: 50 }),
+    });
+    let blockedCalls = 0;
+    const blocked = blockedCache.cached(async (userId: string) => ({ userId, calls: ++blockedCalls }), {
+      keyType: "user_id",
+      useCase: "LocalRampFiftyBlocked",
+      cacheKey: (userId) => userId,
+      defaultConfig: configFor({ [CacheLayer.LOCAL]: 60 }, { [CacheLayer.LOCAL]: 50 }),
+    });
+
+    // When both caches read the same key twice.
+    const passingFirst = await passingCache.enable(async () => await passing("123"));
+    const passingSecond = await passingCache.enable(async () => await passing("123"));
+    const blockedFirst = await blockedCache.enable(async () => await blocked("123"));
+    const blockedSecond = await blockedCache.enable(async () => await blocked("123"));
+
+    // Then the sampled-in key caches and the sampled-out key falls through.
+    expect(passingFirst).toEqual({ userId: "123", calls: 1 });
+    expect(passingSecond).toEqual({ userId: "123", calls: 1 });
+    expect(blockedFirst).toEqual({ userId: "123", calls: 1 });
+    expect(blockedSecond).toEqual({ userId: "123", calls: 2 });
+    expect(passingSampler).toHaveBeenCalledWith(expect.objectContaining({ layer: CacheLayer.LOCAL, ramp: 50 }));
+    expect(blockedSampler).toHaveBeenCalledWith(expect.objectContaining({ layer: CacheLayer.LOCAL, ramp: 50 }));
+  });
+
+  it("uses the injected sampler for remote ramp 50 behavior", async () => {
+    // Given remote-only config with one sampler inside ramp 50 and another just outside it.
+    const passingRedis = new FakeRedis();
+    const blockedRedis = new FakeRedis();
+    const passingSampler = vi.fn(() => 49);
+    const blockedSampler = vi.fn(() => 50);
+    const passingCache = new DialCache({
+      redis: { client: passingRedis },
+      rampSampler: passingSampler,
+      cacheConfigProvider: async () => configFor({ [CacheLayer.REMOTE]: 60 }, { [CacheLayer.REMOTE]: 50 }),
+    });
+    const blockedCache = new DialCache({
+      redis: { client: blockedRedis },
+      rampSampler: blockedSampler,
+      cacheConfigProvider: async () => configFor({ [CacheLayer.REMOTE]: 60 }, { [CacheLayer.REMOTE]: 50 }),
+    });
+    let passingCalls = 0;
+    const passing = passingCache.cached(async (userId: string) => ({ userId, calls: ++passingCalls }), {
+      keyType: "user_id",
+      useCase: "RemoteRampFiftyPassing",
+      cacheKey: (userId) => userId,
+    });
+    let blockedCalls = 0;
+    const blocked = blockedCache.cached(async (userId: string) => ({ userId, calls: ++blockedCalls }), {
+      keyType: "user_id",
+      useCase: "RemoteRampFiftyBlocked",
+      cacheKey: (userId) => userId,
+    });
+
+    // When both remote-only caches read the same key twice.
+    const passingFirst = await passingCache.enable(async () => await passing("123"));
+    const passingSecond = await passingCache.enable(async () => await passing("123"));
+    const blockedFirst = await blockedCache.enable(async () => await blocked("123"));
+    const blockedSecond = await blockedCache.enable(async () => await blocked("123"));
+
+    // Then the sampled-in key uses Redis and the sampled-out key never touches Redis.
+    expect(passingFirst).toEqual({ userId: "123", calls: 1 });
+    expect(passingSecond).toEqual({ userId: "123", calls: 1 });
+    expect(blockedFirst).toEqual({ userId: "123", calls: 1 });
+    expect(blockedSecond).toEqual({ userId: "123", calls: 2 });
+    expect(passingRedis.getCalls).toBe(2);
+    expect(passingRedis.setCalls).toBe(1);
+    expect(blockedRedis.getCalls).toBe(0);
+    expect(blockedRedis.setCalls).toBe(0);
+    expect(passingSampler).toHaveBeenCalledWith(expect.objectContaining({ layer: CacheLayer.REMOTE, ramp: 50 }));
+    expect(blockedSampler).toHaveBeenCalledWith(expect.objectContaining({ layer: CacheLayer.REMOTE, ramp: 50 }));
+  });
+
+  it("handles out-of-range and non-finite ramp inputs defensively", async () => {
+    // Given configured ramps can come from dynamic config and may be outside the normal 0-100 range.
+    const deterministicSampler = vi.fn(() => {
+      throw new Error("clamped terminal ramps should not need random sampling");
+    });
+    const clampedCache = new DialCache({ rampSampler: deterministicSampler });
+    let negativeCalls = 0;
+    const negativeRamp = clampedCache.cached(async (userId: string) => ({ userId, calls: ++negativeCalls }), {
+      keyType: "user_id",
+      useCase: "NegativeConfiguredRamp",
+      cacheKey: (userId) => userId,
+      defaultConfig: configFor({ [CacheLayer.LOCAL]: 60 }, { [CacheLayer.LOCAL]: -10 }),
+    });
+    let overHundredCalls = 0;
+    const overHundredRamp = clampedCache.cached(async (userId: string) => ({ userId, calls: ++overHundredCalls }), {
+      keyType: "user_id",
+      useCase: "OverHundredConfiguredRamp",
+      cacheKey: (userId) => userId,
+      defaultConfig: configFor({ [CacheLayer.LOCAL]: 60 }, { [CacheLayer.LOCAL]: 150 }),
+    });
+    let nanConfiguredCalls = 0;
+    const nanConfiguredRamp = clampedCache.cached(async (userId: string) => ({ userId, calls: ++nanConfiguredCalls }), {
+      keyType: "user_id",
+      useCase: "NanConfiguredRamp",
+      cacheKey: (userId) => userId,
+      defaultConfig: configFor({ [CacheLayer.LOCAL]: 60 }, { [CacheLayer.LOCAL]: Number.NaN }),
+    });
+
+    // When the same keys are read twice.
+    const negativeFirst = await clampedCache.enable(async () => await negativeRamp("123"));
+    const negativeSecond = await clampedCache.enable(async () => await negativeRamp("123"));
+    const overHundredFirst = await clampedCache.enable(async () => await overHundredRamp("456"));
+    const overHundredSecond = await clampedCache.enable(async () => await overHundredRamp("456"));
+    const nanConfiguredFirst = await clampedCache.enable(async () => await nanConfiguredRamp("789"));
+    const nanConfiguredSecond = await clampedCache.enable(async () => await nanConfiguredRamp("789"));
+
+    // Then finite out-of-range ramps clamp to safe terminal behavior, and non-finite config disables caching.
+    expect(negativeFirst).toEqual({ userId: "123", calls: 1 });
+    expect(negativeSecond).toEqual({ userId: "123", calls: 2 });
+    expect(overHundredFirst).toEqual({ userId: "456", calls: 1 });
+    expect(overHundredSecond).toEqual({ userId: "456", calls: 1 });
+    expect(nanConfiguredFirst).toEqual({ userId: "789", calls: 1 });
+    expect(nanConfiguredSecond).toEqual({ userId: "789", calls: 2 });
+    expect(deterministicSampler).not.toHaveBeenCalled();
+
+    // Given partial ramps still depend on sampler output.
+    for (const [sample, useCase] of [
+      [Number.NaN, "NanRampSample"],
+      [Number.POSITIVE_INFINITY, "InfinityRampSample"],
+    ] as const) {
+      const sampler = vi.fn(() => sample);
+      const sampledCache = new DialCache({ rampSampler: sampler });
+      let calls = 0;
+      const getUser = sampledCache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+        keyType: "user_id",
+        useCase,
+        cacheKey: (userId) => userId,
+        defaultConfig: configFor({ [CacheLayer.LOCAL]: 60 }, { [CacheLayer.LOCAL]: 50 }),
+      });
+
+      const first = await sampledCache.enable(async () => await getUser("123"));
+      const second = await sampledCache.enable(async () => await getUser("123"));
+
+      expect(first.calls).toBe(1);
+      expect(second.calls).toBe(2);
+      expect(sampler).toHaveBeenCalledTimes(2);
+    }
+  });
+
+  it("uses one ramp sample for a local miss and write decision", async () => {
+    // Given the first ramp sample admits the read path and any immediate second sample would reject the write path.
+    const rampSampler = vi.fn().mockReturnValueOnce(49).mockReturnValueOnce(50);
+    const dialcache = new DialCache({ rampSampler });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "LocalRampSingleSample",
+      cacheKey: (userId) => userId,
+      defaultConfig: configFor({ [CacheLayer.LOCAL]: 60 }, { [CacheLayer.LOCAL]: 50 }),
+    });
+
+    // When the key misses once.
+    const first = await dialcache.enable(async () => await getUser("123"));
+
+    // Then the sampled-in miss writes local cache without resampling during the same call.
+    expect(first).toEqual({ userId: "123", calls: 1 });
+    expect(rampSampler).toHaveBeenCalledTimes(1);
+
+    // When the next read is sampled into the local layer again.
+    rampSampler.mockReset();
+    rampSampler.mockReturnValueOnce(49);
+    const second = await dialcache.enable(async () => await getUser("123"));
+
+    // Then it can hit the value written by the original sampled-in miss.
+    expect(second).toEqual({ userId: "123", calls: 1 });
+    expect(rampSampler).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses one ramp sample for a remote miss and write decision", async () => {
+    // Given the first remote ramp sample admits the read path and any immediate second sample would reject the write path.
+    const redis = new FakeRedis();
+    const rampSampler = vi.fn().mockReturnValueOnce(49).mockReturnValueOnce(50);
+    const dialcache = new DialCache({
+      redis: { client: redis },
+      rampSampler,
+      cacheConfigProvider: async () => configFor({ [CacheLayer.REMOTE]: 60 }, { [CacheLayer.REMOTE]: 50 }),
+    });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "RemoteRampSingleSample",
+      cacheKey: (userId) => userId,
+    });
+
+    // When the Redis key misses once.
+    const first = await dialcache.enable(async () => await getUser("123"));
+
+    // Then the sampled-in miss writes Redis without resampling during the same call.
+    expect(first).toEqual({ userId: "123", calls: 1 });
+    expect(redis.setCalls).toBe(1);
+    expect(rampSampler).toHaveBeenCalledTimes(1);
+
+    // When the next read is sampled into the remote layer again.
+    rampSampler.mockReset();
+    rampSampler.mockReturnValueOnce(49);
+    const second = await dialcache.enable(async () => await getUser("123"));
+
+    // Then it can hit the value written by the original sampled-in miss.
+    expect(second).toEqual({ userId: "123", calls: 1 });
+    expect(rampSampler).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats non-finite and fractional TTLs as invalid config", async () => {
+    // Given invalid TTL values are configured for local and remote layers.
+    const redis = new FakeRedis();
+    const dialcache = new DialCache({ redis: { client: redis } });
+    const badTtls = [Number.NaN, Number.POSITIVE_INFINITY, 0.5];
+
+    // When each cached function is called twice.
+    for (const ttl of badTtls) {
+      let calls = 0;
+      const getUser = dialcache.cached(async (userId: string) => ({ userId, ttl: String(ttl), calls: ++calls }), {
+        keyType: "user_id",
+        useCase: `InvalidTtl${String(ttl)}`,
+        cacheKey: (userId) => userId,
+        defaultConfig: configFor({ [CacheLayer.LOCAL]: ttl, [CacheLayer.REMOTE]: ttl }, { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 100 }),
+      });
+
+      const first = await dialcache.enable(async () => await getUser("123"));
+      const second = await dialcache.enable(async () => await getUser("123"));
+
+      expect(first.calls).toBe(1);
+      expect(second.calls).toBe(2);
+    }
+
+    // Then no invalid TTL reaches Redis.
+    expect(redis.getCalls).toBe(0);
+    expect(redis.setCalls).toBe(0);
+  });
+
+  it("disables missing local config while allowing the remote layer to work", async () => {
+    // Given runtime config only enables the remote layer.
+    const redis = new FakeRedis();
+    const dialcache = new DialCache({
+      redis: { client: redis },
+      cacheConfigProvider: async () => configFor({ [CacheLayer.REMOTE]: 60 }, { [CacheLayer.REMOTE]: 100 }),
+    });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "RemoteOnlyRuntimeConfig",
+      cacheKey: (userId) => userId,
+    });
+
+    // When the same key is read twice through a Redis-backed cache.
+    const first = await dialcache.enable(async () => await getUser("123"));
+    const second = await dialcache.enable(async () => await getUser("123"));
+
+    // Then local is skipped, Redis stores the fallback, and the second read comes from Redis.
+    expect(first).toEqual({ userId: "123", calls: 1 });
+    expect(second).toEqual({ userId: "123", calls: 1 });
+    expect(calls).toBe(1);
+    expect(redis.getCalls).toBe(2);
+    expect(redis.setCalls).toBe(1);
+  });
+
+  it("disables missing remote config while allowing the local layer to work", async () => {
+    // Given Redis exists but runtime config only enables the local layer.
+    const redis = new FakeRedis();
+    const dialcache = new DialCache({
+      redis: { client: redis },
+      cacheConfigProvider: async () => configFor({ [CacheLayer.LOCAL]: 60 }, { [CacheLayer.LOCAL]: 100 }),
+    });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "LocalOnlyRuntimeConfig",
+      cacheKey: (userId) => userId,
+    });
+
+    // When the same key is read twice through a Redis-backed cache.
+    const first = await dialcache.enable(async () => await getUser("123"));
+    const second = await dialcache.enable(async () => await getUser("123"));
+
+    // Then Redis is skipped and the second read comes from local cache.
+    expect(first).toEqual({ userId: "123", calls: 1 });
+    expect(second).toEqual({ userId: "123", calls: 1 });
+    expect(calls).toBe(1);
+    expect(redis.getCalls).toBe(0);
+    expect(redis.setCalls).toBe(0);
+  });
+
+  it("fails open when the runtime config provider throws", async () => {
+    // Given the runtime config provider is temporarily unavailable.
+    const providerError = new Error("config provider unavailable");
+    const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const dialcache = new DialCache({
+      logger,
+      cacheConfigProvider: vi.fn(async () => {
+        throw providerError;
+      }),
+    });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "ConfigProviderThrows",
+      cacheKey: (userId) => userId,
+      defaultConfig: DialCacheKeyConfig.enabled(60),
+    });
+
+    // When the cached function is called while config lookup fails.
+    const first = await dialcache.enable(async () => await getUser("123"));
+    const second = await dialcache.enable(async () => await getUser("123"));
+
+    // Then no provider error escapes and no value is accidentally cached. The
+    // config is resolved once up front, so the failure is logged there rather
+    // than surfacing as a per-layer cache-read error.
+    expect(first).toEqual({ userId: "123", calls: 1 });
+    expect(second).toEqual({ userId: "123", calls: 2 });
+    expect(logger.warn).toHaveBeenCalledWith("Could not resolve DialCache key config", providerError);
+  });
+});

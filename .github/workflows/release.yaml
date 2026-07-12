@@ -1,46 +1,41 @@
-name: Package Release
+name: Release
 
-on: workflow_dispatch
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
   publish:
     runs-on: ubuntu-latest
-    permissions:
-      # IMPORTANT: This permission is mandatory for trusted publishing.
-      id-token: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
+          ref: ${{ github.event.release.tag_name }}
           fetch-depth: 0
-          ref: ${{ github.head_ref || github.ref_name }}
-          token: ${{ secrets.GALILEO_AUTOMATION_GITHUB_TOKEN }}
-
-      - name: Python Semantic Release
-        id: release
-        uses: python-semantic-release/python-semantic-release@v10.5.3
+      - uses: pnpm/action-setup@v4
         with:
-          git_committer_name: galileo-automation
-          git_committer_email: ci@rungalileo.io
-          github_token: ${{ secrets.GALILEO_AUTOMATION_GITHUB_TOKEN }}
-          ssh_public_signing_key: ${{ secrets.GALILEO_AUTOMATION_SSH_PUBLIC_KEY }}
-          ssh_private_signing_key: ${{ secrets.GALILEO_AUTOMATION_SSH_PRIVATE_KEY }}
-
-      - name: Build Package
-        if: steps.release.outputs.released == 'true'
+          version: 10.33.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
+      - name: Verify release source and tag
         run: |
-          pipx install poetry==${{ vars.POETRY_V2_VERSION }}
-          poetry build
-
-      - name: Publish Package to PyPI
-        if: steps.release.outputs.released == 'true'
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          verbose: true
-          print-hash: true
-
-      - name: Publish to GitHub Releases
-        uses: python-semantic-release/upload-to-gh-release@main
-        if: steps.release.outputs.released == 'true'
-        with:
-          github_token: ${{ secrets.GALILEO_AUTOMATION_GITHUB_TOKEN }}
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          node -e "const expected = 'v' + require('./package.json').version; if (process.env.GITHUB_REF_NAME !== expected) { throw new Error('Expected release tag ' + expected + ', got ' + process.env.GITHUB_REF_NAME); }"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm test:package
+      - run: npm publish --provenance --access public
+        env:
+          # Required only for the first publish. Once dialcache exists on npm,
+          # configure release.yaml as its trusted GitHub publisher and remove
+          # this secret; npm will then use the workflow's OIDC token.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
