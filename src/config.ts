@@ -57,7 +57,10 @@ export interface DialCacheConfig {
   readonly cacheConfigProvider?: CacheConfigProvider;
   readonly urnPrefix?: string;
   readonly logger?: Logger;
-  /** Maximum local entries across every use case in this DialCache instance. Defaults to 10,000. */
+  /**
+   * Maximum local entries across every use case in this DialCache instance.
+   * Zero disables local storage. Defaults to 10,000.
+   */
   readonly localMaxSize?: number;
   readonly redis?: RedisConfig;
   readonly rampSampler?: CacheRampSampler;

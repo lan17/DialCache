@@ -72,8 +72,8 @@ export class DialCache {
 
   constructor(config: DialCacheConfig = {}) {
     const localMaxSize = config.localMaxSize ?? DEFAULT_LOCAL_MAX_SIZE;
-    if (!Number.isSafeInteger(localMaxSize) || localMaxSize <= 0) {
-      throw new RangeError("DialCache localMaxSize must be a positive safe integer");
+    if (!Number.isSafeInteger(localMaxSize) || localMaxSize < 0) {
+      throw new RangeError("DialCache localMaxSize must be a nonnegative safe integer");
     }
 
     this.configProvider = config.cacheConfigProvider ?? defaultConfigProvider;

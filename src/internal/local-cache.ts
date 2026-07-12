@@ -12,19 +12,25 @@ interface LocalEntry<T> {
 }
 
 export class LocalCache {
-  private readonly cache: LRUCache<string, LocalEntry<unknown>>;
+  private readonly cache: LRUCache<string, LocalEntry<unknown>> | null;
 
   constructor(
     private readonly configProvider: CacheConfigProvider,
     private readonly rampSampler: CacheRampSampler,
     maxSize: number,
   ) {
-    this.cache = new LRUCache({
-      max: maxSize,
-      // Keep fake timers and injected Date clocks observable instead of capturing
-      // the process clock when lru-cache is imported.
-      perf: { now: () => Date.now() },
-    });
+    this.cache =
+      maxSize === 0
+        ? null
+        : new LRUCache({
+            // Weight every entry as one so large configured limits remain sparse
+            // instead of eagerly preallocating max-sized storage arrays.
+            maxSize,
+            // Keep fake timers and injected Date clocks observable instead of capturing
+            // the process clock when lru-cache is imported.
+            perf: { now: () => Date.now() },
+            ttlResolution: 0,
+          });
   }
 
   async get<T>(key: DialCacheKey, fallback: Fallback<T>): Promise<T> {
@@ -51,7 +57,7 @@ export class LocalCache {
       return layerConfig;
     }
 
-    const hit = this.cache.get(key.urn) as LocalEntry<T> | undefined;
+    const hit = this.cache?.get(key.urn) as LocalEntry<T> | undefined;
 
     if (hit !== undefined) {
       return { status: "hit", value: hit.value };
@@ -66,11 +72,11 @@ export class LocalCache {
       return;
     }
 
-    this.cache.set(key.urn, { value }, { ttl: ttlSec * 1000 });
+    this.cache?.set(key.urn, { value }, { size: 1, ttl: ttlSec * 1000 });
   }
 
   async flushAll(): Promise<void> {
-    this.cache.clear();
+    this.cache?.clear();
   }
 
   private async resolveLocalLayerConfig(key: DialCacheKey, keyConfig?: DialCacheKeyConfig | null) {

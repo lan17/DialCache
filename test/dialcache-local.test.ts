@@ -345,6 +345,33 @@ describe("DialCache local-only MVP", () => {
     expect(calls).toBe(2);
   });
 
+  it("checks local ttl against the current clock before the timers phase", async () => {
+    // Given a cached value whose TTL clock has been read without yielding to timers.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    const dialcache = new DialCache();
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "LocalTtlSameTurnExpiration",
+      cacheKey: (userId) => userId,
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.LOCAL]: 1 },
+        ramp: { [CacheLayer.LOCAL]: 100 },
+      }),
+    });
+
+    // When wall time advances beyond the TTL without running scheduled timers.
+    const first = await dialcache.enable(async () => await getUser("123"));
+    vi.setSystemTime(new Date("2026-01-01T00:00:01.001Z"));
+    const afterTtl = await dialcache.enable(async () => await getUser("123"));
+
+    // Then the current clock is authoritative and the stale entry is not returned.
+    expect(first).toEqual({ userId: "123", calls: 1 });
+    expect(afterTtl).toEqual({ userId: "123", calls: 2 });
+    expect(calls).toBe(2);
+  });
+
   it("fails open when key construction fails", async () => {
     // Given a cached function whose key builder throws.
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -677,11 +704,36 @@ describe("DialCache local-only MVP", () => {
     expect(calls).toBe(1);
   });
 
-  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+  it("allows localMaxSize zero to disable local storage", async () => {
+    // Given an explicit zero-entry local cache limit.
+    const dialcache = new DialCache({ localMaxSize: 0 });
+    let calls = 0;
+    const getUser = dialcache.cached(async (id: string) => ({ id, call: ++calls }), {
+      keyType: "user_id",
+      useCase: "DisabledLocalStorage",
+      cacheKey: (id) => id,
+      defaultConfig: DialCacheKeyConfig.enabled(60),
+    });
+
+    // When the same key is read repeatedly.
+    await dialcache.enable(async () => {
+      await getUser("123");
+      await getUser("123");
+    });
+
+    // Then local storage stays disabled, matching the prior zero-size behavior.
+    expect(calls).toBe(2);
+  });
+
+  it("constructs large local entry caps without eager allocation", () => {
+    expect(() => new DialCache({ localMaxSize: 2 ** 32 })).not.toThrow();
+  });
+
+  it.each([-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1])(
     "rejects invalid localMaxSize value %s",
     (localMaxSize) => {
       expect(() => new DialCache({ localMaxSize })).toThrow(
-        new RangeError("DialCache localMaxSize must be a positive safe integer"),
+        new RangeError("DialCache localMaxSize must be a nonnegative safe integer"),
       );
     },
   );

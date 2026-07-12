@@ -73,7 +73,7 @@ local cache -> Redis cache -> fallback function
 - Redis cache read/write failures are logged, counted in metrics, and fail open; fallback results still return when fallback succeeds. Explicit maintenance calls (`invalidateRemote`, `flushAll`) log/count Redis failures and rethrow them so callers do not assume mutation succeeded.
 - Missing per-layer config disables that layer, records a disabled reason, and falls through to the next layer/fallback.
 
-The local layer uses one process-local LRU per `DialCache` instance. It keeps at most 10,000 entries by default across all use cases while retaining each entry's configured local TTL. Set `localMaxSize` to a positive integer to change the global entry cap:
+The local layer uses one process-local LRU per `DialCache` instance. It keeps at most 10,000 entries by default across all use cases while retaining each entry's configured local TTL. Set `localMaxSize` to a nonnegative integer to change the global entry cap; `0` disables local storage:
 
 ```ts
 const dialcache = new DialCache({ localMaxSize: 25_000 });
