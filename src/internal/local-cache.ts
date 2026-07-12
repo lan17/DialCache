@@ -1,3 +1,5 @@
+import { LRUCache } from "lru-cache";
+
 import { CacheLayer, type CacheConfigProvider, type CacheRampSampler, type DialCacheKeyConfig } from "../config.js";
 import type { DialCacheKey } from "../key.js";
 import type { CacheGetResult } from "./cache-result.js";
@@ -6,18 +8,24 @@ import { fetchKeyConfig, resolveLayerConfigResult } from "./runtime-config.js";
 export type Fallback<T> = () => Promise<T>;
 
 interface LocalEntry<T> {
-  readonly expiresAtMs: number;
   readonly value: T;
 }
 
 export class LocalCache {
-  private readonly caches = new Map<string, Map<string, LocalEntry<unknown>>>();
+  private readonly cache: LRUCache<string, LocalEntry<unknown>>;
 
   constructor(
     private readonly configProvider: CacheConfigProvider,
     private readonly rampSampler: CacheRampSampler,
-    private readonly maxSize: number,
-  ) {}
+    maxSize: number,
+  ) {
+    this.cache = new LRUCache({
+      max: maxSize,
+      // Keep fake timers and injected Date clocks observable instead of capturing
+      // the process clock when lru-cache is imported.
+      perf: { now: () => Date.now() },
+    });
+  }
 
   async get<T>(key: DialCacheKey, fallback: Fallback<T>): Promise<T> {
     const result = await this.getIfPresentResult<T>(key);
@@ -43,16 +51,10 @@ export class LocalCache {
       return layerConfig;
     }
 
-    const cache = this.caches.get(key.useCase);
-    const now = Date.now();
-    const hit = cache?.get(key.urn) as LocalEntry<T> | undefined;
-
-    if (hit !== undefined && hit.expiresAtMs > now) {
-      return { status: "hit", value: hit.value };
-    }
+    const hit = this.cache.get(key.urn) as LocalEntry<T> | undefined;
 
     if (hit !== undefined) {
-      cache?.delete(key.urn);
+      return { status: "hit", value: hit.value };
     }
 
     return { status: "miss", config: layerConfig.config };
@@ -64,22 +66,11 @@ export class LocalCache {
       return;
     }
 
-    const cache = this.getOrCreateUseCaseCache(key);
-    cache.set(key.urn, { expiresAtMs: Date.now() + ttlSec * 1000, value });
-    this.evictOldestIfNeeded(cache);
+    this.cache.set(key.urn, { value }, { ttl: ttlSec * 1000 });
   }
 
   async flushAll(): Promise<void> {
-    this.caches.clear();
-  }
-
-  private getOrCreateUseCaseCache(key: DialCacheKey): Map<string, LocalEntry<unknown>> {
-    let cache = this.caches.get(key.useCase);
-    if (cache === undefined) {
-      cache = new Map<string, LocalEntry<unknown>>();
-      this.caches.set(key.useCase, cache);
-    }
-    return cache;
+    this.cache.clear();
   }
 
   private async resolveLocalLayerConfig(key: DialCacheKey, keyConfig?: DialCacheKeyConfig | null) {
@@ -96,15 +87,5 @@ export class LocalCache {
   private async resolveLocalTtlSec(key: DialCacheKey): Promise<number | null> {
     const layerConfig = await this.resolveLocalLayerConfig(key);
     return layerConfig.status === "enabled" ? layerConfig.config.ttlSec : null;
-  }
-
-  private evictOldestIfNeeded(cache: Map<string, LocalEntry<unknown>>): void {
-    while (cache.size > this.maxSize) {
-      const oldestKey = cache.keys().next().value as string | undefined;
-      if (oldestKey === undefined) {
-        return;
-      }
-      cache.delete(oldestKey);
-    }
   }
 }

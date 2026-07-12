@@ -593,31 +593,98 @@ describe("DialCache local-only MVP", () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
-  it("evicts the oldest local entry when max size is exceeded", async () => {
-    // Given a local cache with room for one entry.
-    const dialcache = new DialCache({ localMaxSize: 1 });
-    let calls = 0;
-    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+  it("evicts the least recently used local entry when max size is exceeded", async () => {
+    // Given a local cache with room for two entries.
+    const dialcache = new DialCache({ localMaxSize: 2 });
+    const calls = new Map<string, number>();
+    const getUser = dialcache.cached(async (userId: string) => {
+      const call = (calls.get(userId) ?? 0) + 1;
+      calls.set(userId, call);
+      return { userId, call };
+    }, {
       keyType: "user_id",
       useCase: "LocalMaxSizeEviction",
       cacheKey: (userId) => userId,
       defaultConfig: DialCacheKeyConfig.enabled(60),
     });
 
-    // When two different keys are cached.
+    // When a hit refreshes one entry's recency before a third key is inserted.
     await dialcache.enable(async () => {
       await getUser("123");
       await getUser("456");
+      await getUser("123");
+      await getUser("789");
+      await getUser("456");
     });
-    const newestStillCached = await dialcache.enable(async () => await getUser("456"));
-    const oldestRefreshed = await dialcache.enable(async () => await getUser("123"));
-    const newestRefreshedAfterSecondEviction = await dialcache.enable(async () => await getUser("456"));
 
-    // Then the newest key is initially cached, the oldest key refreshes, and max-size eviction continues to apply.
-    expect(newestStillCached).toEqual({ userId: "456", calls: 2 });
-    expect(oldestRefreshed).toEqual({ userId: "123", calls: 3 });
-    expect(newestRefreshedAfterSecondEviction).toEqual({ userId: "456", calls: 4 });
+    // Then the recently read key survives while the least recently used key refreshes.
+    expect(calls.get("123")).toBe(1);
+    expect(calls.get("456")).toBe(2);
+    expect(calls.get("789")).toBe(1);
   });
+
+  it("applies localMaxSize across all use cases", async () => {
+    // Given two use cases sharing one DialCache instance with a one-entry local limit.
+    const dialcache = new DialCache({ localMaxSize: 1 });
+    let userCalls = 0;
+    let postCalls = 0;
+    const getUser = dialcache.cached(async (id: string) => ({ id, call: ++userCalls }), {
+      keyType: "user_id",
+      useCase: "GlobalLimitUser",
+      cacheKey: (id) => id,
+      defaultConfig: DialCacheKeyConfig.enabled(60),
+    });
+    const getPost = dialcache.cached(async (id: string) => ({ id, call: ++postCalls }), {
+      keyType: "post_id",
+      useCase: "GlobalLimitPost",
+      cacheKey: (id) => id,
+      defaultConfig: DialCacheKeyConfig.enabled(60),
+    });
+
+    // When the second use case fills the single global slot and the first key is requested again.
+    await dialcache.enable(async () => {
+      await getUser("123");
+      await getPost("456");
+      await getUser("123");
+    });
+
+    // Then the limit is global rather than independently applied to each use case.
+    expect(userCalls).toBe(2);
+    expect(postCalls).toBe(1);
+  });
+
+  it("caches undefined local values", async () => {
+    // Given a valid cached function whose result is undefined.
+    const dialcache = new DialCache();
+    let calls = 0;
+    const getOptional = dialcache.cached(async (id: string) => {
+      calls += 1;
+      return undefined;
+    }, {
+      keyType: "optional_id",
+      useCase: "UndefinedLocalValue",
+      cacheKey: (id) => id,
+      defaultConfig: DialCacheKeyConfig.enabled(60),
+    });
+
+    // When the same key is read twice inside an enabled scope.
+    await dialcache.enable(async () => {
+      await getOptional("123");
+      await getOptional("123");
+    });
+
+    // Then the entry wrapper distinguishes the cached undefined from a miss.
+    expect(calls).toBe(1);
+  });
+
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    "rejects invalid localMaxSize value %s",
+    (localMaxSize) => {
+      expect(() => new DialCache({ localMaxSize })).toThrow(
+        new RangeError("DialCache localMaxSize must be a positive safe integer"),
+      );
+    },
+  );
 
   it("round-trips values through the JSON serializer", async () => {
     // Given the default JSON serializer.

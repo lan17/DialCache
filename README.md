@@ -10,6 +10,8 @@ pnpm add dialcache
 pnpm add redis@~4.7.1
 ```
 
+DialCache requires Node.js 20 or Node.js 22 and newer.
+
 ## Quick start
 
 ```ts
@@ -70,6 +72,14 @@ local cache -> Redis cache -> fallback function
 - Redis misses call the fallback and write both Redis and local.
 - Redis cache read/write failures are logged, counted in metrics, and fail open; fallback results still return when fallback succeeds. Explicit maintenance calls (`invalidateRemote`, `flushAll`) log/count Redis failures and rethrow them so callers do not assume mutation succeeded.
 - Missing per-layer config disables that layer, records a disabled reason, and falls through to the next layer/fallback.
+
+The local layer uses one process-local LRU per `DialCache` instance. It keeps at most 10,000 entries by default across all use cases while retaining each entry's configured local TTL. Set `localMaxSize` to a positive integer to change the global entry cap:
+
+```ts
+const dialcache = new DialCache({ localMaxSize: 25_000 });
+```
+
+The limit counts entries rather than estimating JavaScript object memory. Recently read entries stay resident ahead of less recently used entries when the limit is reached.
 
 Node-redis computes each script's SHA, uses `EVALSHA`, and retries with `EVAL` after `NOSCRIPT`. Its cluster client routes scripts by their first key and performs that fallback on the selected shard. Tracked reads are deliberately routed to primaries so a lagging Redis replica cannot hide an invalidation watermark. The adapter also fans `flushAll()` across every cluster master instead of silently clearing one shard.
 
@@ -277,7 +287,7 @@ For non-Prometheus telemetry, inject a `DialCacheMetricsAdapter` through `new Di
 
 Included:
 
-- Local TTL cache
+- Local TTL/LRU cache with a global entry-count bound
 - Redis TTL cache
 - Local → Redis → fallback read-through chain
 - Lazy Redis client factory support

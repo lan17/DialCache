@@ -71,6 +71,11 @@ export class DialCache {
   private readonly inFlight = new Map<string, Promise<unknown>>();
 
   constructor(config: DialCacheConfig = {}) {
+    const localMaxSize = config.localMaxSize ?? DEFAULT_LOCAL_MAX_SIZE;
+    if (!Number.isSafeInteger(localMaxSize) || localMaxSize <= 0) {
+      throw new RangeError("DialCache localMaxSize must be a positive safe integer");
+    }
+
     this.configProvider = config.cacheConfigProvider ?? defaultConfigProvider;
     this.urnPrefix = config.urnPrefix ?? "urn";
     this.logger = config.logger ?? defaultLogger;
@@ -84,7 +89,7 @@ export class DialCache {
             ...(config.metricsRegistry === undefined ? {} : { registry: config.metricsRegistry }),
           });
     this.metrics = safeMetrics(metrics);
-    this.localCache = new LocalCache(this.configProvider, this.rampSampler, config.localMaxSize ?? DEFAULT_LOCAL_MAX_SIZE);
+    this.localCache = new LocalCache(this.configProvider, this.rampSampler, localMaxSize);
     this.redisCache =
       config.redis === undefined
         ? null
