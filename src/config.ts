@@ -59,6 +59,7 @@ export interface DialCacheConfig {
   readonly logger?: Logger;
   /**
    * Maximum local entries across every use case in this DialCache instance.
+   * Must be a nonnegative safe integer.
    * Zero disables local storage. Defaults to 10,000.
    */
   readonly localMaxSize?: number;
