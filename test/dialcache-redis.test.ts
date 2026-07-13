@@ -259,9 +259,24 @@ describe("DialCache Redis TTL layer", () => {
     expect(value).toEqual({ id: "123", source: "fallback" });
     expect(readerCalls).toBe(0);
     expect(frame.encoding).toBe(1);
-    expect(Buffer.from(frame.payload, "base64").toString("utf8")).toBe("123|fallback");
+    expect(frame.payload).toEqual(Buffer.from("123|fallback"));
     expect(serializer.dump).toHaveBeenCalledOnce();
     expect(serializer.load).toHaveBeenCalledOnce();
+  });
+
+  it("isolates binary read payloads from the stored Redis frame", async () => {
+    const redis = new FakeRedis();
+    const valueKey = "binary-isolation:{item:123}:value";
+    const payload = Buffer.from([0, 1, 2, 0xff]);
+    await redis.write({ valueKey, cacheTtlMs: 60_000, value: payload });
+
+    const firstRead = await redis.read({ valueKey });
+    if (!Buffer.isBuffer(firstRead)) {
+      throw new Error("Expected a binary Redis payload");
+    }
+    firstRead[0] = 0xff;
+
+    expect(await redis.read({ valueKey })).toEqual(payload);
   });
 
   it("fails open when Redis serializer dump fails", async () => {
