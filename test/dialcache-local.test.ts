@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { performance } from "node:perf_hooks";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   CacheLayer,
@@ -28,6 +30,10 @@ const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0
 describe("DialCache local-only MVP", () => {
   beforeEach(() => {
     vi.useRealTimers();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("keeps caching disabled by default", async () => {
@@ -318,7 +324,8 @@ describe("DialCache local-only MVP", () => {
 
   it("expires local cache entries after their ttl", async () => {
     // Given a cached function with a one second local TTL.
-    vi.useFakeTimers();
+    let nowMs = 10_000;
+    vi.spyOn(performance, "now").mockImplementation(() => nowMs);
     const dialcache = new DialCache();
     let calls = 0;
     const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
@@ -333,9 +340,9 @@ describe("DialCache local-only MVP", () => {
 
     // When the same key is called before and after TTL expiration.
     const first = await dialcache.enable(async () => await getUser("123"));
-    vi.advanceTimersByTime(999);
+    nowMs += 999;
     const beforeTtl = await dialcache.enable(async () => await getUser("123"));
-    vi.advanceTimersByTime(2);
+    nowMs += 1;
     const afterTtl = await dialcache.enable(async () => await getUser("123"));
 
     // Then the cached value is reused before TTL and refreshed after TTL.
@@ -345,10 +352,11 @@ describe("DialCache local-only MVP", () => {
     expect(calls).toBe(2);
   });
 
-  it("checks local ttl against the current clock before the timers phase", async () => {
-    // Given a cached value whose TTL clock has been read without yielding to timers.
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+  it("checks local ttl from an epoch-zero monotonic clock before the timers phase", async () => {
+    // Given a cached value whose monotonic TTL clock starts at zero and has
+    // been read without yielding to timers.
+    let nowMs = 0;
+    vi.spyOn(performance, "now").mockImplementation(() => nowMs);
     const dialcache = new DialCache();
     let calls = 0;
     const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
@@ -361,9 +369,9 @@ describe("DialCache local-only MVP", () => {
       }),
     });
 
-    // When wall time reaches the TTL boundary without running scheduled timers.
+    // When monotonic time reaches the TTL boundary without running scheduled timers.
     const first = await dialcache.enable(async () => await getUser("123"));
-    vi.setSystemTime(new Date("2026-01-01T00:00:01.000Z"));
+    nowMs = 1_000;
     const afterTtl = await dialcache.enable(async () => await getUser("123"));
 
     // Then the current clock is authoritative and the stale entry is not returned.

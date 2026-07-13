@@ -1,3 +1,5 @@
+import { performance } from "node:perf_hooks";
+
 import { LRUCache } from "lru-cache";
 
 import { CacheLayer, type CacheConfigProvider, type CacheRampSampler, type DialCacheKeyConfig } from "../config.js";
@@ -26,9 +28,9 @@ export class LocalCache {
             // Weight every entry as one so large configured limits remain sparse
             // instead of eagerly preallocating max-sized storage arrays.
             maxSize,
-            // Keep fake timers and injected Date clocks observable instead of capturing
-            // the process clock when lru-cache is imported.
-            perf: { now: () => Date.now() },
+            // Read a fresh monotonic integer clock and avoid lru-cache's zero
+            // timestamp sentinel when the process or a fake clock starts at 0.
+            perf: { now: () => Math.floor(performance.now()) + 1 },
             ttlResolution: 0,
           });
   }
