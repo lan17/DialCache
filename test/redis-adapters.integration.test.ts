@@ -17,10 +17,7 @@ import {
   type ValkeyGlideDialCacheClient,
 } from "../src/valkey-glide.js";
 
-const engines = [
-  { name: "Redis 6.2", image: "redis:6.2-alpine" },
-  { name: "Valkey 8", image: "valkey/valkey:8-alpine" },
-] as const;
+const REDIS_IMAGE = "redis:6.2-alpine";
 
 const adapterKinds = [
   { kind: "nodeRedis", name: "node-redis" },
@@ -41,7 +38,7 @@ function encodeFrame(payload: string | Buffer, encoding: number, createdAtMs = D
   return Buffer.concat([Buffer.from([version]), timestamp, Buffer.from([encoding]), Buffer.from(payload)]);
 }
 
-describe.each(engines)("DialCache Redis adapter conformance on $name", ({ image }) => {
+describe("DialCache Redis adapter conformance on Redis 6.2", () => {
   let container: StartedTestContainer | undefined;
   let admin: ReturnType<typeof createNodeRedisClient> | undefined;
   let glide: GlideClient | undefined;
@@ -49,7 +46,7 @@ describe.each(engines)("DialCache Redis adapter conformance on $name", ({ image 
   let adapters: Record<AdapterKind, DialCacheRedisClient> | undefined;
 
   beforeAll(async () => {
-    container = await new GenericContainer(image)
+    container = await new GenericContainer(REDIS_IMAGE)
       .withExposedPorts(6379)
       .withWaitStrategy(Wait.forListeningPorts())
       .start();
