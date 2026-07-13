@@ -1,4 +1,4 @@
-import { createCluster, type RedisClusterOptions } from "redis";
+import { commandOptions, createCluster, type RedisClusterOptions } from "redis";
 import {
   GenericContainer,
   Network,
@@ -183,5 +183,36 @@ describe("DialCache Lua protocol on Redis Cluster", () => {
     expect(before).toEqual({ id: "123", version: 1 });
     expect(after).toEqual({ id: "123", version: 2 });
     await expect(cluster.dialcacheReadTracked("{slot-a}:value", "{slot-b}:watermark")).rejects.toThrow(/CROSSSLOT/);
+  });
+
+  it("round-trips binary payloads through cluster script routing", async () => {
+    if (cluster === undefined) {
+      throw new Error("Redis Cluster did not start");
+    }
+    const scriptClient = createNodeRedisDialCacheClient(cluster);
+    const valueKey = "binary-cluster:{item:untracked}:value";
+    const payload = Buffer.from(Array.from({ length: 256 }, (_, index) => index));
+
+    expect(await scriptClient.write({ valueKey, cacheTtlMs: 60_000, value: payload })).toBe(true);
+    expect(await scriptClient.read({ valueKey })).toEqual(payload);
+
+    const stored = await cluster.get(commandOptions({ returnBuffers: true }), valueKey);
+    expect(stored?.length).toBe(10 + payload.length);
+    expect(stored?.[9]).toBe(1);
+    expect(stored?.subarray(10)).toEqual(payload);
+
+    const trackedValueKey = "binary-cluster:{item:tracked}:value";
+    const watermarkKey = "binary-cluster:{item:tracked}:watermark";
+    const trackedPayload = Buffer.from([0, 0xff, 0xc3, 0x28, 0x80]);
+    expect(
+      await scriptClient.write({
+        valueKey: trackedValueKey,
+        watermarkKey,
+        cacheTtlMs: 60_000,
+        value: trackedPayload,
+        watermarkTtlFloorMs: 60_000,
+      }),
+    ).toBe(true);
+    expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toEqual(trackedPayload);
   });
 });

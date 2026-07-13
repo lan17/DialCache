@@ -157,7 +157,7 @@ export class FakeRedis implements DialCacheRedisClient {
       return raw.subarray(PAYLOAD_OFFSET).toString("utf8");
     }
     if (encoding === 1) {
-      return raw.subarray(PAYLOAD_OFFSET);
+      return Buffer.from(raw.subarray(PAYLOAD_OFFSET));
     }
     throw new DialCacheRedisPayloadEncodingError("Invalid DialCache Redis payload encoding");
   }
