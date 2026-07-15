@@ -396,7 +396,6 @@ describe("DialCache Redis TTL layer", () => {
       }),
       write: vi.fn(async () => true),
       invalidate: vi.fn(async () => undefined),
-      flushAll: vi.fn(async () => undefined),
     };
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
     const metrics = {
@@ -488,23 +487,11 @@ describe("DialCache Redis TTL layer", () => {
     );
   });
 
-  it("falls through when remote config is missing and propagates Redis maintenance errors", async () => {
-    // Given Redis is configured but the key has no remote TTL and maintenance commands fail.
+  it("falls through when remote config is missing", async () => {
+    // Given Redis is configured but the key has no remote TTL.
     const redis = new FakeRedis();
-    redis.failFlushAll = true;
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
-    const metrics = {
-      request: vi.fn(),
-      miss: vi.fn(),
-      disabled: vi.fn(),
-      error: vi.fn(),
-      invalidation: vi.fn(),
-      observeGet: vi.fn(),
-      observeFallback: vi.fn(),
-      observeSerialization: vi.fn(),
-      observeSize: vi.fn(),
-    };
-    const dialcache = new DialCache({ redis: { client: redis }, logger, metrics });
+    const dialcache = new DialCache({ redis: { client: redis }, logger });
     let calls = 0;
     const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
       keyType: "user_id",
@@ -516,75 +503,14 @@ describe("DialCache Redis TTL layer", () => {
       }),
     });
 
-    // When cache reads/writes and explicit maintenance cannot use Redis safely.
+    // When a cache read is attempted.
     const value = await dialcache.enable(async () => await getUser("123"));
-    await expect(dialcache.flushAll()).rejects.toThrow("redis flushAll failed");
 
-    // Then missing remote config disables Redis reads/writes, while flush failures are logged and surfaced.
+    // Then missing remote config disables Redis reads/writes without logging an operational failure.
     expect(value).toEqual({ userId: "123", calls: 1 });
     expect(redis.getCalls).toBe(0);
     expect(redis.setCalls).toBe(0);
-    expect(logger.warn).toHaveBeenCalledWith("Error flushing Redis cache", expect.any(Error));
-    expect(metrics.error).toHaveBeenCalledWith({
-      useCase: "flushAll",
-      keyType: "all",
-      layer: CacheLayer.REMOTE,
-      error: "Error",
-      inFallback: false,
-    });
-  });
-
-  it("accepts a semantic Redis client adapter", async () => {
-    const redis = new FakeRedis();
-    const client: DialCacheRedisClient = {
-      read: redis.read.bind(redis),
-      write: redis.write.bind(redis),
-      invalidate: redis.invalidate.bind(redis),
-      flushAll: redis.flushAll.bind(redis),
-    };
-    const dialcache = new DialCache({ redis: { client } });
-    const getValue = dialcache.cached(async (userId: string) => ({ userId }), {
-      keyType: "user_id",
-      useCase: "RedisLowercaseFlushAll",
-      cacheKey: (userId) => userId,
-      defaultConfig: DialCacheKeyConfig.enabled(60),
-    });
-
-    await dialcache.enable(async () => await getValue("123"));
-    await dialcache.flushAll();
-
-    expect(redis.values.size).toBe(0);
-  });
-
-  it("propagates semantic client flush failures", async () => {
-    const redis = new FakeRedis();
-    const client: DialCacheRedisClient = {
-      read: redis.read.bind(redis),
-      write: redis.write.bind(redis),
-      invalidate: redis.invalidate.bind(redis),
-      flushAll: async () => {
-        throw new Error("flush unsupported");
-      },
-    };
-    const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
-    const dialcache = new DialCache({ redis: { client }, logger });
-    const getUser = dialcache.cached(async (userId: string) => ({ userId }), {
-      keyType: "user_id",
-      useCase: "RedisMissingFlushCommand",
-      cacheKey: (userId) => userId,
-      defaultConfig: new DialCacheKeyConfig({
-        ttlSec: { [CacheLayer.LOCAL]: 0, [CacheLayer.REMOTE]: 60 },
-        ramp: { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 100 },
-      }),
-    });
-
-    // When flushAll is requested after Redis has been used.
-    await dialcache.enable(async () => await getUser("123"));
-    await expect(dialcache.flushAll()).rejects.toThrow("flush unsupported");
-
-    // Then the missing maintenance command is logged and surfaced to callers.
-    expect(redis.values.size).toBe(1);
-    expect(logger.warn).toHaveBeenCalledWith("Error flushing Redis cache", expect.any(Error));
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 
   it("rejects Redis config without a client or client factory", () => {
@@ -595,31 +521,4 @@ describe("DialCache Redis TTL layer", () => {
     expect(construct).toThrow("Redis config requires either client or createClient");
   });
 
-  it("flushes entries across local and Redis layers", async () => {
-    // Given two cached values exist in both local and Redis layers.
-    const redis = new FakeRedis();
-    const dialcache = new DialCache({ redis: { client: redis } });
-    let calls = 0;
-    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
-      keyType: "user_id",
-      useCase: "RedisFlushAll",
-      cacheKey: (userId) => userId,
-      defaultConfig: DialCacheKeyConfig.enabled(60),
-    });
-    await dialcache.enable(async () => {
-      await getUser("123");
-      await getUser("456");
-    });
-
-    // When all cache layers are flushed.
-    await dialcache.flushAll();
-    const afterFlush = await dialcache.enable(async () => [await getUser("123"), await getUser("456")]);
-
-    // Then flushAll clears both layers.
-    expect(afterFlush).toEqual([
-      { userId: "123", calls: 3 },
-      { userId: "456", calls: 4 },
-    ]);
-    expect(redis.flushAllCalls).toBe(1);
-  });
 });

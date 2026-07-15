@@ -1,8 +1,8 @@
 import {
   Decoder,
-  GlideClusterClient,
   Script,
   type GlideClient,
+  type GlideClusterClient,
   type GlideReturnType,
   type GlideString,
 } from "@valkey/valkey-glide";
@@ -93,16 +93,6 @@ export function createValkeyGlideDialCacheClient(
         [String(futureBufferMs), String(watermarkTtlFloorMs)],
       );
       integerReply(raw, "invalidate");
-    },
-    async flushAll() {
-      if (disposed) {
-        throw new Error("Valkey GLIDE DialCache client is disposed");
-      }
-      if (client instanceof GlideClusterClient) {
-        await client.flushall({ route: "allPrimaries" });
-      } else {
-        await client.flushall();
-      }
     },
     dispose() {
       if (disposed) {

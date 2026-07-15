@@ -166,15 +166,6 @@ describe("DialCache Redis adapter conformance on Redis 6.2", () => {
       expect(calls).toBe(1);
     });
 
-    it("flushes all cached values", async () => {
-      const client = adapter();
-      if (admin === undefined) {
-        throw new Error("Redis admin client did not start");
-      }
-      await client.write({ valueKey: `${kind}:flush`, cacheTtlMs: 60_000, value: "cached" });
-      await client.flushAll();
-      await expect(admin.exists(`${kind}:flush`)).resolves.toBe(0);
-    });
   });
 
   it("uses one wire format across node-redis and Valkey GLIDE", async () => {

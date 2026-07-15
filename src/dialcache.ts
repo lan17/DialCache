@@ -196,27 +196,6 @@ export class DialCache {
     }
   }
 
-  async flushAll(): Promise<void> {
-    await this.localCache.flushAll();
-    if (this.redisCache === null) {
-      return;
-    }
-
-    try {
-      await this.redisCache.flushAll();
-    } catch (error) {
-      this.logger.warn("Error flushing Redis cache", error);
-      this.metrics?.error({
-        useCase: "flushAll",
-        keyType: "all",
-        layer: CacheLayer.REMOTE,
-        error: errorName(error),
-        inFallback: false,
-      });
-      throw error;
-    }
-  }
-
   private async getThroughLocalOnly<T>(key: DialCacheKey, keyConfig: DialCacheKeyConfig | null, fallback: () => Promise<T>): Promise<T> {
     const local = await this.readLocal<T>(key, keyConfig);
     if (local.status === "hit") {

@@ -140,11 +140,6 @@ export class RedisCache {
     });
   }
 
-  async flushAll(): Promise<void> {
-    const client = await this.resolveClient();
-    await client.flushAll();
-  }
-
   redisKey(key: DialCacheKey): string {
     return `${this.keyPrefix}${key.urn}${REDIS_FRAME_KEY_SUFFIX}`;
   }
