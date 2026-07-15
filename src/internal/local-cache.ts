@@ -80,10 +80,6 @@ export class LocalCache {
     this.cache?.set(key.urn, { value }, { size: 1, ttl: ttlMs });
   }
 
-  async flushAll(): Promise<void> {
-    this.cache?.clear();
-  }
-
   private async resolveLocalLayerConfig(key: DialCacheKey, keyConfig?: DialCacheKeyConfig | null) {
     // Chain callers pass the once-resolved config; standalone callers omit it and we fetch.
     const config = keyConfig === undefined ? await fetchKeyConfig(this.configProvider, key) : keyConfig;

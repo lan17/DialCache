@@ -142,12 +142,6 @@ interface NodeRedisScriptClient {
     watermarkTtlFloorMs: number,
   ): Promise<number>;
   dialcacheInvalidate(watermarkKey: string, futureBufferMs: number, watermarkTtlFloorMs: number): Promise<number>;
-  flushAll?(): Promise<unknown>;
-}
-
-interface NodeRedisClusterCommands {
-  readonly masters: ReadonlyArray<unknown>;
-  nodeClient(master: unknown): Promise<{ flushAll(): Promise<unknown> }>;
 }
 
 export function createNodeRedisDialCacheClient(client: NodeRedisScriptClient): DialCacheRedisClient {
@@ -176,31 +170,5 @@ export function createNodeRedisDialCacheClient(client: NodeRedisScriptClient): D
     async invalidate({ watermarkKey, futureBufferMs, watermarkTtlFloorMs }) {
       await client.dialcacheInvalidate(watermarkKey, futureBufferMs, watermarkTtlFloorMs);
     },
-    async flushAll() {
-      const cluster = clusterCommands(client);
-      if (cluster === null) {
-        if (client.flushAll === undefined) {
-          throw new Error("Node-redis client does not implement flushAll");
-        }
-        await client.flushAll();
-        return;
-      }
-      if (cluster.masters.length === 0) {
-        throw new Error("Node-redis cluster has no connected masters");
-      }
-      await Promise.all(
-        cluster.masters.map(async (master) => {
-          const node = await cluster.nodeClient(master);
-          await node.flushAll();
-        }),
-      );
-    },
   };
-}
-
-function clusterCommands(client: NodeRedisScriptClient): NodeRedisClusterCommands | null {
-  if (!("masters" in client) || !("nodeClient" in client) || !Array.isArray(client.masters)) {
-    return null;
-  }
-  return client as NodeRedisScriptClient & NodeRedisClusterCommands;
 }

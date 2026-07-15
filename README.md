@@ -96,7 +96,7 @@ local cache -> Redis cache -> fallback function
 - Local hits return immediately.
 - Local misses try Redis and populate local on a Redis hit.
 - Redis misses call the fallback and write both Redis and local.
-- Redis cache read/write failures are logged, counted in metrics, and fail open; fallback results still return when fallback succeeds. Explicit maintenance calls (`invalidateRemote`, `flushAll`) log/count Redis failures and rethrow them so callers do not assume mutation succeeded.
+- Redis cache read/write failures are logged, counted in metrics, and fail open; fallback results still return when fallback succeeds. `invalidateRemote` logs/counts Redis failures and rethrows them so callers do not assume invalidation succeeded.
 - Missing per-layer config disables that layer, records a disabled reason, and falls through to the next layer/fallback.
 
 The local layer uses one process-local LRU per `DialCache` instance. It keeps at most 10,000 entries by default across all use cases while retaining each entry's configured local TTL. Set `localMaxSize` to a nonnegative safe integer to change the global entry cap; `0` disables local storage:
@@ -107,7 +107,7 @@ const dialcache = new DialCache({ localMaxSize: 25_000 });
 
 The limit counts entries rather than estimating JavaScript object memory. Recently read entries stay resident ahead of less recently used entries when the limit is reached.
 
-Node-redis computes each script's SHA, uses `EVALSHA`, and retries with `EVAL` after `NOSCRIPT`. Its cluster client routes scripts by their first key and performs that fallback on the selected shard. The GLIDE adapter uses GLIDE's native `Script` lifecycle and byte decoder; GLIDE routes scripts from their declared keys and the adapter broadcasts `flushAll()` to all cluster primaries. Tracked reads are deliberately routed to primaries so a lagging replica cannot hide an invalidation watermark.
+Node-redis computes each script's SHA, uses `EVALSHA`, and retries with `EVAL` after `NOSCRIPT`. Its cluster client routes scripts by their first key and performs that fallback on the selected shard. The GLIDE adapter uses GLIDE's native `Script` lifecycle and byte decoder; GLIDE routes scripts from their declared keys. Tracked reads are deliberately routed to primaries so a lagging replica cannot hide an invalidation watermark.
 
 You can also provide a lazy factory that returns a script-enabled client:
 
@@ -324,8 +324,7 @@ Included:
 - Standalone Redis, Valkey, and Redis Cluster support
 - JSON and custom serializer support for Redis values
 - Duplicate and reserved use-case validation
-- `invalidateRemote` for Redis watermark invalidation and `flushAll` across configured layers
-- Fail-open behavior for key/config/cache read-write errors; maintenance mutations surface failures
+- Fail-open behavior for key/config/cache read-write errors; explicit invalidation mutations surface failures
 - Runtime config provider with fallback to cached-function `defaultConfig`
 - Per-layer TTL and ramp controls
 - Deterministic default ramp sampler with injectable override hooks

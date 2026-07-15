@@ -518,32 +518,6 @@ describe("DialCache local-only MVP", () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
-  it("supports flushAll for local entries", async () => {
-    // Given two cached values in the local cache.
-    const dialcache = new DialCache();
-    let calls = 0;
-    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
-      keyType: "user_id",
-      useCase: "FlushAll",
-      cacheKey: (userId) => userId,
-      defaultConfig: DialCacheKeyConfig.enabled(60),
-    });
-    await dialcache.enable(async () => {
-      await getUser("123");
-      await getUser("456");
-    });
-
-    // When the cache is flushed.
-    await dialcache.flushAll();
-    const afterFlush = await dialcache.enable(async () => [await getUser("123"), await getUser("456")]);
-
-    // Then all keys refresh after flush.
-    expect(afterFlush).toEqual([
-      { userId: "123", calls: 3 },
-      { userId: "456", calls: 4 },
-    ]);
-  });
-
   it("rejects duplicate and reserved use cases", () => {
     // Given a DialCache instance with one registered use case.
     const dialcache = new DialCache();

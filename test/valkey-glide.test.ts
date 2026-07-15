@@ -1,4 +1,4 @@
-import { GlideClusterClient, Script } from "@valkey/valkey-glide";
+import { Script } from "@valkey/valkey-glide";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -18,24 +18,19 @@ vi.mock("@valkey/valkey-glide", () => {
     }
   }
 
-  class MockGlideClusterClient {}
-
   return {
     Decoder: { Bytes: 0 },
-    GlideClusterClient: MockGlideClusterClient,
     Script: MockScript,
   };
 });
 
 interface FakeGlideClient {
   invokeScript: ReturnType<typeof vi.fn>;
-  flushall: ReturnType<typeof vi.fn>;
 }
 
 function fakeClient(...replies: unknown[]): FakeGlideClient {
   return {
     invokeScript: vi.fn(async () => replies.shift()),
-    flushall: vi.fn(async () => "OK"),
   };
 }
 
@@ -130,18 +125,6 @@ describe("Valkey GLIDE adapter", () => {
     ).rejects.toThrow("Invalid DialCache Redis invalidate reply");
   });
 
-  it("flushes standalone and cluster clients with the appropriate routing", async () => {
-    const standalone = fakeClient();
-    const standaloneAdapter = createValkeyGlideDialCacheClient(standalone as never);
-    await standaloneAdapter.flushAll();
-    expect(standalone.flushall).toHaveBeenCalledWith();
-
-    const cluster = Object.assign(Object.create(GlideClusterClient.prototype) as FakeGlideClient, fakeClient());
-    const clusterAdapter = createValkeyGlideDialCacheClient(cluster as never);
-    await clusterAdapter.flushAll();
-    expect(cluster.flushall).toHaveBeenCalledWith({ route: "allPrimaries" });
-  });
-
   it("releases every script exactly once and rejects later operations", async () => {
     const client = fakeClient();
     const adapter = createValkeyGlideDialCacheClient(client as never);
@@ -154,9 +137,7 @@ describe("Valkey GLIDE adapter", () => {
       expect(script.release).toHaveBeenCalledTimes(1);
     }
     await expect(adapter.read({ valueKey: "disposed" })).rejects.toThrow("Valkey GLIDE DialCache client is disposed");
-    await expect(adapter.flushAll()).rejects.toThrow("Valkey GLIDE DialCache client is disposed");
     expect(client.invokeScript).not.toHaveBeenCalled();
-    expect(client.flushall).not.toHaveBeenCalled();
   });
 
   it("does not release scripts while an invocation is in flight", async () => {

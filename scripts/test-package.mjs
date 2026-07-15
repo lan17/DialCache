@@ -30,9 +30,12 @@ const customRedisClient: DialCacheRedisClient = {
   read: async () => Buffer.from([0, 255]),
   write: async ({ value }) => typeof value === "string" || Buffer.isBuffer(value),
   invalidate: async () => undefined,
-  flushAll: async () => undefined,
 };
 void customRedisClient;
+const cacheHasNoFlushAll: "flushAll" extends keyof DialCache ? false : true = true;
+const clientHasNoFlushAll: "flushAll" extends keyof DialCacheRedisClient ? false : true = true;
+void cacheHasNoFlushAll;
+void clientHasNoFlushAll;
 const glideRedisClient: ValkeyGlideDialCacheClient | undefined = undefined;
 void glideRedisClient;
 `;

@@ -22,10 +22,8 @@ export class FakeRedis implements DialCacheRedisClient {
   getCalls = 0;
   mGetCalls = 0;
   setCalls = 0;
-  flushAllCalls = 0;
   failGet = false;
   failSet = false;
-  failFlushAll = false;
   failWatermarkGet = false;
   getGate: Promise<void> | null = null;
 
@@ -83,14 +81,6 @@ export class FakeRedis implements DialCacheRedisClient {
       watermark - Date.now() + WATERMARK_TTL_MARGIN_MS,
     );
     this.storeWatermark(watermarkKey, watermark, desiredTtlMs);
-  }
-
-  async flushAll(): Promise<void> {
-    this.flushAllCalls += 1;
-    if (this.failFlushAll) {
-      throw new Error("redis flushAll failed");
-    }
-    this.values.clear();
   }
 
   raw(key: string): Buffer {

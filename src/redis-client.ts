@@ -59,8 +59,6 @@ export interface DialCacheRedisClient {
   write(request: RedisWriteRequest): Awaitable<boolean>;
   /** Advance the watermark monotonically after the source mutation commits. */
   invalidate(request: RedisInvalidationRequest): Awaitable<void>;
-  /** Remove cached values from every backing shard. */
-  flushAll(): Awaitable<void>;
 }
 
 export type RedisClientFactory = () => Awaitable<DialCacheRedisClient>;

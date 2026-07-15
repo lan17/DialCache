@@ -136,23 +136,19 @@ describe("DialCache Lua protocol on Redis Cluster", () => {
         await client.scriptFlush();
       }),
     );
-    const second = await dialcache.enable(async () => await Promise.all(ids.map(getValue)));
-    await dialcache.flushAll();
-    const sizesAfterFlush = await Promise.all(
-      activeCluster.masters.map(async (master) => {
-        const client = await activeCluster.nodeClient(master);
-        return await client.dbSize();
-      }),
-    );
-    const afterFlush = await dialcache.enable(async () => await Promise.all(ids.map(getValue)));
+    const recoveryDialcache = new DialCache({ redis: { client: scriptClient, keyPrefix: "cluster:" } });
+    const recoverValue = recoveryDialcache.cached(async (id: string) => ({ id, calls: ++calls }), {
+      keyType: "item_id",
+      useCase: "ClusterSlots",
+      cacheKey: (id) => id,
+      defaultConfig: remoteOnly,
+    });
+    const second = await recoveryDialcache.enable(async () => await Promise.all(ids.map(recoverValue)));
 
     expect(first.map(({ id }) => id)).toEqual(ids);
-    expect(calls).toBe(60);
+    expect(calls).toBe(30);
     expect(sizesBeforeFlush.every((size) => size > 0)).toBe(true);
     expect(second).toEqual(first);
-    expect(sizesAfterFlush).toEqual([0, 0, 0]);
-    expect(afterFlush.map(({ id }) => id)).toEqual(ids);
-    expect(new Set(afterFlush.map(({ calls: call }) => call))).toEqual(new Set(ids.map((_, index) => index + 31)));
   });
 
   it("keeps tracked keys colocated and rejects mismatched hash tags", async () => {
