@@ -5,7 +5,7 @@ import { LRUCache } from "lru-cache";
 import { CacheLayer, type CacheConfigProvider, type CacheRampSampler, type DialCacheKeyConfig } from "../config.js";
 import type { DialCacheKey } from "../key.js";
 import type { CacheGetResult } from "./cache-result.js";
-import { fetchKeyConfig, resolveLayerConfigResult } from "./runtime-config.js";
+import { fetchKeyConfig, resolveLayerConfigResult, type ResolvedLayerConfig } from "./runtime-config.js";
 
 export type Fallback<T> = () => Promise<T>;
 
@@ -59,13 +59,17 @@ export class LocalCache {
       return layerConfig;
     }
 
+    return this.getWithResolvedConfig<T>(key, layerConfig.config);
+  }
+
+  getWithResolvedConfig<T>(key: DialCacheKey, layerConfig: ResolvedLayerConfig): CacheGetResult<T> {
     const hit = this.cache?.get(key.urn) as LocalEntry<T> | undefined;
 
     if (hit !== undefined) {
       return { status: "hit", value: hit.value };
     }
 
-    return { status: "miss", config: layerConfig.config };
+    return { status: "miss", config: layerConfig };
   }
 
   async put<T>(key: DialCacheKey, value: T, config?: { readonly ttlSec: number }): Promise<void> {

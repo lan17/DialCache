@@ -119,6 +119,26 @@ describe("DialCache local-only MVP", () => {
     expect(calls).toBe(1);
   });
 
+  it("shares process-local value references across request scopes without cloning", async () => {
+    const dialcache = new DialCache();
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, roles: ["reader"] }), {
+      keyType: "user_id",
+      useCase: "ProcessLocalReferenceIdentity",
+      cacheKey: (userId) => userId,
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.LOCAL]: 60 },
+        ramp: { [CacheLayer.LOCAL]: 100 },
+      }),
+    });
+
+    const first = await dialcache.enable(async () => await getUser("123"));
+    first.roles.push("mutated-by-caller");
+    const second = await dialcache.enable(async () => await getUser("123"));
+
+    expect(second).toBe(first);
+    expect(second.roles).toEqual(["reader", "mutated-by-caller"]);
+  });
+
   it("restores the previous enabled value after nested disable scopes", async () => {
     // Given caching is enabled in an outer scope.
     const dialcache = new DialCache();
@@ -494,6 +514,35 @@ describe("DialCache local-only MVP", () => {
     expect(second).toEqual({ userId: "123", calls: 2 });
     expect(third).toEqual({ userId: "123", calls: 2 });
     expect(logger.warn).toHaveBeenCalledWith("Error putting value in local cache", expect.any(Error));
+  });
+
+  it("fails open when an active local cache read throws", async () => {
+    const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const dialcache = new DialCache({ logger });
+    const localCache = (dialcache as unknown as {
+      readonly localCache: {
+        getWithResolvedConfig: (key: DialCacheKey, config: { readonly ttlSec: number; readonly ramp: number }) => unknown;
+      };
+    }).localCache;
+    vi.spyOn(localCache, "getWithResolvedConfig").mockImplementationOnce(() => {
+      throw new Error("local read failed");
+    });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "LocalReadFailOpen",
+      cacheKey: (userId) => userId,
+      defaultConfig: DialCacheKeyConfig.enabled(60),
+    });
+
+    const first = await dialcache.enable(async () => await getUser("123"));
+    const second = await dialcache.enable(async () => await getUser("123"));
+    const third = await dialcache.enable(async () => await getUser("123"));
+
+    expect(first).toEqual({ userId: "123", calls: 1 });
+    expect(second).toEqual({ userId: "123", calls: 2 });
+    expect(third).toBe(second);
+    expect(logger.error).toHaveBeenCalledWith("Error getting value from local cache", expect.any(Error));
   });
 
   it("falls through when local cache config is missing", async () => {

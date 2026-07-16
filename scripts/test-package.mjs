@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 const exec = promisify(execFile);
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspace = await mkdtemp(join(tmpdir(), "dialcache-package-"));
-const consumer = `import { DialCache, DialCacheKeyConfig, type DialCacheRedisClient } from "dialcache";
+const consumer = `import { DialCache, DialCacheKeyConfig, type CoalescedMetricLabels, type DialCacheRedisClient } from "dialcache";
 import { createNodeRedisDialCacheClient } from "dialcache/node-redis";
 import { READ_CACHE_SCRIPT } from "dialcache/redis-protocol";
 import { createValkeyGlideDialCacheClient, type ValkeyGlideDialCacheClient } from "dialcache/valkey-glide";
@@ -20,8 +20,16 @@ const load = cache.cached(async (id: string) => id, {
   cacheKey: (id) => id,
   defaultConfig: DialCacheKeyConfig.enabled(60),
 });
+const requestLocalConfig = new DialCacheKeyConfig({ requestLocal: true });
+const requestLocalCoalescingLabels: CoalescedMetricLabels = {
+  useCase: "Load",
+  keyType: "id",
+  scope: "request_local",
+};
 
 void load;
+void requestLocalConfig;
+void requestLocalCoalescingLabels;
 void createNodeRedisDialCacheClient;
 void createValkeyGlideDialCacheClient;
 void READ_CACHE_SCRIPT;
@@ -85,6 +93,18 @@ try {
     process.execPath,
     ["--eval", "require('dialcache'); require('dialcache/redis-protocol'); require('dialcache/node-redis')"],
     { cwd: workspace },
+  );
+  await exec(
+    process.execPath,
+    [join(workspace, "node_modules", "dialcache", "scripts", "benchmark-request-local.mjs")],
+    {
+      cwd: workspace,
+      env: {
+        ...process.env,
+        DIALCACHE_BENCH_ITERATIONS: "2",
+        DIALCACHE_BENCH_FANOUT: "2",
+      },
+    },
   );
 
   await exec(

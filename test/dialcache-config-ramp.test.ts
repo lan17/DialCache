@@ -13,6 +13,78 @@ const configFor = (ttlSec: Partial<Record<CacheLayer, number>>, ramp: Partial<Re
   new DialCacheKeyConfig({ ttlSec, ramp });
 
 describe("DialCache runtime config and ramp controls", () => {
+  it("enables request-local caching without TTL, ramp, or ramp sampling", async () => {
+    const rampSampler = vi.fn(() => {
+      throw new Error("request-local caching must not use the layer ramp sampler");
+    });
+    const dialcache = new DialCache({ rampSampler });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "RequestLocalWithoutLayerPolicy",
+      cacheKey: (userId) => userId,
+      defaultConfig: new DialCacheKeyConfig({ requestLocal: true }),
+    });
+
+    const values = await dialcache.enable(async () => [await getUser("123"), await getUser("123")] as const);
+
+    expect(values[1]).toBe(values[0]);
+    expect(calls).toBe(1);
+    expect(rampSampler).not.toHaveBeenCalled();
+  });
+
+  it("fetches runtime config once while traversing request-local, local, and remote layers", async () => {
+    const redis = new FakeRedis();
+    const keyConfig = new DialCacheKeyConfig({
+      requestLocal: true,
+      ttlSec: { [CacheLayer.LOCAL]: 60, [CacheLayer.REMOTE]: 60 },
+      ramp: { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 100 },
+    });
+    const cacheConfigProvider = vi.fn(async () => keyConfig);
+    const dialcache = new DialCache({ redis: { client: redis }, cacheConfigProvider });
+    const getUser = dialcache.cached(async (userId: string) => ({ userId }), {
+      keyType: "user_id",
+      useCase: "SingleRuntimeConfigSnapshot",
+      cacheKey: (userId) => userId,
+    });
+
+    await dialcache.enable(async () => await getUser("123"));
+
+    expect(cacheConfigProvider).toHaveBeenCalledTimes(1);
+    expect(redis.getCalls).toBe(1);
+    expect(redis.setCalls).toBe(1);
+  });
+
+  it("fails open without refetching when remote ramp resolution throws", async () => {
+    const redis = new FakeRedis();
+    const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const keyConfig = new DialCacheKeyConfig({
+      ttlSec: { [CacheLayer.REMOTE]: 60 },
+      ramp: { [CacheLayer.REMOTE]: 50 },
+    });
+    const cacheConfigProvider = vi.fn(async () => keyConfig);
+    const dialcache = new DialCache({
+      redis: { client: redis },
+      cacheConfigProvider,
+      rampSampler: () => {
+        throw new Error("ramp source unavailable");
+      },
+      logger,
+    });
+    const getUser = dialcache.cached(async (userId: string) => ({ userId }), {
+      keyType: "user_id",
+      useCase: "RemoteRampResolutionFailOpen",
+      cacheKey: (userId) => userId,
+    });
+
+    await expect(dialcache.enable(async () => await getUser("123"))).resolves.toEqual({ userId: "123" });
+
+    expect(cacheConfigProvider).toHaveBeenCalledTimes(1);
+    expect(redis.getCalls).toBe(0);
+    expect(redis.setCalls).toBe(0);
+    expect(logger.warn).toHaveBeenCalledWith("Error resolving Redis cache config", expect.any(Error));
+  });
+
   it("uses a deterministic default ramp sample per cache key and layer", async () => {
     // Given the built-in sampler is asked to sample the same key multiple times.
     const key = new DialCacheKey({ keyType: "user_id", id: "123", useCase: "DeterministicRampSample" });

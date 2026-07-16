@@ -29,10 +29,16 @@ export const DEFAULT_WATERMARK_TTL_SEC = 3600 * 4;
 export class DialCacheKeyConfig {
   readonly ttlSec: LayerConfig;
   readonly ramp: LayerConfig;
+  /**
+   * Memoize successful values for the lifetime of the outermost enabled scope.
+   * Request-local caching is disabled by default and has no TTL or ramp.
+   */
+  readonly requestLocal: boolean;
 
-  constructor(config: { ttlSec: LayerConfig; ramp: LayerConfig }) {
+  constructor(config: { ttlSec?: LayerConfig; ramp?: LayerConfig; requestLocal?: boolean }) {
     this.ttlSec = { ...config.ttlSec };
     this.ramp = { ...config.ramp };
+    this.requestLocal = config.requestLocal ?? false;
   }
 
   static enabled(ttlSec: number): DialCacheKeyConfig {

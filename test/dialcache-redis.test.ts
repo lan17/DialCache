@@ -97,6 +97,29 @@ describe("DialCache Redis TTL layer", () => {
     expect(redis.getCalls).toBe(2);
   });
 
+  it("does not refetch runtime config after a remote read failure", async () => {
+    const redis = new FakeRedis();
+    redis.failGet = true;
+    const remoteOnlyConfig = new DialCacheKeyConfig({
+      ttlSec: { [CacheLayer.REMOTE]: 60 },
+      ramp: { [CacheLayer.REMOTE]: 100 },
+    });
+    const cacheConfigProvider = vi.fn(async () => remoteOnlyConfig);
+    const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const dialcache = new DialCache({ redis: { client: redis }, cacheConfigProvider, logger });
+    const getUser = dialcache.cached(async (userId: string) => ({ userId }), {
+      keyType: "user_id",
+      useCase: "RemoteFailureConfigSnapshot",
+      cacheKey: (userId) => userId,
+    });
+
+    await dialcache.enable(async () => await getUser("123"));
+
+    expect(cacheConfigProvider).toHaveBeenCalledTimes(1);
+    expect(redis.getCalls).toBe(1);
+    expect(redis.setCalls).toBe(1);
+  });
+
   it("writes Redis misses with a timestamped binary frame", async () => {
     // Given an enabled Redis-backed cache with deterministic time.
     vi.useFakeTimers();

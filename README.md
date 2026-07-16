@@ -1,6 +1,6 @@
 # DialCache
 
-Fine-grained TypeScript caching with explicit enabled contexts, stable key construction, local and Redis TTL caching, runtime rollout controls, request coalescing, Prometheus-ready observability, and Redis watermark-based targeted invalidation.
+Fine-grained TypeScript caching with explicit enabled contexts, request-local memoization, local and Redis TTL caching, stable key construction, runtime rollout controls, request coalescing, Prometheus-ready observability, and Redis watermark-based targeted invalidation.
 
 ## Install
 
@@ -90,14 +90,69 @@ DialCache does not create, connect, or close the underlying Redis client. After 
 When caching is enabled, reads flow through:
 
 ```text
-local cache -> Redis cache -> fallback function
+request-local cache -> local cache -> Redis cache -> fallback function
 ```
 
+- Request-local hits return the value memoized in the current outermost `enable()` scope.
+- Results from the lower chain are memoized request-locally when that layer is enabled.
 - Local hits return immediately.
 - Local misses try Redis and populate local on a Redis hit.
 - Redis misses call the fallback and write both Redis and local.
 - Redis cache read/write failures are logged, counted in metrics, and fail open; fallback results still return when fallback succeeds. `invalidateRemote` logs/counts Redis failures and rethrows them so callers do not assume invalidation succeeded.
-- Missing per-layer config disables that layer, records a disabled reason, and falls through to the next layer/fallback.
+- Missing local/Redis TTL or ramp config disables that layer, records a disabled reason, and falls through to the next layer/fallback.
+
+## Request-local cache
+
+Set `requestLocal: true` to memoize resolved values for the lifetime of the outermost `enable()` scope:
+
+```ts
+import { CacheLayer, DialCache, DialCacheKeyConfig } from "dialcache";
+
+const dialcache = new DialCache();
+const getUser = dialcache.cached(
+  (userId: string) => db.fetchUser(userId),
+  {
+    keyType: "user_id",
+    useCase: "GetUser",
+    cacheKey: (userId) => userId,
+    defaultConfig: new DialCacheKeyConfig({
+      requestLocal: true,
+      ttlSec: { [CacheLayer.LOCAL]: 30, [CacheLayer.REMOTE]: 300 },
+      ramp: { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 100 },
+    }),
+  },
+);
+```
+
+`requestLocal` is a runtime boolean, not a `CacheLayer` TTL/ramp entry. The `cacheConfigProvider` can turn it on or off for each invocation. `DialCacheKeyConfig.enabled(ttlSec)` continues to enable only local and Redis caching, so request-local caching must be selected explicitly. DialCache resolves the runtime config once per enabled invocation, then uses that result for the full lookup. A missing or false value silently bypasses request-local storage without deleting an entry already memoized in the scope; a later invocation that resolves to true can reuse that entry.
+
+The outermost `enable()` call owns the request-local lifetime. Nested `enable()` calls reuse that scope. DialCache allocates the request-local value and in-flight maps lazily, on the first invocation whose resolved config enables request-local caching, so scopes that only use local/Redis caching do not allocate those maps.
+
+Wrap the complete Node HTTP handler so the scope cannot outlive the request:
+
+```ts
+import { createServer } from "node:http";
+
+const server = createServer((req, res) => {
+  void dialcache
+    .enable(async () => {
+      const user = await getUser(readUserId(req));
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify(user));
+    })
+    .catch((error: unknown) => {
+      logger.error(error);
+      if (!res.headersSent) {
+        res.statusCode = 500;
+        res.end("Internal Server Error");
+      } else {
+        res.destroy();
+      }
+    });
+});
+```
+
+Request-local storage has no capacity limit, eviction, or overflow mode. Entries are retained until the outermost `enable()` callback settles. Use it for short-lived scopes with bounded key cardinality; split long-running streams or large batch jobs into smaller scopes when necessary.
 
 The local layer uses one process-local LRU per `DialCache` instance. It keeps at most 10,000 entries by default across all use cases while retaining each entry's configured local TTL. Set `localMaxSize` to a nonnegative safe integer to change the global entry cap; `0` disables local storage:
 
@@ -156,7 +211,7 @@ const getUser = dialcache.cached(
     useCase: "GetMutableUser",
     cacheKey: (userId) => userId,
     trackForInvalidation: true,
-    // Strongly invalidated mutable data should usually disable local cache.
+    // Strongly invalidated mutable data should disable request-local and local caching.
     defaultConfig: new DialCacheKeyConfig({
       ttlSec: { [CacheLayer.REMOTE]: 300 },
       ramp: { [CacheLayer.REMOTE]: 100 },
@@ -178,7 +233,7 @@ Tracked writes create a baseline watermark and extend its TTL to at least the va
 
 `futureBufferMs` must be a nonnegative safe integer. Size it to cover the longest interval from invalidation until any fallback that could have read stale source data completes its Redis write. Include source-replication lag, remaining fallback work, `serializer.dump`, Redis client queue/network latency, script execution, and a safety margin. Invalidate after the source mutation commits. The buffer prevents stale fallback results from being cached under those assumptions; it does not itself force the current fallback to read from an authoritative source.
 
-Local cache limitation: targeted invalidation is enforced by Redis watermarks. Existing local cache hits are not synchronously invalidated across processes, so strongly invalidated mutable data should disable the local layer (or use very short local TTLs only when stale reads are acceptable).
+Request/local cache limitation: targeted invalidation is remote-only and enforced by Redis watermarks. `invalidateRemote` does not evict existing request-local or process-local entries. Strongly invalidated mutable data should disable request-local and local caching (or use a very short local TTL only when stale reads are acceptable).
 
 ## Runtime config and ramp controls
 
@@ -207,9 +262,14 @@ const dialcache = new DialCache({
 
 ## Request coalescing
 
-When caching is enabled and a call misses local cache, concurrent callers for the same cache key share the same in-flight cache work. With Redis configured, the leader runs the Redis read and, on miss, the fallback/cache write; followers await that result. Local-only misses share the leader's fallback/cache write. This protects Redis and the source of truth from a thundering herd on hot keys.
+DialCache coalesces in-flight work at the lifetime of the first active cache layer:
 
-Coalescing only applies after a real cache layer is active. Calls outside `enable()` are true pass-through, and calls where every layer is disabled by missing config, invalid TTL, or ramp are true pass-through.
+- When request-local caching is enabled, same-key callers in one outermost `enable()` scope share request-scoped in-flight work before the request-local lookup. Its resolved value is then memoized for later sequential calls in that scope.
+- When local or Redis caching is enabled, same-key callers share process-scoped in-flight cache work before the first active shared layer. This still applies when request-local caching is off and can combine leaders from separate request scopes.
+
+With Redis configured, a process-scoped leader that misses local runs the Redis read and, on miss, the fallback/cache write; followers await that result. Local-only misses share the leader's fallback/cache write. This protects Redis and the source of truth from a thundering herd on hot keys.
+
+Coalescing only applies when at least one cache layer is active. Calls outside `enable()` are true pass-through, and calls where request-local, local, and Redis are all disabled are true pass-through.
 
 Because coalescing is keyed by `cacheKey`, concurrent calls with the same key share the leader's execution. Any argument ignored by `cacheKey` must be safe to share this way; include inputs such as locale, auth context, or cancellation behavior in the key when they can change the returned value or whether the underlying function should run separately.
 
@@ -245,7 +305,7 @@ await dialcache.enable(async () => {
 
 - Default is disabled — a cached function called **outside** any `enable()` scope simply runs uncached (no error), so wrap your read paths to actually cache.
 - Enabled state is async-scope-local, not process-global.
-- Nested `enable` / `disable` scopes restore the previous behavior when the callback completes.
+- Nested `enable` / `disable` scopes restore the previous behavior when the callback completes. Nested `enable()` calls reuse the outer request-local scope rather than creating a new one.
 
 ## Keys, ids, and extra dimensions
 
@@ -271,6 +331,22 @@ await dialcache.enable(() => searchPosts("u1", 2, "active"));
 - **Non-key inputs** (for example a db handle) are simply parameters the `cacheKey` selector ignores. They still reach `fn` for non-coalesced executions, but concurrent same-key cache misses share the leader's execution, so do not ignore values like `AbortSignal`, auth context, locale, or other request-scoped inputs unless sharing one result is correct.
 - **Methods:** pass `obj.method.bind(obj)` (or `(...a) => obj.method(...a)`) — a bare `obj.method` reference loses `this`.
 
+## Cached-value ownership
+
+Treat values returned by cached functions as immutable. DialCache does not clone or freeze values stored in request-local or process-local memory. Mutating a cached object can therefore be observed by later callers in the same request, callers in other requests that hit the process-local cache, or callers that coalesced onto the same in-flight result.
+
+This contract includes nested objects and arrays, `Map`, `Set`, `Buffer`, typed arrays, and class instances. Redis deserialization can produce a different reference from an in-memory hit, so reference identity is layer-dependent and is not part of the API contract; never rely on a specific layer cloning a value before mutation.
+
+If a caller needs a mutable value, copy it explicitly before changing it:
+
+```ts
+const sharedUser = await getUser("123");
+const editableUser = structuredClone(sharedUser);
+editableUser.displayName = "New name";
+```
+
+Use a narrower copy when its semantics are sufficient; the ownership boundary is the caller's responsibility.
+
 ## Metrics
 
 DialCache registers Prometheus metrics by default via `prom-client`:
@@ -282,13 +358,14 @@ DialCache registers Prometheus metrics by default via `prom-client`:
 | `dialcache_disabled_counter` | Counter | `use_case`, `key_type`, `layer`, `reason` | Cache skips (`context`, `missing_config`, `invalid_ttl`, `ramped_down`, `config_error`) |
 | `dialcache_error_counter` | Counter | `use_case`, `key_type`, `layer`, `error`, `in_fallback` | Cache/fallback errors, with `in_fallback` separating cache plumbing failures from application fallback failures |
 | `dialcache_invalidation_counter` | Counter | `key_type`, `layer` | Invalidation calls for the layers touched today |
-| `dialcache_coalesced_counter` | Counter | `use_case`, `key_type` | Requests that awaited active in-flight cache work |
+| `dialcache_coalesced_counter` | Counter | `use_case`, `key_type` | Requests that awaited active in-flight cache work (backward-compatible aggregate) |
+| `dialcache_scoped_coalesced_counter` | Counter | `use_case`, `key_type`, `scope` | Coalesced requests split by `request_local` or `process` scope |
 | `dialcache_get_timer` | Histogram | `use_case`, `key_type`, `layer` | Cache get latency in seconds |
 | `dialcache_fallback_timer` | Histogram | `use_case`, `key_type`, `layer` | Time spent in the underlying function |
 | `dialcache_serialization_timer` | Histogram | `use_case`, `key_type`, `layer`, `operation` | Redis serializer dump/load latency |
 | `dialcache_size_histogram` | Histogram | `use_case`, `key_type`, `layer` | Serialized Redis payload size in bytes |
 
-The `layer` label is usually `local` or `remote`. Disabled-context, key-construction, and config-provider failures use `noop` because no cache layer was reached.
+The `layer` label is `request_local`, `local`, or `remote`. Disabled-context, key-construction, and config-provider failures use `noop` because no cache layer was reached. `dialcache_coalesced_counter` retains its original aggregate schema; `dialcache_scoped_coalesced_counter` adds the bounded `scope` label that distinguishes request-local from process-wide single-flight work.
 
 Use a custom registry or prefix when embedding DialCache in an app with its own metrics endpoint:
 
@@ -313,9 +390,10 @@ For non-Prometheus telemetry, inject a `DialCacheMetricsAdapter` through `new Di
 
 Included:
 
+- Request-local caching for the lifetime of the outermost enabled context
 - Local TTL/LRU cache with a global entry-count bound
 - Redis TTL cache
-- Local → Redis → fallback read-through chain
+- Request-local → local → Redis → fallback read-through chain
 - Lazy Redis client factory support
 - Lua-backed Redis reads and writes with Redis-generated timestamps
 - Versioned binary Redis frames for UTF-8 and Buffer serializer output
@@ -339,13 +417,23 @@ Included:
 - Redis Cluster hash-tagged value/watermark keys for invalidation-tracked entries
 - Dynamically extended watermark TTL with a configurable `DEFAULT_WATERMARK_TTL_SEC` floor
 - Future-buffer behavior that avoids cache writes during active invalidation windows
-- Request coalescing for active cache work after local misses
+- Request-scoped and process-scoped coalescing for active cache work
 
 Not included yet:
 
 - Framework middleware helpers/integrations
 - `cachedObject`
 - Expanded examples
+
+## Request-local benchmark
+
+Run the dependency-free semantic microbenchmark after installing dependencies:
+
+```bash
+pnpm benchmark:request-local
+```
+
+It reports request-local sequential-hit throughput plus request-local and process-wide coalescing fan-out. The benchmark asserts fallback counts and returned values but deliberately applies no timing threshold. Override its work sizes with `DIALCACHE_BENCH_ITERATIONS` and `DIALCACHE_BENCH_FANOUT`.
 
 ## Releasing
 
