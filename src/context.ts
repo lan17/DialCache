@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
-export type RequestLocalReadResult<T> = { readonly status: "hit"; readonly value: T } | { readonly status: "miss" };
+type RequestLocalReadResult<T> = { readonly status: "hit"; readonly value: T } | { readonly status: "miss" };
 
 /** @internal */
 export class RequestLocalCache {
@@ -94,15 +94,6 @@ export function getOrCreateRequestLocalCache(context: DialCacheContext): Request
 
   holder.requestLocalCache ??= new RequestLocalCache();
   return holder.requestLocalCache;
-}
-
-/** @internal */
-export function peekRequestLocalCache(context: DialCacheContext): RequestLocalCache | null {
-  const store = storageFor(context).getStore();
-  const holder = store?.holder;
-  return store?.enabled === true && holder !== null && holder !== undefined && !holder.closed
-    ? holder.requestLocalCache ?? null
-    : null;
 }
 
 function storageFor(context: DialCacheContext): AsyncLocalStorage<ContextStore> {

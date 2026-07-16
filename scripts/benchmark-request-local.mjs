@@ -1,26 +1,8 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { access } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import { performance } from "node:perf_hooks";
 import { setImmediate as nextTurn } from "node:timers/promises";
 
-const distEntry = new URL("../dist/index.js", import.meta.url);
-let repositoryCheckout = true;
-try {
-  await access(new URL("../src/index.ts", import.meta.url));
-} catch {
-  repositoryCheckout = false;
-}
-if (repositoryCheckout) {
-  execFileSync("corepack", ["pnpm", "build"], {
-    cwd: fileURLToPath(new URL("..", import.meta.url)),
-    stdio: "inherit",
-  });
-} else {
-  await access(distEntry);
-}
-const { CacheLayer, DialCache, DialCacheKeyConfig } = await import(distEntry.href);
+import { CacheLayer, DialCache, DialCacheKeyConfig } from "../dist/index.js";
 
 const sequentialIterations = readPositiveInteger("DIALCACHE_BENCH_ITERATIONS", 50_000);
 const coalescingFanout = readPositiveInteger("DIALCACHE_BENCH_FANOUT", 1_000);

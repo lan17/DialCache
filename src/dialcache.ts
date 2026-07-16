@@ -250,7 +250,7 @@ export class DialCache {
     key: DialCacheKey,
     keyConfig: DialCacheKeyConfig | null,
     fallback: () => Promise<T>,
-    noSharedFallbackLayer: MetricLayer,
+    fallbackMetricLayer: MetricLayer,
   ): Promise<T> {
     const localLayer = await this.resolveLocalLayerConfig(key, keyConfig);
     if (localLayer.status === "enabled") {
@@ -261,18 +261,18 @@ export class DialCache {
 
     const redisCache = this.redisCache;
     if (redisCache === null) {
-      return await this.callFallback(labelsFor(key, noSharedFallbackLayer), fallback);
+      return await this.callFallback(labelsFor(key, fallbackMetricLayer), fallback);
     }
 
     const remoteLayer = await this.resolveRemoteLayerConfig(key, keyConfig);
     if (remoteLayer.status === "disabled") {
-      const fallbackLayer = remoteLayer.reason === "config_error" ? CacheLayer.REMOTE : noSharedFallbackLayer;
+      const fallbackLayer = remoteLayer.reason === "config_error" ? CacheLayer.REMOTE : fallbackMetricLayer;
       return await this.callFallback(labelsFor(key, fallbackLayer), fallback);
     }
 
     return await this.singleFlight(this.inFlight, key, "process", async () => {
       const remote = await this.readRemoteWithResolvedConfig<T>(redisCache, key, remoteLayer.config);
-      return await this.finishRedisChain(redisCache, key, localLayer, remote, fallback);
+      return await this.finishRedisChain(redisCache, key, localLayer, remote, fallback, remoteLayer.config);
     });
   }
 
@@ -298,7 +298,7 @@ export class DialCache {
     }
 
     const remote = await this.readRemoteWithResolvedConfig<T>(redisCache, key, remoteLayer.config);
-    return await this.finishRedisChain(redisCache, key, local, remote, fallback);
+    return await this.finishRedisChain(redisCache, key, local, remote, fallback, remoteLayer.config);
   }
 
   private async finishLocalOnly<T>(key: DialCacheKey, local: CacheGetResult<T>, fallback: () => Promise<T>): Promise<T> {
@@ -315,6 +315,7 @@ export class DialCache {
     local: CacheGetResult<T>,
     remote: CacheGetResult<T>,
     fallback: () => Promise<T>,
+    resolvedRemoteConfig?: ResolvedLayerConfig,
   ): Promise<T> {
     if (remote.status === "hit") {
       if (local.status === "miss") {
@@ -324,29 +325,25 @@ export class DialCache {
     }
 
     const remoteErrored = remote.status === "disabled" && remote.reason === "config_error";
-    const remoteWriteConfig = remote.status === "miss" ? remote.config : remoteErrored ? remote.config : undefined;
-    const runFallback = async (): Promise<T> => {
-      const fallbackLayer = remote.status === "miss" || remoteErrored ? CacheLayer.REMOTE : CacheLayer.LOCAL;
-      const value = await this.callFallback(labelsFor(key, fallbackLayer), fallback);
-      const skipCacheWrite = (remote.status === "miss" || remote.status === "disabled") && remote.skipCacheWrite === true;
-      let suppressCacheWrite = skipCacheWrite;
-      if (!suppressCacheWrite && remoteWriteConfig !== undefined) {
-        try {
-          const wroteRemote = await redisCache.put(key, value, remoteWriteConfig);
-          suppressCacheWrite = wroteRemote === false;
-        } catch (error) {
-          this.logger.warn("Error putting value in Redis cache", error);
-          this.recordError(key, CacheLayer.REMOTE, error, false);
-          suppressCacheWrite = key.trackForInvalidation;
-        }
+    const remoteWriteConfig = remote.status === "miss" ? remote.config : remoteErrored ? resolvedRemoteConfig : undefined;
+    const fallbackLayer = remote.status === "miss" || remoteErrored ? CacheLayer.REMOTE : CacheLayer.LOCAL;
+    const value = await this.callFallback(labelsFor(key, fallbackLayer), fallback);
+    const skipCacheWrite = (remote.status === "miss" || remote.status === "disabled") && remote.skipCacheWrite === true;
+    let suppressCacheWrite = skipCacheWrite;
+    if (!suppressCacheWrite && remoteWriteConfig !== undefined) {
+      try {
+        const wroteRemote = await redisCache.put(key, value, remoteWriteConfig);
+        suppressCacheWrite = wroteRemote === false;
+      } catch (error) {
+        this.logger.warn("Error putting value in Redis cache", error);
+        this.recordError(key, CacheLayer.REMOTE, error, false);
+        suppressCacheWrite = key.trackForInvalidation;
       }
-      if (!suppressCacheWrite && local.status === "miss") {
-        await this.putLocalFailOpen(key, value, local.config);
-      }
-      return value;
-    };
-
-    return await runFallback();
+    }
+    if (!suppressCacheWrite && local.status === "miss") {
+      await this.putLocalFailOpen(key, value, local.config);
+    }
+    return value;
   }
 
   private async resolveLocalLayerConfig(
@@ -354,12 +351,7 @@ export class DialCache {
     keyConfig: DialCacheKeyConfig | null,
   ): Promise<LayerConfigResolution> {
     try {
-      const result = await resolveLayerConfigResult({
-        config: keyConfig,
-        key,
-        layer: CacheLayer.LOCAL,
-        rampSampler: this.rampSampler,
-      });
+      const result = await this.localCache.resolveLayerConfig(key, keyConfig);
       if (result.status === "disabled") {
         this.metrics?.disabled({ ...labelsFor(key, CacheLayer.LOCAL), reason: result.reason });
       }
@@ -425,7 +417,6 @@ export class DialCache {
       return {
         status: "disabled",
         reason: "config_error",
-        config: layerConfig,
         ...(key.trackForInvalidation ? { skipCacheWrite: true } : {}),
       } as const;
     }

@@ -95,19 +95,6 @@ try {
     { cwd: workspace },
   );
   await exec(
-    process.execPath,
-    [join(workspace, "node_modules", "dialcache", "scripts", "benchmark-request-local.mjs")],
-    {
-      cwd: workspace,
-      env: {
-        ...process.env,
-        DIALCACHE_BENCH_ITERATIONS: "2",
-        DIALCACHE_BENCH_FANOUT: "2",
-      },
-    },
-  );
-
-  await exec(
     "npm",
     [
       "install",

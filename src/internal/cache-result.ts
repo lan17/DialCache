@@ -7,6 +7,5 @@ export type CacheGetResult<T> =
   | {
       readonly status: "disabled";
       readonly reason: DisabledReason;
-      readonly config?: ResolvedLayerConfig;
       readonly skipCacheWrite?: boolean;
     };

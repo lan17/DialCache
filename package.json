@@ -53,11 +53,10 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE",
-    "scripts/benchmark-request-local.mjs"
+    "LICENSE"
   ],
   "scripts": {
-    "benchmark:request-local": "node scripts/benchmark-request-local.mjs",
+    "benchmark:request-local": "pnpm build && node scripts/benchmark-request-local.mjs",
     "build": "tsup src/index.ts src/node-redis.ts src/redis-protocol.ts src/valkey-glide.ts --format esm,cjs --dts --clean",
     "check": "pnpm typecheck && pnpm test:release && pnpm test && pnpm build && pnpm test:package",
     "typecheck": "tsc --noEmit",

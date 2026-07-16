@@ -116,7 +116,7 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
     });
     this.coalescedCounter = counter(registry, {
       name: `${prefix}dialcache_coalesced_counter`,
-      help: "DialCache requests coalesced onto an in-flight cache miss.",
+      help: "DialCache requests coalesced onto active in-flight work.",
       labelNames: ["use_case", "key_type"] as const,
     });
     this.scopedCoalescedCounter = counter(registry, {

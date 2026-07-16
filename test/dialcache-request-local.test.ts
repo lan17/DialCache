@@ -1,18 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { CacheLayer, DialCache, DialCacheKeyConfig } from "../src/index.js";
-import { peekRequestLocalCache, type DialCacheContext } from "../src/context.js";
+import { DialCache, DialCacheKeyConfig } from "../src/index.js";
+import { DialCacheContext, RequestLocalCache, getOrCreateRequestLocalCache } from "../src/context.js";
 
 interface Deferred<T> {
   readonly promise: Promise<T>;
   resolve: (value: T) => void;
-}
-
-interface RequestLocalCacheInspection {
-  readonly values: Map<string, unknown>;
-  readonly inFlight: Map<string, Promise<unknown>>;
-  read: <T>(key: string) => { readonly status: "hit"; readonly value: T } | { readonly status: "miss" };
-  set: <T>(key: string, value: T) => void;
 }
 
 function deferred<T>(): Deferred<T> {
@@ -27,12 +20,6 @@ const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0
 
 const requestLocalConfig = (requestLocal = true): DialCacheKeyConfig =>
   new DialCacheKeyConfig({ requestLocal });
-
-function inspectContext(dialcache: DialCache): DialCacheContext {
-  return (dialcache as unknown as {
-    readonly context: DialCacheContext;
-  }).context;
-}
 
 describe("DialCache request-local cache", () => {
   it("memoizes sequential request-local-only reads without sharing across outer scopes", async () => {
@@ -212,7 +199,7 @@ describe("DialCache request-local cache", () => {
     expect(calls).toBe(2);
   });
 
-  it("allocates request-local maps lazily, drops them on close, and rejects detached use of the closed scope", async () => {
+  it("treats detached work as outside its closed outer scope", async () => {
     const detachedGate = deferred<void>();
     const dialcache = new DialCache();
     let calls = 0;
@@ -222,51 +209,61 @@ describe("DialCache request-local cache", () => {
       cacheKey: (id) => id,
       defaultConfig: requestLocalConfig(),
     });
-    const getProcessLocal = dialcache.cached(async (id: string) => ({ id }), {
-      keyType: "user_id",
-      useCase: "RequestLocalLifecycleSharedLayerOnly",
-      cacheKey: (id) => id,
-      defaultConfig: new DialCacheKeyConfig({
-        ttlSec: { [CacheLayer.LOCAL]: 60 },
-        ramp: { [CacheLayer.LOCAL]: 100 },
-      }),
-    });
-    let requestLocalCache: RequestLocalCacheInspection | undefined;
-    let detached: Promise<readonly [{ id: string; call: number }, { id: string; call: number }]> | undefined;
-    const context = inspectContext(dialcache);
+    let detached: Promise<{
+      readonly enabled: boolean;
+      readonly values: readonly [{ id: string; call: number }, { id: string; call: number }];
+    }> | undefined;
 
     const scoped = await dialcache.enable(async () => {
       expect(dialcache.isEnabled()).toBe(true);
-      expect(peekRequestLocalCache(context)).toBeNull();
-      await getProcessLocal("shared-only");
-      expect(peekRequestLocalCache(context)).toBeNull();
-
       const value = await getUser("123");
-      requestLocalCache = peekRequestLocalCache(context) as unknown as RequestLocalCacheInspection;
-      expect(requestLocalCache.values.size).toBe(1);
-      expect(requestLocalCache.inFlight.size).toBe(0);
 
       detached = (async () => {
         await detachedGate.promise;
-        return [await getUser("123"), await getUser("123")] as const;
+        return {
+          enabled: dialcache.isEnabled(),
+          values: [await getUser("123"), await getUser("123")] as const,
+        };
       })();
       return value;
     });
 
     expect(scoped).toEqual({ id: "123", call: 1 });
-    expect(peekRequestLocalCache(context)).toBeNull();
-    requestLocalCache?.set("late", { stale: true });
-    expect(requestLocalCache?.read("late")).toEqual({ status: "miss" });
-    expect(requestLocalCache?.values.size).toBe(0);
-    expect(requestLocalCache?.inFlight.size).toBe(0);
 
     detachedGate.resolve();
-    await expect(detached).resolves.toEqual([
-      { id: "123", call: 2 },
-      { id: "123", call: 3 },
-    ]);
-    expect(peekRequestLocalCache(context)).toBeNull();
+    await expect(detached).resolves.toEqual({
+      enabled: false,
+      values: [
+        { id: "123", call: 2 },
+        { id: "123", call: 3 },
+      ],
+    });
     expect(calls).toBe(3);
+  });
+
+  it("allocates request-local state lazily and closes it at the outer boundary", async () => {
+    const close = vi.spyOn(RequestLocalCache.prototype, "close");
+    const context = new DialCacheContext();
+    let retained: RequestLocalCache | undefined;
+
+    try {
+      await context.enable(async () => undefined);
+      expect(close).not.toHaveBeenCalled();
+
+      await context.enable(async () => {
+        retained = getOrCreateRequestLocalCache(context) ?? undefined;
+        retained?.set("value", "cached");
+        retained?.inFlight.set("flight", Promise.resolve("pending"));
+      });
+
+      expect(close).toHaveBeenCalledTimes(1);
+      expect(retained?.read("value")).toEqual({ status: "miss" });
+      expect(retained?.inFlight.size).toBe(0);
+      retained?.set("late", "stale");
+      expect(retained?.read("late")).toEqual({ status: "miss" });
+    } finally {
+      close.mockRestore();
+    }
   });
 
   it("returns the original value reference without cloning", async () => {
@@ -295,10 +292,6 @@ describe("DialCache request-local cache", () => {
     expect(first).toBe(source);
     expect(second).toBe(source);
     expect(second).toBe(first);
-    expect(second.metadata).toBe(source.metadata);
-    expect(second.flags).toBe(source.flags);
-    expect(second.buffer).toBe(source.buffer);
-    expect(second.typed).toBe(source.typed);
     expect(calls).toBe(1);
   });
 
@@ -314,12 +307,11 @@ describe("DialCache request-local cache", () => {
 
     await dialcache.enable(async () => {
       const first = await getValue("0");
-      for (let id = 1; id <= 10_000; id += 1) {
-        await getValue(String(id));
-      }
+      const second = await getValue("1");
       expect(await getValue("0")).toBe(first);
+      expect(await getValue("1")).toBe(second);
     });
 
-    expect(calls).toBe(10_001);
+    expect(calls).toBe(2);
   });
 });

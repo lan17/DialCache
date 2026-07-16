@@ -34,9 +34,68 @@ const getUser = dialcache.cached(
 // Caching is OFF outside an enable() scope (see "Enabled context"), so this runs the fn uncached:
 await getUser("123");
 
-// Inside enable(), reads are cached. Enable once at your request boundary (not per call site):
+// Inside enable(), reads are cached:
 const user = await dialcache.enable(() => getUser("123"));
 ```
+
+## Request-local cache
+
+Set `requestLocal: true` to memoize resolved values for the lifetime of the outermost `enable()` scope:
+
+```ts
+import { DialCache, DialCacheKeyConfig } from "dialcache";
+
+const dialcache = new DialCache();
+const getUser = dialcache.cached(
+  (userId: string) => db.fetchUser(userId),
+  {
+    keyType: "user_id",
+    useCase: "GetUser",
+    cacheKey: (userId) => userId,
+    defaultConfig: new DialCacheKeyConfig({ requestLocal: true }),
+  },
+);
+```
+
+`requestLocal` is a runtime boolean, not a `CacheLayer` TTL/ramp entry. The `cacheConfigProvider` can turn it on or off for each invocation. `DialCacheKeyConfig.enabled(ttlSec)` continues to enable only local and Redis caching, so request-local caching must be selected explicitly. DialCache resolves the runtime config once per enabled invocation, then uses that result for the full lookup. A missing or false value silently bypasses request-local storage without deleting an entry already memoized in the scope; a later invocation that resolves to true can reuse that entry.
+
+The outermost `enable()` call owns the request-local lifetime. Nested `enable()` calls reuse that scope. DialCache allocates the request-local value and in-flight maps lazily, on the first invocation whose resolved config enables request-local caching, so scopes that only use local/Redis caching do not allocate those maps.
+
+Wrap the complete Node HTTP handler so the scope cannot outlive the request:
+
+```ts
+import { createServer } from "node:http";
+
+const server = createServer((req, res) => {
+  void dialcache
+    .enable(async () => {
+      const user = await getUser(readUserId(req));
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify(user));
+    })
+    .catch((error: unknown) => {
+      logger.error(error);
+      if (!res.headersSent) {
+        res.statusCode = 500;
+        res.end("Internal Server Error");
+      } else {
+        res.destroy();
+      }
+    });
+});
+```
+
+Request-local storage has no capacity limit, eviction, or overflow mode. Entries are retained until the outermost `enable()` callback settles. Use it for short-lived scopes with bounded key cardinality; split long-running streams or large batch jobs into smaller scopes when necessary.
+
+## Process-local cache
+
+The local layer uses one process-local LRU per `DialCache` instance. It keeps at most 10,000 entries by default across all use cases while retaining each entry's configured local TTL. Set `localMaxSize` to a nonnegative safe integer to change the global entry cap; `0` disables local storage:
+
+```ts
+const dialcache = new DialCache({ localMaxSize: 25_000 });
+```
+
+The limit counts entries rather than estimating JavaScript object memory. Recently read entries stay resident ahead of less recently used entries when the limit is reached.
 
 ## Redis-backed TTL cache
 
@@ -44,7 +103,7 @@ Register DialCache's native node-redis scripts when creating the client, then pa
 
 ```ts
 import { createClient } from "redis";
-import { DialCache, DialCacheKeyConfig } from "dialcache";
+import { DialCache } from "dialcache";
 import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "dialcache/node-redis";
 
 const redisClient = createClient({
@@ -100,67 +159,6 @@ request-local cache -> local cache -> Redis cache -> fallback function
 - Redis misses call the fallback and write both Redis and local.
 - Redis cache read/write failures are logged, counted in metrics, and fail open; fallback results still return when fallback succeeds. `invalidateRemote` logs/counts Redis failures and rethrows them so callers do not assume invalidation succeeded.
 - Missing local/Redis TTL or ramp config disables that layer, records a disabled reason, and falls through to the next layer/fallback.
-
-## Request-local cache
-
-Set `requestLocal: true` to memoize resolved values for the lifetime of the outermost `enable()` scope:
-
-```ts
-import { CacheLayer, DialCache, DialCacheKeyConfig } from "dialcache";
-
-const dialcache = new DialCache();
-const getUser = dialcache.cached(
-  (userId: string) => db.fetchUser(userId),
-  {
-    keyType: "user_id",
-    useCase: "GetUser",
-    cacheKey: (userId) => userId,
-    defaultConfig: new DialCacheKeyConfig({
-      requestLocal: true,
-      ttlSec: { [CacheLayer.LOCAL]: 30, [CacheLayer.REMOTE]: 300 },
-      ramp: { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 100 },
-    }),
-  },
-);
-```
-
-`requestLocal` is a runtime boolean, not a `CacheLayer` TTL/ramp entry. The `cacheConfigProvider` can turn it on or off for each invocation. `DialCacheKeyConfig.enabled(ttlSec)` continues to enable only local and Redis caching, so request-local caching must be selected explicitly. DialCache resolves the runtime config once per enabled invocation, then uses that result for the full lookup. A missing or false value silently bypasses request-local storage without deleting an entry already memoized in the scope; a later invocation that resolves to true can reuse that entry.
-
-The outermost `enable()` call owns the request-local lifetime. Nested `enable()` calls reuse that scope. DialCache allocates the request-local value and in-flight maps lazily, on the first invocation whose resolved config enables request-local caching, so scopes that only use local/Redis caching do not allocate those maps.
-
-Wrap the complete Node HTTP handler so the scope cannot outlive the request:
-
-```ts
-import { createServer } from "node:http";
-
-const server = createServer((req, res) => {
-  void dialcache
-    .enable(async () => {
-      const user = await getUser(readUserId(req));
-      res.setHeader("content-type", "application/json");
-      res.end(JSON.stringify(user));
-    })
-    .catch((error: unknown) => {
-      logger.error(error);
-      if (!res.headersSent) {
-        res.statusCode = 500;
-        res.end("Internal Server Error");
-      } else {
-        res.destroy();
-      }
-    });
-});
-```
-
-Request-local storage has no capacity limit, eviction, or overflow mode. Entries are retained until the outermost `enable()` callback settles. Use it for short-lived scopes with bounded key cardinality; split long-running streams or large batch jobs into smaller scopes when necessary.
-
-The local layer uses one process-local LRU per `DialCache` instance. It keeps at most 10,000 entries by default across all use cases while retaining each entry's configured local TTL. Set `localMaxSize` to a nonnegative safe integer to change the global entry cap; `0` disables local storage:
-
-```ts
-const dialcache = new DialCache({ localMaxSize: 25_000 });
-```
-
-The limit counts entries rather than estimating JavaScript object memory. Recently read entries stay resident ahead of less recently used entries when the limit is reached.
 
 Node-redis computes each script's SHA, uses `EVALSHA`, and retries with `EVAL` after `NOSCRIPT`. Its cluster client routes scripts by their first key and performs that fallback on the selected shard. The GLIDE adapter uses GLIDE's native `Script` lifecycle and byte decoder; GLIDE routes scripts from their declared keys. Tracked reads are deliberately routed to primaries so a lagging replica cannot hide an invalidation watermark.
 
@@ -427,13 +425,13 @@ Not included yet:
 
 ## Request-local benchmark
 
-Run the dependency-free semantic microbenchmark after installing dependencies:
+From a repository checkout, run the semantic microbenchmark after installing dependencies:
 
 ```bash
 pnpm benchmark:request-local
 ```
 
-It reports request-local sequential-hit throughput plus request-local and process-wide coalescing fan-out. The benchmark asserts fallback counts and returned values but deliberately applies no timing threshold. Override its work sizes with `DIALCACHE_BENCH_ITERATIONS` and `DIALCACHE_BENCH_FANOUT`.
+The command builds `dist` before reporting request-local sequential-hit throughput plus request-local and process-wide coalescing fan-out. The benchmark is a maintainer tool and is not included in the published package. It asserts fallback counts and returned values but deliberately applies no timing threshold. Override its work sizes with `DIALCACHE_BENCH_ITERATIONS` and `DIALCACHE_BENCH_FANOUT`.
 
 ## Releasing
 
