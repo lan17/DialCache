@@ -1,6 +1,6 @@
 # DialCache
 
-Fine-grained TypeScript caching with explicit enabled contexts, request-local memoization, local and Redis TTL caching, stable key construction, runtime rollout controls, request coalescing, Prometheus-ready observability, and Redis watermark-based targeted invalidation.
+Fine-grained TypeScript caching with explicit enabled contexts, request-local memoization, process-local and Redis TTL caching, stable key construction, runtime rollout controls, request coalescing, Prometheus-ready observability, and Redis watermark-based targeted invalidation.
 
 ## Install
 
@@ -57,11 +57,13 @@ const getUser = dialcache.cached(
 );
 ```
 
-`requestLocal` is a runtime boolean, not a `CacheLayer` TTL/ramp entry. The `cacheConfigProvider` can turn it on or off for each invocation. `DialCacheKeyConfig.enabled(ttlSec)` continues to enable only local and Redis caching, so request-local caching must be selected explicitly. DialCache resolves the runtime config once per enabled invocation, then uses that result for the full lookup. A missing or false value silently bypasses request-local storage without deleting an entry already memoized in the scope; a later invocation that resolves to true can reuse that entry.
+`requestLocal` is a runtime boolean rather than a TTL/ramp-controlled `CacheLayer`. The `cacheConfigProvider` can turn it on or off for each invocation. `DialCacheKeyConfig.enabled(ttlSec)` continues to enable only process-local and Redis caching, so request-local caching must be selected explicitly.
 
-The outermost `enable()` call owns the request-local lifetime. Nested `enable()` calls reuse that scope. DialCache allocates the request-local value and in-flight maps lazily, on the first invocation whose resolved config enables request-local caching, so scopes that only use local/Redis caching do not allocate those maps.
+DialCache resolves the runtime config once per enabled invocation and uses it for the entire lookup. When `requestLocal` is missing or false, the invocation skips request-local lookup and storage without deleting an entry already memoized in the scope. A later invocation that enables request-local caching can reuse that entry.
 
-Wrap the complete Node HTTP handler so the scope cannot outlive the request:
+The outermost `enable()` call owns the request-local lifetime, and nested `enable()` calls reuse that scope. Request-local state is allocated lazily, only when an invocation enables the layer, so scopes that use only process-local or Redis caching do not allocate it.
+
+Wrap the complete Node HTTP handler so the request-local scope matches the handler's lifetime:
 
 ```ts
 import { createServer } from "node:http";
@@ -73,15 +75,7 @@ const server = createServer((req, res) => {
       res.setHeader("content-type", "application/json");
       res.end(JSON.stringify(user));
     })
-    .catch((error: unknown) => {
-      logger.error(error);
-      if (!res.headersSent) {
-        res.statusCode = 500;
-        res.end("Internal Server Error");
-      } else {
-        res.destroy();
-      }
-    });
+    .catch((error: unknown) => handleRequestError(error, res));
 });
 ```
 
@@ -89,7 +83,7 @@ Request-local storage has no capacity limit, eviction, or overflow mode. Entries
 
 ## Process-local cache
 
-The local layer uses one process-local LRU per `DialCache` instance. It keeps at most 10,000 entries by default across all use cases while retaining each entry's configured local TTL. Set `localMaxSize` to a nonnegative safe integer to change the global entry cap; `0` disables local storage:
+The process-local layer (`CacheLayer.LOCAL`) uses one LRU per `DialCache` instance. It keeps at most 10,000 entries by default across all use cases while retaining each entry's configured TTL. Set `localMaxSize` to a nonnegative safe integer to change the global entry cap; `0` disables process-local storage:
 
 ```ts
 const dialcache = new DialCache({ localMaxSize: 25_000 });
@@ -149,16 +143,16 @@ DialCache does not create, connect, or close the underlying Redis client. After 
 When caching is enabled, reads flow through:
 
 ```text
-request-local cache -> local cache -> Redis cache -> fallback function
+request-local cache -> process-local cache -> Redis cache -> fallback function
 ```
 
 - Request-local hits return the value memoized in the current outermost `enable()` scope.
 - Results from the lower chain are memoized request-locally when that layer is enabled.
-- Local hits return immediately.
-- Local misses try Redis and populate local on a Redis hit.
-- Redis misses call the fallback and write both Redis and local.
+- Process-local hits return immediately.
+- Process-local misses try Redis and populate the process-local cache on a Redis hit.
+- Redis misses call the fallback and write both Redis and the process-local cache.
 - Redis cache read/write failures are logged, counted in metrics, and fail open; fallback results still return when fallback succeeds. `invalidateRemote` logs/counts Redis failures and rethrows them so callers do not assume invalidation succeeded.
-- Missing local/Redis TTL or ramp config disables that layer, records a disabled reason, and falls through to the next layer/fallback.
+- Missing process-local/Redis TTL or ramp config disables that layer, records a disabled reason, and falls through to the next layer/fallback.
 
 Node-redis computes each script's SHA, uses `EVALSHA`, and retries with `EVAL` after `NOSCRIPT`. Its cluster client routes scripts by their first key and performs that fallback on the selected shard. The GLIDE adapter uses GLIDE's native `Script` lifecycle and byte decoder; GLIDE routes scripts from their declared keys. Tracked reads are deliberately routed to primaries so a lagging replica cannot hide an invalidation watermark.
 
@@ -209,7 +203,7 @@ const getUser = dialcache.cached(
     useCase: "GetMutableUser",
     cacheKey: (userId) => userId,
     trackForInvalidation: true,
-    // Strongly invalidated mutable data should disable request-local and local caching.
+    // Strongly invalidated mutable data should disable request-local and process-local caching.
     defaultConfig: new DialCacheKeyConfig({
       ttlSec: { [CacheLayer.REMOTE]: 300 },
       ramp: { [CacheLayer.REMOTE]: 100 },
@@ -225,19 +219,19 @@ Invalidation writes a Redis watermark at `{encodedUrnPrefix:encodedKeyType:encod
 
 The internal `:dialcache-frame-v1` suffix identifies values written with DialCache's binary protocol. Watermarks are stored as decimal timestamps.
 
-A cached Redis value whose Redis-created timestamp is older than or equal to the watermark is treated as stale and refreshed through fallback. `invalidateRemote(keyType, id, futureBufferMs)` sets the watermark to the greater of its existing value and Redis's current time plus the buffer. While that future window is active, fallback results are returned but not written to Redis or local cache.
+A cached Redis value whose Redis-created timestamp is older than or equal to the watermark is treated as stale and refreshed through fallback. `invalidateRemote(keyType, id, futureBufferMs)` sets the watermark to the greater of its existing value and Redis's current time plus the buffer. While that future window is active, fallback results are returned but not written to Redis or the process-local cache.
 
 Tracked writes create a baseline watermark and extend its TTL to at least the value TTL plus one minute. Invalidation preserves that lifetime and extends it to cover the future buffer. `DEFAULT_WATERMARK_TTL_SEC` (4 hours) remains a configurable floor rather than a maximum, and reads do not extend watermark lifetime.
 
 `futureBufferMs` must be a nonnegative safe integer. Size it to cover the longest interval from invalidation until any fallback that could have read stale source data completes its Redis write. Include source-replication lag, remaining fallback work, `serializer.dump`, Redis client queue/network latency, script execution, and a safety margin. Invalidate after the source mutation commits. The buffer prevents stale fallback results from being cached under those assumptions; it does not itself force the current fallback to read from an authoritative source.
 
-Request/local cache limitation: targeted invalidation is remote-only and enforced by Redis watermarks. `invalidateRemote` does not evict existing request-local or process-local entries. Strongly invalidated mutable data should disable request-local and local caching (or use a very short local TTL only when stale reads are acceptable).
+Targeted invalidation is remote-only and enforced by Redis watermarks. `invalidateRemote` does not evict existing request-local or process-local entries. Strongly invalidated mutable data should disable request-local and process-local caching (or use a very short process-local TTL only when stale reads are acceptable).
 
 ## Runtime config and ramp controls
 
 Every cached function can provide a per-use-case `defaultConfig`; a `cacheConfigProvider` can override it at runtime. If the provider returns `null`, DialCache falls back to the cached function's `defaultConfig`. If neither exists, or a layer's TTL/ramp is missing or disabled, only that layer is skipped.
 
-`cacheConfigProvider` is called for every enabled cached-function invocation before DialCache checks local or Redis. Keep it cheap, cache any remote/config-store reads inside the provider, and avoid work that would erase the benefit of a cache hit.
+`cacheConfigProvider` is called for every enabled cached-function invocation before DialCache performs any cache lookup. Keep it cheap, cache any remote/config-store reads inside the provider, and avoid work that would erase the benefit of a cache hit.
 
 ```ts
 import { CacheLayer, DialCache, DialCacheKeyConfig } from "dialcache";
@@ -263,11 +257,11 @@ const dialcache = new DialCache({
 DialCache coalesces in-flight work at the lifetime of the first active cache layer:
 
 - When request-local caching is enabled, same-key callers in one outermost `enable()` scope share request-scoped in-flight work before the request-local lookup. Its resolved value is then memoized for later sequential calls in that scope.
-- When local or Redis caching is enabled, same-key callers share process-scoped in-flight cache work before the first active shared layer. This still applies when request-local caching is off and can combine leaders from separate request scopes.
+- When process-local or Redis caching is enabled, same-key callers share process-scoped in-flight cache work before the first active shared layer. This still applies when request-local caching is off and can combine leaders from separate request scopes.
 
-With Redis configured, a process-scoped leader that misses local runs the Redis read and, on miss, the fallback/cache write; followers await that result. Local-only misses share the leader's fallback/cache write. This protects Redis and the source of truth from a thundering herd on hot keys.
+With Redis configured, a process-scoped leader that misses the process-local cache runs the Redis read and, on miss, the fallback/cache write; followers await that result. Process-local-only misses share the leader's fallback/cache write. This protects Redis and the source of truth from a thundering herd on hot keys.
 
-Coalescing only applies when at least one cache layer is active. Calls outside `enable()` are true pass-through, and calls where request-local, local, and Redis are all disabled are true pass-through.
+Coalescing only applies when at least one cache layer is active. Calls outside `enable()` are true pass-through, and calls where request-local, process-local, and Redis are all disabled are true pass-through.
 
 Because coalescing is keyed by `cacheKey`, concurrent calls with the same key share the leader's execution. Any argument ignored by `cacheKey` must be safe to share this way; include inputs such as locale, auth context, or cancellation behavior in the key when they can change the returned value or whether the underlying function should run separately.
 
@@ -324,7 +318,7 @@ const searchPosts = dialcache.cached(
 await dialcache.enable(() => searchPosts("u1", 2, "active"));
 ```
 
-- **`keyType` + `id` is the invalidation unit for tracked Redis entries.** `dialcache.invalidateRemote("user_id", "123")` writes one watermark for that user; any `trackForInvalidation` Redis entry with the same `keyType` and `id` is refreshed across all `args` variants when Redis is read. Existing local hits follow the local-cache limitation above, and untracked Redis entries do not consult the watermark. `useCase` identifies the individual cache (it's the metrics label and part of the stored key).
+- **`keyType` + `id` is the invalidation unit for tracked Redis entries.** `dialcache.invalidateRemote("user_id", "123")` writes one watermark for that user; any `trackForInvalidation` Redis entry with the same `keyType` and `id` is refreshed across all `args` variants when Redis is read. Existing request-local and process-local hits follow the limitation above, and untracked Redis entries do not consult the watermark. `useCase` identifies the individual cache (it's the metrics label and part of the stored key).
 - **`args` are part of the cache key** — different `args` produce different entries — but invalidation is by `id` only.
 - **Non-key inputs** (for example a db handle) are simply parameters the `cacheKey` selector ignores. They still reach `fn` for non-coalesced executions, but concurrent same-key cache misses share the leader's execution, so do not ignore values like `AbortSignal`, auth context, locale, or other request-scoped inputs unless sharing one result is correct.
 - **Methods:** pass `obj.method.bind(obj)` (or `(...a) => obj.method(...a)`) — a bare `obj.method` reference loses `this`.
@@ -363,7 +357,7 @@ DialCache registers Prometheus metrics by default via `prom-client`:
 | `dialcache_serialization_timer` | Histogram | `use_case`, `key_type`, `layer`, `operation` | Redis serializer dump/load latency |
 | `dialcache_size_histogram` | Histogram | `use_case`, `key_type`, `layer` | Serialized Redis payload size in bytes |
 
-The `layer` label is `request_local`, `local`, or `remote`. Disabled-context, key-construction, and config-provider failures use `noop` because no cache layer was reached. `dialcache_coalesced_counter` retains its original aggregate schema; `dialcache_scoped_coalesced_counter` adds the bounded `scope` label that distinguishes request-local from process-wide single-flight work.
+The `layer` label is `request_local`, `local` (process-local), or `remote`. Disabled-context, key-construction, and config-provider failures use `noop` because no cache layer was reached. `dialcache_coalesced_counter` retains its original aggregate schema; `dialcache_scoped_coalesced_counter` adds the bounded `scope` label that distinguishes request-local from process-wide single-flight work.
 
 Use a custom registry or prefix when embedding DialCache in an app with its own metrics endpoint:
 
@@ -389,9 +383,9 @@ For non-Prometheus telemetry, inject a `DialCacheMetricsAdapter` through `new Di
 Included:
 
 - Request-local caching for the lifetime of the outermost enabled context
-- Local TTL/LRU cache with a global entry-count bound
+- Process-local TTL/LRU cache with a global entry-count bound
 - Redis TTL cache
-- Request-local → local → Redis → fallback read-through chain
+- Request-local → process-local → Redis → fallback read-through chain
 - Lazy Redis client factory support
 - Lua-backed Redis reads and writes with Redis-generated timestamps
 - Versioned binary Redis frames for UTF-8 and Buffer serializer output
