@@ -85,6 +85,48 @@ describe("DialCache runtime config and ramp controls", () => {
     expect(logger.warn).toHaveBeenCalledWith("Error resolving Redis cache config", expect.any(Error));
   });
 
+  it.each(["throws synchronously", "rejects asynchronously"] as const)(
+    "fails open without caching when local ramp resolution $failureMode",
+    async (failureMode) => {
+      const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+      const samplerError = new Error("ramp source unavailable");
+      const keyConfig = new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.LOCAL]: 60 },
+        ramp: { [CacheLayer.LOCAL]: 50 },
+      });
+      const cacheConfigProvider = vi.fn(async () => keyConfig);
+      const rampSampler = vi.fn(() => {
+        if (failureMode === "throws synchronously") {
+          throw samplerError;
+        }
+        return Promise.reject(samplerError);
+      });
+      const dialcache = new DialCache({
+        cacheConfigProvider,
+        rampSampler,
+        logger,
+      });
+      let calls = 0;
+      const getUser = dialcache.cached(async (userId: string) => ({ userId, call: ++calls }), {
+        keyType: "user_id",
+        useCase: "LocalRampResolutionFailOpen",
+        cacheKey: (userId) => userId,
+      });
+
+      await expect(
+        dialcache.enable(async () => [await getUser("123"), await getUser("123")] as const),
+      ).resolves.toEqual([
+        { userId: "123", call: 1 },
+        { userId: "123", call: 2 },
+      ]);
+
+      expect(cacheConfigProvider).toHaveBeenCalledTimes(2);
+      expect(rampSampler).toHaveBeenCalledTimes(2);
+      expect(logger.error).toHaveBeenCalledTimes(2);
+      expect(logger.error).toHaveBeenCalledWith("Error resolving local cache config", samplerError);
+    },
+  );
+
   it("uses a deterministic default ramp sample per cache key and layer", async () => {
     // Given the built-in sampler is asked to sample the same key multiple times.
     const key = new DialCacheKey({ keyType: "user_id", id: "123", useCase: "DeterministicRampSample" });

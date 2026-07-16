@@ -1,4 +1,4 @@
-import { Counter, Registry } from "prom-client";
+import { Registry } from "prom-client";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -105,49 +105,6 @@ describe("DialCache observability metrics", () => {
     await expect(registry.getSingleMetricAsString("dialcache_request_counter")).resolves.toContain(
       "dialcache_request_counter",
     );
-  });
-
-  it("keeps the original coalesced counter compatible while adding scoped samples", async () => {
-    const registry = new Registry();
-    new Counter({
-      name: "dialcache_coalesced_counter",
-      help: "Pre-existing aggregate coalescing metric.",
-      labelNames: ["use_case", "key_type"] as const,
-      registers: [registry],
-    });
-    const dialcache = new DialCache({ metricsRegistry: registry });
-    let releaseFallback: () => void = () => undefined;
-    const fallbackGate = new Promise<void>((resolve) => {
-      releaseFallback = resolve;
-    });
-    const getUser = dialcache.cached(async (userId: string) => {
-      await fallbackGate;
-      return userId;
-    }, {
-      keyType: "user_id",
-      useCase: "LegacyCoalescedMetricCompatibility",
-      cacheKey: (userId) => userId,
-      defaultConfig: localOnly(),
-    });
-
-    const inflight = dialcache.enable(async () => await Promise.all([getUser("123"), getUser("123")]));
-    await tick();
-    releaseFallback();
-    await inflight;
-
-    await expect(
-      sumMetric(registry, "dialcache_coalesced_counter", {
-        use_case: "LegacyCoalescedMetricCompatibility",
-        key_type: "user_id",
-      }),
-    ).resolves.toBe(1);
-    await expect(
-      sumMetric(registry, "dialcache_scoped_coalesced_counter", {
-        use_case: "LegacyCoalescedMetricCompatibility",
-        key_type: "user_id",
-        scope: "process",
-      }),
-    ).resolves.toBe(1);
   });
 
   it("supports an injected metrics adapter without requiring Prometheus", async () => {
@@ -437,17 +394,11 @@ describe("DialCache observability metrics", () => {
       sumMetric(registry, "test_dialcache_coalesced_counter", {
         use_case: "PrometheusCoalescedMetric",
         key_type: "user_id",
-      }),
-    ).resolves.toBe(1);
-    await expect(
-      sumMetric(registry, "test_dialcache_scoped_coalesced_counter", {
-        use_case: "PrometheusCoalescedMetric",
-        key_type: "user_id",
         scope: "process",
       }),
     ).resolves.toBe(1);
     await expect(
-      sumMetric(registry, "test_dialcache_scoped_coalesced_counter", {
+      sumMetric(registry, "test_dialcache_coalesced_counter", {
         use_case: "PrometheusRequestLocalCoalescedMetric",
         key_type: "user_id",
         scope: "request_local",

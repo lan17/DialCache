@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 const exec = promisify(execFile);
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspace = await mkdtemp(join(tmpdir(), "dialcache-package-"));
-const consumer = `import { DialCache, DialCacheKeyConfig, type CoalescedMetricLabels, type DialCacheRedisClient } from "dialcache";
+const consumer = `import { CacheLayer, DialCache, DialCacheKeyConfig, type CacheConfigProvider, type CoalescedMetricLabels, type CoalescingScope, type DialCacheRedisClient } from "dialcache";
 import { createNodeRedisDialCacheClient } from "dialcache/node-redis";
 import { READ_CACHE_SCRIPT } from "dialcache/redis-protocol";
 import { createValkeyGlideDialCacheClient, type ValkeyGlideDialCacheClient } from "dialcache/valkey-glide";
@@ -21,15 +21,22 @@ const load = cache.cached(async (id: string) => id, {
   defaultConfig: DialCacheKeyConfig.enabled(60),
 });
 const requestLocalConfig = new DialCacheKeyConfig({ requestLocal: true });
+const structuralConfigProvider: CacheConfigProvider = () => ({
+  ttlSec: { [CacheLayer.LOCAL]: 60 },
+  ramp: { [CacheLayer.LOCAL]: 100 },
+});
 const requestLocalCoalescingLabels: CoalescedMetricLabels = {
   useCase: "Load",
   keyType: "id",
   scope: "request_local",
 };
+const requestLocalCoalescingScope: CoalescingScope = "request_local";
 
 void load;
 void requestLocalConfig;
+void structuralConfigProvider;
 void requestLocalCoalescingLabels;
+void requestLocalCoalescingScope;
 void createNodeRedisDialCacheClient;
 void createValkeyGlideDialCacheClient;
 void READ_CACHE_SCRIPT;

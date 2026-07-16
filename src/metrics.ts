@@ -66,8 +66,7 @@ type DisabledLabels = CounterLabels | "reason";
 type ErrorLabels = CounterLabels | "error" | "in_fallback";
 type SerializationLabels = CounterLabels | "operation";
 type InvalidationLabels = "key_type" | "layer";
-type CoalescedLabels = "use_case" | "key_type";
-type ScopedCoalescedLabels = CoalescedLabels | "scope";
+type CoalescedLabels = "use_case" | "key_type" | "scope";
 
 const TIMER_BUCKETS = [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
 const SIZE_BUCKETS = [100, 1_000, 10_000, 100_000, 1_000_000, 10_000_000];
@@ -79,7 +78,6 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
   private readonly errorCounter: Counter<ErrorLabels>;
   private readonly invalidationCounter: Counter<InvalidationLabels>;
   private readonly coalescedCounter: Counter<CoalescedLabels>;
-  private readonly scopedCoalescedCounter: Counter<ScopedCoalescedLabels>;
   private readonly getTimer: Histogram<CounterLabels>;
   private readonly fallbackTimer: Histogram<CounterLabels>;
   private readonly serializationTimer: Histogram<SerializationLabels>;
@@ -116,11 +114,6 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
     });
     this.coalescedCounter = counter(registry, {
       name: `${prefix}dialcache_coalesced_counter`,
-      help: "DialCache requests coalesced onto active in-flight work.",
-      labelNames: ["use_case", "key_type"] as const,
-    });
-    this.scopedCoalescedCounter = counter(registry, {
-      name: `${prefix}dialcache_scoped_coalesced_counter`,
       help: "DialCache requests coalesced onto in-flight work by sharing scope.",
       labelNames: ["use_case", "key_type", "scope"] as const,
     });
@@ -175,9 +168,11 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
   }
 
   coalesced(labels: CoalescedMetricLabels): void {
-    const common = { use_case: labels.useCase, key_type: labels.keyType };
-    this.coalescedCounter.inc(common);
-    this.scopedCoalescedCounter.inc({ ...common, scope: labels.scope });
+    this.coalescedCounter.inc({
+      use_case: labels.useCase,
+      key_type: labels.keyType,
+      scope: labels.scope,
+    });
   }
 
   observeGet(labels: CacheMetricLabels, seconds: number): void {

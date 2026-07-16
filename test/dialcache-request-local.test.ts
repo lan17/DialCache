@@ -241,6 +241,32 @@ describe("DialCache request-local cache", () => {
     expect(calls).toBe(3);
   });
 
+  it("keeps a call pass-through when runtime config resolves after its outer scope closes", async () => {
+    const configGate = deferred<DialCacheKeyConfig>();
+    const cacheConfigProvider = vi.fn(async () => await configGate.promise);
+    const dialcache = new DialCache({ cacheConfigProvider });
+    let calls = 0;
+    const getUser = dialcache.cached(async (id: string) => ({ id, call: ++calls }), {
+      keyType: "user_id",
+      useCase: "DetachedConfigResolution",
+      cacheKey: (id) => id,
+    });
+    let detached!: Promise<{ id: string; call: number }>;
+
+    await dialcache.enable(() => {
+      detached = getUser("123");
+    });
+    expect(cacheConfigProvider).toHaveBeenCalledTimes(1);
+    configGate.resolve(DialCacheKeyConfig.enabled(60));
+
+    await expect(detached).resolves.toEqual({ id: "123", call: 1 });
+    const liveValues = await dialcache.enable(async () => [await getUser("123"), await getUser("123")] as const);
+    expect(liveValues[0]).toEqual({ id: "123", call: 2 });
+    expect(liveValues[1]).toBe(liveValues[0]);
+    expect(calls).toBe(2);
+    expect(cacheConfigProvider).toHaveBeenCalledTimes(3);
+  });
+
   it("allocates request-local state lazily and closes it at the outer boundary", async () => {
     const close = vi.spyOn(RequestLocalCache.prototype, "close");
     const context = new DialCacheContext();

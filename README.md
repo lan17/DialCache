@@ -350,14 +350,13 @@ DialCache registers Prometheus metrics by default via `prom-client`:
 | `dialcache_disabled_counter` | Counter | `use_case`, `key_type`, `layer`, `reason` | Cache skips (`context`, `missing_config`, `invalid_ttl`, `ramped_down`, `config_error`) |
 | `dialcache_error_counter` | Counter | `use_case`, `key_type`, `layer`, `error`, `in_fallback` | Cache/fallback errors, with `in_fallback` separating cache plumbing failures from application fallback failures |
 | `dialcache_invalidation_counter` | Counter | `key_type`, `layer` | Invalidation calls for the layers touched today |
-| `dialcache_coalesced_counter` | Counter | `use_case`, `key_type` | Requests that awaited active in-flight cache work (backward-compatible aggregate) |
-| `dialcache_scoped_coalesced_counter` | Counter | `use_case`, `key_type`, `scope` | Coalesced requests split by `request_local` or `process` scope |
+| `dialcache_coalesced_counter` | Counter | `use_case`, `key_type`, `scope` | Coalesced requests split by `request_local` or `process` scope |
 | `dialcache_get_timer` | Histogram | `use_case`, `key_type`, `layer` | Cache get latency in seconds |
 | `dialcache_fallback_timer` | Histogram | `use_case`, `key_type`, `layer` | Time spent in the underlying function |
 | `dialcache_serialization_timer` | Histogram | `use_case`, `key_type`, `layer`, `operation` | Redis serializer dump/load latency |
 | `dialcache_size_histogram` | Histogram | `use_case`, `key_type`, `layer` | Serialized Redis payload size in bytes |
 
-The `layer` label is `request_local`, `local` (process-local), or `remote`. Disabled-context, key-construction, and config-provider failures use `noop` because no cache layer was reached. `dialcache_coalesced_counter` retains its original aggregate schema; `dialcache_scoped_coalesced_counter` adds the bounded `scope` label that distinguishes request-local from process-wide single-flight work.
+The `layer` label is `request_local`, `local` (process-local), or `remote`. Disabled-context, key-construction, and config-provider failures use `noop` because no cache layer was reached. The bounded `scope` label on `dialcache_coalesced_counter` distinguishes request-local from process-wide single-flight work.
 
 Use a custom registry or prefix when embedding DialCache in an app with its own metrics endpoint:
 
