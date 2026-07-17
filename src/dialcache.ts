@@ -225,6 +225,7 @@ export class DialCache {
       } catch (error) {
         // Provider failure: fail open and run uncached, mirroring the per-layer config_error path.
         this.logger.warn("Could not resolve DialCache key config", error);
+        this.recordError(key, NO_CACHE_LAYER, "config_resolution");
         this.metrics?.disabled({ ...noLayerLabels, reason: "config_error" });
         return await this.callFallback(noLayerLabels, fallback);
       }
@@ -497,7 +498,7 @@ export class DialCache {
     }
   }
 
-  private recordError(key: DialCacheKey, layer: CacheLayer, kind: MetricErrorKind): void {
+  private recordError(key: DialCacheKey, layer: MetricLayer, kind: MetricErrorKind): void {
     this.metrics?.error({ ...labelsFor(key, layer), error: kind, inFallback: false });
   }
 

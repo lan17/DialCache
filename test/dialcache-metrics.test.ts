@@ -381,14 +381,255 @@ describe("DialCache observability metrics", () => {
     });
     await loadFailure.enable(async () => await loadValue("123"));
 
-    expect(events(metrics, "error", { useCase: "ConfigErrorClassification", error: "config_resolution" })).toHaveLength(1);
-    expect(events(metrics, "error", { useCase: "WriteErrorClassification", error: "cache_write" })).toHaveLength(1);
-    expect(events(metrics, "error", { useCase: "SerializationDumpClassification", error: "serialization_dump" })).toHaveLength(1);
-    expect(events(metrics, "error", { useCase: "SerializationDumpClassification", error: "cache_write" })).toHaveLength(0);
-    expect(events(metrics, "error", { useCase: "SerializationLoadClassification", error: "serialization_load" })).toHaveLength(1);
+    expect(
+      events(metrics, "error", {
+        useCase: "ConfigErrorClassification",
+        layer: CacheLayer.LOCAL,
+        error: "config_resolution",
+        inFallback: false,
+      }),
+    ).toHaveLength(1);
+    expect(
+      events(metrics, "error", {
+        useCase: "WriteErrorClassification",
+        layer: CacheLayer.REMOTE,
+        error: "cache_write",
+        inFallback: false,
+      }),
+    ).toHaveLength(1);
+    expect(
+      events(metrics, "error", {
+        useCase: "SerializationDumpClassification",
+        layer: CacheLayer.REMOTE,
+        error: "serialization_dump",
+        inFallback: false,
+      }),
+    ).toHaveLength(1);
+    expect(
+      events(metrics, "error", {
+        useCase: "SerializationDumpClassification",
+        layer: CacheLayer.REMOTE,
+        error: "cache_write",
+        inFallback: false,
+      }),
+    ).toHaveLength(0);
+    expect(
+      events(metrics, "error", {
+        useCase: "SerializationLoadClassification",
+        layer: CacheLayer.REMOTE,
+        error: "serialization_load",
+        inFallback: false,
+      }),
+    ).toHaveLength(1);
     expect(JSON.stringify(events(metrics, "error", {}))).not.toMatch(
       /Tenant456DumpError|Tenant789LoadError|tenant-456|tenant-789/,
     );
+  });
+
+  it("classifies provider and remote layer config failures", async () => {
+    const metrics = new RecordingMetrics();
+    const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const providerError = new Error("config provider failed for tenant-123");
+    providerError.name = "Tenant123ConfigProviderError";
+    const providerFailure = new DialCache({
+      metrics,
+      logger,
+      cacheConfigProvider: async () => {
+        throw providerError;
+      },
+    });
+    const resolveProviderConfig = providerFailure.cached(async (id: string) => id, {
+      keyType: "user_id",
+      useCase: "ProviderConfigErrorClassification",
+      cacheKey: (id) => id,
+      defaultConfig: localOnly(),
+    });
+
+    const remoteError = new Error("remote ramp failed for tenant-456");
+    remoteError.name = "Tenant456RemoteRampError";
+    const remoteFailure = new DialCache({
+      redis: { client: new FakeRedis() },
+      metrics,
+      logger,
+      rampSampler: ({ layer }) => {
+        if (layer === CacheLayer.REMOTE) {
+          throw remoteError;
+        }
+        return 0;
+      },
+    });
+    const resolveRemoteConfig = remoteFailure.cached(async (id: string) => id, {
+      keyType: "user_id",
+      useCase: "RemoteConfigErrorClassification",
+      cacheKey: (id) => id,
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 50 },
+      }),
+    });
+
+    await providerFailure.enable(async () => await resolveProviderConfig("123"));
+    await remoteFailure.enable(async () => await resolveRemoteConfig("456"));
+
+    expect(
+      events(metrics, "error", {
+        useCase: "ProviderConfigErrorClassification",
+        layer: "noop",
+        error: "config_resolution",
+        inFallback: false,
+      }),
+    ).toHaveLength(1);
+    expect(
+      events(metrics, "error", {
+        useCase: "RemoteConfigErrorClassification",
+        layer: CacheLayer.REMOTE,
+        error: "config_resolution",
+        inFallback: false,
+      }),
+    ).toHaveLength(1);
+    expect(JSON.stringify(events(metrics, "error", {}))).not.toMatch(
+      /Tenant123ConfigProviderError|Tenant456RemoteRampError|tenant-123|tenant-456/,
+    );
+  });
+
+  it("classifies local cache reads and writes", async () => {
+    const metrics = new RecordingMetrics();
+    const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const readFailure = new DialCache({ metrics, logger });
+    const readLocalCache = (readFailure as unknown as {
+      readonly localCache: { getWithResolvedConfig: () => unknown };
+    }).localCache;
+    vi.spyOn(readLocalCache, "getWithResolvedConfig").mockImplementationOnce(() => {
+      throw new Error("local read failed");
+    });
+    const readValue = readFailure.cached(async (id: string) => id, {
+      keyType: "user_id",
+      useCase: "LocalReadErrorClassification",
+      cacheKey: (id) => id,
+      defaultConfig: localOnly(),
+    });
+
+    const writeFailure = new DialCache({ metrics, logger });
+    const writeLocalCache = (writeFailure as unknown as {
+      readonly localCache: { put: () => Promise<void> };
+    }).localCache;
+    vi.spyOn(writeLocalCache, "put").mockRejectedValueOnce(new Error("local write failed"));
+    const writeValue = writeFailure.cached(async (id: string) => id, {
+      keyType: "user_id",
+      useCase: "LocalWriteErrorClassification",
+      cacheKey: (id) => id,
+      defaultConfig: localOnly(),
+    });
+
+    await readFailure.enable(async () => await readValue("123"));
+    await writeFailure.enable(async () => await writeValue("456"));
+
+    expect(
+      events(metrics, "error", {
+        useCase: "LocalReadErrorClassification",
+        layer: CacheLayer.LOCAL,
+        error: "cache_read",
+        inFallback: false,
+      }),
+    ).toHaveLength(1);
+    expect(
+      events(metrics, "error", {
+        useCase: "LocalWriteErrorClassification",
+        layer: CacheLayer.LOCAL,
+        error: "cache_write",
+        inFallback: false,
+      }),
+    ).toHaveLength(1);
+  });
+
+  it("labels fallback errors with every reachable metric layer", async () => {
+    const metrics = new RecordingMetrics();
+    const noopFailure = new DialCache({ metrics });
+    const noopFallback = noopFailure.cached(async () => {
+      throw new Error("noop fallback failed");
+    }, {
+      keyType: "user_id",
+      useCase: "NoopFallbackErrorClassification",
+      cacheKey: () => {
+        throw new Error("key construction failed");
+      },
+      defaultConfig: localOnly(),
+    });
+    const requestLocalFailure = new DialCache({ metrics });
+    const requestLocalFallback = requestLocalFailure.cached(async (_id: string) => {
+      throw new Error("request-local fallback failed");
+    }, {
+      keyType: "user_id",
+      useCase: "RequestLocalFallbackErrorClassification",
+      cacheKey: (id: string) => id,
+      defaultConfig: new DialCacheKeyConfig({ requestLocal: true }),
+    });
+    const localFailure = new DialCache({ metrics });
+    const localFallback = localFailure.cached(async (_id: string) => {
+      throw new Error("local fallback failed");
+    }, {
+      keyType: "user_id",
+      useCase: "LocalFallbackErrorClassification",
+      cacheKey: (id: string) => id,
+      defaultConfig: localOnly(),
+    });
+    const remoteFailure = new DialCache({ redis: { client: new FakeRedis() }, metrics });
+    const remoteFallback = remoteFailure.cached(async (_id: string) => {
+      throw new Error("remote fallback failed");
+    }, {
+      keyType: "user_id",
+      useCase: "RemoteFallbackErrorClassification",
+      cacheKey: (id: string) => id,
+      defaultConfig: remoteOnly(),
+    });
+
+    await expect(noopFailure.enable(async () => await noopFallback())).rejects.toThrow("noop fallback failed");
+    await expect(requestLocalFailure.enable(async () => await requestLocalFallback("123"))).rejects.toThrow(
+      "request-local fallback failed",
+    );
+    await expect(localFailure.enable(async () => await localFallback("123"))).rejects.toThrow("local fallback failed");
+    await expect(remoteFailure.enable(async () => await remoteFallback("123"))).rejects.toThrow("remote fallback failed");
+
+    expect(
+      events(metrics, "error", {
+        useCase: "NoopFallbackErrorClassification",
+        layer: "noop",
+        error: "key_construction",
+        inFallback: false,
+      }),
+    ).toHaveLength(1);
+    expect(
+      events(metrics, "error", {
+        useCase: "NoopFallbackErrorClassification",
+        layer: "noop",
+        error: "fallback",
+        inFallback: true,
+      }),
+    ).toHaveLength(1);
+    expect(
+      events(metrics, "error", {
+        useCase: "RequestLocalFallbackErrorClassification",
+        layer: "request_local",
+        error: "fallback",
+        inFallback: true,
+      }),
+    ).toHaveLength(1);
+    expect(
+      events(metrics, "error", {
+        useCase: "LocalFallbackErrorClassification",
+        layer: CacheLayer.LOCAL,
+        error: "fallback",
+        inFallback: true,
+      }),
+    ).toHaveLength(1);
+    expect(
+      events(metrics, "error", {
+        useCase: "RemoteFallbackErrorClassification",
+        layer: CacheLayer.REMOTE,
+        error: "fallback",
+        inFallback: true,
+      }),
+    ).toHaveLength(1);
   });
 
 });

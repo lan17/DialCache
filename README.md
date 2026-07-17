@@ -430,7 +430,7 @@ The `error` label reports where an operation failed rather than copying the thro
 | `error` | Meaning |
 | --- | --- |
 | `key_construction` | The cache-key selector or `DialCacheKey` construction failed |
-| `config_resolution` | Layer configuration or ramp resolution failed |
+| `config_resolution` | Runtime or layer configuration, or ramp resolution, failed |
 | `cache_read` | A local-cache or Redis read failed |
 | `cache_write` | A local-cache or Redis write failed |
 | `serialization_load` | Deserializing a Redis payload failed |
