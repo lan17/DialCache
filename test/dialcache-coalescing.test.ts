@@ -146,6 +146,53 @@ describe("DialCache request coalescing", () => {
     expect(coalesced).not.toHaveBeenCalled();
   });
 
+  it("does not coalesce shared-layer work across DialCache instances", async () => {
+    const gate = deferred<void>();
+    const { metrics, coalesced } = spyMetrics();
+    const firstCache = new DialCache({ metrics });
+    const secondCache = new DialCache({ metrics });
+    let firstCalls = 0;
+    let secondCalls = 0;
+    const firstGetUser = firstCache.cached(async (id: string) => {
+      firstCalls += 1;
+      await gate.promise;
+      return { id, source: "first" };
+    }, {
+      keyType: "user_id",
+      useCase: "IsolateProcessFlightsByInstance",
+      cacheKey: (id) => id,
+      defaultConfig: DialCacheKeyConfig.enabled(60),
+    });
+    const secondGetUser = secondCache.cached(async (id: string) => {
+      secondCalls += 1;
+      await gate.promise;
+      return { id, source: "second" };
+    }, {
+      keyType: "user_id",
+      useCase: "IsolateProcessFlightsByInstance",
+      cacheKey: (id) => id,
+      defaultConfig: DialCacheKeyConfig.enabled(60),
+    });
+
+    const inflight = Promise.all([
+      firstCache.enable(async () => await firstGetUser("1")),
+      secondCache.enable(async () => await secondGetUser("1")),
+    ]);
+    await tick();
+
+    expect(firstCalls).toBe(1);
+    expect(secondCalls).toBe(1);
+
+    gate.resolve();
+    const results = await inflight;
+
+    expect(results).toEqual([
+      { id: "1", source: "first" },
+      { id: "1", source: "second" },
+    ]);
+    expect(coalesced).not.toHaveBeenCalled();
+  });
+
   it("coalesces shared-layer work across requests only after each request-local miss", async () => {
     const gate = deferred<void>();
     const { metrics, coalesced, request, miss } = spyMetrics();

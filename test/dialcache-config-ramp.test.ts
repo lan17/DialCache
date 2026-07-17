@@ -127,6 +127,84 @@ describe("DialCache runtime config and ramp controls", () => {
     },
   );
 
+  it("continues through Redis when local ramp resolution throws", async () => {
+    // Given local ramp resolution fails while the remote layer is fully enabled.
+    const redis = new FakeRedis();
+    const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const samplerError = new Error("local ramp source unavailable");
+    const rampSampler = vi.fn(() => {
+      throw samplerError;
+    });
+    const dialcache = new DialCache({
+      redis: { client: redis },
+      rampSampler,
+      logger,
+    });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "LocalRampFailureContinuesThroughRedis",
+      cacheKey: (userId) => userId,
+      defaultConfig: configFor(
+        { [CacheLayer.LOCAL]: 60, [CacheLayer.REMOTE]: 60 },
+        { [CacheLayer.LOCAL]: 50, [CacheLayer.REMOTE]: 100 },
+      ),
+    });
+
+    // When the same key is read twice.
+    const first = await dialcache.enable(async () => await getUser("123"));
+    const second = await dialcache.enable(async () => await getUser("123"));
+
+    // Then the first call stores its fallback in Redis and the second call hits it.
+    expect(first).toEqual({ userId: "123", calls: 1 });
+    expect(second).toEqual({ userId: "123", calls: 1 });
+    expect(calls).toBe(1);
+    expect(redis.getCalls).toBe(2);
+    expect(redis.setCalls).toBe(1);
+    expect(rampSampler).toHaveBeenCalledTimes(2);
+    expect(logger.error).toHaveBeenCalledTimes(2);
+    expect(logger.error).toHaveBeenCalledWith("Error resolving local cache config", samplerError);
+  });
+
+  it("populates local cache when remote ramp resolution throws after a local miss", async () => {
+    // Given local caching is fully enabled while remote ramp resolution fails.
+    const redis = new FakeRedis();
+    const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const samplerError = new Error("remote ramp source unavailable");
+    const rampSampler = vi.fn(() => {
+      throw samplerError;
+    });
+    const dialcache = new DialCache({
+      redis: { client: redis },
+      rampSampler,
+      logger,
+    });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "RemoteRampFailurePopulatesLocal",
+      cacheKey: (userId) => userId,
+      defaultConfig: configFor(
+        { [CacheLayer.LOCAL]: 60, [CacheLayer.REMOTE]: 60 },
+        { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 50 },
+      ),
+    });
+
+    // When the same key is read twice.
+    const first = await dialcache.enable(async () => await getUser("123"));
+    const second = await dialcache.enable(async () => await getUser("123"));
+
+    // Then the fallback is stored locally and the local hit does not resolve remote again.
+    expect(first).toEqual({ userId: "123", calls: 1 });
+    expect(second).toEqual({ userId: "123", calls: 1 });
+    expect(calls).toBe(1);
+    expect(redis.getCalls).toBe(0);
+    expect(redis.setCalls).toBe(0);
+    expect(rampSampler).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith("Error resolving Redis cache config", samplerError);
+  });
+
   it("uses a deterministic default ramp sample per cache key and layer", async () => {
     // Given the built-in sampler is asked to sample the same key multiple times.
     const key = new DialCacheKey({ keyType: "user_id", id: "123", useCase: "DeterministicRampSample" });

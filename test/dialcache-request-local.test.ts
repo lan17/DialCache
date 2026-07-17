@@ -199,6 +199,64 @@ describe("DialCache request-local cache", () => {
     expect(calls).toBe(2);
   });
 
+  it("does not let an active request-local flight repopulate a scope after its outer callback rejects", async () => {
+    const fallbackStarted = deferred<void>();
+    const fallbackGate = deferred<void>();
+    const dialcache = new DialCache();
+    let calls = 0;
+    const getUser = dialcache.cached(async (id: string) => {
+      const call = ++calls;
+      if (call === 1) {
+        fallbackStarted.resolve();
+        await fallbackGate.promise;
+      }
+      return { id, call };
+    }, {
+      keyType: "user_id",
+      useCase: "RequestLocalRejectedScopeLifecycle",
+      cacheKey: (id) => id,
+      defaultConfig: requestLocalConfig(),
+    });
+    let detached!: Promise<{
+      readonly enabled: boolean;
+      readonly flight: { id: string; call: number };
+      readonly later: readonly [{ id: string; call: number }, { id: string; call: number }];
+    }>;
+
+    await expect(dialcache.enable(async () => {
+      const activeFlight = getUser("123");
+      detached = (async () => {
+        const flight = await activeFlight;
+        return {
+          enabled: dialcache.isEnabled(),
+          flight,
+          later: [await getUser("123"), await getUser("123")] as const,
+        };
+      })();
+
+      await fallbackStarted.promise;
+      throw new Error("request failed");
+    })).rejects.toThrow("request failed");
+
+    expect(dialcache.isEnabled()).toBe(false);
+    expect(calls).toBe(1);
+    fallbackGate.resolve();
+
+    await expect(detached).resolves.toEqual({
+      enabled: false,
+      flight: { id: "123", call: 1 },
+      later: [
+        { id: "123", call: 2 },
+        { id: "123", call: 3 },
+      ],
+    });
+
+    const fresh = await dialcache.enable(async () => [await getUser("123"), await getUser("123")] as const);
+    expect(fresh[0]).toEqual({ id: "123", call: 4 });
+    expect(fresh[1]).toBe(fresh[0]);
+    expect(calls).toBe(4);
+  });
+
   it("treats detached work as outside its closed outer scope", async () => {
     const detachedGate = deferred<void>();
     const dialcache = new DialCache();

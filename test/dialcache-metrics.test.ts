@@ -189,6 +189,42 @@ describe("DialCache observability metrics", () => {
     expect(second).toEqual({ userId: "123", calls: 1 });
   });
 
+  it("fails open when the coalesced metrics hook throws", async () => {
+    const metrics = new RecordingMetrics();
+    const coalesced = vi.spyOn(metrics, "coalesced").mockImplementation(() => {
+      throw new Error("metrics unavailable");
+    });
+    let releaseFallback: () => void = () => undefined;
+    const fallbackGate = new Promise<void>((resolve) => {
+      releaseFallback = resolve;
+    });
+    const dialcache = new DialCache({ metrics });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => {
+      calls += 1;
+      await fallbackGate;
+      return { userId, calls };
+    }, {
+      keyType: "user_id",
+      useCase: "ThrowingCoalescedMetricFailOpen",
+      cacheKey: (userId) => userId,
+      defaultConfig: localOnly(),
+    });
+
+    const inflight = dialcache.enable(async () => await Promise.all([getUser("123"), getUser("123")]));
+    await tick();
+
+    expect(calls).toBe(1);
+    expect(coalesced).toHaveBeenCalledTimes(1);
+
+    releaseFallback();
+
+    await expect(inflight).resolves.toEqual([
+      { userId: "123", calls: 1 },
+      { userId: "123", calls: 1 },
+    ]);
+  });
+
   it("classifies disabled cache skips by reason", async () => {
     // Given one cache call is outside context and other enabled calls have disabled layer config.
     const metrics = new RecordingMetrics();
