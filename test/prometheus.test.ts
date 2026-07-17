@@ -1,4 +1,4 @@
-import { Registry, register as defaultRegistry } from "prom-client";
+import { Counter, Histogram, Registry, register as defaultRegistry } from "prom-client";
 import { describe, expect, it } from "vitest";
 
 import { CacheLayer, DialCache, DialCacheKeyConfig } from "../src/index.js";
@@ -18,6 +18,60 @@ const remoteOnly = () =>
   });
 
 const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+const GET_TIMER_HELP = "DialCache cache get latency in seconds.";
+const GET_TIMER_LABELS = ["use_case", "key_type", "layer"] as const;
+const CONFIGURED_TIMER_BUCKETS = [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
+
+interface IncompatibleCollectorCase {
+  readonly schemaPart: string;
+  register(registry: Registry, name: string): void;
+}
+
+const incompatibleCollectorCases: readonly IncompatibleCollectorCase[] = [
+  {
+    schemaPart: "type",
+    register: (registry, name) => {
+      new Counter({ name, help: GET_TIMER_HELP, labelNames: GET_TIMER_LABELS, registers: [registry] });
+    },
+  },
+  {
+    schemaPart: "label names",
+    register: (registry, name) => {
+      new Histogram({
+        name,
+        help: GET_TIMER_HELP,
+        labelNames: ["use_case", "layer", "key_type"],
+        buckets: CONFIGURED_TIMER_BUCKETS,
+        registers: [registry],
+      });
+    },
+  },
+  {
+    schemaPart: "help text",
+    register: (registry, name) => {
+      new Histogram({
+        name,
+        help: "Incompatible help text.",
+        labelNames: GET_TIMER_LABELS,
+        buckets: CONFIGURED_TIMER_BUCKETS,
+        registers: [registry],
+      });
+    },
+  },
+  {
+    schemaPart: "histogram buckets",
+    register: (registry, name) => {
+      new Histogram({
+        name,
+        help: GET_TIMER_HELP,
+        labelNames: GET_TIMER_LABELS,
+        buckets: [0.1, 1],
+        registers: [registry],
+      });
+    },
+  },
+];
 
 describe("Prometheus metrics adapter", () => {
   it("keeps default DialCache construction detached from Prometheus", () => {
@@ -122,6 +176,21 @@ describe("Prometheus metrics adapter", () => {
       "dialcache_request_counter",
     );
   });
+
+  for (const { schemaPart, register } of incompatibleCollectorCases) {
+    it(`rejects an existing collector with incompatible ${schemaPart} before registering anything`, () => {
+      const registry = new Registry();
+      const prefix = "collision_";
+      const metricName = `${prefix}dialcache_get_timer`;
+      register(registry, metricName);
+
+      expect(() => new PrometheusDialCacheMetrics({ registry, prefix })).toThrowError(
+        `Prometheus collector "${metricName}" already exists with an incompatible schema. ` +
+          "Use a unique prefix or a separate Registry.",
+      );
+      expect(registry.getMetricsAsArray().map(({ name }) => name)).toEqual([metricName]);
+    });
+  }
 
   it("exports counters and histograms for requests, misses, fallbacks, gets, serialization, and size", async () => {
     const registry = new Registry();
