@@ -3,6 +3,7 @@ import {
   Histogram,
   Registry,
   register as defaultRegistry,
+  type CounterConfiguration,
   type OpenMetricsContentType,
 } from "prom-client";
 import { describe, expect, it } from "vitest";
@@ -217,6 +218,31 @@ describe("Prometheus metrics adapter", () => {
         "Use a unique prefix or a separate Registry.",
     );
     expect(registry.getMetricsAsArray().map(({ name }) => name)).toEqual([metricName]);
+  });
+
+  it("treats an explicitly undefined exemplar mode as disabled", async () => {
+    const registry = new Registry();
+    const prefix = "undefined_exemplar_";
+    const metricName = `${prefix}dialcache_request_counter`;
+    const config = {
+      name: metricName,
+      help: "Total DialCache cache-layer requests.",
+      labelNames: GET_TIMER_LABELS,
+      enableExemplars: undefined,
+      registers: [registry],
+    } as unknown as CounterConfiguration<(typeof GET_TIMER_LABELS)[number]>;
+    new Counter(config);
+    const metrics = new PrometheusDialCacheMetrics({ registry, prefix });
+
+    metrics.request({ useCase: "UndefinedExemplarMode", keyType: "user_id", layer: CacheLayer.LOCAL });
+
+    await expect(
+      sumMetric(registry, metricName, {
+        use_case: "UndefinedExemplarMode",
+        key_type: "user_id",
+        layer: "local",
+      }),
+    ).resolves.toBe(1);
   });
 
   it("exports counters and histograms for requests, misses, fallbacks, gets, serialization, and size", async () => {

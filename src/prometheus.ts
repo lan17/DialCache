@@ -226,7 +226,7 @@ function validateExistingCollectors(registry: PrometheusRegistry, configs: reado
       collector.name === config.name &&
       collector.help === config.help &&
       collector.type === config.type &&
-      collector.enableExemplars === false &&
+      collector.enableExemplars !== true &&
       arraysEqual(collector.labelNames, config.labelNames) &&
       (config.type === "counter" || arraysEqual(collector.buckets, config.buckets));
     if (!compatible) {
