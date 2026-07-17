@@ -41,6 +41,62 @@ describe("Prometheus metrics adapter", () => {
     expect(defaultRegistry.getSingleMetric(metricName)).toBeUndefined();
   });
 
+  it("preserves the public collector schema", async () => {
+    const registry = new Registry();
+    const metrics = new PrometheusDialCacheMetrics({ registry, prefix: "schema_" });
+    const labels = {
+      useCase: "PrometheusSchema",
+      keyType: "user_id",
+      layer: CacheLayer.LOCAL,
+    } as const;
+
+    metrics.request(labels);
+    metrics.miss(labels);
+    metrics.disabled({ ...labels, reason: "context" });
+    metrics.error({ ...labels, error: "Error", inFallback: false });
+    metrics.invalidation({ keyType: labels.keyType, layer: labels.layer });
+    metrics.coalesced?.({ useCase: labels.useCase, keyType: labels.keyType, scope: "process" });
+    metrics.observeGet(labels, 0.05);
+    metrics.observeFallback(labels, 0.05);
+    metrics.observeSerialization({ ...labels, operation: "dump" }, 0.05);
+    metrics.observeSerialization({ ...labels, operation: "load" }, 0.05);
+    metrics.observeSize(labels, 1_000);
+
+    // prom-client declares MetricType as a numeric enum, but this JSON API returns string type names.
+    const families = (await registry.getMetricsAsJSON()) as unknown as MetricFamily[];
+    expect(families.map(metricSchema).sort((left, right) => left.name.localeCompare(right.name))).toEqual([
+      counterSchema("schema_dialcache_coalesced_counter", ["use_case", "key_type", "scope"]),
+      counterSchema("schema_dialcache_disabled_counter", ["use_case", "key_type", "layer", "reason"]),
+      counterSchema("schema_dialcache_error_counter", [
+        "use_case",
+        "key_type",
+        "layer",
+        "error",
+        "in_fallback",
+      ]),
+      histogramSchema("schema_dialcache_fallback_timer", ["use_case", "key_type", "layer"], TIMER_BUCKETS),
+      histogramSchema("schema_dialcache_get_timer", ["use_case", "key_type", "layer"], TIMER_BUCKETS),
+      counterSchema("schema_dialcache_invalidation_counter", ["key_type", "layer"]),
+      counterSchema("schema_dialcache_miss_counter", ["use_case", "key_type", "layer"]),
+      counterSchema("schema_dialcache_request_counter", ["use_case", "key_type", "layer"]),
+      histogramSchema(
+        "schema_dialcache_serialization_timer",
+        ["use_case", "key_type", "layer", "operation"],
+        TIMER_BUCKETS,
+      ),
+      histogramSchema("schema_dialcache_size_histogram", ["use_case", "key_type", "layer"], SIZE_BUCKETS),
+    ]);
+
+    const serialization = families.find(({ name }) => name === "schema_dialcache_serialization_timer");
+    const serializationLabels = serialization?.values
+      .filter(({ metricName }) => metricName === `${serialization.name}_sum`)
+      .map(({ labels: sampleLabels }) => sampleLabels);
+    expect(serializationLabels).toEqual([
+      { use_case: labels.useCase, key_type: labels.keyType, layer: labels.layer, operation: "dump" },
+      { use_case: labels.useCase, key_type: labels.keyType, layer: labels.layer, operation: "load" },
+    ]);
+  });
+
   it("reuses existing collectors when multiple adapters share a registry", async () => {
     const registry = new Registry();
     const firstCache = new DialCache({ metrics: createPrometheusDialCacheMetrics({ registry }) });
@@ -186,6 +242,65 @@ describe("Prometheus metrics adapter", () => {
     ).resolves.toBe(1);
   });
 });
+
+const TIMER_BUCKETS = [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, "+Inf"];
+const SIZE_BUCKETS = [100, 1_000, 10_000, 100_000, 1_000_000, 10_000_000, "+Inf"];
+
+interface MetricValue {
+  readonly metricName?: string;
+  readonly labels: Record<string, string | number>;
+}
+
+interface MetricFamily {
+  readonly name: string;
+  readonly type: string;
+  readonly values: readonly MetricValue[];
+}
+
+interface MetricSchema {
+  readonly name: string;
+  readonly type: string;
+  readonly labelNames: readonly string[];
+  readonly buckets?: readonly unknown[];
+}
+
+function counterSchema(name: string, labelNames: readonly string[]): MetricSchema {
+  return { name, type: "counter", labelNames };
+}
+
+function histogramSchema(
+  name: string,
+  labelNames: readonly string[],
+  buckets: readonly (number | string)[],
+): MetricSchema {
+  return { name, type: "histogram", labelNames, buckets };
+}
+
+function metricSchema(metric: MetricFamily): MetricSchema {
+  const nonBucketSample = metric.values.find(({ metricName }) => metricName !== `${metric.name}_bucket`);
+  if (metric.type !== "histogram") {
+    return {
+      name: metric.name,
+      type: metric.type,
+      labelNames: Object.keys(nonBucketSample?.labels ?? {}),
+    };
+  }
+
+  const firstSeriesLabels = nonBucketSample?.labels ?? {};
+  const buckets = metric.values
+    .filter(
+      ({ metricName, labels }) =>
+        metricName === `${metric.name}_bucket` &&
+        Object.entries(firstSeriesLabels).every(([label, value]) => labels[label] === value),
+    )
+    .map(({ labels }) => labels.le);
+  return {
+    name: metric.name,
+    type: metric.type,
+    labelNames: Object.keys(firstSeriesLabels),
+    buckets,
+  };
+}
 
 async function sumMetric(
   registry: Registry,
