@@ -5,6 +5,7 @@ export { PrometheusDialCacheMetrics, createPrometheusDialCacheMetrics } from "./
 export type {
   CacheMetricLabels,
   CoalescedMetricLabels,
+  CoalescingScope,
   DisabledMetricLabels,
   DisabledReason,
   ErrorMetricLabels,

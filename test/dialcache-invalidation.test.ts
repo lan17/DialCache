@@ -410,4 +410,34 @@ describe("DialCache targeted invalidation watermarks", () => {
     expect(before).toEqual({ userId: "123", version: 1 });
     expect(after).toEqual({ userId: "123", version: 1 });
   });
+
+  it("keeps a memoized request-local value after remote invalidation and refreshes in the next request", async () => {
+    const redis = new FakeRedis();
+    const dialcache = new DialCache({ redis: { client: redis } });
+    let version = 1;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, version }), {
+      keyType: "user_id",
+      useCase: "RequestLocalInvalidationBoundary",
+      cacheKey: (userId) => userId,
+      trackForInvalidation: true,
+      defaultConfig: new DialCacheKeyConfig({
+        requestLocal: true,
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 100 },
+      }),
+    });
+
+    const sameRequest = await dialcache.enable(async () => {
+      const before = await getUser("123");
+      version = 2;
+      await dialcache.invalidateRemote("user_id", "123");
+      const after = await getUser("123");
+      return { before, after };
+    });
+    const nextRequest = await dialcache.enable(async () => await getUser("123"));
+
+    expect(sameRequest.before).toEqual({ userId: "123", version: 1 });
+    expect(sameRequest.after).toBe(sameRequest.before);
+    expect(nextRequest).toEqual({ userId: "123", version: 2 });
+  });
 });

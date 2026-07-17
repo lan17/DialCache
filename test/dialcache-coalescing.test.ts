@@ -30,9 +30,11 @@ class FailingReadRedis extends FakeRedis {
 
 function spyMetrics() {
   const coalesced = vi.fn();
+  const request = vi.fn();
+  const miss = vi.fn();
   const metrics: DialCacheMetricsAdapter = {
-    request: vi.fn(),
-    miss: vi.fn(),
+    request,
+    miss,
     disabled: vi.fn(),
     error: vi.fn(),
     invalidation: vi.fn(),
@@ -42,7 +44,7 @@ function spyMetrics() {
     observeSerialization: vi.fn(),
     observeSize: vi.fn(),
   };
-  return { metrics, coalesced };
+  return { metrics, coalesced, request, miss };
 }
 
 describe("DialCache request coalescing", () => {
@@ -77,7 +79,170 @@ describe("DialCache request coalescing", () => {
       { id: "1", calls: 1 },
     ]);
     expect(coalesced).toHaveBeenCalledTimes(2);
-    expect(coalesced).toHaveBeenCalledWith({ useCase: "CoalesceLocalMiss", keyType: "user_id" });
+    expect(coalesced).toHaveBeenCalledWith({ useCase: "CoalesceLocalMiss", keyType: "user_id", scope: "process" });
+  });
+
+  it("coalesces request-local-only work within one request and shares the resolved reference", async () => {
+    const gate = deferred<void>();
+    const { metrics, coalesced } = spyMetrics();
+    const dialcache = new DialCache({ metrics });
+    let calls = 0;
+    const getUser = dialcache.cached(async (id: string) => {
+      calls += 1;
+      await gate.promise;
+      return { id };
+    }, {
+      keyType: "user_id",
+      useCase: "CoalesceRequestLocal",
+      cacheKey: (id) => id,
+      defaultConfig: new DialCacheKeyConfig({ requestLocal: true }),
+    });
+
+    const inflight = dialcache.enable(async () => await Promise.all([getUser("1"), getUser("1"), getUser("1")]));
+    await tick();
+    gate.resolve();
+    const results = await inflight;
+
+    expect(calls).toBe(1);
+    expect(results[1]).toBe(results[0]);
+    expect(results[2]).toBe(results[0]);
+    expect(coalesced).toHaveBeenCalledTimes(2);
+    expect(coalesced).toHaveBeenCalledWith({
+      useCase: "CoalesceRequestLocal",
+      keyType: "user_id",
+      scope: "request_local",
+    });
+  });
+
+  it("does not coalesce request-local-only work across outer request scopes", async () => {
+    const gate = deferred<void>();
+    const { metrics, coalesced } = spyMetrics();
+    const dialcache = new DialCache({ metrics });
+    let calls = 0;
+    const getUser = dialcache.cached(async (id: string) => {
+      const call = ++calls;
+      await gate.promise;
+      return { id, call };
+    }, {
+      keyType: "user_id",
+      useCase: "IsolateRequestLocalFlights",
+      cacheKey: (id) => id,
+      defaultConfig: new DialCacheKeyConfig({ requestLocal: true }),
+    });
+
+    const inflight = Promise.all([
+      dialcache.enable(async () => await getUser("1")),
+      dialcache.enable(async () => await getUser("1")),
+    ]);
+    await tick();
+    gate.resolve();
+    const results = await inflight;
+
+    expect(calls).toBe(2);
+    expect(results).toEqual([
+      { id: "1", call: 1 },
+      { id: "1", call: 2 },
+    ]);
+    expect(coalesced).not.toHaveBeenCalled();
+  });
+
+  it("does not coalesce shared-layer work across DialCache instances", async () => {
+    const gate = deferred<void>();
+    const { metrics, coalesced } = spyMetrics();
+    const firstCache = new DialCache({ metrics });
+    const secondCache = new DialCache({ metrics });
+    let firstCalls = 0;
+    let secondCalls = 0;
+    const firstGetUser = firstCache.cached(async (id: string) => {
+      firstCalls += 1;
+      await gate.promise;
+      return { id, source: "first" };
+    }, {
+      keyType: "user_id",
+      useCase: "IsolateProcessFlightsByInstance",
+      cacheKey: (id) => id,
+      defaultConfig: DialCacheKeyConfig.enabled(60),
+    });
+    const secondGetUser = secondCache.cached(async (id: string) => {
+      secondCalls += 1;
+      await gate.promise;
+      return { id, source: "second" };
+    }, {
+      keyType: "user_id",
+      useCase: "IsolateProcessFlightsByInstance",
+      cacheKey: (id) => id,
+      defaultConfig: DialCacheKeyConfig.enabled(60),
+    });
+
+    const inflight = Promise.all([
+      firstCache.enable(async () => await firstGetUser("1")),
+      secondCache.enable(async () => await secondGetUser("1")),
+    ]);
+    await tick();
+
+    expect(firstCalls).toBe(1);
+    expect(secondCalls).toBe(1);
+
+    gate.resolve();
+    const results = await inflight;
+
+    expect(results).toEqual([
+      { id: "1", source: "first" },
+      { id: "1", source: "second" },
+    ]);
+    expect(coalesced).not.toHaveBeenCalled();
+  });
+
+  it("coalesces shared-layer work across requests only after each request-local miss", async () => {
+    const gate = deferred<void>();
+    const { metrics, coalesced, request, miss } = spyMetrics();
+    const dialcache = new DialCache({ metrics });
+    let calls = 0;
+    const getUser = dialcache.cached(async (id: string) => {
+      calls += 1;
+      await gate.promise;
+      return { id };
+    }, {
+      keyType: "user_id",
+      useCase: "RequestThenProcessCoalescing",
+      cacheKey: (id) => id,
+      defaultConfig: new DialCacheKeyConfig({
+        requestLocal: true,
+        ttlSec: { [CacheLayer.LOCAL]: 60 },
+        ramp: { [CacheLayer.LOCAL]: 100 },
+      }),
+    });
+
+    const inflight = Promise.all([
+      dialcache.enable(async () => await getUser("1")),
+      dialcache.enable(async () => await getUser("1")),
+    ]);
+    await tick();
+    gate.resolve();
+    const results = await inflight;
+
+    expect(calls).toBe(1);
+    expect(results[1]).toBe(results[0]);
+    expect(coalesced).toHaveBeenCalledTimes(1);
+    expect(coalesced).toHaveBeenCalledWith({
+      useCase: "RequestThenProcessCoalescing",
+      keyType: "user_id",
+      scope: "process",
+    });
+    expect(request).toHaveBeenCalledTimes(3);
+    expect(request).toHaveBeenCalledWith({
+      useCase: "RequestThenProcessCoalescing",
+      keyType: "user_id",
+      layer: "request_local",
+    });
+    expect(request.mock.calls.filter(([labels]) => labels.layer === "request_local")).toHaveLength(2);
+    expect(miss).toHaveBeenCalledTimes(3);
+    expect(miss).toHaveBeenCalledWith({
+      useCase: "RequestThenProcessCoalescing",
+      keyType: "user_id",
+      layer: "request_local",
+    });
+    expect(miss.mock.calls.filter(([labels]) => labels.layer === "request_local")).toHaveLength(2);
   });
 
   it("coalesces concurrent Redis misses when the remote layer is active", async () => {

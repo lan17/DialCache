@@ -6,6 +6,7 @@ import {
   DialCache,
   DialCacheKeyConfig,
   type CacheMetricLabels,
+  type CoalescedMetricLabels,
   type DisabledMetricLabels,
   type ErrorMetricLabels,
   type DialCacheMetricsAdapter,
@@ -35,6 +36,10 @@ class RecordingMetrics implements DialCacheMetricsAdapter {
 
   invalidation(labels: InvalidationMetricLabels): void {
     this.record("invalidation", labels);
+  }
+
+  coalesced(labels: CoalescedMetricLabels): void {
+    this.record("coalesced", labels);
   }
 
   observeGet(labels: CacheMetricLabels, seconds: number): void {
@@ -127,6 +132,32 @@ describe("DialCache observability metrics", () => {
     expect(events(metrics, "get", { useCase: "CustomMetricsAdapter", layer: CacheLayer.LOCAL })).toHaveLength(2);
   });
 
+  it("reports request-local cache activity and request-scoped coalescing with bounded labels", async () => {
+    const metrics = new RecordingMetrics();
+    const dialcache = new DialCache({ metrics });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "RequestLocalMetrics",
+      cacheKey: (userId) => userId,
+      defaultConfig: new DialCacheKeyConfig({ requestLocal: true }),
+    });
+
+    const values = await dialcache.enable(async () => {
+      const concurrent = await Promise.all([getUser("123"), getUser("123")]);
+      return [...concurrent, await getUser("123")];
+    });
+
+    expect(values[1]).toBe(values[0]);
+    expect(values[2]).toBe(values[0]);
+    expect(calls).toBe(1);
+    expect(events(metrics, "request", { useCase: "RequestLocalMetrics", layer: "request_local" })).toHaveLength(2);
+    expect(events(metrics, "miss", { useCase: "RequestLocalMetrics", layer: "request_local" })).toHaveLength(1);
+    expect(events(metrics, "get", { useCase: "RequestLocalMetrics", layer: "request_local" })).toHaveLength(2);
+    expect(events(metrics, "fallback", { useCase: "RequestLocalMetrics", layer: "request_local" })).toHaveLength(1);
+    expect(events(metrics, "coalesced", { useCase: "RequestLocalMetrics", scope: "request_local" })).toHaveLength(1);
+  });
+
   it("fails open when an injected metrics adapter throws", async () => {
     // Given a custom metrics adapter throws for every metric call.
     const throwingMetrics: DialCacheMetricsAdapter = {
@@ -156,6 +187,42 @@ describe("DialCache observability metrics", () => {
     // Then metrics failures do not break application fallback or cache behavior.
     expect(first).toEqual({ userId: "123", calls: 1 });
     expect(second).toEqual({ userId: "123", calls: 1 });
+  });
+
+  it("fails open when the coalesced metrics hook throws", async () => {
+    const metrics = new RecordingMetrics();
+    const coalesced = vi.spyOn(metrics, "coalesced").mockImplementation(() => {
+      throw new Error("metrics unavailable");
+    });
+    let releaseFallback: () => void = () => undefined;
+    const fallbackGate = new Promise<void>((resolve) => {
+      releaseFallback = resolve;
+    });
+    const dialcache = new DialCache({ metrics });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => {
+      calls += 1;
+      await fallbackGate;
+      return { userId, calls };
+    }, {
+      keyType: "user_id",
+      useCase: "ThrowingCoalescedMetricFailOpen",
+      cacheKey: (userId) => userId,
+      defaultConfig: localOnly(),
+    });
+
+    const inflight = dialcache.enable(async () => await Promise.all([getUser("123"), getUser("123")]));
+    await tick();
+
+    expect(calls).toBe(1);
+    expect(coalesced).toHaveBeenCalledTimes(1);
+
+    releaseFallback();
+
+    await expect(inflight).resolves.toEqual([
+      { userId: "123", calls: 1 },
+      { userId: "123", calls: 1 },
+    ]);
   });
 
   it("classifies disabled cache skips by reason", async () => {
@@ -316,6 +383,19 @@ describe("DialCache observability metrics", () => {
       cacheKey: (userId) => userId,
       defaultConfig: localOnly(),
     });
+    let releaseRequestLocalFallback: () => void = () => undefined;
+    const requestLocalFallbackGate = new Promise<void>((resolve) => {
+      releaseRequestLocalFallback = resolve;
+    });
+    const requestLocalCoalesced = dialcache.cached(async (userId: string) => {
+      await requestLocalFallbackGate;
+      return userId;
+    }, {
+      keyType: "user_id",
+      useCase: "PrometheusRequestLocalCoalescedMetric",
+      cacheKey: (userId) => userId,
+      defaultConfig: new DialCacheKeyConfig({ requestLocal: true }),
+    });
 
     // When each counter path emits once.
     await contextDisabled("123");
@@ -325,6 +405,12 @@ describe("DialCache observability metrics", () => {
     await tick();
     releaseFallback();
     await inflight;
+    const requestLocalInflight = dialcache.enable(async () =>
+      await Promise.all([requestLocalCoalesced("789"), requestLocalCoalesced("789")]),
+    );
+    await tick();
+    releaseRequestLocalFallback();
+    await requestLocalInflight;
 
     // Then the Prometheus registry exposes the documented counter families with their operational labels.
     expect(coalescedCalls).toBe(1);
@@ -340,7 +426,20 @@ describe("DialCache observability metrics", () => {
       }),
     ).resolves.toBe(1);
     await expect(sumMetric(registry, "test_dialcache_invalidation_counter", { key_type: "user_id", layer: "remote" })).resolves.toBe(1);
-    await expect(sumMetric(registry, "test_dialcache_coalesced_counter", { use_case: "PrometheusCoalescedMetric", key_type: "user_id" })).resolves.toBe(1);
+    await expect(
+      sumMetric(registry, "test_dialcache_coalesced_counter", {
+        use_case: "PrometheusCoalescedMetric",
+        key_type: "user_id",
+        scope: "process",
+      }),
+    ).resolves.toBe(1);
+    await expect(
+      sumMetric(registry, "test_dialcache_coalesced_counter", {
+        use_case: "PrometheusRequestLocalCoalescedMetric",
+        key_type: "user_id",
+        scope: "request_local",
+      }),
+    ).resolves.toBe(1);
   });
 });
 

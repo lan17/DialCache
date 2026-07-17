@@ -4,9 +4,12 @@ import { CacheLayer } from "./config.js";
 import type { DialCacheKey } from "./key.js";
 
 export const NO_CACHE_LAYER = "noop";
+export const REQUEST_LOCAL_CACHE_LAYER = "request_local";
 
 type NoCacheLayer = typeof NO_CACHE_LAYER;
-export type MetricLayer = CacheLayer | NoCacheLayer;
+type RequestLocalCacheLayer = typeof REQUEST_LOCAL_CACHE_LAYER;
+export type MetricLayer = CacheLayer | RequestLocalCacheLayer | NoCacheLayer;
+export type CoalescingScope = "request_local" | "process";
 export type DisabledReason = "context" | "missing_config" | "invalid_ttl" | "ramped_down" | "config_error";
 
 export interface CacheMetricLabels {
@@ -36,6 +39,7 @@ export interface InvalidationMetricLabels {
 export interface CoalescedMetricLabels {
   readonly useCase: string;
   readonly keyType: string;
+  readonly scope: CoalescingScope;
 }
 
 export interface DialCacheMetricsAdapter {
@@ -62,7 +66,7 @@ type DisabledLabels = CounterLabels | "reason";
 type ErrorLabels = CounterLabels | "error" | "in_fallback";
 type SerializationLabels = CounterLabels | "operation";
 type InvalidationLabels = "key_type" | "layer";
-type CoalescedLabels = "use_case" | "key_type";
+type CoalescedLabels = "use_case" | "key_type" | "scope";
 
 const TIMER_BUCKETS = [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
 const SIZE_BUCKETS = [100, 1_000, 10_000, 100_000, 1_000_000, 10_000_000];
@@ -110,8 +114,8 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
     });
     this.coalescedCounter = counter(registry, {
       name: `${prefix}dialcache_coalesced_counter`,
-      help: "DialCache requests coalesced onto an in-flight cache miss.",
-      labelNames: ["use_case", "key_type"] as const,
+      help: "DialCache requests coalesced onto in-flight work by sharing scope.",
+      labelNames: ["use_case", "key_type", "scope"] as const,
     });
     this.getTimer = histogram(registry, {
       name: `${prefix}dialcache_get_timer`,
@@ -164,7 +168,11 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
   }
 
   coalesced(labels: CoalescedMetricLabels): void {
-    this.coalescedCounter.inc({ use_case: labels.useCase, key_type: labels.keyType });
+    this.coalescedCounter.inc({
+      use_case: labels.useCase,
+      key_type: labels.keyType,
+      scope: labels.scope,
+    });
   }
 
   observeGet(labels: CacheMetricLabels, seconds: number): void {
