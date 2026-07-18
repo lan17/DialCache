@@ -25,6 +25,7 @@ const rootConsumer = `import {
   type DialCacheRedisClient,
   type InvalidationMetricLabels,
   type MetricErrorKind,
+  type RedisConfig,
   type Serializer,
 } from "dialcache";
 import { createNodeRedisDialCacheClient } from "dialcache/node-redis";
@@ -203,6 +204,9 @@ const configHasNamespace: "namespace" extends keyof DialCacheConfig ? true : fal
 const configHasNoUrnPrefix: "urnPrefix" extends keyof DialCacheConfig ? false : true = true;
 // @ts-expect-error urnPrefix was renamed to namespace.
 const legacyNamespaceConfig: DialCacheConfig = { urnPrefix: "consumer-cache" };
+const redisConfigHasNoKeyPrefix: "keyPrefix" extends keyof RedisConfig ? false : true = true;
+// @ts-expect-error keyPrefix was removed in favor of DialCacheConfig.namespace.
+const legacyKeyPrefixConfig: RedisConfig = { client: customRedisClient, keyPrefix: "legacy:" };
 type DialCacheRoot = typeof import("dialcache");
 const rootHasNoPrometheusFactory: "createPrometheusDialCacheMetrics" extends keyof DialCacheRoot ? false : true = true;
 const rootHasNoDatadogFactory: "createDatadogDialCacheMetrics" extends keyof DialCacheRoot ? false : true = true;
@@ -248,6 +252,8 @@ void configRejectsFalseMetrics;
 void configHasNamespace;
 void configHasNoUrnPrefix;
 void legacyNamespaceConfig;
+void redisConfigHasNoKeyPrefix;
+void legacyKeyPrefixConfig;
 void rootHasNoPrometheusFactory;
 void rootHasNoDatadogFactory;
 void datadogMetrics;

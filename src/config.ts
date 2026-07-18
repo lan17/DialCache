@@ -61,7 +61,7 @@ export interface DialCacheConfig {
   readonly cacheConfigProvider?: CacheConfigProvider;
   /**
    * Logical namespace used in cache keys, invalidation identity, ramp sampling,
-   * and metrics. Defaults to "urn".
+   * and metrics. Defaults to "urn". May not contain `{` or `}`.
    */
   readonly namespace?: string;
   readonly logger?: Logger;

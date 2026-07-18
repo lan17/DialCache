@@ -37,6 +37,7 @@ export class DialCacheKey {
     this.serializer = init.serializer ?? null;
     this.trackForInvalidation = init.trackForInvalidation ?? false;
     this.namespace = init.namespace ?? "urn";
+    assertValidNamespace(this.namespace);
 
     const rawPrefix = joinUrnComponents(this.namespace, this.keyType, this.id);
     this.prefix = this.trackForInvalidation ? redisClusterHashTag(invalidationPrefix(this.namespace, this.keyType, this.id)) : rawPrefix;
@@ -57,10 +58,16 @@ export function normalizeArgs(args: Record<string, string | number | boolean | b
 }
 
 export function invalidationPrefix(namespace: string, keyType: string, id: string): string {
-  assertRedisHashTagComponent("namespace", namespace);
+  assertValidNamespace(namespace);
   assertRedisHashTagComponent("keyType", keyType);
   assertRedisHashTagComponent("id", id);
   return joinUrnComponents(namespace, keyType, id);
+}
+
+export function assertValidNamespace(namespace: string): void {
+  if (namespace.includes("{") || namespace.includes("}")) {
+    throw new TypeError('DialCache namespace must not contain "{" or "}"');
+  }
 }
 
 export function redisClusterHashTag(value: string): string {

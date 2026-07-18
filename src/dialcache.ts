@@ -12,7 +12,7 @@ import {
 } from "./config.js";
 import { DialCacheContext, getOrCreateRequestLocalCache, type RequestLocalCache } from "./context.js";
 import { UseCaseIsAlreadyRegisteredError, UseCaseNameIsReservedError } from "./errors.js";
-import { DialCacheKey, normalizeArgs } from "./key.js";
+import { DialCacheKey, assertValidNamespace, normalizeArgs } from "./key.js";
 import {
   NO_CACHE_LAYER,
   REQUEST_LOCAL_CACHE_LAYER,
@@ -151,13 +151,16 @@ export class DialCache {
       throw new TypeError('DialCacheConfig.urnPrefix was renamed to "namespace"');
     }
 
+    const namespace = config.namespace ?? "urn";
+    assertValidNamespace(namespace);
+
     const localMaxSize = config.localMaxSize ?? DEFAULT_LOCAL_MAX_SIZE;
     if (!Number.isSafeInteger(localMaxSize) || localMaxSize < 0) {
       throw new RangeError("DialCache localMaxSize must be a nonnegative safe integer");
     }
 
     this.configProvider = config.cacheConfigProvider ?? defaultConfigProvider;
-    this.namespace = config.namespace ?? "urn";
+    this.namespace = namespace;
     this.logger = safeLogger(config.logger ?? defaultLogger);
     this.rampSampler = config.rampSampler ?? deterministicRampSampler;
     this.metrics = safeMetrics(config.metrics ?? null);

@@ -11,7 +11,6 @@ import { fetchKeyConfig, resolveLayerConfigResult, type ResolvedLayerConfig } fr
 export interface RedisConfig {
   readonly client?: DialCacheRedisClient;
   readonly createClient?: RedisClientFactory;
-  readonly keyPrefix?: string;
   readonly serializer?: Serializer<unknown>;
   readonly watermarkTtlSec?: number;
 }
@@ -29,7 +28,6 @@ const REDIS_FRAME_KEY_SUFFIX = ":dialcache-frame-v1";
 export class RedisCache {
   private readonly configProvider: CacheConfigProvider;
   private readonly rampSampler: CacheRampSampler;
-  private readonly keyPrefix: string;
   private readonly defaultSerializer: Serializer<unknown>;
   private readonly watermarkTtlMs: number;
   private readonly createClient: RedisClientFactory | null;
@@ -37,9 +35,12 @@ export class RedisCache {
   private clientPromise: Promise<DialCacheRedisClient> | null;
 
   constructor(options: RedisCacheOptions) {
+    if (Object.hasOwn(options.redis, "keyPrefix")) {
+      throw new TypeError("RedisConfig.keyPrefix was removed; use DialCacheConfig.namespace for cache identity");
+    }
+
     this.configProvider = options.configProvider;
     this.rampSampler = options.rampSampler;
-    this.keyPrefix = options.redis.keyPrefix ?? "";
     this.defaultSerializer = options.redis.serializer ?? defaultSerializer;
     const watermarkTtlSec = options.redis.watermarkTtlSec ?? DEFAULT_WATERMARK_TTL_SEC;
     if (!Number.isSafeInteger(watermarkTtlSec) || watermarkTtlSec <= 0) {
@@ -154,11 +155,11 @@ export class RedisCache {
   }
 
   redisKey(key: DialCacheKey): string {
-    return `${this.keyPrefix}${key.urn}${REDIS_FRAME_KEY_SUFFIX}`;
+    return `${key.urn}${REDIS_FRAME_KEY_SUFFIX}`;
   }
 
   redisWatermarkKey(namespace: string, keyType: string, id: string): string {
-    return `${this.keyPrefix}${redisClusterHashTag(invalidationPrefix(namespace, keyType, id))}#watermark`;
+    return `${redisClusterHashTag(invalidationPrefix(namespace, keyType, id))}#watermark`;
   }
 
   private redisWatermarkKeyFromKey(key: DialCacheKey): string {

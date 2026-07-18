@@ -115,7 +115,7 @@ describe("DialCache Lua protocol on Redis Cluster", () => {
     const scriptClient: DialCacheRedisClient = createNodeRedisDialCacheClient(activeCluster);
     const dialcache = new DialCache({
       namespace: "cluster-cache",
-      redis: { client: scriptClient, keyPrefix: "cluster:" },
+      redis: { client: scriptClient },
     });
     const ids = Array.from({ length: 30 }, (_, index) => `item-${index}`);
     let calls = 0;
@@ -141,7 +141,7 @@ describe("DialCache Lua protocol on Redis Cluster", () => {
     );
     const recoveryDialcache = new DialCache({
       namespace: "cluster-cache",
-      redis: { client: scriptClient, keyPrefix: "cluster:" },
+      redis: { client: scriptClient },
     });
     const recoverValue = recoveryDialcache.cached(async (id: string) => ({ id, calls: ++calls }), {
       keyType: "item_id",
@@ -168,7 +168,7 @@ describe("DialCache Lua protocol on Redis Cluster", () => {
     const scriptClient: DialCacheRedisClient = createNodeRedisDialCacheClient(cluster);
     const dialcache = new DialCache({
       namespace: "cluster-cache",
-      redis: { client: scriptClient, keyPrefix: "cluster:" },
+      redis: { client: scriptClient },
     });
     let version = 1;
     const getUser = dialcache.cached(async (id: string) => ({ id, version }), {

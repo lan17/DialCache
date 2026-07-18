@@ -317,8 +317,9 @@ describe("Datadog metrics adapter", () => {
       invalidate: async () => undefined,
     };
     const dialcache = new DialCache({
+      namespace: "private-cache",
       metrics,
-      redis: { client: redis, keyPrefix: "private-cache-prefix:" },
+      redis: { client: redis },
       logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
     });
     const load = dialcache.cached(async (id: string, filter: string) => ({ id, filter }), {
@@ -343,7 +344,7 @@ describe("Datadog metrics adapter", () => {
       name: "dialcache.error.count",
       value: 1,
       tags: {
-        cache_namespace: "urn",
+        cache_namespace: "private-cache",
         use_case: "DatadogBoundedTags",
         key_type: "user_id",
         layer: "remote",

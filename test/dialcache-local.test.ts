@@ -785,6 +785,15 @@ describe("DialCache local-only MVP", () => {
     );
   });
 
+  it.each(["bad{namespace", "bad}namespace"])("rejects namespace hash-tag braces in %s", (namespace) => {
+    const error = new TypeError('DialCache namespace must not contain "{" or "}"');
+
+    expect(() => new DialCache({ namespace })).toThrow(error);
+    expect(
+      () => new DialCacheKey({ namespace, keyType: "user_id", id: "123", useCase: "InvalidNamespace" }),
+    ).toThrow(error);
+  });
+
   it("round-trips values through the JSON serializer", async () => {
     // Given the default JSON serializer.
     const serializer = new JsonSerializer<{ id: string; enabled: boolean }>();

@@ -115,10 +115,7 @@ await redisClient.connect();
 
 const dialcache = new DialCache({
   namespace: "users-api",
-  redis: {
-    client: createNodeRedisDialCacheClient(redisClient),
-    keyPrefix: "dialcache:",
-  },
+  redis: { client: createNodeRedisDialCacheClient(redisClient) },
 });
 ```
 
@@ -137,7 +134,7 @@ const glideClient = await GlideClient.createClient({
 const redisClient = createValkeyGlideDialCacheClient(glideClient);
 const dialcache = new DialCache({
   namespace: "users-api",
-  redis: { client: redisClient, keyPrefix: "dialcache:" },
+  redis: { client: redisClient },
 });
 
 function shutdown(): void {
@@ -377,11 +374,11 @@ await dialcache.enable(() => searchPosts("u1", 2, "active"));
 ```ts
 const dialcache = new DialCache({
   namespace: "users-api",
-  redis: { client: redisClient, keyPrefix: "production:" },
+  redis: { client: redisClient },
 });
 ```
 
-That produces Redis keys beginning with `production:users-api:...`, or `production:{users-api:...}` for invalidation-tracked values. The logical `namespace` participates in request-local, process-local, Redis, coalescing, deterministic ramp, and invalidation identity. `redis.keyPrefix` is a separate Redis-only physical prefix prepended verbatim to the generated key; it is not the logical namespace and is not included in metrics.
+That produces Redis keys beginning with `users-api:...`, or `{users-api:...}` for invalidation-tracked values. `namespace` is DialCache's single cache-identity and key-partitioning setting: it participates in request-local, process-local, Redis, coalescing, deterministic ramp, invalidation, and metrics. It may not contain `{` or `}` because DialCache reserves those characters for Redis Cluster hash tags.
 
 - **`keyType` + `id` is the invalidation unit for tracked Redis entries.** `dialcache.invalidateRemote("user_id", "123", USER_INVALIDATION_BUFFER_MS)` writes one watermark for that user; any `trackForInvalidation` Redis entry with the same `keyType` and `id` is refreshed across all `args` variants when Redis is read. Existing request-local and process-local hits follow the limitation above, and untracked Redis entries do not consult the watermark. `useCase` identifies the individual cache (it's the metrics label and part of the stored key).
 - **`args` are part of the cache key** — different `args` produce different entries — but invalidation is by `id` only.
@@ -389,9 +386,9 @@ That produces Redis keys beginning with `production:users-api:...`, or `producti
 - **Non-key inputs** (for example a db handle) are simply parameters the `cacheKey` selector ignores. They still reach `fn` for non-coalesced executions, but concurrent same-key cache misses share the leader's execution, so do not ignore values like `AbortSignal`, auth context, locale, or other request-scoped inputs unless sharing one result is correct.
 - **Methods:** pass `obj.method.bind(obj)` (or `(...a) => obj.method(...a)`) — a bare `obj.method` reference loses `this`.
 
-### Migrating from `urnPrefix`
+### Migrating to `namespace`
 
-The public `urnPrefix` option and `DialCacheKey.urnPrefix` property were renamed to `namespace`. Replace the property name and keep the same value to preserve generated key bytes, invalidation watermarks, deterministic ramp cohorts, and cache behavior:
+The public `urnPrefix` option and `DialCacheKey.urnPrefix` property were renamed to `namespace`. For callers that did not configure `redis.keyPrefix`, replacing the property name while keeping the same value preserves generated key bytes, invalidation watermarks, deterministic ramp cohorts, and cache behavior:
 
 ```ts
 // Before
@@ -403,7 +400,9 @@ new DialCache({ namespace: "users-api", redis: { client: redisClient } });
 
 Callers that omitted `urnPrefix` can continue omitting `namespace`; both defaults are `"urn"`. TypeScript rejects the removed property. The `DialCache` constructor throws `DialCacheConfig.urnPrefix was renamed to "namespace"`, and direct `DialCacheKey` construction throws `DialCacheKeyInit.urnPrefix was renamed to "namespace"`, when an untyped or JavaScript caller still supplies it. These errors prevent a custom legacy value from silently falling back to `urn`.
 
-Changing the namespace value intentionally creates a cold-cache boundary across every layer. During a rolling deployment, old and new namespaces do not share entries or invalidation watermarks; expect fallback/refill load until the rollout converges, then allow old Redis keys to expire by TTL. `redis.keyPrefix` is unchanged by this migration.
+`redis.keyPrefix` was removed so `namespace` is the only public cache-partitioning control. TypeScript rejects the removed Redis option, and untyped or JavaScript construction throws `RedisConfig.keyPrefix was removed; use DialCacheConfig.namespace for cache identity`. Move any required application or environment separation into a stable namespace such as `production-users-api`.
+
+Changing the namespace value intentionally creates a cold-cache boundary across every layer. Removing a previous Redis key prefix also changes the remote key bytes even if the namespace value stays the same. During a rolling deployment, old and new keyspaces do not share Redis values or invalidation watermarks; provision for fallback/refill load until the rollout converges, then allow old Redis keys to expire by TTL.
 
 ## Cached-value ownership
 
