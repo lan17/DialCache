@@ -332,7 +332,14 @@ describe("DialCache targeted invalidation watermarks", () => {
     expect(redis.values.size).toBe(0);
     expect(metrics.events).toContainEqual({
       name: "error",
-      labels: { useCase: "WatermarkReadFailOpen", keyType: "user_id", layer: CacheLayer.REMOTE, error: "cache_read", inFallback: false },
+      labels: {
+        cacheNamespace: "urn",
+        useCase: "WatermarkReadFailOpen",
+        keyType: "user_id",
+        layer: CacheLayer.REMOTE,
+        error: "cache_read",
+        inFallback: false,
+      },
     });
   });
 
@@ -348,11 +355,18 @@ describe("DialCache targeted invalidation watermarks", () => {
     expect(logger.warn).toHaveBeenCalledWith("Error writing DialCache invalidation watermark", expect.any(Error));
     expect(metrics.events).toContainEqual({
       name: "invalidation",
-      labels: { keyType: "user_id", layer: CacheLayer.REMOTE },
+      labels: { cacheNamespace: "urn", keyType: "user_id", layer: CacheLayer.REMOTE },
     });
     expect(metrics.events).toContainEqual({
       name: "error",
-      labels: { useCase: "watermark", keyType: "user_id", layer: CacheLayer.REMOTE, error: "invalidation", inFallback: false },
+      labels: {
+        cacheNamespace: "urn",
+        useCase: "watermark",
+        keyType: "user_id",
+        layer: CacheLayer.REMOTE,
+        error: "invalidation",
+        inFallback: false,
+      },
     });
   });
 
@@ -370,7 +384,7 @@ describe("DialCache targeted invalidation watermarks", () => {
   it("constructs cluster-compatible tracked value and watermark keys", async () => {
     const redis = new FakeRedis();
     const dialcache = new DialCache({
-      urnPrefix: "urn:galileo:test",
+      namespace: "urn:galileo:test",
       redis: { client: redis, keyPrefix: "dialcache:" },
     });
     const getUser = dialcache.cached(async (userId: string, locale: string) => ({ userId, locale }), {

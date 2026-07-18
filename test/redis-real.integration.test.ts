@@ -369,6 +369,7 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
     expect(value).toEqual({ id: "bad", calls: 1 });
     expect(write).not.toHaveBeenCalled();
     expect(metrics.error).toHaveBeenCalledWith({
+      cacheNamespace: "urn",
       useCase: "RealMalformedEncoding",
       keyType: "user_id",
       layer: CacheLayer.REMOTE,

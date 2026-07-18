@@ -11,15 +11,19 @@ const workspace = await mkdtemp(join(tmpdir(), "dialcache-package-"));
 const rootConsumer = `import {
   CacheLayer,
   DialCache,
+  DialCacheKey,
   DialCacheKeyConfig,
   JsonSerializer,
+  type CacheMetricLabels,
   type CacheConfigProvider,
   type CachedOptions,
   type CoalescedMetricLabels,
   type CoalescingScope,
   type DialCacheConfig,
+  type DialCacheKeyInit,
   type DialCacheMetricsAdapter,
   type DialCacheRedisClient,
+  type InvalidationMetricLabels,
   type MetricErrorKind,
   type Serializer,
 } from "dialcache";
@@ -63,7 +67,7 @@ const datadogMetrics = createDatadogDialCacheMetrics(datadogOptions);
 const datadogClassAdapter = new DatadogDialCacheMetrics(datadogOptions);
 // @ts-expect-error The observation type is an explicit, required choice.
 const missingObservationType: DatadogMetricsOptions = { client: dogStatsDClient };
-const cache = new DialCache({ metrics });
+const cache = new DialCache({ namespace: "consumer-cache", metrics });
 const load = cache.cached(async (id: string) => id, {
   keyType: "id",
   useCase: "Load",
@@ -143,10 +147,32 @@ const structuralConfigProvider: CacheConfigProvider = () => ({
   ramp: { [CacheLayer.LOCAL]: 100 },
 });
 const requestLocalCoalescingLabels: CoalescedMetricLabels = {
+  cacheNamespace: "consumer-cache",
   useCase: "Load",
   keyType: "id",
   scope: "request_local",
 };
+const cacheMetricLabels: CacheMetricLabels = {
+  cacheNamespace: "consumer-cache",
+  useCase: "Load",
+  keyType: "id",
+  layer: CacheLayer.LOCAL,
+};
+const invalidationMetricLabels: InvalidationMetricLabels = {
+  cacheNamespace: "consumer-cache",
+  keyType: "id",
+  layer: CacheLayer.REMOTE,
+};
+const keyInit: DialCacheKeyInit = {
+  namespace: "consumer-cache",
+  keyType: "id",
+  id: "123",
+  useCase: "Load",
+};
+const keyInitHasNoUrnPrefix: "urnPrefix" extends keyof DialCacheKeyInit ? false : true = true;
+// @ts-expect-error DialCacheKeyInit.urnPrefix was renamed to namespace.
+const legacyKeyInit: DialCacheKeyInit = { keyType: "id", id: "123", useCase: "Load", urnPrefix: "consumer-cache" };
+const namespacedKey = new DialCacheKey(keyInit);
 const requestLocalCoalescingScope: CoalescingScope = "request_local";
 const boundedErrorKind: MetricErrorKind = "cache_read";
 const metricErrorKinds: Readonly<Record<MetricErrorKind, true>> = {
@@ -173,6 +199,10 @@ const clientHasNoFlushAll: "flushAll" extends keyof DialCacheRedisClient ? false
 const configHasNoMetricsRegistry: "metricsRegistry" extends keyof DialCacheConfig ? false : true = true;
 const configHasNoMetricsPrefix: "metricsPrefix" extends keyof DialCacheConfig ? false : true = true;
 const configRejectsFalseMetrics: false extends NonNullable<DialCacheConfig["metrics"]> ? false : true = true;
+const configHasNamespace: "namespace" extends keyof DialCacheConfig ? true : false = true;
+const configHasNoUrnPrefix: "urnPrefix" extends keyof DialCacheConfig ? false : true = true;
+// @ts-expect-error urnPrefix was renamed to namespace.
+const legacyNamespaceConfig: DialCacheConfig = { urnPrefix: "consumer-cache" };
 type DialCacheRoot = typeof import("dialcache");
 const rootHasNoPrometheusFactory: "createPrometheusDialCacheMetrics" extends keyof DialCacheRoot ? false : true = true;
 const rootHasNoDatadogFactory: "createDatadogDialCacheMetrics" extends keyof DialCacheRoot ? false : true = true;
@@ -189,6 +219,11 @@ void missingDateSerializer;
 void requestLocalConfig;
 void structuralConfigProvider;
 void requestLocalCoalescingLabels;
+void cacheMetricLabels;
+void invalidationMetricLabels;
+void keyInitHasNoUrnPrefix;
+void legacyKeyInit;
+void namespacedKey.namespace;
 void requestLocalCoalescingScope;
 void boundedErrorKind;
 void metricErrorKinds;
@@ -210,6 +245,9 @@ void clientHasNoFlushAll;
 void configHasNoMetricsRegistry;
 void configHasNoMetricsPrefix;
 void configRejectsFalseMetrics;
+void configHasNamespace;
+void configHasNoUrnPrefix;
+void legacyNamespaceConfig;
 void rootHasNoPrometheusFactory;
 void rootHasNoDatadogFactory;
 void datadogMetrics;

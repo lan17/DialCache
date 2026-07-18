@@ -139,7 +139,7 @@ export class DialCache {
   private readonly localCache: LocalCache;
   private readonly useCases = new Set<string>();
   private readonly configProvider: CacheConfigProvider;
-  private readonly urnPrefix: string;
+  private readonly namespace: string;
   private readonly logger: Logger;
   private readonly rampSampler: CacheRampSampler;
   private readonly redisCache: RedisCache | null;
@@ -147,13 +147,17 @@ export class DialCache {
   private readonly inFlight = new Map<string, Promise<unknown>>();
 
   constructor(config: DialCacheConfig = {}) {
+    if (Object.hasOwn(config, "urnPrefix")) {
+      throw new TypeError('DialCacheConfig.urnPrefix was renamed to "namespace"');
+    }
+
     const localMaxSize = config.localMaxSize ?? DEFAULT_LOCAL_MAX_SIZE;
     if (!Number.isSafeInteger(localMaxSize) || localMaxSize < 0) {
       throw new RangeError("DialCache localMaxSize must be a nonnegative safe integer");
     }
 
     this.configProvider = config.cacheConfigProvider ?? defaultConfigProvider;
-    this.urnPrefix = config.urnPrefix ?? "urn";
+    this.namespace = config.namespace ?? "urn";
     this.logger = safeLogger(config.logger ?? defaultLogger);
     this.rampSampler = config.rampSampler ?? deterministicRampSampler;
     this.metrics = safeMetrics(config.metrics ?? null);
@@ -199,7 +203,12 @@ export class DialCache {
     const run = async (...args: Parameters<Fn>): Promise<CachedValue<Fn>> => {
       // `fn`'s awaited result is the cached value by construction; the generic `Fn` erases it to `unknown`.
       const fallback = async (): Promise<CachedValue<Fn>> => (await fn(...args)) as CachedValue<Fn>;
-      const noLayerLabels = { useCase: options.useCase, keyType: options.keyType, layer: NO_CACHE_LAYER } as const;
+      const noLayerLabels = {
+        cacheNamespace: this.namespace,
+        useCase: options.useCase,
+        keyType: options.keyType,
+        layer: NO_CACHE_LAYER,
+      } as const;
 
       if (!this.isEnabled()) {
         this.metrics?.disabled({ ...noLayerLabels, reason: "context" });
@@ -282,12 +291,13 @@ export class DialCache {
       return;
     }
 
-    this.metrics?.invalidation({ keyType, layer: CacheLayer.REMOTE });
+    this.metrics?.invalidation({ cacheNamespace: this.namespace, keyType, layer: CacheLayer.REMOTE });
     try {
-      await this.redisCache.invalidate(keyType, String(id), futureBufferMs, this.urnPrefix);
+      await this.redisCache.invalidate(keyType, String(id), futureBufferMs, this.namespace);
     } catch (error) {
       this.logger.warn("Error writing DialCache invalidation watermark", error);
       this.metrics?.error({
+        cacheNamespace: this.namespace,
         useCase: "watermark",
         keyType,
         layer: CacheLayer.REMOTE,
@@ -536,7 +546,7 @@ export class DialCache {
       id: String(spec.id),
       useCase: options.useCase,
       args: normalizeArgs(spec.args ?? {}),
-      urnPrefix: this.urnPrefix,
+      namespace: this.namespace,
       defaultConfig: options.defaultConfig ?? null,
       serializer: (options.serializer as Serializer<unknown> | null | undefined) ?? null,
       trackForInvalidation: options.trackForInvalidation ?? false,
@@ -551,7 +561,12 @@ export class DialCache {
   ): Promise<T> {
     const existing = inFlight.get(key.urn);
     if (existing !== undefined) {
-      this.metrics?.coalesced?.({ useCase: key.useCase, keyType: key.keyType, scope });
+      this.metrics?.coalesced?.({
+        cacheNamespace: key.namespace,
+        useCase: key.useCase,
+        keyType: key.keyType,
+        scope,
+      });
       return existing as Promise<T>;
     }
 

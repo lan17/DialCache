@@ -492,6 +492,7 @@ describe("DialCache Redis TTL layer", () => {
     expect(second).toEqual({ userId: "123", calls: 2 });
     expect(redisClient.write).not.toHaveBeenCalled();
     expect(metrics.error).toHaveBeenCalledWith({
+      cacheNamespace: "urn",
       useCase: "RedisBadPayloadEncoding",
       keyType: "user_id",
       layer: CacheLayer.REMOTE,
@@ -538,6 +539,7 @@ describe("DialCache Redis TTL layer", () => {
     expect(calls).toBe(1);
     expect(redis.getCalls).toBe(1);
     expect(metrics.error).toHaveBeenCalledWith({
+      cacheNamespace: "urn",
       useCase: "RedisFakeBadPayloadEncoding",
       keyType: "user_id",
       layer: CacheLayer.REMOTE,

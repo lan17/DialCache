@@ -144,10 +144,10 @@ export class RedisCache {
     }
   }
 
-  async invalidate(keyType: string, id: string, futureBufferMs = 0, urnPrefix = "urn"): Promise<void> {
+  async invalidate(keyType: string, id: string, futureBufferMs = 0, namespace = "urn"): Promise<void> {
     const client = await this.resolveClient();
     await client.invalidate({
-      watermarkKey: this.redisWatermarkKey(urnPrefix, keyType, id),
+      watermarkKey: this.redisWatermarkKey(namespace, keyType, id),
       futureBufferMs,
       watermarkTtlFloorMs: this.watermarkTtlMs,
     });
@@ -157,12 +157,12 @@ export class RedisCache {
     return `${this.keyPrefix}${key.urn}${REDIS_FRAME_KEY_SUFFIX}`;
   }
 
-  redisWatermarkKey(urnPrefix: string, keyType: string, id: string): string {
-    return `${this.keyPrefix}${redisClusterHashTag(invalidationPrefix(urnPrefix, keyType, id))}#watermark`;
+  redisWatermarkKey(namespace: string, keyType: string, id: string): string {
+    return `${this.keyPrefix}${redisClusterHashTag(invalidationPrefix(namespace, keyType, id))}#watermark`;
   }
 
   private redisWatermarkKeyFromKey(key: DialCacheKey): string {
-    return this.redisWatermarkKey(key.urnPrefix, key.keyType, key.id);
+    return this.redisWatermarkKey(key.namespace, key.keyType, key.id);
   }
 
   private async resolveClient(): Promise<DialCacheRedisClient> {
