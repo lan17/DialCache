@@ -1,5 +1,7 @@
 import type { Awaitable } from "./config.js";
 
+const redisProtocolErrorBrand = Symbol.for("dialcache.DialCacheRedisProtocolError");
+
 export class DialCacheRedisPayloadError extends Error {
   constructor(message: string) {
     super(message);
@@ -11,6 +13,24 @@ export class DialCacheRedisPayloadEncodingError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "DialCacheRedisPayloadEncodingError";
+  }
+}
+
+export class DialCacheRedisProtocolError extends Error {
+  static [Symbol.hasInstance](value: unknown): boolean {
+    if (this !== DialCacheRedisProtocolError) {
+      return Function.prototype[Symbol.hasInstance].call(this, value);
+    }
+    return typeof value === "object"
+      && value !== null
+      && Object.getOwnPropertyDescriptor(value, redisProtocolErrorBrand)?.value === true;
+  }
+
+  constructor(message: string) {
+    super(message);
+    this.name = "DialCacheRedisProtocolError";
+    // CJS adapter subpaths are separate bundles; a global symbol preserves root-export instanceof checks.
+    Object.defineProperty(this, redisProtocolErrorBrand, { value: true });
   }
 }
 
