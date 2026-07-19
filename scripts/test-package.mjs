@@ -14,18 +14,21 @@ const rootConsumer = `import {
   DialCacheKey,
   DialCacheKeyConfig,
   DialCacheRedisProtocolError,
+  FallbackTimeoutError,
   JsonSerializer,
   type CacheMetricLabels,
   type CacheConfigProvider,
   type CachedOptions,
   type CoalescedMetricLabels,
   type CoalescingScope,
+  type CoalescingState,
   type DialCacheConfig,
   type DialCacheKeyInit,
   type DialCacheMetricsAdapter,
   type DialCacheRedisClient,
   type InvalidationMetricLabels,
   type MetricErrorKind,
+  type ProcessCoalescingState,
   type RedisConfig,
   type Serializer,
 } from "dialcache";
@@ -71,11 +74,21 @@ const datadogClassAdapter = new DatadogDialCacheMetrics(datadogOptions);
 const missingObservationType: DatadogMetricsOptions = { client: dogStatsDClient };
 const cache = new DialCache({ namespace: "consumer-cache", metrics });
 const redisProtocolError = new DialCacheRedisProtocolError("Invalid DialCache Redis write reply");
+const fallbackTimeoutError = new FallbackTimeoutError("Load", 1_000);
+const coalescingState: CoalescingState = cache.getCoalescingState();
+const processCoalescingState: ProcessCoalescingState = coalescingState.process;
 const load = cache.cached(async (id: string) => id, {
   keyType: "id",
   useCase: "Load",
   cacheKey: (id) => id,
+  fallbackTimeoutMs: 1_000,
   defaultConfig: DialCacheKeyConfig.enabled(60),
+});
+const loadWithoutFallbackDeadline = cache.cached(async (id: string) => id, {
+  keyType: "id",
+  useCase: "LoadWithoutFallbackDeadline",
+  cacheKey: (id) => id,
+  fallbackTimeoutMs: null,
 });
 
 interface JsonCompatibleRecord {
@@ -223,6 +236,7 @@ const rootHasNoPrometheusFactory: "createPrometheusDialCacheMetrics" extends key
 const rootHasNoDatadogFactory: "createDatadogDialCacheMetrics" extends keyof DialCacheRoot ? false : true = true;
 
 void load;
+void loadWithoutFallbackDeadline;
 void loadJsonRecord;
 void loadEmptyObject;
 void loadUndefined;
@@ -240,6 +254,9 @@ void keyInitHasNoUrnPrefix;
 void legacyKeyInit;
 void namespacedKey.namespace;
 void redisProtocolError.name;
+void fallbackTimeoutError.timeoutMs;
+void coalescingState.process;
+void processCoalescingState.activeLeaders;
 void requestLocalCoalescingScope;
 void boundedErrorKind;
 void metricErrorKinds;
@@ -381,6 +398,15 @@ try {
 const nodeRedis = await import("dialcache/node-redis");
 await import("dialcache/datadog");
 await import("dialcache/redis-protocol");
+const fallbackTimeoutError = new root.FallbackTimeoutError("PackageRuntime", 1000);
+if (!(fallbackTimeoutError instanceof root.DialCacheError) || fallbackTimeoutError.timeoutMs !== 1000) {
+  throw new Error("The root ESM fallback-timeout error export is invalid");
+}
+const coalescingState = new root.DialCache().getCoalescingState();
+const idleCoalescingState = { process: { activeLeaders: 0, activeFollowers: 0, oldestLeaderAgeMs: null } };
+if (JSON.stringify(coalescingState) !== JSON.stringify(idleCoalescingState)) {
+  throw new Error("The root ESM coalescing snapshot export is invalid");
+}
 try {
   nodeRedis.dialcacheRedisScripts.dialcacheWrite.transformReply(2);
   throw new Error("Expected an invalid node-redis script reply to fail");
@@ -400,6 +426,15 @@ try {
 const nodeRedis = require("dialcache/node-redis");
 require("dialcache/datadog");
 require("dialcache/redis-protocol");
+const fallbackTimeoutError = new root.FallbackTimeoutError("PackageRuntime", 1000);
+if (!(fallbackTimeoutError instanceof root.DialCacheError) || fallbackTimeoutError.timeoutMs !== 1000) {
+  throw new Error("The root CommonJS fallback-timeout error export is invalid");
+}
+const coalescingState = new root.DialCache().getCoalescingState();
+const idleCoalescingState = { process: { activeLeaders: 0, activeFollowers: 0, oldestLeaderAgeMs: null } };
+if (JSON.stringify(coalescingState) !== JSON.stringify(idleCoalescingState)) {
+  throw new Error("The root CommonJS coalescing snapshot export is invalid");
+}
 try {
   nodeRedis.dialcacheRedisScripts.dialcacheWrite.transformReply(2);
   throw new Error("Expected an invalid node-redis script reply to fail");

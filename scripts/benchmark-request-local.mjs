@@ -122,12 +122,21 @@ async function benchmarkProcessCoalescing(fanout) {
   );
   await started.promise;
   await nextTurn();
+  const activeState = dialcache.getCoalescingState().process;
+  assert.equal(activeState.activeLeaders, 1);
+  assert.equal(activeState.activeFollowers, fanout - 1);
+  assert.equal(typeof activeState.oldestLeaderAgeMs, "number");
   gate.resolve();
   const values = await valuesPromise;
   const elapsedMs = performance.now() - start;
 
   assert.deepEqual(new Set(values), new Set(["shared"]));
   assert.equal(fallbackCalls, 1, "process coalescing should execute the fallback once across enabled scopes");
+  assert.deepEqual(dialcache.getCoalescingState().process, {
+    activeLeaders: 0,
+    activeFollowers: 0,
+    oldestLeaderAgeMs: null,
+  });
   return { scenario: "process coalescing", operations: fanout, elapsedMs, fallbackCalls };
 }
 
