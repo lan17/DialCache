@@ -24,6 +24,7 @@ const rootConsumer = `import {
   type DialCacheKeyInit,
   type DialCacheMetricsAdapter,
   type DialCacheRedisClient,
+  type DisabledReason,
   type InvalidationMetricLabels,
   type MetricErrorKind,
   type RedisConfig,
@@ -178,6 +179,15 @@ const legacyKeyInit: DialCacheKeyInit = { keyType: "id", id: "123", useCase: "Lo
 const namespacedKey = new DialCacheKey(keyInit);
 const requestLocalCoalescingScope: CoalescingScope = "request_local";
 const boundedErrorKind: MetricErrorKind = "cache_read";
+const disabledReasons: Readonly<Record<DisabledReason, true>> = {
+  context: true,
+  policy_disabled: true,
+  invalid_ttl: true,
+  ramped_down: true,
+  config_error: true,
+};
+// @ts-expect-error Missing configuration now means the documented disabled policy, not a separate reason.
+const legacyMissingConfigReason: DisabledReason = "missing_config";
 const metricErrorKinds: Readonly<Record<MetricErrorKind, true>> = {
   key_construction: true,
   config_resolution: true,
@@ -242,6 +252,8 @@ void namespacedKey.namespace;
 void redisProtocolError.name;
 void requestLocalCoalescingScope;
 void boundedErrorKind;
+void disabledReasons;
+void legacyMissingConfigReason;
 void metricErrorKinds;
 void unboundedErrorKind;
 void createNodeRedisDialCacheClient;
@@ -388,6 +400,25 @@ try {
   if (!(error instanceof root.DialCacheRedisProtocolError)) {
     throw new Error("The node-redis protocol error does not match the root ESM export");
   }
+}
+let calls = 0;
+const overlayCache = new root.DialCache({
+  cacheConfigProvider: () => new root.DialCacheKeyConfig({
+    ramp: { [root.CacheLayer.LOCAL]: 100 },
+  }),
+});
+const load = overlayCache.cached(async (id) => ({ id, calls: ++calls }), {
+  keyType: "id",
+  useCase: "PackedRuntimeOverlay",
+  cacheKey: (id) => id,
+  defaultConfig: new root.DialCacheKeyConfig({
+    ttlSec: { [root.CacheLayer.LOCAL]: 60 },
+  }),
+});
+const first = await overlayCache.enable(() => load("123"));
+const second = await overlayCache.enable(() => load("123"));
+if (calls !== 1 || second !== first) {
+  throw new Error("The packed ESM runtime did not inherit the default local TTL through a sparse overlay");
 }`,
     ],
     { cwd: workspace },
@@ -407,7 +438,31 @@ try {
   if (!(error instanceof root.DialCacheRedisProtocolError)) {
     throw new Error("The node-redis protocol error does not match the root CommonJS export");
   }
-}`,
+}
+void (async () => {
+  let calls = 0;
+  const overlayCache = new root.DialCache({
+    cacheConfigProvider: () => new root.DialCacheKeyConfig({
+      ramp: { [root.CacheLayer.LOCAL]: 100 },
+    }),
+  });
+  const load = overlayCache.cached(async (id) => ({ id, calls: ++calls }), {
+    keyType: "id",
+    useCase: "PackedRuntimeOverlay",
+    cacheKey: (id) => id,
+    defaultConfig: new root.DialCacheKeyConfig({
+      ttlSec: { [root.CacheLayer.LOCAL]: 60 },
+    }),
+  });
+  const first = await overlayCache.enable(() => load("123"));
+  const second = await overlayCache.enable(() => load("123"));
+  if (calls !== 1 || second !== first) {
+    throw new Error("The packed CommonJS runtime did not inherit the default local TTL through a sparse overlay");
+  }
+})().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});`,
     ],
     { cwd: workspace },
   );

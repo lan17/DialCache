@@ -17,6 +17,7 @@ export class UseCaseNameIsReservedError extends DialCacheError {
   }
 }
 
+/** @deprecated Missing policy now resolves to the disabled baseline and does not throw. */
 export class MissingKeyConfigError extends DialCacheError {
   constructor(useCase: string) {
     super(`Missing key config for use case: ${useCase}`);

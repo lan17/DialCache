@@ -183,8 +183,8 @@ describe("DialCache Redis TTL layer", () => {
       useCase: "RedisFailOpen",
       cacheKey: (userId) => userId,
       defaultConfig: new DialCacheKeyConfig({
-        ttlSec: { [CacheLayer.LOCAL]: 0, [CacheLayer.REMOTE]: 60 },
-        ramp: { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 100 },
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 100 },
       }),
     });
 
@@ -354,8 +354,8 @@ describe("DialCache Redis TTL layer", () => {
       cacheKey: (userId) => userId,
       trackForInvalidation: true,
       defaultConfig: new DialCacheKeyConfig({
-        ttlSec: { [CacheLayer.LOCAL]: 0, [CacheLayer.REMOTE]: 60 },
-        ramp: { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 100 },
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 100 },
       }),
       serializer,
     });
@@ -435,8 +435,8 @@ describe("DialCache Redis TTL layer", () => {
       cacheKey: (userId) => userId,
       trackForInvalidation: true,
       defaultConfig: new DialCacheKeyConfig({
-        ttlSec: { [CacheLayer.LOCAL]: 0, [CacheLayer.REMOTE]: 60 },
-        ramp: { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 100 },
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 100 },
       }),
     });
 
@@ -517,10 +517,7 @@ describe("DialCache Redis TTL layer", () => {
       keyType: "user_id",
       useCase: "RedisMissingRemoteTtl",
       cacheKey: (userId) => userId,
-      defaultConfig: new DialCacheKeyConfig({
-        ttlSec: { [CacheLayer.LOCAL]: 0 },
-        ramp: { [CacheLayer.LOCAL]: 100 },
-      }),
+      defaultConfig: new DialCacheKeyConfig({}),
     });
 
     // When a cache read is attempted.

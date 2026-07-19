@@ -75,13 +75,14 @@ const remoteOnly = () =>
   });
 
 const observationMetricTypes: readonly DatadogObservationMetricType[] = ["histogram", "distribution"];
-const disabledReasons: readonly DisabledReason[] = [
-  "context",
-  "missing_config",
-  "invalid_ttl",
-  "ramped_down",
-  "config_error",
-];
+const DISABLED_REASONS: Readonly<Record<DisabledReason, true>> = {
+  context: true,
+  policy_disabled: true,
+  invalid_ttl: true,
+  ramped_down: true,
+  config_error: true,
+};
+const disabledReasons = Object.keys(DISABLED_REASONS) as DisabledReason[];
 const errorKinds: readonly MetricErrorKind[] = [
   "key_construction",
   "config_resolution",

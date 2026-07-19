@@ -8,7 +8,8 @@ type NoCacheLayer = typeof NO_CACHE_LAYER;
 type RequestLocalCacheLayer = typeof REQUEST_LOCAL_CACHE_LAYER;
 export type MetricLayer = CacheLayer | RequestLocalCacheLayer | NoCacheLayer;
 export type CoalescingScope = "request_local" | "process";
-export type DisabledReason = "context" | "missing_config" | "invalid_ttl" | "ramped_down" | "config_error";
+/** Bounded reasons for skipping cache work; policy_disabled means a shared layer has no effective TTL. */
+export type DisabledReason = "context" | "policy_disabled" | "invalid_ttl" | "ramped_down" | "config_error";
 /** Stable failure sites used instead of backend- or application-defined error names. */
 export type MetricErrorKind =
   | "key_construction"

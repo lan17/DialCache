@@ -66,7 +66,7 @@ const getUser = dialcache.cached(
 
 `requestLocal` is a runtime boolean rather than a TTL/ramp-controlled `CacheLayer`. The `cacheConfigProvider` can turn it on or off for each invocation. `DialCacheKeyConfig.enabled(ttlSec)` continues to enable only process-local and Redis caching, so request-local caching must be selected explicitly.
 
-DialCache resolves the runtime config once per enabled invocation and uses it for the entire lookup. When `requestLocal` is missing or false, the invocation skips request-local lookup and storage without deleting an entry already memoized in the scope. A later invocation that enables request-local caching can reuse that entry.
+DialCache resolves the runtime config once per enabled invocation and uses it for the entire lookup. When the effective `requestLocal` value is false, the invocation skips request-local lookup and storage without deleting an entry already memoized in the scope. A later invocation that enables request-local caching can reuse that entry.
 
 The outermost `enable()` call owns the request-local lifetime, and nested `enable()` calls reuse that scope. Request-local state is allocated lazily, only when an invocation enables the layer, so scopes that use only process-local or Redis caching do not allocate it.
 
@@ -167,7 +167,7 @@ request-local cache -> process-local cache -> Redis cache -> fallback function
 - Process-local misses try Redis and populate the process-local cache on a Redis hit.
 - Redis misses call the fallback and write both Redis and the process-local cache.
 - Redis cache read/write failures are logged, counted in metrics, and fail open; fallback results still return when fallback succeeds. `invalidateRemote` logs/counts Redis failures and rethrows them so callers do not assume invalidation succeeded.
-- Missing process-local/Redis TTL or ramp config disables that layer, records a disabled reason, and falls through to the next layer/fallback.
+- A missing effective process-local/Redis TTL disables that layer by policy; a configured TTL with no ramp defaults to 100%. Disabled layers fall through to the next layer or fallback.
 
 Node-redis computes each script's SHA, uses `EVALSHA`, and retries with `EVAL` after `NOSCRIPT`. Its cluster client routes scripts by their first key and performs that fallback on the selected shard. The GLIDE adapter uses GLIDE's native `Script` lifecycle and byte decoder; GLIDE routes scripts from their declared keys. Tracked reads are deliberately routed to primaries so a lagging replica cannot hide an invalidation watermark.
 
@@ -273,7 +273,19 @@ Targeted invalidation is remote-only and enforced by Redis watermarks. `invalida
 
 ## Runtime config and ramp controls
 
-Every cached function can provide a per-use-case `defaultConfig`; a `cacheConfigProvider` can override it at runtime. If the provider returns `null`, DialCache falls back to the cached function's `defaultConfig`. If neither exists, or a layer's TTL/ramp is missing or disabled, only that layer is skipped.
+Every cached function can provide an optional per-use-case `defaultConfig`. It is the baseline policy, and the `cacheConfigProvider` result is a sparse field-level overlay on that baseline. Precedence is: runtime field, then `defaultConfig` field, then DialCache's disabled baseline.
+
+The disabled baseline sets `requestLocal` to false and leaves the process-local and Redis TTLs unset. A shared layer with no effective TTL is disabled by policy. When a shared layer has an effective TTL but no effective ramp, its ramp defaults to 100%.
+
+`DialCacheKeyConfig` preserves an omitted `requestLocal` as `undefined` so the overlay can distinguish omission from an explicit `false`; the effective value still defaults to false after resolution.
+
+A provider result of `null` (or defensive `undefined`) applies no overrides. An empty `DialCacheKeyConfig` and omitted runtime fields also inherit the baseline. Use explicit values to override inherited policy: `requestLocal: false` disables request-local caching and a layer ramp of `0` disables that shared layer.
+
+DialCache validates `defaultConfig` when `cached()` registers the definition: TTLs must be positive safe integers, ramps must be finite percentages from 0 to 100, layer maps must be objects, and `requestLocal` must be a boolean when present. Invalid defaults are rejected immediately.
+
+Registration captures an immutable internal snapshot of `defaultConfig`; mutating the supplied config or its maps later does not change the use case's baseline. Runtime policy changes belong in the provider's returned overlay.
+
+Runtime TTL and ramp leaves are used as supplied instead of falling back to valid default leaves. An invalid TTL disables that layer with `invalid_ttl`; a non-finite or nonnumeric ramp disables it with `ramped_down`; finite runtime ramps retain the existing defensive clamp to 0–100. Other layers can still run. A malformed runtime config object, layer-map shape, or `requestLocal` value fails config resolution for the invocation, records `config_error`, and executes the fallback uncached.
 
 `cacheConfigProvider` is called for every enabled cached-function invocation before DialCache performs any cache lookup. Keep it cheap, cache any remote/config-store reads inside the provider, and avoid work that would erase the benefit of a cache hit.
 
@@ -284,17 +296,40 @@ const dialcache = new DialCache({
   cacheConfigProvider: async (key) => {
     if (key.useCase === "GetUser") {
       return new DialCacheKeyConfig({
-        ttlSec: { [CacheLayer.LOCAL]: 30, [CacheLayer.REMOTE]: 300 },
-        ramp: { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 25 },
+        // Sparse override: inherit both TTLs and the local ramp from defaultConfig.
+        ramp: { [CacheLayer.REMOTE]: 25 },
       });
     }
-    return null; // use the cached function's defaultConfig
+    return null; // apply no overrides; use the cached function's baseline
   },
   rampSampler: ({ key, layer }) => deterministicPercentFor(`${key.urn}:${layer}`),
 });
+
+const getUser = dialcache.cached((userId: string) => db.fetchUser(userId), {
+  keyType: "user_id",
+  useCase: "GetUser",
+  cacheKey: (userId) => userId,
+  defaultConfig: new DialCacheKeyConfig({
+    // Omitted ramps default to 100% because these layers have TTLs.
+    ttlSec: { [CacheLayer.LOCAL]: 30, [CacheLayer.REMOTE]: 300 },
+  }),
+});
 ```
 
-`ramp` values are percentages from 0 to 100. `0` disables the layer, `100` enables it, and intermediate values use `rampSampler`; the default sampler is deterministic by cache key and layer, so the same key is consistently sampled in or out of a partial rollout. Provider errors fail open and execute the fallback function.
+`ramp` values are percentages from 0 to 100. `0` disables the layer, `100` enables it, and intermediate values use `rampSampler`; the default sampler is deterministic by cache key and layer, so the same key is consistently sampled in or out of a partial rollout. DialCache fetches and resolves one config snapshot per enabled invocation. Provider errors do not activate defaults: they fail open, record `config_error`, and execute the fallback function uncached.
+
+Before this overlay behavior, a non-null provider result replaced the entire `defaultConfig`, so omitted fields could disable inherited layers. To keep disabling an inherited policy, migrate those provider results to explicit `requestLocal: false` or per-layer `ramp: 0` values.
+
+```ts
+// Old omission-based kill switch: now a no-op overlay that inherits the baseline.
+new DialCacheKeyConfig({});
+
+// Explicitly disable every inherited cache layer.
+new DialCacheKeyConfig({
+  requestLocal: false,
+  ramp: { [CacheLayer.LOCAL]: 0, [CacheLayer.REMOTE]: 0 },
+});
+```
 
 ## Request coalescing
 
@@ -452,7 +487,7 @@ The Prometheus adapter emits:
 | --- | --- | --- | --- |
 | `dialcache_request_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache-layer requests that reached an enabled layer |
 | `dialcache_miss_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache misses |
-| `dialcache_disabled_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer`, `reason` | Cache skips (`context`, `missing_config`, `invalid_ttl`, `ramped_down`, `config_error`) |
+| `dialcache_disabled_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer`, `reason` | Cache skips (`context`, `policy_disabled`, `invalid_ttl`, `ramped_down`, `config_error`) |
 | `dialcache_error_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer`, `error`, `in_fallback` | Cache/fallback errors classified by a bounded failure site |
 | `dialcache_invalidation_counter` | Counter | `cache_namespace`, `key_type`, `layer` | Invalidation calls for the layers touched today |
 | `dialcache_coalesced_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `scope` | Coalesced requests split by `request_local` or `process` scope |
@@ -460,6 +495,10 @@ The Prometheus adapter emits:
 | `dialcache_fallback_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Time spent in the underlying function |
 | `dialcache_serialization_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer`, `operation` | Redis serializer dump/load latency |
 | `dialcache_size_histogram` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Serialized Redis payload size in bytes |
+
+`policy_disabled` means that a process-local or Redis layer has no effective TTL after runtime overlays are applied. It is an intentional policy outcome, including the default when `defaultConfig` is omitted, rather than a configuration-loading failure.
+
+Dashboards and alerts that match `reason="missing_config"` must migrate to `reason="policy_disabled"`; `missing_config` is no longer emitted or part of the public `DisabledReason` type.
 
 Every metric carries `cache_namespace`, including disabled-context, key-construction, coalescing, and invalidation paths that do not have a constructed key. Its value is `DialCacheConfig.namespace`, defaulting to `urn`. The `layer` label is `request_local`, `local` (process-local), or `remote`. Disabled-context, key-construction, and config-provider failures use `noop` because no cache layer was reached. The bounded `scope` label on `dialcache_coalesced_counter` distinguishes request-local from instance-scoped single-flight work. `scope="process"` coordinates calls only within one `DialCache` instance; separate instances in the same process do not share in-flight state.
 
@@ -569,10 +608,10 @@ Included:
 - JSON and custom serializer support for Redis values
 - Duplicate and reserved use-case validation
 - Fail-open behavior for key/config/cache read-write errors; explicit invalidation mutations surface failures
-- Runtime config provider with fallback to cached-function `defaultConfig`
+- Sparse runtime config overlays on optional cached-function `defaultConfig` baselines
 - Per-layer TTL and ramp controls
 - Deterministic default ramp sampler with injectable override hooks
-- Missing config disables only the relevant layer and falls through
+- Missing effective TTL disables only the relevant shared layer and falls through
 - Optional Prometheus adapter with caller-owned registries and duplicate-registration safety
 - Optional Datadog DogStatsD adapter with caller-owned clients and explicit distribution/histogram semantics
 - Backend-neutral custom metrics adapter hook; metrics are disabled when omitted

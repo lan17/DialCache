@@ -633,19 +633,22 @@ describe("DialCache local-only MVP", () => {
     });
   });
 
-  it("treats non-positive local ttl as disabled local config", async () => {
-    // Given a cached function with an invalid local TTL.
+  it("treats a non-positive runtime local TTL as disabled config", async () => {
+    // Given a valid static baseline and an invalid dynamic local TTL override.
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
-    const dialcache = new DialCache({ logger });
+    const dialcache = new DialCache({
+      logger,
+      cacheConfigProvider: () => new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.LOCAL]: 0 },
+        ramp: { [CacheLayer.LOCAL]: 100 },
+      }),
+    });
     let calls = 0;
     const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
       keyType: "user_id",
       useCase: "InvalidLocalTtl",
       cacheKey: (userId) => userId,
-      defaultConfig: new DialCacheKeyConfig({
-        ttlSec: { [CacheLayer.LOCAL]: 0 },
-        ramp: { [CacheLayer.LOCAL]: 100 },
-      }),
+      defaultConfig: DialCacheKeyConfig.enabled(60),
     });
 
     // When the function is called in an enabled scope.

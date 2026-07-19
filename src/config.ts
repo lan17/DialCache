@@ -34,9 +34,17 @@ export class DialCacheKeyConfig {
   readonly requestLocal?: boolean;
 
   constructor(config: { ttlSec?: LayerConfig; ramp?: LayerConfig; requestLocal?: boolean }) {
-    this.ttlSec = { ...config.ttlSec };
-    this.ramp = { ...config.ramp };
-    this.requestLocal = config.requestLocal ?? false;
+    if (config === null || typeof config !== "object" || Array.isArray(config)) {
+      throw new TypeError("DialCache key config must be an object");
+    }
+    this.ttlSec = cloneLayerConfig(config.ttlSec, "ttlSec");
+    this.ramp = cloneLayerConfig(config.ramp, "ramp");
+    if (config.requestLocal !== undefined && typeof config.requestLocal !== "boolean") {
+      throw new TypeError("DialCache requestLocal config must be a boolean");
+    }
+    if (config.requestLocal !== undefined) {
+      this.requestLocal = config.requestLocal;
+    }
   }
 
   static enabled(ttlSec: number): DialCacheKeyConfig {
@@ -51,6 +59,16 @@ export class DialCacheKeyConfig {
       },
     });
   }
+}
+
+function cloneLayerConfig(config: LayerConfig | undefined, name: "ttlSec" | "ramp"): LayerConfig {
+  if (config === undefined) {
+    return {};
+  }
+  if (config === null || typeof config !== "object" || Array.isArray(config)) {
+    throw new TypeError(`DialCache ${name} config must be a layer map`);
+  }
+  return { ...config };
 }
 
 export type CacheConfigProvider = (key: DialCacheKey) => Awaitable<DialCacheKeyConfig | null>;

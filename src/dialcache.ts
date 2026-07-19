@@ -2,12 +2,12 @@ import { performance } from "node:perf_hooks";
 
 import {
   CacheLayer,
+  DialCacheKeyConfig,
   deterministicRampSampler,
   type Awaitable,
   type CacheConfigProvider,
   type CacheRampSampler,
   type DialCacheConfig,
-  type DialCacheKeyConfig,
   type Logger,
 } from "./config.js";
 import { DialCacheContext, getOrCreateRequestLocalCache, type RequestLocalCache } from "./context.js";
@@ -201,6 +201,7 @@ export class DialCache {
    * values are shared by reference and must be treated as immutable.
    */
   cached<Fn extends AnyFn>(fn: Fn, options: CachedOptions<Fn>): CachedFn<Fn> {
+    const defaultConfig = snapshotDefaultConfig(options.defaultConfig);
     this.registerUseCase(options.useCase);
 
     const run = async (...args: Parameters<Fn>): Promise<CachedValue<Fn>> => {
@@ -220,7 +221,7 @@ export class DialCache {
 
       let key: DialCacheKey;
       try {
-        key = this.buildKey(options, options.cacheKey(...args));
+        key = this.buildKey(options, options.cacheKey(...args), defaultConfig);
       } catch (error) {
         this.logger.error("Could not construct DialCache key", error);
         this.metrics?.error({
@@ -489,6 +490,7 @@ export class DialCache {
     } catch (error) {
       this.logger.warn("Error resolving Redis cache config", error);
       this.recordError(key, CacheLayer.REMOTE, "config_resolution");
+      this.metrics?.disabled({ ...labelsFor(key, CacheLayer.REMOTE), reason: "config_error" });
       return { status: "disabled", reason: "config_error", ...(key.trackForInvalidation ? { skipCacheWrite: true } : {}) } as const;
     }
   }
@@ -548,7 +550,11 @@ export class DialCache {
     this.useCases.add(useCase);
   }
 
-  private buildKey<Fn extends AnyFn>(options: CachedOptions<Fn>, cacheKey: CacheKeySpec): DialCacheKey {
+  private buildKey<Fn extends AnyFn>(
+    options: CachedOptions<Fn>,
+    cacheKey: CacheKeySpec,
+    defaultConfig: DialCacheKeyConfig | null,
+  ): DialCacheKey {
     const spec = typeof cacheKey === "object" ? cacheKey : { id: cacheKey };
     return new DialCacheKey({
       keyType: options.keyType,
@@ -556,7 +562,7 @@ export class DialCache {
       useCase: options.useCase,
       args: normalizeArgs(spec.args ?? {}),
       namespace: this.namespace,
-      defaultConfig: options.defaultConfig ?? null,
+      defaultConfig,
       serializer: (options.serializer as Serializer<unknown> | null | undefined) ?? null,
       trackForInvalidation: options.trackForInvalidation ?? false,
     });
@@ -598,6 +604,62 @@ function elapsedSeconds(startMs: number): number {
 function assertValidFutureBufferMs(futureBufferMs: number): void {
   if (!Number.isSafeInteger(futureBufferMs) || futureBufferMs < 0) {
     throw new RangeError("DialCache invalidation futureBufferMs must be a nonnegative safe integer");
+  }
+}
+
+function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): DialCacheKeyConfig | null {
+  if (config === null || config === undefined) {
+    return null;
+  }
+  if (typeof config !== "object" || Array.isArray(config)) {
+    throw new TypeError("DialCache defaultConfig must be an object");
+  }
+  const ttlSecConfig = config.ttlSec;
+  const rampConfig = config.ramp;
+  const requestLocal = config.requestLocal;
+  if (requestLocal !== undefined && typeof requestLocal !== "boolean") {
+    throw new TypeError("DialCache defaultConfig requestLocal must be a boolean");
+  }
+
+  assertDefaultLayerMap(ttlSecConfig, "ttlSec");
+  assertDefaultLayerMap(rampConfig, "ramp");
+
+  const snapshot = new DialCacheKeyConfig({
+    ttlSec: ttlSecConfig,
+    ramp: rampConfig,
+    ...(requestLocal === undefined ? {} : { requestLocal }),
+  });
+
+  for (const layer of [CacheLayer.LOCAL, CacheLayer.REMOTE]) {
+    const ttlSec = snapshot.ttlSec[layer];
+    if (ttlSec !== undefined) {
+      if (typeof ttlSec !== "number") {
+        throw new TypeError(`DialCache defaultConfig ttlSec.${layer} must be a number`);
+      }
+      if (!Number.isSafeInteger(ttlSec) || ttlSec <= 0) {
+        throw new RangeError(`DialCache defaultConfig ttlSec.${layer} must be a positive safe integer`);
+      }
+    }
+
+    const ramp = snapshot.ramp[layer];
+    if (ramp !== undefined) {
+      if (typeof ramp !== "number") {
+        throw new TypeError(`DialCache defaultConfig ramp.${layer} must be a number`);
+      }
+      if (!Number.isFinite(ramp) || ramp < 0 || ramp > 100) {
+        throw new RangeError(`DialCache defaultConfig ramp.${layer} must be between 0 and 100`);
+      }
+    }
+  }
+
+  Object.freeze(snapshot.ttlSec);
+  Object.freeze(snapshot.ramp);
+  return Object.freeze(snapshot);
+}
+
+function assertDefaultLayerMap(config: unknown, name: "ttlSec" | "ramp"): void {
+  if (config === null || typeof config !== "object" || Array.isArray(config)) {
+    throw new TypeError(`DialCache defaultConfig ${name} must be a layer map`);
   }
 }
 

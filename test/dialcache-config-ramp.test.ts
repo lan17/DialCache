@@ -6,6 +6,7 @@ import {
   DialCacheKey,
   DialCacheKeyConfig,
   deterministicRampSampler,
+  type LayerConfig,
 } from "../src/index.js";
 import { FakeRedis } from "./fake-redis.js";
 
@@ -13,6 +14,49 @@ const configFor = (ttlSec: Partial<Record<CacheLayer, number>>, ramp: Partial<Re
   new DialCacheKeyConfig({ ttlSec, ramp });
 
 describe("DialCache runtime config and ramp controls", () => {
+  it("preserves requestLocal omission until baseline and runtime config are merged", () => {
+    expect(new DialCacheKeyConfig({}).requestLocal).toBeUndefined();
+    expect(new DialCacheKeyConfig({ requestLocal: false }).requestLocal).toBe(false);
+  });
+
+  it("captures an immutable default policy snapshot when the use case is registered", async () => {
+    const suppliedDefault = new DialCacheKeyConfig({
+      ttlSec: { [CacheLayer.LOCAL]: 60 },
+      ramp: { [CacheLayer.LOCAL]: 100 },
+    });
+    const observedDefaults: Array<DialCacheKeyConfig | null> = [];
+    const dialcache = new DialCache({
+      cacheConfigProvider: (key) => {
+        observedDefaults.push(key.defaultConfig);
+        (key as unknown as { defaultConfig: DialCacheKeyConfig | null }).defaultConfig = null;
+        return null;
+      },
+    });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "ImmutableRegisteredDefault",
+      cacheKey: (userId) => userId,
+      defaultConfig: suppliedDefault,
+    });
+
+    suppliedDefault.ttlSec[CacheLayer.LOCAL] = 0;
+    suppliedDefault.ramp[CacheLayer.LOCAL] = 0;
+    const first = await dialcache.enable(async () => await getUser("123"));
+    const second = await dialcache.enable(async () => await getUser("123"));
+
+    expect(second).toBe(first);
+    expect(calls).toBe(1);
+    expect(observedDefaults).toHaveLength(2);
+    expect(observedDefaults[0]).not.toBe(suppliedDefault);
+    expect(observedDefaults[1]).toBe(observedDefaults[0]);
+    expect(observedDefaults[0]?.ttlSec[CacheLayer.LOCAL]).toBe(60);
+    expect(observedDefaults[0]?.ramp[CacheLayer.LOCAL]).toBe(100);
+    expect(Object.isFrozen(observedDefaults[0])).toBe(true);
+    expect(Object.isFrozen(observedDefaults[0]?.ttlSec)).toBe(true);
+    expect(Object.isFrozen(observedDefaults[0]?.ramp)).toBe(true);
+  });
+
   it("enables request-local caching without TTL, ramp, or ramp sampling", async () => {
     const rampSampler = vi.fn(() => {
       throw new Error("request-local caching must not use the layer ramp sampler");
@@ -246,6 +290,245 @@ describe("DialCache runtime config and ramp controls", () => {
     expect(cacheConfigProvider).toHaveBeenCalled();
   });
 
+  it("inherits defaults per field when the runtime config is sparse", async () => {
+    // Given the static baseline enables local and remote caching with distinct policies,
+    // while runtime config changes only the local ramp and remote TTL.
+    const redis = new FakeRedis();
+    const dialcache = new DialCache({
+      redis: { client: redis },
+      cacheConfigProvider: async () => new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 30 },
+        ramp: { [CacheLayer.LOCAL]: 0 },
+      }),
+    });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "SparseRuntimeOverlay",
+      cacheKey: (userId) => userId,
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.LOCAL]: 60, [CacheLayer.REMOTE]: 120 },
+        ramp: { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 100 },
+      }),
+    });
+
+    // When the same key is read twice, the explicit local ramp disables local
+    // caching while the remote TTL override inherits the baseline remote ramp.
+    const first = await dialcache.enable(async () => await getUser("123"));
+    const second = await dialcache.enable(async () => await getUser("123"));
+
+    expect(first).toEqual({ userId: "123", calls: 1 });
+    expect(second).toEqual({ userId: "123", calls: 1 });
+    expect(calls).toBe(1);
+    expect(redis.getCalls).toBe(2);
+    expect(redis.setCalls).toBe(1);
+  });
+
+  it.each([
+    ["null", null],
+    ["undefined", undefined],
+    ["an empty config", new DialCacheKeyConfig({})],
+    [
+      "undefined leaves",
+      new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.LOCAL]: undefined } as unknown as LayerConfig,
+        ramp: { [CacheLayer.LOCAL]: undefined } as unknown as LayerConfig,
+      }),
+    ],
+  ] as const)("inherits the full baseline when the provider returns %s", async (_name, runtimeConfig) => {
+    const cacheConfigProvider = vi.fn(async () => runtimeConfig as DialCacheKeyConfig | null);
+    const dialcache = new DialCache({ cacheConfigProvider });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: `WholeBaselineInheritance${String(_name)}`,
+      cacheKey: (userId) => userId,
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.LOCAL]: 60 },
+      }),
+    });
+
+    const first = await dialcache.enable(async () => await getUser("123"));
+    const second = await dialcache.enable(async () => await getUser("123"));
+
+    expect(first).toEqual({ userId: "123", calls: 1 });
+    expect(second).toEqual({ userId: "123", calls: 1 });
+    expect(cacheConfigProvider).toHaveBeenCalledTimes(2);
+  });
+
+  it("defaults a shared layer ramp to 100 when its effective TTL is configured", async () => {
+    const rampSampler = vi.fn(() => {
+      throw new Error("the default 100 ramp must not sample");
+    });
+    const dialcache = new DialCache({ rampSampler });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "ImplicitFullRamp",
+      cacheKey: (userId) => userId,
+      defaultConfig: new DialCacheKeyConfig({ ttlSec: { [CacheLayer.LOCAL]: 60 } }),
+    });
+
+    const first = await dialcache.enable(async () => await getUser("123"));
+    const second = await dialcache.enable(async () => await getUser("123"));
+
+    expect(second).toBe(first);
+    expect(calls).toBe(1);
+    expect(rampSampler).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["a null config", () => new DialCacheKeyConfig(null as never), "DialCache key config must be an object"],
+    [
+      "a null layer map",
+      () => new DialCacheKeyConfig({ ttlSec: null as unknown as LayerConfig }),
+      "DialCache ttlSec config must be a layer map",
+    ],
+    [
+      "a non-boolean requestLocal value",
+      () => new DialCacheKeyConfig({ requestLocal: null as unknown as boolean }),
+      "DialCache requestLocal config must be a boolean",
+    ],
+  ])("rejects $0 in the public config constructor", (_name, construct, message) => {
+    expect(construct).toThrow(message);
+  });
+
+  it.each([
+    ["zero TTL", new DialCacheKeyConfig({ ttlSec: { [CacheLayer.LOCAL]: 0 } }), RangeError, "positive safe integer"],
+    ["negative TTL", new DialCacheKeyConfig({ ttlSec: { [CacheLayer.LOCAL]: -1 } }), RangeError, "positive safe integer"],
+    ["fractional TTL", new DialCacheKeyConfig({ ttlSec: { [CacheLayer.LOCAL]: 0.5 } }), RangeError, "positive safe integer"],
+    ["non-finite TTL", new DialCacheKeyConfig({ ttlSec: { [CacheLayer.LOCAL]: Number.NaN } }), RangeError, "positive safe integer"],
+    ["negative ramp", new DialCacheKeyConfig({ ramp: { [CacheLayer.LOCAL]: -1 } }), RangeError, "between 0 and 100"],
+    ["over-100 ramp", new DialCacheKeyConfig({ ramp: { [CacheLayer.LOCAL]: 101 } }), RangeError, "between 0 and 100"],
+    ["non-finite ramp", new DialCacheKeyConfig({ ramp: { [CacheLayer.LOCAL]: Number.POSITIVE_INFINITY } }), RangeError, "between 0 and 100"],
+    [
+      "wrong-type TTL",
+      new DialCacheKeyConfig({ ttlSec: { [CacheLayer.LOCAL]: "60" as unknown as number } }),
+      TypeError,
+      "must be a number",
+    ],
+    [
+      "wrong-type ramp",
+      new DialCacheKeyConfig({ ramp: { [CacheLayer.LOCAL]: null as unknown as number } }),
+      TypeError,
+      "must be a number",
+    ],
+    ["primitive config", 42 as unknown as DialCacheKeyConfig, TypeError, "must be an object"],
+    ["array config", [] as unknown as DialCacheKeyConfig, TypeError, "must be an object"],
+    [
+      "null TTL map",
+      { ttlSec: null, ramp: {} } as unknown as DialCacheKeyConfig,
+      TypeError,
+      "must be a layer map",
+    ],
+  ])("rejects a malformed static defaultConfig with $0 at registration", (_name, defaultConfig, ErrorType, message) => {
+    const dialcache = new DialCache();
+
+    expect(() => dialcache.cached(async () => "value", {
+      keyType: "item_id",
+      useCase: "InvalidStaticPolicy",
+      cacheKey: () => "123",
+      defaultConfig,
+    })).toThrow(ErrorType);
+    expect(() => dialcache.cached(async () => "value", {
+      keyType: "item_id",
+      useCase: "InvalidStaticPolicy",
+      cacheKey: () => "123",
+      defaultConfig,
+    })).toThrow(message);
+
+    // Validation runs before use-case registration, so a corrected policy can
+    // reuse the same name instead of being rejected as a duplicate.
+    expect(() => dialcache.cached(async () => "value", {
+      keyType: "item_id",
+      useCase: "InvalidStaticPolicy",
+      cacheKey: () => "123",
+      defaultConfig: new DialCacheKeyConfig({ ttlSec: { [CacheLayer.LOCAL]: 60 } }),
+    })).not.toThrow();
+  });
+
+  it.each([
+    ["a primitive", 42],
+    ["an array", []],
+    ["a null layer map", { ttlSec: null, ramp: {} }],
+    ["a null requestLocal value", { ttlSec: {}, ramp: {}, requestLocal: null }],
+  ] as const)("fails open instead of inheriting defaults when the provider returns %s", async (_name, runtimeConfig) => {
+    const cacheConfigProvider = vi.fn(async () => runtimeConfig as unknown as DialCacheKeyConfig);
+    const dialcache = new DialCache({ cacheConfigProvider });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: `MalformedRuntimeConfig${String(_name)}`,
+      cacheKey: (userId) => userId,
+      defaultConfig: new DialCacheKeyConfig({ ttlSec: { [CacheLayer.LOCAL]: 60 } }),
+    });
+
+    const first = await dialcache.enable(async () => await getUser("123"));
+    const second = await dialcache.enable(async () => await getUser("123"));
+
+    expect(first.calls).toBe(1);
+    expect(second.calls).toBe(2);
+    expect(cacheConfigProvider).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses explicit runtime controls to disable every inherited layer", async () => {
+    const redis = new FakeRedis();
+    const dialcache = new DialCache({
+      redis: { client: redis },
+      cacheConfigProvider: async () => new DialCacheKeyConfig({
+        requestLocal: false,
+        ramp: { [CacheLayer.LOCAL]: 0, [CacheLayer.REMOTE]: 0 },
+      }),
+    });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "ExplicitDisableAll",
+      cacheKey: (userId) => userId,
+      defaultConfig: new DialCacheKeyConfig({
+        requestLocal: true,
+        ttlSec: { [CacheLayer.LOCAL]: 60, [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 100 },
+      }),
+    });
+
+    const values = await dialcache.enable(async () => [await getUser("123"), await getUser("123")] as const);
+
+    expect(values).toEqual([
+      { userId: "123", calls: 1 },
+      { userId: "123", calls: 2 },
+    ]);
+    expect(redis.getCalls).toBe(0);
+    expect(redis.setCalls).toBe(0);
+  });
+
+  it.each([
+    ["null TTL", new DialCacheKeyConfig({ ttlSec: { [CacheLayer.LOCAL]: null as unknown as number } })],
+    ["NaN TTL", new DialCacheKeyConfig({ ttlSec: { [CacheLayer.LOCAL]: Number.NaN } })],
+    ["wrong-type TTL", new DialCacheKeyConfig({ ttlSec: { [CacheLayer.LOCAL]: "60" as unknown as number } })],
+    ["null ramp", new DialCacheKeyConfig({ ramp: { [CacheLayer.LOCAL]: null as unknown as number } })],
+    ["NaN ramp", new DialCacheKeyConfig({ ramp: { [CacheLayer.LOCAL]: Number.NaN } })],
+    ["wrong-type ramp", new DialCacheKeyConfig({ ramp: { [CacheLayer.LOCAL]: "50" as unknown as number } })],
+  ])("does not inherit a valid default over an explicit malformed runtime $0", async (_name, runtimeConfig) => {
+    const dialcache = new DialCache({ cacheConfigProvider: async () => runtimeConfig });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: `MalformedRuntimeLeaf${String(_name)}`,
+      cacheKey: (userId) => userId,
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.LOCAL]: 60 },
+        ramp: { [CacheLayer.LOCAL]: 100 },
+      }),
+    });
+
+    const first = await dialcache.enable(async () => await getUser("123"));
+    const second = await dialcache.enable(async () => await getUser("123"));
+
+    expect(first.calls).toBe(1);
+    expect(second.calls).toBe(2);
+  });
+
   it("applies runtime config changes to subsequent calls", async () => {
     // Given a provider whose config can change without redeploying the cached function.
     let runtimeConfig: DialCacheKeyConfig | null = DialCacheKeyConfig.enabled(60);
@@ -260,7 +543,7 @@ describe("DialCache runtime config and ramp controls", () => {
 
     // When the provider disables local caching after the first cached read.
     const first = await dialcache.enable(async () => await getUser("123"));
-    runtimeConfig = configFor({}, {});
+    runtimeConfig = new DialCacheKeyConfig({ ramp: { [CacheLayer.LOCAL]: 0 } });
     const second = await dialcache.enable(async () => await getUser("123"));
 
     // Then the second call honors the new disabled config instead of returning the existing local entry.
@@ -393,27 +676,36 @@ describe("DialCache runtime config and ramp controls", () => {
     const deterministicSampler = vi.fn(() => {
       throw new Error("clamped terminal ramps should not need random sampling");
     });
-    const clampedCache = new DialCache({ rampSampler: deterministicSampler });
+    const clampedCache = new DialCache({
+      rampSampler: deterministicSampler,
+      cacheConfigProvider: async (key) => configFor(
+        { [CacheLayer.LOCAL]: 60 },
+        {
+          [CacheLayer.LOCAL]: key.useCase === "NegativeConfiguredRamp"
+            ? -10
+            : key.useCase === "OverHundredConfiguredRamp"
+              ? 150
+              : Number.NaN,
+        },
+      ),
+    });
     let negativeCalls = 0;
     const negativeRamp = clampedCache.cached(async (userId: string) => ({ userId, calls: ++negativeCalls }), {
       keyType: "user_id",
       useCase: "NegativeConfiguredRamp",
       cacheKey: (userId) => userId,
-      defaultConfig: configFor({ [CacheLayer.LOCAL]: 60 }, { [CacheLayer.LOCAL]: -10 }),
     });
     let overHundredCalls = 0;
     const overHundredRamp = clampedCache.cached(async (userId: string) => ({ userId, calls: ++overHundredCalls }), {
       keyType: "user_id",
       useCase: "OverHundredConfiguredRamp",
       cacheKey: (userId) => userId,
-      defaultConfig: configFor({ [CacheLayer.LOCAL]: 60 }, { [CacheLayer.LOCAL]: 150 }),
     });
     let nanConfiguredCalls = 0;
     const nanConfiguredRamp = clampedCache.cached(async (userId: string) => ({ userId, calls: ++nanConfiguredCalls }), {
       keyType: "user_id",
       useCase: "NanConfiguredRamp",
       cacheKey: (userId) => userId,
-      defaultConfig: configFor({ [CacheLayer.LOCAL]: 60 }, { [CacheLayer.LOCAL]: Number.NaN }),
     });
 
     // When the same keys are read twice.
@@ -523,17 +815,22 @@ describe("DialCache runtime config and ramp controls", () => {
   it("treats non-finite and fractional TTLs as invalid config", async () => {
     // Given invalid TTL values are configured for local and remote layers.
     const redis = new FakeRedis();
-    const dialcache = new DialCache({ redis: { client: redis } });
     const badTtls = [Number.NaN, Number.POSITIVE_INFINITY, 0.5];
 
     // When each cached function is called twice.
     for (const ttl of badTtls) {
+      const dialcache = new DialCache({
+        redis: { client: redis },
+        cacheConfigProvider: async () => configFor(
+          { [CacheLayer.LOCAL]: ttl, [CacheLayer.REMOTE]: ttl },
+          { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 100 },
+        ),
+      });
       let calls = 0;
       const getUser = dialcache.cached(async (userId: string) => ({ userId, ttl: String(ttl), calls: ++calls }), {
         keyType: "user_id",
         useCase: `InvalidTtl${String(ttl)}`,
         cacheKey: (userId) => userId,
-        defaultConfig: configFor({ [CacheLayer.LOCAL]: ttl, [CacheLayer.REMOTE]: ttl }, { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 100 }),
       });
 
       const first = await dialcache.enable(async () => await getUser("123"));
@@ -553,7 +850,7 @@ describe("DialCache runtime config and ramp controls", () => {
     const redis = new FakeRedis();
     const dialcache = new DialCache({
       redis: { client: redis },
-      cacheConfigProvider: async () => configFor({ [CacheLayer.REMOTE]: 60 }, { [CacheLayer.REMOTE]: 100 }),
+      cacheConfigProvider: async () => new DialCacheKeyConfig({ ttlSec: { [CacheLayer.REMOTE]: 60 } }),
     });
     let calls = 0;
     const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
