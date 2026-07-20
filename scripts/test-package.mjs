@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 const exec = promisify(execFile);
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspace = await mkdtemp(join(tmpdir(), "dialcache-package-"));
+const fallbackTimeoutMarker = "dialcache-fallback-timeout-delivered";
 const rootConsumer = `import {
   CacheLayer,
   DialCache,
@@ -389,7 +390,7 @@ try {
     ),
   ]);
 
-  await exec(
+  const { stdout: esmRootRuntimeOutput } = await exec(
     process.execPath,
     [
       "--input-type=module",
@@ -407,6 +408,23 @@ const idleCoalescingState = { process: { activeLeaders: 0, activeFollowers: 0, o
 if (JSON.stringify(coalescingState) !== JSON.stringify(idleCoalescingState)) {
   throw new Error("The root ESM coalescing snapshot export is invalid");
 }
+const timeoutCache = new root.DialCache();
+const neverSettles = timeoutCache.cached(async () => await new Promise(() => undefined), {
+  keyType: "id",
+  useCase: "PackageOnlyHandleTimeout",
+  cacheKey: () => "1",
+  defaultConfig: root.DialCacheKeyConfig.enabled(60),
+  fallbackTimeoutMs: 20,
+});
+try {
+  await timeoutCache.enable(() => neverSettles());
+  throw new Error("Expected the packaged ESM fallback to time out");
+} catch (error) {
+  if (!(error instanceof root.FallbackTimeoutError) || error.timeoutMs !== 20) {
+    throw new Error("The packaged ESM fallback timeout was not delivered");
+  }
+  console.log("${fallbackTimeoutMarker}");
+}
 try {
   nodeRedis.dialcacheRedisScripts.dialcacheWrite.transformReply(2);
   throw new Error("Expected an invalid node-redis script reply to fail");
@@ -418,7 +436,11 @@ try {
     ],
     { cwd: workspace },
   );
-  await exec(
+  if (!esmRootRuntimeOutput.includes(fallbackTimeoutMarker)) {
+    throw new Error("The packaged ESM only-handle fallback timeout marker is missing");
+  }
+
+  const { stdout: cjsRootRuntimeOutput } = await exec(
     process.execPath,
     [
       "--eval",
@@ -435,6 +457,25 @@ const idleCoalescingState = { process: { activeLeaders: 0, activeFollowers: 0, o
 if (JSON.stringify(coalescingState) !== JSON.stringify(idleCoalescingState)) {
   throw new Error("The root CommonJS coalescing snapshot export is invalid");
 }
+const timeoutCache = new root.DialCache();
+const neverSettles = timeoutCache.cached(async () => await new Promise(() => undefined), {
+  keyType: "id",
+  useCase: "PackageOnlyHandleTimeout",
+  cacheKey: () => "1",
+  defaultConfig: root.DialCacheKeyConfig.enabled(60),
+  fallbackTimeoutMs: 20,
+});
+void (async () => {
+  try {
+    await timeoutCache.enable(() => neverSettles());
+    throw new Error("Expected the packaged CommonJS fallback to time out");
+  } catch (error) {
+    if (!(error instanceof root.FallbackTimeoutError) || error.timeoutMs !== 20) {
+      throw new Error("The packaged CommonJS fallback timeout was not delivered");
+    }
+    console.log("${fallbackTimeoutMarker}");
+  }
+})();
 try {
   nodeRedis.dialcacheRedisScripts.dialcacheWrite.transformReply(2);
   throw new Error("Expected an invalid node-redis script reply to fail");
@@ -446,6 +487,9 @@ try {
     ],
     { cwd: workspace },
   );
+  if (!cjsRootRuntimeOutput.includes(fallbackTimeoutMarker)) {
+    throw new Error("The packaged CommonJS only-handle fallback timeout marker is missing");
+  }
   await exec(
     join(workspace, "node_modules", ".bin", "tsc"),
     ["--project", join(workspace, "tsconfig.root.json")],

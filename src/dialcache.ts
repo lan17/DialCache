@@ -105,9 +105,11 @@ interface CachedOptionsBase<Fn extends AnyFn> {
   readonly defaultConfig?: DialCacheKeyConfig | null;
   readonly trackForInvalidation?: boolean;
   /**
-   * Maximum time to wait once an initially enabled invocation starts its
+   * Monotonic deadline applied once an initially enabled invocation starts its
    * fallback, in milliseconds. Must be at most 2,147,483,647. Defaults to 60
-   * seconds. Set to `null` to disable the deadline.
+   * seconds. Set to `null` to disable the deadline. Like every JavaScript
+   * timer, delivery requires event-loop progress and cannot preempt synchronous
+   * work.
    *
    * Concurrent same-key callers share the leader's remaining budget. Timing
    * out rejects those callers and prevents the eventual result from being
@@ -152,7 +154,7 @@ export interface CoalescingState {
 }
 
 interface ProcessFlight {
-  readonly promise: Promise<unknown>;
+  promise: Promise<unknown> | null;
   readonly startedAtMs: number;
   followers: number;
 }
@@ -639,6 +641,9 @@ export class DialCache {
   private singleFlightProcess<T>(key: DialCacheKey, run: () => Promise<T>): Promise<T> {
     const existing = this.processFlights.get(key.urn);
     if (existing !== undefined) {
+      if (existing.promise === null) {
+        throw new Error("DialCache process flight was joined before initialization");
+      }
       existing.followers += 1;
       this.activeProcessFollowers += 1;
       this.metrics?.coalesced?.({
@@ -650,14 +655,22 @@ export class DialCache {
       return existing.promise as Promise<T>;
     }
 
-    const startedAtMs = performance.now();
-    const promise = run();
     const flight: ProcessFlight = {
-      promise,
-      startedAtMs,
+      promise: null,
+      startedAtMs: performance.now(),
       followers: 0,
     };
     this.processFlights.set(key.urn, flight);
+    let promise: Promise<T>;
+    try {
+      promise = run();
+    } catch (error) {
+      if (this.processFlights.get(key.urn) === flight) {
+        this.processFlights.delete(key.urn);
+      }
+      throw error;
+    }
+    flight.promise = promise;
     const clear = (): void => {
       if (this.processFlights.get(key.urn) === flight) {
         this.activeProcessFollowers -= flight.followers;

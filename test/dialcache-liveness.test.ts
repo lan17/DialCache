@@ -10,6 +10,8 @@ import {
   FallbackTimeoutError,
   type CachedOptions,
   type DialCacheMetricsAdapter,
+  type DialCacheRedisClient,
+  type Serializer,
 } from "../src/index.js";
 import { FakeRedis } from "./fake-redis.js";
 
@@ -446,6 +448,208 @@ describe("DialCache fallback liveness", () => {
     expect((await result)[0]).toEqual({ status: "rejected", reason: expect.any(FallbackTimeoutError) });
   });
 
+  it("does not start the fallback deadline while the config provider is pending", async () => {
+    const configGate = deferred<DialCacheKeyConfig>();
+    const configStarted = deferred<void>();
+    const fallback = vi.fn(async () => "value");
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    const dialcache = new DialCache({
+      cacheConfigProvider: async () => {
+        configStarted.resolve();
+        return await configGate.promise;
+      },
+    });
+    const load = dialcache.cached(fallback, {
+      keyType: "id",
+      useCase: "PendingConfigHasCallerOwnedDeadline",
+      cacheKey: () => "123",
+      fallbackTimeoutMs: 5,
+    });
+
+    const result = dialcache.enable(async () => await load());
+    await configStarted.promise;
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(fallback).not.toHaveBeenCalled();
+    expect(setTimeoutSpy).not.toHaveBeenCalled();
+    expect(dialcache.getCoalescingState().process.activeLeaders).toBe(0);
+
+    configGate.resolve(localConfig);
+    await expect(result).resolves.toBe("value");
+    expect(fallback).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not start the fallback deadline while the ramp sampler is pending", async () => {
+    const rampGate = deferred<number>();
+    const rampStarted = deferred<void>();
+    const fallback = vi.fn(async () => "value");
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    const dialcache = new DialCache({
+      rampSampler: async () => {
+        rampStarted.resolve();
+        return await rampGate.promise;
+      },
+    });
+    const load = dialcache.cached(fallback, {
+      keyType: "id",
+      useCase: "PendingRampHasCallerOwnedDeadline",
+      cacheKey: () => "123",
+      fallbackTimeoutMs: 5,
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.LOCAL]: 60 },
+        ramp: { [CacheLayer.LOCAL]: 50 },
+      }),
+    });
+
+    const result = dialcache.enable(async () => await load());
+    await rampStarted.promise;
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(fallback).not.toHaveBeenCalled();
+    expect(setTimeoutSpy).not.toHaveBeenCalled();
+    expect(dialcache.getCoalescingState().process.activeLeaders).toBe(0);
+
+    rampGate.resolve(0);
+    await expect(result).resolves.toBe("value");
+    expect(fallback).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not apply the fallback deadline to a pending Redis read", async () => {
+    const readGate = deferred<null>();
+    const readStarted = deferred<void>();
+    const fallback = vi.fn(async () => "value");
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    const redis: DialCacheRedisClient = {
+      read: async () => {
+        readStarted.resolve();
+        return await readGate.promise;
+      },
+      write: async () => true,
+      invalidate: async () => undefined,
+    };
+    const dialcache = new DialCache({ redis: { client: redis } });
+    const load = dialcache.cached(fallback, {
+      keyType: "id",
+      useCase: "PendingRedisReadHasCallerOwnedDeadline",
+      cacheKey: () => "123",
+      fallbackTimeoutMs: 5,
+      defaultConfig: remoteConfig,
+    });
+
+    const result = dialcache.enable(async () => await load());
+    await readStarted.promise;
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(fallback).not.toHaveBeenCalled();
+    expect(setTimeoutSpy).not.toHaveBeenCalled();
+    expect(dialcache.getCoalescingState().process.activeLeaders).toBe(1);
+
+    readGate.resolve(null);
+    await expect(result).resolves.toBe("value");
+    expect(fallback).toHaveBeenCalledTimes(1);
+    expect(dialcache.getCoalescingState().process.activeLeaders).toBe(0);
+  });
+
+  it("does not apply the fallback deadline to a pending serializer load", async () => {
+    const loadGate = deferred<string>();
+    const loadStarted = deferred<void>();
+    const fallback = vi.fn(async () => "fallback");
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    const serializer: Serializer<string> = {
+      dump: (value) => value,
+      load: async () => {
+        loadStarted.resolve();
+        return await loadGate.promise;
+      },
+    };
+    const redis: DialCacheRedisClient = {
+      read: async () => "stored",
+      write: async () => true,
+      invalidate: async () => undefined,
+    };
+    const dialcache = new DialCache({ redis: { client: redis } });
+    const load = dialcache.cached(async () => await fallback(), {
+      keyType: "id",
+      useCase: "PendingSerializerLoadHasCallerOwnedDeadline",
+      cacheKey: () => "123",
+      fallbackTimeoutMs: 5,
+      defaultConfig: remoteConfig,
+      serializer,
+    });
+
+    const result = dialcache.enable(async () => await load());
+    await loadStarted.promise;
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(fallback).not.toHaveBeenCalled();
+    expect(setTimeoutSpy).not.toHaveBeenCalled();
+    expect(dialcache.getCoalescingState().process.activeLeaders).toBe(1);
+
+    loadGate.resolve("cached");
+    await expect(result).resolves.toBe("cached");
+    expect(dialcache.getCoalescingState().process.activeLeaders).toBe(0);
+  });
+
+  it("does not apply a completed fallback's deadline to serializer dump or Redis write", async () => {
+    const dumpGate = deferred<string>();
+    const dumpStarted = deferred<void>();
+    const writeGate = deferred<boolean>();
+    const writeStarted = deferred<void>();
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    const serializer: Serializer<string> = {
+      dump: async () => {
+        dumpStarted.resolve();
+        return await dumpGate.promise;
+      },
+      load: (value) => value.toString(),
+    };
+    const redis: DialCacheRedisClient = {
+      read: async () => null,
+      write: async () => {
+        writeStarted.resolve();
+        return await writeGate.promise;
+      },
+      invalidate: async () => undefined,
+    };
+    const dialcache = new DialCache({ redis: { client: redis } });
+    const load = dialcache.cached(async () => "value", {
+      keyType: "id",
+      useCase: "PendingPublicationHasCallerOwnedDeadline",
+      cacheKey: () => "123",
+      fallbackTimeoutMs: 5,
+      defaultConfig: remoteConfig,
+      serializer,
+    });
+
+    let settled = false;
+    const result = dialcache.enable(async () => await load());
+    void result.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    await dumpStarted.promise;
+    expect(setTimeoutSpy).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(settled).toBe(false);
+    expect(dialcache.getCoalescingState().process.activeLeaders).toBe(1);
+
+    dumpGate.resolve("value");
+    await writeStarted.promise;
+    await vi.advanceTimersByTimeAsync(100);
+    expect(settled).toBe(false);
+    expect(dialcache.getCoalescingState().process.activeLeaders).toBe(1);
+
+    writeGate.resolve(true);
+    await expect(result).resolves.toBe("value");
+    expect(dialcache.getCoalescingState().process.activeLeaders).toBe(0);
+  });
+
   it("keeps initially disabled calls as true pass-through", async () => {
     const started = deferred<void>();
     const gate = deferred<string>();
@@ -625,6 +829,27 @@ describe("DialCache coalescing state", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+  });
+
+  it("registers a process leader before its synchronous fallback prefix runs", async () => {
+    const dialcache = new DialCache();
+    let observedState = dialcache.getCoalescingState().process;
+    const load = dialcache.cached(async () => {
+      observedState = dialcache.getCoalescingState().process;
+      return "value";
+    }, {
+      keyType: "id",
+      useCase: "ObserveSynchronousLeaderPrefix",
+      cacheKey: () => "123",
+      defaultConfig: localConfig,
+    });
+
+    await expect(dialcache.enable(async () => await load())).resolves.toBe("value");
+    expect(observedState).toMatchObject({ activeLeaders: 1, activeFollowers: 0 });
+    expect(observedState.oldestLeaderAgeMs).toBeGreaterThanOrEqual(0);
+    expect(dialcache.getCoalescingState()).toEqual({
+      process: { activeLeaders: 0, activeFollowers: 0, oldestLeaderAgeMs: null },
+    });
   });
 
   it("reports leaders, followers, oldest age, and settlement cleanup", async () => {
