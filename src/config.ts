@@ -16,6 +16,10 @@ export interface CacheRampSample {
   readonly ramp: number;
 }
 
+/**
+ * Selects a rollout sample. Async implementations must settle within a finite
+ * application-defined deadline; DialCache does not add one.
+ */
 export type CacheRampSampler = (sample: CacheRampSample) => Awaitable<number>;
 
 export const deterministicRampSampler: CacheRampSampler = ({ key, layer }) => stablePercent(`${key.urn}:${layer}`);
@@ -53,6 +57,10 @@ export class DialCacheKeyConfig {
   }
 }
 
+/**
+ * Resolves runtime cache policy. Async implementations must settle within a
+ * finite application-defined deadline; DialCache does not add one.
+ */
 export type CacheConfigProvider = (key: DialCacheKey) => Awaitable<DialCacheKeyConfig | null>;
 
 export type Logger = Pick<Console, "debug" | "error" | "warn">;
