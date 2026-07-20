@@ -65,7 +65,7 @@ const user = await dialcache.enable(() => getUser("123"));
 
 ## How caching works
 
-The wrapped function is the **fallback**: it runs only when every active cache layer misses.
+The wrapped function is the **fallback**: it runs whenever no active cache layer returns a value, whether because layers missed, were disabled, or failed open.
 
 When caching is enabled, reads flow through:
 
@@ -77,7 +77,7 @@ request-local cache -> process-local cache -> Redis cache -> fallback function
 - Results from the lower chain are memoized request-locally when that layer is enabled.
 - Process-local hits return immediately.
 - Process-local misses try Redis and populate the process-local cache on a Redis hit.
-- Redis misses call the fallback and write both Redis and the process-local cache.
+- Redis misses call the fallback and attempt to populate Redis and, when active, the process-local cache. Tracked invalidation may suppress both publications.
 - Redis cache read/write failures are logged, counted in metrics, and fail open; fallback results still return when fallback succeeds. `invalidateRemote` logs/counts Redis failures and rethrows them so callers do not assume invalidation succeeded.
 - Cache-key construction and config-provider failures also fail open and run the fallback uncached.
 - Missing process-local/Redis TTL or ramp config disables that layer, records a disabled reason, and falls through to the next layer/fallback.
@@ -168,7 +168,7 @@ Instance-wide behavior is set through the `DialCache` constructor:
 | --- | --- | --- |
 | `namespace` | `"urn"` | Logical cache namespace and first key component (see [Keys, ids, and extra dimensions](#keys-ids-and-extra-dimensions)). |
 | `redis` | none | `{ client: DialCacheRedisClient }`; enables the Redis layer (see [Redis-backed TTL cache](#redis-backed-ttl-cache)). |
-| `localMaxSize` | `10_000` | Global process-local entry cap; `0` disables the layer. Nonnegative safe integer. |
+| `localMaxSize` | `10_000` | Global process-local entry cap; `0` disables process-local storage. Nonnegative safe integer. |
 | `cacheConfigProvider` | none | Resolves runtime config per enabled invocation; `null` falls back to the function's `defaultConfig`. |
 | `rampSampler` | deterministic by key and layer | Percentage sampler for partial ramps; `randomRampSampler` is also exported. |
 | `metrics` | disabled | A `DialCacheMetricsAdapter` (see [Metrics](#metrics)). |
@@ -451,8 +451,8 @@ DialCache coalesces in-flight work at the lifetime of the first active cache lay
 
 ```ts
 await dialcache.enable(async () => {
-  // Same key, concurrent calls: one fallback execution, one shared result.
-  const [a, b] = await Promise.all([getUser("123"), getUser("123")]);
+  // Same cold key, concurrent calls: one fallback execution, one shared result.
+  const [a, b] = await Promise.all([getUser("456"), getUser("456")]);
 });
 ```
 
