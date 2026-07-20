@@ -12,6 +12,7 @@ Fine-grained TypeScript caching with explicit enabled contexts, request-local me
 - [How caching works](#how-caching-works)
 - [Enabled context](#enabled-context)
 - [Defining cached functions](#defining-cached-functions)
+- [Keys, ids, and extra dimensions](#keys-ids-and-extra-dimensions)
 - [Runtime config and ramp controls](#runtime-config-and-ramp-controls)
 - [Cache layers](#cache-layers)
   - [Request-local cache](#request-local-cache) · [Process-local cache](#process-local-cache) · [Redis-backed TTL cache](#redis-backed-ttl-cache) · [Serialization](#serialization)
@@ -55,7 +56,7 @@ const getUser = dialcache.cached(
   },
 );
 
-// Caching is OFF outside an enable() scope, so this runs the fn uncached:
+// Caching is OFF outside an enable() scope (see "Enabled context"), so this runs the fn uncached:
 await getUser("123");
 
 // Inside enable(), reads are cached:
@@ -64,7 +65,9 @@ const user = await dialcache.enable(() => getUser("123"));
 
 ## How caching works
 
-`dialcache.cached(fn, options)` returns a wrapper with the same parameters as `fn`. The wrapped function is the **fallback**: it runs only when every active cache layer misses. When caching is enabled, reads flow through:
+The wrapped function is the **fallback**: it runs only when every active cache layer misses.
+
+When caching is enabled, reads flow through:
 
 ```text
 request-local cache -> process-local cache -> Redis cache -> fallback function
@@ -75,10 +78,11 @@ request-local cache -> process-local cache -> Redis cache -> fallback function
 - Process-local hits return immediately.
 - Process-local misses try Redis and populate the process-local cache on a Redis hit.
 - Redis misses call the fallback and write both Redis and the process-local cache.
-- Redis cache read/write failures are logged, counted in metrics, and fail open; fallback results still return when fallback succeeds. Cache-key construction and config-provider failures also fail open: the invocation runs the fallback uncached. `invalidateRemote` logs/counts Redis failures and rethrows them so callers do not assume invalidation succeeded.
+- Redis cache read/write failures are logged, counted in metrics, and fail open; fallback results still return when fallback succeeds. `invalidateRemote` logs/counts Redis failures and rethrows them so callers do not assume invalidation succeeded.
+- Cache-key construction and config-provider failures also fail open and run the fallback uncached.
 - Missing process-local/Redis TTL or ramp config disables that layer, records a disabled reason, and falls through to the next layer/fallback.
 
-Every layer is optional: a `DialCache` instance with no Redis client and no local TTL config simply runs fallbacks. Caching as a whole activates only inside an enabled context, described next.
+Caching as a whole is only active inside an enabled context, described next.
 
 ## Enabled context
 
@@ -118,7 +122,11 @@ await dialcache.enable(async () => {
 
 `useCase` is validated at registration: a duplicate within one `DialCache` instance throws `UseCaseIsAlreadyRegisteredError`, and the internal name `watermark` throws `UseCaseNameIsReservedError`.
 
-The `cacheKey` selector is the value identity contract. It must include every input dimension that can affect the returned value; otherwise distinct calls can reuse the same cached value or share the same in-flight fallback through request coalescing. Return a bare id, or return `{ id, args }` to extract a field or add secondary dimensions:
+## Keys, ids, and extra dimensions
+
+The cache key comes from the required `cacheKey` selector whose parameters are inferred from `fn`. Return a bare id, or return `{ id, args }` to extract a field or add secondary dimensions:
+
+The `cacheKey` selector is the value identity contract. It must include every input dimension that can affect the returned value; otherwise distinct calls can reuse the same cached value or share the same in-flight fallback through request coalescing.
 
 ```ts
 const searchPosts = dialcache.cached(
@@ -133,16 +141,6 @@ const searchPosts = dialcache.cached(
 await dialcache.enable(() => searchPosts("u1", 2, "active"));
 ```
 
-### Key semantics
-
-- **`keyType` + `id` is the invalidation unit for tracked Redis entries.** `dialcache.invalidateRemote("user_id", "123", futureBufferMs)` writes one watermark for that user; any `trackForInvalidation` Redis entry with the same `keyType` and `id` is refreshed across all `args` variants when Redis is read. `invalidateRemote` does not evict existing request-local or process-local entries (see [Targeted invalidation](#targeted-invalidation-and-watermarks)), and untracked Redis entries do not consult the watermark. `useCase` identifies the individual cache (it's the metrics label and part of the stored key).
-- **`args` are part of the cache key** — different `args` produce different entries — but invalidation is by `id` only.
-- **Scalar key equality is string-based.** Runtime type is not an identity dimension: for matching surrounding dimensions, numeric `1`, string `"1"`, and bigint `1n` identify the same key; argument values `null` and `"null"` also match. `-0` matches `0`, and an `undefined` argument is omitted. If a deployment changes the logical meaning represented by a scalar, change an explicit identity dimension such as `keyType`, `useCase`, or an argument name/value.
-- **Non-key inputs** (for example a db handle) are simply parameters the `cacheKey` selector ignores. They still reach `fn` for non-coalesced executions, but concurrent same-key cache misses share the leader's execution, so do not ignore values like `AbortSignal`, auth context, locale, or other request-scoped inputs unless sharing one result is correct.
-- **Methods:** pass `obj.method.bind(obj)` (or `(...a) => obj.method(...a)`) — a bare `obj.method` reference loses `this`.
-
-### Namespace
-
 `DialCacheConfig.namespace` is the logical cache namespace and the first component of every key. It defaults to `"urn"`, producing keys such as `urn:user_id:123#GetUser`. Set a stable application-specific value when multiple applications may use the same Redis deployment:
 
 ```ts
@@ -154,7 +152,13 @@ const dialcache = new DialCache({
 
 That produces Redis keys beginning with `users-api:...`, or `{users-api:...}` for invalidation-tracked values. `namespace` is DialCache's single cache-identity and key-partitioning setting: it participates in request-local, process-local, Redis, coalescing, deterministic ramp, invalidation, and metrics. It may not contain `{` or `}` because DialCache reserves those characters for Redis Cluster hash tags. Use a namespace to express any required application or environment separation, such as `production-users-api`.
 
-Changing the namespace value creates a cold-cache boundary across every layer: the old and new keyspaces do not share Redis values or invalidation watermarks. During an overlapping deployment of two values, an invalidation handled by one is invisible to the other, which can continue serving a stale tracked value until its value TTL expires. If remote invalidation correctness matters, a normal rolling deployment is unsafe for a namespace change: use a coordinated no-overlap cutover, or an operational bridge that prevents both versions from serving remote cache across mutations (for example, temporarily disable and clear remote caching during the transition). After the cutover, provision for fallback/refill load and allow old Redis keys to expire by TTL.
+- **`keyType` + `id` is the invalidation unit for tracked Redis entries.** `dialcache.invalidateRemote("user_id", "123", futureBufferMs)` writes one watermark for that user; any `trackForInvalidation` Redis entry with the same `keyType` and `id` is refreshed across all `args` variants when Redis is read. `invalidateRemote` does not evict existing request-local or process-local entries (see [Targeted invalidation](#targeted-invalidation-and-watermarks)), and untracked Redis entries do not consult the watermark. `useCase` identifies the individual cache (it's the metrics label and part of the stored key).
+- **`args` are part of the cache key** — different `args` produce different entries — but invalidation is by `id` only.
+- **Scalar key equality is string-based.** Runtime type is not an identity dimension: for matching surrounding dimensions, numeric `1`, string `"1"`, and bigint `1n` identify the same key; argument values `null` and `"null"` also match. `-0` matches `0`, and an `undefined` argument is omitted. If a deployment changes the logical meaning represented by a scalar, change an explicit identity dimension such as `keyType`, `useCase`, or an argument name/value.
+- **Non-key inputs** (for example a db handle) are simply parameters the `cacheKey` selector ignores. They still reach `fn` for non-coalesced executions, but concurrent same-key cache misses share the leader's execution, so do not ignore values like `AbortSignal`, auth context, locale, or other request-scoped inputs unless sharing one result is correct.
+- **Methods:** pass `obj.method.bind(obj)` (or `(...a) => obj.method(...a)`) — a bare `obj.method` reference loses `this`.
+
+Changing the namespace value intentionally creates a cold-cache boundary across every layer. Old and new keyspaces do not share Redis values or invalidation watermarks. During an overlapping deployment, an invalidation handled by one version is invisible to the other, which can continue serving a stale tracked value until its value TTL expires. If remote invalidation correctness matters, a normal rolling deployment is unsafe: use a coordinated no-overlap cutover, or an operational bridge that prevents both versions from serving remote cache across mutations (for example, temporarily disable and clear remote caching during the transition). After the cutover, provision for fallback/refill load and allow old Redis keys to expire by TTL.
 
 ## Runtime config and ramp controls
 
@@ -162,7 +166,7 @@ Instance-wide behavior is set through the `DialCache` constructor:
 
 | `DialCacheConfig` option | Default | Description |
 | --- | --- | --- |
-| `namespace` | `"urn"` | Logical cache namespace and first key component (see [Namespace](#namespace)). |
+| `namespace` | `"urn"` | Logical cache namespace and first key component (see [Keys, ids, and extra dimensions](#keys-ids-and-extra-dimensions)). |
 | `redis` | none | `{ client: DialCacheRedisClient }`; enables the Redis layer (see [Redis-backed TTL cache](#redis-backed-ttl-cache)). |
 | `localMaxSize` | `10_000` | Global process-local entry cap; `0` disables the layer. Nonnegative safe integer. |
 | `cacheConfigProvider` | none | Resolves runtime config per enabled invocation; `null` falls back to the function's `defaultConfig`. |
@@ -170,7 +174,7 @@ Instance-wide behavior is set through the `DialCache` constructor:
 | `metrics` | disabled | A `DialCacheMetricsAdapter` (see [Metrics](#metrics)). |
 | `logger` | `console` | Receives operational cache failures (`debug`, `warn`, `error`). |
 
-Per-invocation cache policy is a `DialCacheKeyConfig`: per-layer `ttlSec` and `ramp` maps keyed by `CacheLayer.LOCAL` (process-local) and `CacheLayer.REMOTE` (Redis), plus a `requestLocal` boolean. `DialCacheKeyConfig.enabled(ttlSec)` enables process-local and Redis caching at that TTL with a 100% ramp; request-local caching must be selected explicitly.
+Per-invocation cache policy is a `DialCacheKeyConfig`: per-layer `ttlSec` and `ramp` maps keyed by `CacheLayer.LOCAL` (process-local) and `CacheLayer.REMOTE` (Redis), plus a `requestLocal` boolean.
 
 Every cached function can provide a per-use-case `defaultConfig`; a `cacheConfigProvider` can override it at runtime. If the provider returns `null`, DialCache falls back to the cached function's `defaultConfig`. If neither exists, or a layer's TTL/ramp is missing or disabled, only that layer is skipped.
 
@@ -195,8 +199,6 @@ const dialcache = new DialCache({
 
 `ramp` values are percentages from 0 to 100. `0` disables the layer, `100` enables it, and intermediate values use `rampSampler`; the default sampler is deterministic by cache key and layer, so the same key is consistently sampled in or out of a partial rollout. Provider errors fail open and execute the fallback function.
 
-Async `cacheConfigProvider` and `rampSampler` implementations must settle within a finite, application-defined deadline; DialCache does not add one (see [Async liveness contract](#async-liveness-contract)).
-
 ## Cache layers
 
 ### Request-local cache
@@ -218,7 +220,7 @@ const getUser = dialcache.cached(
 );
 ```
 
-`requestLocal` is a runtime boolean rather than a TTL/ramp-controlled `CacheLayer`. The `cacheConfigProvider` can turn it on or off for each invocation.
+`requestLocal` is a runtime boolean rather than a TTL/ramp-controlled `CacheLayer`. The `cacheConfigProvider` can turn it on or off for each invocation. `DialCacheKeyConfig.enabled(ttlSec)` enables only process-local and Redis caching, so request-local caching must be selected explicitly.
 
 DialCache resolves the runtime config once per enabled invocation and uses it for the entire lookup. When `requestLocal` is missing or false, the invocation skips request-local lookup and storage without deleting an entry already memoized in the scope. A later invocation that enables request-local caching can reuse that entry.
 
@@ -254,9 +256,7 @@ The limit counts entries rather than estimating JavaScript object memory. Recent
 
 ### Redis-backed TTL cache
 
-The Redis layer works with standalone Redis, Valkey, and Redis Cluster through two bundled client adapters. `redis.client` accepts the semantic `DialCacheRedisClient` interface; create and connect the underlying client before constructing `DialCache`.
-
-Node-redis users register DialCache's native scripts when creating the client, then wrap it with `createNodeRedisDialCacheClient`:
+The Redis layer supports standalone Redis, Valkey, and Redis Cluster. Register DialCache's native node-redis scripts when creating the client, then pass that client to DialCache:
 
 ```ts
 import { createClient } from "redis";
@@ -282,6 +282,8 @@ async function shutdown(): Promise<void> {
   await redisClient.quit();
 }
 ```
+
+`redis.client` is required when Redis is configured and accepts the semantic `DialCacheRedisClient` interface. Create and connect the underlying client before constructing `DialCache`. Node-redis users should register the supplied scripts and wrap their client with `createNodeRedisDialCacheClient` as shown above.
 
 Valkey GLIDE users pass an already-created standalone or cluster client to the GLIDE adapter:
 
@@ -322,7 +324,7 @@ Valkey GLIDE users should configure [`requestTimeout`](https://github.com/valkey
 
 In node-redis 4.7, `socket.connectTimeout`, `disableOfflineQueue`, and `commandsQueueMaxLength` bound connection or queue behavior but do not impose a response deadline on a dispatched command. A [per-command `AbortSignal`](https://redis.io/docs/latest/develop/clients/nodejs/produsage/) can remove work that is still waiting to be sent, but once dispatched it no longer controls the pending reply. Node-redis 4.7 has no built-in strict dispatched-response deadline, and the bundled adapter does not inject queue cancellation. Applications requiring finite node-redis settlement must supply and document a custom `DialCacheRedisClient` policy for queue removal, hung connections, and ambiguous writes. Do not put Redis writes or invalidations behind a bare `Promise.race`: rejecting the outer promise neither removes queued work nor proves that an already-dispatched command did not execute.
 
-The same finite-settlement responsibility applies to async `cacheConfigProvider`, `rampSampler`, and custom `Serializer` methods. DialCache's [fallback deadline](#fallback-deadlines) covers only the wrapped application function. Prefer resource-native budgets and cooperative cancellation for every injected async operation. Native budgets can bound client waiting and may prevent queued work; only a cooperating operation can guarantee that underlying work stops.
+The same finite-settlement responsibility applies to async `cacheConfigProvider`, `rampSampler`, and custom `Serializer` methods. DialCache's [fallback deadline](#fallback-deadlines) below covers only the wrapped application function. Prefer resource-native budgets and cooperative cancellation for every injected async operation. Native budgets can bound client waiting and may prevent queued work; only a cooperating operation can guarantee that underlying work stops.
 
 #### Serialization
 
@@ -426,13 +428,13 @@ Invalidation writes a Redis watermark at `{encodedNamespace:encodedKeyType:encod
 
 The internal `:dialcache-frame-v1` suffix identifies values written with DialCache's binary protocol. Watermarks are stored as decimal timestamps.
 
-A cached Redis value whose Redis-created timestamp is older than or equal to the watermark is treated as stale and refreshed through fallback. `invalidateRemote(keyType, id, futureBufferMs)` sets the watermark to the greater of its existing value and Redis's current time plus the buffer. While that future window is active, an invocation that reaches the tracked Redis read treats the covered value as a miss. If its fallback then reaches the tracked Redis write, Redis rejects the write and DialCache also suppresses the corresponding process-local population; the fallback value still returns to its caller. Request-local memoization is unconditional, and invocations whose remote layer is disabled or ramped out do not consult the watermark and are not fenced by it.
+A cached Redis value whose Redis-created timestamp is older than or equal to the watermark is treated as stale and refreshed through fallback. `invalidateRemote(keyType, id, futureBufferMs)` sets the watermark to the greater of its existing value and Redis's current time plus the buffer. While that future window is active, an invocation that reaches the tracked Redis read treats the covered value as a miss. If its fallback then reaches the tracked Redis write, Redis rejects the write and DialCache also suppresses the corresponding process-local population; the fallback value still returns to its caller. Request-local memoization remains unconditional, and invocations whose remote layer is disabled or ramped out do not consult the watermark and are not fenced by it.
 
 The bundled timestamp protocol assumes that system clocks are synchronized across every Redis node eligible for primary promotion. Redis does not guarantee that `TIME` is monotonic across nodes, and DialCache does not detect or compensate for cross-node clock skew. If this deployment assumption is violated, failover can temporarily suppress tracked cache fills or allow a pre-invalidation value to remain readable until it expires or a later invalidation advances the watermark past its timestamp.
 
-Tracked writes create a baseline watermark and extend its TTL to at least the value TTL plus one minute. Invalidation preserves that lifetime and extends it to cover the future buffer. `DEFAULT_WATERMARK_TTL_SEC` (4 hours) is a configurable floor rather than a maximum, and reads do not extend watermark lifetime.
+Tracked writes create a baseline watermark and extend its TTL to at least the value TTL plus one minute. Invalidation preserves that lifetime and extends it to cover the future buffer. `DEFAULT_WATERMARK_TTL_SEC` (4 hours) remains a configurable floor rather than a maximum, and reads do not extend watermark lifetime.
 
-`futureBufferMs` must be a nonnegative safe integer and defaults to zero, but zero provides no stale-publication protection once Redis time advances. Every production invalidation should pass a named, application-owned nonzero value based on that application's measured or conservatively bounded timings; there is no universally safe library value.
+`futureBufferMs` must be a nonnegative safe integer. The default is zero, but zero provides no stale-publication protection once Redis time advances. Every production invalidation should pass a named, application-owned nonzero value based on that application's measured or conservatively bounded timings; there is no universally safe library value.
 
 Size the buffer to cover the maximum expected negative clock skew between promotion-eligible Redis nodes plus the complete interval in which stale data could still reach the Redis write: source visibility or replication lag, the full remaining tail of any fallback that may already have observed the pre-mutation value, `serializer.dump`, Redis client queue and network latency, Lua script execution, the write itself, and a safety margin. Invalidate only after the source mutation commits. Underestimating this interval can allow a delayed stale fallback to repopulate Redis after the watermark window ends. Overestimating it lengthens the tracked Redis miss/write-suppression window described above, increasing fallback load without publishing stale values. A larger buffer does not delay or suppress returning fallback values to callers.
 
@@ -494,9 +496,9 @@ The timer starts only when the fallback begins. Same-key followers share the pro
 
 Deadline delivery requires the JavaScript event loop to make progress. It cannot preempt a synchronous fallback prefix or other event-loop blocking, so rejection can arrive later than the configured duration; when control returns, DialCache checks the monotonic deadline before accepting the result. The deadline timer remains referenced until the fallback settles or times out. Consequently, an abandoned enabled fallback can keep an otherwise idle short-lived process alive until that deadline; shutdown code should drain outstanding DialCache work rather than discarding its promises.
 
-Timing out rejects the DialCache chain and clears its flight normally. A later fallback resolution is ignored, so that timed-out invocation cannot proceed to serializer, Redis, or local-cache publication. The underlying function is not canceled and may continue its own I/O or side effects; give the source operation its own native timeout or `AbortSignal` whenever possible. `fallbackTimeoutMs: null` disables this guard and makes finite fallback settlement entirely application-owned; use it only after intentionally accepting that liveness risk.
+Timing out rejects the DialCache chain and clears its flight normally. A later fallback resolution is ignored, so that timed-out invocation cannot proceed to serializer, Redis, or local-cache publication. The underlying function is not canceled and may continue its own I/O or side effects; give the source operation its own native timeout or `AbortSignal` whenever possible. `fallbackTimeoutMs: null` disables this guard and makes finite fallback settlement entirely application-owned. Use the `null` escape hatch only after intentionally accepting that liveness risk.
 
-Timeout failures use the bounded metrics classification `error="fallback"` with `in_fallback="true"`; the typed error provides the timeout details without adding high-cardinality labels.
+Timeout failures retain the bounded metrics classification `error="fallback"` with `in_fallback="true"`; the typed error provides the timeout details without adding high-cardinality labels.
 
 ### Coalescing state
 
@@ -555,7 +557,7 @@ The Prometheus adapter emits:
 | `dialcache_miss_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache misses |
 | `dialcache_disabled_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer`, `reason` | Cache skips (`context`, `missing_config`, `invalid_ttl`, `ramped_down`, `config_error`) |
 | `dialcache_error_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer`, `error`, `in_fallback` | Cache/fallback errors classified by a bounded failure site |
-| `dialcache_invalidation_counter` | Counter | `cache_namespace`, `key_type`, `layer` | Invalidation calls by layer touched |
+| `dialcache_invalidation_counter` | Counter | `cache_namespace`, `key_type`, `layer` | Invalidation calls for the layers touched |
 | `dialcache_coalesced_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `scope` | Coalesced requests split by `request_local` or `process` scope |
 | `dialcache_get_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache get latency in seconds |
 | `dialcache_fallback_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Elapsed time until the underlying function settles or timeout rejection is delivered |
@@ -610,7 +612,7 @@ The Datadog adapter emits exact increments of `1` for counters and preserves sec
 | `dialcache.miss.count` | Count | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache misses |
 | `dialcache.disabled.count` | Count | `cache_namespace`, `use_case`, `key_type`, `layer`, `reason` | Cache skips by bounded reason |
 | `dialcache.error.count` | Count | `cache_namespace`, `use_case`, `key_type`, `layer`, `error`, `in_fallback` | Cache/fallback errors by bounded failure site |
-| `dialcache.invalidation.count` | Count | `cache_namespace`, `key_type`, `layer` | Invalidation calls by layer touched |
+| `dialcache.invalidation.count` | Count | `cache_namespace`, `key_type`, `layer` | Invalidation calls for the layers touched |
 | `dialcache.coalesced.count` | Count | `cache_namespace`, `use_case`, `key_type`, `scope` | Coalesced requests by sharing scope |
 | `dialcache.get.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache get latency in seconds |
 | `dialcache.fallback.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Elapsed time until the underlying function settles or timeout rejection is delivered |
@@ -635,7 +637,7 @@ The `error` label reports where an operation failed rather than copying the thro
 | `fallback` | The wrapped application function failed or exceeded its DialCache deadline |
 | `unknown` | Reserved for an otherwise unclassified future failure site |
 
-These values are defined by the backend-neutral core and are identical for every metrics adapter. Raw thrown values, error names, messages, cache IDs, arguments, and Redis keys are never included in metric labels. Operational errors are still passed to the configured logger where the existing failure path logs them. `in_fallback` is the explicit cache-plumbing-versus-application distinction.
+These values are defined by the backend-neutral core and are identical for every metrics adapter. Raw thrown values, error names, messages, cache IDs, arguments, and Redis keys are never included in metric labels. Operational errors are still passed to the configured logger where the existing failure path logs them. `in_fallback` remains the explicit cache-plumbing-versus-application distinction.
 
 ### Custom adapters
 
