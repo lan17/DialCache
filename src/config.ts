@@ -63,6 +63,21 @@ export class DialCacheKeyConfig {
       },
     });
   }
+
+  /**
+   * The explicit kill switch: request-local caching off and both shared
+   * layers ramped to 0. As a provider overlay it disables every inherited
+   * layer instead of relying on field omission, which inherits the baseline.
+   */
+  static disabled(): DialCacheKeyConfig {
+    return new DialCacheKeyConfig({
+      requestLocal: false,
+      ramp: {
+        [CacheLayer.LOCAL]: 0,
+        [CacheLayer.REMOTE]: 0,
+      },
+    });
+  }
 }
 
 function cloneLayerConfig(config: LayerConfig | undefined, name: "ttlSec" | "ramp"): LayerConfig {

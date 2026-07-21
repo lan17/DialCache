@@ -27,8 +27,10 @@ import type { CacheGetResult } from "./internal/cache-result.js";
 import { LocalCache } from "./internal/local-cache.js";
 import { RedisCache } from "./internal/redis-cache.js";
 import {
+  effectiveKeyConfigOf,
   fetchKeyConfig,
   resolveLayerConfigResult,
+  type EffectiveKeyConfig,
   type LayerConfigResolution,
   type ResolvedLayerConfig,
 } from "./internal/runtime-config.js";
@@ -177,6 +179,7 @@ export class DialCache {
   private readonly metrics: DialCacheMetricsAdapter | null;
   private readonly processFlights = new Map<string, ProcessFlight>();
   private activeProcessFollowers = 0;
+  private readonly observedEffectiveConfigs = new Map<string, ObservedEffectiveConfig>();
 
   constructor(config: DialCacheConfig = {}) {
     if (Object.hasOwn(config, "urnPrefix")) {
@@ -291,6 +294,7 @@ export class DialCache {
         this.metrics?.disabled({ ...noLayerLabels, reason: "config_error" });
         return await this.callFallback(noLayerLabels, fallback);
       }
+      this.observeEffectiveConfig(options.useCase, keyConfig);
 
       // An unawaited child can inherit the async store after its outer enable()
       // callback settles. The closed holder turns that detached work back into
@@ -589,6 +593,36 @@ export class DialCache {
     this.metrics?.error({ ...labelsFor(key, layer), error: kind, inFallback: false });
   }
 
+  /**
+   * Logs when a use case's resolved effective config changes between
+   * invocations, so runtime dial turns and accidental silent enables surface
+   * operationally. Providers that vary policy per key within one use case are
+   * rate limited to one line per use case per minute.
+   */
+  private observeEffectiveConfig(useCase: string, keyConfig: DialCacheKeyConfig | null): void {
+    const fingerprint = effectiveConfigFingerprint(effectiveKeyConfigOf(keyConfig));
+    const previous = this.observedEffectiveConfigs.get(useCase);
+    if (previous === undefined) {
+      this.observedEffectiveConfigs.set(useCase, { fingerprint, lastLoggedMs: Number.NEGATIVE_INFINITY });
+      return;
+    }
+    if (previous.fingerprint === fingerprint) {
+      return;
+    }
+
+    const now = performance.now();
+    const shouldLog = now - previous.lastLoggedMs >= EFFECTIVE_CONFIG_LOG_INTERVAL_MS;
+    if (shouldLog) {
+      this.logger.warn(
+        `DialCache effective config changed for use case "${useCase}": ${previous.fingerprint} -> ${fingerprint}`,
+      );
+    }
+    this.observedEffectiveConfigs.set(useCase, {
+      fingerprint,
+      lastLoggedMs: shouldLog ? now : previous.lastLoggedMs,
+    });
+  }
+
   private registerUseCase(useCase: string): void {
     if (useCase === "watermark") {
       throw new UseCaseNameIsReservedError(useCase);
@@ -690,6 +724,23 @@ export class DialCache {
 
 function elapsedSeconds(startMs: number): number {
   return Math.max((performance.now() - startMs) / 1000, 0);
+}
+
+const EFFECTIVE_CONFIG_LOG_INTERVAL_MS = 60_000;
+
+interface ObservedEffectiveConfig {
+  readonly fingerprint: string;
+  readonly lastLoggedMs: number;
+}
+
+function effectiveConfigFingerprint(effective: EffectiveKeyConfig): string {
+  const layerPart = (layer: CacheLayer): string => {
+    const policy = effective.layers[layer];
+    return policy.status === "enabled"
+      ? `${layer}[ttl=${policy.ttlSec}s ramp=${policy.ramp}%]`
+      : `${layer}[disabled:${policy.reason}]`;
+  };
+  return `requestLocal=${effective.requestLocal} ${layerPart(CacheLayer.LOCAL)} ${layerPart(CacheLayer.REMOTE)}`;
 }
 
 function assertValidFutureBufferMs(futureBufferMs: number): void {

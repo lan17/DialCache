@@ -183,7 +183,7 @@ The disabled baseline sets `requestLocal` to false and leaves the process-local 
 
 `DialCacheKeyConfig` preserves an omitted `requestLocal` as `undefined` so the overlay can distinguish omission from an explicit `false`; the effective value still defaults to false after resolution.
 
-A provider result of `null` (or defensive `undefined`) applies no overrides. An empty `DialCacheKeyConfig` and omitted runtime fields also inherit the baseline. Use explicit values to override inherited policy: `requestLocal: false` disables request-local caching and a layer ramp of `0` disables that shared layer.
+A provider result of `null` (or defensive `undefined`) applies no overrides. An empty `DialCacheKeyConfig` and omitted runtime fields also inherit the baseline. Use explicit values to override inherited policy: `requestLocal: false` disables request-local caching and a layer ramp of `0` disables that shared layer. `DialCacheKeyConfig.disabled()` is that explicit kill switch in one call: request-local off and both shared layers ramped to 0.
 
 DialCache validates `defaultConfig` when `cached()` registers the definition: TTLs must be positive safe integers, ramps must be finite percentages from 0 to 100, layer maps must be objects, and `requestLocal` must be a boolean when present. Invalid defaults are rejected immediately.
 
@@ -221,6 +221,10 @@ const getUser = dialcache.cached((userId: string) => db.fetchUser(userId), {
 ```
 
 `ramp` values are percentages from 0 to 100. `0` disables the layer, `100` enables it, and intermediate values use `rampSampler`; the default sampler is deterministic by cache key and layer, so the same key is consistently sampled in or out of a partial rollout. DialCache fetches and resolves one config snapshot per enabled invocation. Provider errors do not activate defaults: they fail open, record `config_error`, and execute the fallback function uncached.
+
+`resolveEffectiveKeyConfig(defaultConfig, runtimeConfig)` returns the effective policy those inputs resolve to: the effective `requestLocal` boolean plus each shared layer's effective TTL and ramp or bounded disabled reason. Partial ramps stay enabled with their percentage because sampling is per key at read time. Use it to unit-test provider results against a use case's baseline. A shape the cache classifies as `config_error` and fails open on throws a `TypeError` here instead.
+
+DialCache logs one warning line when a use case's resolved effective config changes between enabled invocations, including the previous and new effective policy. The line is rate limited to one per use case per minute, so a provider that varies policy per key within one use case surfaces as a periodic summary rather than a log storm.
 
 ## Cache layers
 
