@@ -31,8 +31,6 @@ export type {
 } from "./dialcache.js";
 export { DialCacheKey, invalidationPrefix, normalizeArgs, redisClusterHashTag } from "./key.js";
 export type { DialCacheKeyInit } from "./key.js";
-export { resolveEffectiveKeyConfig } from "./internal/runtime-config.js";
-export type { EffectiveKeyConfig, EffectiveLayerConfig } from "./internal/runtime-config.js";
 export {
   DialCacheRedisPayloadEncodingError,
   DialCacheRedisPayloadError,

@@ -6,7 +6,6 @@ import {
   DialCacheKey,
   DialCacheKeyConfig,
   deterministicRampSampler,
-  resolveEffectiveKeyConfig,
   type LayerConfig,
 } from "../src/index.js";
 import { FakeRedis } from "./fake-redis.js";
@@ -514,92 +513,6 @@ describe("DialCache runtime config and ramp controls", () => {
     ]);
     expect(redis.getCalls).toBe(0);
     expect(redis.setCalls).toBe(0);
-  });
-
-  it("resolves the effective policy for baselines and sparse overlays", () => {
-    const defaultConfig = new DialCacheKeyConfig({
-      requestLocal: true,
-      ttlSec: { [CacheLayer.LOCAL]: 60, [CacheLayer.REMOTE]: 120 },
-      ramp: { [CacheLayer.LOCAL]: 25, [CacheLayer.REMOTE]: 50 },
-    });
-
-    expect(resolveEffectiveKeyConfig(defaultConfig, new DialCacheKeyConfig({
-      requestLocal: false,
-      ttlSec: { [CacheLayer.LOCAL]: 30 },
-      ramp: { [CacheLayer.REMOTE]: 75 },
-    }))).toEqual({
-      requestLocal: false,
-      layers: {
-        [CacheLayer.LOCAL]: { status: "enabled", ttlSec: 30, ramp: 25 },
-        [CacheLayer.REMOTE]: { status: "enabled", ttlSec: 120, ramp: 75 },
-      },
-    });
-
-    expect(resolveEffectiveKeyConfig(defaultConfig, null)).toEqual({
-      requestLocal: true,
-      layers: {
-        [CacheLayer.LOCAL]: { status: "enabled", ttlSec: 60, ramp: 25 },
-        [CacheLayer.REMOTE]: { status: "enabled", ttlSec: 120, ramp: 50 },
-      },
-    });
-  });
-
-  it("resolves disabled baselines, implicit full ramps, and bounded invalid reasons", () => {
-    expect(resolveEffectiveKeyConfig(null, null)).toEqual({
-      requestLocal: false,
-      layers: {
-        [CacheLayer.LOCAL]: { status: "disabled", reason: "policy_disabled" },
-        [CacheLayer.REMOTE]: { status: "disabled", reason: "policy_disabled" },
-      },
-    });
-
-    expect(resolveEffectiveKeyConfig(new DialCacheKeyConfig({ ttlSec: { [CacheLayer.LOCAL]: 60 } }), null).layers).toEqual({
-      [CacheLayer.LOCAL]: { status: "enabled", ttlSec: 60, ramp: 100 },
-      [CacheLayer.REMOTE]: { status: "disabled", reason: "policy_disabled" },
-    });
-
-    const invalidLeaves = resolveEffectiveKeyConfig(
-      DialCacheKeyConfig.enabled(60),
-      new DialCacheKeyConfig({ ttlSec: { [CacheLayer.LOCAL]: 0 }, ramp: { [CacheLayer.REMOTE]: 0 } }),
-    );
-    expect(invalidLeaves.layers[CacheLayer.LOCAL]).toEqual({ status: "disabled", reason: "invalid_ttl" });
-    expect(invalidLeaves.layers[CacheLayer.REMOTE]).toEqual({ status: "disabled", reason: "ramped_down" });
-
-    expect(() => resolveEffectiveKeyConfig(null, 42 as unknown as DialCacheKeyConfig)).toThrow(TypeError);
-  });
-
-  it("logs one rate-limited warning when a use case's effective config changes", async () => {
-    const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
-    let runtimeConfig: DialCacheKeyConfig | null = null;
-    const dialcache = new DialCache({
-      logger,
-      cacheConfigProvider: () => runtimeConfig,
-    });
-    let calls = 0;
-    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
-      keyType: "user_id",
-      useCase: "EffectiveConfigChangeLog",
-      cacheKey: (userId) => userId,
-      defaultConfig: DialCacheKeyConfig.enabled(60),
-    });
-
-    // Stable config across the first two reads primes observation without logging.
-    await dialcache.enable(async () => await getUser("123"));
-    await dialcache.enable(async () => await getUser("123"));
-    expect(logger.warn).not.toHaveBeenCalled();
-
-    // The first change logs once; reverting within the rate window stays silent.
-    runtimeConfig = new DialCacheKeyConfig({ ramp: { [CacheLayer.REMOTE]: 25 } });
-    await dialcache.enable(async () => await getUser("123"));
-    runtimeConfig = null;
-    await dialcache.enable(async () => await getUser("123"));
-
-    expect(logger.warn).toHaveBeenCalledTimes(1);
-    const message = String(logger.warn.mock.calls[0]?.[0]);
-    expect(message).toContain('use case "EffectiveConfigChangeLog"');
-    expect(message).toContain("ramp=100%");
-    expect(message).toContain("ramp=25%");
-    expect(message).toContain(" -> ");
   });
 
   it.each([

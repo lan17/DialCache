@@ -42,12 +42,29 @@ export async function resolveLayerConfig(options: ResolveLayerConfigOptions): Pr
 }
 
 export async function resolveLayerConfigResult(options: ResolveLayerConfigOptions): Promise<LayerConfigResolution> {
-  const policy = resolveEffectiveLayerConfig(options.config, options.layer);
-  if (policy.status === "disabled") {
-    return policy;
+  const config = options.config;
+  if (config === null) {
+    return { status: "disabled", reason: "policy_disabled" };
   }
 
-  const { ttlSec, ramp } = policy;
+  const ttlSec = config.ttlSec[options.layer];
+  if (ttlSec === undefined) {
+    return { status: "disabled", reason: "policy_disabled" };
+  }
+  if (!Number.isSafeInteger(ttlSec) || ttlSec <= 0) {
+    return { status: "disabled", reason: "invalid_ttl" };
+  }
+
+  const configuredRampValue = config.ramp[options.layer];
+  const configuredRamp = configuredRampValue === undefined ? 100 : configuredRampValue;
+  if (!Number.isFinite(configuredRamp)) {
+    return { status: "disabled", reason: "ramped_down" };
+  }
+
+  const ramp = clampPercentage(configuredRamp);
+  if (ramp <= 0) {
+    return { status: "disabled", reason: "ramped_down" };
+  }
   if (ramp >= 100) {
     return { status: "enabled", config: { ttlSec, ramp } };
   }
@@ -60,70 +77,6 @@ export async function resolveLayerConfigResult(options: ResolveLayerConfigOption
   return clampPercentage(sample) < ramp
     ? { status: "enabled", config: { ttlSec, ramp } }
     : { status: "disabled", reason: "ramped_down" };
-}
-
-/** A shared layer's effective policy: enabled with a TTL and ramp, or disabled with a bounded reason. */
-export type EffectiveLayerConfig =
-  | { readonly status: "enabled"; readonly ttlSec: number; readonly ramp: number }
-  | { readonly status: "disabled"; readonly reason: DisabledReason };
-
-/** The effective per-invocation policy after runtime overlays and baseline defaults are applied. */
-export interface EffectiveKeyConfig {
-  readonly requestLocal: boolean;
-  readonly layers: Readonly<Record<CacheLayer, EffectiveLayerConfig>>;
-}
-
-/**
- * Resolves the effective policy DialCache runs for a baseline and a provider
- * result, before per-key ramp sampling: partial ramps stay `enabled` with
- * their percentage. Throws `TypeError` for shapes the cache classifies as
- * `config_error` and fails open on.
- */
-export function resolveEffectiveKeyConfig(
-  defaultConfig: DialCacheKeyConfig | null,
-  runtimeConfig: DialCacheKeyConfig | null | undefined,
-): EffectiveKeyConfig {
-  const config = runtimeConfig === null || runtimeConfig === undefined
-    ? defaultConfig
-    : mergeKeyConfig(defaultConfig, runtimeConfig);
-  return effectiveKeyConfigOf(config);
-}
-
-export function effectiveKeyConfigOf(config: DialCacheKeyConfig | null): EffectiveKeyConfig {
-  return {
-    requestLocal: config?.requestLocal === true,
-    layers: {
-      [CacheLayer.LOCAL]: resolveEffectiveLayerConfig(config, CacheLayer.LOCAL),
-      [CacheLayer.REMOTE]: resolveEffectiveLayerConfig(config, CacheLayer.REMOTE),
-    },
-  };
-}
-
-function resolveEffectiveLayerConfig(config: DialCacheKeyConfig | null, layer: CacheLayer): EffectiveLayerConfig {
-  if (config === null) {
-    return { status: "disabled", reason: "policy_disabled" };
-  }
-
-  const ttlSec = config.ttlSec[layer];
-  if (ttlSec === undefined) {
-    return { status: "disabled", reason: "policy_disabled" };
-  }
-  if (!Number.isSafeInteger(ttlSec) || ttlSec <= 0) {
-    return { status: "disabled", reason: "invalid_ttl" };
-  }
-
-  const configuredRampValue = config.ramp[layer];
-  const configuredRamp = configuredRampValue === undefined ? 100 : configuredRampValue;
-  if (!Number.isFinite(configuredRamp)) {
-    return { status: "disabled", reason: "ramped_down" };
-  }
-
-  const ramp = clampPercentage(configuredRamp);
-  if (ramp <= 0) {
-    return { status: "disabled", reason: "ramped_down" };
-  }
-
-  return { status: "enabled", ttlSec, ramp };
 }
 
 function mergeKeyConfig(

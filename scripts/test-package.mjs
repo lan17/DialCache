@@ -17,7 +17,6 @@ const rootConsumer = `import {
   DialCacheRedisProtocolError,
   FallbackTimeoutError,
   JsonSerializer,
-  resolveEffectiveKeyConfig,
   type CacheMetricLabels,
   type CacheConfigProvider,
   type CachedOptions,
@@ -29,8 +28,6 @@ const rootConsumer = `import {
   type DialCacheMetricsAdapter,
   type DialCacheRedisClient,
   type DisabledReason,
-  type EffectiveKeyConfig,
-  type EffectiveLayerConfig,
   type InvalidationMetricLabels,
   type MetricErrorKind,
   type ProcessCoalescingState,
@@ -84,8 +81,7 @@ const redisProtocolError = new DialCacheRedisProtocolError("Invalid DialCache Re
 const fallbackTimeoutError = new FallbackTimeoutError("Load", 1_000);
 const coalescingState: CoalescingState = cache.getCoalescingState();
 const processCoalescingState: ProcessCoalescingState = coalescingState.process;
-const effectiveDisabledConfig: EffectiveKeyConfig = resolveEffectiveKeyConfig(DialCacheKeyConfig.disabled(), null);
-const effectiveDisabledLocalLayer: EffectiveLayerConfig = effectiveDisabledConfig.layers[CacheLayer.LOCAL];
+const disabledOverlay: DialCacheKeyConfig = DialCacheKeyConfig.disabled();
 const load = cache.cached(async (id: string) => id, {
   keyType: "id",
   useCase: "Load",
@@ -280,7 +276,7 @@ void boundedErrorKind;
 void disabledReasons;
 void legacyMissingConfigReason;
 void MissingKeyConfigError;
-void effectiveDisabledLocalLayer;
+void disabledOverlay;
 void metricErrorKinds;
 void unboundedErrorKind;
 void createNodeRedisDialCacheClient;
@@ -457,9 +453,9 @@ try {
 if ("MissingKeyConfigError" in root) {
   throw new Error("The removed MissingKeyConfigError class must not be exported from the root ESM entry");
 }
-const esmDisabledEffective = root.resolveEffectiveKeyConfig(null, root.DialCacheKeyConfig.disabled());
-if (esmDisabledEffective.requestLocal !== false || esmDisabledEffective.layers[root.CacheLayer.LOCAL].status !== "disabled") {
-  throw new Error("The packed ESM runtime did not resolve the disabled() overlay to a disabled effective config");
+const esmDisabledOverlay = root.DialCacheKeyConfig.disabled();
+if (esmDisabledOverlay.requestLocal !== false || esmDisabledOverlay.ramp[root.CacheLayer.LOCAL] !== 0 || esmDisabledOverlay.ramp[root.CacheLayer.REMOTE] !== 0) {
+  throw new Error("The packed ESM runtime did not build the disabled() kill-switch overlay");
 }
 let calls = 0;
 const overlayCache = new root.DialCache({
@@ -534,9 +530,9 @@ try {
 if ("MissingKeyConfigError" in root) {
   throw new Error("The removed MissingKeyConfigError class must not be exported from the root CommonJS entry");
 }
-const cjsDisabledEffective = root.resolveEffectiveKeyConfig(null, root.DialCacheKeyConfig.disabled());
-if (cjsDisabledEffective.requestLocal !== false || cjsDisabledEffective.layers[root.CacheLayer.LOCAL].status !== "disabled") {
-  throw new Error("The packed CommonJS runtime did not resolve the disabled() overlay to a disabled effective config");
+const cjsDisabledOverlay = root.DialCacheKeyConfig.disabled();
+if (cjsDisabledOverlay.requestLocal !== false || cjsDisabledOverlay.ramp[root.CacheLayer.LOCAL] !== 0 || cjsDisabledOverlay.ramp[root.CacheLayer.REMOTE] !== 0) {
+  throw new Error("The packed CommonJS runtime did not build the disabled() kill-switch overlay");
 }
 void (async () => {
   let calls = 0;
