@@ -86,6 +86,11 @@
     "test:watch": "vitest"
   },
   "packageManager": "pnpm@10.33.0",
+  "pnpm": {
+    "overrides": {
+      "esbuild@<0.28.1": "^0.28.1"
+    }
+  },
   "engines": {
     "node": "20 || >=22"
   },
