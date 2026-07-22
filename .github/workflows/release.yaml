@@ -1,6 +1,9 @@
 name: Release
 
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [publish-release]
 
 permissions: {}
 
@@ -9,11 +12,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
+  prepare:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # contents: write pushes the release tag and GitHub release;
-    # id-token: write mints the OIDC token for npm trusted publishing.
+    # contents: write pushes the version commit and dispatches the isolated
+    # publish run. The GitHub Actions app must be an always-allowed bypass
+    # actor for the protect-main repository ruleset.
     permissions:
       contents: write
       id-token: write
@@ -44,10 +49,134 @@ jobs:
           fi
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+      - name: Resolve release
+        id: release
+        uses: cycjimmy/semantic-release-action@b12c8f6015dc215fe37bc154d4ad456dd3833c90 # v6.0.0
+        with:
+          semantic_version: 25.0.7
+          extra_plugins: conventional-changelog-conventionalcommits@9.3.1
+          dry_run: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Record no-op release
+        if: steps.release.outputs.new_release_version == ''
+        run: echo "No releasable commits were found." >> "$GITHUB_STEP_SUMMARY"
+      - name: Stamp and push release version
+        id: version
+        if: steps.release.outputs.new_release_version != ''
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.release.outputs.new_release_version }}
+        run: |
+          npm version "$RELEASE_VERSION" --no-git-tag-version --allow-same-version
+
+          actual_version="$(node -p 'require("./package.json").version')"
+          if [[ "$actual_version" != "$RELEASE_VERSION" ]]; then
+            echo "Expected package.json version $RELEASE_VERSION; got $actual_version" >&2
+            exit 1
+          fi
+
+          git diff --exit-code -- . ':(exclude)package.json'
+
+          if ! git diff --quiet -- package.json; then
+            git config user.name "@semantic-release-bot"
+            git config user.email "semantic-release-bot@martynus.net"
+            git add -- package.json
+            git commit -m "chore(release): $RELEASE_VERSION [skip ci]"
+          fi
+
+          release_commit="$(git rev-parse HEAD)"
+          git -c credential.helper= \
+            -c "credential.helper=!f() { echo username=x-access-token; echo \"password=\$GITHUB_TOKEN\"; }; f" \
+            push "https://github.com/$GITHUB_REPOSITORY.git" HEAD:main
+
+          echo "release_commit=$release_commit" >> "$GITHUB_OUTPUT"
+          echo "Prepared dialcache@$RELEASE_VERSION at $release_commit." >> "$GITHUB_STEP_SUMMARY"
+      - name: Dispatch publish run
+        if: steps.release.outputs.new_release_version != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_COMMIT: ${{ steps.version.outputs.release_commit }}
+          RELEASE_VERSION: ${{ steps.release.outputs.new_release_version }}
+        run: |
+          gh api --method POST "repos/$GITHUB_REPOSITORY/dispatches" \
+            --raw-field event_type=publish-release \
+            --raw-field "client_payload[release_commit]=$RELEASE_COMMIT" \
+            --raw-field "client_payload[release_version]=$RELEASE_VERSION"
+
+  publish:
+    if: github.event_name == 'repository_dispatch' && github.event.action == 'publish-release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # contents: write pushes the release tag and GitHub release;
+    # id-token: write mints the OIDC token for npm trusted publishing.
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Verify publish source
+        env:
+          EXPECTED_RELEASE_COMMIT: ${{ github.event.client_payload.release_commit }}
+          EXPECTED_RELEASE_VERSION: ${{ github.event.client_payload.release_version }}
+        run: |
+          if [[ ! "$EXPECTED_RELEASE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid release commit: $EXPECTED_RELEASE_COMMIT" >&2
+            exit 1
+          fi
+          if [[ ! "$EXPECTED_RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid release version: $EXPECTED_RELEASE_VERSION" >&2
+            exit 1
+          fi
+
+          git fetch --force origin main:refs/remotes/origin/main --tags
+          remote_main="$(git rev-parse origin/main)"
+          if [[ "$GITHUB_SHA" != "$EXPECTED_RELEASE_COMMIT" ]]; then
+            echo "Release source $GITHUB_SHA is not expected commit $EXPECTED_RELEASE_COMMIT" >&2
+            exit 1
+          fi
+          if [[ "$GITHUB_SHA" != "$remote_main" ]]; then
+            echo "Release source $GITHUB_SHA is not current main $remote_main" >&2
+            exit 1
+          fi
+
+          actual_version="$(node -p 'require("./package.json").version')"
+          if [[ "$actual_version" != "$EXPECTED_RELEASE_VERSION" ]]; then
+            echo "Expected package.json version $EXPECTED_RELEASE_VERSION; got $actual_version" >&2
+            exit 1
+          fi
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
       - name: Semantic Release
+        id: release
         uses: cycjimmy/semantic-release-action@b12c8f6015dc215fe37bc154d4ad456dd3833c90 # v6.0.0
         with:
           semantic_version: 25.0.7
           extra_plugins: conventional-changelog-conventionalcommits@9.3.1
         env:
           GITHUB_TOKEN: ${{ github.token }}
+      - name: Verify published release
+        env:
+          ACTUAL_RELEASE_COMMIT: ${{ steps.release.outputs.new_release_git_head }}
+          ACTUAL_RELEASE_VERSION: ${{ steps.release.outputs.new_release_version }}
+          EXPECTED_RELEASE_COMMIT: ${{ github.event.client_payload.release_commit }}
+          EXPECTED_RELEASE_VERSION: ${{ github.event.client_payload.release_version }}
+        run: |
+          if [[ "$ACTUAL_RELEASE_COMMIT" != "$EXPECTED_RELEASE_COMMIT" ]]; then
+            echo "Expected release commit $EXPECTED_RELEASE_COMMIT; got $ACTUAL_RELEASE_COMMIT" >&2
+            exit 1
+          fi
+          if [[ "$ACTUAL_RELEASE_VERSION" != "$EXPECTED_RELEASE_VERSION" ]]; then
+            echo "Expected release version $EXPECTED_RELEASE_VERSION; got $ACTUAL_RELEASE_VERSION" >&2
+            exit 1
+          fi
