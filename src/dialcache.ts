@@ -19,6 +19,7 @@ import {
   labelsFor,
   type CacheMetricLabels,
   type DialCacheMetricsAdapter,
+  type DisabledReason,
   type MetricErrorKind,
   type MetricLayer,
 } from "./metrics.js";
@@ -496,6 +497,7 @@ export class DialCache {
       const result = await this.localCache.resolveLayerConfig(key, keyConfig);
       if (result.status === "disabled") {
         this.metrics?.disabled({ ...labelsFor(key, CacheLayer.LOCAL), reason: result.reason });
+        this.recordInvalidLeaf(key, CacheLayer.LOCAL, result.reason);
       }
       return result;
     } catch (error) {
@@ -534,6 +536,7 @@ export class DialCache {
       });
       if (result.status === "disabled") {
         this.metrics?.disabled({ ...labelsFor(key, CacheLayer.REMOTE), reason: result.reason });
+        this.recordInvalidLeaf(key, CacheLayer.REMOTE, result.reason);
       }
       return result;
     } catch (error) {
@@ -587,6 +590,18 @@ export class DialCache {
 
   private recordError(key: DialCacheKey, layer: MetricLayer, kind: MetricErrorKind): void {
     this.metrics?.error({ ...labelsFor(key, layer), error: kind, inFallback: false });
+  }
+
+  /**
+   * Invalid runtime TTL/ramp leaves can only come from provider results, since
+   * static defaults are validated at registration. Count them as
+   * config_resolution errors as well as disabled skips so garbage config is
+   * alertable separately from intentional ramp-downs and disabled policy.
+   */
+  private recordInvalidLeaf(key: DialCacheKey, layer: MetricLayer, reason: DisabledReason): void {
+    if (reason === "invalid_ttl" || reason === "invalid_ramp") {
+      this.recordError(key, layer, "config_resolution");
+    }
   }
 
   private registerUseCase(useCase: string): void {

@@ -200,6 +200,7 @@ const disabledReasons: Readonly<Record<DisabledReason, true>> = {
   context: true,
   policy_disabled: true,
   invalid_ttl: true,
+  invalid_ramp: true,
   ramped_down: true,
   config_error: true,
 };

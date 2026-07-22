@@ -189,7 +189,7 @@ DialCache validates `defaultConfig` when `cached()` registers the definition: TT
 
 Registration captures an immutable internal snapshot of `defaultConfig`; mutating the supplied config or its maps later does not change the use case's baseline. Runtime policy changes belong in the provider's returned overlay.
 
-Runtime TTL and ramp leaves are used as supplied instead of falling back to valid default leaves. An invalid TTL disables that layer with `invalid_ttl`; a non-finite or nonnumeric ramp disables it with `ramped_down`; finite runtime ramps retain the defensive clamp to 0–100. Other layers can still run. A malformed runtime config object, layer-map shape, or `requestLocal` value fails config resolution for the invocation, records `config_error`, and executes the fallback uncached.
+Runtime TTL and ramp leaves are used as supplied instead of falling back to valid default leaves. An invalid TTL disables that layer with `invalid_ttl`; a non-finite or nonnumeric ramp disables it with `invalid_ramp`; finite runtime ramps retain the defensive clamp to 0–100. Other layers can still run, and invalid leaves also record a `config_resolution` error so provider garbage is alertable separately from intentional ramp-downs. A malformed runtime config object, layer-map shape, or `requestLocal` value fails config resolution for the invocation, records `config_error`, and executes the fallback uncached.
 
 `cacheConfigProvider` is called for every enabled cached-function invocation before DialCache performs any cache lookup. Keep it cheap, cache any remote/config-store reads inside the provider, and avoid work that would erase the benefit of a cache hit.
 
@@ -578,7 +578,7 @@ The Prometheus adapter emits:
 | --- | --- | --- | --- |
 | `dialcache_request_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache-layer requests that reached an enabled layer |
 | `dialcache_miss_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache misses |
-| `dialcache_disabled_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer`, `reason` | Cache skips (`context`, `policy_disabled`, `invalid_ttl`, `ramped_down`, `config_error`) |
+| `dialcache_disabled_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer`, `reason` | Cache skips (`context`, `policy_disabled`, `invalid_ttl`, `invalid_ramp`, `ramped_down`, `config_error`) |
 | `dialcache_error_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer`, `error`, `in_fallback` | Cache/fallback errors classified by a bounded failure site |
 | `dialcache_invalidation_counter` | Counter | `cache_namespace`, `key_type`, `layer` | Invalidation calls for the layers touched |
 | `dialcache_coalesced_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `scope` | Coalesced requests split by `request_local` or `process` scope |
