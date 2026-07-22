@@ -8,7 +8,10 @@ on:
 permissions: {}
 
 concurrency:
-  group: release
+  # Preparation and publishing are independently serialized. The publish run
+  # can start as soon as preparation dispatches it, while its source checks
+  # reject any intervening main-branch update.
+  group: release-${{ github.event_name }}
   cancel-in-progress: false
 
 jobs:
@@ -157,6 +160,30 @@ jobs:
           fi
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+      - name: Resolve publish release
+        id: plan
+        uses: cycjimmy/semantic-release-action@b12c8f6015dc215fe37bc154d4ad456dd3833c90 # v6.0.0
+        with:
+          semantic_version: 25.0.7
+          extra_plugins: conventional-changelog-conventionalcommits@9.3.1
+          dry_run: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Verify publish plan
+        env:
+          PLANNED_RELEASE_COMMIT: ${{ steps.plan.outputs.new_release_git_head }}
+          PLANNED_RELEASE_VERSION: ${{ steps.plan.outputs.new_release_version }}
+          EXPECTED_RELEASE_COMMIT: ${{ github.event.client_payload.release_commit }}
+          EXPECTED_RELEASE_VERSION: ${{ github.event.client_payload.release_version }}
+        run: |
+          if [[ "$PLANNED_RELEASE_COMMIT" != "$EXPECTED_RELEASE_COMMIT" ]]; then
+            echo "Expected planned release commit $EXPECTED_RELEASE_COMMIT; got $PLANNED_RELEASE_COMMIT" >&2
+            exit 1
+          fi
+          if [[ "$PLANNED_RELEASE_VERSION" != "$EXPECTED_RELEASE_VERSION" ]]; then
+            echo "Expected planned release version $EXPECTED_RELEASE_VERSION; got $PLANNED_RELEASE_VERSION" >&2
+            exit 1
+          fi
       - name: Semantic Release
         id: release
         uses: cycjimmy/semantic-release-action@b12c8f6015dc215fe37bc154d4ad456dd3833c90 # v6.0.0
