@@ -8,7 +8,13 @@ import {
 } from "prom-client";
 import { describe, expect, it } from "vitest";
 
-import { CacheLayer, DialCache, DialCacheKeyConfig, type MetricErrorKind } from "../src/index.js";
+import {
+  CacheLayer,
+  DialCache,
+  DialCacheKeyConfig,
+  type DisabledReason,
+  type MetricErrorKind,
+} from "../src/index.js";
 import { PrometheusDialCacheMetrics, createPrometheusDialCacheMetrics } from "../src/prometheus.js";
 import { FakeRedis } from "./fake-redis.js";
 
@@ -39,6 +45,14 @@ const METRIC_ERROR_KINDS: Readonly<Record<MetricErrorKind, true>> = {
   invalidation: true,
   fallback: true,
   unknown: true,
+};
+const DISABLED_REASONS: Readonly<Record<DisabledReason, true>> = {
+  context: true,
+  policy_disabled: true,
+  invalid_ttl: true,
+  invalid_ramp: true,
+  ramped_down: true,
+  config_error: true,
 };
 
 interface IncompatibleCollectorCase {
@@ -212,6 +226,34 @@ describe("Prometheus metrics adapter", () => {
           layer: labels.layer,
           error,
           in_fallback: "false",
+        }),
+      ).resolves.toBe(1);
+    }
+  });
+
+  it("exports every bounded disabled reason without rewriting labels", async () => {
+    const registry = new Registry();
+    const metrics = new PrometheusDialCacheMetrics({ registry, prefix: "disabled_reason_" });
+    const labels = {
+      cacheNamespace: "users",
+      useCase: "PrometheusDisabledReasons",
+      keyType: "user_id",
+      layer: CacheLayer.LOCAL,
+    } as const;
+
+    const disabledReasons = Object.keys(DISABLED_REASONS) as DisabledReason[];
+    for (const reason of disabledReasons) {
+      metrics.disabled({ ...labels, reason });
+    }
+
+    for (const reason of disabledReasons) {
+      await expect(
+        sumMetric(registry, "disabled_reason_dialcache_disabled_counter", {
+          cache_namespace: labels.cacheNamespace,
+          use_case: labels.useCase,
+          key_type: labels.keyType,
+          layer: labels.layer,
+          reason,
         }),
       ).resolves.toBe(1);
     }

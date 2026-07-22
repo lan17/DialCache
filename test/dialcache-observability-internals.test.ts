@@ -3,13 +3,50 @@ import { describe, expect, it, vi } from "vitest";
 import { CacheLayer, DialCacheKey, DialCacheKeyConfig } from "../src/index.js";
 import { LocalCache } from "../src/internal/local-cache.js";
 import { RedisCache } from "../src/internal/redis-cache.js";
-import { resolveLayerConfig } from "../src/internal/runtime-config.js";
+import { fetchKeyConfig, resolveLayerConfig } from "../src/internal/runtime-config.js";
 import { encodeFrame, FakeRedis } from "./fake-redis.js";
 
 const key = (defaultConfig: DialCacheKeyConfig | null = DialCacheKeyConfig.enabled(60)) =>
   new DialCacheKey({ keyType: "user_id", id: "123", useCase: "ObservabilityInternals", defaultConfig });
 
 describe("DialCache observability internal compatibility paths", () => {
+  it("merges every runtime policy leaf independently", async () => {
+    const defaultConfig = new DialCacheKeyConfig({
+      requestLocal: true,
+      ttlSec: { [CacheLayer.LOCAL]: 60, [CacheLayer.REMOTE]: 120 },
+      ramp: { [CacheLayer.LOCAL]: 25, [CacheLayer.REMOTE]: 50 },
+    });
+    const cases = [
+      {
+        runtime: new DialCacheKeyConfig({
+          requestLocal: false,
+          ttlSec: { [CacheLayer.LOCAL]: 30 },
+          ramp: { [CacheLayer.REMOTE]: 75 },
+        }),
+        expected: new DialCacheKeyConfig({
+          requestLocal: false,
+          ttlSec: { [CacheLayer.LOCAL]: 30, [CacheLayer.REMOTE]: 120 },
+          ramp: { [CacheLayer.LOCAL]: 25, [CacheLayer.REMOTE]: 75 },
+        }),
+      },
+      {
+        runtime: new DialCacheKeyConfig({
+          ttlSec: { [CacheLayer.REMOTE]: 90 },
+          ramp: { [CacheLayer.LOCAL]: 10 },
+        }),
+        expected: new DialCacheKeyConfig({
+          requestLocal: true,
+          ttlSec: { [CacheLayer.LOCAL]: 60, [CacheLayer.REMOTE]: 90 },
+          ramp: { [CacheLayer.LOCAL]: 10, [CacheLayer.REMOTE]: 50 },
+        }),
+      },
+    ];
+
+    for (const { runtime, expected } of cases) {
+      await expect(fetchKeyConfig(async () => runtime, key(defaultConfig))).resolves.toEqual(expected);
+    }
+  });
+
   it("keeps LocalCache get/getIfPresent compatibility while exposing disabled reads", async () => {
     // Given a local cache with enabled config and a second key with no config.
     const cache = new LocalCache(async () => null, () => 0, 10);
@@ -25,7 +62,7 @@ describe("DialCache observability internal compatibility paths", () => {
     // Then compatibility helpers still behave like the pre-metrics API, and disabled state is explicit.
     expect(first).toEqual({ calls: 1 });
     expect(hit).toEqual({ calls: 1 });
-    expect(disabled).toEqual({ status: "disabled", reason: "missing_config" });
+    expect(disabled).toEqual({ status: "disabled", reason: "policy_disabled" });
     expect(calls).toBe(1);
   });
 
@@ -60,7 +97,7 @@ describe("DialCache observability internal compatibility paths", () => {
   });
 
   it("preserves runtime-config edge behavior used by metrics", async () => {
-    // Given configs for missing ramp and non-finite ramp samples.
+    // Given configs for an omitted ramp and non-finite ramp samples.
     const missingRamp = new DialCacheKeyConfig({ ttlSec: { [CacheLayer.LOCAL]: 60 }, ramp: {} });
     const partialRamp = new DialCacheKeyConfig({
       ttlSec: { [CacheLayer.LOCAL]: 60 },
@@ -87,9 +124,9 @@ describe("DialCache observability internal compatibility paths", () => {
       rampSampler: () => Number.NaN,
     });
 
-    // Then disabled configuration paths remain explicit.
+    // Then absent policy stays disabled, an omitted ramp defaults to 100%, and invalid samples stay disabled.
     expect(noConfig).toBeNull();
-    expect(noRamp).toBeNull();
+    expect(noRamp).toEqual({ ttlSec: 60, ramp: 100 });
     expect(nonFiniteSample).toBeNull();
   });
 });

@@ -103,8 +103,8 @@ describe("DialCache request-local cache", () => {
     expect(calls).toBe(2);
   });
 
-  it("reads runtime config once per invocation and preserves scoped values across a true-false-true sequence", async () => {
-    const configs = [requestLocalConfig(), requestLocalConfig(false), requestLocalConfig()];
+  it("inherits request-local defaults unless the runtime overlay explicitly disables them", async () => {
+    const configs = [new DialCacheKeyConfig({}), requestLocalConfig(false), new DialCacheKeyConfig({})];
     const cacheConfigProvider = vi.fn(async () => configs.shift() ?? null);
     const dialcache = new DialCache({ cacheConfigProvider });
     let calls = 0;
@@ -112,6 +112,7 @@ describe("DialCache request-local cache", () => {
       keyType: "user_id",
       useCase: "RuntimeRequestLocalToggle",
       cacheKey: (id) => id,
+      defaultConfig: requestLocalConfig(),
     });
 
     const result = await dialcache.enable(async () => {

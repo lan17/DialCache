@@ -269,23 +269,42 @@ describe("DialCache observability metrics", () => {
   it("classifies disabled cache skips by reason", async () => {
     // Given one cache call is outside context and other enabled calls have disabled layer config.
     const metrics = new RecordingMetrics();
-    const dialcache = new DialCache({ metrics });
+    const invalidRuntimeTtl = localOnly(0);
+    const invalidRuntimeRamp = new DialCacheKeyConfig({
+      ttlSec: { [CacheLayer.LOCAL]: 60 },
+      ramp: { [CacheLayer.LOCAL]: Number.NaN },
+    });
+    const dialcache = new DialCache({
+      metrics,
+      cacheConfigProvider: (key) =>
+        key.useCase === "DisabledByInvalidTtl"
+          ? invalidRuntimeTtl
+          : key.useCase === "DisabledByInvalidRamp"
+            ? invalidRuntimeRamp
+            : null,
+    });
     const contextDisabled = dialcache.cached(async (userId: string) => userId, {
       keyType: "user_id",
       useCase: "DisabledByContext",
       cacheKey: (userId) => userId,
       defaultConfig: localOnly(),
     });
-    const missingConfig = dialcache.cached(async (userId: string) => userId, {
+    const policyDisabled = dialcache.cached(async (userId: string) => userId, {
       keyType: "user_id",
-      useCase: "DisabledByMissingConfig",
+      useCase: "DisabledByPolicy",
       cacheKey: (userId) => userId,
     });
     const invalidTtl = dialcache.cached(async (userId: string) => userId, {
       keyType: "user_id",
       useCase: "DisabledByInvalidTtl",
       cacheKey: (userId) => userId,
-      defaultConfig: localOnly(0),
+      defaultConfig: localOnly(),
+    });
+    const invalidRamp = dialcache.cached(async (userId: string) => userId, {
+      keyType: "user_id",
+      useCase: "DisabledByInvalidRamp",
+      cacheKey: (userId) => userId,
+      defaultConfig: localOnly(),
     });
     const rampedDown = dialcache.cached(async (userId: string) => userId, {
       keyType: "user_id",
@@ -300,18 +319,31 @@ describe("DialCache observability metrics", () => {
     // When each path is called.
     await contextDisabled("123");
     await dialcache.enable(async () => {
-      await missingConfig("123");
+      await policyDisabled("123");
       await invalidTtl("123");
+      await invalidRamp("123");
       await rampedDown("123");
     });
 
     // Then disabled metrics preserve the operational reason labels.
     expect(events(metrics, "disabled", { useCase: "DisabledByContext", layer: "noop", reason: "context" })).toHaveLength(1);
     expect(
-      events(metrics, "disabled", { useCase: "DisabledByMissingConfig", layer: CacheLayer.LOCAL, reason: "missing_config" }),
+      events(metrics, "disabled", { useCase: "DisabledByPolicy", layer: CacheLayer.LOCAL, reason: "policy_disabled" }),
     ).toHaveLength(1);
     expect(events(metrics, "disabled", { useCase: "DisabledByInvalidTtl", layer: CacheLayer.LOCAL, reason: "invalid_ttl" })).toHaveLength(1);
+    expect(events(metrics, "disabled", { useCase: "DisabledByInvalidRamp", layer: CacheLayer.LOCAL, reason: "invalid_ramp" })).toHaveLength(1);
     expect(events(metrics, "disabled", { useCase: "DisabledByRamp", layer: CacheLayer.LOCAL, reason: "ramped_down" })).toHaveLength(1);
+
+    // And invalid runtime leaves count as config_resolution errors, while
+    // intentional ramp-downs and absent policy do not.
+    expect(
+      events(metrics, "error", { useCase: "DisabledByInvalidTtl", layer: CacheLayer.LOCAL, error: "config_resolution", inFallback: false }),
+    ).toHaveLength(1);
+    expect(
+      events(metrics, "error", { useCase: "DisabledByInvalidRamp", layer: CacheLayer.LOCAL, error: "config_resolution", inFallback: false }),
+    ).toHaveLength(1);
+    expect(events(metrics, "error", { useCase: "DisabledByRamp" })).toHaveLength(0);
+    expect(events(metrics, "error", { useCase: "DisabledByPolicy" })).toHaveLength(0);
   });
 
   it("labels cache errors separately from fallback errors", async () => {
@@ -560,6 +592,20 @@ describe("DialCache observability metrics", () => {
         layer: CacheLayer.REMOTE,
         error: "config_resolution",
         inFallback: false,
+      }),
+    ).toHaveLength(1);
+    expect(
+      events(metrics, "disabled", {
+        useCase: "ProviderConfigErrorClassification",
+        layer: "noop",
+        reason: "config_error",
+      }),
+    ).toHaveLength(1);
+    expect(
+      events(metrics, "disabled", {
+        useCase: "RemoteConfigErrorClassification",
+        layer: CacheLayer.REMOTE,
+        reason: "config_error",
       }),
     ).toHaveLength(1);
     expect(JSON.stringify(events(metrics, "error", {}))).not.toMatch(

@@ -17,7 +17,6 @@ export type {
 export {
   DialCacheError,
   FallbackTimeoutError,
-  MissingKeyConfigError,
   UseCaseIsAlreadyRegisteredError,
   UseCaseNameIsReservedError,
 } from "./errors.js";

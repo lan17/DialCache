@@ -27,12 +27,15 @@ const rootConsumer = `import {
   type DialCacheKeyInit,
   type DialCacheMetricsAdapter,
   type DialCacheRedisClient,
+  type DisabledReason,
   type InvalidationMetricLabels,
   type MetricErrorKind,
   type ProcessCoalescingState,
   type RedisConfig,
   type Serializer,
 } from "dialcache";
+// @ts-expect-error The unused MissingKeyConfigError class was removed instead of deprecated.
+import { MissingKeyConfigError } from "dialcache";
 import { createNodeRedisDialCacheClient } from "dialcache/node-redis";
 import { READ_CACHE_SCRIPT } from "dialcache/redis-protocol";
 import {
@@ -78,6 +81,7 @@ const redisProtocolError = new DialCacheRedisProtocolError("Invalid DialCache Re
 const fallbackTimeoutError = new FallbackTimeoutError("Load", 1_000);
 const coalescingState: CoalescingState = cache.getCoalescingState();
 const processCoalescingState: ProcessCoalescingState = coalescingState.process;
+const disabledOverlay: DialCacheKeyConfig = DialCacheKeyConfig.disabled();
 const load = cache.cached(async (id: string) => id, {
   keyType: "id",
   useCase: "Load",
@@ -192,6 +196,16 @@ const legacyKeyInit: DialCacheKeyInit = { keyType: "id", id: "123", useCase: "Lo
 const namespacedKey = new DialCacheKey(keyInit);
 const requestLocalCoalescingScope: CoalescingScope = "request_local";
 const boundedErrorKind: MetricErrorKind = "cache_read";
+const disabledReasons: Readonly<Record<DisabledReason, true>> = {
+  context: true,
+  policy_disabled: true,
+  invalid_ttl: true,
+  invalid_ramp: true,
+  ramped_down: true,
+  config_error: true,
+};
+// @ts-expect-error Missing configuration now means the documented disabled policy, not a separate reason.
+const legacyMissingConfigReason: DisabledReason = "missing_config";
 const metricErrorKinds: Readonly<Record<MetricErrorKind, true>> = {
   key_construction: true,
   config_resolution: true,
@@ -260,6 +274,10 @@ void coalescingState.process;
 void processCoalescingState.activeLeaders;
 void requestLocalCoalescingScope;
 void boundedErrorKind;
+void disabledReasons;
+void legacyMissingConfigReason;
+void MissingKeyConfigError;
+void disabledOverlay;
 void metricErrorKinds;
 void unboundedErrorKind;
 void createNodeRedisDialCacheClient;
@@ -432,6 +450,32 @@ try {
   if (!(error instanceof root.DialCacheRedisProtocolError)) {
     throw new Error("The node-redis protocol error does not match the root ESM export");
   }
+}
+if ("MissingKeyConfigError" in root) {
+  throw new Error("The removed MissingKeyConfigError class must not be exported from the root ESM entry");
+}
+const esmDisabledOverlay = root.DialCacheKeyConfig.disabled();
+if (esmDisabledOverlay.requestLocal !== false || esmDisabledOverlay.ramp[root.CacheLayer.LOCAL] !== 0 || esmDisabledOverlay.ramp[root.CacheLayer.REMOTE] !== 0) {
+  throw new Error("The packed ESM runtime did not build the disabled() kill-switch overlay");
+}
+let calls = 0;
+const overlayCache = new root.DialCache({
+  cacheConfigProvider: () => new root.DialCacheKeyConfig({
+    ramp: { [root.CacheLayer.LOCAL]: 100 },
+  }),
+});
+const load = overlayCache.cached(async (id) => ({ id, calls: ++calls }), {
+  keyType: "id",
+  useCase: "PackedRuntimeOverlay",
+  cacheKey: (id) => id,
+  defaultConfig: new root.DialCacheKeyConfig({
+    ttlSec: { [root.CacheLayer.LOCAL]: 60 },
+  }),
+});
+const first = await overlayCache.enable(() => load("123"));
+const second = await overlayCache.enable(() => load("123"));
+if (calls !== 1 || second !== first) {
+  throw new Error("The packed ESM runtime did not inherit the default local TTL through a sparse overlay");
 }`,
     ],
     { cwd: workspace },
@@ -483,7 +527,38 @@ try {
   if (!(error instanceof root.DialCacheRedisProtocolError)) {
     throw new Error("The node-redis protocol error does not match the root CommonJS export");
   }
-}`,
+}
+if ("MissingKeyConfigError" in root) {
+  throw new Error("The removed MissingKeyConfigError class must not be exported from the root CommonJS entry");
+}
+const cjsDisabledOverlay = root.DialCacheKeyConfig.disabled();
+if (cjsDisabledOverlay.requestLocal !== false || cjsDisabledOverlay.ramp[root.CacheLayer.LOCAL] !== 0 || cjsDisabledOverlay.ramp[root.CacheLayer.REMOTE] !== 0) {
+  throw new Error("The packed CommonJS runtime did not build the disabled() kill-switch overlay");
+}
+void (async () => {
+  let calls = 0;
+  const overlayCache = new root.DialCache({
+    cacheConfigProvider: () => new root.DialCacheKeyConfig({
+      ramp: { [root.CacheLayer.LOCAL]: 100 },
+    }),
+  });
+  const load = overlayCache.cached(async (id) => ({ id, calls: ++calls }), {
+    keyType: "id",
+    useCase: "PackedRuntimeOverlay",
+    cacheKey: (id) => id,
+    defaultConfig: new root.DialCacheKeyConfig({
+      ttlSec: { [root.CacheLayer.LOCAL]: 60 },
+    }),
+  });
+  const first = await overlayCache.enable(() => load("123"));
+  const second = await overlayCache.enable(() => load("123"));
+  if (calls !== 1 || second !== first) {
+    throw new Error("The packed CommonJS runtime did not inherit the default local TTL through a sparse overlay");
+  }
+})().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});`,
     ],
     { cwd: workspace },
   );

@@ -27,9 +27,3 @@ export class UseCaseNameIsReservedError extends DialCacheError {
     super(`Use case name is reserved: ${useCase}`);
   }
 }
-
-export class MissingKeyConfigError extends DialCacheError {
-  constructor(useCase: string) {
-    super(`Missing key config for use case: ${useCase}`);
-  }
-}
