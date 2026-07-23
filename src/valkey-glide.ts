@@ -1,12 +1,3 @@
-import {
-  Decoder,
-  Script,
-  type GlideClient,
-  type GlideClusterClient,
-  type GlideReturnType,
-  type GlideString,
-} from "@valkey/valkey-glide";
-
 import { decodeRedisPayload, redisPayloadEncoding } from "./internal/redis-payload.js";
 import {
   INVALIDATE_CACHE_SCRIPT,
@@ -21,14 +12,39 @@ import {
 } from "./internal/redis-script-reply.js";
 import { DialCacheRedisPayloadError, type DialCacheRedisClient } from "./redis-client.js";
 
-type SupportedValkeyGlideClient = GlideClient | GlideClusterClient;
+type ValkeyGlideString = string | Buffer;
 
-interface DialCacheGlideScripts {
-  readonly read: Script;
-  readonly readTracked: Script;
-  readonly write: Script;
-  readonly writeTracked: Script;
-  readonly invalidate: Script;
+export interface ValkeyGlideScriptHandle {
+  /** Release the native GLIDE script registration. */
+  release(): void;
+}
+
+export interface ValkeyGlideScriptingClient<TScript, TDecoder> {
+  invokeScript(
+    script: TScript,
+    options: {
+      keys: ValkeyGlideString[];
+      args: ValkeyGlideString[];
+      decoder: TDecoder;
+    },
+  ): Promise<unknown>;
+}
+
+export interface ValkeyGlideRuntime<TScript extends ValkeyGlideScriptHandle, TDecoder> {
+  /** The Script constructor exported by the same GLIDE module instance as the client. */
+  readonly Script: new (source: string) => TScript;
+  /** The Decoder enum exported by the same GLIDE module instance as the client. */
+  readonly Decoder: {
+    readonly Bytes: TDecoder;
+  };
+}
+
+interface DialCacheGlideScripts<TScript> {
+  readonly read: TScript;
+  readonly readTracked: TScript;
+  readonly write: TScript;
+  readonly writeTracked: TScript;
+  readonly invalidate: TScript;
 }
 
 export interface ValkeyGlideDialCacheClient extends DialCacheRedisClient {
@@ -38,34 +54,37 @@ export interface ValkeyGlideDialCacheClient extends DialCacheRedisClient {
 
 /**
  * Wrap a caller-owned GLIDE connection. The returned adapter owns only its
- * Script handles and preserves the connection's `requestTimeout`; callers
- * dispose the handles after draining work, then close GLIDE. A request timeout
- * bounds client waiting but is not server-side command cancellation.
+ * Script handles and preserves the connection's `requestTimeout`. Pass the
+ * same GLIDE module namespace used to create the client so native Script
+ * handles are registered with that client's runtime. Callers dispose the
+ * handles after draining work, then close GLIDE. A request timeout bounds
+ * client waiting but is not server-side command cancellation.
  */
-export function createValkeyGlideDialCacheClient(
-  client: SupportedValkeyGlideClient,
+export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScriptHandle, TDecoder>(
+  client: ValkeyGlideScriptingClient<TScript, TDecoder>,
+  glide: ValkeyGlideRuntime<TScript, TDecoder>,
 ): ValkeyGlideDialCacheClient {
-  const scripts: DialCacheGlideScripts = {
-    read: new Script(READ_CACHE_SCRIPT),
-    readTracked: new Script(READ_TRACKED_CACHE_SCRIPT),
-    write: new Script(WRITE_CACHE_SCRIPT),
-    writeTracked: new Script(WRITE_TRACKED_CACHE_SCRIPT),
-    invalidate: new Script(INVALIDATE_CACHE_SCRIPT),
+  const scripts: DialCacheGlideScripts<TScript> = {
+    read: new glide.Script(READ_CACHE_SCRIPT),
+    readTracked: new glide.Script(READ_TRACKED_CACHE_SCRIPT),
+    write: new glide.Script(WRITE_CACHE_SCRIPT),
+    writeTracked: new glide.Script(WRITE_TRACKED_CACHE_SCRIPT),
+    invalidate: new glide.Script(INVALIDATE_CACHE_SCRIPT),
   };
   let disposed = false;
   let activeInvocations = 0;
 
   const invoke = async (
-    script: Script,
-    keys: GlideString[],
-    args: GlideString[] = [],
-  ): Promise<GlideReturnType> => {
+    script: TScript,
+    keys: ValkeyGlideString[],
+    args: ValkeyGlideString[] = [],
+  ): Promise<unknown> => {
     if (disposed) {
       throw new Error("Valkey GLIDE DialCache client is disposed");
     }
     activeInvocations += 1;
     try {
-      return await client.invokeScript(script, { keys, args, decoder: Decoder.Bytes });
+      return await client.invokeScript(script, { keys, args, decoder: glide.Decoder.Bytes });
     } finally {
       activeInvocations -= 1;
     }
