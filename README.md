@@ -31,7 +31,7 @@ pnpm add dialcache
 # Choose a Redis client when using the remote layer:
 pnpm add redis@~4.7.1
 # or
-pnpm add @valkey/valkey-glide@^2.4.2
+pnpm add @valkey/valkey-glide
 # Add a metrics client only when using its adapter:
 pnpm add prom-client@^15.1.3
 # or
@@ -308,19 +308,20 @@ async function shutdown(): Promise<void> {
 
 `redis.client` is required when Redis is configured and accepts the semantic `DialCacheRedisClient` interface. Create and connect the underlying client before constructing `DialCache`. Node-redis users should register the supplied scripts and wrap their client with `createNodeRedisDialCacheClient` as shown above.
 
-Valkey GLIDE users pass an already-created standalone or cluster client to the GLIDE adapter:
+Valkey GLIDE users pass an already-created standalone or cluster client and its
+module namespace to the GLIDE adapter:
 
 ```ts
-import { GlideClient } from "@valkey/valkey-glide";
+import * as valkeyGlide from "@valkey/valkey-glide";
 import { DialCache } from "dialcache";
 import { createValkeyGlideDialCacheClient } from "dialcache/valkey-glide";
 
-const glideClient = await GlideClient.createClient({
+const glideClient = await valkeyGlide.GlideClient.createClient({
   addresses: [{ host: "127.0.0.1", port: 6379 }],
   requestTimeout: 2_000,
   advancedConfiguration: { connectionTimeout: 2_000 },
 });
-const redisClient = createValkeyGlideDialCacheClient(glideClient);
+const redisClient = createValkeyGlideDialCacheClient(glideClient, valkeyGlide);
 const dialcache = new DialCache({
   namespace: "users-api",
   redis: { client: redisClient },
@@ -333,6 +334,11 @@ function shutdown(): void {
 }
 ```
 
+Pass the same module namespace that created the client. DialCache uses its
+`Script` constructor and `Decoder.Bytes` value without importing a GLIDE runtime
+itself, so linked workspaces and applications with another installed GLIDE
+version cannot accidentally mix native script handles.
+
 The application owns the complete Redis lifecycle. It creates and connects the underlying client and passes the semantic adapter to DialCache. During shutdown, stop starting DialCache-backed work and await every outstanding cached-function and `invalidateRemote()` promise, including calls still running fallbacks that may later write Redis. Then dispose adapter-owned resources and close the underlying connection. DialCache only borrows `redis.client`; it has no close or drain method and never disposes or closes caller resources.
 
 The node-redis adapter owns no additional resources, so the application closes the underlying node-redis client after draining work. The GLIDE adapter owns five native `Script` handles but not the wrapped connection. After outstanding operations finish, call its idempotent `dispose()` before closing GLIDE as shown above; disposal while an adapter operation is in flight throws rather than releasing a live script.
@@ -343,7 +349,7 @@ Node-redis computes each script's SHA, uses `EVALSHA`, and retries with `EVAL` a
 
 DialCache fail-open behavior is rejection-driven: a Redis promise that never settles cannot fall through. Every `DialCacheRedisClient.read`, `write`, and `invalidate` promise must therefore resolve or reject within a finite application-defined budget covering connection establishment, reconnection, retries, offline queueing, dispatch, and response time. A connection timeout alone does not satisfy this contract. A pending read prevents fallback from starting, while a pending write withholds an already-computed fallback result and retains its process flight.
 
-Valkey GLIDE users should configure [`requestTimeout`](https://github.com/valkey-io/valkey-glide/blob/v2.4.2/node/src/BaseClient.ts#L770-L776) and [`advancedConfiguration.connectionTimeout`](https://github.com/valkey-io/valkey-glide/blob/v2.4.2/node/src/BaseClient.ts#L957-L964), as shown above. GLIDE applies the request timeout while sending, waiting for a response, reconnecting, and retrying. This bounds client waiting; it is not server-side cancellation, so a write dispatched before timeout may still execute.
+Valkey GLIDE users should configure [`requestTimeout`](https://glide.valkey.io/languages/nodejs/api/interfaces/BaseClient.BaseClientConfiguration.html) and [`advancedConfiguration.connectionTimeout`](https://glide.valkey.io/languages/nodejs/api/interfaces/BaseClient.AdvancedBaseClientConfiguration.html), as shown above. GLIDE applies the request timeout while sending, waiting for a response, reconnecting, and retrying. This bounds client waiting; it is not server-side cancellation, so a write dispatched before timeout may still execute.
 
 In node-redis 4.7, `socket.connectTimeout`, `disableOfflineQueue`, and `commandsQueueMaxLength` bound connection or queue behavior but do not impose a response deadline on a dispatched command. A [per-command `AbortSignal`](https://redis.io/docs/latest/develop/clients/nodejs/produsage/) can remove work that is still waiting to be sent, but once dispatched it no longer controls the pending reply. Node-redis 4.7 has no built-in strict dispatched-response deadline, and the bundled adapter does not inject queue cancellation. Applications requiring finite node-redis settlement must supply and document a custom `DialCacheRedisClient` policy for queue removal, hung connections, and ambiguous writes. Do not put Redis writes or invalidations behind a bare `Promise.race`: rejecting the outer promise neither removes queued work nor proves that an already-dispatched command did not execute.
 

@@ -1,4 +1,4 @@
-import { GlideClient } from "@valkey/valkey-glide";
+import * as valkeyGlide from "@valkey/valkey-glide";
 import { createClient } from "redis";
 import { GenericContainer, type StartedTestContainer, Wait } from "testcontainers";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -41,7 +41,7 @@ function encodeFrame(payload: string | Buffer, encoding: number, createdAtMs = D
 describe("DialCache Redis adapter conformance on Redis 6.2", () => {
   let container: StartedTestContainer | undefined;
   let admin: ReturnType<typeof createNodeRedisClient> | undefined;
-  let glide: GlideClient | undefined;
+  let glide: valkeyGlide.GlideClient | undefined;
   let glideAdapter: ValkeyGlideDialCacheClient | undefined;
   let adapters: Record<AdapterKind, DialCacheRedisClient> | undefined;
 
@@ -55,8 +55,8 @@ describe("DialCache Redis adapter conformance on Redis 6.2", () => {
     admin = createNodeRedisClient(`redis://${host}:${port}`);
     admin.on("error", () => undefined);
     await admin.connect();
-    glide = await GlideClient.createClient({ addresses: [{ host, port }] });
-    glideAdapter = createValkeyGlideDialCacheClient(glide);
+    glide = await valkeyGlide.GlideClient.createClient({ addresses: [{ host, port }] });
+    glideAdapter = createValkeyGlideDialCacheClient(glide, valkeyGlide);
     adapters = {
       nodeRedis: createNodeRedisDialCacheClient(admin),
       valkeyGlide: glideAdapter,

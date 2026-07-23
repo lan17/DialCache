@@ -313,7 +313,8 @@ void datadogMetrics;
 void datadogClassAdapter;
 void missingObservationType;
 `;
-const integrationConsumer = `import { DialCache } from "dialcache";
+const integrationConsumer = `import * as valkeyGlide from "@valkey/valkey-glide";
+import { DialCache } from "dialcache";
 import StatsD from "hot-shots";
 import {
   DatadogDialCacheMetrics,
@@ -330,6 +331,7 @@ import {
 import {
   createValkeyGlideDialCacheClient,
   type ValkeyGlideDialCacheClient,
+  type ValkeyGlideRuntime,
 } from "dialcache/valkey-glide";
 import { Registry, type OpenMetricsContentType } from "prom-client";
 
@@ -343,6 +345,13 @@ openMetricsRegistry.setContentType(Registry.OPENMETRICS_CONTENT_TYPE);
 const openMetricsAdapter = new PrometheusDialCacheMetrics({ registry: openMetricsRegistry, prefix: "open_" });
 const registryIsRequired: {} extends Pick<PrometheusMetricsOptions, "registry"> ? false : true = true;
 const glideRedisClient: ValkeyGlideDialCacheClient | undefined = undefined;
+const glideRuntime: ValkeyGlideRuntime<valkeyGlide.Script, valkeyGlide.Decoder> = valkeyGlide;
+declare const standaloneGlideClient: valkeyGlide.GlideClient;
+declare const clusterGlideClient: valkeyGlide.GlideClusterClient;
+const standaloneGlideAdapter = createValkeyGlideDialCacheClient(standaloneGlideClient, glideRuntime);
+const clusterGlideAdapter = createValkeyGlideDialCacheClient(clusterGlideClient, glideRuntime);
+// @ts-expect-error The caller's GLIDE runtime is required for native Script ownership.
+createValkeyGlideDialCacheClient(standaloneGlideClient);
 const dogStatsD = new StatsD({ mock: true });
 const compatibleDogStatsD: DatadogDogStatsDClient = dogStatsD;
 const observationMetricType: DatadogObservationMetricType = "distribution";
@@ -365,7 +374,8 @@ void classAdapter;
 void openMetricsAdapter;
 void registryIsRequired;
 void glideRedisClient;
-void createValkeyGlideDialCacheClient;
+void standaloneGlideAdapter;
+void clusterGlideAdapter;
 void datadogClassAdapter;
 void datadogCache;
 void observationMetricTypeIsRequired;
@@ -415,6 +425,7 @@ try {
       "--eval",
       `const root = await import("dialcache");
 const nodeRedis = await import("dialcache/node-redis");
+await import("dialcache/valkey-glide");
 await import("dialcache/datadog");
 await import("dialcache/redis-protocol");
 const fallbackTimeoutError = new root.FallbackTimeoutError("PackageRuntime", 1000);
@@ -490,6 +501,7 @@ if (calls !== 1 || second !== first) {
       "--eval",
       `const root = require("dialcache");
 const nodeRedis = require("dialcache/node-redis");
+require("dialcache/valkey-glide");
 require("dialcache/datadog");
 require("dialcache/redis-protocol");
 const fallbackTimeoutError = new root.FallbackTimeoutError("PackageRuntime", 1000);
@@ -582,7 +594,8 @@ void (async () => {
       "redis@~4.7.1",
       "typescript@5.9.3",
       "prom-client@^15.1.3",
-      "@valkey/valkey-glide@^2.4.2",
+      "@valkey/valkey-glide@2.2.10",
+      "dialcache-test-glide@npm:@valkey/valkey-glide@2.4.2",
       "hot-shots@^17.0.0",
     ],
     { cwd: workspace },
@@ -601,11 +614,26 @@ void (async () => {
       "--eval",
       `const root = await import("dialcache");
 const glide = await import("dialcache/valkey-glide");
+const appGlide = await import("@valkey/valkey-glide");
+const otherGlide = await import("dialcache-test-glide");
 await import("dialcache/datadog");
 await import("dialcache/prometheus");
 await import("dialcache/redis-protocol");
 await import("dialcache/node-redis");
-const adapter = glide.createValkeyGlideDialCacheClient({ invokeScript: async () => 2 });
+if (appGlide.Script === otherGlide.Script) {
+  throw new Error("The package test requires two distinct GLIDE module instances");
+}
+const adapter = glide.createValkeyGlideDialCacheClient({
+  invokeScript: async (script, options) => {
+    if (!(script instanceof appGlide.Script) || script instanceof otherGlide.Script) {
+      throw new Error("The ESM adapter did not use the caller-supplied GLIDE Script constructor");
+    }
+    if (options.decoder !== appGlide.Decoder.Bytes) {
+      throw new Error("The ESM adapter did not use the caller-supplied GLIDE byte decoder");
+    }
+    return 2;
+  },
+}, appGlide);
 try {
   await adapter.write({ valueKey: "value", cacheTtlMs: 1_000, value: "payload" });
   throw new Error("Expected an invalid GLIDE script reply to fail");
@@ -625,12 +653,27 @@ try {
       "--eval",
       `const root = require("dialcache");
 const glide = require("dialcache/valkey-glide");
+const appGlide = require("@valkey/valkey-glide");
+const otherGlide = require("dialcache-test-glide");
 require("dialcache/datadog");
 require("dialcache/prometheus");
 require("dialcache/redis-protocol");
 require("dialcache/node-redis");
 void (async () => {
-  const adapter = glide.createValkeyGlideDialCacheClient({ invokeScript: async () => 2 });
+  if (appGlide.Script === otherGlide.Script) {
+    throw new Error("The package test requires two distinct GLIDE module instances");
+  }
+  const adapter = glide.createValkeyGlideDialCacheClient({
+    invokeScript: async (script, options) => {
+      if (!(script instanceof appGlide.Script) || script instanceof otherGlide.Script) {
+        throw new Error("The CommonJS adapter did not use the caller-supplied GLIDE Script constructor");
+      }
+      if (options.decoder !== appGlide.Decoder.Bytes) {
+        throw new Error("The CommonJS adapter did not use the caller-supplied GLIDE byte decoder");
+      }
+      return 2;
+    },
+  }, appGlide);
   try {
     await adapter.write({ valueKey: "value", cacheTtlMs: 1_000, value: "payload" });
     throw new Error("Expected an invalid GLIDE script reply to fail");
