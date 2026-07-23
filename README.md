@@ -4,43 +4,79 @@
 [![Codecov](https://codecov.io/gh/lan17/DialCache/branch/main/graph/badge.svg)](https://codecov.io/gh/lan17/DialCache)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/lan17/DialCache/badge)](https://scorecard.dev/viewer/?uri=github.com/lan17/DialCache)
 
-Fine-grained TypeScript caching with explicit enabled contexts, request-local memoization, process-local and Redis TTL caching, stable key construction, runtime rollout controls, request coalescing, adapter-based observability, and Redis watermark-based targeted invalidation.
+**Roll out backend caching like a feature—not a leap of faith.**
+
+**DialCache is** a TypeScript library for caching database and service reads
+inside Node.js backends. It routes reusable async functions and inline loaders
+through one read-through path with request-local memoization, a bounded
+in-process LRU, and optional Redis or Valkey caching.
+
+The “dial” is per-use-case runtime control. Start with caching off, dial the
+process-local and remote layers up for stable cohorts of keys, and dial them
+back down without changing the loader.
+
+**DialCache is not** a frontend data cache, cache server, Redis or Valkey
+client, or runtime configuration service. It supplies the cache path and
+rollout controls; your application still decides what is safe to cache and
+owns loader behavior, connections, runtime configuration, keys, TTLs,
+invalidation policy, and resource budgets.
+
+## Safety comes from explicit controls
+
+- **Off by default.** Outside `dialcache.enable(...)`, both cached wrappers and
+  inline loaders are true pass-throughs: DialCache does not build a key,
+  resolve config, access a cache, or coalesce the call. Inside an enabled
+  scope, a layer still needs an effective policy before it participates.
+- **Gradual and reversible rollout.** Configure TTL and ramp independently for
+  the process-local and remote layers. A ramp of `0` is off, `100` is fully on,
+  and `DialCacheKeyConfig.disabled()` is the all-layer policy kill switch.
+- **Fail-open cache path.** Key, config, cache-read, and serialization-load
+  failures fall through to the source loader. Cache-write,
+  serialization-dump, logging, and metrics failures do not replace an otherwise
+  usable fallback result. Explicit remote invalidation failures are rethrown so
+  callers never assume a mutation was made safe when it was not.
+- **Bounded defaults.** The process-local cache has a 10,000-entry default cap,
+  active remote reads have a 50-millisecond default deadline, and enabled
+  fallback executions have a 60-second default deadline. The read deadline
+  bounds DialCache's wait, not necessarily the underlying Redis command;
+  applications still need resource-native budgets for client work, config
+  providers, serializers, and source I/O.
+
+Use DialCache when you want to:
+
+- add caching to database or service reads without scattering cache get/set
+  plumbing across call sites;
+- begin with one layer or a small deterministic key cohort, observe it, and
+  expand or reverse the rollout per use case;
+- combine request-local, process-local, and shared caching behind one key and
+  policy contract; or
+- coalesce hot-key misses, invalidate related Redis entries, and emit bounded
+  cache metrics without rebuilding those mechanisms for every function.
 
 ## Contents
 
 - [Install](#install)
 - [Quick start](#quick-start)
-- [How caching works](#how-caching-works)
-- [Enabled context](#enabled-context)
-- [Defining cached functions](#defining-cached-functions)
-  - [One-shot inline cache blocks](#one-shot-inline-cache-blocks)
-- [Keys, ids, and extra dimensions](#keys-ids-and-extra-dimensions)
-- [Runtime config and ramp controls](#runtime-config-and-ramp-controls)
-- [Cache layers](#cache-layers)
-  - [Request-local cache](#request-local-cache) · [Process-local cache](#process-local-cache) · [Redis-backed TTL cache](#redis-backed-ttl-cache) · [Remote read deadlines](#remote-read-deadlines-and-async-liveness) · [Serialization](#serialization)
-- [Cached-value ownership](#cached-value-ownership)
-- [Targeted invalidation and watermarks](#targeted-invalidation-and-watermarks)
-- [Request coalescing](#request-coalescing)
-  - [Fallback deadlines](#fallback-deadlines) · [Coalescing state](#coalescing-state)
-- [Metrics](#metrics)
-- [Maintainers](#maintainers)
+- [Dial caching up or down](#dial-caching-up-or-down)
+- [How the read path works](#how-the-read-path-works)
+- [Core concepts](#core-concepts)
+- [Production checklist](#production-checklist)
+- [Reference guides](#reference-guides)
 
 ## Install
 
 ```bash
 pnpm add dialcache
-# Choose a Redis client when using the remote layer:
-pnpm add redis@~4.7.1
-# or
-pnpm add @valkey/valkey-glide
-# Add a metrics client only when using its adapter:
-pnpm add prom-client@^15.1.3
-# or
-pnpm add hot-shots@^17.0.0
 ```
 
 DialCache requires Node.js 22.0.0 or newer. Production deployments should use a
 [currently supported LTS release](https://nodejs.org/en/about/previous-releases).
+
+Redis, Valkey, Prometheus, and Datadog integrations are optional and keep their
+clients application-owned:
+
+- [Redis and Valkey setup](https://github.com/lan17/DialCache/blob/main/docs/redis.md)
+- [Prometheus and Datadog setup](https://github.com/lan17/DialCache/blob/main/docs/observability.md)
 
 ## Quick start
 
@@ -59,678 +95,309 @@ const getUser = dialcache.cached(
   },
 );
 
-// Caching is OFF outside an enable() scope (see "Enabled context"), so this runs the fn uncached:
+// Outside enable(), this is a true pass-through to db.fetchUser:
 await getUser("123");
 
-// Inside enable(), reads are cached:
+// Inside enable(), the active cache layers participate:
 const user = await dialcache.enable(() => getUser("123"));
 ```
 
-## How caching works
+`cached(fn, options)` preserves the function's parameters and returns a
+Promise-based wrapper. `DialCacheKeyConfig.enabled(60)` gives the process-local
+and remote layers a 60-second baseline TTL; the remote layer participates only
+when a Redis or Valkey client is configured.
 
-The wrapped function is the **fallback**: it runs whenever no active cache layer returns a value, whether because layers missed, were disabled, or failed open.
+For a one-shot calculation that should remain inline,
+[`getOrLoad()`](https://github.com/lan17/DialCache/blob/main/docs/configuration.md#one-shot-inline-loaders)
+accepts a
+zero-argument loader and a direct key through the same cache contract.
 
-When caching is enabled, reads flow through:
-
-```text
-request-local cache -> process-local cache -> Redis cache -> fallback function
-```
-
-- Request-local hits return the value memoized in the current outermost `enable()` scope.
-- Results from the lower chain are memoized request-locally when that layer is enabled.
-- Process-local hits return immediately.
-- Process-local misses try Redis and populate the process-local cache on a Redis hit.
-- Redis misses call the fallback and attempt to populate Redis and, when active, the process-local cache. Tracked invalidation may suppress both publications.
-- Redis read failures and timeouts are logged, counted in metrics, and fail open without attempting a second Redis operation. Redis write failures also fail open. `invalidateRemote` logs/counts Redis failures and rethrows them so callers do not assume invalidation succeeded.
-- Cache-key construction and config-provider failures also fail open and run the fallback uncached.
-- A missing effective process-local/Redis TTL disables that layer by policy; a configured TTL with no ramp defaults to 100%. Disabled layers record a disabled reason and fall through to the next layer/fallback.
-
-Caching as a whole is only active inside an enabled context, described next.
-
-## Enabled context
-
-Caching is **off by default** and only active inside a `dialcache.enable(...)` scope. This is deliberate: it lets you turn caching **off in write paths** so a stale read can't be cached around a write. DialCache uses Node `AsyncLocalStorage` to keep enabled state scoped to the current asynchronous call chain.
-
-**Enable once at your request boundary** (e.g. a middleware that wraps read-request handling) so individual call sites don't each need it; wrap mutation handlers in `disable()`:
+Enable caching once at a read-request boundary instead of at every call site.
+Keep nested mutation work uncached with `disable()`:
 
 ```ts
 await dialcache.enable(async () => {
-  await getUser("123"); // cached
+  const user = await getUser("123");
 
   await dialcache.disable(async () => {
-    await updateUser("123", patch); // reads here are uncached
+    await updateUser("123", patch);
   });
-
-  await getUser("123"); // cached again
 });
 ```
 
-- Default is disabled — `cached()` and `getOrLoad()` calls made **outside** any `enable()` scope simply run their loader uncached (no error), so wrap your read paths to actually cache.
-- Enabled state is async-scope-local, not process-global.
-- Nested `enable` / `disable` scopes restore the previous behavior when the callback completes. Nested `enable()` calls reuse the outer request-local scope rather than creating a new one.
+Enabled state follows the current asynchronous call chain through Node
+`AsyncLocalStorage`; it is not process-global. Nested scopes restore the
+previous state when their callbacks settle.
 
-## Defining cached functions
+`disable()` prevents cache access during its callback; it does not evict values
+cached before a mutation. Use the appropriate invalidation or TTL policy before
+serving later reads of mutable data.
 
-Use `cached(fn, options)` for an extracted, reusable function. The wrapped callable has the same parameters and always returns a `Promise`. For a one-shot calculation that should remain inline, use [`getOrLoad()`](#one-shot-inline-cache-blocks).
+## Dial caching up or down
 
-| Option | Required | Description |
-| --- | --- | --- |
-| `keyType` | yes | The kind of id the key addresses (e.g. `"user_id"`). Together with the id, the invalidation unit for tracked entries. |
-| `useCase` | yes | Identifies the individual cache: part of the stored key and the metrics label. |
-| `cacheKey` | yes | Selector over `fn`'s parameters; returns a bare id or `{ id, args }`. |
-| `defaultConfig` | no | `DialCacheKeyConfig` baseline policy that runtime config overlays field by field (see [Runtime config](#runtime-config-and-ramp-controls)). |
-| `serializer` | when the return type is not statically JSON-compatible | Per-function `Serializer<T>` for Redis values (see [Serialization](#serialization)). |
-| `trackForInvalidation` | no (default `false`) | Opts this use case's Redis entries into watermark-based targeted invalidation. |
-| `fallbackTimeoutMs` | no (default `60_000`) | Fallback deadline in milliseconds, at most 2,147,483,647; `null` disables it (see [Fallback deadlines](#fallback-deadlines)). |
-
-`cached()` validates `useCase` at registration: a duplicate within one `DialCache` instance throws `UseCaseIsAlreadyRegisteredError`. Both APIs reject the internal name `watermark` with `UseCaseNameIsReservedError`.
-
-### One-shot inline cache blocks
-
-`getOrLoad(load, options)` runs one zero-argument loader through the same policy, cache layers, coalescing, invalidation, metrics, serialization, deadlines, and fail-open behavior as `cached()`. It is useful when only part of a larger function should be cached and the loader needs to capture local values:
-
-```ts
-// Reuse the caller-owned defaults; getOrLoad() snapshots them per invocation.
-const profileCacheDefaults = DialCacheKeyConfig.enabled(60);
-
-const profile = await dialcache.getOrLoad(
-  async () => {
-    const user = await db.getUser(userId);
-    return renderProfile(user, locale);
-  },
-  {
-    keyType: "user_id",
-    useCase: "BuildProfile",
-    key: { id: userId, args: { locale } },
-    defaultConfig: profileCacheDefaults,
-  },
-);
-```
-
-The options match `cached()` except that the direct `key` replaces the `cacheKey` selector. `defaultConfig` and `fallbackTimeoutMs` are validated and snapshotted for each invocation. Outside an enabled scope, DialCache invokes `load` directly without constructing a key or resolving runtime policy.
-
-`getOrLoad()` does not register its `useCase`, so repeated calls should reuse one stable, deployment-defined name such as `"BuildProfile"`. Keep it bounded: never derive `useCase` from a user, request, id, or other high-cardinality input because it is part of both cache identity and metrics labels. Put those values in `key` instead.
-
-Every captured value that can change the result belongs in the bare id or `{ id, args }` key. Concurrent same-key calls may share one caller's in-flight loader and cached value, so all call sites for that identity must also agree on value meaning and serialization. Prefer `cached()` when a loader is reusable; prefer `getOrLoad()` when the calculation is intentionally local to one call site.
-
-## Keys, ids, and extra dimensions
-
-For `cached()`, the key comes from the required `cacheKey` selector whose parameters are inferred from `fn`. `getOrLoad()` accepts the same bare id or `{ id, args }` shape directly through `key`:
-
-The selected or direct key is the value identity contract. It must include every input dimension that can affect the returned value; otherwise distinct calls can reuse the same cached value or share the same in-flight fallback through request coalescing.
-
-```ts
-const searchPosts = dialcache.cached(
-  (userId: string, page: number, filter: string) => db.searchPosts(userId, page, filter),
-  {
-    keyType: "user_id",
-    useCase: "SearchPosts",
-    cacheKey: (userId, page, filter) => ({ id: userId, args: { page, filter } }),
-    defaultConfig: DialCacheKeyConfig.enabled(60),
-  },
-);
-await dialcache.enable(() => searchPosts("u1", 2, "active"));
-```
-
-`DialCacheConfig.namespace` is the logical cache namespace and the first component of every key. It defaults to `"urn"`, producing keys such as `urn:user_id:123#GetUser`. Set a stable application-specific value when multiple applications may use the same Redis deployment:
-
-```ts
-const dialcache = new DialCache({
-  namespace: "users-api",
-  redis: { client: redisClient },
-});
-```
-
-That produces Redis keys beginning with `users-api:...`, or `{users-api:...}` for invalidation-tracked values. `namespace` is DialCache's single cache-identity and key-partitioning setting: it participates in request-local, process-local, Redis, coalescing, deterministic ramp, invalidation, and metrics. It may not contain `{` or `}` because DialCache reserves those characters for Redis Cluster hash tags. Use a namespace to express any required application or environment separation, such as `production-users-api`.
-
-- **`keyType` + `id` is the invalidation unit for tracked Redis entries.** `dialcache.invalidateRemote("user_id", "123", futureBufferMs)` writes one watermark for that user; any `trackForInvalidation` Redis entry with the same `keyType` and `id` is refreshed across all `args` variants when Redis is read. `invalidateRemote` does not evict existing request-local or process-local entries (see [Targeted invalidation](#targeted-invalidation-and-watermarks)), and untracked Redis entries do not consult the watermark. `useCase` identifies the individual cache (it's the metrics label and part of the stored key).
-- **`args` are part of the cache key** — different `args` produce different entries — but invalidation is by `id` only.
-- **Scalar key equality is string-based.** Runtime type is not an identity dimension: for matching surrounding dimensions, numeric `1`, string `"1"`, and bigint `1n` identify the same key; argument values `null` and `"null"` also match. `-0` matches `0`, and an `undefined` argument is omitted. If a deployment changes the logical meaning represented by a scalar, change an explicit identity dimension such as `keyType`, `useCase`, or an argument name/value.
-- **Non-key inputs** (for example a db handle) are parameters ignored by a `cacheKey` selector or values captured by a `getOrLoad()` loader. They still reach non-coalesced executions, but concurrent same-key cache misses share the leader's execution, so do not omit values like auth context, locale, or cancellation behavior unless sharing one result is correct.
-- **Methods:** pass `obj.method.bind(obj)` (or `(...a) => obj.method(...a)`) — a bare `obj.method` reference loses `this`.
-
-Changing the namespace value intentionally creates a cold-cache boundary across every layer. Old and new keyspaces do not share Redis values or invalidation watermarks. During an overlapping deployment, an invalidation handled by one version is invisible to the other, which can continue serving a stale tracked value until its value TTL expires. If remote invalidation correctness matters, a normal rolling deployment is unsafe: use a coordinated no-overlap cutover, or an operational bridge that prevents both versions from serving remote cache across mutations (for example, temporarily disable and clear remote caching during the transition). After the cutover, provision for fallback/refill load and allow old Redis keys to expire by TTL.
-
-## Runtime config and ramp controls
-
-Instance-wide behavior is set through the `DialCache` constructor:
-
-| `DialCacheConfig` option | Default | Description |
-| --- | --- | --- |
-| `namespace` | `"urn"` | Logical cache namespace and first key component (see [Keys, ids, and extra dimensions](#keys-ids-and-extra-dimensions)). |
-| `redis` | none | `{ client: DialCacheRedisClient, readTimeoutMs?: number }`; enables the Redis layer with a 50 ms default read deadline (see [Redis-backed TTL cache](#redis-backed-ttl-cache)). |
-| `localMaxSize` | `10_000` | Global process-local entry cap; `0` disables process-local storage. Nonnegative safe integer. |
-| `cacheConfigProvider` | none | Resolves runtime config per enabled invocation as a sparse overlay on the function's `defaultConfig`; `null` applies no overrides. |
-| `metrics` | disabled | A `DialCacheMetricsAdapter` (see [Metrics](#metrics)). |
-| `logger` | `console` | Receives operational cache failures (`debug`, `warn`, `error`). |
-
-Per-invocation cache policy is a `DialCacheKeyConfig`: per-layer `ttlSec` and `ramp` maps keyed by `CacheLayer.LOCAL` (process-local) and `CacheLayer.REMOTE` (Redis), a `requestLocal` boolean, and an optional `remoteReadTimeoutMs`.
-
-Every cached definition or `getOrLoad()` invocation can provide an optional per-use-case `defaultConfig`. It is the baseline policy, and the `cacheConfigProvider` result is a sparse field-level overlay on that baseline. For cache enablement fields, precedence is runtime config, then `defaultConfig`, then DialCache's disabled baseline. For the remote-read deadline, precedence is runtime `remoteReadTimeoutMs`, `defaultConfig.remoteReadTimeoutMs`, `redis.readTimeoutMs`, then the 50 ms library default.
-
-The disabled baseline sets `requestLocal` to false and leaves the process-local and Redis TTLs unset. A shared layer with no effective TTL is disabled by policy. When a shared layer has an effective TTL but no effective ramp, its ramp defaults to 100%.
-
-`DialCacheKeyConfig` preserves an omitted `requestLocal` as `undefined` so the overlay can distinguish omission from an explicit `false`; the effective value still defaults to false after resolution.
-
-A provider result of `null` (or defensive `undefined`) applies no overrides. An empty `DialCacheKeyConfig` and omitted runtime fields also inherit the baseline. Use explicit values to override inherited policy: `requestLocal: false` disables request-local caching and a layer ramp of `0` disables that shared layer. `DialCacheKeyConfig.disabled()` is that explicit kill switch in one call: request-local off and both shared layers ramped to 0.
-
-DialCache validates `defaultConfig` when `cached()` registers a definition and whenever `getOrLoad()` is invoked: TTLs and remote-read deadlines must be positive safe integers, ramps must be finite percentages from 0 to 100, layer maps must be objects, and `requestLocal` must be a boolean when present. Invalid defaults are rejected immediately.
-
-Each registration or one-shot invocation captures an immutable internal snapshot of `defaultConfig`; mutating the supplied config or its maps later does not change that operation's baseline. Runtime policy changes belong in the provider's returned overlay.
-
-Runtime TTL and ramp leaves are used as supplied instead of falling back to valid default leaves. An invalid TTL disables that layer with `invalid_ttl`; a non-finite or nonnumeric ramp disables it with `invalid_ramp`; finite runtime ramps retain the defensive clamp to 0–100. Other layers can still run, and invalid leaves also record a `config_resolution` error so provider garbage is alertable separately from intentional ramp-downs. A malformed runtime config object, layer-map shape, `requestLocal` value, or explicit `remoteReadTimeoutMs` fails config resolution for the invocation, records `config_error`, and executes the fallback uncached without attempting Redis.
-
-`cacheConfigProvider` is called for every enabled cache invocation before DialCache performs any cache lookup. Keep it cheap, cache any remote/config-store reads inside the provider, and avoid work that would erase the benefit of a cache hit.
+Every cache operation can declare a stable `defaultConfig`. An optional
+`cacheConfigProvider` returns a sparse runtime overlay for the current key, so
+policy can change independently of the loader:
 
 ```ts
 import { CacheLayer, DialCache, DialCacheKeyConfig } from "dialcache";
 
+const runtimePolicies = new Map<string, DialCacheKeyConfig>();
+
 const dialcache = new DialCache({
-  cacheConfigProvider: async (key) => {
-    if (key.useCase === "GetUser") {
-      return new DialCacheKeyConfig({
-        // Sparse override: inherit both TTLs and the local ramp from defaultConfig.
-        ramp: { [CacheLayer.REMOTE]: 25 },
-        // Can be changed by the provider at runtime for this use case.
-        remoteReadTimeoutMs: 35,
-      });
-    }
-    return null; // apply no overrides; use the cached function's baseline
-  },
+  cacheConfigProvider: (key) => runtimePolicies.get(key.useCase) ?? null,
 });
 
-const getUser = dialcache.cached((userId: string) => db.fetchUser(userId), {
-  keyType: "user_id",
-  useCase: "GetUser",
-  cacheKey: (userId) => userId,
-  defaultConfig: new DialCacheKeyConfig({
-    // Omitted ramps default to 100% because these layers have TTLs.
-    ttlSec: { [CacheLayer.LOCAL]: 30, [CacheLayer.REMOTE]: 300 },
-  }),
-});
-```
-
-`ramp` values are percentages from 0 to 100. `0` disables the layer, `100` enables it, and intermediate values are deterministically sampled by cache key and layer, so the same key is consistently sampled in or out of a partial rollout across calls and instances. The assignment algorithm is owned by DialCache and remains stable across releases. Applications that need an externally coordinated cohort can use `cacheConfigProvider` to return a sparse per-key ramp override of `0` or `100`. DialCache fetches and resolves one config snapshot per enabled invocation. Provider errors do not activate defaults: they fail open, record `config_error`, and execute the fallback function uncached.
-
-## Cache layers
-
-### Request-local cache
-
-Set `requestLocal: true` to memoize resolved values for the lifetime of the outermost `enable()` scope:
-
-```ts
-import { DialCache, DialCacheKeyConfig } from "dialcache";
-
-const dialcache = new DialCache();
 const getUser = dialcache.cached(
   (userId: string) => db.fetchUser(userId),
   {
     keyType: "user_id",
     useCase: "GetUser",
     cacheKey: (userId) => userId,
-    defaultConfig: new DialCacheKeyConfig({ requestLocal: true }),
+    defaultConfig: DialCacheKeyConfig.enabled(60),
   },
 );
+
+// Start with the local 10% ramp cohort; keep the remote layer off.
+runtimePolicies.set(
+  "GetUser",
+  new DialCacheKeyConfig({
+    ramp: {
+      [CacheLayer.LOCAL]: 10,
+      [CacheLayer.REMOTE]: 0,
+    },
+  }),
+);
+
+// Later, ramp both shared layers to 100%.
+runtimePolicies.set(
+  "GetUser",
+  new DialCacheKeyConfig({
+    ramp: {
+      [CacheLayer.LOCAL]: 100,
+      [CacheLayer.REMOTE]: 100,
+    },
+  }),
+);
+
+// Reverse the rollout without changing getUser.
+runtimePolicies.set("GetUser", DialCacheKeyConfig.disabled());
 ```
 
-`requestLocal` is a runtime boolean rather than a TTL/ramp-controlled `CacheLayer`. The `cacheConfigProvider` can turn it on or off for each invocation. `DialCacheKeyConfig.enabled(ttlSec)` enables only process-local and Redis caching, so request-local caching must be selected explicitly.
+In production, the provider can read from an application-owned dynamic config
+client instead of an in-memory map. DialCache resolves one policy snapshot per
+enabled invocation. Keep the provider cheap and give any asynchronous work its
+own finite budget.
 
-DialCache resolves the runtime config once per enabled invocation and uses it for the entire lookup. When the effective `requestLocal` value is false, the invocation skips request-local lookup and storage without deleting an entry already memoized in the scope. A later invocation that enables request-local caching can reuse that entry.
+For the process-local and remote layers:
 
-The outermost `enable()` call owns the request-local lifetime, and nested `enable()` calls reuse that scope. Request-local state is allocated lazily, only when an invocation enables the layer, so scopes that use only process-local or Redis caching do not allocate it.
+- a missing effective TTL disables that layer by policy;
+- a configured TTL with no ramp defaults to `100`;
+- `0` disables the layer;
+- `100` enables the layer for every key; and
+- an intermediate ramp uses DialCache's deterministic key-and-layer
+  assignment.
 
-Wrap the complete Node HTTP handler so the request-local scope matches the handler's lifetime:
+Ramps select key cohorts, not requests or load, so `10` does not guarantee 10%
+of calls. Increasing or decreasing a ramp preserves membership for keys that
+remain inside the threshold, and local and remote cohorts are layer-specific.
+DialCache keeps the assignment stable across releases.
 
-```ts
-import { createServer } from "node:http";
+If an application needs an externally coordinated cohort, its
+`cacheConfigProvider` can return a per-key ramp override of `0` or `100`.
+Ramping down, including with `DialCacheKeyConfig.disabled()`, bypasses existing
+entries rather than deleting them; a later ramp-up can reuse entries that
+remain valid.
 
-const server = createServer((req, res) => {
-  void dialcache
-    .enable(async () => {
-      const user = await getUser(readUserId(req));
-      res.setHeader("content-type", "application/json");
-      res.end(JSON.stringify(user));
-    })
-    .catch((error: unknown) => handleRequestError(error, res));
-});
-```
+Request-local caching is controlled separately by the `requestLocal` boolean.
+`DialCacheKeyConfig.disabled()` sets it to `false` and ramps both shared layers
+to `0`. Provider errors do not silently activate the baseline: the invocation
+records a config error and runs the source loader uncached.
 
-Request-local storage has no capacity limit, eviction, or overflow mode. Entries are retained until the outermost `enable()` callback settles. Use it for short-lived scopes with bounded key cardinality; split long-running streams or large batch jobs into smaller scopes when necessary.
+Remote-read waiting is runtime-controlled too. An overlay
+`remoteReadTimeoutMs` takes precedence over the operation's `defaultConfig`,
+then the instance's `redis.readTimeoutMs`, then the 50-millisecond core default.
+Remote reads always have a finite positive deadline.
 
-### Process-local cache
+See [Configuration and cache layers](https://github.com/lan17/DialCache/blob/main/docs/configuration.md)
+for sparse-overlay precedence, validation, and layer behavior.
 
-The process-local layer (`CacheLayer.LOCAL`) uses one LRU per `DialCache` instance. It keeps at most 10,000 entries by default across all use cases while retaining each entry's configured TTL. Set `localMaxSize` to a nonnegative safe integer to change the global entry cap; `0` disables process-local storage:
+## How the read path works
 
-```ts
-const dialcache = new DialCache({ localMaxSize: 25_000 });
-```
-
-The limit counts entries rather than estimating JavaScript object memory. Recently read entries stay resident ahead of less recently used entries when the limit is reached.
-
-### Redis-backed TTL cache
-
-The Redis layer supports standalone Redis, Valkey, and Redis Cluster. Register DialCache's native node-redis scripts when creating the client, then pass that client to DialCache:
-
-```ts
-import { createClient } from "redis";
-import { DialCache } from "dialcache";
-import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "dialcache/node-redis";
-
-const redisClient = createClient({
-  url: process.env.REDIS_URL,
-  scripts: dialcacheRedisScripts,
-  disableOfflineQueue: true,
-  commandsQueueMaxLength: 1_000,
-  socket: { connectTimeout: 2_000 },
-});
-await redisClient.connect();
-
-const dialcache = new DialCache({
-  namespace: "users-api",
-  redis: {
-    client: createNodeRedisDialCacheClient(redisClient),
-    // Optional instance default; omit to use DialCache's 50 ms default.
-    readTimeoutMs: 100,
-  },
-});
-
-async function shutdown(): Promise<void> {
-  // Stop new work and await every outstanding cached call and invalidation first.
-  await redisClient.quit();
-}
-```
-
-`redis.client` is required when Redis is configured and accepts the semantic `DialCacheRedisClient` interface. `redis.readTimeoutMs` is optional and sets the instance default for remote reads; omit it to use 50 ms. Create and connect the underlying client before constructing `DialCache`. Node-redis users should register the supplied scripts and wrap their client with `createNodeRedisDialCacheClient` as shown above.
-
-Valkey GLIDE users pass an already-created standalone or cluster client and its
-module namespace to the GLIDE adapter:
-
-```ts
-import * as valkeyGlide from "@valkey/valkey-glide";
-import { DialCache } from "dialcache";
-import { createValkeyGlideDialCacheClient } from "dialcache/valkey-glide";
-
-const glideClient = await valkeyGlide.GlideClient.createClient({
-  addresses: [{ host: "127.0.0.1", port: 6379 }],
-  requestTimeout: 2_000,
-  advancedConfiguration: { connectionTimeout: 2_000 },
-});
-const redisClient = createValkeyGlideDialCacheClient(glideClient, valkeyGlide);
-const dialcache = new DialCache({
-  namespace: "users-api",
-  redis: { client: redisClient },
-});
-
-function shutdown(): void {
-  // After draining cached calls and invalidations, release scripts before closing GLIDE.
-  redisClient.dispose();
-  glideClient.close();
-}
-```
-
-Pass the same module namespace that created the client. DialCache uses its
-`Script` constructor and `Decoder.Bytes` value without importing a GLIDE runtime
-itself, so linked workspaces and applications with another installed GLIDE
-version cannot accidentally mix native script handles.
-
-The application owns the complete Redis lifecycle. It creates and connects the underlying client and passes the semantic adapter to DialCache. During shutdown, stop starting DialCache-backed work and await every promise returned by a cached function, `getOrLoad()`, or `invalidateRemote()`, including calls still running fallbacks that may later write Redis. A read that crossed DialCache's wait deadline may still be active inside the client, so use client-native telemetry and shutdown controls to drain or terminate that work before disposing adapter-owned resources and closing the connection. DialCache only borrows `redis.client`; it has no close or drain method and never disposes or closes caller resources.
-
-The node-redis adapter owns no additional resources, so the application closes the underlying node-redis client after draining work. The GLIDE adapter owns five native `Script` handles but not the wrapped connection. After outstanding operations finish, call its idempotent `dispose()` before closing GLIDE as shown above; disposal while an adapter operation is in flight throws rather than releasing a live script.
-
-Node-redis computes each script's SHA, uses `EVALSHA`, and retries with `EVAL` after `NOSCRIPT`. Its cluster client routes scripts by their first key and performs that fallback on the selected shard. The GLIDE adapter uses GLIDE's native `Script` lifecycle and byte decoder; GLIDE routes scripts from their declared keys. Tracked reads are deliberately routed to primaries so a lagging replica cannot hide an invalidation watermark.
-
-#### Remote read deadlines and async liveness
-
-DialCache bounds every active Redis read. The effective timeout is resolved per use case and per invocation: runtime `remoteReadTimeoutMs`, then `defaultConfig.remoteReadTimeoutMs`, then optional instance `redis.readTimeoutMs`, then 50 ms. Values must be positive safe integers no greater than 2,147,483,647. There is no unbounded escape hatch for remote reads.
-
-When the deadline expires, DialCache aborts the optional `RedisReadContext.signal`, records one `cache_read_timeout` error, logs a `RedisReadTimeoutError`, and starts the source fallback. Late read fulfillment or rejection is consumed and ignored. A read failure or timeout never triggers a post-fallback Redis write; an untracked active process-local miss may retain the source value, while a tracked key suppresses local publication because the failed read did not establish watermark safety.
-
-Same-key followers share the leader's remaining remote-read budget. The timer covers only the semantic Redis read, not config resolution, serializer load, fallback work, Redis writes, or invalidation. `fallbackTimeoutMs` starts separately when the source fallback begins.
-
-The bundled node-redis adapter passes the signal through per-command options, which can remove queued work where supported. Aborting after dispatch does not unsend a command or prove that Redis stopped executing it. GLIDE's current script API has no per-invocation signal, so its invocation may continue after DialCache has fallen back. Keep client-native connection, retry, queue, and response budgets in place; they bound underlying resource lifetime while DialCache's deadline bounds caller wait time.
-
-Writes, invalidations, async `cacheConfigProvider` calls, and custom serializer methods still need finite application-owned budgets. Do not put mutations behind a bare `Promise.race`: rejecting the outer promise neither removes queued work nor proves whether a dispatched mutation executed.
-
-#### Serialization
-
-The core Redis boundary is the client-agnostic `DialCacheRedisClient` interface. It exchanges serialized values as `string | Buffer` and does not expose client commands or wire encodings. Distinct untracked/tracked read and write Lua sources, the invalidation source, and wire constants are available from `dialcache/redis-protocol`. Custom adapters can throw the root-exported `DialCacheRedisPayloadError`, `DialCacheRedisPayloadEncodingError`, and `DialCacheRedisProtocolError` classes to distinguish malformed payloads, unsupported encodings, and Lua reply-domain violations in logs. DialCache records bounded `cache_read`, `cache_write`, or `invalidation` metrics by failure site.
-
-Redis values use a compact binary frame:
+Inside an enabled scope, active layers are checked in order:
 
 ```text
-byte 1      format version
-bytes 2-9   Redis-created timestamp in milliseconds (uint64, big-endian)
-byte 10     payload encoding (0 = UTF-8, 1 = raw binary)
-bytes 11... serialized payload
+request-local -> process-local LRU -> Redis or Valkey -> source loader
 ```
 
-Redis's Lua `struct` library packs and unpacks the timestamp. Redis TTL is authoritative, so expiry metadata is not duplicated in the frame. `payload` is produced by the operation's serializer, or by `JsonSerializer` by default. Custom serializers can return either `string` or `Buffer`; strings are stored as UTF-8 and Buffers are stored byte-for-byte without base64 expansion. Adapters restore the same representation before calling `serializer.load`.
+The wrapped function or inline loader is the fallback and remains the source of
+the returned value when every active layer misses or a cache operation fails
+open.
 
-DialCache uses native `JSON.stringify` and `JSON.parse` by default. There is no runtime validation pass, so the default adds no traversal beyond JSON serialization itself. A top-level `undefined` result is supported with an internal sentinel.
+- A request-local hit returns the value memoized in the current outermost
+  `enable()` scope.
+- A process-local hit returns from the `DialCache` instance's bounded LRU.
+- A process-local miss can read Redis and populate the process-local cache.
+- A remote miss runs the fallback and attempts to populate active shared
+  layers.
+- A remote read failure or timeout runs the fallback without a second Redis
+  operation. An untracked result may still populate process-local cache; a
+  tracked result does not, because watermark safety was not established.
+- Same-key concurrent work is coalesced at the lifetime of the first active
+  layer.
 
-When `serializer.load` rejects a Redis payload, DialCache records a `serialization_load` error, counts the read as a remote cache miss, runs the fallback, and attempts to replace the rejected payload. A validating custom serializer can therefore treat an incompatible cached value as a refreshable miss without adding a schema version to the cache key.
+When all layers are disabled by policy, an initially enabled call remains
+uncached and uncoalesced, but its fallback deadline still applies. A call that
+started outside an enabled scope remains a true pass-through and does not get a
+DialCache deadline.
 
-`JsonSerializer` validates JSON syntax only. It cannot detect that a structurally valid payload came from an incompatible application value schema. Applications that keep the same `useCase` across deployments must keep default-JSON values backward compatible. For an incompatible change, either provide a serializer whose `load` method validates and rejects the old shape, or change `useCase` to isolate the new cache entries. During a mixed deployment, mutually incompatible validating serializers can repeatedly reject and replace each other's values; correctness is preserved, but expect additional fallback and Redis-write load until the rollout converges.
+## Core concepts
 
-When a cached function or inline loader's resolved return type is statically JSON-compatible, `serializer` remains optional. This includes JSON primitives, arrays, plain object/interface shapes, optional object fields, and a top-level `undefined`. Types known not to survive the default round trip require a typed `Serializer<T>`:
+### Cache operations and keys
 
-```ts
-import { DialCache, type Serializer } from "dialcache";
+`cached(fn, options)` defines both a callable and the value-identity contract:
 
-const dialcache = new DialCache();
-const dateSerializer: Serializer<Date> = {
-  dump: (value) => value.toISOString(),
-  load: (value) => new Date(Buffer.isBuffer(value) ? value.toString("utf8") : value),
-};
+| Option | Required | Purpose |
+| --- | --- | --- |
+| `keyType` | yes | Names the kind of id and, with `id`, the invalidation unit for tracked Redis entries. |
+| `useCase` | yes | Identifies this individual cache in stored keys and metrics. |
+| `cacheKey` | yes | Selects the bare id or `{ id, args }` from the function parameters. |
+| `defaultConfig` | no | Supplies the baseline policy overlaid by runtime config. |
+| `serializer` | for statically non-JSON return types | Defines the Redis representation for this operation's value. |
+| `trackForInvalidation` | no | Opts the remote entries into watermark-based targeted invalidation. |
+| `fallbackTimeoutMs` | no | Sets the fallback deadline; defaults to `60_000`, and `null` disables it. |
 
-const getUpdatedAt = dialcache.cached(
-  (userId: string) => db.fetchUpdatedAt(userId),
-  {
-    keyType: "user_id",
-    useCase: "GetUpdatedAt",
-    cacheKey: (userId) => userId,
-    serializer: dateSerializer,
-  },
-);
-```
+Use `getOrLoad(load, options)` when a one-shot calculation should remain inline.
+It follows the same cache, policy, coalescing, invalidation, serialization, and
+deadline contracts, but takes a direct `key` instead of a `cacheKey` selector.
+It does not register `useCase`, so repeated calls should reuse one stable,
+deployment-defined name.
 
-The compile-time guard rejects known incompatible shapes such as `Date`, `Map`, `Set`, `bigint`, symbols, functions, Buffers, typed arrays, method-bearing class instances, required nested `undefined`, `unknown`, and `any`. It applies to every `cached()` declaration and `getOrLoad()` invocation because active layers are selected at runtime. A global Redis serializer is not parameterized by each returned type, so it cannot discharge this requirement; non-JSON operations must select a typed serializer.
+The selected or direct key must include every input dimension that can affect
+the returned value. Same-key concurrent calls may share the leader's execution,
+so ignored function arguments or captured values such as auth context, locale,
+or cancellation behavior must truly be safe to share.
 
-This guard is deliberately conservative and is not a proof of runtime data. TypeScript cannot detect non-finite numbers, cyclic/shared references, runtime getter or `toJSON` behavior, or data-only class instances that look like plain objects. Opaque, generic, or deeply recursive types may also require an explicit serializer. Providing `Serializer<T>` (including an explicitly typed `JsonSerializer<T>`) is a trusted caller assertion; DialCache does not serialize-and-deserialize again to validate it.
-
-## Cached-value ownership
-
-Treat values returned by cached functions or `getOrLoad()` as immutable. DialCache does not clone or freeze values stored in request-local or process-local memory. Mutating a cached object can therefore be observed by later callers in the same request, callers in other requests that hit the process-local cache, or callers that coalesced onto the same in-flight result.
-
-This contract includes nested objects and arrays, `Map`, `Set`, `Buffer`, typed arrays, and class instances. Redis deserialization can produce a different reference from an in-memory hit, so reference identity is layer-dependent and is not part of the API contract; never rely on a specific layer cloning a value before mutation.
-
-If a caller needs a mutable value, copy it explicitly before changing it:
-
-```ts
-const sharedUser = await getUser("123");
-const editableUser = structuredClone(sharedUser);
-editableUser.displayName = "New name";
-```
-
-Use a narrower copy when its semantics are sufficient; the ownership boundary is the caller's responsibility.
-
-## Targeted invalidation and watermarks
-
-Mutable Redis-backed use cases can opt into targeted invalidation by setting `trackForInvalidation: true` in the options and calling `dialcache.invalidateRemote(keyType, id, futureBufferMs)` after writes. The buffer is an application-owned safety value; DialCache cannot choose a universally safe nonzero value:
+Set a stable, application-specific `namespace` when applications or
+environments share Redis:
 
 ```ts
-import { CacheLayer, DialCache, DialCacheKeyConfig } from "dialcache";
-import { createNodeRedisDialCacheClient } from "dialcache/node-redis";
-
 const dialcache = new DialCache({
-  namespace: "users-api",
-  redis: { client: createNodeRedisDialCacheClient(redisClient) },
+  namespace: "production-users-api",
+  redis: { client: dialCacheRedisClient },
 });
+```
 
-// Chosen from this application's clock-skew bound and measured worst-case source/fallback timings.
-const USER_INVALIDATION_BUFFER_MS = 5_000;
+See [Configuration and cache layers](https://github.com/lan17/DialCache/blob/main/docs/configuration.md)
+for key encoding, secondary arguments, namespace changes, serializers, and
+value ownership.
 
-const getUser = dialcache.cached(
-  (userId: string) => db.fetchUser(userId),
-  {
-    keyType: "user_id",
-    useCase: "GetMutableUser",
-    cacheKey: (userId) => userId,
-    trackForInvalidation: true,
-    // Strongly invalidated mutable data should disable request-local and process-local caching.
-    defaultConfig: new DialCacheKeyConfig({
-      ttlSec: { [CacheLayer.REMOTE]: 300 },
-      ramp: { [CacheLayer.REMOTE]: 100 },
-    }),
-  },
-);
+### Cache layers
 
+| Layer | Scope | Primary use |
+| --- | --- | --- |
+| Request-local | Outermost `enable()` scope | Memoize repeated reads during one bounded request or job. |
+| Process-local | One `DialCache` instance | Serve hot values from a bounded in-process LRU. |
+| Redis or Valkey | Shared remote store | Reuse TTL-cached values across processes and hosts. |
+
+Each invocation uses one resolved policy snapshot for all three layers.
+Request-local storage has no capacity limit, so use it only for short-lived
+scopes with bounded key cardinality. Process-local values count toward one
+instance-wide entry cap. Remote values use a serializer selected by the cache
+operation or the Redis configuration.
+
+Cached in-memory values are shared by reference. Treat every returned value as
+immutable, or copy it explicitly before mutation.
+
+### Targeted invalidation
+
+Mutable Redis-backed use cases can opt into watermark-based invalidation with
+`trackForInvalidation: true`, then call:
+
+```ts
 await updateUser("123", patch);
-await dialcache.invalidateRemote("user_id", "123", USER_INVALIDATION_BUFFER_MS);
-```
-
-Invalidation writes a Redis watermark at `{encodedNamespace:encodedKeyType:encodedId}#watermark`. Tracked Redis cache entries use the same Redis Cluster hash tag, for example `{users-api:user_id:123}?locale=en#GetMutableUser:dialcache-frame-v1`, so the value key and watermark key live in the same slot. Key components are percent-encoded before joining so delimiters inside IDs or args cannot collide with delimiters in the key format. Components may not contain `{` or `}` because those characters would corrupt the hash tag.
-
-The internal `:dialcache-frame-v1` suffix identifies values written with DialCache's binary protocol. Watermarks are stored as decimal timestamps.
-
-A cached Redis value whose Redis-created timestamp is older than or equal to the watermark is treated as stale and refreshed through fallback. `invalidateRemote(keyType, id, futureBufferMs)` sets the watermark to the greater of its existing value and Redis's current time plus the buffer. While that future window is active, an invocation that reaches the tracked Redis read treats the covered value as a miss. If its fallback then reaches the tracked Redis write, Redis rejects the write and DialCache also suppresses the corresponding process-local population; the fallback value still returns to its caller. Request-local memoization remains unconditional, and invocations whose remote layer is disabled or ramped out do not consult the watermark and are not fenced by it.
-
-The bundled timestamp protocol assumes that system clocks are synchronized across every Redis node eligible for primary promotion. Redis does not guarantee that `TIME` is monotonic across nodes, and DialCache does not detect or compensate for cross-node clock skew. If this deployment assumption is violated, failover can temporarily suppress tracked cache fills or allow a pre-invalidation value to remain readable until it expires or a later invalidation advances the watermark past its timestamp.
-
-Watermarks are invalidation state, not disposable cache entries. The Redis deployment must preserve them for their derived TTL: use `noeviction` or an equivalent guarantee for deployments that rely on the publication fence, and choose persistence and failover guarantees appropriate to the application's consistency requirements. A missing watermark makes tracked reads miss, but a later tracked write cannot distinguish an empty cache from lost invalidation history; it creates a new baseline watermark and can publish fallback data that the lost future watermark would have rejected. Redis replication is asynchronous by default, and DialCache does not issue `WAIT` or provide strong consistency across failover.
-
-Tracked writes create a baseline watermark and extend its TTL to at least the value TTL plus one minute. Neither tracked writes nor invalidation shorten a longer or persistent watermark TTL; invalidation extends it to at least the remaining future-buffer window plus one minute. There is no fixed watermark retention floor, and reads do not extend watermark lifetime.
-
-`futureBufferMs` must be a nonnegative safe integer. The default is zero, but zero provides no stale-publication protection once Redis time advances. Every production invalidation should pass a named, application-owned nonzero value based on that application's measured or conservatively bounded timings; there is no universally safe library value.
-
-Size the buffer to cover the maximum expected negative clock skew between promotion-eligible Redis nodes plus the complete interval in which stale data could still reach the Redis write: source visibility or replication lag, the full remaining tail of any fallback that may already have observed the pre-mutation value, `serializer.dump`, Redis client queue and network latency, Lua script execution, the write itself, and a safety margin. Invalidate only after the source mutation commits. Underestimating this interval can allow a delayed stale fallback to repopulate Redis after the watermark window ends. Overestimating it lengthens the tracked Redis miss/write-suppression window described above, increasing fallback load without publishing stale values. A larger buffer does not delay or suppress returning fallback values to callers.
-
-This is a timing contract rather than a cancellation or acquisition fence: the buffer prevents stale fallback results from passing that tracked Redis write only while the configured window remains active, and it does not force a fallback to read from an authoritative source.
-
-Targeted invalidation is remote-only and enforced by Redis watermarks. `invalidateRemote` does not evict existing request-local or process-local entries. Strongly invalidated mutable data should disable request-local and process-local caching (or use a very short process-local TTL only when stale reads are acceptable).
-
-## Request coalescing
-
-DialCache coalesces in-flight work at the lifetime of the first active cache layer:
-
-- When request-local caching is enabled, same-key callers in one outermost `enable()` scope share request-scoped in-flight work before the request-local lookup. Its resolved value is then memoized for later sequential calls in that scope.
-- When process-local or Redis caching is enabled, same-key callers share in-flight work within one `DialCache` instance before the first active shared layer. This is reported as `scope="process"`, still applies when request-local caching is off, and can combine leaders from separate request scopes using the same instance.
-
-```ts
-await dialcache.enable(async () => {
-  // Same cold key, concurrent calls: one fallback execution, one shared result.
-  const [a, b] = await Promise.all([getUser("456"), getUser("456")]);
-});
-```
-
-With Redis configured, an instance-scoped leader that misses the process-local cache runs one bounded Redis read and, on a normal miss, the fallback/cache write; followers share its remaining read budget and await the same result. Process-local-only misses share the leader's fallback/cache write. This protects Redis and the source of truth from a thundering herd on hot keys.
-
-Coalescing only applies when at least one cache layer is active. Calls outside `enable()` are true pass-through. Calls where request-local, process-local, and Redis are all disabled are uncached and uncoalesced, but because they were initially enabled, the fallback deadline below still applies.
-
-Because coalescing is keyed by the selected or direct key, concurrent calls with the same key share the leader's execution. Any function argument or captured value omitted from the key must be safe to share this way; include inputs such as locale, auth context, or cancellation behavior when they can change the returned value or whether the underlying loader should run separately.
-
-### Fallback deadlines
-
-Once an initially enabled invocation starts its fallback, DialCache applies a 60-second monotonic deadline by default. Set `fallbackTimeoutMs` once on a cached wrapper or on each `getOrLoad()` invocation to choose a positive integer deadline in milliseconds, up to 2,147,483,647, or set it to `null` to preserve an intentionally unbounded fallback:
-
-```ts
-import { FallbackTimeoutError } from "dialcache";
-
-const getUser = dialcache.cached(
-  (userId: string) => db.fetchUser(userId),
-  {
-    keyType: "user_id",
-    useCase: "GetUserWithDeadline",
-    cacheKey: (userId) => userId,
-    defaultConfig: DialCacheKeyConfig.enabled(60),
-    fallbackTimeoutMs: 2_000,
-  },
+await dialcache.invalidateRemote(
+  "user_id",
+  "123",
+  USER_INVALIDATION_BUFFER_MS,
 );
-
-try {
-  await dialcache.enable(() => getUser("123"));
-} catch (error) {
-  if (error instanceof FallbackTimeoutError) {
-    logger.warn("source lookup exceeded its DialCache budget", {
-      useCase: error.useCase,
-      timeoutMs: error.timeoutMs,
-    });
-  }
-}
 ```
 
-The timer starts only when the fallback begins, including after a remote-read deadline has elapsed. Same-key followers share the process or request-local leader's remaining budget and receive its `FallbackTimeoutError`; pass-through invocations where every layer is disabled have independent timers. Cache hits create no fallback timer. Calls that were initially outside an enabled context remain true pass-through and are not timed out, even when the operation configures `fallbackTimeoutMs`.
+Invalidation is deliberately remote-only. It does not evict existing
+request-local or process-local values, so strongly invalidated mutable data
+should disable those layers or tolerate their TTL-bounded staleness.
 
-Deadline delivery requires the JavaScript event loop to make progress. It cannot preempt a synchronous fallback prefix or other event-loop blocking, so rejection can arrive later than the configured duration; when control returns, DialCache checks the monotonic deadline before accepting the result. The deadline timer remains referenced until the fallback settles or times out. Consequently, an abandoned enabled fallback can keep an otherwise idle short-lived process alive until that deadline; shutdown code should drain outstanding DialCache work rather than discarding its promises.
+The buffer must be a named, application-owned nonzero value sized for clock
+skew and the full stale-work window. See
+[Targeted invalidation](https://github.com/lan17/DialCache/blob/main/docs/invalidation.md)
+before enabling it in production.
 
-Timing out rejects the DialCache chain and clears its flight normally. A later fallback resolution is ignored, so that timed-out invocation cannot proceed to serializer, Redis, or local-cache publication. The underlying function is not canceled and may continue its own I/O or side effects; give the source operation its own native timeout or `AbortSignal` whenever possible. `fallbackTimeoutMs: null` disables this guard and makes finite fallback settlement entirely application-owned. Use the `null` escape hatch only after intentionally accepting that liveness risk.
+### Request coalescing and fallback deadlines
 
-Timeout failures retain the bounded metrics classification `error="fallback"` with `in_fallback="true"`; the typed error provides the timeout details without adding high-cardinality labels.
+Concurrent callers with the same cache key share active work within the first
+active cache scope: one outer request for request-local caching, or one
+`DialCache` instance for the shared layers. This mitigates hot-key stampedes
+inside that scope; it is not cross-process coordination.
 
-### Coalescing state
+Same-key followers share the leader's remaining remote-read budget. The
+fallback deadline starts separately only if and when the source loader begins.
 
-`getCoalescingState()` returns a detached, point-in-time snapshot of process-scoped flights owned by that `DialCache` instance:
+Enabled fallbacks have a 60-second monotonic deadline by default. Timing out
+rejects the DialCache chain and prevents the late result from being published,
+but it does not cancel the underlying function. Give source operations their
+own native timeout or `AbortSignal`.
 
-```ts
-const state = dialcache.getCoalescingState();
+See [Coalescing and fallback liveness](https://github.com/lan17/DialCache/blob/main/docs/coalescing.md)
+for exact sharing, deadline, cleanup, and admission-control contracts.
 
-state.process.activeLeaders;
-state.process.activeFollowers;
-state.process.oldestLeaderAgeMs; // null when idle
-```
+### Observability
 
-A leader is one exact cache key currently tracked by the instance-scoped coalescer. A follower is each later invocation that joined that pending leader; the initiating invocation is not counted as a follower. Followers remain counted until their leader settles because abandoning a JavaScript promise is not observable. Request-local flights are deliberately excluded because their lifecycle is bounded by the outer `enable()` scope. `oldestLeaderAgeMs` uses a monotonic clock and is computed when the snapshot is requested.
+Metrics are disabled unless a `DialCacheMetricsAdapter` is supplied. First-party
+adapters support caller-owned Prometheus registries and Datadog DogStatsD
+clients. Bounded labels report layer requests, misses, disabled reasons,
+coalescing scopes, serialization work, and cache versus fallback failures.
 
-There is no library-wide flight cap or age-based replacement. A registry cap would bound only DialCache metadata while overflow or eviction could still create unbounded source work and unsafe duplicate publication. Finite operation deadlines provide eventual cleanup; application admission control and backpressure remain responsible for bounding simultaneous distinct-key work. Monitor leader count and oldest age to verify that those budgets hold in production.
+See [Observability](https://github.com/lan17/DialCache/blob/main/docs/observability.md)
+for installation, collector schemas, metric names, and custom adapters.
 
-## Metrics
+## Production checklist
 
-Metrics are disabled unless a `DialCacheMetricsAdapter` is passed to the constructor. `new DialCache()` does not import a metrics backend, register collectors, or emit metrics.
+Before ramping a use case:
 
-### Prometheus
+- enable DialCache only around read paths, and keep mutation paths inside
+  `disable()` or outside the enabled boundary;
+- verify that every selected or direct key includes each value and execution
+  dimension that is unsafe to share;
+- begin at `0` or a small deterministic key cohort, monitor source load, cache
+  errors, hit rate, latency, remote-read and fallback timeouts, and coalescing
+  state, then increase in controlled steps;
+- keep a runtime path to `DialCacheKeyConfig.disabled()`;
+- choose an effective DialCache remote-read deadline, and configure
+  resource-native budgets for the underlying Redis work, config providers,
+  serializers, and source operation;
+- use a conservative `localMaxSize` and bounded request-local scopes;
+- treat cached values as immutable;
+- verify serializer compatibility across mixed application versions; and
+- for tracked invalidation, synchronize promotion-eligible Redis clocks,
+  preserve watermark keys for their derived TTL with `noeviction` or an
+  equivalent guarantee, choose suitable persistence and failover behavior, and
+  size a nonzero buffer from measured or conservatively bounded timings.
 
-Install `prom-client` separately, create the registry your application owns, and pass the explicit Prometheus adapter to DialCache:
+## Reference guides
 
-```bash
-pnpm add prom-client@^15.1.3
-```
+- [Configuration and cache layers](https://github.com/lan17/DialCache/blob/main/docs/configuration.md) — definitions, keys,
+  runtime overlays, request-local and process-local behavior, and value
+  ownership.
+- [Redis and Valkey](https://github.com/lan17/DialCache/blob/main/docs/redis.md) — node-redis and GLIDE setup, lifecycle,
+  liveness, binary protocol, and serialization.
+- [Targeted invalidation](https://github.com/lan17/DialCache/blob/main/docs/invalidation.md) — watermarks, Redis Cluster
+  placement, clock assumptions, and buffer sizing.
+- [Coalescing and fallback liveness](https://github.com/lan17/DialCache/blob/main/docs/coalescing.md) — sharing scopes,
+  deadlines, state inspection, cleanup, and backpressure.
+- [Observability](https://github.com/lan17/DialCache/blob/main/docs/observability.md) — Prometheus, Datadog, metric schemas,
+  error categories, and custom adapters.
+- [Maintainer guide](https://github.com/lan17/DialCache/blob/main/docs/maintainers.md) — benchmarks and the protected release
+  workflow.
 
-```ts
-import { Registry } from "prom-client";
-import { DialCache } from "dialcache";
-import { createPrometheusDialCacheMetrics } from "dialcache/prometheus";
-
-const registry = new Registry();
-const dialcache = new DialCache({
-  namespace: "users-api",
-  metrics: createPrometheusDialCacheMetrics({
-    registry,
-    prefix: "myapp_", // myapp_dialcache_request_counter, etc.
-  }),
-});
-
-app.get("/metrics", async (_req, res) => {
-  res.type(registry.contentType).send(await registry.metrics());
-});
-```
-
-The adapter requires a caller-owned `Registry`; it never uses the global default registry and does not clear or otherwise own the registry lifecycle. Multiple adapters with the same registry and prefix reuse existing collectors when their type, help, labels, histogram buckets, and exemplar mode match. Adapter construction fails before registering anything if a same-name collector has an incompatible schema; use a unique prefix or a separate registry to resolve the collision.
-
-The Prometheus adapter emits:
-
-| Metric | Type | Labels | Description |
-| --- | --- | --- | --- |
-| `dialcache_request_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache-layer requests that reached an enabled layer |
-| `dialcache_miss_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache misses |
-| `dialcache_disabled_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer`, `reason` | Cache skips (`context`, `policy_disabled`, `invalid_ttl`, `invalid_ramp`, `ramped_down`, `config_error`) |
-| `dialcache_error_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer`, `error`, `in_fallback` | Cache/fallback errors classified by a bounded failure site |
-| `dialcache_invalidation_counter` | Counter | `cache_namespace`, `key_type`, `layer` | Invalidation calls for the layers touched |
-| `dialcache_coalesced_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `scope` | Coalesced requests split by `request_local` or `process` scope |
-| `dialcache_get_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache get latency in seconds |
-| `dialcache_fallback_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Elapsed time until the underlying function settles or timeout rejection is delivered |
-| `dialcache_serialization_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer`, `operation` | Redis serializer dump/load latency |
-| `dialcache_size_histogram` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Serialized Redis payload size in bytes |
-
-`policy_disabled` means that a process-local or Redis layer has no effective TTL after runtime overlays are applied. It is an intentional policy outcome, including the default when `defaultConfig` is omitted, rather than a configuration-loading failure.
-
-Every metric carries `cache_namespace`, including disabled-context, key-construction, coalescing, and invalidation paths that do not have a constructed key. Its value is `DialCacheConfig.namespace`, defaulting to `urn`. The `layer` label is `request_local`, `local` (process-local), or `remote`. Disabled-context, key-construction, and config-provider failures use `noop` because no cache layer was reached. The bounded `scope` label on `dialcache_coalesced_counter` distinguishes request-local from instance-scoped single-flight work. `scope="process"` coordinates calls only within one `DialCache` instance; separate instances in the same process do not share in-flight state.
-
-### Datadog
-
-Install `hot-shots` separately, create the DogStatsD client your application owns, and pass it to the Datadog adapter:
-
-```bash
-pnpm add hot-shots@^17.0.0
-```
-
-```ts
-import StatsD from "hot-shots";
-import { DialCache } from "dialcache";
-import { createDatadogDialCacheMetrics } from "dialcache/datadog";
-
-const dogStatsD = new StatsD({
-  host: process.env.DD_AGENT_HOST,
-  globalTags: { service: "users-api", env: process.env.DD_ENV ?? "development" },
-  errorHandler: (error) => logger.warn("DogStatsD error", { error }),
-});
-
-const dialcache = new DialCache({
-  namespace: "users-api", // cache identity and cache_namespace tag
-  metrics: createDatadogDialCacheMetrics({
-    client: dogStatsD,
-    observationMetricType: "distribution",
-    namespace: "dialcache", // metric-name prefix: dialcache.request.count, etc.
-  }),
-});
-
-// After outstanding cache operations finish during application shutdown:
-dogStatsD.close();
-```
-
-`hot-shots` is the supported and tested client, but the adapter depends only on the exported `DatadogDogStatsDClient` structural interface. DialCache does not import or install `hot-shots`, create a client, flush buffers, close sockets, or otherwise own the client lifecycle.
-
-`observationMetricType` is required. `"distribution"` is recommended when latency and size percentiles must aggregate across hosts; enable the desired distribution percentiles and aggregations in Datadog. Choose `"histogram"` when host-level histogram aggregation matches your existing Datadog setup. The choice applies uniformly to all four duration/size metrics. Both modes produce Datadog custom metrics. Distribution volume scales with unique tag-value combinations: Datadog counts five baseline aggregations per combination, and enabling percentile aggregations adds five more. Review [Datadog's custom-metrics billing guidance](https://docs.datadoghq.com/account_management/billing/custom_metrics/) before rollout. Do not send both types under the same namespace: when changing types, use a new namespace during migration so one metric identity never mixes histogram and distribution points.
-
-`DatadogMetricsOptions.namespace` is the metric-name namespace and defaults to `dialcache`. It is separate from `DialCacheConfig.namespace`, the logical cache namespace emitted as the `cache_namespace` tag. The Datadog metric namespace must start with a letter and contain only letters, numbers, underscores, and dot-separated non-empty segments. The adapter rejects invalid metric namespaces and final metric names longer than 200 characters rather than relying on client-side normalization. A `hot-shots` `prefix` is applied after the adapter constructs the name, so include that prefix when checking the final length and avoid combining it with the metric namespace accidentally. Client-level `globalTags` are appended by `hot-shots`; the table below lists the tags added by the adapter.
-
-The Datadog adapter emits exact increments of `1` for counters and preserves seconds and bytes without unit conversion:
-
-| Metric | Type | Tags | Description |
-| --- | --- | --- | --- |
-| `dialcache.request.count` | Count | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache-layer requests that reached an enabled layer |
-| `dialcache.miss.count` | Count | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache misses |
-| `dialcache.disabled.count` | Count | `cache_namespace`, `use_case`, `key_type`, `layer`, `reason` | Cache skips by bounded reason |
-| `dialcache.error.count` | Count | `cache_namespace`, `use_case`, `key_type`, `layer`, `error`, `in_fallback` | Cache/fallback errors by bounded failure site |
-| `dialcache.invalidation.count` | Count | `cache_namespace`, `key_type`, `layer` | Invalidation calls for the layers touched |
-| `dialcache.coalesced.count` | Count | `cache_namespace`, `use_case`, `key_type`, `scope` | Coalesced requests by sharing scope |
-| `dialcache.get.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache get latency in seconds |
-| `dialcache.fallback.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Elapsed time until the underlying function settles or timeout rejection is delivered |
-| `dialcache.serialization.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer`, `operation` | Redis serializer dump/load latency in seconds |
-| `dialcache.serialization.size` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Serialized Redis payload size in bytes |
-
-Synchronous client throws are isolated by DialCache's fail-open metrics boundary. Buffered transport failures happen outside that synchronous call, so configure the DogStatsD client's error handling and shutdown behavior as part of application ownership.
-
-### Error categories
-
-The `error` label reports where an operation failed rather than copying the thrown value's class or `Error.name`:
-
-| `error` | Meaning |
-| --- | --- |
-| `key_construction` | The cache-key selector or `DialCacheKey` construction failed |
-| `config_resolution` | Runtime or layer configuration, or ramp resolution, failed |
-| `cache_read` | A local-cache or Redis read failed |
-| `cache_read_timeout` | A Redis read exceeded its effective remote-read deadline |
-| `cache_write` | A local-cache or Redis write failed |
-| `serialization_load` | Deserializing a Redis payload failed |
-| `serialization_dump` | Serializing a value for Redis failed |
-| `invalidation` | Writing an invalidation watermark failed |
-| `fallback` | The wrapped application function failed or exceeded its DialCache deadline |
-| `unknown` | Reserved for an otherwise unclassified future failure site |
-
-These values are defined by the backend-neutral core and are identical for every metrics adapter. Raw thrown values, error names, messages, timeout values, cache IDs, arguments, and Redis keys are never included in metric labels. Operational errors are still passed to the configured logger where the existing failure path logs them. `in_fallback` remains the explicit cache-plumbing-versus-application distinction.
-
-### Custom adapters
-
-For other telemetry backends, implement `DialCacheMetricsAdapter` and pass the adapter through `new DialCache({ metrics })`. Every backend-neutral label object exposes the logical namespace as camel-case `cacheNamespace`; adapters should map it to their backend's `cache_namespace` label/tag. This field is present even when no key or cache layer was reached. Synchronous adapter failures are isolated from cache behavior and application fallbacks. Omit `metrics` to disable metrics.
-
-## Maintainers
-
-### Cache-path benchmark
-
-From a repository checkout, run the semantic microbenchmark after installing dependencies:
-
-```bash
-pnpm benchmark:request-local
-```
-
-The command builds `dist` before reporting six scenarios: sequential request-local hits, sequential process-local hits, enabled bounded fallbacks, request-local coalescing fan-out, process coalescing fan-out, and remote-read-deadline coalescing fan-out. The benchmark is a maintainer tool and is not included in the published package. It asserts fallback counts, coalescing state, timer cleanup, and returned values but deliberately applies no timing threshold. Override its work sizes with `DIALCACHE_BENCH_ITERATIONS` and `DIALCACHE_BENCH_FANOUT`.
-
-### Releasing
-
-Publishing starts by manually running the `Release` workflow from current `main`. After the package checks pass, Semantic Release selects the next version from Conventional Commits since the highest stable `vX.Y.Z` tag. Breaking changes bump major, `feat` bumps minor, and every other normal PR-title type (`fix`, `perf`, `docs`, `style`, `refactor`, `test`, `build`, `chore`, `ci`, and `revert`) bumps patch. The highest required bump wins.
-
-The workflow opens a `release: <version>` PR whose only change is the matching `package.json` version. `release` is a reserved Conventional Commit type configured not to request another release, so the version-control commit does not cause an extra bump. GitHub marks workflow runs for a PR opened with `GITHUB_TOKEN` as approval-required; approve those runs, review the PR, and squash-merge it normally through the protected branch.
-
-The merge triggers the publish job. Before any release side effect, it verifies current `main`, the release commit subject, the one-file diff, the package version, the absent tag, and Semantic Release's independently calculated version and commit. It then reruns the package checks and asks Semantic Release to create the matching Git tag, publish the public npm package with provenance, and publish the GitHub release.
-
-The repository must enable **Allow GitHub Actions to create and approve pull requests** under Actions workflow permissions. This workflow uses that capability only to create the version PR; it never approves or merges one, and no ruleset bypass actor or persistent release credential is required.
+DialCache is licensed under the
+[MIT License](https://github.com/lan17/DialCache/blob/main/LICENSE).
