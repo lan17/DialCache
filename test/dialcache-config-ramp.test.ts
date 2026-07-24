@@ -85,7 +85,7 @@ describe("DialCache runtime config and ramp controls", () => {
       ramp: { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 100 },
     });
     const cacheConfigProvider = vi.fn(async () => keyConfig);
-    const dialcache = new DialCache({ redis: { client: redis }, cacheConfigProvider });
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 }, cacheConfigProvider });
     const getUser = dialcache.cached(async (userId: string) => ({ userId }), {
       keyType: "user_id",
       useCase: "SingleRuntimeConfigSnapshot",
@@ -108,7 +108,7 @@ describe("DialCache runtime config and ramp controls", () => {
     });
     const cacheConfigProvider = vi.fn(async () => keyConfig);
     const dialcache = new DialCache({
-      redis: { client: redis },
+      redis: { client: redis, readTimeoutMs: 1_000 },
       cacheConfigProvider,
       rampSampler: () => {
         throw new Error("ramp source unavailable");
@@ -180,7 +180,7 @@ describe("DialCache runtime config and ramp controls", () => {
       throw samplerError;
     });
     const dialcache = new DialCache({
-      redis: { client: redis },
+      redis: { client: redis, readTimeoutMs: 1_000 },
       rampSampler,
       logger,
     });
@@ -219,7 +219,7 @@ describe("DialCache runtime config and ramp controls", () => {
       throw samplerError;
     });
     const dialcache = new DialCache({
-      redis: { client: redis },
+      redis: { client: redis, readTimeoutMs: 1_000 },
       rampSampler,
       logger,
     });
@@ -295,7 +295,7 @@ describe("DialCache runtime config and ramp controls", () => {
     // while runtime config changes only the local ramp and remote TTL.
     const redis = new FakeRedis();
     const dialcache = new DialCache({
-      redis: { client: redis },
+      redis: { client: redis, readTimeoutMs: 1_000 },
       cacheConfigProvider: async () => new DialCacheKeyConfig({
         ttlSec: { [CacheLayer.REMOTE]: 30 },
         ramp: { [CacheLayer.LOCAL]: 0 },
@@ -490,7 +490,7 @@ describe("DialCache runtime config and ramp controls", () => {
   ])("uses %s to disable every inherited layer", async (_name, overlayFor) => {
     const redis = new FakeRedis();
     const dialcache = new DialCache({
-      redis: { client: redis },
+      redis: { client: redis, readTimeoutMs: 1_000 },
       cacheConfigProvider: async () => overlayFor(),
     });
     let calls = 0;
@@ -643,12 +643,12 @@ describe("DialCache runtime config and ramp controls", () => {
     const passingSampler = vi.fn(() => 49);
     const blockedSampler = vi.fn(() => 50);
     const passingCache = new DialCache({
-      redis: { client: passingRedis },
+      redis: { client: passingRedis, readTimeoutMs: 1_000 },
       rampSampler: passingSampler,
       cacheConfigProvider: async () => configFor({ [CacheLayer.REMOTE]: 60 }, { [CacheLayer.REMOTE]: 50 }),
     });
     const blockedCache = new DialCache({
-      redis: { client: blockedRedis },
+      redis: { client: blockedRedis, readTimeoutMs: 1_000 },
       rampSampler: blockedSampler,
       cacheConfigProvider: async () => configFor({ [CacheLayer.REMOTE]: 60 }, { [CacheLayer.REMOTE]: 50 }),
     });
@@ -796,7 +796,7 @@ describe("DialCache runtime config and ramp controls", () => {
     const redis = new FakeRedis();
     const rampSampler = vi.fn().mockReturnValueOnce(49).mockReturnValueOnce(50);
     const dialcache = new DialCache({
-      redis: { client: redis },
+      redis: { client: redis, readTimeoutMs: 1_000 },
       rampSampler,
       cacheConfigProvider: async () => configFor({ [CacheLayer.REMOTE]: 60 }, { [CacheLayer.REMOTE]: 50 }),
     });
@@ -833,7 +833,7 @@ describe("DialCache runtime config and ramp controls", () => {
     // When each cached function is called twice.
     for (const ttl of badTtls) {
       const dialcache = new DialCache({
-        redis: { client: redis },
+        redis: { client: redis, readTimeoutMs: 1_000 },
         cacheConfigProvider: async () => configFor(
           { [CacheLayer.LOCAL]: ttl, [CacheLayer.REMOTE]: ttl },
           { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 100 },
@@ -862,7 +862,7 @@ describe("DialCache runtime config and ramp controls", () => {
     // Given runtime config only enables the remote layer.
     const redis = new FakeRedis();
     const dialcache = new DialCache({
-      redis: { client: redis },
+      redis: { client: redis, readTimeoutMs: 1_000 },
       cacheConfigProvider: async () => new DialCacheKeyConfig({ ttlSec: { [CacheLayer.REMOTE]: 60 } }),
     });
     let calls = 0;
@@ -888,7 +888,7 @@ describe("DialCache runtime config and ramp controls", () => {
     // Given Redis exists but runtime config only enables the local layer.
     const redis = new FakeRedis();
     const dialcache = new DialCache({
-      redis: { client: redis },
+      redis: { client: redis, readTimeoutMs: 1_000 },
       cacheConfigProvider: async () => configFor({ [CacheLayer.LOCAL]: 60 }, { [CacheLayer.LOCAL]: 100 }),
     });
     let calls = 0;

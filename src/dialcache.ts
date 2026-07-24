@@ -24,7 +24,8 @@ import {
   type MetricLayer,
 } from "./metrics.js";
 import type { Serializer } from "./serializer.js";
-import type { CacheGetResult } from "./internal/cache-result.js";
+import type { CacheGetResult, RemoteCacheGetResult } from "./internal/cache-result.js";
+import { assertValidDeadlineMs, MAX_TIMER_DELAY_MS, withMonotonicDeadline } from "./internal/deadline.js";
 import { LocalCache } from "./internal/local-cache.js";
 import { RedisCache } from "./internal/redis-cache.js";
 import {
@@ -118,6 +119,12 @@ interface CachedOptionsBase<Fn extends AnyFn> {
    */
   readonly fallbackTimeoutMs?: number | null;
   /**
+   * Static per-use-case override for the Redis read wait deadline, in
+   * milliseconds. Omission inherits the required Redis instance default.
+   * There is no unbounded escape hatch.
+   */
+  readonly redisReadTimeoutMs?: number;
+  /**
    * Select every input dimension that can affect the returned value. Concurrent
    * enabled calls with the same cache key may share one in-flight execution.
    */
@@ -162,7 +169,6 @@ interface ProcessFlight {
 
 const DEFAULT_LOCAL_MAX_SIZE = 10_000;
 const DEFAULT_FALLBACK_TIMEOUT_MS = 60_000;
-const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const defaultConfigProvider: CacheConfigProvider = () => null;
 const defaultLogger: Logger = console;
 
@@ -249,6 +255,10 @@ export class DialCache {
   cached<Fn extends AnyFn>(fn: Fn, options: CachedOptions<Fn>): CachedFn<Fn> {
     const defaultConfig = snapshotDefaultConfig(options.defaultConfig);
     const fallbackTimeoutMs = resolveFallbackTimeoutMs(options.fallbackTimeoutMs);
+    const redisReadTimeoutMs = resolveRedisReadTimeoutMs(
+      options.redisReadTimeoutMs,
+      this.redisCache?.readTimeoutMs,
+    );
     this.registerUseCase(options.useCase);
 
     const run = async (...args: Parameters<Fn>): Promise<CachedValue<Fn>> => {
@@ -304,11 +314,23 @@ export class DialCache {
       if (keyConfig?.requestLocal === true) {
         const requestLocalCache = getOrCreateRequestLocalCache(this.context);
         if (requestLocalCache !== null) {
-          return await this.getThroughRequestLocal(requestLocalCache, key, keyConfig, fallback);
+          return await this.getThroughRequestLocal(
+            requestLocalCache,
+            key,
+            keyConfig,
+            fallback,
+            redisReadTimeoutMs,
+          );
         }
       }
 
-      return await this.getThroughSharedLayers(key, keyConfig, fallback, CacheLayer.LOCAL);
+      return await this.getThroughSharedLayers(
+        key,
+        keyConfig,
+        fallback,
+        CacheLayer.LOCAL,
+        redisReadTimeoutMs,
+      );
     };
 
     return run;
@@ -373,6 +395,7 @@ export class DialCache {
     key: DialCacheKey,
     keyConfig: DialCacheKeyConfig,
     fallback: () => Promise<T>,
+    redisReadTimeoutMs: number | undefined,
   ): Promise<T> {
     return await this.singleFlightRequestLocal(requestLocalCache.inFlight, key, async () => {
       const start = performance.now();
@@ -384,7 +407,13 @@ export class DialCache {
       }
 
       this.metrics?.miss(labelsFor(key, REQUEST_LOCAL_CACHE_LAYER));
-      const value = await this.getThroughSharedLayers(key, keyConfig, fallback, REQUEST_LOCAL_CACHE_LAYER);
+      const value = await this.getThroughSharedLayers(
+        key,
+        keyConfig,
+        fallback,
+        REQUEST_LOCAL_CACHE_LAYER,
+        redisReadTimeoutMs,
+      );
       requestLocalCache.set(key.urn, value);
       return value;
     });
@@ -395,11 +424,18 @@ export class DialCache {
     keyConfig: DialCacheKeyConfig | null,
     fallback: () => Promise<T>,
     fallbackMetricLayer: MetricLayer,
+    redisReadTimeoutMs: number | undefined,
   ): Promise<T> {
     const localLayer = await this.resolveLocalLayerConfig(key, keyConfig);
     if (localLayer.status === "enabled") {
       return await this.singleFlightProcess(key, async () =>
-        await this.getThroughActiveLocal(key, keyConfig, localLayer.config, fallback),
+        await this.getThroughActiveLocal(
+          key,
+          keyConfig,
+          localLayer.config,
+          fallback,
+          redisReadTimeoutMs,
+        ),
       );
     }
 
@@ -415,7 +451,12 @@ export class DialCache {
     }
 
     return await this.singleFlightProcess(key, async () => {
-      const remote = await this.readRemoteWithResolvedConfig<T>(redisCache, key, remoteLayer.config);
+      const remote = await this.readRemoteWithResolvedConfig<T>(
+        redisCache,
+        key,
+        remoteLayer.config,
+        redisReadTimeoutMs,
+      );
       return await this.finishRedisChain(redisCache, key, localLayer, remote, fallback, remoteLayer.config);
     });
   }
@@ -425,6 +466,7 @@ export class DialCache {
     keyConfig: DialCacheKeyConfig | null,
     localConfig: ResolvedLayerConfig,
     fallback: () => Promise<T>,
+    redisReadTimeoutMs: number | undefined,
   ): Promise<T> {
     const local = this.readLocalWithResolvedConfig<T>(key, localConfig);
     if (local.status === "hit") {
@@ -441,7 +483,12 @@ export class DialCache {
       return await this.finishRedisChain(redisCache, key, local, remoteLayer, fallback);
     }
 
-    const remote = await this.readRemoteWithResolvedConfig<T>(redisCache, key, remoteLayer.config);
+    const remote = await this.readRemoteWithResolvedConfig<T>(
+      redisCache,
+      key,
+      remoteLayer.config,
+      redisReadTimeoutMs,
+    );
     return await this.finishRedisChain(redisCache, key, local, remote, fallback, remoteLayer.config);
   }
 
@@ -457,7 +504,7 @@ export class DialCache {
     redisCache: RedisCache,
     key: DialCacheKey,
     local: CacheGetResult<T>,
-    remote: CacheGetResult<T>,
+    remote: RemoteCacheGetResult<T>,
     fallback: () => Promise<T>,
     resolvedRemoteConfig?: ResolvedLayerConfig,
   ): Promise<T> {
@@ -466,6 +513,14 @@ export class DialCache {
         await this.putLocalFailOpen(key, remote.value, local.config);
       }
       return remote.value;
+    }
+
+    if (remote.status === "error") {
+      const value = await this.callFallback(labelsFor(key, CacheLayer.REMOTE), fallback);
+      if (!key.trackForInvalidation && local.status === "miss") {
+        await this.putLocalFailOpen(key, value, local.config);
+      }
+      return value;
     }
 
     const remoteErrored = remote.status === "disabled" && remote.reason === "config_error";
@@ -547,10 +602,19 @@ export class DialCache {
     }
   }
 
-  private async readRemoteWithResolvedConfig<T>(redisCache: RedisCache, key: DialCacheKey, layerConfig: ResolvedLayerConfig) {
+  private async readRemoteWithResolvedConfig<T>(
+    redisCache: RedisCache,
+    key: DialCacheKey,
+    layerConfig: ResolvedLayerConfig,
+    redisReadTimeoutMs: number | undefined,
+  ): Promise<RemoteCacheGetResult<T>> {
     const start = performance.now();
     try {
-      const result = await redisCache.getWithResolvedConfig<T>(key, layerConfig);
+      const result = await redisCache.getWithResolvedConfig<T>(
+        key,
+        layerConfig,
+        redisReadTimeoutMs,
+      );
       this.metrics?.request(labelsFor(key, CacheLayer.REMOTE));
       this.metrics?.observeGet(labelsFor(key, CacheLayer.REMOTE), elapsedSeconds(start));
       if (result.status === "miss") {
@@ -559,11 +623,7 @@ export class DialCache {
       return result;
     } catch (error) {
       this.logger.warn("Error getting value from Redis cache", error);
-      return {
-        status: "disabled",
-        reason: "config_error",
-        ...(key.trackForInvalidation ? { skipCacheWrite: true } : {}),
-      } as const;
+      return { status: "error", operation: "read" };
     }
   }
 
@@ -783,6 +843,14 @@ function resolveFallbackTimeoutMs(value: number | null | undefined): number | nu
   return timeoutMs;
 }
 
+function resolveRedisReadTimeoutMs(value: unknown, instanceDefault: number | undefined): number | undefined {
+  if (value === undefined) {
+    return instanceDefault;
+  }
+  assertValidDeadlineMs(value, "DialCache redisReadTimeoutMs");
+  return value;
+}
+
 function withFallbackTimeout<T>(
   fallback: () => Promise<T>,
   useCase: string,
@@ -791,68 +859,10 @@ function withFallbackTimeout<T>(
   if (timeoutMs === null) {
     return fallback();
   }
-
-  const startedAtMs = performance.now();
-  const operation = fallback();
-  return new Promise<T>((resolve, reject) => {
-    let settled = false;
-    let timer: NodeJS.Timeout | null = null;
-    const elapsedMs = (): number => Math.max(performance.now() - startedAtMs, 0);
-    const clearTimer = (): void => {
-      if (timer !== null) {
-        clearTimeout(timer);
-        timer = null;
-      }
-    };
-    const rejectTimeout = (): void => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimer();
-      reject(new FallbackTimeoutError(useCase, timeoutMs));
-    };
-    const onTimer = (): void => {
-      timer = null;
-      if (settled) {
-        return;
-      }
-
-      const remainingMs = timeoutMs - elapsedMs();
-      if (remainingMs > 0) {
-        timer = setTimeout(onTimer, Math.ceil(remainingMs));
-        return;
-      }
-      rejectTimeout();
-    };
-    const settleBeforeDeadline = (settle: () => void): void => {
-      if (settled) {
-        return;
-      }
-      if (elapsedMs() >= timeoutMs) {
-        rejectTimeout();
-        return;
-      }
-      settled = true;
-      clearTimer();
-      settle();
-    };
-
-    const remainingMs = timeoutMs - elapsedMs();
-    if (remainingMs <= 0) {
-      rejectTimeout();
-    } else {
-      timer = setTimeout(onTimer, Math.ceil(remainingMs));
-    }
-
-    void operation.then(
-      (value) => {
-        settleBeforeDeadline(() => resolve(value));
-      },
-      (error: unknown) => {
-        settleBeforeDeadline(() => reject(error));
-      },
-    );
+  return withMonotonicDeadline({
+    operation: fallback,
+    timeoutMs,
+    timeoutError: () => new FallbackTimeoutError(useCase, timeoutMs),
   });
 }
 

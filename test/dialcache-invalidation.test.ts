@@ -79,7 +79,7 @@ describe("DialCache targeted invalidation watermarks", () => {
 
   it("invalidates all tracked use cases sharing a key type and id", async () => {
     const redis = new FakeRedis();
-    const dialcache = new DialCache({ redis: { client: redis } });
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     let profileVersion = 1;
     let permissionsVersion = 1;
     const getProfile = dialcache.cached(async (userId: string) => ({ userId, profileVersion }), {
@@ -117,7 +117,7 @@ describe("DialCache targeted invalidation watermarks", () => {
 
   it("does not write remote or local cache during a future invalidation window", async () => {
     const redis = new FakeRedis();
-    const dialcache = new DialCache({ redis: { client: redis } });
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     let calls = 0;
     const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
       keyType: "user_id",
@@ -139,7 +139,7 @@ describe("DialCache targeted invalidation watermarks", () => {
 
   it("rejects a write when invalidation arrives during fallback", async () => {
     const redis = new FakeRedis();
-    const dialcache = new DialCache({ redis: { client: redis } });
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     let calls = 0;
     const getUser = dialcache.cached(
       async (userId: string) => {
@@ -185,7 +185,7 @@ describe("DialCache targeted invalidation watermarks", () => {
         return JSON.parse(payload) as { userId: string; calls: number };
       },
     };
-    const dialcache = new DialCache({ redis: { client: redis } });
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     let calls = 0;
     const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
       keyType: "user_id",
@@ -211,7 +211,7 @@ describe("DialCache targeted invalidation watermarks", () => {
 
   it("blocks a same-millisecond write for a zero-length future buffer", async () => {
     const redis = new FakeRedis();
-    const dialcache = new DialCache({ redis: { client: redis } });
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     let calls = 0;
     const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
       keyType: "user_id",
@@ -235,7 +235,7 @@ describe("DialCache targeted invalidation watermarks", () => {
 
   it("resumes tracked writes after the future buffer", async () => {
     const redis = new FakeRedis();
-    const dialcache = new DialCache({ redis: { client: redis } });
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     let calls = 0;
     const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
       keyType: "user_id",
@@ -258,7 +258,7 @@ describe("DialCache targeted invalidation watermarks", () => {
   it("treats a tracked value with a missing watermark marker as a miss", async () => {
     const redis = new FakeRedis();
     redis.setRaw(valueKey("MissingWatermark"), encodeFrame({ source: "stale" }));
-    const dialcache = new DialCache({ redis: { client: redis } });
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     let calls = 0;
     const getUser = dialcache.cached(async (userId: string) => ({ userId, source: `fallback-${++calls}` }), {
       keyType: "user_id",
@@ -278,7 +278,7 @@ describe("DialCache targeted invalidation watermarks", () => {
 
   it("preserves the furthest watermark across repeated invalidations", async () => {
     const redis = new FakeRedis();
-    const dialcache = new DialCache({ redis: { client: redis } });
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
 
     await dialcache.invalidateRemote("user_id", "123", 5_000);
     const first = redis.readWatermarkValue(watermarkKey);
@@ -290,7 +290,7 @@ describe("DialCache targeted invalidation watermarks", () => {
 
   it("extends watermark lifetime on writes but not reads", async () => {
     const redis = new FakeRedis();
-    const dialcache = new DialCache({ redis: { client: redis, watermarkTtlSec: 60 } });
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000, watermarkTtlSec: 60 } });
     const getUser = dialcache.cached(async (userId: string) => ({ userId }), {
       keyType: "user_id",
       useCase: "WatermarkLifetime",
@@ -314,7 +314,7 @@ describe("DialCache targeted invalidation watermarks", () => {
     redis.failWatermarkGet = true;
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
     const metrics = new RecordingMetrics();
-    const dialcache = new DialCache({ redis: { client: redis }, logger, metrics });
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 }, logger, metrics });
     let calls = 0;
     const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
       keyType: "user_id",
@@ -348,7 +348,7 @@ describe("DialCache targeted invalidation watermarks", () => {
     redis.failSet = true;
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
     const metrics = new RecordingMetrics();
-    const dialcache = new DialCache({ redis: { client: redis }, logger, metrics });
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 }, logger, metrics });
 
     await expect(dialcache.invalidateRemote("user_id", "123")).rejects.toThrow("redis set failed");
 
@@ -372,7 +372,7 @@ describe("DialCache targeted invalidation watermarks", () => {
 
   it("rejects invalid future buffers before calling Redis", async () => {
     const redis = new FakeRedis();
-    const dialcache = new DialCache({ redis: { client: redis } });
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
 
     await expect(dialcache.invalidateRemote("user_id", "123", -1)).rejects.toThrow("futureBufferMs");
     await expect(dialcache.invalidateRemote("user_id", "123", 1.5)).rejects.toThrow("futureBufferMs");
@@ -385,7 +385,7 @@ describe("DialCache targeted invalidation watermarks", () => {
     const redis = new FakeRedis();
     const dialcache = new DialCache({
       namespace: "urn:galileo:test",
-      redis: { client: redis },
+      redis: { client: redis, readTimeoutMs: 1_000 },
     });
     const getUser = dialcache.cached(async (userId: string, locale: string) => ({ userId, locale }), {
       keyType: "User",
@@ -410,7 +410,7 @@ describe("DialCache targeted invalidation watermarks", () => {
 
   it("documents that Redis invalidation does not evict local cache", async () => {
     const redis = new FakeRedis();
-    const dialcache = new DialCache({ redis: { client: redis } });
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     let version = 1;
     const getUser = dialcache.cached(async (userId: string) => ({ userId, version }), {
       keyType: "user_id",
@@ -431,7 +431,7 @@ describe("DialCache targeted invalidation watermarks", () => {
 
   it("keeps a memoized request-local value after remote invalidation and refreshes in the next request", async () => {
     const redis = new FakeRedis();
-    const dialcache = new DialCache({ redis: { client: redis } });
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     let version = 1;
     const getUser = dialcache.cached(async (userId: string) => ({ userId, version }), {
       keyType: "user_id",

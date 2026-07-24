@@ -1,21 +1,28 @@
 import { performance } from "node:perf_hooks";
 
 import { CacheLayer, DEFAULT_WATERMARK_TTL_SEC, type CacheConfigProvider, type CacheRampSampler, type DialCacheKeyConfig } from "../config.js";
+import { RedisReadTimeoutError } from "../errors.js";
 import { invalidationPrefix, redisClusterHashTag, type DialCacheKey } from "../key.js";
 import { labelsFor, type DialCacheMetricsAdapter, type MetricErrorKind } from "../metrics.js";
 import type { DialCacheRedisClient, RedisCachePayload } from "../redis-client.js";
 import { JsonSerializer, type Serializer } from "../serializer.js";
 import type { CacheGetResult } from "./cache-result.js";
+import { assertValidDeadlineMs, withMonotonicDeadline } from "./deadline.js";
 import { fetchKeyConfig, resolveLayerConfigResult, type ResolvedLayerConfig } from "./runtime-config.js";
 
 export interface RedisConfig {
   /**
    * Caller-created, connected, and lifecycle-owned semantic Redis client.
-   * DialCache borrows it and never adds command deadlines or drains, disposes,
-   * or closes it. Every client operation must settle within a finite
-   * application-defined budget.
+   * DialCache borrows it and never drains, disposes, or closes it. The client
+   * still needs finite native budgets to bound work that outlives DialCache's
+   * read wait deadline.
    */
   readonly client: DialCacheRedisClient;
+  /**
+   * Required application-selected default for how long DialCache waits for a
+   * semantic Redis read. Individual cached use cases may override it.
+   */
+  readonly readTimeoutMs: number;
   readonly serializer?: Serializer<unknown>;
   readonly watermarkTtlSec?: number;
 }
@@ -37,6 +44,7 @@ export class RedisCache {
   private readonly watermarkTtlMs: number;
   private readonly client: DialCacheRedisClient;
   private readonly metrics: DialCacheMetricsAdapter | null;
+  readonly readTimeoutMs: number;
 
   constructor(options: RedisCacheOptions) {
     if (Object.hasOwn(options.redis, "keyPrefix")) {
@@ -47,6 +55,14 @@ export class RedisCache {
         "RedisConfig.createClient was removed; create and connect a client, then pass it as RedisConfig.client",
       );
     }
+
+    if (options.redis.client === undefined) {
+      throw new TypeError("Redis config requires client");
+    }
+    if (options.redis.readTimeoutMs === undefined) {
+      throw new TypeError("Redis config requires readTimeoutMs");
+    }
+    assertValidDeadlineMs(options.redis.readTimeoutMs, "Redis readTimeoutMs");
 
     this.configProvider = options.configProvider;
     this.rampSampler = options.rampSampler;
@@ -60,12 +76,8 @@ export class RedisCache {
       throw new RangeError("Redis watermarkTtlSec is too large");
     }
     this.metrics = options.metrics;
-
-    if (options.redis.client === undefined) {
-      throw new TypeError("Redis config requires client");
-    }
-
     this.client = options.redis.client;
+    this.readTimeoutMs = options.redis.readTimeoutMs;
   }
 
   async get<T>(key: DialCacheKey): Promise<T | undefined> {
@@ -82,13 +94,27 @@ export class RedisCache {
     return await this.getWithResolvedConfig(key, layerConfig.config);
   }
 
-  async getWithResolvedConfig<T>(key: DialCacheKey, layerConfig: ResolvedLayerConfig): Promise<CacheGetResult<T>> {
+  async getWithResolvedConfig<T>(
+    key: DialCacheKey,
+    layerConfig: ResolvedLayerConfig,
+    readTimeoutMs = this.readTimeoutMs,
+  ): Promise<CacheGetResult<T>> {
     let payload: RedisCachePayload | null;
     try {
       const redisKey = this.redisKey(key);
-      payload = await this.client.read({
+      const request = {
         valueKey: redisKey,
         ...(key.trackForInvalidation ? { watermarkKey: this.redisWatermarkKeyFromKey(key) } : {}),
+      };
+      const controller = new AbortController();
+      payload = await withMonotonicDeadline({
+        operation: () => this.client.read(request, {
+          timeoutMs: readTimeoutMs,
+          signal: controller.signal,
+        }),
+        timeoutMs: readTimeoutMs,
+        timeoutError: () => new RedisReadTimeoutError(key.useCase, readTimeoutMs),
+        onTimeout: () => controller.abort(),
       });
     } catch (error) {
       this.recordError(key, "cache_read");

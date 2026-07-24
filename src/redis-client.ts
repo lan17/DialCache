@@ -51,6 +51,15 @@ interface UntrackedRedisValueRequest extends RedisValueRequest {
 
 export type RedisReadRequest = TrackedRedisValueRequest | UntrackedRedisValueRequest;
 
+/**
+ * Per-use-case read policy supplied by DialCache. Adapters may use the signal
+ * for cooperative cancellation, but the core deadline remains authoritative.
+ */
+export interface RedisReadContext {
+  readonly timeoutMs: number;
+  readonly signal: AbortSignal;
+}
+
 interface RedisWriteBase extends RedisValueRequest {
   readonly cacheTtlMs: number;
   readonly value: RedisCachePayload;
@@ -76,15 +85,16 @@ export interface RedisInvalidationRequest {
  * Caller-owned semantic Redis boundary. DialCache borrows this client and does
  * not create, connect, drain, dispose, or close it.
  *
- * Every method must settle within a finite application-defined deadline that
- * includes connection, retry, offline-queue, dispatch, and response time.
- * DialCache does not add Redis deadlines or server-side cancellation. A
- * command that times out after dispatch may still have executed, so adapters
- * must document their queue-removal and ambiguous-write semantics.
+ * Clients must use finite application-defined connection, retry, reconnect,
+ * offline-queue, dispatch, and response budgets to bound underlying resource
+ * lifetime. DialCache additionally bounds how long it waits for reads, but
+ * does not claim server-side cancellation. A command that times out after
+ * dispatch may still have executed, so adapters must document their
+ * queue-removal and ambiguous-write semantics.
  */
 export interface DialCacheRedisClient {
   /** Atomically read and validate a value against its watermark when tracked. */
-  read(request: RedisReadRequest): Awaitable<RedisCachePayload | null>;
+  read(request: RedisReadRequest, context?: RedisReadContext): Awaitable<RedisCachePayload | null>;
   /** Atomically write using server time. False means invalidation blocked the write. */
   write(request: RedisWriteRequest): Awaitable<boolean>;
   /** Advance the watermark monotonically after the source mutation commits. */

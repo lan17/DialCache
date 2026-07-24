@@ -17,6 +17,7 @@ export type {
 export {
   DialCacheError,
   FallbackTimeoutError,
+  RedisReadTimeoutError,
   UseCaseIsAlreadyRegisteredError,
   UseCaseNameIsReservedError,
 } from "./errors.js";
@@ -41,6 +42,7 @@ export type {
   DialCacheRedisClient,
   RedisCachePayload,
   RedisInvalidationRequest,
+  RedisReadContext,
   RedisReadRequest,
   RedisWriteRequest,
 } from "./redis-client.js";

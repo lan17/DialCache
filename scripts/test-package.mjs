@@ -17,6 +17,7 @@ const rootConsumer = `import {
   DialCacheRedisProtocolError,
   FallbackTimeoutError,
   JsonSerializer,
+  RedisReadTimeoutError,
   type CacheMetricLabels,
   type CacheConfigProvider,
   type CachedOptions,
@@ -32,6 +33,7 @@ const rootConsumer = `import {
   type MetricErrorKind,
   type ProcessCoalescingState,
   type RedisConfig,
+  type RedisReadContext,
   type Serializer,
 } from "dialcache";
 // @ts-expect-error The unused MissingKeyConfigError class was removed instead of deprecated.
@@ -79,6 +81,7 @@ const missingObservationType: DatadogMetricsOptions = { client: dogStatsDClient 
 const cache = new DialCache({ namespace: "consumer-cache", metrics });
 const redisProtocolError = new DialCacheRedisProtocolError("Invalid DialCache Redis write reply");
 const fallbackTimeoutError = new FallbackTimeoutError("Load", 1_000);
+const redisReadTimeoutError = new RedisReadTimeoutError("Load", 100);
 const coalescingState: CoalescingState = cache.getCoalescingState();
 const processCoalescingState: ProcessCoalescingState = coalescingState.process;
 const disabledOverlay: DialCacheKeyConfig = DialCacheKeyConfig.disabled();
@@ -87,6 +90,7 @@ const load = cache.cached(async (id: string) => id, {
   useCase: "Load",
   cacheKey: (id) => id,
   fallbackTimeoutMs: 1_000,
+  redisReadTimeoutMs: 100,
   defaultConfig: DialCacheKeyConfig.enabled(60),
 });
 const loadWithoutFallbackDeadline = cache.cached(async (id: string) => id, {
@@ -221,6 +225,7 @@ const metricErrorKinds: Readonly<Record<MetricErrorKind, true>> = {
 const unboundedErrorKind: MetricErrorKind = "Tenant123Error";
 
 const customRedisClient: DialCacheRedisClient = {
+  // The optional second read argument preserves one-argument custom clients.
   read: async () => Buffer.from([0, 255]),
   write: async ({ value }) => typeof value === "string" || Buffer.isBuffer(value),
   invalidate: async () => undefined,
@@ -237,13 +242,20 @@ const configHasNoUrnPrefix: "urnPrefix" extends keyof DialCacheConfig ? false : 
 const legacyNamespaceConfig: DialCacheConfig = { urnPrefix: "consumer-cache" };
 const redisConfigHasNoKeyPrefix: "keyPrefix" extends keyof RedisConfig ? false : true = true;
 // @ts-expect-error keyPrefix was removed in favor of DialCacheConfig.namespace.
-const legacyKeyPrefixConfig: RedisConfig = { client: customRedisClient, keyPrefix: "legacy:" };
+const legacyKeyPrefixConfig: RedisConfig = { client: customRedisClient, readTimeoutMs: 100, keyPrefix: "legacy:" };
 const redisConfigRequiresClient: {} extends Pick<RedisConfig, "client"> ? false : true = true;
+const redisConfigRequiresReadTimeout: {} extends Pick<RedisConfig, "readTimeoutMs"> ? false : true = true;
 const redisConfigHasNoCreateClient: "createClient" extends keyof RedisConfig ? false : true = true;
 // @ts-expect-error Redis requires a caller-owned client.
 const missingRedisClientConfig: RedisConfig = {};
+// @ts-expect-error Redis requires an application-selected core read deadline.
+const missingRedisReadTimeoutConfig: RedisConfig = { client: customRedisClient };
 // @ts-expect-error createClient was removed; construct and pass RedisConfig.client instead.
 const legacyRedisFactoryConfig: RedisConfig = { createClient: () => customRedisClient };
+const redisReadContext: RedisReadContext = {
+  timeoutMs: 100,
+  signal: new AbortController().signal,
+};
 // @ts-expect-error RedisClientFactory was removed with RedisConfig.createClient.
 type LegacyRedisClientFactory = import("dialcache").RedisClientFactory;
 type DialCacheRoot = typeof import("dialcache");
@@ -270,6 +282,7 @@ void legacyKeyInit;
 void namespacedKey.namespace;
 void redisProtocolError.name;
 void fallbackTimeoutError.timeoutMs;
+void redisReadTimeoutError.timeoutMs;
 void coalescingState.process;
 void processCoalescingState.activeLeaders;
 void requestLocalCoalescingScope;
@@ -288,7 +301,7 @@ const globalSerializer: Serializer<unknown> = {
   load: () => ({ source: "global" }),
 };
 const cacheWithGlobalSerializer = new DialCache({
-  redis: { client: customRedisClient, serializer: globalSerializer },
+  redis: { client: customRedisClient, readTimeoutMs: 1_000, serializer: globalSerializer },
 });
 // @ts-expect-error A global serializer cannot establish per-function Date compatibility.
 cacheWithGlobalSerializer.cached(async (_id: string) => new Date(0), optionsFor("GlobalSerializerNeedsTypedOverride"));
@@ -304,9 +317,12 @@ void legacyNamespaceConfig;
 void redisConfigHasNoKeyPrefix;
 void legacyKeyPrefixConfig;
 void redisConfigRequiresClient;
+void redisConfigRequiresReadTimeout;
 void redisConfigHasNoCreateClient;
 void missingRedisClientConfig;
+void missingRedisReadTimeoutConfig;
 void legacyRedisFactoryConfig;
+void redisReadContext.signal;
 void rootHasNoPrometheusFactory;
 void rootHasNoDatadogFactory;
 void datadogMetrics;
@@ -432,6 +448,10 @@ const fallbackTimeoutError = new root.FallbackTimeoutError("PackageRuntime", 100
 if (!(fallbackTimeoutError instanceof root.DialCacheError) || fallbackTimeoutError.timeoutMs !== 1000) {
   throw new Error("The root ESM fallback-timeout error export is invalid");
 }
+const redisReadTimeoutError = new root.RedisReadTimeoutError("PackageRuntime", 100);
+if (!(redisReadTimeoutError instanceof root.DialCacheError) || redisReadTimeoutError.timeoutMs !== 100) {
+  throw new Error("The root ESM Redis-read-timeout error export is invalid");
+}
 const coalescingState = new root.DialCache().getCoalescingState();
 const idleCoalescingState = { process: { activeLeaders: 0, activeFollowers: 0, oldestLeaderAgeMs: null } };
 if (JSON.stringify(coalescingState) !== JSON.stringify(idleCoalescingState)) {
@@ -507,6 +527,10 @@ require("dialcache/redis-protocol");
 const fallbackTimeoutError = new root.FallbackTimeoutError("PackageRuntime", 1000);
 if (!(fallbackTimeoutError instanceof root.DialCacheError) || fallbackTimeoutError.timeoutMs !== 1000) {
   throw new Error("The root CommonJS fallback-timeout error export is invalid");
+}
+const redisReadTimeoutError = new root.RedisReadTimeoutError("PackageRuntime", 100);
+if (!(redisReadTimeoutError instanceof root.DialCacheError) || redisReadTimeoutError.timeoutMs !== 100) {
+  throw new Error("The root CommonJS Redis-read-timeout error export is invalid");
 }
 const coalescingState = new root.DialCache().getCoalescingState();
 const idleCoalescingState = { process: { activeLeaders: 0, activeFollowers: 0, oldestLeaderAgeMs: null } };

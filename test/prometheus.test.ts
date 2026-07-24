@@ -351,7 +351,7 @@ describe("Prometheus metrics adapter", () => {
     const registry = new Registry();
     const redis = new FakeRedis();
     const metrics = createPrometheusDialCacheMetrics({ registry, prefix: "test_" });
-    const dialcache = new DialCache({ namespace: "metrics-cache", redis: { client: redis }, metrics });
+    const dialcache = new DialCache({ namespace: "metrics-cache", redis: { client: redis, readTimeoutMs: 1_000 }, metrics });
     let calls = 0;
     const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
       keyType: "user_id",
@@ -380,7 +380,7 @@ describe("Prometheus metrics adapter", () => {
     const registry = new Registry();
     const redis = new FakeRedis();
     const metrics = createPrometheusDialCacheMetrics({ registry, prefix: "test_" });
-    const dialcache = new DialCache({ namespace: "metrics-cache", redis: { client: redis }, metrics });
+    const dialcache = new DialCache({ namespace: "metrics-cache", redis: { client: redis, readTimeoutMs: 1_000 }, metrics });
     const contextDisabled = dialcache.cached(async (userId: string) => userId, {
       keyType: "user_id",
       useCase: "PrometheusDisabledMetric",
