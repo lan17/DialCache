@@ -115,6 +115,29 @@ describe("node-redis adapter", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("passes the cooperative read signal through node-redis command options", async () => {
+    const client = fakeClient();
+    const adapter = createNodeRedisDialCacheClient(client as never);
+    const controller = new AbortController();
+    const context = { timeoutMs: 25, signal: controller.signal } as const;
+
+    await adapter.read({ valueKey: "plain:value" }, context);
+    await adapter.read(
+      { valueKey: "tracked:{id}:value", watermarkKey: "tracked:{id}:watermark" },
+      context,
+    );
+
+    expect(client.dialcacheRead).toHaveBeenCalledWith(
+      expect.objectContaining({ returnBuffers: true, signal: controller.signal }),
+      "plain:value",
+    );
+    expect(client.dialcacheReadTracked).toHaveBeenCalledWith(
+      expect.objectContaining({ returnBuffers: true, signal: controller.signal }),
+      "tracked:{id}:value",
+      "tracked:{id}:watermark",
+    );
+  });
+
   it("rejects every out-of-domain reply returned by a node-redis client", async () => {
     const writeMessage = "Invalid DialCache Redis write reply; expected integer 0 or 1";
     const invalidationMessage = "Invalid DialCache Redis invalidate reply; expected integer 1";
@@ -204,7 +227,7 @@ describe("node-redis adapter", () => {
       observeSerialization: vi.fn(),
       observeSize: vi.fn(),
     };
-    const dialcache = new DialCache({ redis: { client: redisClient }, logger, metrics });
+    const dialcache = new DialCache({ redis: { client: redisClient, readTimeoutMs: 1_000 }, logger, metrics });
     const load = dialcache.cached(async (id: string) => ({ id }), {
       keyType: "user_id",
       useCase: "ProtocolFailure",

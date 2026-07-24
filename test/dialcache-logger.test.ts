@@ -108,12 +108,12 @@ describe("DialCache logger isolation", () => {
     expect(logger.warn).toHaveBeenCalledWith("Error putting value in local cache", expect.any(Error));
   });
 
-  it("preserves fallback behavior when Redis reads, writes, and logging fail", async () => {
+  it("preserves fallback behavior and skips Redis writes when reads and logging fail", async () => {
     const logger = throwingLogger();
     const redis = new FakeRedis();
     redis.failGet = true;
     redis.failSet = true;
-    const dialcache = new DialCache({ logger, redis: { client: redis } });
+    const dialcache = new DialCache({ logger, redis: { client: redis, readTimeoutMs: 1_000 } });
     const getUser = dialcache.cached(async () => ({ source: "fallback" }), {
       keyType: "user_id",
       useCase: "ThrowingLoggerRedisReadWrite",
@@ -123,10 +123,9 @@ describe("DialCache logger isolation", () => {
 
     await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ source: "fallback" });
     expect(redis.getCalls).toBe(1);
-    expect(redis.setCalls).toBe(1);
-    expect(logger.warn).toHaveBeenCalledTimes(2);
+    expect(redis.setCalls).toBe(0);
+    expect(logger.warn).toHaveBeenCalledOnce();
     expect(logger.warn).toHaveBeenCalledWith("Error getting value from Redis cache", expect.any(Error));
-    expect(logger.warn).toHaveBeenCalledWith("Error putting value in Redis cache", expect.any(Error));
   });
 
   it("preserves the original invalidation error when logging also fails", async () => {
@@ -139,7 +138,7 @@ describe("DialCache logger isolation", () => {
         throw invalidationError;
       }),
     } satisfies DialCacheRedisClient;
-    const dialcache = new DialCache({ logger, redis: { client: redis } });
+    const dialcache = new DialCache({ logger, redis: { client: redis, readTimeoutMs: 1_000 } });
 
     await expect(dialcache.invalidateRemote("user_id", "123")).rejects.toBe(invalidationError);
     expect(logger.warn).toHaveBeenCalledOnce();

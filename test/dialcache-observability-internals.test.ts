@@ -72,7 +72,7 @@ describe("DialCache observability internal compatibility paths", () => {
     const redisCache = new RedisCache({
       configProvider: async () => null,
       rampSampler: () => 0,
-      redis: { client: redis },
+      redis: { client: redis, readTimeoutMs: 1_000 },
       metrics: null,
     });
     const enabledKey = key();

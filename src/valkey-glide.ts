@@ -58,7 +58,9 @@ export interface ValkeyGlideDialCacheClient extends DialCacheRedisClient {
  * same GLIDE module namespace used to create the client so native Script
  * handles are registered with that client's runtime. Callers dispose the
  * handles after draining work, then close GLIDE. A request timeout bounds
- * client waiting but is not server-side command cancellation.
+ * client waiting but is not server-side command cancellation. GLIDE's current
+ * script API has no per-invocation signal, so DialCache's core read deadline
+ * may return before this adapter's invocation settles.
  */
 export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScriptHandle, TDecoder>(
   client: ValkeyGlideScriptingClient<TScript, TDecoder>,

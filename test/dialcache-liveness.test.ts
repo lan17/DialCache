@@ -514,23 +514,22 @@ describe("DialCache fallback liveness", () => {
     expect(fallback).toHaveBeenCalledTimes(1);
   });
 
-  it("does not apply the fallback deadline to a pending Redis read", async () => {
-    const readGate = deferred<null>();
+  it("bounds a pending Redis read before starting the separate fallback deadline", async () => {
     const readStarted = deferred<void>();
     const fallback = vi.fn(async () => "value");
     const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
     const redis: DialCacheRedisClient = {
       read: async () => {
         readStarted.resolve();
-        return await readGate.promise;
+        return await new Promise<null>(() => undefined);
       },
       write: async () => true,
       invalidate: async () => undefined,
     };
-    const dialcache = new DialCache({ redis: { client: redis } });
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 10 } });
     const load = dialcache.cached(fallback, {
       keyType: "id",
-      useCase: "PendingRedisReadHasCallerOwnedDeadline",
+      useCase: "PendingRedisReadHasCoreDeadline",
       cacheKey: () => "123",
       fallbackTimeoutMs: 5,
       defaultConfig: remoteConfig,
@@ -538,15 +537,17 @@ describe("DialCache fallback liveness", () => {
 
     const result = dialcache.enable(async () => await load());
     await readStarted.promise;
-    await vi.advanceTimersByTimeAsync(100);
+    await vi.advanceTimersByTimeAsync(9);
 
     expect(fallback).not.toHaveBeenCalled();
-    expect(setTimeoutSpy).not.toHaveBeenCalled();
+    expect(setTimeoutSpy).toHaveBeenCalledTimes(1);
     expect(dialcache.getCoalescingState().process.activeLeaders).toBe(1);
 
-    readGate.resolve(null);
+    await vi.advanceTimersByTimeAsync(1);
     await expect(result).resolves.toBe("value");
     expect(fallback).toHaveBeenCalledTimes(1);
+    expect(setTimeoutSpy).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
     expect(dialcache.getCoalescingState().process.activeLeaders).toBe(0);
   });
 
@@ -567,7 +568,7 @@ describe("DialCache fallback liveness", () => {
       write: async () => true,
       invalidate: async () => undefined,
     };
-    const dialcache = new DialCache({ redis: { client: redis } });
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     const load = dialcache.cached(async () => await fallback(), {
       keyType: "id",
       useCase: "PendingSerializerLoadHasCallerOwnedDeadline",
@@ -582,7 +583,8 @@ describe("DialCache fallback liveness", () => {
     await vi.advanceTimersByTimeAsync(100);
 
     expect(fallback).not.toHaveBeenCalled();
-    expect(setTimeoutSpy).not.toHaveBeenCalled();
+    expect(setTimeoutSpy).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
     expect(dialcache.getCoalescingState().process.activeLeaders).toBe(1);
 
     loadGate.resolve("cached");
@@ -611,7 +613,7 @@ describe("DialCache fallback liveness", () => {
       },
       invalidate: async () => undefined,
     };
-    const dialcache = new DialCache({ redis: { client: redis } });
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     const load = dialcache.cached(async () => "value", {
       keyType: "id",
       useCase: "PendingPublicationHasCallerOwnedDeadline",
@@ -632,7 +634,7 @@ describe("DialCache fallback liveness", () => {
       },
     );
     await dumpStarted.promise;
-    expect(setTimeoutSpy).toHaveBeenCalledTimes(1);
+    expect(setTimeoutSpy).toHaveBeenCalledTimes(2);
     expect(vi.getTimerCount()).toBe(0);
 
     await vi.advanceTimersByTimeAsync(100);
@@ -728,7 +730,7 @@ describe("DialCache fallback liveness", () => {
     const firstGate = deferred<{ readonly id: string; readonly version: number }>();
     const firstStarted = deferred<void>();
     const redis = new FakeRedis();
-    const dialcache = new DialCache({ redis: { client: redis } });
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     let calls = 0;
     const getUser = dialcache.cached(async (id: string) => {
       calls += 1;

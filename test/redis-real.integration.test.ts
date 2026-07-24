@@ -194,7 +194,7 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
         throw new Error("Redis test clients did not start");
       }
       const scriptClient: DialCacheRedisClient = client.adapter;
-      const dialcache = new DialCache({ namespace: "real", redis: { client: scriptClient } });
+      const dialcache = new DialCache({ namespace: "real", redis: { client: scriptClient, readTimeoutMs: 10_000 } });
       let jsonCalls = 0;
       let binaryCalls = 0;
       const getJson = dialcache.cached(async (id: string) => ({ id, calls: ++jsonCalls }), {
@@ -413,7 +413,7 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
         throw new Error("Redis test clients did not start");
       }
       const scriptClient: DialCacheRedisClient = client.adapter;
-      const dialcache = new DialCache({ namespace: "tracked", redis: { client: scriptClient } });
+      const dialcache = new DialCache({ namespace: "tracked", redis: { client: scriptClient, readTimeoutMs: 10_000 } });
       let version = 1;
       let calls = 0;
       const getUser = dialcache.cached(async (id: string) => ({ id, version, calls: ++calls }), {
@@ -445,7 +445,7 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       }
       const scriptClient = client.adapter;
       const logger = { debug: () => undefined, warn: () => undefined, error: () => undefined };
-      const dialcache = new DialCache({ namespace: "malformed", redis: { client: scriptClient }, logger });
+      const dialcache = new DialCache({ namespace: "malformed", redis: { client: scriptClient, readTimeoutMs: 10_000 }, logger });
       let calls = 0;
       const getUser = dialcache.cached(async (id: string) => ({ id, calls: ++calls }), {
         keyType: "user_id",
@@ -507,7 +507,7 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       await admin.set(valueKey, encodeFrame("malformed", 2), { PX: 60_000 });
       await admin.set(watermarkKey, "0", { PX: 60_000 });
 
-      const dialcache = new DialCache({ namespace, redis: { client: redisClient }, logger, metrics });
+      const dialcache = new DialCache({ namespace, redis: { client: redisClient, readTimeoutMs: 10_000 }, logger, metrics });
       let calls = 0;
       const getUser = dialcache.cached(async (id: string) => ({ id, calls: ++calls }), {
         keyType: "user_id",

@@ -14,7 +14,12 @@ import {
 } from "./internal/redis-script-reply.js";
 import type { DialCacheRedisClient } from "./redis-client.js";
 
-type BufferReplyOptions = ReturnType<typeof commandOptions<{ readonly returnBuffers: true }>>;
+type BufferReplyOptions = ReturnType<
+  typeof commandOptions<{
+    readonly returnBuffers: true;
+    readonly signal?: AbortSignal;
+  }>
+>;
 // Redis bulk strings are binary data; decoding them as UTF-8 would corrupt arbitrary serializer output.
 const bufferReplyOptions: BufferReplyOptions = commandOptions({ returnBuffers: true });
 const readReply = (reply: string | null): string | null => reply;
@@ -151,17 +156,20 @@ interface NodeRedisScriptClient {
 
 /**
  * Create a resource-free semantic view over a caller-owned node-redis client.
- * The adapter preserves the wrapped script commands' lifetimes; node-redis
- * `connectTimeout` alone is not a command deadline. The caller remains
- * responsible for finite command settlement, draining work, and closing the
- * client.
+ * Read signals are passed to node-redis so queued commands can be removed when
+ * supported. Aborting after dispatch does not unsend a command or prove the
+ * server stopped executing it. The caller remains responsible for finite
+ * native command budgets, draining work, and closing the client.
  */
 export function createNodeRedisDialCacheClient(client: NodeRedisScriptClient): DialCacheRedisClient {
   return {
-    async read({ valueKey, watermarkKey }) {
+    async read({ valueKey, watermarkKey }, context) {
+      const options: BufferReplyOptions = context === undefined
+        ? bufferReplyOptions
+        : commandOptions({ returnBuffers: true, signal: context.signal });
       const raw = watermarkKey === undefined
-        ? await client.dialcacheRead(bufferReplyOptions, valueKey)
-        : await client.dialcacheReadTracked(bufferReplyOptions, valueKey, watermarkKey);
+        ? await client.dialcacheRead(options, valueKey)
+        : await client.dialcacheReadTracked(options, valueKey, watermarkKey);
       return raw === null ? null : decodeRedisPayload(raw);
     },
     async write(request) {

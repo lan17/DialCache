@@ -25,7 +25,7 @@ describe("DialCache Redis TTL layer", () => {
   it("reads local miss from Redis and populates the local layer", async () => {
     // Given one process has already written a value into the shared Redis cache.
     const redis = new FakeRedis();
-    const writer = new DialCache({ redis: { client: redis } });
+    const writer = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     let writerCalls = 0;
     const writeUser = writer.cached(async (userId: string) => ({ userId, calls: ++writerCalls }), {
       keyType: "user_id",
@@ -35,7 +35,7 @@ describe("DialCache Redis TTL layer", () => {
     });
     await writer.enable(async () => await writeUser("123"));
 
-    const reader = new DialCache({ redis: { client: redis } });
+    const reader = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     let readerCalls = 0;
     const readUser = reader.cached(async (userId: string) => ({ userId, calls: ++readerCalls }), {
       keyType: "user_id",
@@ -60,7 +60,7 @@ describe("DialCache Redis TTL layer", () => {
   it("does not populate local cache when the local layer was disabled for the read", async () => {
     // Given one process has already written a value into the shared Redis cache.
     const redis = new FakeRedis();
-    const writer = new DialCache({ redis: { client: redis } });
+    const writer = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     const writeUser = writer.cached(async (userId: string) => ({ userId, source: "redis" }), {
       keyType: "user_id",
       useCase: "RedisNoDisabledLocalPopulate",
@@ -77,7 +77,7 @@ describe("DialCache Redis TTL layer", () => {
     });
     const cacheConfigProvider = vi.fn(async () => (++providerCalls <= 2 ? remoteOnlyConfig : DialCacheKeyConfig.enabled(60)));
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
-    const reader = new DialCache({ redis: { client: redis }, cacheConfigProvider, logger });
+    const reader = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 }, cacheConfigProvider, logger });
     let readerCalls = 0;
     const readUser = reader.cached(async (userId: string) => ({ userId, source: `fallback-${++readerCalls}` }), {
       keyType: "user_id",
@@ -107,7 +107,7 @@ describe("DialCache Redis TTL layer", () => {
     });
     const cacheConfigProvider = vi.fn(async () => remoteOnlyConfig);
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
-    const dialcache = new DialCache({ redis: { client: redis }, cacheConfigProvider, logger });
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 }, cacheConfigProvider, logger });
     const getUser = dialcache.cached(async (userId: string) => ({ userId }), {
       keyType: "user_id",
       useCase: "RemoteFailureConfigSnapshot",
@@ -118,7 +118,7 @@ describe("DialCache Redis TTL layer", () => {
 
     expect(cacheConfigProvider).toHaveBeenCalledTimes(1);
     expect(redis.getCalls).toBe(1);
-    expect(redis.setCalls).toBe(1);
+    expect(redis.setCalls).toBe(0);
   });
 
   it("writes Redis misses with a timestamped binary frame", async () => {
@@ -126,7 +126,7 @@ describe("DialCache Redis TTL layer", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-12T17:00:00.000Z"));
     const redis = new FakeRedis();
-    const dialcache = new DialCache({ redis: { client: redis } });
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     let calls = 0;
     const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
       keyType: "user_id",
@@ -170,13 +170,13 @@ describe("DialCache Redis TTL layer", () => {
     },
   );
 
-  it("fails open when Redis operations fail before fallback", async () => {
+  it("fails open without attempting a second Redis operation after a read failure", async () => {
     // Given Redis is unavailable and local caching is not configured for this key.
     const redis = new FakeRedis();
     redis.failGet = true;
     redis.failSet = true;
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
-    const dialcache = new DialCache({ redis: { client: redis }, logger });
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 }, logger });
     let calls = 0;
     const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
       keyType: "user_id",
@@ -196,7 +196,8 @@ describe("DialCache Redis TTL layer", () => {
     expect(first).toEqual({ userId: "123", calls: 1 });
     expect(second).toEqual({ userId: "123", calls: 2 });
     expect(logger.warn).toHaveBeenCalledWith("Error getting value from Redis cache", expect.any(Error));
-    expect(logger.warn).toHaveBeenCalledWith("Error putting value in Redis cache", expect.any(Error));
+    expect(redis.setCalls).toBe(0);
+    expect(logger.warn).not.toHaveBeenCalledWith("Error putting value in Redis cache", expect.any(Error));
   });
 
   it("round-trips Redis values through a custom serializer", async () => {
@@ -209,7 +210,7 @@ describe("DialCache Redis TTL layer", () => {
         return { id: id ?? "", source: source ?? "" };
       }),
     };
-    const writer = new DialCache({ redis: { client: redis } });
+    const writer = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     const readFromWriter = writer.cached(async (userId: string) => ({ id: userId, source: "fallback" }), {
       keyType: "user_id",
       useCase: "RedisCustomSerializer",
@@ -219,7 +220,7 @@ describe("DialCache Redis TTL layer", () => {
     });
     await writer.enable(async () => await readFromWriter("123"));
 
-    const reader = new DialCache({ redis: { client: redis } });
+    const reader = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     let readerCalls = 0;
     const readFromRedis = reader.cached(async (userId: string) => ({ id: userId, source: `fallback-${++readerCalls}` }), {
       keyType: "user_id",
@@ -248,7 +249,7 @@ describe("DialCache Redis TTL layer", () => {
       dump: vi.fn((value) => value.toISOString()),
       load: vi.fn((value) => new Date(Buffer.isBuffer(value) ? value.toString("utf8") : value)),
     };
-    const writer = new DialCache({ redis: { client: redis } });
+    const writer = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     const writeUpdatedAt = writer.cached(async () => new Date("2026-07-17T12:00:00.000Z"), {
       keyType: "user_id",
       useCase: "RedisDateSerializer",
@@ -258,7 +259,7 @@ describe("DialCache Redis TTL layer", () => {
     });
     await writer.enable(async () => await writeUpdatedAt());
 
-    const reader = new DialCache({ redis: { client: redis } });
+    const reader = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     let readerCalls = 0;
     const readUpdatedAt = reader.cached(
       async () => {
@@ -307,7 +308,7 @@ describe("DialCache Redis TTL layer", () => {
       }),
       load: vi.fn(async () => ({ userId: "never", calls: 0 })),
     };
-    const dialcache = new DialCache({ redis: { client: redis }, logger });
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 }, logger });
     let calls = 0;
     const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
       keyType: "user_id",
@@ -346,7 +347,7 @@ describe("DialCache Redis TTL layer", () => {
       }),
     };
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
-    const dialcache = new DialCache({ redis: { client: redis }, logger });
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 }, logger });
     let calls = 0;
     const getUser = dialcache.cached(async (userId: string) => ({ userId, source: `fallback-${++calls}` }), {
       keyType: "user_id",
@@ -383,7 +384,7 @@ describe("DialCache Redis TTL layer", () => {
     redis.setRaw(badKey, Buffer.from([2, 0, 0, 0, 0, 0, 0, 0, 0, 0]));
     redis.setRaw(nonFiniteKey, Buffer.from([1, 0]));
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
-    const dialcache = new DialCache({ redis: { client: redis }, logger });
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 }, logger });
     let calls = 0;
     const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
       keyType: "user_id",
@@ -427,7 +428,7 @@ describe("DialCache Redis TTL layer", () => {
       observeSerialization: vi.fn(),
       observeSize: vi.fn(),
     };
-    const dialcache = new DialCache({ redis: { client: redisClient }, logger, metrics });
+    const dialcache = new DialCache({ redis: { client: redisClient, readTimeoutMs: 1_000 }, logger, metrics });
     let calls = 0;
     const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
       keyType: "user_id",
@@ -476,7 +477,7 @@ describe("DialCache Redis TTL layer", () => {
       observeSerialization: vi.fn(),
       observeSize: vi.fn(),
     };
-    const dialcache = new DialCache({ redis: { client: redis }, logger, metrics });
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 }, logger, metrics });
     let calls = 0;
     const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
       keyType: "user_id",
@@ -511,7 +512,7 @@ describe("DialCache Redis TTL layer", () => {
     // Given Redis is configured but the key has no remote TTL.
     const redis = new FakeRedis();
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
-    const dialcache = new DialCache({ redis: { client: redis }, logger });
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 }, logger });
     let calls = 0;
     const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
       keyType: "user_id",

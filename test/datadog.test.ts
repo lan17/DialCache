@@ -321,7 +321,7 @@ describe("Datadog metrics adapter", () => {
     const dialcache = new DialCache({
       namespace: "private-cache",
       metrics,
-      redis: { client: redis },
+      redis: { client: redis, readTimeoutMs: 1_000 },
       logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
     });
     const load = dialcache.cached(async (id: string, filter: string) => ({ id, filter }), {
