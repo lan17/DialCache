@@ -22,7 +22,8 @@ import {
   type MetricLayer,
 } from "./metrics.js";
 import type { Serializer } from "./serializer.js";
-import type { CacheGetResult } from "./internal/cache-result.js";
+import type { CacheGetResult, RemoteCacheGetResult } from "./internal/cache-result.js";
+import { MAX_TIMER_DELAY_MS, withMonotonicDeadline } from "./internal/deadline.js";
 import { LocalCache } from "./internal/local-cache.js";
 import { RedisCache } from "./internal/redis-cache.js";
 import {
@@ -182,7 +183,6 @@ interface ProcessFlight {
 
 const DEFAULT_LOCAL_MAX_SIZE = 10_000;
 const DEFAULT_FALLBACK_TIMEOUT_MS = 60_000;
-const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const defaultConfigProvider: CacheConfigProvider = () => null;
 const defaultLogger: Logger = console;
 
@@ -472,7 +472,12 @@ export class DialCache {
     }
 
     return await this.singleFlightProcess(key, async () => {
-      const remote = await this.readRemoteWithResolvedConfig<T>(redisCache, key, remoteLayer.config);
+      const remote = await this.readRemoteWithResolvedConfig<T>(
+        redisCache,
+        key,
+        remoteLayer.config,
+        keyConfig?.remoteReadTimeoutMs ?? redisCache.readTimeoutMs,
+      );
       return await this.finishRedisChain(redisCache, key, localLayer, remote, fallback, remoteLayer.config);
     });
   }
@@ -498,7 +503,12 @@ export class DialCache {
       return await this.finishRedisChain(redisCache, key, local, remoteLayer, fallback);
     }
 
-    const remote = await this.readRemoteWithResolvedConfig<T>(redisCache, key, remoteLayer.config);
+    const remote = await this.readRemoteWithResolvedConfig<T>(
+      redisCache,
+      key,
+      remoteLayer.config,
+      keyConfig?.remoteReadTimeoutMs ?? redisCache.readTimeoutMs,
+    );
     return await this.finishRedisChain(redisCache, key, local, remote, fallback, remoteLayer.config);
   }
 
@@ -514,7 +524,7 @@ export class DialCache {
     redisCache: RedisCache,
     key: DialCacheKey,
     local: CacheGetResult<T>,
-    remote: CacheGetResult<T>,
+    remote: RemoteCacheGetResult<T>,
     fallback: () => Promise<T>,
     resolvedRemoteConfig?: ResolvedLayerConfig,
   ): Promise<T> {
@@ -523,6 +533,14 @@ export class DialCache {
         await this.putLocalFailOpen(key, remote.value, local.config);
       }
       return remote.value;
+    }
+
+    if (remote.status === "error") {
+      const value = await this.callFallback(labelsFor(key, CacheLayer.REMOTE), fallback);
+      if (!key.trackForInvalidation && local.status === "miss") {
+        await this.putLocalFailOpen(key, value, local.config);
+      }
+      return value;
     }
 
     const remoteErrored = remote.status === "disabled" && remote.reason === "config_error";
@@ -603,23 +621,25 @@ export class DialCache {
     }
   }
 
-  private async readRemoteWithResolvedConfig<T>(redisCache: RedisCache, key: DialCacheKey, layerConfig: ResolvedLayerConfig) {
+  private async readRemoteWithResolvedConfig<T>(
+    redisCache: RedisCache,
+    key: DialCacheKey,
+    layerConfig: ResolvedLayerConfig,
+    readTimeoutMs: number,
+  ): Promise<RemoteCacheGetResult<T>> {
     const start = performance.now();
+    this.metrics?.request(labelsFor(key, CacheLayer.REMOTE));
     try {
-      const result = await redisCache.getWithResolvedConfig<T>(key, layerConfig);
-      this.metrics?.request(labelsFor(key, CacheLayer.REMOTE));
-      this.metrics?.observeGet(labelsFor(key, CacheLayer.REMOTE), elapsedSeconds(start));
+      const result = await redisCache.getWithResolvedConfig<T>(key, layerConfig, readTimeoutMs);
       if (result.status === "miss") {
         this.metrics?.miss(labelsFor(key, CacheLayer.REMOTE));
       }
       return result;
     } catch (error) {
       this.logger.warn("Error getting value from Redis cache", error);
-      return {
-        status: "disabled",
-        reason: "config_error",
-        ...(key.trackForInvalidation ? { skipCacheWrite: true } : {}),
-      } as const;
+      return { status: "error", operation: "read" };
+    } finally {
+      this.metrics?.observeGet(labelsFor(key, CacheLayer.REMOTE), elapsedSeconds(start));
     }
   }
 
@@ -783,6 +803,7 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
   const ttlSecConfig = config.ttlSec;
   const rampConfig = config.ramp;
   const requestLocal = config.requestLocal;
+  const remoteReadTimeoutMs = config.remoteReadTimeoutMs;
   if (requestLocal !== undefined && typeof requestLocal !== "boolean") {
     throw new TypeError("DialCache defaultConfig requestLocal must be a boolean");
   }
@@ -794,6 +815,7 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
     ttlSec: ttlSecConfig,
     ramp: rampConfig,
     ...(requestLocal === undefined ? {} : { requestLocal }),
+    ...(remoteReadTimeoutMs === undefined ? {} : { remoteReadTimeoutMs }),
   });
 
   for (const layer of [CacheLayer.LOCAL, CacheLayer.REMOTE]) {
@@ -852,67 +874,10 @@ function withFallbackTimeout<T>(
     return fallback();
   }
 
-  const startedAtMs = performance.now();
-  const operation = fallback();
-  return new Promise<T>((resolve, reject) => {
-    let settled = false;
-    let timer: NodeJS.Timeout | null = null;
-    const elapsedMs = (): number => Math.max(performance.now() - startedAtMs, 0);
-    const clearTimer = (): void => {
-      if (timer !== null) {
-        clearTimeout(timer);
-        timer = null;
-      }
-    };
-    const rejectTimeout = (): void => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimer();
-      reject(new FallbackTimeoutError(useCase, timeoutMs));
-    };
-    const onTimer = (): void => {
-      timer = null;
-      if (settled) {
-        return;
-      }
-
-      const remainingMs = timeoutMs - elapsedMs();
-      if (remainingMs > 0) {
-        timer = setTimeout(onTimer, Math.ceil(remainingMs));
-        return;
-      }
-      rejectTimeout();
-    };
-    const settleBeforeDeadline = (settle: () => void): void => {
-      if (settled) {
-        return;
-      }
-      if (elapsedMs() >= timeoutMs) {
-        rejectTimeout();
-        return;
-      }
-      settled = true;
-      clearTimer();
-      settle();
-    };
-
-    const remainingMs = timeoutMs - elapsedMs();
-    if (remainingMs <= 0) {
-      rejectTimeout();
-    } else {
-      timer = setTimeout(onTimer, Math.ceil(remainingMs));
-    }
-
-    void operation.then(
-      (value) => {
-        settleBeforeDeadline(() => resolve(value));
-      },
-      (error: unknown) => {
-        settleBeforeDeadline(() => reject(error));
-      },
-    );
+  return withMonotonicDeadline({
+    operation: fallback,
+    timeoutMs,
+    timeoutError: () => new FallbackTimeoutError(useCase, timeoutMs),
   });
 }
 

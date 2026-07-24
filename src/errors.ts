@@ -16,6 +16,17 @@ export class FallbackTimeoutError extends DialCacheError {
   }
 }
 
+export class RedisReadTimeoutError extends DialCacheError {
+  readonly timeoutMs: number;
+  readonly useCase: string;
+
+  constructor(useCase: string, timeoutMs: number) {
+    super(`DialCache Redis read for use case "${useCase}" timed out after ${timeoutMs} ms`);
+    this.useCase = useCase;
+    this.timeoutMs = timeoutMs;
+  }
+}
+
 export class UseCaseIsAlreadyRegisteredError extends DialCacheError {
   constructor(useCase: string) {
     super(`Use case already registered: ${useCase}`);

@@ -479,7 +479,7 @@ describe("DialCache fallback liveness", () => {
     expect(fallback).toHaveBeenCalledTimes(1);
   });
 
-  it("does not apply the fallback deadline to a pending Redis read", async () => {
+  it("uses a separate remote-read deadline instead of the fallback deadline", async () => {
     const readGate = deferred<null>();
     const readStarted = deferred<void>();
     const fallback = vi.fn(async () => "value");
@@ -492,7 +492,7 @@ describe("DialCache fallback liveness", () => {
       write: async () => true,
       invalidate: async () => undefined,
     };
-    const dialcache = new DialCache({ redis: { client: redis } });
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 200 } });
     const load = dialcache.cached(fallback, {
       keyType: "id",
       useCase: "PendingRedisReadHasCallerOwnedDeadline",
@@ -506,7 +506,8 @@ describe("DialCache fallback liveness", () => {
     await vi.advanceTimersByTimeAsync(100);
 
     expect(fallback).not.toHaveBeenCalled();
-    expect(setTimeoutSpy).not.toHaveBeenCalled();
+    expect(setTimeoutSpy).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(1);
     expect(dialcache.getCoalescingState().process.activeLeaders).toBe(1);
 
     readGate.resolve(null);
@@ -547,7 +548,8 @@ describe("DialCache fallback liveness", () => {
     await vi.advanceTimersByTimeAsync(100);
 
     expect(fallback).not.toHaveBeenCalled();
-    expect(setTimeoutSpy).not.toHaveBeenCalled();
+    expect(setTimeoutSpy).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
     expect(dialcache.getCoalescingState().process.activeLeaders).toBe(1);
 
     loadGate.resolve("cached");
@@ -597,7 +599,7 @@ describe("DialCache fallback liveness", () => {
       },
     );
     await dumpStarted.promise;
-    expect(setTimeoutSpy).toHaveBeenCalledTimes(1);
+    expect(setTimeoutSpy).toHaveBeenCalledTimes(2);
     expect(vi.getTimerCount()).toBe(0);
 
     await vi.advanceTimersByTimeAsync(100);

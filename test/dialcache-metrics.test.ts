@@ -89,7 +89,7 @@ describe("DialCache observability metrics", () => {
     const dialcache = new DialCache({
       namespace: "users-cache",
       metrics,
-      redis: { client: redis },
+      redis: { client: redis, readTimeoutMs: 1_000 },
       logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
     });
     const getUser = dialcache.cached(async (userId: string) => {
@@ -359,14 +359,14 @@ describe("DialCache observability metrics", () => {
       write: vi.fn(async () => true),
       invalidate: vi.fn(async () => undefined),
     };
-    const cacheFailure = new DialCache({ redis: { client: failingRedis }, metrics, logger });
+    const cacheFailure = new DialCache({ redis: { client: failingRedis, readTimeoutMs: 1_000 }, metrics, logger });
     const readThroughFailure = cacheFailure.cached(async (userId: string) => ({ userId }), {
       keyType: "user_id",
       useCase: "CacheErrorClassification",
       cacheKey: (userId) => userId,
       defaultConfig: remoteOnly(),
     });
-    const fallbackCache = new DialCache({ redis: { client: new FakeRedis() }, metrics, logger });
+    const fallbackCache = new DialCache({ redis: { client: new FakeRedis(), readTimeoutMs: 1_000 }, metrics, logger });
     const fallbackFailure = fallbackCache.cached(async (userId: string) => {
       const fallbackError = new TypeError("database failed for tenant-456");
       fallbackError.name = "Tenant456DatabaseError";
@@ -427,7 +427,7 @@ describe("DialCache observability metrics", () => {
 
     const failingWriteRedis = new FakeRedis();
     failingWriteRedis.failSet = true;
-    const writeFailure = new DialCache({ redis: { client: failingWriteRedis }, metrics, logger });
+    const writeFailure = new DialCache({ redis: { client: failingWriteRedis, readTimeoutMs: 1_000 }, metrics, logger });
     const writeValue = writeFailure.cached(async (id: string) => id, {
       keyType: "user_id",
       useCase: "WriteErrorClassification",
@@ -444,7 +444,7 @@ describe("DialCache observability metrics", () => {
       },
       load: async (value) => value.toString(),
     };
-    const dumpFailure = new DialCache({ redis: { client: new FakeRedis() }, metrics, logger });
+    const dumpFailure = new DialCache({ redis: { client: new FakeRedis(), readTimeoutMs: 1_000 }, metrics, logger });
     const dumpValue = dumpFailure.cached(async (id: string) => id, {
       keyType: "user_id",
       useCase: "SerializationDumpClassification",
@@ -455,7 +455,7 @@ describe("DialCache observability metrics", () => {
     await dumpFailure.enable(async () => await dumpValue("123"));
 
     const loadRedis = new FakeRedis();
-    const loadWriter = new DialCache({ redis: { client: loadRedis } });
+    const loadWriter = new DialCache({ redis: { client: loadRedis, readTimeoutMs: 1_000 } });
     const writeLoadFixture = loadWriter.cached(async (id: string) => id, {
       keyType: "user_id",
       useCase: "SerializationLoadClassification",
@@ -471,7 +471,7 @@ describe("DialCache observability metrics", () => {
         throw loadError;
       },
     };
-    const loadFailure = new DialCache({ redis: { client: loadRedis }, metrics, logger });
+    const loadFailure = new DialCache({ redis: { client: loadRedis, readTimeoutMs: 1_000 }, metrics, logger });
     const loadValue = loadFailure.cached(async (id: string) => id, {
       keyType: "user_id",
       useCase: "SerializationLoadClassification",
@@ -552,7 +552,7 @@ describe("DialCache observability metrics", () => {
     });
 
     const remoteFailure = new DialCache({
-      redis: { client: new FakeRedis() },
+      redis: { client: new FakeRedis(), readTimeoutMs: 1_000 },
       metrics,
       logger,
       cacheConfigProvider: async () => new DialCacheKeyConfig({
@@ -685,7 +685,7 @@ describe("DialCache observability metrics", () => {
       cacheKey: (id: string) => id,
       defaultConfig: localOnly(),
     });
-    const remoteFailure = new DialCache({ redis: { client: new FakeRedis() }, metrics });
+    const remoteFailure = new DialCache({ redis: { client: new FakeRedis(), readTimeoutMs: 1_000 }, metrics });
     const remoteFallback = remoteFailure.cached(async (_id: string) => {
       throw new Error("remote fallback failed");
     }, {

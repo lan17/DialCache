@@ -1,6 +1,7 @@
 import type { DialCacheKey } from "./key.js";
 import type { DialCacheMetricsAdapter } from "./metrics.js";
 import type { RedisConfig } from "./internal/redis-cache.js";
+import { assertValidDeadlineMs } from "./internal/deadline.js";
 
 export enum CacheLayer {
   LOCAL = "local",
@@ -18,8 +19,18 @@ export class DialCacheKeyConfig {
    * Request-local caching is disabled by default and has no TTL or ramp.
    */
   readonly requestLocal?: boolean;
+  /**
+   * Maximum time DialCache waits for a remote read before failing open to the
+   * source of truth. Overrides the instance default for this use case.
+   */
+  readonly remoteReadTimeoutMs?: number;
 
-  constructor(config: { ttlSec?: LayerConfig; ramp?: LayerConfig; requestLocal?: boolean }) {
+  constructor(config: {
+    ttlSec?: LayerConfig;
+    ramp?: LayerConfig;
+    requestLocal?: boolean;
+    remoteReadTimeoutMs?: number;
+  }) {
     if (config === null || typeof config !== "object" || Array.isArray(config)) {
       throw new TypeError("DialCache key config must be an object");
     }
@@ -30,6 +41,10 @@ export class DialCacheKeyConfig {
     }
     if (config.requestLocal !== undefined) {
       this.requestLocal = config.requestLocal;
+    }
+    if (config.remoteReadTimeoutMs !== undefined) {
+      assertValidDeadlineMs(config.remoteReadTimeoutMs, "DialCache remoteReadTimeoutMs");
+      this.remoteReadTimeoutMs = config.remoteReadTimeoutMs;
     }
   }
 

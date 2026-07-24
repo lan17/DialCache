@@ -301,7 +301,7 @@ describe("DialCache getOrLoad", () => {
     expect(second).toEqual({ version: 2 });
   });
 
-  it("fails open through Redis read and write failures", async () => {
+  it("fails open without attempting a Redis write after a read failure", async () => {
     const redis = new FakeRedis();
     redis.failGet = true;
     redis.failSet = true;
@@ -325,7 +325,8 @@ describe("DialCache getOrLoad", () => {
     expect(first).toEqual({ calls: 1 });
     expect(second).toEqual({ calls: 2 });
     expect(logger.warn).toHaveBeenCalledWith("Error getting value from Redis cache", expect.any(Error));
-    expect(logger.warn).toHaveBeenCalledWith("Error putting value in Redis cache", expect.any(Error));
+    expect(redis.setCalls).toBe(0);
+    expect(logger.warn).not.toHaveBeenCalledWith("Error putting value in Redis cache", expect.any(Error));
   });
 
   it("propagates loader errors, records them as fallback failures, and clears the flight", async () => {
