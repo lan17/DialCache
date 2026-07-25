@@ -54,12 +54,11 @@ export type DialCacheNodeRedisScripts = {
       cacheTtlMs: number,
       encoding: number,
       payload: string | Buffer,
-      watermarkTtlFloorMs: number,
     ],
     number
   >;
   readonly dialcacheInvalidate: NodeRedisScript<
-    [watermarkKey: string, futureBufferMs: number, watermarkTtlFloorMs: number],
+    [watermarkKey: string, futureBufferMs: number],
     number
   >;
 };
@@ -112,9 +111,8 @@ export const dialcacheRedisScripts: DialCacheNodeRedisScripts = {
       cacheTtlMs: number,
       encoding: number,
       payload: string | Buffer,
-      watermarkTtlFloorMs: number,
     ): Array<NodeRedisArgument> {
-      return [valueKey, watermarkKey, String(cacheTtlMs), String(encoding), payload, String(watermarkTtlFloorMs)];
+      return [valueKey, watermarkKey, String(cacheTtlMs), String(encoding), payload];
     },
     transformReply: writeReply,
   }),
@@ -123,8 +121,8 @@ export const dialcacheRedisScripts: DialCacheNodeRedisScripts = {
     NUMBER_OF_KEYS: 1,
     FIRST_KEY_INDEX: 0,
     IS_READ_ONLY: false,
-    transformArguments(watermarkKey: string, futureBufferMs: number, watermarkTtlFloorMs: number): Array<string> {
-      return [watermarkKey, String(futureBufferMs), String(watermarkTtlFloorMs)];
+    transformArguments(watermarkKey: string, futureBufferMs: number): Array<string> {
+      return [watermarkKey, String(futureBufferMs)];
     },
     transformReply: invalidationReply,
   }),
@@ -144,9 +142,8 @@ interface NodeRedisScriptClient {
     cacheTtlMs: number,
     encoding: number,
     payload: string | Buffer,
-    watermarkTtlFloorMs: number,
   ): Promise<number>;
-  dialcacheInvalidate(watermarkKey: string, futureBufferMs: number, watermarkTtlFloorMs: number): Promise<number>;
+  dialcacheInvalidate(watermarkKey: string, futureBufferMs: number): Promise<number>;
 }
 
 /**
@@ -175,12 +172,11 @@ export function createNodeRedisDialCacheClient(client: NodeRedisScriptClient): D
             cacheTtlMs,
             encodingByte,
             value,
-            request.watermarkTtlFloorMs,
           );
       return validateRedisScriptWriteReply(result) === 1;
     },
-    async invalidate({ watermarkKey, futureBufferMs, watermarkTtlFloorMs }) {
-      const result = await client.dialcacheInvalidate(watermarkKey, futureBufferMs, watermarkTtlFloorMs);
+    async invalidate({ watermarkKey, futureBufferMs }) {
+      const result = await client.dialcacheInvalidate(watermarkKey, futureBufferMs);
       validateRedisScriptInvalidationReply(result);
     },
   };

@@ -1,4 +1,4 @@
-export { CacheLayer, DEFAULT_WATERMARK_TTL_SEC, DialCacheKeyConfig } from "./config.js";
+export { CacheLayer, DialCacheKeyConfig } from "./config.js";
 export type { CacheConfigProvider, DialCacheConfig, LayerConfig, Logger } from "./config.js";
 export { DialCacheContext } from "./context.js";
 export type {

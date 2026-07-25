@@ -1,6 +1,6 @@
 import { performance } from "node:perf_hooks";
 
-import { CacheLayer, DEFAULT_WATERMARK_TTL_SEC, type CacheConfigProvider, type DialCacheKeyConfig } from "../config.js";
+import { CacheLayer, type CacheConfigProvider, type DialCacheKeyConfig } from "../config.js";
 import { invalidationPrefix, redisClusterHashTag, type DialCacheKey } from "../key.js";
 import { labelsFor, type DialCacheMetricsAdapter, type MetricErrorKind } from "../metrics.js";
 import type { DialCacheRedisClient, RedisCachePayload } from "../redis-client.js";
@@ -17,7 +17,6 @@ export interface RedisConfig {
    */
   readonly client: DialCacheRedisClient;
   readonly serializer?: Serializer<unknown>;
-  readonly watermarkTtlSec?: number;
 }
 
 interface RedisCacheOptions {
@@ -32,7 +31,6 @@ const REDIS_FRAME_KEY_SUFFIX = ":dialcache-frame-v1";
 export class RedisCache {
   private readonly configProvider: CacheConfigProvider;
   private readonly defaultSerializer: Serializer<unknown>;
-  private readonly watermarkTtlMs: number;
   private readonly client: DialCacheRedisClient;
   private readonly metrics: DialCacheMetricsAdapter | null;
 
@@ -45,17 +43,12 @@ export class RedisCache {
         "RedisConfig.createClient was removed; create and connect a client, then pass it as RedisConfig.client",
       );
     }
+    if (Object.hasOwn(options.redis, "watermarkTtlSec")) {
+      throw new TypeError("RedisConfig.watermarkTtlSec was removed; watermark lifetime is derived by DialCache");
+    }
 
     this.configProvider = options.configProvider;
     this.defaultSerializer = options.redis.serializer ?? defaultSerializer;
-    const watermarkTtlSec = options.redis.watermarkTtlSec ?? DEFAULT_WATERMARK_TTL_SEC;
-    if (!Number.isSafeInteger(watermarkTtlSec) || watermarkTtlSec <= 0) {
-      throw new RangeError("Redis watermarkTtlSec must be a positive safe integer");
-    }
-    this.watermarkTtlMs = watermarkTtlSec * 1000;
-    if (!Number.isSafeInteger(this.watermarkTtlMs)) {
-      throw new RangeError("Redis watermarkTtlSec is too large");
-    }
     this.metrics = options.metrics;
 
     if (options.redis.client === undefined) {
@@ -139,7 +132,6 @@ export class RedisCache {
         ? await this.client.write({
             ...request,
             watermarkKey: this.redisWatermarkKeyFromKey(key),
-            watermarkTtlFloorMs: this.watermarkTtlMs,
           })
         : await this.client.write(request);
     } catch (error) {
@@ -152,7 +144,6 @@ export class RedisCache {
     await this.client.invalidate({
       watermarkKey: this.redisWatermarkKey(namespace, keyType, id),
       futureBufferMs,
-      watermarkTtlFloorMs: this.watermarkTtlMs,
     });
   }
 

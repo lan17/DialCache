@@ -76,12 +76,11 @@ describe("node-redis adapter", () => {
         1_000,
         1,
         binary,
-        2_000,
       ),
-    ).toEqual(["tracked:{id}:value", "tracked:{id}:watermark", "1000", "1", binary, "2000"]);
+    ).toEqual(["tracked:{id}:value", "tracked:{id}:watermark", "1000", "1", binary]);
     expect(
-      dialcacheRedisScripts.dialcacheInvalidate.transformArguments("tracked:{id}:watermark", 50, 2_000),
-    ).toEqual(["tracked:{id}:watermark", "50", "2000"]);
+      dialcacheRedisScripts.dialcacheInvalidate.transformArguments("tracked:{id}:watermark", 50),
+    ).toEqual(["tracked:{id}:watermark", "50"]);
   });
 
   it("accepts the exact write and invalidation reply domains", async () => {
@@ -107,11 +106,10 @@ describe("node-redis adapter", () => {
         watermarkKey: "tracked:{id}:watermark",
         cacheTtlMs: 1_000,
         value: "tracked",
-        watermarkTtlFloorMs: 2_000,
       }),
     ).resolves.toBe(false);
     await expect(
-      adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50, watermarkTtlFloorMs: 2_000 }),
+      adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 }),
     ).resolves.toBeUndefined();
   });
 
@@ -133,7 +131,6 @@ describe("node-redis adapter", () => {
           watermarkKey: "tracked:{id}:watermark",
           cacheTtlMs: 1_000,
           value: "tracked",
-          watermarkTtlFloorMs: 2_000,
         })),
         writeMessage,
       );
@@ -145,7 +142,6 @@ describe("node-redis adapter", () => {
         Promise.resolve(adapter.invalidate({
           watermarkKey: "tracked:{id}:watermark",
           futureBufferMs: 50,
-          watermarkTtlFloorMs: 2_000,
         })),
         invalidationMessage,
       );

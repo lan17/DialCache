@@ -215,7 +215,6 @@ describe("DialCache Lua protocol on Redis Cluster", () => {
         watermarkKey,
         cacheTtlMs: 60_000,
         value: trackedPayload,
-        watermarkTtlFloorMs: 60_000,
       }),
     ).toBe(true);
     expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toEqual(trackedPayload);

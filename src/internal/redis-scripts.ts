@@ -86,10 +86,6 @@ export const WRITE_TRACKED_CACHE_SCRIPT = [
   PARSE_WATERMARK_LUA,
   CEIL_FINITE_NUMBER_LUA,
   VALIDATE_WRITE_ARGUMENTS_LUA,
-  String.raw`local watermark_ttl_floor_ms = ceil_finite_number(ARGV[4])
-if not watermark_ttl_floor_ms or watermark_ttl_floor_ms <= 0 then
-  return redis.error_reply("ERR invalid DialCache watermark TTL")
-end`,
   REDIS_TIME_LUA,
   String.raw`local raw_watermark = redis.call("GET", KEYS[2])
 local watermark = 0
@@ -104,7 +100,7 @@ if watermark >= now_ms then
   return 0
 end`,
   WRITE_FRAME_LUA,
-  String.raw`local desired_ttl_ms = math.max(watermark_ttl_floor_ms, cache_ttl_ms + ${WATERMARK_TTL_MARGIN_MS})
+  String.raw`local desired_ttl_ms = cache_ttl_ms + ${WATERMARK_TTL_MARGIN_MS}
 if not raw_watermark then
   redis.call("SET", KEYS[2], "0", "PX", desired_ttl_ms)
 else
@@ -122,12 +118,8 @@ export const INVALIDATE_CACHE_SCRIPT = [
   PARSE_WATERMARK_LUA,
   CEIL_FINITE_NUMBER_LUA,
   String.raw`local future_buffer_ms = ceil_finite_number(ARGV[1])
-local watermark_ttl_floor_ms = ceil_finite_number(ARGV[2])
 if not future_buffer_ms or future_buffer_ms < 0 then
   return redis.error_reply("ERR invalid DialCache future buffer")
-end
-if not watermark_ttl_floor_ms or watermark_ttl_floor_ms <= 0 then
-  return redis.error_reply("ERR invalid DialCache watermark TTL")
 end`,
   REDIS_TIME_LUA,
   String.raw`local proposed_watermark = now_ms + future_buffer_ms
@@ -147,7 +139,6 @@ if raw_watermark then
   current_ttl_ms = redis.call("PTTL", KEYS[1])
 end
 local desired_ttl_ms = math.max(
-  watermark_ttl_floor_ms,
   future_buffer_ms + ${WATERMARK_TTL_MARGIN_MS},
   watermark - now_ms + ${WATERMARK_TTL_MARGIN_MS}
 )

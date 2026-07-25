@@ -33,6 +33,8 @@ const rootConsumer = `import {
   type MetricErrorKind,
   type ProcessCoalescingState,
   type RedisConfig,
+  type RedisInvalidationRequest,
+  type RedisWriteRequest,
   type Serializer,
 } from "dialcache";
 // @ts-expect-error The unused MissingKeyConfigError class was removed instead of deprecated.
@@ -251,6 +253,27 @@ const customRedisClient: DialCacheRedisClient = {
 const cacheHasNoFlushAll: "flushAll" extends keyof DialCache ? false : true = true;
 const cacheHasNoClose: "close" extends keyof DialCache ? false : true = true;
 const clientHasNoFlushAll: "flushAll" extends keyof DialCacheRedisClient ? false : true = true;
+type TrackedRedisWriteRequest = Extract<RedisWriteRequest, { readonly watermarkKey: string }>;
+const trackedWriteHasNoWatermarkTtlFloor: "watermarkTtlFloorMs" extends keyof TrackedRedisWriteRequest
+  ? false
+  : true = true;
+const invalidationHasNoWatermarkTtlFloor: "watermarkTtlFloorMs" extends keyof RedisInvalidationRequest
+  ? false
+  : true = true;
+const legacyTrackedWriteRequest: RedisWriteRequest = {
+  valueKey: "tracked:{id}:value",
+  watermarkKey: "tracked:{id}:watermark",
+  cacheTtlMs: 1_000,
+  value: "tracked",
+  // @ts-expect-error Watermark lifetime is derived by the Redis invalidation protocol.
+  watermarkTtlFloorMs: 1_000,
+};
+const legacyInvalidationRequest: RedisInvalidationRequest = {
+  watermarkKey: "tracked:{id}:watermark",
+  futureBufferMs: 0,
+  // @ts-expect-error Watermark lifetime is derived by the Redis invalidation protocol.
+  watermarkTtlFloorMs: 1_000,
+};
 const configHasNoMetricsRegistry: "metricsRegistry" extends keyof DialCacheConfig ? false : true = true;
 const configHasNoMetricsPrefix: "metricsPrefix" extends keyof DialCacheConfig ? false : true = true;
 const configRejectsFalseMetrics: false extends NonNullable<DialCacheConfig["metrics"]> ? false : true = true;
@@ -266,10 +289,13 @@ const redisConfigHasNoKeyPrefix: "keyPrefix" extends keyof RedisConfig ? false :
 const legacyKeyPrefixConfig: RedisConfig = { client: customRedisClient, keyPrefix: "legacy:" };
 const redisConfigRequiresClient: {} extends Pick<RedisConfig, "client"> ? false : true = true;
 const redisConfigHasNoCreateClient: "createClient" extends keyof RedisConfig ? false : true = true;
+const redisConfigHasNoWatermarkTtlSec: "watermarkTtlSec" extends keyof RedisConfig ? false : true = true;
 // @ts-expect-error Redis requires a caller-owned client.
 const missingRedisClientConfig: RedisConfig = {};
 // @ts-expect-error createClient was removed; construct and pass RedisConfig.client instead.
 const legacyRedisFactoryConfig: RedisConfig = { createClient: () => customRedisClient };
+// @ts-expect-error Watermark lifetime is derived internally by DialCache.
+const legacyWatermarkTtlConfig: RedisConfig = { client: customRedisClient, watermarkTtlSec: 60 };
 // @ts-expect-error RedisClientFactory was removed with RedisConfig.createClient.
 type LegacyRedisClientFactory = import("dialcache").RedisClientFactory;
 // @ts-expect-error CacheRampSampler was removed with the public sampler override.
@@ -277,6 +303,7 @@ type LegacyCacheRampSampler = import("dialcache").CacheRampSampler;
 // @ts-expect-error CacheRampSample was removed with the public sampler override.
 type LegacyCacheRampSample = import("dialcache").CacheRampSample;
 type DialCacheRoot = typeof import("dialcache");
+const rootHasNoDefaultWatermarkTtlSec: "DEFAULT_WATERMARK_TTL_SEC" extends keyof DialCacheRoot ? false : true = true;
 const rootHasNoPrometheusFactory: "createPrometheusDialCacheMetrics" extends keyof DialCacheRoot ? false : true = true;
 const rootHasNoDatadogFactory: "createDatadogDialCacheMetrics" extends keyof DialCacheRoot ? false : true = true;
 const rootHasNoDeterministicRampSampler: "deterministicRampSampler" extends keyof DialCacheRoot ? false : true = true;
@@ -334,6 +361,10 @@ cacheWithGlobalSerializer.getOrLoad(async () => new Date(0), inlineOptionsFor("G
 void cacheHasNoFlushAll;
 void cacheHasNoClose;
 void clientHasNoFlushAll;
+void trackedWriteHasNoWatermarkTtlFloor;
+void invalidationHasNoWatermarkTtlFloor;
+void legacyTrackedWriteRequest;
+void legacyInvalidationRequest;
 void configHasNoMetricsRegistry;
 void configHasNoMetricsPrefix;
 void configRejectsFalseMetrics;

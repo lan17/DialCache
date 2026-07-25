@@ -10,9 +10,6 @@ export enum CacheLayer {
 export type Awaitable<T> = T | Promise<T>;
 export type LayerConfig = Partial<Record<CacheLayer, number>>;
 
-// Tracked writes extend this floor when their value TTL is longer.
-export const DEFAULT_WATERMARK_TTL_SEC = 3600 * 4;
-
 export class DialCacheKeyConfig {
   readonly ttlSec: LayerConfig;
   readonly ramp: LayerConfig;

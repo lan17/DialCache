@@ -43,7 +43,6 @@ export class FakeRedis implements DialCacheRedisClient {
     watermarkKey,
     cacheTtlMs,
     value,
-    watermarkTtlFloorMs,
   }: RedisWriteRequest): Promise<boolean> {
     this.setCalls += 1;
     this.throwIfWriteFails();
@@ -54,7 +53,7 @@ export class FakeRedis implements DialCacheRedisClient {
       }
       this.storeFrame(valueKey, cacheTtlMs, value);
       const currentTtlMs = this.remainingTtlMs(watermarkKey);
-      const desiredTtlMs = Math.max(currentTtlMs, watermarkTtlFloorMs, cacheTtlMs + WATERMARK_TTL_MARGIN_MS);
+      const desiredTtlMs = Math.max(currentTtlMs, cacheTtlMs + WATERMARK_TTL_MARGIN_MS);
       this.storeWatermark(watermarkKey, watermark, desiredTtlMs);
       return true;
     }
@@ -63,7 +62,7 @@ export class FakeRedis implements DialCacheRedisClient {
     return true;
   }
 
-  async invalidate({ watermarkKey, futureBufferMs, watermarkTtlFloorMs }: RedisInvalidationRequest): Promise<void> {
+  async invalidate({ watermarkKey, futureBufferMs }: RedisInvalidationRequest): Promise<void> {
     this.setCalls += 1;
     this.throwIfWriteFails();
     let current = 0;
@@ -76,7 +75,6 @@ export class FakeRedis implements DialCacheRedisClient {
     const currentTtlMs = this.remainingTtlMs(watermarkKey);
     const desiredTtlMs = Math.max(
       currentTtlMs,
-      watermarkTtlFloorMs,
       futureBufferMs + WATERMARK_TTL_MARGIN_MS,
       watermark - Date.now() + WATERMARK_TTL_MARGIN_MS,
     );
