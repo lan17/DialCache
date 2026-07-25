@@ -170,6 +170,17 @@ describe("DialCache Redis TTL layer", () => {
     },
   );
 
+  it.each([60, undefined])(
+    "rejects the removed Redis watermarkTtlSec option value %s for untyped callers",
+    (watermarkTtlSec) => {
+      const legacyRedisConfig = { client: new FakeRedis(), watermarkTtlSec } as unknown as RedisConfig;
+
+      expect(() => new DialCache({ redis: legacyRedisConfig })).toThrow(
+        new TypeError("RedisConfig.watermarkTtlSec was removed; watermark lifetime is managed by DialCache"),
+      );
+    },
+  );
+
   it("fails open when Redis operations fail before fallback", async () => {
     // Given Redis is unavailable and local caching is not configured for this key.
     const redis = new FakeRedis();

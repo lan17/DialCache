@@ -288,9 +288,9 @@ describe("DialCache targeted invalidation watermarks", () => {
     expect(redis.readWatermarkValue(watermarkKey)).toBe(first);
   });
 
-  it("extends watermark lifetime on writes but not reads", async () => {
+  it("uses the internal watermark TTL floor for writes and invalidations but not reads", async () => {
     const redis = new FakeRedis();
-    const dialcache = new DialCache({ redis: { client: redis, watermarkTtlSec: 60 } });
+    const dialcache = new DialCache({ redis: { client: redis } });
     const getUser = dialcache.cached(async (userId: string) => ({ userId }), {
       keyType: "user_id",
       useCase: "WatermarkLifetime",
@@ -304,9 +304,12 @@ describe("DialCache targeted invalidation watermarks", () => {
     vi.advanceTimersByTime(1_000);
     await dialcache.enable(async () => await getUser("123"));
     const afterRead = redis.ttlMs(watermarkKey);
+    await dialcache.invalidateRemote("user_id", "123");
+    const afterInvalidation = redis.ttlMs(watermarkKey);
 
-    expect(afterWrite).toBe(2 * 60 * 60 * 1_000 + 60_000);
+    expect(afterWrite).toBe(4 * 60 * 60 * 1_000);
     expect(afterRead).toBe(afterWrite - 1_000);
+    expect(afterInvalidation).toBe(afterWrite);
   });
 
   it("fails open without caching when tracked watermark reads fail", async () => {

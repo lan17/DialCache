@@ -488,7 +488,7 @@ A cached Redis value whose Redis-created timestamp is older than or equal to the
 
 The bundled timestamp protocol assumes that system clocks are synchronized across every Redis node eligible for primary promotion. Redis does not guarantee that `TIME` is monotonic across nodes, and DialCache does not detect or compensate for cross-node clock skew. If this deployment assumption is violated, failover can temporarily suppress tracked cache fills or allow a pre-invalidation value to remain readable until it expires or a later invalidation advances the watermark past its timestamp.
 
-Tracked writes create a baseline watermark and extend its TTL to at least the value TTL plus one minute. Invalidation preserves that lifetime and extends it to cover the future buffer. `DEFAULT_WATERMARK_TTL_SEC` (4 hours) remains a configurable floor rather than a maximum, and reads do not extend watermark lifetime.
+Tracked writes create a baseline watermark and extend its TTL to at least the value TTL plus one minute. Invalidation preserves that lifetime and extends it to cover the future buffer. DialCache applies an internal four-hour floor; this is a minimum retention time, not a maximum. Reads do not extend watermark lifetime.
 
 `futureBufferMs` must be a nonnegative safe integer. The default is zero, but zero provides no stale-publication protection once Redis time advances. Every production invalidation should pass a named, application-owned nonzero value based on that application's measured or conservatively bounded timings; there is no universally safe library value.
 

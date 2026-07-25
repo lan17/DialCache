@@ -266,10 +266,13 @@ const redisConfigHasNoKeyPrefix: "keyPrefix" extends keyof RedisConfig ? false :
 const legacyKeyPrefixConfig: RedisConfig = { client: customRedisClient, keyPrefix: "legacy:" };
 const redisConfigRequiresClient: {} extends Pick<RedisConfig, "client"> ? false : true = true;
 const redisConfigHasNoCreateClient: "createClient" extends keyof RedisConfig ? false : true = true;
+const redisConfigHasNoWatermarkTtlSec: "watermarkTtlSec" extends keyof RedisConfig ? false : true = true;
 // @ts-expect-error Redis requires a caller-owned client.
 const missingRedisClientConfig: RedisConfig = {};
 // @ts-expect-error createClient was removed; construct and pass RedisConfig.client instead.
 const legacyRedisFactoryConfig: RedisConfig = { createClient: () => customRedisClient };
+// @ts-expect-error Watermark lifetime is managed internally by DialCache.
+const legacyWatermarkTtlConfig: RedisConfig = { client: customRedisClient, watermarkTtlSec: 60 };
 // @ts-expect-error RedisClientFactory was removed with RedisConfig.createClient.
 type LegacyRedisClientFactory = import("dialcache").RedisClientFactory;
 // @ts-expect-error CacheRampSampler was removed with the public sampler override.
@@ -277,6 +280,7 @@ type LegacyCacheRampSampler = import("dialcache").CacheRampSampler;
 // @ts-expect-error CacheRampSample was removed with the public sampler override.
 type LegacyCacheRampSample = import("dialcache").CacheRampSample;
 type DialCacheRoot = typeof import("dialcache");
+const rootHasNoDefaultWatermarkTtlSec: "DEFAULT_WATERMARK_TTL_SEC" extends keyof DialCacheRoot ? false : true = true;
 const rootHasNoPrometheusFactory: "createPrometheusDialCacheMetrics" extends keyof DialCacheRoot ? false : true = true;
 const rootHasNoDatadogFactory: "createDatadogDialCacheMetrics" extends keyof DialCacheRoot ? false : true = true;
 const rootHasNoDeterministicRampSampler: "deterministicRampSampler" extends keyof DialCacheRoot ? false : true = true;
