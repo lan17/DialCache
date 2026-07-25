@@ -107,11 +107,10 @@ describe("Valkey GLIDE adapter", () => {
         watermarkKey: "tracked:{id}:watermark",
         cacheTtlMs: 2_000,
         value: binary,
-        watermarkTtlFloorMs: 3_000,
       }),
     ).resolves.toBe(false);
     await expect(
-      adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 100, watermarkTtlFloorMs: 3_000 }),
+      adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 100 }),
     ).resolves.toBeUndefined();
 
     expect(client.invokeScript).toHaveBeenNthCalledWith(
@@ -124,14 +123,14 @@ describe("Valkey GLIDE adapter", () => {
       expect.any(MockScript),
       {
         keys: ["tracked:{id}:value", "tracked:{id}:watermark"],
-        args: ["2000", "1", binary, "3000"],
+        args: ["2000", "1", binary],
         decoder: decoderBytes,
       },
     );
     expect(client.invokeScript).toHaveBeenNthCalledWith(
       3,
       expect.any(MockScript),
-      { keys: ["tracked:{id}:watermark"], args: ["100", "3000"], decoder: decoderBytes },
+      { keys: ["tracked:{id}:watermark"], args: ["100"], decoder: decoderBytes },
     );
   });
 
@@ -150,7 +149,7 @@ describe("Valkey GLIDE adapter", () => {
     );
     await expectProtocolError(
       Promise.resolve(
-        adapter.invalidate({ watermarkKey: "bad-watermark", futureBufferMs: 0, watermarkTtlFloorMs: 1_000 }),
+        adapter.invalidate({ watermarkKey: "bad-watermark", futureBufferMs: 0 }),
       ),
       "Invalid DialCache Redis invalidate reply; expected integer 1",
     );
@@ -175,7 +174,6 @@ describe("Valkey GLIDE adapter", () => {
           watermarkKey: "tracked:{id}:watermark",
           cacheTtlMs: 1_000,
           value: "tracked",
-          watermarkTtlFloorMs: 2_000,
         })),
         writeMessage,
       );
@@ -188,7 +186,6 @@ describe("Valkey GLIDE adapter", () => {
         Promise.resolve(adapter.invalidate({
           watermarkKey: "tracked:{id}:watermark",
           futureBufferMs: 50,
-          watermarkTtlFloorMs: 2_000,
         })),
         invalidationMessage,
       );

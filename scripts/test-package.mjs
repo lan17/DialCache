@@ -33,6 +33,8 @@ const rootConsumer = `import {
   type MetricErrorKind,
   type ProcessCoalescingState,
   type RedisConfig,
+  type RedisInvalidationRequest,
+  type RedisWriteRequest,
   type Serializer,
 } from "dialcache";
 // @ts-expect-error The unused MissingKeyConfigError class was removed instead of deprecated.
@@ -251,6 +253,27 @@ const customRedisClient: DialCacheRedisClient = {
 const cacheHasNoFlushAll: "flushAll" extends keyof DialCache ? false : true = true;
 const cacheHasNoClose: "close" extends keyof DialCache ? false : true = true;
 const clientHasNoFlushAll: "flushAll" extends keyof DialCacheRedisClient ? false : true = true;
+type TrackedRedisWriteRequest = Extract<RedisWriteRequest, { readonly watermarkKey: string }>;
+const trackedWriteHasNoWatermarkTtlFloor: "watermarkTtlFloorMs" extends keyof TrackedRedisWriteRequest
+  ? false
+  : true = true;
+const invalidationHasNoWatermarkTtlFloor: "watermarkTtlFloorMs" extends keyof RedisInvalidationRequest
+  ? false
+  : true = true;
+const legacyTrackedWriteRequest: RedisWriteRequest = {
+  valueKey: "tracked:{id}:value",
+  watermarkKey: "tracked:{id}:watermark",
+  cacheTtlMs: 1_000,
+  value: "tracked",
+  // @ts-expect-error Watermark lifetime is derived by the Redis invalidation protocol.
+  watermarkTtlFloorMs: 1_000,
+};
+const legacyInvalidationRequest: RedisInvalidationRequest = {
+  watermarkKey: "tracked:{id}:watermark",
+  futureBufferMs: 0,
+  // @ts-expect-error Watermark lifetime is derived by the Redis invalidation protocol.
+  watermarkTtlFloorMs: 1_000,
+};
 const configHasNoMetricsRegistry: "metricsRegistry" extends keyof DialCacheConfig ? false : true = true;
 const configHasNoMetricsPrefix: "metricsPrefix" extends keyof DialCacheConfig ? false : true = true;
 const configRejectsFalseMetrics: false extends NonNullable<DialCacheConfig["metrics"]> ? false : true = true;
@@ -271,7 +294,7 @@ const redisConfigHasNoWatermarkTtlSec: "watermarkTtlSec" extends keyof RedisConf
 const missingRedisClientConfig: RedisConfig = {};
 // @ts-expect-error createClient was removed; construct and pass RedisConfig.client instead.
 const legacyRedisFactoryConfig: RedisConfig = { createClient: () => customRedisClient };
-// @ts-expect-error Watermark lifetime is managed internally by DialCache.
+// @ts-expect-error Watermark lifetime is derived internally by DialCache.
 const legacyWatermarkTtlConfig: RedisConfig = { client: customRedisClient, watermarkTtlSec: 60 };
 // @ts-expect-error RedisClientFactory was removed with RedisConfig.createClient.
 type LegacyRedisClientFactory = import("dialcache").RedisClientFactory;
@@ -338,6 +361,10 @@ cacheWithGlobalSerializer.getOrLoad(async () => new Date(0), inlineOptionsFor("G
 void cacheHasNoFlushAll;
 void cacheHasNoClose;
 void clientHasNoFlushAll;
+void trackedWriteHasNoWatermarkTtlFloor;
+void invalidationHasNoWatermarkTtlFloor;
+void legacyTrackedWriteRequest;
+void legacyInvalidationRequest;
 void configHasNoMetricsRegistry;
 void configHasNoMetricsPrefix;
 void configRejectsFalseMetrics;

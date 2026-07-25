@@ -176,7 +176,7 @@ describe("DialCache Redis TTL layer", () => {
       const legacyRedisConfig = { client: new FakeRedis(), watermarkTtlSec } as unknown as RedisConfig;
 
       expect(() => new DialCache({ redis: legacyRedisConfig })).toThrow(
-        new TypeError("RedisConfig.watermarkTtlSec was removed; watermark lifetime is managed by DialCache"),
+        new TypeError("RedisConfig.watermarkTtlSec was removed; watermark lifetime is derived by DialCache"),
       );
     },
   );

@@ -56,20 +56,14 @@ interface RedisWriteBase extends RedisValueRequest {
   readonly value: RedisCachePayload;
 }
 
-interface TrackedRedisWriteRequest extends RedisWriteBase, TrackedRedisValueRequest {
-  readonly watermarkTtlFloorMs: number;
-}
-
-interface UntrackedRedisWriteRequest extends RedisWriteBase, UntrackedRedisValueRequest {
-  readonly watermarkTtlFloorMs?: never;
-}
+type TrackedRedisWriteRequest = RedisWriteBase & TrackedRedisValueRequest;
+type UntrackedRedisWriteRequest = RedisWriteBase & UntrackedRedisValueRequest;
 
 export type RedisWriteRequest = TrackedRedisWriteRequest | UntrackedRedisWriteRequest;
 
 export interface RedisInvalidationRequest {
   readonly watermarkKey: string;
   readonly futureBufferMs: number;
-  readonly watermarkTtlFloorMs: number;
 }
 
 /**
@@ -81,12 +75,19 @@ export interface RedisInvalidationRequest {
  * DialCache does not add Redis deadlines or server-side cancellation. A
  * command that times out after dispatch may still have executed, so adapters
  * must document their queue-removal and ambiguous-write semantics.
+ *
+ * Tracked invalidation also requires the Redis deployment to preserve
+ * watermark keys for their derived TTL. Losing a watermark through eviction,
+ * failover, restore, or external deletion removes its prior publication fence.
  */
 export interface DialCacheRedisClient {
   /** Atomically read and validate a value against its watermark when tracked. */
   read(request: RedisReadRequest): Awaitable<RedisCachePayload | null>;
   /** Atomically write using server time. False means invalidation blocked the write. */
   write(request: RedisWriteRequest): Awaitable<boolean>;
-  /** Advance the watermark monotonically after the source mutation commits. */
+  /**
+   * Advance the watermark monotonically after the source mutation commits.
+   * Its TTL is derived from the future buffer and any longer existing TTL.
+   */
   invalidate(request: RedisInvalidationRequest): Awaitable<void>;
 }

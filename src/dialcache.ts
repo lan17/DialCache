@@ -380,6 +380,14 @@ export class DialCache {
    * can suppress tracked cache fills or leave a pre-invalidation value readable
    * until it expires or a later invalidation advances the watermark past its
    * timestamp.
+   *
+   * Watermarks are invalidation state and must not be evicted or lost during
+   * their derived TTL. A missing watermark makes tracked reads miss, but a
+   * later tracked write initializes a new baseline and cannot recover the lost
+   * publication fence. Use `noeviction` or an equivalent guarantee when relying
+   * on that fence, and choose persistence and failover guarantees accordingly;
+   * DialCache does not issue `WAIT` or provide strong consistency across
+   * failover.
    * There is no universally safe library value. A zero buffer provides no
    * stale-publication protection once Redis time advances; an undersized buffer
    * may allow stale data to repopulate Redis. An oversized buffer temporarily

@@ -28,9 +28,6 @@ interface RedisCacheOptions {
 const defaultSerializer = new JsonSerializer<unknown>();
 const REDIS_FRAME_KEY_SUFFIX = ":dialcache-frame-v1";
 
-// Tracked writes extend this floor when their value TTL is longer.
-const WATERMARK_TTL_FLOOR_MS = 4 * 60 * 60 * 1000;
-
 export class RedisCache {
   private readonly configProvider: CacheConfigProvider;
   private readonly defaultSerializer: Serializer<unknown>;
@@ -47,7 +44,7 @@ export class RedisCache {
       );
     }
     if (Object.hasOwn(options.redis, "watermarkTtlSec")) {
-      throw new TypeError("RedisConfig.watermarkTtlSec was removed; watermark lifetime is managed by DialCache");
+      throw new TypeError("RedisConfig.watermarkTtlSec was removed; watermark lifetime is derived by DialCache");
     }
 
     this.configProvider = options.configProvider;
@@ -135,7 +132,6 @@ export class RedisCache {
         ? await this.client.write({
             ...request,
             watermarkKey: this.redisWatermarkKeyFromKey(key),
-            watermarkTtlFloorMs: WATERMARK_TTL_FLOOR_MS,
           })
         : await this.client.write(request);
     } catch (error) {
@@ -148,7 +144,6 @@ export class RedisCache {
     await this.client.invalidate({
       watermarkKey: this.redisWatermarkKey(namespace, keyType, id),
       futureBufferMs,
-      watermarkTtlFloorMs: WATERMARK_TTL_FLOOR_MS,
     });
   }
 

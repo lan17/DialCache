@@ -288,7 +288,7 @@ describe("DialCache targeted invalidation watermarks", () => {
     expect(redis.readWatermarkValue(watermarkKey)).toBe(first);
   });
 
-  it("uses the internal watermark TTL floor for writes and invalidations but not reads", async () => {
+  it("derives watermark lifetime from value TTLs and invalidations without extending it on reads", async () => {
     const redis = new FakeRedis();
     const dialcache = new DialCache({ redis: { client: redis } });
     const getUser = dialcache.cached(async (userId: string) => ({ userId }), {
@@ -307,9 +307,36 @@ describe("DialCache targeted invalidation watermarks", () => {
     await dialcache.invalidateRemote("user_id", "123");
     const afterInvalidation = redis.ttlMs(watermarkKey);
 
-    expect(afterWrite).toBe(4 * 60 * 60 * 1_000);
+    expect(afterWrite).toBe(2 * 60 * 60 * 1_000 + 60_000);
     expect(afterRead).toBe(afterWrite - 1_000);
-    expect(afterInvalidation).toBe(afterWrite);
+    expect(afterInvalidation).toBe(afterRead);
+  });
+
+  it("keeps one shared watermark alive for the longest outstanding tracked value", async () => {
+    const redis = new FakeRedis();
+    const dialcache = new DialCache({ redis: { client: redis } });
+    const getLongLived = dialcache.cached(async (userId: string) => ({ userId, lifetime: "long" }), {
+      keyType: "user_id",
+      useCase: "LongWatermarkLifetime",
+      cacheKey: (userId) => userId,
+      trackForInvalidation: true,
+      defaultConfig: remoteOnly(2 * 60 * 60),
+    });
+    const getShortLived = dialcache.cached(async (userId: string) => ({ userId, lifetime: "short" }), {
+      keyType: "user_id",
+      useCase: "ShortWatermarkLifetime",
+      cacheKey: (userId) => userId,
+      trackForInvalidation: true,
+      defaultConfig: remoteOnly(60),
+    });
+
+    await dialcache.enable(async () => await getLongLived("123"));
+    const afterLongWrite = redis.ttlMs(watermarkKey);
+    vi.advanceTimersByTime(60 * 60 * 1_000);
+    await dialcache.enable(async () => await getShortLived("123"));
+
+    expect(afterLongWrite).toBe(2 * 60 * 60 * 1_000 + 60_000);
+    expect(redis.ttlMs(watermarkKey)).toBe(afterLongWrite - 60 * 60 * 1_000);
   });
 
   it("fails open without caching when tracked watermark reads fail", async () => {

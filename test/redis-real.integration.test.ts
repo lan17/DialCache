@@ -54,13 +54,8 @@ interface RawRedisScriptClient {
     cacheTtlMs: number,
     encoding: number,
     payload: string | Buffer,
-    watermarkTtlFloorMs: number,
   ): Promise<number>;
-  invalidate(
-    watermarkKey: string,
-    futureBufferMs: number,
-    watermarkTtlFloorMs: number,
-  ): Promise<number>;
+  invalidate(watermarkKey: string, futureBufferMs: number): Promise<number>;
 }
 
 interface RedisAdapterHarness {
@@ -116,18 +111,17 @@ function createValkeyGlideHarness(client: valkeyGlide.GlideClient): RedisAdapter
         cacheTtlMs,
         encoding,
         payload,
-        watermarkTtlFloorMs,
       ) =>
         await invoke(
           rawScripts.writeTracked,
           [valueKey, watermarkKey],
-          [String(cacheTtlMs), String(encoding), payload, String(watermarkTtlFloorMs)],
+          [String(cacheTtlMs), String(encoding), payload],
         ),
-      invalidate: async (watermarkKey, futureBufferMs, watermarkTtlFloorMs) =>
+      invalidate: async (watermarkKey, futureBufferMs) =>
         await invoke(
           rawScripts.invalidate,
           [watermarkKey],
-          [String(futureBufferMs), String(watermarkTtlFloorMs)],
+          [String(futureBufferMs)],
         ),
     },
     dispose() {
@@ -280,7 +274,6 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
           watermarkKey,
           cacheTtlMs: 60_000,
           value: trackedPayload,
-          watermarkTtlFloorMs: 60_000,
         }),
       ).toBe(true);
       expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toEqual(trackedPayload);
@@ -307,7 +300,6 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
           watermarkKey,
           cacheTtlMs: 60_000,
           value: "tracked",
-          watermarkTtlFloorMs: 60_000,
         }),
       ).toBe(true);
       await admin.scriptFlush();
@@ -317,7 +309,6 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
         scriptClient.invalidate({
           watermarkKey,
           futureBufferMs: 0,
-          watermarkTtlFloorMs: 60_000,
         }),
       ).resolves.toBeUndefined();
     });
@@ -370,26 +361,14 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       await expect(client.raw.write(valueKey, 1_000, notANumber, "value")).rejects.toThrow("invalid DialCache payload encoding");
       await expect(client.raw.write(valueKey, 1_000, Number.NaN, "value")).rejects.toThrow("invalid DialCache payload encoding");
       await expect(client.raw.write(valueKey, 1_000, 2, "value")).rejects.toThrow("invalid DialCache payload encoding");
-      await expect(client.raw.writeTracked(valueKey, watermarkKey, 1_000, 0, "value", 0)).rejects.toThrow(
-        "invalid DialCache watermark TTL",
-      );
-      await expect(client.raw.writeTracked(valueKey, watermarkKey, 1_000, 0, "value", Number.NaN)).rejects.toThrow(
-        "invalid DialCache watermark TTL",
-      );
-      await expect(client.raw.invalidate(watermarkKey, -1, 1_000)).rejects.toThrow("invalid DialCache future buffer");
-      await expect(client.raw.invalidate(watermarkKey, notANumber, 1_000)).rejects.toThrow("invalid DialCache future buffer");
-      await expect(client.raw.invalidate(watermarkKey, Number.NaN, 1_000)).rejects.toThrow("invalid DialCache future buffer");
-      await expect(client.raw.invalidate(watermarkKey, Number.POSITIVE_INFINITY, 1_000)).rejects.toThrow(
+      await expect(client.raw.invalidate(watermarkKey, -1)).rejects.toThrow("invalid DialCache future buffer");
+      await expect(client.raw.invalidate(watermarkKey, notANumber)).rejects.toThrow("invalid DialCache future buffer");
+      await expect(client.raw.invalidate(watermarkKey, Number.NaN)).rejects.toThrow("invalid DialCache future buffer");
+      await expect(client.raw.invalidate(watermarkKey, Number.POSITIVE_INFINITY)).rejects.toThrow(
         "invalid DialCache future buffer",
       );
-      await expect(client.raw.invalidate(watermarkKey, Number.NEGATIVE_INFINITY, 1_000)).rejects.toThrow(
+      await expect(client.raw.invalidate(watermarkKey, Number.NEGATIVE_INFINITY)).rejects.toThrow(
         "invalid DialCache future buffer",
-      );
-      await expect(client.raw.invalidate(watermarkKey, 0, 0)).rejects.toThrow("invalid DialCache watermark TTL");
-      await expect(client.raw.invalidate(watermarkKey, 0, notANumber)).rejects.toThrow("invalid DialCache watermark TTL");
-      await expect(client.raw.invalidate(watermarkKey, 0, Number.NaN)).rejects.toThrow("invalid DialCache watermark TTL");
-      await expect(client.raw.invalidate(watermarkKey, 0, Number.POSITIVE_INFINITY)).rejects.toThrow(
-        "invalid DialCache watermark TTL",
       );
 
       expect(await admin.exists([valueKey, watermarkKey])).toBe(0);
@@ -406,22 +385,22 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       expect(await admin.pTTL(valueKey)).toBeGreaterThan(900);
       expect(await admin.pTTL(valueKey)).toBeLessThanOrEqual(1_001);
 
-      const trackedValueKey = "fractional-args:{item:tracked-floor}:value";
-      const trackedWatermarkKey = "fractional-args:{item:tracked-floor}:watermark";
+      const trackedValueKey = "fractional-args:{item:tracked}:value";
+      const trackedWatermarkKey = "fractional-args:{item:tracked}:watermark";
       expect(
-        await client.raw.writeTracked(trackedValueKey, trackedWatermarkKey, 1_000, 0, "value", 70_000.1),
+        await client.raw.writeTracked(trackedValueKey, trackedWatermarkKey, 1_000.1, 0, "value"),
       ).toBe(1);
       expect(await admin.get(trackedWatermarkKey)).toBe("0");
-      expect(await admin.pTTL(trackedWatermarkKey)).toBeGreaterThan(69_000);
-      expect(await admin.pTTL(trackedWatermarkKey)).toBeLessThanOrEqual(70_001);
+      expect(await admin.pTTL(trackedWatermarkKey)).toBeGreaterThan(60_000);
+      expect(await admin.pTTL(trackedWatermarkKey)).toBeLessThanOrEqual(61_001);
 
       const beforeMs = (await admin.time()).getTime();
-      expect(await client.raw.invalidate(watermarkKey, 100.1, 70_000.1)).toBe(1);
+      expect(await client.raw.invalidate(watermarkKey, 100.1)).toBe(1);
       const watermark = Number(await admin.get(watermarkKey));
       expect(Number.isSafeInteger(watermark)).toBe(true);
       expect(watermark).toBeGreaterThanOrEqual(beforeMs + 101);
-      expect(await admin.pTTL(watermarkKey)).toBeGreaterThan(69_000);
-      expect(await admin.pTTL(watermarkKey)).toBeLessThanOrEqual(70_001);
+      expect(await admin.pTTL(watermarkKey)).toBeGreaterThan(60_000);
+      expect(await admin.pTTL(watermarkKey)).toBeLessThanOrEqual(60_101);
     });
 
     it("invalidates tracked entries and recovers after SCRIPT FLUSH", async () => {
@@ -490,7 +469,7 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
 
       for (const malformed of ["not-a-watermark", "9".repeat(400)]) {
         await admin.set(watermarkKey, malformed, { PX: 60_000 });
-        await expect(client.raw.writeTracked(valueKey, watermarkKey, 60_000, 0, "replacement", 60_000)).rejects.toThrow(
+        await expect(client.raw.writeTracked(valueKey, watermarkKey, 60_000, 0, "replacement")).rejects.toThrow(
           "invalid DialCache watermark",
         );
         expect(await scriptClient.read({ valueKey })).toBe("original");
@@ -564,7 +543,6 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       await scriptClient.invalidate({
         watermarkKey: shortTtlKey,
         futureBufferMs: 1_000,
-        watermarkTtlFloorMs: 60_000,
       });
 
       expect(Number(await admin.get(shortTtlKey))).toBeGreaterThanOrEqual(Math.ceil(legacyWatermark));
@@ -577,7 +555,6 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       await scriptClient.invalidate({
         watermarkKey: longTtlKey,
         futureBufferMs: 1_000,
-        watermarkTtlFloorMs: 60_000,
       });
 
       expect(Number(await admin.get(longTtlKey))).toBeGreaterThanOrEqual(Math.ceil(legacyWatermark));
@@ -594,7 +571,7 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       const missingKey = "invalidate-paths:{item:missing}:watermark";
       const beforeMs = (await admin.time()).getTime();
 
-      await scriptClient.invalidate({ watermarkKey: missingKey, futureBufferMs: 100, watermarkTtlFloorMs: 1_000 });
+      await scriptClient.invalidate({ watermarkKey: missingKey, futureBufferMs: 100 });
 
       const created = Number(await admin.get(missingKey));
       expect(Number.isSafeInteger(created)).toBe(true);
@@ -607,7 +584,7 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       ] as const) {
         const watermarkKey = `invalidate-paths:{item:${suffix}}:watermark`;
         await admin.set(watermarkKey, malformed, { PX: 1_000 });
-        await scriptClient.invalidate({ watermarkKey, futureBufferMs: 0, watermarkTtlFloorMs: 2_000 });
+        await scriptClient.invalidate({ watermarkKey, futureBufferMs: 0 });
         expect(Number.isSafeInteger(Number(await admin.get(watermarkKey)))).toBe(true);
         expect(await admin.pTTL(watermarkKey)).toBeGreaterThan(59_000);
       }
@@ -621,7 +598,7 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       const watermarkKey = "invalidate-persistent:{item:persistent}:watermark";
       await admin.set(watermarkKey, "1");
 
-      await scriptClient.invalidate({ watermarkKey, futureBufferMs: 0, watermarkTtlFloorMs: 60_000 });
+      await scriptClient.invalidate({ watermarkKey, futureBufferMs: 0 });
 
       expect(Number(await admin.get(watermarkKey))).toBeGreaterThan(1);
       expect(await admin.pTTL(watermarkKey)).toBe(-1);
@@ -641,7 +618,6 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
         watermarkKey,
         cacheTtlMs: 2_000,
         value: "cached",
-        watermarkTtlFloorMs: 1_000,
       });
 
       expect(wrote).toBe(true);
@@ -666,7 +642,6 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
           watermarkKey: sufficientWatermarkKey,
           cacheTtlMs: 2_000,
           value: "cached",
-          watermarkTtlFloorMs: 1_000,
         }),
       ).toBe(true);
 
@@ -684,7 +659,6 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
           watermarkKey: persistentWatermarkKey,
           cacheTtlMs: 2_000,
           value: "cached",
-          watermarkTtlFloorMs: 1_000,
         }),
       ).toBe(true);
       expect(await admin.get(persistentWatermarkKey)).toBe("2.25");
@@ -703,7 +677,6 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
         watermarkKey,
         cacheTtlMs: 2_000,
         value: "cached",
-        watermarkTtlFloorMs: 1_000,
       };
 
       expect(await scriptClient.write(writeRequest)).toBe(true);
@@ -711,7 +684,7 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       const ttlAfterWrite = await admin.pTTL(watermarkKey);
       expect(ttlAfterWrite).toBeGreaterThanOrEqual(61_000);
 
-      await scriptClient.invalidate({ watermarkKey, futureBufferMs: 100, watermarkTtlFloorMs: 1_000 });
+      await scriptClient.invalidate({ watermarkKey, futureBufferMs: 100 });
       expect(await scriptClient.read({ valueKey, watermarkKey })).toBeNull();
       expect(await scriptClient.write({ ...writeRequest, value: "blocked" })).toBe(false);
       expect(await scriptClient.read({ valueKey })).toBe("cached");
@@ -722,6 +695,30 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       await new Promise((resolve) => setTimeout(resolve, 110));
       expect(await scriptClient.write({ ...writeRequest, value: "fresh" })).toBe(true);
       expect(await scriptClient.read({ valueKey, watermarkKey })).toBe("fresh");
+    });
+
+    it("documents that losing a watermark removes its publication fence", async () => {
+      if (client === undefined || admin === undefined) {
+        throw new Error("Redis test clients did not start");
+      }
+      const scriptClient = client.adapter;
+      const valueKey = "watermark-loss:{item:tracked}:value";
+      const watermarkKey = "watermark-loss:{item:tracked}:watermark";
+      const staleWrite = {
+        valueKey,
+        watermarkKey,
+        cacheTtlMs: 60_000,
+        value: "stale",
+      };
+
+      await scriptClient.invalidate({ watermarkKey, futureBufferMs: 60_000 });
+      expect(await scriptClient.write(staleWrite)).toBe(false);
+
+      await admin.del(watermarkKey);
+
+      expect(await scriptClient.write(staleWrite)).toBe(true);
+      expect(await admin.get(watermarkKey)).toBe("0");
+      expect(await scriptClient.read({ valueKey, watermarkKey })).toBe("stale");
     });
   });
 
@@ -747,7 +744,6 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       watermarkKey: nodeTrackedWatermarkKey,
       cacheTtlMs: 60_000,
       value: binary,
-      watermarkTtlFloorMs: 60_000,
     });
     await expect(
       valkeyGlide.read({
@@ -763,7 +759,6 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       watermarkKey: glideTrackedWatermarkKey,
       cacheTtlMs: 60_000,
       value: "tracked",
-      watermarkTtlFloorMs: 60_000,
     });
     await expect(
       nodeRedis.read({

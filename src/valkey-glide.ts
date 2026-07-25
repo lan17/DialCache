@@ -111,15 +111,15 @@ export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScri
         : await invoke(
             scripts.writeTracked,
             [valueKey, watermarkKey],
-            [String(cacheTtlMs), String(encoding), value, String(request.watermarkTtlFloorMs)],
+            [String(cacheTtlMs), String(encoding), value],
           );
       return validateRedisScriptWriteReply(raw) === 1;
     },
-    async invalidate({ watermarkKey, futureBufferMs, watermarkTtlFloorMs }) {
+    async invalidate({ watermarkKey, futureBufferMs }) {
       const raw = await invoke(
         scripts.invalidate,
         [watermarkKey],
-        [String(futureBufferMs), String(watermarkTtlFloorMs)],
+        [String(futureBufferMs)],
       );
       validateRedisScriptInvalidationReply(raw);
     },
