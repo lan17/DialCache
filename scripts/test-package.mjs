@@ -274,6 +274,8 @@ const legacyRedisFactoryConfig: RedisConfig = { createClient: () => customRedisC
 type LegacyRedisClientFactory = import("dialcache").RedisClientFactory;
 // @ts-expect-error CacheRampSampler was removed with the public sampler override.
 type LegacyCacheRampSampler = import("dialcache").CacheRampSampler;
+// @ts-expect-error CacheRampSample was removed with the public sampler override.
+type LegacyCacheRampSample = import("dialcache").CacheRampSample;
 type DialCacheRoot = typeof import("dialcache");
 const rootHasNoPrometheusFactory: "createPrometheusDialCacheMetrics" extends keyof DialCacheRoot ? false : true = true;
 const rootHasNoDatadogFactory: "createDatadogDialCacheMetrics" extends keyof DialCacheRoot ? false : true = true;
