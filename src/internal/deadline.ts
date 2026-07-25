@@ -23,7 +23,9 @@ export function withMonotonicDeadline<T>({
   onTimeout,
 }: MonotonicDeadlineOptions<T>): Promise<T> {
   const startedAtMs = performance.now();
-  const pending = Promise.resolve(operation());
+  // Invoke through a promise so a synchronous throw is measured against the
+  // same deadline as a synchronous return or asynchronous settlement.
+  const pending = Promise.resolve().then(operation);
 
   return new Promise<T>((resolve, reject) => {
     let settled = false;

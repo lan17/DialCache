@@ -276,6 +276,53 @@ describe("DialCache Redis read deadlines", () => {
     });
   });
 
+  it.each(["return", "throw"] as const)(
+    "classifies a synchronous over-deadline read %s as a timeout",
+    async (settlement) => {
+      let elapsedMs = 0;
+      vi.mocked(performance.now).mockImplementation(() => elapsedMs);
+      const redis = redisClient(() => {
+        elapsedMs = 10;
+        if (settlement === "throw") {
+          throw new Error("late synchronous Redis failure");
+        }
+        return null;
+      });
+      const error = vi.fn<DialCacheMetricsAdapter["error"]>();
+      const metrics = metricsWithError(error);
+      const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+      const dialcache = new DialCache({
+        redis: { client: redis.client, readTimeoutMs: 5 },
+        metrics,
+        logger,
+      });
+      const load = dialcache.cached(async () => "source", {
+        keyType: "id",
+        useCase: `SynchronousRedisRead${settlement}`,
+        cacheKey: () => "1",
+        defaultConfig: remoteConfig,
+      });
+
+      await expect(dialcache.enable(async () => await load())).resolves.toBe("source");
+
+      expect(redis.write).not.toHaveBeenCalled();
+      expect(error).toHaveBeenCalledOnce();
+      expect(error).toHaveBeenCalledWith({
+        cacheNamespace: "urn",
+        useCase: `SynchronousRedisRead${settlement}`,
+        keyType: "id",
+        layer: CacheLayer.REMOTE,
+        error: "cache_read_timeout",
+        inFallback: false,
+      });
+      expect(logger.warn).toHaveBeenCalledWith(
+        "Error getting value from Redis cache",
+        expect.any(RedisReadTimeoutError),
+      );
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
   it("cleans up the read timer after hits and misses", async () => {
     const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
     const redis = redisClient(
