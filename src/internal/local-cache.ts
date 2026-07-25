@@ -2,7 +2,7 @@ import { performance } from "node:perf_hooks";
 
 import { LRUCache } from "lru-cache";
 
-import { CacheLayer, type CacheConfigProvider, type CacheRampSampler, type DialCacheKeyConfig } from "../config.js";
+import { CacheLayer, type CacheConfigProvider, type DialCacheKeyConfig } from "../config.js";
 import type { DialCacheKey } from "../key.js";
 import type { CacheGetResult } from "./cache-result.js";
 import {
@@ -23,7 +23,6 @@ export class LocalCache {
 
   constructor(
     private readonly configProvider: CacheConfigProvider,
-    private readonly rampSampler: CacheRampSampler,
     maxSize: number,
   ) {
     this.cache =
@@ -83,11 +82,10 @@ export class LocalCache {
   ): Promise<LayerConfigResolution> {
     // Chain callers pass the once-resolved config; standalone callers omit it and we fetch.
     const config = keyConfig === undefined ? await fetchKeyConfig(this.configProvider, key) : keyConfig;
-    return await resolveLayerConfigResult({
+    return resolveLayerConfigResult({
       config,
       key,
       layer: CacheLayer.LOCAL,
-      rampSampler: this.rampSampler,
     });
   }
 

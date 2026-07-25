@@ -200,7 +200,6 @@ Instance-wide behavior is set through the `DialCache` constructor:
 | `redis` | none | `{ client: DialCacheRedisClient }`; enables the Redis layer (see [Redis-backed TTL cache](#redis-backed-ttl-cache)). |
 | `localMaxSize` | `10_000` | Global process-local entry cap; `0` disables process-local storage. Nonnegative safe integer. |
 | `cacheConfigProvider` | none | Resolves runtime config per enabled invocation as a sparse overlay on the function's `defaultConfig`; `null` applies no overrides. |
-| `rampSampler` | deterministic by key and layer | Percentage sampler for partial ramps; `randomRampSampler` is also exported. |
 | `metrics` | disabled | A `DialCacheMetricsAdapter` (see [Metrics](#metrics)). |
 | `logger` | `console` | Receives operational cache failures (`debug`, `warn`, `error`). |
 
@@ -235,7 +234,6 @@ const dialcache = new DialCache({
     }
     return null; // apply no overrides; use the cached function's baseline
   },
-  rampSampler: ({ key, layer }) => deterministicPercentFor(`${key.urn}:${layer}`),
 });
 
 const getUser = dialcache.cached((userId: string) => db.fetchUser(userId), {
@@ -249,7 +247,7 @@ const getUser = dialcache.cached((userId: string) => db.fetchUser(userId), {
 });
 ```
 
-`ramp` values are percentages from 0 to 100. `0` disables the layer, `100` enables it, and intermediate values use `rampSampler`; the default sampler is deterministic by cache key and layer, so the same key is consistently sampled in or out of a partial rollout. DialCache fetches and resolves one config snapshot per enabled invocation. Provider errors do not activate defaults: they fail open, record `config_error`, and execute the fallback function uncached.
+`ramp` values are percentages from 0 to 100. `0` disables the layer, `100` enables it, and intermediate values are deterministically sampled by cache key and layer, so the same key is consistently sampled in or out of a partial rollout across calls and instances. The assignment algorithm is owned by DialCache and remains stable across releases. Applications that need an externally coordinated cohort can use `cacheConfigProvider` to return a sparse per-key ramp override of `0` or `100`. DialCache fetches and resolves one config snapshot per enabled invocation. Provider errors do not activate defaults: they fail open, record `config_error`, and execute the fallback function uncached.
 
 ## Cache layers
 
@@ -382,7 +380,7 @@ Valkey GLIDE users should configure [`requestTimeout`](https://glide.valkey.io/l
 
 In node-redis 4.7, `socket.connectTimeout`, `disableOfflineQueue`, and `commandsQueueMaxLength` bound connection or queue behavior but do not impose a response deadline on a dispatched command. A [per-command `AbortSignal`](https://redis.io/docs/latest/develop/clients/nodejs/produsage/) can remove work that is still waiting to be sent, but once dispatched it no longer controls the pending reply. Node-redis 4.7 has no built-in strict dispatched-response deadline, and the bundled adapter does not inject queue cancellation. Applications requiring finite node-redis settlement must supply and document a custom `DialCacheRedisClient` policy for queue removal, hung connections, and ambiguous writes. Do not put Redis writes or invalidations behind a bare `Promise.race`: rejecting the outer promise neither removes queued work nor proves that an already-dispatched command did not execute.
 
-The same finite-settlement responsibility applies to async `cacheConfigProvider`, `rampSampler`, and custom `Serializer` methods. DialCache's [fallback deadline](#fallback-deadlines) below covers only the wrapped application function. Prefer resource-native budgets and cooperative cancellation for every injected async operation. Native budgets can bound client waiting and may prevent queued work; only a cooperating operation can guarantee that underlying work stops.
+The same finite-settlement responsibility applies to async `cacheConfigProvider` and custom `Serializer` methods. DialCache's [fallback deadline](#fallback-deadlines) below covers only the wrapped application function. Prefer resource-native budgets and cooperative cancellation for every injected async operation. Native budgets can bound client waiting and may prevent queued work; only a cooperating operation can guarantee that underlying work stops.
 
 #### Serialization
 

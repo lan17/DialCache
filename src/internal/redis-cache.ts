@@ -1,6 +1,6 @@
 import { performance } from "node:perf_hooks";
 
-import { CacheLayer, DEFAULT_WATERMARK_TTL_SEC, type CacheConfigProvider, type CacheRampSampler, type DialCacheKeyConfig } from "../config.js";
+import { CacheLayer, DEFAULT_WATERMARK_TTL_SEC, type CacheConfigProvider, type DialCacheKeyConfig } from "../config.js";
 import { invalidationPrefix, redisClusterHashTag, type DialCacheKey } from "../key.js";
 import { labelsFor, type DialCacheMetricsAdapter, type MetricErrorKind } from "../metrics.js";
 import type { DialCacheRedisClient, RedisCachePayload } from "../redis-client.js";
@@ -22,7 +22,6 @@ export interface RedisConfig {
 
 interface RedisCacheOptions {
   readonly configProvider: CacheConfigProvider;
-  readonly rampSampler: CacheRampSampler;
   readonly redis: RedisConfig;
   readonly metrics: DialCacheMetricsAdapter | null;
 }
@@ -32,7 +31,6 @@ const REDIS_FRAME_KEY_SUFFIX = ":dialcache-frame-v1";
 
 export class RedisCache {
   private readonly configProvider: CacheConfigProvider;
-  private readonly rampSampler: CacheRampSampler;
   private readonly defaultSerializer: Serializer<unknown>;
   private readonly watermarkTtlMs: number;
   private readonly client: DialCacheRedisClient;
@@ -49,7 +47,6 @@ export class RedisCache {
     }
 
     this.configProvider = options.configProvider;
-    this.rampSampler = options.rampSampler;
     this.defaultSerializer = options.redis.serializer ?? defaultSerializer;
     const watermarkTtlSec = options.redis.watermarkTtlSec ?? DEFAULT_WATERMARK_TTL_SEC;
     if (!Number.isSafeInteger(watermarkTtlSec) || watermarkTtlSec <= 0) {
@@ -177,11 +174,10 @@ export class RedisCache {
 
   private async resolveRemoteLayerConfig(key: DialCacheKey, keyConfig?: DialCacheKeyConfig | null) {
     const config = keyConfig === undefined ? await fetchKeyConfig(this.configProvider, key) : keyConfig;
-    return await resolveLayerConfigResult({
+    return resolveLayerConfigResult({
       config,
       key,
       layer: CacheLayer.REMOTE,
-      rampSampler: this.rampSampler,
     });
   }
 

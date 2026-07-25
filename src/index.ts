@@ -1,5 +1,5 @@
-export { CacheLayer, DEFAULT_WATERMARK_TTL_SEC, DialCacheKeyConfig, deterministicRampSampler, randomRampSampler } from "./config.js";
-export type { CacheConfigProvider, CacheRampSample, CacheRampSampler, DialCacheConfig, LayerConfig, Logger } from "./config.js";
+export { CacheLayer, DEFAULT_WATERMARK_TTL_SEC, DialCacheKeyConfig } from "./config.js";
+export type { CacheConfigProvider, DialCacheConfig, LayerConfig, Logger } from "./config.js";
 export { DialCacheContext } from "./context.js";
 export type {
   CacheMetricLabels,

@@ -411,9 +411,9 @@ describe("DialCache observability metrics", () => {
     const configFailure = new DialCache({
       metrics,
       logger,
-      rampSampler: () => {
-        throw new Error("tenant-123 ramp source failed");
-      },
+      cacheConfigProvider: async () => new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.LOCAL]: Number.NaN },
+      }),
     });
     const resolveConfig = configFailure.cached(async (id: string) => id, {
       keyType: "user_id",
@@ -421,7 +421,6 @@ describe("DialCache observability metrics", () => {
       cacheKey: (id) => id,
       defaultConfig: new DialCacheKeyConfig({
         ttlSec: { [CacheLayer.LOCAL]: 60 },
-        ramp: { [CacheLayer.LOCAL]: 50 },
       }),
     });
     await configFailure.enable(async () => await resolveConfig("123"));
@@ -552,18 +551,13 @@ describe("DialCache observability metrics", () => {
       defaultConfig: localOnly(),
     });
 
-    const remoteError = new Error("remote ramp failed for tenant-456");
-    remoteError.name = "Tenant456RemoteRampError";
     const remoteFailure = new DialCache({
       redis: { client: new FakeRedis() },
       metrics,
       logger,
-      rampSampler: ({ layer }) => {
-        if (layer === CacheLayer.REMOTE) {
-          throw remoteError;
-        }
-        return 0;
-      },
+      cacheConfigProvider: async () => new DialCacheKeyConfig({
+        ramp: { [CacheLayer.REMOTE]: Number.NaN },
+      }),
     });
     const resolveRemoteConfig = remoteFailure.cached(async (id: string) => id, {
       keyType: "user_id",
@@ -571,7 +565,6 @@ describe("DialCache observability metrics", () => {
       cacheKey: (id) => id,
       defaultConfig: new DialCacheKeyConfig({
         ttlSec: { [CacheLayer.REMOTE]: 60 },
-        ramp: { [CacheLayer.REMOTE]: 50 },
       }),
     });
 
@@ -605,12 +598,10 @@ describe("DialCache observability metrics", () => {
       events(metrics, "disabled", {
         useCase: "RemoteConfigErrorClassification",
         layer: CacheLayer.REMOTE,
-        reason: "config_error",
+        reason: "invalid_ramp",
       }),
     ).toHaveLength(1);
-    expect(JSON.stringify(events(metrics, "error", {}))).not.toMatch(
-      /Tenant123ConfigProviderError|Tenant456RemoteRampError|tenant-123|tenant-456/,
-    );
+    expect(JSON.stringify(events(metrics, "error", {}))).not.toMatch(/Tenant123ConfigProviderError|tenant-123/);
   });
 
   it("classifies local cache reads and writes", async () => {

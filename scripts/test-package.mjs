@@ -258,6 +258,9 @@ const configHasNamespace: "namespace" extends keyof DialCacheConfig ? true : fal
 const configHasNoUrnPrefix: "urnPrefix" extends keyof DialCacheConfig ? false : true = true;
 // @ts-expect-error urnPrefix was renamed to namespace.
 const legacyNamespaceConfig: DialCacheConfig = { urnPrefix: "consumer-cache" };
+const configHasNoRampSampler: "rampSampler" extends keyof DialCacheConfig ? false : true = true;
+// @ts-expect-error Ramp assignment is owned internally by DialCache.
+const legacyRampSamplerConfig: DialCacheConfig = { rampSampler: () => 0 };
 const redisConfigHasNoKeyPrefix: "keyPrefix" extends keyof RedisConfig ? false : true = true;
 // @ts-expect-error keyPrefix was removed in favor of DialCacheConfig.namespace.
 const legacyKeyPrefixConfig: RedisConfig = { client: customRedisClient, keyPrefix: "legacy:" };
@@ -269,9 +272,13 @@ const missingRedisClientConfig: RedisConfig = {};
 const legacyRedisFactoryConfig: RedisConfig = { createClient: () => customRedisClient };
 // @ts-expect-error RedisClientFactory was removed with RedisConfig.createClient.
 type LegacyRedisClientFactory = import("dialcache").RedisClientFactory;
+// @ts-expect-error CacheRampSampler was removed with the public sampler override.
+type LegacyCacheRampSampler = import("dialcache").CacheRampSampler;
 type DialCacheRoot = typeof import("dialcache");
 const rootHasNoPrometheusFactory: "createPrometheusDialCacheMetrics" extends keyof DialCacheRoot ? false : true = true;
 const rootHasNoDatadogFactory: "createDatadogDialCacheMetrics" extends keyof DialCacheRoot ? false : true = true;
+const rootHasNoDeterministicRampSampler: "deterministicRampSampler" extends keyof DialCacheRoot ? false : true = true;
+const rootHasNoRandomRampSampler: "randomRampSampler" extends keyof DialCacheRoot ? false : true = true;
 
 void load;
 void loadWithoutFallbackDeadline;
@@ -331,6 +338,8 @@ void configRejectsFalseMetrics;
 void configHasNamespace;
 void configHasNoUrnPrefix;
 void legacyNamespaceConfig;
+void configHasNoRampSampler;
+void legacyRampSamplerConfig;
 void redisConfigHasNoKeyPrefix;
 void legacyKeyPrefixConfig;
 void redisConfigRequiresClient;
@@ -339,6 +348,8 @@ void missingRedisClientConfig;
 void legacyRedisFactoryConfig;
 void rootHasNoPrometheusFactory;
 void rootHasNoDatadogFactory;
+void rootHasNoDeterministicRampSampler;
+void rootHasNoRandomRampSampler;
 void datadogMetrics;
 void datadogClassAdapter;
 void missingObservationType;
