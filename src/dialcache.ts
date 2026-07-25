@@ -3,10 +3,8 @@ import { performance } from "node:perf_hooks";
 import {
   CacheLayer,
   DialCacheKeyConfig,
-  deterministicRampSampler,
   type Awaitable,
   type CacheConfigProvider,
-  type CacheRampSampler,
   type DialCacheConfig,
   type Logger,
 } from "./config.js";
@@ -195,7 +193,6 @@ export class DialCache {
   private readonly configProvider: CacheConfigProvider;
   private readonly namespace: string;
   private readonly logger: Logger;
-  private readonly rampSampler: CacheRampSampler;
   private readonly redisCache: RedisCache | null;
   private readonly metrics: DialCacheMetricsAdapter | null;
   private readonly processFlights = new Map<string, ProcessFlight>();
@@ -204,6 +201,11 @@ export class DialCache {
   constructor(config: DialCacheConfig = {}) {
     if (Object.hasOwn(config, "urnPrefix")) {
       throw new TypeError('DialCacheConfig.urnPrefix was renamed to "namespace"');
+    }
+    if (Object.hasOwn(config, "rampSampler")) {
+      throw new TypeError(
+        "DialCacheConfig.rampSampler was removed; partial ramps use DialCache's deterministic key-and-layer assignment",
+      );
     }
 
     const namespace = config.namespace ?? "urn";
@@ -217,15 +219,13 @@ export class DialCache {
     this.configProvider = config.cacheConfigProvider ?? defaultConfigProvider;
     this.namespace = namespace;
     this.logger = safeLogger(config.logger ?? defaultLogger);
-    this.rampSampler = config.rampSampler ?? deterministicRampSampler;
     this.metrics = safeMetrics(config.metrics ?? null);
-    this.localCache = new LocalCache(this.configProvider, this.rampSampler, localMaxSize);
+    this.localCache = new LocalCache(this.configProvider, localMaxSize);
     this.redisCache =
       config.redis === undefined
         ? null
         : new RedisCache({
             configProvider: this.configProvider,
-            rampSampler: this.rampSampler,
             redis: config.redis,
             metrics: this.metrics,
           });
@@ -577,11 +577,10 @@ export class DialCache {
 
   private async resolveRemoteLayerConfig(key: DialCacheKey, keyConfig: DialCacheKeyConfig | null) {
     try {
-      const result = await resolveLayerConfigResult({
+      const result = resolveLayerConfigResult({
         config: keyConfig,
         key,
         layer: CacheLayer.REMOTE,
-        rampSampler: this.rampSampler,
       });
       if (result.status === "disabled") {
         this.metrics?.disabled({ ...labelsFor(key, CacheLayer.REMOTE), reason: result.reason });

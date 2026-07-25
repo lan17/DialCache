@@ -10,21 +10,6 @@ export enum CacheLayer {
 export type Awaitable<T> = T | Promise<T>;
 export type LayerConfig = Partial<Record<CacheLayer, number>>;
 
-export interface CacheRampSample {
-  readonly key: DialCacheKey;
-  readonly layer: CacheLayer;
-  readonly ramp: number;
-}
-
-/**
- * Selects a rollout sample. Async implementations must settle within a finite
- * application-defined deadline; DialCache does not add one.
- */
-export type CacheRampSampler = (sample: CacheRampSample) => Awaitable<number>;
-
-export const deterministicRampSampler: CacheRampSampler = ({ key, layer }) => stablePercent(`${key.urn}:${layer}`);
-export const randomRampSampler: CacheRampSampler = () => Math.random() * 100;
-
 // Tracked writes extend this floor when their value TTL is longer.
 export const DEFAULT_WATERMARK_TTL_SEC = 3600 * 4;
 
@@ -113,15 +98,5 @@ export interface DialCacheConfig {
    */
   readonly localMaxSize?: number;
   readonly redis?: RedisConfig;
-  readonly rampSampler?: CacheRampSampler;
   readonly metrics?: DialCacheMetricsAdapter;
-}
-
-function stablePercent(value: string): number {
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return ((hash >>> 0) / 0x1_0000_0000) * 100;
 }

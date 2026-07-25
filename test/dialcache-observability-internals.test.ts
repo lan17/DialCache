@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { CacheLayer, DialCacheKey, DialCacheKeyConfig } from "../src/index.js";
 import { LocalCache } from "../src/internal/local-cache.js";
@@ -49,7 +49,7 @@ describe("DialCache observability internal compatibility paths", () => {
 
   it("keeps LocalCache get/getIfPresent compatibility while exposing disabled reads", async () => {
     // Given a local cache with enabled config and a second key with no config.
-    const cache = new LocalCache(async () => null, () => 0, 10);
+    const cache = new LocalCache(async () => null, 10);
     const enabledKey = key();
     const disabledKey = key(null);
     let calls = 0;
@@ -71,7 +71,6 @@ describe("DialCache observability internal compatibility paths", () => {
     const redis = new FakeRedis();
     const redisCache = new RedisCache({
       configProvider: async () => null,
-      rampSampler: () => 0,
       redis: { client: redis },
       metrics: null,
     });
@@ -97,36 +96,23 @@ describe("DialCache observability internal compatibility paths", () => {
   });
 
   it("preserves runtime-config edge behavior used by metrics", async () => {
-    // Given configs for an omitted ramp and non-finite ramp samples.
+    // Given a config with an omitted ramp.
     const missingRamp = new DialCacheKeyConfig({ ttlSec: { [CacheLayer.LOCAL]: 60 }, ramp: {} });
-    const partialRamp = new DialCacheKeyConfig({
-      ttlSec: { [CacheLayer.LOCAL]: 60 },
-      ramp: { [CacheLayer.LOCAL]: 50 },
-    });
 
-    // When runtime config is resolved through compatibility and sampled disabled paths.
+    // When runtime config is resolved through compatibility paths.
     const noConfig = await resolveLayerConfig({
       config: null,
       key: key(null),
       layer: CacheLayer.LOCAL,
-      rampSampler: vi.fn(),
     });
     const noRamp = await resolveLayerConfig({
       config: missingRamp,
       key: key(),
       layer: CacheLayer.LOCAL,
-      rampSampler: vi.fn(),
-    });
-    const nonFiniteSample = await resolveLayerConfig({
-      config: partialRamp,
-      key: key(),
-      layer: CacheLayer.LOCAL,
-      rampSampler: () => Number.NaN,
     });
 
-    // Then absent policy stays disabled, an omitted ramp defaults to 100%, and invalid samples stay disabled.
+    // Then absent policy stays disabled and an omitted ramp defaults to 100%.
     expect(noConfig).toBeNull();
     expect(noRamp).toEqual({ ttlSec: 60, ramp: 100 });
-    expect(nonFiniteSample).toBeNull();
   });
 });

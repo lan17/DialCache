@@ -2,11 +2,11 @@ import {
   CacheLayer,
   DialCacheKeyConfig,
   type CacheConfigProvider,
-  type CacheRampSampler,
   type LayerConfig,
 } from "../config.js";
 import type { DialCacheKey } from "../key.js";
 import type { DisabledReason } from "../metrics.js";
+import { deterministicRampSample } from "./ramp.js";
 
 export interface ResolvedLayerConfig {
   readonly ttlSec: number;
@@ -21,7 +21,6 @@ interface ResolveLayerConfigOptions {
   readonly config: DialCacheKeyConfig | null;
   readonly key: DialCacheKey;
   readonly layer: CacheLayer;
-  readonly rampSampler: CacheRampSampler;
 }
 
 export async function fetchKeyConfig(
@@ -36,12 +35,12 @@ export async function fetchKeyConfig(
   return mergeKeyConfig(defaultConfig, runtimeConfig);
 }
 
-export async function resolveLayerConfig(options: ResolveLayerConfigOptions): Promise<ResolvedLayerConfig | null> {
-  const resolution = await resolveLayerConfigResult(options);
+export function resolveLayerConfig(options: ResolveLayerConfigOptions): ResolvedLayerConfig | null {
+  const resolution = resolveLayerConfigResult(options);
   return resolution.status === "enabled" ? resolution.config : null;
 }
 
-export async function resolveLayerConfigResult(options: ResolveLayerConfigOptions): Promise<LayerConfigResolution> {
+export function resolveLayerConfigResult(options: ResolveLayerConfigOptions): LayerConfigResolution {
   const config = options.config;
   if (config === null) {
     return { status: "disabled", reason: "policy_disabled" };
@@ -69,12 +68,9 @@ export async function resolveLayerConfigResult(options: ResolveLayerConfigOption
     return { status: "enabled", config: { ttlSec, ramp } };
   }
 
-  const sample = await options.rampSampler({ key: options.key, layer: options.layer, ramp });
-  if (!Number.isFinite(sample)) {
-    return { status: "disabled", reason: "ramped_down" };
-  }
+  const sample = deterministicRampSample(options.key, options.layer);
 
-  return clampPercentage(sample) < ramp
+  return sample < ramp
     ? { status: "enabled", config: { ttlSec, ramp } }
     : { status: "disabled", reason: "ramped_down" };
 }

@@ -479,41 +479,6 @@ describe("DialCache fallback liveness", () => {
     expect(fallback).toHaveBeenCalledTimes(1);
   });
 
-  it("does not start the fallback deadline while the ramp sampler is pending", async () => {
-    const rampGate = deferred<number>();
-    const rampStarted = deferred<void>();
-    const fallback = vi.fn(async () => "value");
-    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
-    const dialcache = new DialCache({
-      rampSampler: async () => {
-        rampStarted.resolve();
-        return await rampGate.promise;
-      },
-    });
-    const load = dialcache.cached(fallback, {
-      keyType: "id",
-      useCase: "PendingRampHasCallerOwnedDeadline",
-      cacheKey: () => "123",
-      fallbackTimeoutMs: 5,
-      defaultConfig: new DialCacheKeyConfig({
-        ttlSec: { [CacheLayer.LOCAL]: 60 },
-        ramp: { [CacheLayer.LOCAL]: 50 },
-      }),
-    });
-
-    const result = dialcache.enable(async () => await load());
-    await rampStarted.promise;
-    await vi.advanceTimersByTimeAsync(100);
-
-    expect(fallback).not.toHaveBeenCalled();
-    expect(setTimeoutSpy).not.toHaveBeenCalled();
-    expect(dialcache.getCoalescingState().process.activeLeaders).toBe(0);
-
-    rampGate.resolve(0);
-    await expect(result).resolves.toBe("value");
-    expect(fallback).toHaveBeenCalledTimes(1);
-  });
-
   it("does not apply the fallback deadline to a pending Redis read", async () => {
     const readGate = deferred<null>();
     const readStarted = deferred<void>();
