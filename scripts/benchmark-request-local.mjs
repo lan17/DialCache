@@ -13,15 +13,18 @@ const results = [
   await benchmarkEnabledFallbacks(sequentialIterations),
   await benchmarkRequestLocalCoalescing(coalescingFanout),
   await benchmarkProcessCoalescing(coalescingFanout),
+  await benchmarkRedisReadDeadlineCoalescing(coalescingFanout),
 ];
 
 console.table(
-  results.map(({ scenario, operations, elapsedMs, fallbackCalls }) => ({
+  results.map(({ scenario, operations, elapsedMs, fallbackCalls, redisReadCalls = 0, deadlineTimers = 0 }) => ({
     scenario,
     operations,
     "elapsed (ms)": elapsedMs.toFixed(2),
     "operations/sec": Math.round((operations / elapsedMs) * 1_000).toLocaleString("en-US"),
     "fallback calls": fallbackCalls,
+    "Redis reads": redisReadCalls,
+    "deadline timers": deadlineTimers,
   })),
 );
 
@@ -205,6 +208,85 @@ async function benchmarkProcessCoalescing(fanout) {
     oldestLeaderAgeMs: null,
   });
   return { scenario: "process coalescing", operations: fanout, elapsedMs, fallbackCalls };
+}
+
+async function benchmarkRedisReadDeadlineCoalescing(fanout) {
+  const gate = deferred();
+  const started = deferred();
+  let redisReadCalls = 0;
+  let deadlineTimers = 0;
+  let clearedDeadlineTimers = 0;
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  const redisClient = {
+    async read() {
+      redisReadCalls += 1;
+      started.resolve();
+      await gate.promise;
+      return JSON.stringify("shared");
+    },
+    async write() {
+      return true;
+    },
+    async invalidate() {},
+  };
+  const dialcache = new DialCache({
+    redis: { client: redisClient, readTimeoutMs: 60_000 },
+  });
+  let fallbackCalls = 0;
+  const getValue = dialcache.cached(
+    async (id) => {
+      fallbackCalls += 1;
+      return id;
+    },
+    {
+      keyType: "benchmark_id",
+      useCase: "BenchmarkRedisReadDeadlineCoalescing",
+      cacheKey: (id) => id,
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 100 },
+      }),
+    },
+  );
+
+  try {
+    globalThis.setTimeout = (...args) => {
+      deadlineTimers += 1;
+      return originalSetTimeout(...args);
+    };
+    globalThis.clearTimeout = (timer) => {
+      clearedDeadlineTimers += 1;
+      originalClearTimeout(timer);
+    };
+
+    const start = performance.now();
+    const valuesPromise = Promise.all(
+      Array.from({ length: fanout }, () => dialcache.enable(async () => await getValue("shared"))),
+    );
+    await started.promise;
+    await nextTurn();
+    gate.resolve();
+    const values = await valuesPromise;
+    const elapsedMs = performance.now() - start;
+
+    assert.deepEqual(new Set(values), new Set(["shared"]));
+    assert.equal(fallbackCalls, 0, "a Redis hit should not execute the fallback");
+    assert.equal(redisReadCalls, 1, "Redis followers should share one semantic read");
+    assert.equal(deadlineTimers, 1, "one Redis read leader should allocate one deadline timer");
+    assert.equal(clearedDeadlineTimers, 1, "the Redis read deadline timer should be cleared exactly once");
+    return {
+      scenario: "Redis read deadline coalescing",
+      operations: fanout,
+      elapsedMs,
+      fallbackCalls,
+      redisReadCalls,
+      deadlineTimers,
+    };
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+  }
 }
 
 function deferred() {

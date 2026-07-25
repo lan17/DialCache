@@ -1,21 +1,26 @@
 import { performance } from "node:perf_hooks";
 
 import { CacheLayer, type CacheConfigProvider, type DialCacheKeyConfig } from "../config.js";
+import { RedisReadTimeoutError } from "../errors.js";
 import { invalidationPrefix, redisClusterHashTag, type DialCacheKey } from "../key.js";
 import { labelsFor, type DialCacheMetricsAdapter, type MetricErrorKind } from "../metrics.js";
 import type { DialCacheRedisClient, RedisCachePayload } from "../redis-client.js";
 import { JsonSerializer, type Serializer } from "../serializer.js";
 import type { CacheGetResult } from "./cache-result.js";
+import { assertValidDeadlineMs, withMonotonicDeadline } from "./deadline.js";
 import { fetchKeyConfig, resolveLayerConfigResult, type ResolvedLayerConfig } from "./runtime-config.js";
 
 export interface RedisConfig {
   /**
    * Caller-created, connected, and lifecycle-owned semantic Redis client.
-   * DialCache borrows it and never adds command deadlines or drains, disposes,
-   * or closes it. Every client operation must settle within a finite
-   * application-defined budget.
+   * DialCache borrows it and never drains, disposes, or closes it.
    */
   readonly client: DialCacheRedisClient;
+  /**
+   * Instance-level remote-read deadline in milliseconds. Per-use-case runtime
+   * config can override it. Defaults to 50 ms.
+   */
+  readonly readTimeoutMs?: number;
   readonly serializer?: Serializer<unknown>;
 }
 
@@ -27,12 +32,14 @@ interface RedisCacheOptions {
 
 const defaultSerializer = new JsonSerializer<unknown>();
 const REDIS_FRAME_KEY_SUFFIX = ":dialcache-frame-v1";
+const DEFAULT_REMOTE_READ_TIMEOUT_MS = 50;
 
 export class RedisCache {
   private readonly configProvider: CacheConfigProvider;
   private readonly defaultSerializer: Serializer<unknown>;
   private readonly client: DialCacheRedisClient;
   private readonly metrics: DialCacheMetricsAdapter | null;
+  readonly readTimeoutMs: number;
 
   constructor(options: RedisCacheOptions) {
     if (Object.hasOwn(options.redis, "keyPrefix")) {
@@ -50,6 +57,10 @@ export class RedisCache {
     this.configProvider = options.configProvider;
     this.defaultSerializer = options.redis.serializer ?? defaultSerializer;
     this.metrics = options.metrics;
+    this.readTimeoutMs = options.redis.readTimeoutMs === undefined
+      ? DEFAULT_REMOTE_READ_TIMEOUT_MS
+      : options.redis.readTimeoutMs;
+    assertValidDeadlineMs(this.readTimeoutMs, "Redis readTimeoutMs");
 
     if (options.redis.client === undefined) {
       throw new TypeError("Redis config requires client");
@@ -69,19 +80,36 @@ export class RedisCache {
       return layerConfig;
     }
 
-    return await this.getWithResolvedConfig(key, layerConfig.config);
+    return await this.getWithResolvedConfig(
+      key,
+      layerConfig.config,
+      keyConfig?.remoteReadTimeoutMs ?? this.readTimeoutMs,
+    );
   }
 
-  async getWithResolvedConfig<T>(key: DialCacheKey, layerConfig: ResolvedLayerConfig): Promise<CacheGetResult<T>> {
+  async getWithResolvedConfig<T>(
+    key: DialCacheKey,
+    layerConfig: ResolvedLayerConfig,
+    readTimeoutMs = this.readTimeoutMs,
+  ): Promise<CacheGetResult<T>> {
     let payload: RedisCachePayload | null;
+    const abortController = new AbortController();
     try {
       const redisKey = this.redisKey(key);
-      payload = await this.client.read({
-        valueKey: redisKey,
-        ...(key.trackForInvalidation ? { watermarkKey: this.redisWatermarkKeyFromKey(key) } : {}),
+      payload = await withMonotonicDeadline({
+        timeoutMs: readTimeoutMs,
+        operation: () => this.client.read(
+          {
+            valueKey: redisKey,
+            ...(key.trackForInvalidation ? { watermarkKey: this.redisWatermarkKeyFromKey(key) } : {}),
+          },
+          { timeoutMs: readTimeoutMs, signal: abortController.signal },
+        ),
+        onTimeout: () => abortController.abort(),
+        timeoutError: () => new RedisReadTimeoutError(key.useCase, readTimeoutMs),
       });
     } catch (error) {
-      this.recordError(key, "cache_read");
+      this.recordError(key, error instanceof RedisReadTimeoutError ? "cache_read_timeout" : "cache_read");
       throw error;
     }
     if (payload === null) {

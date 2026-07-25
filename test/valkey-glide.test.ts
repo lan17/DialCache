@@ -93,6 +93,23 @@ describe("Valkey GLIDE adapter", () => {
     expect(scriptInstances).toHaveLength(5);
   });
 
+  it("preserves GLIDE invocation options when given a core read context", async () => {
+    const client = fakeClient(null);
+    const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
+    const controller = new AbortController();
+
+    await adapter.read(
+      { valueKey: "plain:value" },
+      { timeoutMs: 25, signal: controller.signal },
+    );
+
+    expect(client.invokeScript).toHaveBeenCalledWith(
+      expect.any(MockScript),
+      { keys: ["plain:value"], args: [], decoder: decoderBytes },
+    );
+    adapter.dispose();
+  });
+
   it("passes string and Buffer writes directly to GLIDE", async () => {
     const binary = Buffer.from([0, 0xff, 0x80]);
     const client = fakeClient(1, 0, 1);

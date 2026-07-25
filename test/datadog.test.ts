@@ -88,6 +88,7 @@ const errorKinds: readonly MetricErrorKind[] = [
   "key_construction",
   "config_resolution",
   "cache_read",
+  "cache_read_timeout",
   "cache_write",
   "serialization_load",
   "serialization_dump",
@@ -321,7 +322,7 @@ describe("Datadog metrics adapter", () => {
     const dialcache = new DialCache({
       namespace: "private-cache",
       metrics,
-      redis: { client: redis },
+      redis: { client: redis, readTimeoutMs: 1_000 },
       logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
     });
     const load = dialcache.cached(async (id: string, filter: string) => ({ id, filter }), {

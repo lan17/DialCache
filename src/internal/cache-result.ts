@@ -9,3 +9,7 @@ export type CacheGetResult<T> =
       readonly reason: DisabledReason;
       readonly skipCacheWrite?: boolean;
     };
+
+export type RemoteCacheGetResult<T> =
+  | CacheGetResult<T>
+  | { readonly status: "error"; readonly operation: "read" };

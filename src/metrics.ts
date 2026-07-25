@@ -15,6 +15,7 @@ export type MetricErrorKind =
   | "key_construction"
   | "config_resolution"
   | "cache_read"
+  | "cache_read_timeout"
   | "cache_write"
   | "serialization_load"
   | "serialization_dump"
