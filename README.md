@@ -4,31 +4,37 @@
 [![Codecov](https://codecov.io/gh/lan17/DialCache/branch/main/graph/badge.svg)](https://codecov.io/gh/lan17/DialCache)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/lan17/DialCache/badge)](https://scorecard.dev/viewer/?uri=github.com/lan17/DialCache)
 
-**Roll out backend caching like a feature—not a leap of faith.**
+**Read-through caching with the controls production systems need.**
 
-**DialCache is** a TypeScript library for caching database and service reads
-inside Node.js backends. It routes reusable async functions and inline loaders
-through one read-through path with request-local memoization, a bounded
-in-process LRU, and optional Redis or Valkey caching.
+DialCache is a TypeScript read-through caching library for asynchronous
+database and service reads in Node.js. Wrap a reusable function with
+`cached()` or keep a loader inline with `getOrLoad()`; when the active cache
+layers miss, DialCache calls your loader and publishes the result to whichever
+request-local, bounded process-local, and optional Redis or Valkey layers are
+active.
 
-The “dial” is per-use-case runtime control. Start with caching off, dial the
-process-local and remote layers up for stable cohorts of keys, and dial them
-back down without changing the loader.
+Around that core path, DialCache provides patterns that high-scale services
+otherwise have to build themselves: request coalescing, per-use-case runtime
+policy, deterministic ramp-up and ramp-down, fail-open cache access, targeted
+invalidation, serialization, deadlines, and backend-neutral metrics.
 
-**DialCache is not** a frontend data cache, cache server, Redis or Valkey
-client, or runtime configuration service. It supplies the cache path and
-rollout controls; your application still decides what is safe to cache and
-owns loader behavior, connections, runtime configuration, keys, TTLs,
-invalidation policy, and resource budgets.
+The “dial” is the runtime policy: start a use case at zero, expand local or
+remote caching to stable key cohorts, and reverse the rollout without changing
+the loader.
+
+DialCache is a backend application library—not a frontend data cache, cache
+server, Redis or Valkey client, or configuration control plane. Your service
+owns the loader, clients, dynamic configuration source, cache identity, TTLs,
+invalidation windows, admission control, and resource budgets.
 
 ## Safety comes from explicit controls
 
 - **Off by default.** Outside `dialcache.enable(...)`, calls go straight to the
   loader without building a key, resolving policy, accessing a cache, or
   coalescing work.
-- **Gradual and reversible.** Start the process-local or remote layer at `0`,
-  expand it by a stable subset of keys, and turn every cache layer off through
-  runtime policy.
+- **Gradual and reversible.** Start process-local and remote ramps at `0`,
+  expand either to a stable key cohort, and turn every cache layer back off
+  through runtime policy.
 - **Fail-open cache path.** Cache-plumbing failures fall through to the loader
   instead of replacing a usable result. Explicit invalidation failures still
   surface to the caller.
