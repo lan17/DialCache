@@ -39,7 +39,8 @@ pnpm add prom-client@^15.1.3
 pnpm add hot-shots@^17.0.0
 ```
 
-DialCache requires Node.js 20 or Node.js 22 and newer.
+DialCache requires Node.js 22.0.0 or newer. Production deployments should use a
+[currently supported LTS release](https://nodejs.org/en/about/previous-releases).
 
 ## Quick start
 
