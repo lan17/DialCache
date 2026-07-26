@@ -6,12 +6,13 @@
 
 **Read-through caching with the controls production systems need.**
 
-DialCache is a TypeScript read-through caching library for asynchronous
-database and service reads in Node.js. Wrap a reusable function with
-`cached()` or keep a loader inline with `getOrLoad()`; when the active cache
-layers miss, DialCache calls your loader and publishes the result to whichever
-request-local, bounded process-local, and optional Redis or Valkey layers are
-active.
+DialCache is a TypeScript read-through caching library for async database and
+service reads in Node.js.
+
+Wrap a reusable function with `cached()` or keep a loader inline with
+`getOrLoad()`; when the active cache layers miss, DialCache calls your loader
+and publishes the result to whichever request-local, bounded process-local,
+and optional Redis or Valkey layers are active.
 
 Around that core path, DialCache provides patterns that high-scale services
 otherwise have to build themselves: request coalescing, per-use-case runtime
