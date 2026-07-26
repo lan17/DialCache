@@ -60,8 +60,9 @@ clients application-owned:
 
 ## Quick start
 
-Create one long-lived `DialCache` instance for each cache and coalescing domain,
-typically once per service process:
+Most services create one long-lived `DialCache` instance and reuse it across
+the process. It owns one process-local LRU and one process-coalescing scope;
+create separate instances only when those resources should be isolated:
 
 ```ts
 import { CacheLayer, DialCache, DialCacheKeyConfig } from "dialcache";
@@ -128,8 +129,8 @@ A typical adoption path is:
 1. start with the process-local cache shown above;
 2. add [Prometheus or Datadog](https://github.com/lan17/DialCache/blob/main/docs/observability.md)
    before increasing production exposure; and
-3. connect an application-owned runtime configuration source with the remote
-   ramp at `0`; then
+3. extend the policy with a remote TTL and a remote ramp of `0`, using an
+   application-owned runtime configuration source; then
 4. add [Redis or Valkey](https://github.com/lan17/DialCache/blob/main/docs/redis.md)
    and ramp a stable subset of keys as described next.
 
@@ -157,7 +158,16 @@ const getUser = dialcache.cached(
     keyType: "user_id",
     useCase: "GetUser",
     cacheKey: (userId) => userId,
-    defaultConfig: DialCacheKeyConfig.enabled(60),
+    defaultConfig: new DialCacheKeyConfig({
+      ttlSec: {
+        [CacheLayer.LOCAL]: 60,
+        [CacheLayer.REMOTE]: 60,
+      },
+      ramp: {
+        [CacheLayer.LOCAL]: 0,
+        [CacheLayer.REMOTE]: 0,
+      },
+    }),
   },
 );
 
@@ -186,6 +196,9 @@ runtimePolicies.set(
 // Reverse the rollout without changing getUser.
 runtimePolicies.set("GetUser", DialCacheKeyConfig.disabled());
 ```
+
+The zero-ramp baseline is the safety net: if the provider has no matching
+entry, both layers remain off.
 
 In production, the provider can read from an application-owned dynamic config
 client instead of an in-memory map. DialCache resolves one policy snapshot per

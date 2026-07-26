@@ -76,9 +76,10 @@ intentionally local to one call site.
 
 ## Enable and disable scopes
 
-DialCache performs cache work only inside an enabled asynchronous scope. Create
-each `DialCache` instance once and reuse it for the lifetime of its cache and
-coalescing domain, typically one service process:
+DialCache performs cache work only inside an enabled asynchronous scope. Most
+services create one instance and reuse it for the service process. Each
+instance owns one process-local LRU and one process-coalescing registry; create
+separate instances only to isolate those resources:
 
 | API | Behavior |
 | --- | --- |
