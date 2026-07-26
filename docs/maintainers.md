@@ -2,6 +2,43 @@
 
 [Back to the README](../README.md)
 
+## Validation
+
+Use the repository's pinned pnpm version through Corepack:
+
+```bash
+corepack pnpm install --frozen-lockfile
+corepack pnpm check
+corepack pnpm test:integration
+```
+
+`pnpm check` runs strict typechecking, the unit suite with coverage,
+bundles/declarations, and packed ESM/CJS consumer tests. The integration suite
+uses Testcontainers and requires a working Docker-compatible container runtime
+for Redis, Valkey, and Redis Cluster.
+
+CI runs development and integration checks on Node.js 24, then switches to the
+declared minimum Node.js 22.0.0 to test the packed package. Keep the consumer
+floor separate from the development runtime so a new dependency or emitted
+syntax cannot silently raise the published requirement.
+
+Before changing a compatibility-sensitive surface, identify and extend the
+corresponding packed, unit, and integration assertions:
+
+- package root and explicit adapter/protocol entry points;
+- full cache-key identity, encoding, namespace behavior, and Redis Cluster hash
+  tags;
+- deterministic partial-ramp assignment, which must not reshuffle cohorts
+  across releases;
+- the binary Redis frame, Lua arguments and reply domains, tracked
+  read/write/invalidation semantics, and mixed-version serializer behavior; and
+- bounded metrics names, labels, reasons, error categories, scopes, and units.
+
+When changing user-facing examples, parse TypeScript fences, validate local
+files and anchors, verify that README repository links are absolute for npm
+rendering, and inspect the packed README. The package ships `README.md` but not
+`docs/`.
+
 ## Cache-path benchmark
 
 From a repository checkout, install dependencies and run:

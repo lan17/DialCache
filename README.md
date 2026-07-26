@@ -23,35 +23,14 @@ invalidation policy, and resource budgets.
 
 ## Safety comes from explicit controls
 
-- **Off by default.** Outside `dialcache.enable(...)`, both cached wrappers and
-  inline loaders are true pass-throughs: DialCache does not build a key,
-  resolve config, access a cache, or coalesce the call. Inside an enabled
-  scope, a layer still needs an effective policy before it participates.
-- **Gradual and reversible rollout.** Configure TTL and ramp independently for
-  the process-local and remote layers. A ramp of `0` is off, `100` is fully on,
-  and `DialCacheKeyConfig.disabled()` is the all-layer policy kill switch.
-- **Fail-open cache path.** Key, config, cache-read, and serialization-load
-  failures fall through to the source loader. Cache-write,
-  serialization-dump, logging, and metrics failures do not replace an otherwise
-  usable fallback result. Explicit remote invalidation failures are rethrown so
-  callers never assume a mutation was made safe when it was not.
-- **Bounded defaults.** The process-local cache has a 10,000-entry default cap,
-  active remote reads have a 50-millisecond default deadline, and enabled
-  fallback executions have a 60-second default deadline. The read deadline
-  bounds DialCache's wait, not necessarily the underlying Redis command;
-  applications still need resource-native budgets for client work, config
-  providers, serializers, and source I/O.
-
-Use DialCache when you want to:
-
-- add caching to database or service reads without scattering cache get/set
-  plumbing across call sites;
-- begin with one layer or a small deterministic key cohort, observe it, and
-  expand or reverse the rollout per use case;
-- combine request-local, process-local, and shared caching behind one key and
-  policy contract; or
-- coalesce hot-key misses, invalidate related Redis entries, and emit bounded
-  cache metrics without rebuilding those mechanisms for every function.
+- **Off by default.** Outside `dialcache.enable(...)`, calls go straight to the
+  loader without building a key, resolving policy, accessing a cache, or
+  coalescing work.
+- **Gradual and reversible.** Start either shared layer at `0`, expand it by a
+  stable subset of keys, and turn every cache layer off through runtime policy.
+- **Fail-open cache path.** Cache-plumbing failures fall through to the loader
+  instead of replacing a usable result. Explicit invalidation failures still
+  surface to the caller.
 
 ## Contents
 
@@ -66,7 +45,7 @@ Use DialCache when you want to:
 ## Install
 
 ```bash
-pnpm add dialcache
+npm install dialcache
 ```
 
 DialCache requires Node.js 22.0.0 or newer. Production deployments should use a
@@ -79,6 +58,9 @@ clients application-owned:
 - [Prometheus and Datadog setup](https://github.com/lan17/DialCache/blob/main/docs/observability.md)
 
 ## Quick start
+
+Create one long-lived `DialCache` instance for each cache and coalescing domain,
+typically once per service process:
 
 ```ts
 import { DialCache, DialCacheKeyConfig } from "dialcache";
@@ -98,14 +80,18 @@ const getUser = dialcache.cached(
 // Outside enable(), this is a true pass-through to db.fetchUser:
 await getUser("123");
 
-// Inside enable(), the active cache layers participate:
-const user = await dialcache.enable(() => getUser("123"));
+// Inside enable(), the first call loads and the second reuses the cached value:
+const user = await dialcache.enable(async () => {
+  await getUser("123"); // db.fetchUser, then populate process-local cache
+  return await getUser("123"); // process-local hit
+});
 ```
 
 `cached(fn, options)` preserves the function's parameters and returns a
 Promise-based wrapper. `DialCacheKeyConfig.enabled(60)` gives the process-local
-and remote layers a 60-second baseline TTL; the remote layer participates only
-when a Redis or Valkey client is configured.
+and remote layers a 60-second baseline TTL. It does not enable request-local
+memoization, and the remote layer participates only when a Redis or Valkey
+client is configured.
 
 For a one-shot calculation that should remain inline,
 [`getOrLoad()`](https://github.com/lan17/DialCache/blob/main/docs/configuration.md#one-shot-inline-loaders)
@@ -133,11 +119,26 @@ previous state when their callbacks settle.
 cached before a mutation. Use the appropriate invalidation or TTL policy before
 serving later reads of mutable data.
 
+### From local trial to production
+
+A typical adoption path is:
+
+1. start with the process-local cache shown above;
+2. add [Redis or Valkey](https://github.com/lan17/DialCache/blob/main/docs/redis.md)
+   when values should be shared across processes or hosts;
+3. add [Prometheus or Datadog](https://github.com/lan17/DialCache/blob/main/docs/observability.md)
+   before increasing production exposure; and
+4. connect an application-owned runtime configuration source, then ramp a
+   stable subset of keys as described next.
+
 ## Dial caching up or down
 
 Every cache operation can declare a stable `defaultConfig`. An optional
 `cacheConfigProvider` returns a sparse runtime overlay for the current key, so
-policy can change independently of the loader:
+policy can change independently of the loader.
+
+The example below focuses on runtime policy. Remote ramp settings take effect
+only when a Redis or Valkey client is configured.
 
 ```ts
 import { CacheLayer, DialCache, DialCacheKeyConfig } from "dialcache";
@@ -186,41 +187,28 @@ runtimePolicies.set("GetUser", DialCacheKeyConfig.disabled());
 
 In production, the provider can read from an application-owned dynamic config
 client instead of an in-memory map. DialCache resolves one policy snapshot per
-enabled invocation. Keep the provider cheap and give any asynchronous work its
-own finite budget.
+enabled invocation.
 
-For the process-local and remote layers:
-
-- a missing effective TTL disables that layer by policy;
-- a configured TTL with no ramp defaults to `100`;
-- `0` disables the layer;
-- `100` enables the layer for every key; and
-- an intermediate ramp uses DialCache's deterministic key-and-layer
-  assignment.
+A shared layer needs an effective TTL. With a TTL but no ramp, it defaults to
+`100`; a ramp of `0` disables it, `100` selects every key, and an intermediate
+value selects a stable key cohort for that layer.
 
 Ramps select key cohorts, not requests or load, so `10` does not guarantee 10%
 of calls. Increasing or decreasing a ramp preserves membership for keys that
 remain inside the threshold, and local and remote cohorts are layer-specific.
 DialCache keeps the assignment stable across releases.
 
-If an application needs an externally coordinated cohort, its
-`cacheConfigProvider` can return a per-key ramp override of `0` or `100`.
 Ramping down, including with `DialCacheKeyConfig.disabled()`, bypasses existing
 entries rather than deleting them; a later ramp-up can reuse entries that
 remain valid.
 
 Request-local caching is controlled separately by the `requestLocal` boolean.
 `DialCacheKeyConfig.disabled()` sets it to `false` and ramps both shared layers
-to `0`. Provider errors do not silently activate the baseline: the invocation
-records a config error and runs the source loader uncached.
-
-Remote-read waiting is runtime-controlled too. An overlay
-`remoteReadTimeoutMs` takes precedence over the operation's `defaultConfig`,
-then the instance's `redis.readTimeoutMs`, then the 50-millisecond core default.
-Remote reads always have a finite positive deadline.
+to `0`.
 
 See [Configuration and cache layers](https://github.com/lan17/DialCache/blob/main/docs/configuration.md)
-for sparse-overlay precedence, validation, and layer behavior.
+for sparse-overlay precedence, provider failure behavior, externally
+coordinated cohorts, remote-read deadlines, and layer validation.
 
 ## How the read path works
 

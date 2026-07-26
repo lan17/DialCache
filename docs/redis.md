@@ -13,10 +13,10 @@ Choose one supported integration:
 
 ```bash
 # node-redis
-pnpm add redis@~4.7.1
+npm install redis@~4.7.1
 
 # or Valkey GLIDE
-pnpm add @valkey/valkey-glide
+npm install @valkey/valkey-glide
 ```
 
 ## node-redis
@@ -189,9 +189,9 @@ The `fallbackTimeoutMs` timer is separate and starts only if and when the source
 loader begins. The remote-read timer covers neither config resolution,
 serializer loading, the fallback, Redis writes, nor invalidation.
 
-### Custom-client read context
+### Custom-client contract
 
-The semantic boundary exposes an optional second argument:
+Custom adapters implement the complete client-agnostic semantic boundary:
 
 ```ts
 interface RedisReadContext {
@@ -204,13 +204,26 @@ interface DialCacheRedisClient {
     request: RedisReadRequest,
     context?: RedisReadContext,
   ): Awaitable<RedisCachePayload | null>;
+  write(request: RedisWriteRequest): Awaitable<boolean>;
+  invalidate(request: RedisInvalidationRequest): Awaitable<void>;
 }
 ```
 
-The optional argument keeps existing one-argument custom clients structurally
-compatible. Adapters should use the signal for cooperative cancellation where
-their client supports it, but the core deadline remains authoritative when
-they do not.
+| Method | Required semantics |
+| --- | --- |
+| `read` | Return the serialized `string` or `Buffer`, or `null` for a miss. A tracked request includes `watermarkKey`; compare the value timestamp and watermark atomically. |
+| `write` | Apply `cacheTtlMs` and record server time atomically. A tracked request includes `watermarkKey`; return `false` when the watermark rejects publication and `true` when the value was written. |
+| `invalidate` | Advance `watermarkKey` monotonically to at least server time plus `futureBufferMs`, while preserving the required derived lifetime. Reject on failure. |
+
+`write()` returning `false` is a safe publication refusal, not an adapter error.
+DialCache still returns the fallback value but skips the corresponding
+process-local population. A thrown cache-write error fails open; a thrown
+explicit invalidation error is rethrown to the caller.
+
+The optional `RedisReadContext` keeps existing one-argument readers
+structurally compatible. Adapters should use its signal for cooperative
+cancellation where their client supports it, but the core deadline remains
+authoritative when they do not.
 
 The bundled node-redis adapter forwards the signal in per-command options. This
 can remove queued work where supported, but aborting after dispatch cannot
@@ -256,9 +269,18 @@ The core Redis boundary is the client-agnostic `DialCacheRedisClient` interface.
 It exchanges serialized values as `string | Buffer` and does not expose
 client-specific commands or wire encodings.
 
-Distinct untracked and tracked read/write Lua sources, the invalidation source,
-and wire constants are exported from `dialcache/redis-protocol`. Custom adapters
-can throw these root-exported error classes:
+The `dialcache/redis-protocol` entry point exports the exact bundled protocol
+building blocks:
+
+- `READ_CACHE_SCRIPT` and `READ_TRACKED_CACHE_SCRIPT`;
+- `WRITE_CACHE_SCRIPT` and `WRITE_TRACKED_CACHE_SCRIPT`;
+- `INVALIDATE_CACHE_SCRIPT`; and
+- `REDIS_FRAME_VERSION`, `REDIS_ENCODING_UTF8`, and
+  `REDIS_ENCODING_BINARY`.
+
+The scripts implement the atomic read, publication, invalidation, server-time,
+and derived-watermark-lifetime behavior required above. Custom adapters can
+throw these root-exported error classes:
 
 - `DialCacheRedisPayloadError`;
 - `DialCacheRedisPayloadEncodingError`; and

@@ -74,6 +74,39 @@ value meaning and serialization.
 Prefer `cached()` for reusable loaders and `getOrLoad()` for calculations
 intentionally local to one call site.
 
+## Enable and disable scopes
+
+DialCache performs cache work only inside an enabled asynchronous scope. Create
+each `DialCache` instance once and reuse it for the lifetime of its cache and
+coalescing domain, typically one service process:
+
+| API | Behavior |
+| --- | --- |
+| `enable(fn)` | Enables caching for `fn` and the asynchronous work it awaits. The outermost call owns any request-local state. |
+| `disable(fn)` | Temporarily restores pass-through behavior, commonly around nested mutation work. It does not evict existing values. |
+| `isEnabled()` | Reports whether the current asynchronous call chain is inside a live enabled scope. |
+| `withEnabled(fn)` | Exact alias for `enable(fn)`. |
+| `withDisabled(fn)` | Exact alias for `disable(fn)`. |
+
+All five methods are instance-scoped. `enable()` and `disable()` always return a
+`Promise`, including when their callback returns synchronously. Nested scopes
+restore the previous state when their callbacks settle, and a nested
+`enable()` inside `disable()` can opt a smaller read region back in.
+
+Enabled state follows Node's `AsyncLocalStorage`; it is not a process-global
+flag. Once the outermost `enable()` callback settles, detached asynchronous work
+that inherited the old context becomes pass-through and cannot repopulate its
+closed request-local state.
+
+The root-exported `DialCacheContext` exposes the lower-level
+`enable()`, `disable()`, and `isEnabled()` context primitive. It does not attach
+itself to a `DialCache` instance or perform cache work. Most applications should
+use the methods on `DialCache`.
+
+Keep mutation work outside the enabled boundary or inside `disable()`. Because
+disabling does not evict existing values, mutable data still needs an
+appropriate TTL or [targeted invalidation](invalidation.md) policy.
+
 ## Keys, ids, and extra dimensions
 
 For `cached()`, the required `cacheKey` selector receives the wrapped
@@ -336,6 +369,41 @@ Applications that need an externally coordinated cohort can use
 
 Ramping down bypasses affected entries; it does not evict them, so a later
 ramp-up can reuse entries that remain valid.
+
+### Provider key input
+
+`cacheConfigProvider` receives the fully constructed, read-only `DialCacheKey`
+for the invocation:
+
+| Field | Meaning |
+| --- | --- |
+| `namespace` | Logical application or environment namespace. |
+| `keyType` and `id` | Primary identity. The selected id has already been converted to a string. |
+| `args` | Secondary dimensions as normalized, name-sorted string pairs; entries whose value was `undefined` are omitted. |
+| `useCase` | Stable operation name used in cache identity and metrics. |
+| `prefix` | Encoded identity prefix, including a Redis Cluster hash tag when invalidation tracking is enabled. |
+| `urn` | Complete encoded cache identity, including arguments and `useCase`. |
+| `defaultConfig` | The operation's snapshotted baseline policy, or `null`. |
+| `serializer` | The operation-specific serializer, or `null`. |
+| `trackForInvalidation` | Whether the operation uses remote watermark tracking. |
+
+Use the identity fields to select policy; do not derive policy names or metric
+dimensions from unbounded user input. The provider result remains a sparse
+overlay and must not mutate the key.
+
+Most applications do not construct keys directly. Custom integrations can use
+the root exports:
+
+- `new DialCacheKey(init)` to build the same public key shape;
+- `normalizeArgs(record)` to omit `undefined`, stringify scalar values, and
+  sort argument names;
+- `invalidationPrefix(namespace, keyType, id)` to build the encoded tracked
+  identity; and
+- `redisClusterHashTag(value)` to wrap a validated value in a Redis Cluster hash
+  tag.
+
+The namespace and hash-tag components reject `{` and `}` as described under
+[Identity rules](#identity-rules).
 
 ## Request-local cache
 

@@ -15,7 +15,7 @@ bounded labels.
 Install `prom-client` separately:
 
 ```bash
-pnpm add prom-client@^15.1.3
+npm install prom-client@^15.1.3
 ```
 
 Create the registry your application owns, then pass an explicit adapter to
@@ -105,7 +105,7 @@ in-flight state.
 Install `hot-shots` separately:
 
 ```bash
-pnpm add hot-shots@^17.0.0
+npm install hot-shots@^17.0.0
 ```
 
 Create the DogStatsD client your application owns, then pass it to the Datadog
@@ -252,6 +252,24 @@ and application fallback failures.
 
 Implement `DialCacheMetricsAdapter` and pass it through
 `new DialCache({ metrics })` for another telemetry backend.
+
+| Hook | Required | Value |
+| --- | --- | --- |
+| `request(labels)` | yes | One active cache-layer lookup. |
+| `miss(labels)` | yes | One cache miss. |
+| `disabled(labels)` | yes | One skipped layer or no-layer invocation with a bounded `reason`. |
+| `error(labels)` | yes | One bounded failure site with `inFallback`. |
+| `invalidation(labels)` | yes | One explicit remote invalidation call. |
+| `coalesced(labels)` | no | One follower that joined request-local or process-scoped work. |
+| `observeGet(labels, seconds)` | yes | Cache-read duration in seconds. |
+| `observeFallback(labels, seconds)` | yes | Fallback duration in seconds. |
+| `observeSerialization(labels, seconds)` | yes | Serializer dump/load duration in seconds. |
+| `observeSize(labels, bytes)` | yes | Serialized remote payload size in bytes. |
+
+The root package exports `DialCacheMetricsAdapter` and every associated label,
+reason, error-kind, layer, and scope type. All hooks are synchronous; adapters
+that buffer or transmit asynchronously own that later lifecycle. Keep label
+values bounded and preserve the seconds and bytes units shown above.
 
 Every backend-neutral label object exposes the logical namespace as camel-case
 `cacheNamespace`. Map it to the backend's `cache_namespace` label or tag. This
