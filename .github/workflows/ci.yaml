@@ -43,8 +43,12 @@ jobs:
           fail_ci_if_error: true
       - run: pnpm build
       - run: pnpm test:integration
+      # Prove the exact consumer floor; development and integration stay on Node 24.
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version: "20"
+          node-version: "22.0.0"
           cache: "pnpm"
-      - run: pnpm test:package
+      - name: Test packed package on the minimum Node.js version
+        run: |
+          node --version
+          pnpm test:package
