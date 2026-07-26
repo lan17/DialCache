@@ -6,6 +6,7 @@ import {
 } from "../config.js";
 import type { DialCacheKey } from "../key.js";
 import type { DisabledReason } from "../metrics.js";
+import { isSupportedCacheTtlSec } from "./duration.js";
 import { deterministicRampSample } from "./ramp.js";
 
 export interface ResolvedLayerConfig {
@@ -50,7 +51,7 @@ export function resolveLayerConfigResult(options: ResolveLayerConfigOptions): La
   if (ttlSec === undefined) {
     return { status: "disabled", reason: "policy_disabled" };
   }
-  if (!Number.isSafeInteger(ttlSec) || ttlSec <= 0) {
+  if (!isSupportedCacheTtlSec(ttlSec)) {
     return { status: "disabled", reason: "invalid_ttl" };
   }
 

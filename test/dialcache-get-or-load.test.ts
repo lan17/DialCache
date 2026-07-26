@@ -224,14 +224,20 @@ describe("DialCache getOrLoad", () => {
     expect(seenKeys[0]?.defaultConfig?.ttlSec[CacheLayer.LOCAL]).toBe(60);
     expect(seenKeys[1]?.defaultConfig?.ttlSec[CacheLayer.LOCAL]).toBe(30);
     expect(Object.isFrozen(seenKeys[0]?.defaultConfig)).toBe(true);
+    const invalidLoader = vi.fn(async () => "invalid");
     expect(() =>
-      dialcache.getOrLoad(async () => "invalid", {
+      dialcache.getOrLoad(invalidLoader, {
         ...options,
         defaultConfig: new DialCacheKeyConfig({
-          ttlSec: { [CacheLayer.LOCAL]: 0 },
+          ttlSec: { [CacheLayer.LOCAL]: 31_536_001 },
         }),
       }),
-    ).toThrow(new RangeError("DialCache defaultConfig ttlSec.local must be a positive safe integer"));
+    ).toThrow(
+      new RangeError(
+        "DialCache defaultConfig ttlSec.local must be a positive safe integer no greater than 31536000",
+      ),
+    );
+    expect(invalidLoader).not.toHaveBeenCalled();
   });
 
   it("reads and writes Redis values with the per-invocation serializer", async () => {

@@ -5,6 +5,7 @@ import { LRUCache } from "lru-cache";
 import { CacheLayer, type CacheConfigProvider, type DialCacheKeyConfig } from "../config.js";
 import type { DialCacheKey } from "../key.js";
 import type { CacheGetResult } from "./cache-result.js";
+import { cacheTtlSecToMs } from "./duration.js";
 import {
   fetchKeyConfig,
   resolveLayerConfigResult,
@@ -97,7 +98,7 @@ export class LocalCache {
 
     // lru-cache expires when age > ttl, while DialCache historically expired
     // when its integer-millisecond clock reached the configured boundary.
-    const ttlMs = ttlSec * 1000 - 1;
+    const ttlMs = cacheTtlSecToMs(ttlSec) - 1;
     this.cache?.set(key.urn, { value }, { size: 1, ttl: ttlMs });
   }
 

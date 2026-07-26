@@ -12,6 +12,7 @@ export type Awaitable<T> = T | Promise<T>;
 export type LayerConfig = Partial<Record<CacheLayer, number>>;
 
 export class DialCacheKeyConfig {
+  /** Per-layer TTLs in seconds, from 1 through 31,536,000 (365 days). */
   readonly ttlSec: LayerConfig;
   readonly ramp: LayerConfig;
   /**
