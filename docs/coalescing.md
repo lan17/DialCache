@@ -7,9 +7,10 @@ cache layer. It applies a finite deadline to each active remote read and a
 separate default deadline once an initially enabled invocation begins its
 fallback loader.
 
-These mechanisms reduce duplicate source work and give active flights eventual
-cleanup. They do not replace cross-process coordination, source-native
-cancellation, application admission control, or backpressure.
+These mechanisms reduce duplicate source work. Their deadlines help flights
+settle, but eventual cleanup still requires finite application-owned budgets
+for every injected operation. They do not replace cross-process coordination,
+source-native cancellation, admission control, or backpressure.
 
 ## Request coalescing
 
@@ -26,7 +27,8 @@ different outer request has a different request-local flight registry.
 ### Process scope
 
 When process-local or remote caching is active, same-key callers share work
-within one `DialCache` instance before the first active shared layer.
+within one `DialCache` instance before the first active process-local or remote
+layer.
 
 This is reported as `scope="process"`, but it is instance-scoped:
 
@@ -36,7 +38,7 @@ This is reported as `scope="process"`, but it is instance-scoped:
 
 ```ts
 await dialcache.enable(async () => {
-  // Same cold key and active shared layer:
+  // Same cold key and active process-local or remote layer:
   // one fallback execution, one shared result.
   const [first, second] = await Promise.all([
     getUser("456"),
@@ -202,10 +204,11 @@ requested.
 There is no library-wide flight cap or age-based replacement.
 
 A registry cap would bound only DialCache metadata. Overflow or eviction could
-still create unbounded source work and unsafe duplicate publication. Finite
-operation deadlines provide eventual cleanup; application admission control
-and backpressure remain responsible for bounding simultaneous distinct-key
-work.
+still create unbounded source work and unsafe duplicate publication.
+DialCache's remote-read and fallback deadlines cover only those phases;
+provider, serializer, and Redis-write settlement remains application-owned.
+Admission control and backpressure remain responsible for bounding
+simultaneous distinct-key work.
 
 Monitor:
 

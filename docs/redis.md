@@ -4,8 +4,8 @@
 
 DialCache's remote TTL layer supports standalone Redis, standalone Valkey, and
 Redis Cluster. The application creates, connects, configures, drains, and closes
-the underlying client. DialCache borrows a semantic `DialCacheRedisClient` and
-does not own the connection lifecycle.
+the underlying client. DialCache borrows a client-independent
+`DialCacheRedisClient` adapter and does not own the connection lifecycle.
 
 ## Install a client
 
@@ -22,7 +22,7 @@ npm install @valkey/valkey-glide
 ## node-redis
 
 Register DialCache's native scripts when creating the client, connect it, and
-pass the semantic adapter to `DialCache`:
+pass the DialCache-compatible adapter to `DialCache`:
 
 ```ts
 import { createClient } from "redis";
@@ -144,7 +144,7 @@ client-side invocation has settled.
 
 ## Remote-read deadlines and async liveness
 
-Every active semantic remote-read leader has a finite monotonic deadline.
+Every active remote-read leader has a finite monotonic deadline.
 DialCache uses this precedence for `cached()` and `getOrLoad()`:
 
 ```text
@@ -191,7 +191,8 @@ serializer loading, the fallback, Redis writes, nor invalidation.
 
 ### Custom-client contract
 
-Custom adapters implement the complete client-agnostic semantic boundary:
+Custom adapters implement the complete client-independent read, write, and
+invalidate contract:
 
 ```ts
 interface RedisReadContext {
@@ -211,9 +212,9 @@ interface DialCacheRedisClient {
 
 | Method | Required semantics |
 | --- | --- |
-| `read` | Return the serialized `string` or `Buffer`, or `null` for a miss. A tracked request includes `watermarkKey`; compare the value timestamp and watermark atomically. |
-| `write` | Apply `cacheTtlMs` and record server time atomically. A tracked request includes `watermarkKey`; return `false` when the watermark rejects publication and `true` when the value was written. |
-| `invalidate` | Advance `watermarkKey` monotonically to at least server time plus `futureBufferMs`, while preserving the required derived lifetime. Reject on failure. |
+| `read` | Return the serialized `string` or `Buffer`, or `null` for a miss. For a tracked request, compare the value timestamp and watermark atomically; a missing watermark or a value at or behind it is a miss. |
+| `write` | Apply `cacheTtlMs` and record server time atomically. For a tracked request, create a missing baseline, retain it for at least the value TTL plus one minute without shortening a longer or persistent lifetime, and return `false` when it rejects publication. Return `true` only when the value was written. |
+| `invalidate` | Advance `watermarkKey` monotonically to at least server time plus `futureBufferMs`. Retain it long enough to cover that buffer and any still-future existing watermark, plus one minute, without shortening a longer or persistent lifetime. Reject on failure. |
 
 `write()` returning `false` is a safe publication refusal, not an adapter error.
 DialCache still returns the fallback value but skips the corresponding
@@ -265,49 +266,10 @@ every injected operation.
 
 ## Serialization
 
-The core Redis boundary is the client-agnostic `DialCacheRedisClient` interface.
-It exchanges serialized values as `string | Buffer` and does not expose
-client-specific commands or wire encodings.
-
-The `dialcache/redis-protocol` entry point exports the exact bundled protocol
-building blocks:
-
-- `READ_CACHE_SCRIPT` and `READ_TRACKED_CACHE_SCRIPT`;
-- `WRITE_CACHE_SCRIPT` and `WRITE_TRACKED_CACHE_SCRIPT`;
-- `INVALIDATE_CACHE_SCRIPT`; and
-- `REDIS_FRAME_VERSION`, `REDIS_ENCODING_UTF8`, and
-  `REDIS_ENCODING_BINARY`.
-
-The scripts implement the atomic read, publication, invalidation, server-time,
-and derived-watermark-lifetime behavior required above. Custom adapters can
-throw these root-exported error classes:
-
-- `DialCacheRedisPayloadError`;
-- `DialCacheRedisPayloadEncodingError`; and
-- `DialCacheRedisProtocolError`.
-
-They distinguish malformed payloads, unsupported encodings, and invalid Lua
-reply domains in logs. DialCache records bounded `cache_read`,
-`cache_read_timeout`, `cache_write`, or `invalidation` metrics by failure site.
-
-### Binary frame
-
-Redis values use a compact binary frame:
-
-```text
-byte 1      format version
-bytes 2-9   Redis-created timestamp in milliseconds (uint64, big-endian)
-byte 10     payload encoding (0 = UTF-8, 1 = raw binary)
-bytes 11... serialized payload
-```
-
-Redis's Lua `struct` library packs and unpacks the timestamp. Redis TTL is
-authoritative, so expiry metadata is not duplicated in the frame.
-
-The payload comes from the cache operation's serializer or `JsonSerializer` by
-default. Custom serializers can return `string` or `Buffer`. Strings are
-stored as UTF-8; Buffers are stored byte-for-byte without base64 expansion.
-Adapters restore the same representation before calling `serializer.load`.
+DialCache uses `JsonSerializer` by default. A cache operation can select a
+typed serializer, and `redis.serializer` supplies the instance default when an
+operation does not select one. Serializers run only for remote reads and
+writes; request-local and process-local values remain native references.
 
 ### Default JSON behavior
 
@@ -397,3 +359,49 @@ explicit serializer.
 Providing `Serializer<T>`, including an explicitly typed
 `JsonSerializer<T>`, is a trusted caller assertion. DialCache does not perform
 an additional serialize-and-deserialize cycle to validate it.
+
+### Advanced wire protocol
+
+The core Redis boundary is the client-independent `DialCacheRedisClient`
+interface. It exchanges serialized values as `string | Buffer` and does not
+expose client-specific commands or wire encodings.
+
+The `dialcache/redis-protocol` entry point exports the exact bundled protocol
+building blocks:
+
+- `READ_CACHE_SCRIPT` and `READ_TRACKED_CACHE_SCRIPT`;
+- `WRITE_CACHE_SCRIPT` and `WRITE_TRACKED_CACHE_SCRIPT`;
+- `INVALIDATE_CACHE_SCRIPT`; and
+- `REDIS_FRAME_VERSION`, `REDIS_ENCODING_UTF8`, and
+  `REDIS_ENCODING_BINARY`.
+
+The scripts implement the atomic read, publication, invalidation, server-time,
+and derived-watermark-lifetime behavior required above. Custom adapters can
+throw these root-exported error classes:
+
+- `DialCacheRedisPayloadError`;
+- `DialCacheRedisPayloadEncodingError`; and
+- `DialCacheRedisProtocolError`.
+
+They distinguish malformed payloads, unsupported encodings, and invalid Lua
+reply domains in logs. DialCache records bounded `cache_read`,
+`cache_read_timeout`, `cache_write`, or `invalidation` metrics by failure site.
+
+#### Binary frame
+
+Redis values use a compact binary frame:
+
+```text
+byte 1      format version
+bytes 2-9   Redis-created timestamp in milliseconds (uint64, big-endian)
+byte 10     payload encoding (0 = UTF-8, 1 = raw binary)
+bytes 11... serialized payload
+```
+
+Redis's Lua `struct` library packs and unpacks the timestamp. Redis TTL is
+authoritative, so expiry metadata is not duplicated in the frame.
+
+The payload comes from the cache operation's serializer or `JsonSerializer` by
+default. Custom serializers can return `string` or `Buffer`. Strings are
+stored as UTF-8; Buffers are stored byte-for-byte without base64 expansion.
+Adapters restore the same representation before calling `serializer.load`.

@@ -161,8 +161,9 @@ watermark TTL.
 
 Invalidation ensures the TTL covers both the requested future buffer and any
 still-future existing watermark, plus one minute. It also preserves a longer or
-persistent TTL. There is no fixed or configurable retention floor, and reads do
-not extend watermark lifetime.
+persistent TTL. The one-minute safety margin is fixed; there is no separate
+configurable or global retention floor, and reads do not extend watermark
+lifetime.
 
 ## Choosing `futureBufferMs`
 

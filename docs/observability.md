@@ -135,8 +135,10 @@ const dialcache = new DialCache({
   }),
 });
 
-// Drain outstanding cache operations before application shutdown.
-dogStatsD.close();
+function shutdown(): void {
+  // Drain outstanding cache operations before application shutdown.
+  dogStatsD.close();
+}
 ```
 
 `hot-shots` is the supported and tested client, but the adapter depends only on

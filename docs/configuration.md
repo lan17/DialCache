@@ -235,8 +235,8 @@ runtime field -> defaultConfig field -> DialCache disabled baseline
 ```
 
 The disabled baseline sets `requestLocal` to `false` and leaves the
-process-local and remote TTLs unset. A shared layer with no effective TTL is
-disabled by policy. A shared layer with an effective TTL but no effective ramp
+process-local and remote TTLs unset. Either layer is disabled by policy when it
+has no effective TTL. With an effective TTL but no effective ramp, that layer
 defaults to a 100% ramp.
 
 The remote-read deadline has two additional fallbacks:

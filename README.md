@@ -26,8 +26,9 @@ invalidation policy, and resource budgets.
 - **Off by default.** Outside `dialcache.enable(...)`, calls go straight to the
   loader without building a key, resolving policy, accessing a cache, or
   coalescing work.
-- **Gradual and reversible.** Start either shared layer at `0`, expand it by a
-  stable subset of keys, and turn every cache layer off through runtime policy.
+- **Gradual and reversible.** Start the process-local or remote layer at `0`,
+  expand it by a stable subset of keys, and turn every cache layer off through
+  runtime policy.
 - **Fail-open cache path.** Cache-plumbing failures fall through to the loader
   instead of replacing a usable result. Explicit invalidation failures still
   surface to the caller.
@@ -63,7 +64,7 @@ Create one long-lived `DialCache` instance for each cache and coalescing domain,
 typically once per service process:
 
 ```ts
-import { DialCache, DialCacheKeyConfig } from "dialcache";
+import { CacheLayer, DialCache, DialCacheKeyConfig } from "dialcache";
 
 const dialcache = new DialCache();
 
@@ -73,7 +74,9 @@ const getUser = dialcache.cached(
     keyType: "user_id",
     useCase: "GetUser",
     cacheKey: (userId) => userId,
-    defaultConfig: DialCacheKeyConfig.enabled(60),
+    defaultConfig: new DialCacheKeyConfig({
+      ttlSec: { [CacheLayer.LOCAL]: 60 },
+    }),
   },
 );
 
@@ -88,10 +91,9 @@ const user = await dialcache.enable(async () => {
 ```
 
 `cached(fn, options)` preserves the function's parameters and returns a
-Promise-based wrapper. `DialCacheKeyConfig.enabled(60)` gives the process-local
-and remote layers a 60-second baseline TTL. It does not enable request-local
-memoization, and the remote layer participates only when a Redis or Valkey
-client is configured.
+Promise-based wrapper. The configuration above enables only the process-local
+layer with a 60-second TTL; its omitted ramp defaults to `100`. Request-local
+memoization and the remote layer remain off.
 
 For a one-shot calculation that should remain inline,
 [`getOrLoad()`](https://github.com/lan17/DialCache/blob/main/docs/configuration.md#one-shot-inline-loaders)
@@ -124,12 +126,12 @@ serving later reads of mutable data.
 A typical adoption path is:
 
 1. start with the process-local cache shown above;
-2. add [Redis or Valkey](https://github.com/lan17/DialCache/blob/main/docs/redis.md)
-   when values should be shared across processes or hosts;
-3. add [Prometheus or Datadog](https://github.com/lan17/DialCache/blob/main/docs/observability.md)
+2. add [Prometheus or Datadog](https://github.com/lan17/DialCache/blob/main/docs/observability.md)
    before increasing production exposure; and
-4. connect an application-owned runtime configuration source, then ramp a
-   stable subset of keys as described next.
+3. connect an application-owned runtime configuration source with the remote
+   ramp at `0`; then
+4. add [Redis or Valkey](https://github.com/lan17/DialCache/blob/main/docs/redis.md)
+   and ramp a stable subset of keys as described next.
 
 ## Dial caching up or down
 
@@ -170,7 +172,7 @@ runtimePolicies.set(
   }),
 );
 
-// Later, ramp both shared layers to 100%.
+// Later, ramp the process-local and remote layers to 100%.
 runtimePolicies.set(
   "GetUser",
   new DialCacheKeyConfig({
@@ -189,9 +191,9 @@ In production, the provider can read from an application-owned dynamic config
 client instead of an in-memory map. DialCache resolves one policy snapshot per
 enabled invocation.
 
-A shared layer needs an effective TTL. With a TTL but no ramp, it defaults to
-`100`; a ramp of `0` disables it, `100` selects every key, and an intermediate
-value selects a stable key cohort for that layer.
+The process-local and remote layers each need an effective TTL. With a TTL but
+no ramp, a layer defaults to `100`; a ramp of `0` disables it, `100` selects
+every key, and an intermediate value selects a stable key cohort.
 
 Ramps select key cohorts, not requests or load, so `10` does not guarantee 10%
 of calls. Increasing or decreasing a ramp preserves membership for keys that
@@ -203,8 +205,8 @@ entries rather than deleting them; a later ramp-up can reuse entries that
 remain valid.
 
 Request-local caching is controlled separately by the `requestLocal` boolean.
-`DialCacheKeyConfig.disabled()` sets it to `false` and ramps both shared layers
-to `0`.
+`DialCacheKeyConfig.disabled()` sets it to `false` and ramps both the
+process-local and remote layers to `0`.
 
 See [Configuration and cache layers](https://github.com/lan17/DialCache/blob/main/docs/configuration.md)
 for sparse-overlay precedence, provider failure behavior, externally
@@ -226,11 +228,11 @@ open.
   `enable()` scope.
 - A process-local hit returns from the `DialCache` instance's bounded LRU.
 - A process-local miss can read Redis and populate the process-local cache.
-- A remote miss runs the fallback and attempts to populate active shared
+- A remote miss runs the fallback and attempts to populate the active cache
   layers.
 - A remote read failure or timeout runs the fallback without a second Redis
-  operation. An untracked result may still populate process-local cache; a
-  tracked result does not, because watermark safety was not established.
+  operation. Tracked invalidation adds a stricter
+  [publication rule](https://github.com/lan17/DialCache/blob/main/docs/invalidation.md#read-and-write-behavior).
 - Same-key concurrent work is coalesced at the lifetime of the first active
   layer.
 
@@ -324,8 +326,9 @@ before enabling it in production.
 
 Concurrent callers with the same cache key share active work within the first
 active cache scope: one outer request for request-local caching, or one
-`DialCache` instance for the shared layers. This mitigates hot-key stampedes
-inside that scope; it is not cross-process coordination.
+`DialCache` instance when process-local or remote caching is active. This
+mitigates hot-key stampedes inside that scope; it is not cross-process
+coordination.
 
 Same-key followers share the leader's remaining remote-read budget. The
 fallback deadline starts separately only if and when the source loader begins.
