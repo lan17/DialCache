@@ -93,12 +93,16 @@ function mergeKeyConfig(
   const remoteReadTimeoutMs = overlay?.remoteReadTimeoutMs !== undefined
     ? overlay.remoteReadTimeoutMs
     : defaultConfig?.remoteReadTimeoutMs;
+  const shadowRamp = overlay?.shadowRamp !== undefined
+    ? overlay.shadowRamp
+    : defaultConfig?.shadowRamp;
 
   return new DialCacheKeyConfig({
     ttlSec: mergeLayerConfig(defaultConfig?.ttlSec, overlay?.ttlSec, "ttlSec"),
     ramp: mergeLayerConfig(defaultConfig?.ramp, overlay?.ramp, "ramp"),
     requestLocal,
     ...(remoteReadTimeoutMs === undefined ? {} : { remoteReadTimeoutMs }),
+    ...(shadowRamp === undefined ? {} : { shadowRamp }),
   });
 }
 

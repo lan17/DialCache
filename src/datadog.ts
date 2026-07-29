@@ -6,6 +6,7 @@ import type {
   ErrorMetricLabels,
   InvalidationMetricLabels,
   SerializationMetricLabels,
+  ShadowValidationMetricLabels,
 } from "./metrics.js";
 
 export type DatadogObservationMetricType = "histogram" | "distribution";
@@ -44,6 +45,7 @@ const METRIC_SUFFIXES = {
   error: "error.count",
   invalidation: "invalidation.count",
   coalesced: "coalesced.count",
+  shadowValidation: "shadow.count",
   get: "get.duration",
   fallback: "fallback.duration",
   serialization: "serialization.duration",
@@ -111,6 +113,15 @@ export class DatadogDialCacheMetrics implements DialCacheMetricsAdapter {
     });
   }
 
+  shadowValidation(labels: ShadowValidationMetricLabels): void {
+    return this.increment(this.metricNames.shadowValidation, {
+      cache_namespace: labels.cacheNamespace,
+      use_case: labels.useCase,
+      key_type: labels.keyType,
+      outcome: labels.outcome,
+    });
+  }
+
   observeGet(labels: CacheMetricLabels, seconds: number): void {
     this.observe(this.metricNames.get, seconds, cacheTags(labels));
   }
@@ -131,7 +142,7 @@ export class DatadogDialCacheMetrics implements DialCacheMetricsAdapter {
   }
 
   private increment(name: string, tags: DatadogTags): void {
-    this.client.increment(name, 1, tags);
+    return this.client.increment(name, 1, tags);
   }
 }
 

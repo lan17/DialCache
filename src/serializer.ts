@@ -3,7 +3,13 @@ import type { Awaitable } from "./config.js";
 export interface Serializer<T = unknown> {
   /** Async implementations must settle within an application-defined deadline. */
   dump(value: T): Awaitable<string | Buffer>;
-  /** Async implementations must settle within an application-defined deadline. */
+  /**
+   * Async implementations must settle within an application-defined deadline.
+   * The serialized input is borrowed and immutable. Implementations must not
+   * mutate a Buffer passed here because DialCache may retain the exact payload
+   * and call load again for best-effort shadow validation; copy it first if
+   * mutation is required. Repeated loads of the same payload must be independent.
+   */
   load(value: string | Buffer): Awaitable<T>;
 }
 

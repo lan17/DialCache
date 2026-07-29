@@ -1,5 +1,6 @@
 import type { ResolvedLayerConfig } from "./runtime-config.js";
 import type { DisabledReason } from "../metrics.js";
+import type { RedisCachePayload } from "../redis-client.js";
 
 export type CacheGetResult<T> =
   | { readonly status: "hit"; readonly value: T }
@@ -10,6 +11,10 @@ export type CacheGetResult<T> =
       readonly skipCacheWrite?: boolean;
     };
 
+export type RedisCacheGetResult<T> =
+  | { readonly status: "hit"; readonly value: T; readonly payload: RedisCachePayload }
+  | Exclude<CacheGetResult<T>, { readonly status: "hit" }>;
+
 export type RemoteCacheGetResult<T> =
-  | CacheGetResult<T>
+  | RedisCacheGetResult<T>
   | { readonly status: "error"; readonly operation: "read" };

@@ -93,7 +93,15 @@ export interface RedisInvalidationRequest {
  * failover, restore, or external deletion removes its prior publication fence.
  */
 export interface DialCacheRedisClient {
-  /** Atomically read and validate a value against its watermark when tracked. */
+  /**
+   * Atomically read and validate a value against its watermark when tracked.
+   *
+   * A non-null payload is transferred to DialCache. A returned Buffer must
+   * remain stable and must not be mutated, pooled, or reused after this method
+   * settles; DialCache may retain it beyond the request for best-effort shadow
+   * deserialization. Adapters that recycle response storage must return a
+   * dedicated Buffer.
+   */
   read(request: RedisReadRequest, context?: RedisReadContext): Awaitable<RedisCachePayload | null>;
   /** Atomically write using server time. False means invalidation blocked the write. */
   write(request: RedisWriteRequest): Awaitable<boolean>;

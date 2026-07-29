@@ -13,6 +13,8 @@ export type {
   MetricErrorKind,
   MetricLayer,
   SerializationMetricLabels,
+  ShadowValidationMetricLabels,
+  ShadowValidationOutcome,
 } from "./metrics.js";
 export {
   DialCacheError,
@@ -30,6 +32,7 @@ export type {
   CoalescingState,
   GetOrLoadOptions,
   ProcessCoalescingState,
+  ShadowComparator,
 } from "./dialcache.js";
 export { DialCacheKey, invalidationPrefix, normalizeArgs, redisClusterHashTag } from "./key.js";
 export type { DialCacheKeyInit } from "./key.js";
