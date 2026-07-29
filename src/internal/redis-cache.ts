@@ -8,6 +8,7 @@ import type { DialCacheRedisClient, RedisCachePayload } from "../redis-client.js
 import { JsonSerializer, type Serializer } from "../serializer.js";
 import type { RedisCacheGetResult } from "./cache-result.js";
 import { assertValidDeadlineMs, withMonotonicDeadline } from "./deadline.js";
+import { cacheTtlSecToMs } from "./duration.js";
 import { fetchKeyConfig, resolveLayerConfigResult, type ResolvedLayerConfig } from "./runtime-config.js";
 
 export interface RedisConfig {
@@ -141,6 +142,7 @@ export class RedisCache {
     if (ttlSec === null) {
       return true;
     }
+    const cacheTtlMs = cacheTtlSecToMs(ttlSec);
 
     const start = performance.now();
     let serialized: string | Buffer;
@@ -155,10 +157,6 @@ export class RedisCache {
     this.recordMetric((metrics) => metrics.observeSize(labelsFor(key, CacheLayer.REMOTE), payloadSize(serialized)));
 
     try {
-      const cacheTtlMs = ttlSec * 1000;
-      if (!Number.isSafeInteger(cacheTtlMs)) {
-        throw new RangeError("Redis cache TTL is too large");
-      }
       const request = {
         valueKey: this.redisKey(key),
         cacheTtlMs,

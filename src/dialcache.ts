@@ -27,6 +27,11 @@ import type { RedisCachePayload } from "./redis-client.js";
 import type { Serializer } from "./serializer.js";
 import type { CacheGetResult, RemoteCacheGetResult } from "./internal/cache-result.js";
 import { MAX_TIMER_DELAY_MS, withMonotonicDeadline } from "./internal/deadline.js";
+import {
+  assertSupportedFutureBufferMs,
+  isSupportedCacheTtlSec,
+  MAX_CACHE_TTL_SEC,
+} from "./internal/duration.js";
 import { LocalCache } from "./internal/local-cache.js";
 import { deterministicShadowRampSample } from "./internal/ramp.js";
 import { RedisCache } from "./internal/redis-cache.js";
@@ -472,10 +477,11 @@ export class DialCache {
    * Request-local memoization remains unconditional, and invocations whose
    * remote layer is disabled or ramped out are not fenced by the watermark.
    *
-   * @param futureBufferMs Nonnegative safe integer; defaults to zero for backward compatibility.
+   * @param futureBufferMs Nonnegative safe integer no greater than
+   * 31,536,000,000 (365 days); defaults to zero for backward compatibility.
    */
   async invalidateRemote(keyType: string, id: Id, futureBufferMs = 0): Promise<void> {
-    assertValidFutureBufferMs(futureBufferMs);
+    assertSupportedFutureBufferMs(futureBufferMs);
 
     if (this.redisCache === null) {
       return;
@@ -1050,12 +1056,6 @@ function elapsedSeconds(startMs: number): number {
   return Math.max((performance.now() - startMs) / 1000, 0);
 }
 
-function assertValidFutureBufferMs(futureBufferMs: number): void {
-  if (!Number.isSafeInteger(futureBufferMs) || futureBufferMs < 0) {
-    throw new RangeError("DialCache invalidation futureBufferMs must be a nonnegative safe integer");
-  }
-}
-
 function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): DialCacheKeyConfig | null {
   if (config === null || config === undefined) {
     return null;
@@ -1089,8 +1089,10 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
       if (typeof ttlSec !== "number") {
         throw new TypeError(`DialCache defaultConfig ttlSec.${layer} must be a number`);
       }
-      if (!Number.isSafeInteger(ttlSec) || ttlSec <= 0) {
-        throw new RangeError(`DialCache defaultConfig ttlSec.${layer} must be a positive safe integer`);
+      if (!isSupportedCacheTtlSec(ttlSec)) {
+        throw new RangeError(
+          `DialCache defaultConfig ttlSec.${layer} must be a positive safe integer no greater than ${MAX_CACHE_TTL_SEC}`,
+        );
       }
     }
 

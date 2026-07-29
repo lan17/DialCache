@@ -32,6 +32,8 @@ const adapterKinds = [
   { kind: "valkeyGlide", name: "Valkey GLIDE" },
 ] as const;
 type AdapterKind = (typeof adapterKinds)[number]["kind"];
+const MAX_SUPPORTED_DURATION_MS = 31_536_000_000;
+const WATERMARK_TTL_MARGIN_MS = 60_000;
 
 interface Deferred<T> {
   readonly promise: Promise<T>;
@@ -474,6 +476,18 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       await expect(client.raw.write(valueKey, Number.NaN, 0, "value")).rejects.toThrow("invalid DialCache TTL");
       await expect(client.raw.write(valueKey, Number.POSITIVE_INFINITY, 0, "value")).rejects.toThrow("invalid DialCache TTL");
       await expect(client.raw.write(valueKey, Number.NEGATIVE_INFINITY, 0, "value")).rejects.toThrow("invalid DialCache TTL");
+      await expect(
+        client.raw.write(valueKey, MAX_SUPPORTED_DURATION_MS + 1, 0, "value"),
+      ).rejects.toThrow("invalid DialCache TTL");
+      await expect(
+        client.raw.writeTracked(
+          valueKey,
+          watermarkKey,
+          Number.MAX_SAFE_INTEGER,
+          0,
+          "value",
+        ),
+      ).rejects.toThrow("invalid DialCache TTL");
       await expect(client.raw.write(valueKey, 1_000, notANumber, "value")).rejects.toThrow("invalid DialCache payload encoding");
       await expect(client.raw.write(valueKey, 1_000, Number.NaN, "value")).rejects.toThrow("invalid DialCache payload encoding");
       await expect(client.raw.write(valueKey, 1_000, 2, "value")).rejects.toThrow("invalid DialCache payload encoding");
@@ -486,8 +500,63 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       await expect(client.raw.invalidate(watermarkKey, Number.NEGATIVE_INFINITY)).rejects.toThrow(
         "invalid DialCache future buffer",
       );
+      await expect(
+        client.raw.invalidate(watermarkKey, MAX_SUPPORTED_DURATION_MS + 1),
+      ).rejects.toThrow("invalid DialCache future buffer");
+      await expect(
+        client.raw.invalidate(watermarkKey, Number.MAX_SAFE_INTEGER),
+      ).rejects.toThrow("invalid DialCache future buffer");
 
       expect(await admin.exists([valueKey, watermarkKey])).toBe(0);
+    });
+
+    it("accepts maximum raw protocol durations and keeps derived TTLs in range", async () => {
+      if (client === undefined || admin === undefined) {
+        throw new Error("Redis test clients did not start");
+      }
+      const valueKey = "maximum-args:{item:untracked}:value";
+      expect(
+        await client.raw.write(valueKey, MAX_SUPPORTED_DURATION_MS, 0, "value"),
+      ).toBe(1);
+      expect(await admin.pTTL(valueKey)).toBeGreaterThan(
+        MAX_SUPPORTED_DURATION_MS - 1_000,
+      );
+      expect(await admin.pTTL(valueKey)).toBeLessThanOrEqual(
+        MAX_SUPPORTED_DURATION_MS,
+      );
+
+      const trackedValueKey = "maximum-args:{item:tracked}:value";
+      const trackedWatermarkKey = "maximum-args:{item:tracked}:watermark";
+      expect(
+        await client.raw.writeTracked(
+          trackedValueKey,
+          trackedWatermarkKey,
+          MAX_SUPPORTED_DURATION_MS,
+          0,
+          "value",
+        ),
+      ).toBe(1);
+      expect(await admin.pTTL(trackedWatermarkKey)).toBeGreaterThan(
+        MAX_SUPPORTED_DURATION_MS + WATERMARK_TTL_MARGIN_MS - 1_000,
+      );
+      expect(await admin.pTTL(trackedWatermarkKey)).toBeLessThanOrEqual(
+        MAX_SUPPORTED_DURATION_MS + WATERMARK_TTL_MARGIN_MS,
+      );
+
+      const invalidationKey = "maximum-args:{item:invalidation}:watermark";
+      const beforeMs = (await admin.time()).getTime();
+      expect(
+        await client.raw.invalidate(invalidationKey, MAX_SUPPORTED_DURATION_MS),
+      ).toBe(1);
+      expect(Number(await admin.get(invalidationKey))).toBeGreaterThanOrEqual(
+        beforeMs + MAX_SUPPORTED_DURATION_MS,
+      );
+      expect(await admin.pTTL(invalidationKey)).toBeGreaterThan(
+        MAX_SUPPORTED_DURATION_MS + WATERMARK_TTL_MARGIN_MS - 1_000,
+      );
+      expect(await admin.pTTL(invalidationKey)).toBeLessThanOrEqual(
+        MAX_SUPPORTED_DURATION_MS + WATERMARK_TTL_MARGIN_MS,
+      );
     });
 
     it("rounds fractional raw protocol durations upward", async () => {

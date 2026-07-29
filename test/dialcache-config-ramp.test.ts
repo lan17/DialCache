@@ -6,12 +6,14 @@ import {
   DialCacheKey,
   DialCacheKeyConfig,
   type LayerConfig,
+  type Serializer,
 } from "../src/index.js";
 import { deterministicRampSample, deterministicShadowRampSample } from "../src/internal/ramp.js";
 import { FakeRedis } from "./fake-redis.js";
 
 const configFor = (ttlSec: Partial<Record<CacheLayer, number>>, ramp: Partial<Record<CacheLayer, number>>) =>
   new DialCacheKeyConfig({ ttlSec, ramp });
+const MAX_CACHE_TTL_SEC = 31_536_000;
 
 function idForRamp(useCase: string, layer: CacheLayer, ramp: number, enabled: boolean): string {
   for (let index = 0; index < 10_000; index += 1) {
@@ -280,6 +282,18 @@ describe("DialCache runtime config and ramp controls", () => {
     ["negative TTL", new DialCacheKeyConfig({ ttlSec: { [CacheLayer.LOCAL]: -1 } }), RangeError, "positive safe integer"],
     ["fractional TTL", new DialCacheKeyConfig({ ttlSec: { [CacheLayer.LOCAL]: 0.5 } }), RangeError, "positive safe integer"],
     ["non-finite TTL", new DialCacheKeyConfig({ ttlSec: { [CacheLayer.LOCAL]: Number.NaN } }), RangeError, "positive safe integer"],
+    [
+      "over-maximum local TTL",
+      new DialCacheKeyConfig({ ttlSec: { [CacheLayer.LOCAL]: MAX_CACHE_TTL_SEC + 1 } }),
+      RangeError,
+      `no greater than ${MAX_CACHE_TTL_SEC}`,
+    ],
+    [
+      "maximum-safe-integer remote TTL",
+      new DialCacheKeyConfig({ ttlSec: { [CacheLayer.REMOTE]: Number.MAX_SAFE_INTEGER } }),
+      RangeError,
+      `no greater than ${MAX_CACHE_TTL_SEC}`,
+    ],
     ["negative ramp", new DialCacheKeyConfig({ ramp: { [CacheLayer.LOCAL]: -1 } }), RangeError, "between 0 and 100"],
     ["over-100 ramp", new DialCacheKeyConfig({ ramp: { [CacheLayer.LOCAL]: 101 } }), RangeError, "between 0 and 100"],
     ["non-finite ramp", new DialCacheKeyConfig({ ramp: { [CacheLayer.LOCAL]: Number.POSITIVE_INFINITY } }), RangeError, "between 0 and 100"],
@@ -622,10 +636,23 @@ describe("DialCache runtime config and ramp controls", () => {
     expect(nanConfiguredSecond).toEqual({ userId: "789", calls: 2 });
   });
 
-  it("treats non-finite and fractional TTLs as invalid config", async () => {
+  it("rejects unsupported runtime TTLs before cache or serialization work", async () => {
     // Given invalid TTL values are configured for local and remote layers.
     const redis = new FakeRedis();
-    const badTtls = [Number.NaN, Number.POSITIVE_INFINITY, 0.5];
+    type Value = { readonly userId: string; readonly ttl: string; readonly calls: number };
+    const serializer: Serializer<Value> = {
+      dump: vi.fn(async (value) => JSON.stringify(value)),
+      load: vi.fn(async (value) =>
+        JSON.parse(Buffer.isBuffer(value) ? value.toString("utf8") : value) as Value
+      ),
+    };
+    const badTtls = [
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      0.5,
+      MAX_CACHE_TTL_SEC + 1,
+      Number.MAX_SAFE_INTEGER,
+    ];
 
     // When each cached function is called twice.
     for (const ttl of badTtls) {
@@ -641,6 +668,7 @@ describe("DialCache runtime config and ramp controls", () => {
         keyType: "user_id",
         useCase: `InvalidTtl${String(ttl)}`,
         cacheKey: (userId) => userId,
+        serializer,
       });
 
       const first = await dialcache.enable(async () => await getUser("123"));
@@ -650,9 +678,11 @@ describe("DialCache runtime config and ramp controls", () => {
       expect(second.calls).toBe(2);
     }
 
-    // Then no invalid TTL reaches Redis.
+    // Then no invalid TTL reaches a cache layer or serializer.
     expect(redis.getCalls).toBe(0);
     expect(redis.setCalls).toBe(0);
+    expect(serializer.dump).not.toHaveBeenCalled();
+    expect(serializer.load).not.toHaveBeenCalled();
   });
 
   it("disables missing local config while allowing the remote layer to work", async () => {
