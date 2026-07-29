@@ -90,16 +90,57 @@ export class LocalCache {
     });
   }
 
-  async put<T>(key: DialCacheKey, value: T, config?: { readonly ttlSec: number }): Promise<void> {
+  async put<T>(
+    key: DialCacheKey,
+    value: T,
+    config?: { readonly ttlSec: number },
+    canPublish?: () => boolean,
+  ): Promise<void> {
+    if (this.cache === null) {
+      return;
+    }
     const ttlSec = config?.ttlSec ?? await this.resolveLocalTtlSec(key);
     if (ttlSec === null) {
+      return;
+    }
+    if (canPublish !== undefined && !canPublish()) {
       return;
     }
 
     // lru-cache expires when age > ttl, while DialCache historically expired
     // when its integer-millisecond clock reached the configured boundary.
     const ttlMs = cacheTtlSecToMs(ttlSec) - 1;
-    this.cache?.set(key.urn, { value }, { size: 1, ttl: ttlMs });
+    // Keep the publication guard and set synchronous so an invalidation either
+    // deletes an already-published value or is observed before this write.
+    this.cache.set(key.urn, { value }, { size: 1, ttl: ttlMs });
+  }
+
+  deleteTrackedPrefix(prefix: string): number {
+    if (this.cache === null) {
+      return 0;
+    }
+    let deleted = 0;
+    for (const urn of this.cache.keys()) {
+      if (urn.startsWith(prefix) && this.cache.delete(urn)) {
+        deleted += 1;
+      }
+    }
+    return deleted;
+  }
+
+  clearTracked(): number {
+    if (this.cache === null) {
+      return 0;
+    }
+    let deleted = 0;
+    for (const urn of this.cache.keys()) {
+      // Tracked URNs begin with DialCache's reserved Redis hash tag. Namespace
+      // and untracked key components cannot contain a literal opening brace.
+      if (urn.startsWith("{") && this.cache.delete(urn)) {
+        deleted += 1;
+      }
+    }
+    return deleted;
   }
 
   private async resolveLocalTtlSec(key: DialCacheKey): Promise<number | null> {

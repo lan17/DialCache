@@ -1,5 +1,7 @@
+import { decodeRedisInvalidationEvent } from "./internal/invalidation-event.js";
 import { decodeRedisPayload, redisPayloadEncoding } from "./internal/redis-payload.js";
 import {
+  INVALIDATE_AND_PUBLISH_CACHE_SCRIPT,
   INVALIDATE_CACHE_SCRIPT,
   READ_CACHE_SCRIPT,
   READ_TRACKED_CACHE_SCRIPT,
@@ -10,7 +12,10 @@ import {
   validateRedisScriptInvalidationReply,
   validateRedisScriptWriteReply,
 } from "./internal/redis-script-reply.js";
-import { DialCacheRedisPayloadError, type DialCacheRedisClient } from "./redis-client.js";
+import {
+  DialCacheRedisPayloadError,
+  type DialCacheCoordinatedRedisClient,
+} from "./redis-client.js";
 
 type ValkeyGlideString = string | Buffer;
 
@@ -47,7 +52,7 @@ interface DialCacheGlideScripts<TScript> {
   readonly invalidate: TScript;
 }
 
-export interface ValkeyGlideDialCacheClient extends DialCacheRedisClient {
+export interface ValkeyGlideDialCacheClient extends DialCacheCoordinatedRedisClient {
   /** Release the adapter-owned GLIDE Script handles. Does not close the wrapped GLIDE client. */
   dispose(): void;
 }
@@ -61,6 +66,12 @@ export interface ValkeyGlideDialCacheClient extends DialCacheRedisClient {
  * client waiting but is not server-side command cancellation. GLIDE's current
  * script API has no per-invocation signal, so DialCache's core read deadline
  * may return before this adapter's invocation settles.
+ *
+ * This adapter supports coordinated publication. It does not create a
+ * first-party GLIDE invalidation coordinator because the pinned GLIDE API does
+ * not expose the subscription-health lifecycle required to detect every known
+ * gap. Applications may supply their own backend-neutral coordinator only when
+ * they can provide that health contract.
  */
 export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScriptHandle, TDecoder>(
   client: ValkeyGlideScriptingClient<TScript, TDecoder>,
@@ -73,6 +84,7 @@ export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScri
     writeTracked: new glide.Script(WRITE_TRACKED_CACHE_SCRIPT),
     invalidate: new glide.Script(INVALIDATE_CACHE_SCRIPT),
   };
+  let invalidateAndPublishScript: TScript | null = null;
   let disposed = false;
   let activeInvocations = 0;
 
@@ -125,6 +137,29 @@ export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScri
       );
       validateRedisScriptInvalidationReply(raw);
     },
+    async invalidateAndPublish(request) {
+      if (disposed) {
+        throw new Error("Valkey GLIDE DialCache client is disposed");
+      }
+      invalidateAndPublishScript ??= new glide.Script(INVALIDATE_AND_PUBLISH_CACHE_SCRIPT);
+      const raw = await invoke(
+        invalidateAndPublishScript,
+        [request.watermarkKey],
+        [
+          String(request.futureBufferMs),
+          request.channel,
+          request.namespace,
+          request.keyType,
+          request.id,
+        ],
+      );
+      if (!Buffer.isBuffer(raw)) {
+        throw new DialCacheRedisPayloadError(
+          "Invalid DialCache Redis coordinated invalidation reply",
+        );
+      }
+      return decodeRedisInvalidationEvent(raw, request);
+    },
     dispose() {
       if (disposed) {
         return;
@@ -136,6 +171,7 @@ export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScri
       for (const script of Object.values(scripts)) {
         script.release();
       }
+      invalidateAndPublishScript?.release();
     },
   };
 }

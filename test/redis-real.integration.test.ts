@@ -7,6 +7,9 @@ import {
   CacheLayer,
   DialCache,
   DialCacheKeyConfig,
+  type DialCacheCoordinatedRedisClient,
+  type DialCacheInvalidationCoordinator,
+  type DialCacheLocalInvalidation,
   type DialCacheMetricsAdapter,
   type DialCacheRedisClient,
   type Serializer,
@@ -16,7 +19,15 @@ import {
   WRITE_CACHE_SCRIPT,
   WRITE_TRACKED_CACHE_SCRIPT,
 } from "../src/internal/redis-scripts.js";
-import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "../src/node-redis.js";
+import {
+  createNodeRedisDialCacheClient,
+  createNodeRedisDialCacheInvalidationCoordinator,
+  dialcacheRedisScripts,
+} from "../src/node-redis.js";
+import {
+  MAX_REDIS_INVALIDATION_EVENT_BYTES,
+  redisInvalidationChannel,
+} from "../src/redis-protocol.js";
 import {
   createValkeyGlideDialCacheClient,
   type ValkeyGlideDialCacheClient,
@@ -40,6 +51,11 @@ const remoteOnly = new DialCacheKeyConfig({
   ramp: { [CacheLayer.REMOTE]: 100 },
 });
 
+const localOnly = new DialCacheKeyConfig({
+  ttlSec: { [CacheLayer.LOCAL]: 60 },
+  ramp: { [CacheLayer.LOCAL]: 100 },
+});
+
 const createTestClient = (url: string) => createClient({ url, scripts: dialcacheRedisScripts });
 type NodeRedisTestClient = ReturnType<typeof createTestClient>;
 
@@ -61,7 +77,7 @@ interface RawRedisScriptClient {
 }
 
 interface RedisAdapterHarness {
-  readonly adapter: DialCacheRedisClient;
+  readonly adapter: DialCacheCoordinatedRedisClient;
   /** Exercise Lua argument validation that the semantic adapter cannot represent. */
   readonly raw: RawRedisScriptClient;
   dispose(): void;
@@ -141,12 +157,52 @@ function encodeFrame(payload: string | Buffer, encoding: number, createdAtMs = D
   return Buffer.concat([Buffer.from([version]), timestamp, Buffer.from([encoding]), Buffer.from(payload)]);
 }
 
+function nextInvalidation(
+  coordinator: DialCacheInvalidationCoordinator,
+  expectedId: string,
+): {
+    readonly promise: Promise<DialCacheLocalInvalidation>;
+    cancel(): void;
+  } {
+  let removeListener = (): void => undefined;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const promise = new Promise<DialCacheLocalInvalidation>((resolve, reject) => {
+    timeout = setTimeout(
+      () => reject(new Error(`Timed out waiting for DialCache invalidation ${expectedId}`)),
+      5_000,
+    );
+    removeListener = coordinator.addListener({
+      onInvalidation(invalidation) {
+        if (invalidation.id !== expectedId || invalidation.source !== "event") {
+          return;
+        }
+        if (timeout !== undefined) {
+          clearTimeout(timeout);
+        }
+        removeListener();
+        resolve(invalidation);
+      },
+      onStateChange: () => undefined,
+    });
+  });
+  return {
+    promise,
+    cancel() {
+      if (timeout !== undefined) {
+        clearTimeout(timeout);
+      }
+      removeListener();
+    },
+  };
+}
+
 describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
   let container: StartedTestContainer | undefined;
   // This connection controls and inspects server state; cache operations use the selected adapter harness.
   let admin: NodeRedisTestClient | undefined;
   let glide: valkeyGlide.GlideClient | undefined;
   let harnesses: Record<AdapterKind, RedisAdapterHarness> | undefined;
+  let redisUrl: string | undefined;
 
   beforeAll(async () => {
     container = await new GenericContainer(image)
@@ -155,7 +211,8 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       .start();
     const host = container.getHost();
     const port = container.getMappedPort(6379);
-    admin = createTestClient(`redis://${host}:${port}`);
+    redisUrl = `redis://${host}:${port}`;
+    admin = createTestClient(redisUrl);
     admin.on("error", () => undefined);
     await admin.connect();
     glide = await valkeyGlide.GlideClient.createClient({ addresses: [{ host, port }] });
@@ -313,6 +370,137 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
           futureBufferMs: 0,
         }),
       ).resolves.toBeUndefined();
+
+      const coordinatedWatermarkKey = "script-recovery:{item:coordinated}:watermark";
+      const coordinatedRequest = {
+        watermarkKey: coordinatedWatermarkKey,
+        futureBufferMs: 10,
+        channel: redisInvalidationChannel("script-recovery"),
+        namespace: "script-recovery",
+        keyType: "item",
+        id: "coordinated",
+      } as const;
+      await expect(scriptClient.invalidateAndPublish(coordinatedRequest)).resolves.toEqual(
+        expect.objectContaining({
+          version: 1,
+          namespace: "script-recovery",
+          keyType: "item",
+          id: "coordinated",
+        }),
+      );
+      await admin.scriptFlush();
+      await expect(
+        scriptClient.invalidateAndPublish({
+          ...coordinatedRequest,
+          watermarkKey: "script-recovery:{item:coordinated-after-flush}:watermark",
+          id: "coordinated-after-flush",
+        }),
+      ).resolves.toEqual(
+        expect.objectContaining({
+          version: 1,
+          namespace: "script-recovery",
+          keyType: "item",
+          id: "coordinated-after-flush",
+        }),
+      );
+    });
+
+    it("publishes coordinated invalidations without subscribers and returns the effective watermark", async () => {
+      if (client === undefined || admin === undefined) {
+        throw new Error("Redis test clients did not start");
+      }
+      const namespace = `coordinated-${kind}`;
+      const channel = redisInvalidationChannel(namespace);
+      const watermarkKey = `coordinated:{${namespace}:user_id:123}:watermark`;
+      const futureBufferMs = 5_000;
+      const first = await client.adapter.invalidateAndPublish({
+        watermarkKey,
+        futureBufferMs,
+        channel,
+        namespace,
+        keyType: "user_id",
+        id: "123",
+      });
+
+      expect(first).toEqual({
+        version: 1,
+        namespace,
+        keyType: "user_id",
+        id: "123",
+        effectiveWatermarkMs: expect.any(String),
+        redisNowMs: expect.any(String),
+      });
+      expect(Number(first.effectiveWatermarkMs)).toBeGreaterThanOrEqual(
+        Number(first.redisNowMs) + futureBufferMs,
+      );
+      expect(await admin.get(watermarkKey)).toBe(first.effectiveWatermarkMs);
+      expect(await admin.pTTL(watermarkKey)).toBeGreaterThan(60_000);
+
+      const redisNowMs = (await admin.time()).getTime();
+      const longerWatermarkMs = redisNowMs + 5_000;
+      await admin.set(watermarkKey, String(longerWatermarkMs), { PX: 120_000 });
+      const ttlBefore = await admin.pTTL(watermarkKey);
+
+      const extended = await client.adapter.invalidateAndPublish({
+        watermarkKey,
+        futureBufferMs: 0,
+        channel,
+        namespace,
+        keyType: "user_id",
+        id: "123",
+      });
+
+      expect(extended.effectiveWatermarkMs).toBe(String(longerWatermarkMs));
+      expect(await admin.get(watermarkKey)).toBe(String(longerWatermarkMs));
+      expect(await admin.pTTL(watermarkKey)).toBeGreaterThan(ttlBefore - 1_000);
+      expect(await admin.pTTL(watermarkKey)).toBeLessThanOrEqual(ttlBefore);
+    });
+
+    it("rejects unsafe coordinated events before mutating their watermarks", async () => {
+      if (client === undefined || admin === undefined) {
+        throw new Error("Redis test clients did not start");
+      }
+      const namespace = `coordinated-safety-${kind}`;
+      const channel = redisInvalidationChannel(namespace);
+      const oversizedWatermarkKey = `coordinated-safety:{${kind}:oversized}:watermark`;
+      await expect(
+        client.adapter.invalidateAndPublish({
+          watermarkKey: oversizedWatermarkKey,
+          futureBufferMs: 0,
+          channel,
+          namespace,
+          keyType: "user_id",
+          id: "x".repeat(MAX_REDIS_INVALIDATION_EVENT_BYTES + 1_024),
+        }),
+      ).rejects.toThrow(/invalidation event is too large/i);
+      expect(await admin.exists(oversizedWatermarkKey)).toBe(0);
+
+      const futureWatermarkKey = `coordinated-safety:{${kind}:future}:watermark`;
+      const redisNowMs = (await admin.time()).getTime();
+      const unsupportedFutureWatermarkMs =
+        redisNowMs + MAX_SUPPORTED_DURATION_MS + 60_000;
+      await admin.set(futureWatermarkKey, String(unsupportedFutureWatermarkMs), {
+        PX: 120_000,
+      });
+      const ttlBefore = await admin.pTTL(futureWatermarkKey);
+
+      await expect(
+        client.adapter.invalidateAndPublish({
+          watermarkKey: futureWatermarkKey,
+          futureBufferMs: 0,
+          channel,
+          namespace,
+          keyType: "user_id",
+          id: "future",
+        }),
+      ).rejects.toThrow(/invalid DialCache watermark/i);
+      expect(await admin.get(futureWatermarkKey)).toBe(
+        String(unsupportedFutureWatermarkMs),
+      );
+      expect(await admin.pTTL(futureWatermarkKey)).toBeGreaterThan(
+        ttlBefore - 1_000,
+      );
+      expect(await admin.pTTL(futureWatermarkKey)).toBeLessThanOrEqual(ttlBefore);
     });
 
     it("treats every invalid read frame and watermark state as a miss", async () => {
@@ -835,5 +1023,248 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
         watermarkKey: glideTrackedWatermarkKey,
       }),
     ).resolves.toBe("tracked");
+  });
+
+  it("delivers coordinated publications from both adapters to a node-redis peer", async () => {
+    if (admin === undefined || harnesses === undefined || redisUrl === undefined) {
+      throw new Error("Redis test clients did not start");
+    }
+    await admin.flushAll();
+    const namespace = "coordinated-peer";
+    const subscriber = createClient({ url: redisUrl });
+    subscriber.on("error", () => undefined);
+    await subscriber.connect();
+    const coordinator = await createNodeRedisDialCacheInvalidationCoordinator(subscriber, {
+      namespace,
+    });
+    const peerCache = new DialCache({
+      namespace,
+      localMaxSize: 100,
+      redis: {
+        client: harnesses.nodeRedis.adapter,
+        coordinator,
+        readTimeoutMs: 10_000,
+      },
+    });
+    const versions = new Map<string, number>();
+    const calls = new Map<string, number>();
+    const getUser = peerCache.cached(async (id: string) => {
+      const version = versions.get(id);
+      if (version === undefined) {
+        throw new Error(`Missing test version for ${id}`);
+      }
+      const nextCalls = (calls.get(id) ?? 0) + 1;
+      calls.set(id, nextCalls);
+      return { id, version, calls: nextCalls };
+    }, {
+      keyType: "user_id",
+      useCase: "CoordinatedPeerLocal",
+      cacheKey: (id) => id,
+      trackForInvalidation: true,
+      defaultConfig: localOnly,
+    });
+
+    try {
+      expect(coordinator.state).toBe("ready");
+      for (const { kind } of adapterKinds) {
+        const id = `${kind}-publisher`;
+        versions.set(id, 1);
+        expect(await peerCache.enable(async () => await getUser(id))).toEqual({
+          id,
+          version: 1,
+          calls: 1,
+        });
+        expect(await peerCache.enable(async () => await getUser(id))).toEqual({
+          id,
+          version: 1,
+          calls: 1,
+        });
+        versions.set(id, 2);
+        const delivery = nextInvalidation(coordinator, id);
+        try {
+          const event = await harnesses[kind].adapter.invalidateAndPublish({
+            watermarkKey: `coordinated-peer:{${namespace}:user_id:${id}}:watermark`,
+            futureBufferMs: 5_000,
+            channel: coordinator.channel,
+            namespace,
+            keyType: "user_id",
+            id,
+          });
+          const received = await delivery.promise;
+
+          expect(received).toEqual({
+            namespace,
+            keyType: "user_id",
+            id,
+            remainingMs: Number(event.effectiveWatermarkMs) - Number(event.redisNowMs),
+            source: "event",
+          });
+          expect(await peerCache.enable(async () => await getUser(id))).toEqual({
+            id,
+            version: 2,
+            calls: 2,
+          });
+          versions.set(id, 3);
+          expect(await peerCache.enable(async () => await getUser(id))).toEqual({
+            id,
+            version: 3,
+            calls: 3,
+          });
+        } finally {
+          delivery.cancel();
+        }
+      }
+    } finally {
+      peerCache.dispose();
+      await coordinator.dispose();
+      await subscriber.quit();
+    }
+  });
+
+  it("retains the watermark and origin local fence when ACLs reject PUBLISH", async () => {
+    if (admin === undefined || harnesses === undefined || redisUrl === undefined) {
+      throw new Error("Redis test clients did not start");
+    }
+    await admin.flushAll();
+    const username = "dialcache-acl-publisher";
+    const password = "dialcache-acl-password";
+    await admin.sendCommand([
+      "ACL",
+      "SETUSER",
+      username,
+      "reset",
+      "on",
+      `>${password}`,
+      "~*",
+      "&*",
+      "+@all",
+      "-publish",
+    ]);
+
+    const restrictedUrl = new URL(redisUrl);
+    restrictedUrl.username = username;
+    restrictedUrl.password = password;
+    const publisher = createTestClient(restrictedUrl.toString());
+    publisher.on("error", () => undefined);
+    const originSubscriber = createClient({ url: redisUrl });
+    originSubscriber.on("error", () => undefined);
+    const peerSubscriber = createClient({ url: redisUrl });
+    peerSubscriber.on("error", () => undefined);
+    let originCoordinator:
+      | Awaited<ReturnType<typeof createNodeRedisDialCacheInvalidationCoordinator>>
+      | undefined;
+    let peerCoordinator:
+      | Awaited<ReturnType<typeof createNodeRedisDialCacheInvalidationCoordinator>>
+      | undefined;
+    let originCache: DialCache | undefined;
+    let removePeerListener = (): void => undefined;
+
+    try {
+      await Promise.all([
+        publisher.connect(),
+        originSubscriber.connect(),
+        peerSubscriber.connect(),
+      ]);
+      const namespace = "coordinated-acl";
+      [originCoordinator, peerCoordinator] = await Promise.all([
+        createNodeRedisDialCacheInvalidationCoordinator(originSubscriber, { namespace }),
+        createNodeRedisDialCacheInvalidationCoordinator(peerSubscriber, { namespace }),
+      ]);
+      const peerEvents: Array<DialCacheLocalInvalidation> = [];
+      removePeerListener = peerCoordinator.addListener({
+        onInvalidation(invalidation) {
+          if (invalidation.source === "event") {
+            peerEvents.push(invalidation);
+          }
+        },
+        onStateChange: () => undefined,
+      });
+      originCache = new DialCache({
+        namespace,
+        localMaxSize: 100,
+        logger: {
+          debug: () => undefined,
+          warn: () => undefined,
+          error: () => undefined,
+        },
+        redis: {
+          client: createNodeRedisDialCacheClient(publisher),
+          coordinator: originCoordinator,
+          readTimeoutMs: 10_000,
+        },
+      });
+      const id = "denied-publish";
+      const watermarkKey = `{${namespace}:user_id:${id}}#watermark`;
+      let version = 1;
+      let calls = 0;
+      const getUser = originCache.cached(async () => ({
+        id,
+        version,
+        calls: ++calls,
+      }), {
+        keyType: "user_id",
+        useCase: "AclDeniedPublication",
+        cacheKey: () => id,
+        trackForInvalidation: true,
+        defaultConfig: localOnly,
+      });
+
+      expect(originCoordinator.state).toBe("ready");
+      expect(peerCoordinator.state).toBe("ready");
+      expect(await originCache.enable(getUser)).toEqual({ id, version: 1, calls: 1 });
+      expect(await originCache.enable(getUser)).toEqual({ id, version: 1, calls: 1 });
+
+      version = 2;
+      const redisNowBeforeMs = (await admin.time()).getTime();
+      await expect(
+        originCache.invalidateRemote("user_id", id, 5_000),
+      ).rejects.toThrow(/ACL failure|can't run this command|NOPERM|permission/i);
+
+      const effectiveWatermarkMs = Number(await admin.get(watermarkKey));
+      expect(Number.isSafeInteger(effectiveWatermarkMs)).toBe(true);
+      expect(effectiveWatermarkMs).toBeGreaterThanOrEqual(redisNowBeforeMs + 5_000);
+      expect(await admin.pTTL(watermarkKey)).toBeGreaterThan(60_000);
+
+      // A later valid publication is a deterministic Pub/Sub delivery barrier:
+      // if the denied script had emitted the target event, the peer would have
+      // processed it before this sentinel from the same Redis server.
+      const sentinelId = "delivery-barrier";
+      const sentinel = nextInvalidation(peerCoordinator, sentinelId);
+      try {
+        await harnesses.nodeRedis.adapter.invalidateAndPublish({
+          watermarkKey: `{${namespace}:user_id:${sentinelId}}#watermark`,
+          futureBufferMs: 0,
+          channel: peerCoordinator.channel,
+          namespace,
+          keyType: "user_id",
+          id: sentinelId,
+        });
+        await sentinel.promise;
+      } finally {
+        sentinel.cancel();
+      }
+      expect(
+        peerEvents.filter((event) => event.id === id),
+      ).toEqual([]);
+
+      // The provisional local invalidation is intentionally not rolled back
+      // when the Redis script fails after advancing the durable watermark.
+      expect(await originCache.enable(getUser)).toEqual({ id, version: 2, calls: 2 });
+      version = 3;
+      expect(await originCache.enable(getUser)).toEqual({ id, version: 3, calls: 3 });
+    } finally {
+      originCache?.dispose();
+      removePeerListener();
+      await Promise.allSettled([
+        originCoordinator?.dispose(),
+        peerCoordinator?.dispose(),
+      ]);
+      await Promise.allSettled([
+        originSubscriber.isOpen ? originSubscriber.quit() : Promise.resolve(),
+        peerSubscriber.isOpen ? peerSubscriber.quit() : Promise.resolve(),
+        publisher.isOpen ? publisher.quit() : Promise.resolve(),
+      ]);
+      await admin.sendCommand(["ACL", "DELUSER", username]);
+    }
   });
 });

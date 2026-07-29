@@ -1,6 +1,8 @@
 import type {
-  DialCacheRedisClient,
+  DialCacheCoordinatedRedisClient,
+  DialCacheInvalidationEventV1,
   RedisCachePayload,
+  RedisCoordinatedInvalidationRequest,
   RedisInvalidationRequest,
   RedisReadRequest,
   RedisWriteRequest,
@@ -17,7 +19,7 @@ interface StoredValue {
   expiresAtMs: number;
 }
 
-export class FakeRedis implements DialCacheRedisClient {
+export class FakeRedis implements DialCacheCoordinatedRedisClient {
   readonly values = new Map<string, StoredValue>();
   getCalls = 0;
   mGetCalls = 0;
@@ -26,6 +28,9 @@ export class FakeRedis implements DialCacheRedisClient {
   failSet = false;
   failWatermarkGet = false;
   getGate: Promise<void> | null = null;
+  coordinatedInvalidationGate: Promise<void> | null = null;
+  readonly coordinatedInvalidations: RedisCoordinatedInvalidationRequest[] = [];
+  readonly publishedInvalidations: DialCacheInvalidationEventV1[] = [];
 
   async read({ valueKey, watermarkKey }: RedisReadRequest): Promise<RedisCachePayload | null> {
     if (watermarkKey === undefined) {
@@ -79,6 +84,31 @@ export class FakeRedis implements DialCacheRedisClient {
       watermark - Date.now() + WATERMARK_TTL_MARGIN_MS,
     );
     this.storeWatermark(watermarkKey, watermark, desiredTtlMs);
+  }
+
+  async invalidateAndPublish(
+    request: RedisCoordinatedInvalidationRequest,
+  ): Promise<DialCacheInvalidationEventV1> {
+    this.coordinatedInvalidations.push(request);
+    if (this.coordinatedInvalidationGate !== null) {
+      await this.coordinatedInvalidationGate;
+    }
+    const redisNowMs = Date.now();
+    await this.invalidate(request);
+    const effectiveWatermarkMs = this.readWatermarkValue(request.watermarkKey);
+    if (effectiveWatermarkMs === null) {
+      throw new Error("missing coordinated invalidation watermark");
+    }
+    const event = {
+      version: 1,
+      namespace: request.namespace,
+      keyType: request.keyType,
+      id: request.id,
+      effectiveWatermarkMs: String(Math.ceil(effectiveWatermarkMs)),
+      redisNowMs: String(redisNowMs),
+    } as const;
+    this.publishedInvalidations.push(event);
+    return event;
   }
 
   raw(key: string): Buffer {

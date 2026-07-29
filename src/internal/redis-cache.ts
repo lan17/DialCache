@@ -2,21 +2,28 @@ import { performance } from "node:perf_hooks";
 
 import { CacheLayer, type CacheConfigProvider, type DialCacheKeyConfig } from "../config.js";
 import { RedisReadTimeoutError } from "../errors.js";
+import type {
+  DialCacheInvalidationCoordinator,
+  DialCacheInvalidationEventV1,
+} from "../invalidation.js";
 import { invalidationPrefix, redisClusterHashTag, type DialCacheKey } from "../key.js";
 import { labelsFor, type DialCacheMetricsAdapter, type MetricErrorKind } from "../metrics.js";
-import type { DialCacheRedisClient, RedisCachePayload } from "../redis-client.js";
+import type {
+  DialCacheCoordinatedRedisClient,
+  DialCacheRedisClient,
+  RedisCachePayload,
+} from "../redis-client.js";
 import { JsonSerializer, type Serializer } from "../serializer.js";
 import type { CacheGetResult } from "./cache-result.js";
 import { assertValidDeadlineMs, withMonotonicDeadline } from "./deadline.js";
 import { cacheTtlSecToMs } from "./duration.js";
+import {
+  redisInvalidationChannel,
+  validateRedisInvalidationEvent,
+} from "./invalidation-event.js";
 import { fetchKeyConfig, resolveLayerConfigResult, type ResolvedLayerConfig } from "./runtime-config.js";
 
-export interface RedisConfig {
-  /**
-   * Caller-created, connected, and lifecycle-owned semantic Redis client.
-   * DialCache borrows it and never drains, disposes, or closes it.
-   */
-  readonly client: DialCacheRedisClient;
+interface RedisConfigBase {
   /**
    * Instance-level remote-read deadline in milliseconds. Per-use-case runtime
    * config can override it. Defaults to 50 ms.
@@ -25,9 +32,40 @@ export interface RedisConfig {
   readonly serializer?: Serializer<unknown>;
 }
 
+/**
+ * Backward-compatible remote-only Redis configuration.
+ *
+ * This remains an interface so existing application interfaces and classes can
+ * continue to extend or implement it.
+ */
+export interface RedisConfig extends RedisConfigBase {
+  /**
+   * Caller-created, connected, and lifecycle-owned semantic Redis client.
+   * DialCache borrows it and never drains, disposes, or closes it.
+   */
+  readonly client: DialCacheRedisClient;
+  readonly coordinator?: undefined;
+}
+
+export interface CoordinatedRedisConfig extends RedisConfigBase {
+  /**
+   * Caller-owned command client with the atomic invalidate-and-publish
+   * capability. DialCache never creates, connects, drains, or closes it.
+   */
+  readonly client: DialCacheCoordinatedRedisClient;
+  /**
+   * Caller-owned, already-established notification coordinator. It may be
+   * shared by several DialCache instances in the same process.
+   */
+  readonly coordinator: DialCacheInvalidationCoordinator;
+}
+
+/** Redis configuration accepted by DialCache. */
+export type DialCacheRedisConfig = RedisConfig | CoordinatedRedisConfig;
+
 interface RedisCacheOptions {
   readonly configProvider: CacheConfigProvider;
-  readonly redis: RedisConfig;
+  readonly redis: DialCacheRedisConfig;
   readonly metrics: DialCacheMetricsAdapter | null;
 }
 
@@ -39,6 +77,7 @@ export class RedisCache {
   private readonly configProvider: CacheConfigProvider;
   private readonly defaultSerializer: Serializer<unknown>;
   private readonly client: DialCacheRedisClient;
+  private readonly coordinatedClient: DialCacheCoordinatedRedisClient | null;
   private readonly metrics: DialCacheMetricsAdapter | null;
   readonly readTimeoutMs: number;
 
@@ -68,6 +107,23 @@ export class RedisCache {
     }
 
     this.client = options.redis.client;
+    if (options.redis.coordinator === undefined) {
+      this.coordinatedClient = null;
+    } else {
+      if (
+        options.redis.coordinator === null
+        || typeof options.redis.coordinator !== "object"
+      ) {
+        throw new TypeError("Redis invalidation coordinator must be an object");
+      }
+      const coordinatedClient = options.redis.client as Partial<DialCacheCoordinatedRedisClient>;
+      if (typeof coordinatedClient.invalidateAndPublish !== "function") {
+        throw new TypeError(
+          "Redis config with coordinator requires a client that supports invalidateAndPublish",
+        );
+      }
+      this.coordinatedClient = options.redis.client;
+    }
   }
 
   async get<T>(key: DialCacheKey): Promise<T | undefined> {
@@ -166,11 +222,27 @@ export class RedisCache {
     }
   }
 
-  async invalidate(keyType: string, id: string, futureBufferMs = 0, namespace = "urn"): Promise<void> {
-    await this.client.invalidate({
-      watermarkKey: this.redisWatermarkKey(namespace, keyType, id),
+  async invalidate(
+    keyType: string,
+    id: string,
+    futureBufferMs = 0,
+    namespace = "urn",
+  ): Promise<DialCacheInvalidationEventV1 | null> {
+    const watermarkKey = this.redisWatermarkKey(namespace, keyType, id);
+    if (this.coordinatedClient === null) {
+      await this.client.invalidate({ watermarkKey, futureBufferMs });
+      return null;
+    }
+
+    const event = await this.coordinatedClient.invalidateAndPublish({
+      watermarkKey,
       futureBufferMs,
+      channel: redisInvalidationChannel(namespace),
+      namespace,
+      keyType,
+      id,
     });
+    return validateRedisInvalidationEvent(event, { namespace, keyType, id });
   }
 
   redisKey(key: DialCacheKey): string {

@@ -1,4 +1,5 @@
 export {
+  INVALIDATE_AND_PUBLISH_CACHE_SCRIPT,
   INVALIDATE_CACHE_SCRIPT,
   READ_CACHE_SCRIPT,
   READ_TRACKED_CACHE_SCRIPT,
@@ -8,3 +9,9 @@ export {
   WRITE_CACHE_SCRIPT,
   WRITE_TRACKED_CACHE_SCRIPT,
 } from "./internal/redis-scripts.js";
+export {
+  MAX_REDIS_INVALIDATION_EVENT_BYTES,
+  REDIS_INVALIDATION_EVENT_VERSION,
+  decodeRedisInvalidationEvent,
+  redisInvalidationChannel,
+} from "./internal/invalidation-event.js";

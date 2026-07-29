@@ -4,7 +4,7 @@
 [![Codecov](https://codecov.io/gh/lan17/DialCache/branch/main/graph/badge.svg)](https://codecov.io/gh/lan17/DialCache)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/lan17/DialCache/badge)](https://scorecard.dev/viewer/?uri=github.com/lan17/DialCache)
 
-Fine-grained TypeScript caching with explicit enabled contexts, request-local memoization, process-local and Redis TTL caching, stable key construction, runtime rollout controls, request coalescing, adapter-based observability, and Redis watermark-based targeted invalidation.
+Fine-grained TypeScript caching with explicit enabled contexts, request-local memoization, process-local and Redis TTL caching, stable key construction, runtime rollout controls, request coalescing, adapter-based observability, and Redis watermark-based targeted invalidation with optional process-local coordination.
 
 ## Contents
 
@@ -20,6 +20,7 @@ Fine-grained TypeScript caching with explicit enabled contexts, request-local me
   - [Request-local cache](#request-local-cache) · [Process-local cache](#process-local-cache) · [Redis-backed TTL cache](#redis-backed-ttl-cache) · [Remote read deadlines](#remote-read-deadlines-and-async-liveness) · [Serialization](#serialization)
 - [Cached-value ownership](#cached-value-ownership)
 - [Targeted invalidation and watermarks](#targeted-invalidation-and-watermarks)
+  - [Coordinating process-local invalidation](#coordinating-process-local-invalidation)
 - [Request coalescing](#request-coalescing)
   - [Fallback deadlines](#fallback-deadlines) · [Coalescing state](#coalescing-state)
 - [Metrics](#metrics)
@@ -120,7 +121,7 @@ Use `cached(fn, options)` for an extracted, reusable function. The wrapped calla
 | `cacheKey` | yes | Selector over `fn`'s parameters; returns a bare id or `{ id, args }`. |
 | `defaultConfig` | no | `DialCacheKeyConfig` baseline policy that runtime config overlays field by field (see [Runtime config](#runtime-config-and-ramp-controls)). |
 | `serializer` | when the return type is not statically JSON-compatible | Per-function `Serializer<T>` for Redis values (see [Serialization](#serialization)). |
-| `trackForInvalidation` | no (default `false`) | Opts this use case's Redis entries into watermark-based targeted invalidation. |
+| `trackForInvalidation` | no (default `false`) | Opts this use case into Redis watermark-based targeted invalidation and, when configured, coordinated process-local invalidation. |
 | `fallbackTimeoutMs` | no (default `60_000`) | Fallback deadline in milliseconds, at most 2,147,483,647; `null` disables it (see [Fallback deadlines](#fallback-deadlines)). |
 
 `cached()` validates `useCase` at registration: a duplicate within one `DialCache` instance throws `UseCaseIsAlreadyRegisteredError`. Both APIs reject the internal name `watermark` with `UseCaseNameIsReservedError`.
@@ -183,7 +184,7 @@ const dialcache = new DialCache({
 
 That produces Redis keys beginning with `users-api:...`, or `{users-api:...}` for invalidation-tracked values. `namespace` is DialCache's single cache-identity and key-partitioning setting: it participates in request-local, process-local, Redis, coalescing, deterministic ramp, invalidation, and metrics. It may not contain `{` or `}` because DialCache reserves those characters for Redis Cluster hash tags. Use a namespace to express any required application or environment separation, such as `production-users-api`.
 
-- **`keyType` + `id` is the invalidation unit for tracked Redis entries.** `dialcache.invalidateRemote("user_id", "123", futureBufferMs)` writes one watermark for that user; any `trackForInvalidation` Redis entry with the same `keyType` and `id` is refreshed across all `args` variants when Redis is read. `invalidateRemote` does not evict existing request-local or process-local entries (see [Targeted invalidation](#targeted-invalidation-and-watermarks)), and untracked Redis entries do not consult the watermark. `useCase` identifies the individual cache (it's the metrics label and part of the stored key).
+- **`keyType` + `id` is the invalidation unit for tracked entries.** `dialcache.invalidateRemote("user_id", "123", futureBufferMs)` writes one Redis watermark for that user; any `trackForInvalidation` Redis entry with the same `keyType` and `id` is refreshed across all `args` variants when Redis is read. Process-local entries remain unchanged by default, or can use the [optional coordinator](#coordinating-process-local-invalidation) to evict the same identity across processes. Request-local and untracked entries are never evicted. `useCase` identifies the individual cache (it's the metrics label and part of the stored key).
 - **`args` are part of the cache key** — different `args` produce different entries — but invalidation is by `id` only.
 - **Scalar key equality is string-based.** Runtime type is not an identity dimension: for matching surrounding dimensions, numeric `1`, string `"1"`, and bigint `1n` identify the same key; argument values `null` and `"null"` also match. `-0` matches `0`, and an `undefined` argument is omitted. If a deployment changes the logical meaning represented by a scalar, change an explicit identity dimension such as `keyType`, `useCase`, or an argument name/value.
 - **Non-key inputs** (for example a db handle) are parameters ignored by a `cacheKey` selector or values captured by a `getOrLoad()` loader. They still reach non-coalesced executions, but concurrent same-key cache misses share the leader's execution, so do not omit values like auth context, locale, or cancellation behavior unless sharing one result is correct.
@@ -198,7 +199,7 @@ Instance-wide behavior is set through the `DialCache` constructor:
 | `DialCacheConfig` option | Default | Description |
 | --- | --- | --- |
 | `namespace` | `"urn"` | Logical cache namespace and first key component (see [Keys, ids, and extra dimensions](#keys-ids-and-extra-dimensions)). |
-| `redis` | none | `{ client: DialCacheRedisClient, readTimeoutMs?: number }`; enables the Redis layer with a 50 ms default read deadline (see [Redis-backed TTL cache](#redis-backed-ttl-cache)). |
+| `redis` | none | `{ client: DialCacheRedisClient, readTimeoutMs?: number }`; enables the Redis layer with a 50 ms default read deadline. A coordinated client may also provide `coordinator` for tracked process-local invalidation (see [Redis-backed TTL cache](#redis-backed-ttl-cache)). |
 | `localMaxSize` | `10_000` | Global process-local entry cap; `0` disables process-local storage. Nonnegative safe integer. |
 | `cacheConfigProvider` | none | Resolves runtime config per enabled invocation as a sparse overlay on the function's `defaultConfig`; `null` applies no overrides. |
 | `metrics` | disabled | A `DialCacheMetricsAdapter` (see [Metrics](#metrics)). |
@@ -307,6 +308,8 @@ const dialcache = new DialCache({ localMaxSize: 25_000 });
 
 The limit counts entries rather than estimating JavaScript object memory. Recently read entries stay resident ahead of less recently used entries when the limit is reached.
 
+Process-local entries are not shared between instances and, by default, are not changed by `invalidateRemote`. Applications that need targeted invalidation without giving up this layer can opt into [coordinated process-local invalidation](#coordinating-process-local-invalidation).
+
 ### Redis-backed TTL cache
 
 The Redis layer supports standalone Redis, Valkey, and Redis Cluster. Register DialCache's native node-redis scripts when creating the client, then pass that client to DialCache:
@@ -373,9 +376,9 @@ Pass the same module namespace that created the client. DialCache uses its
 itself, so linked workspaces and applications with another installed GLIDE
 version cannot accidentally mix native script handles.
 
-The application owns the complete Redis lifecycle. It creates and connects the underlying client and passes the semantic adapter to DialCache. During shutdown, stop starting DialCache-backed work and await every promise returned by a cached function, `getOrLoad()`, or `invalidateRemote()`, including calls still running fallbacks that may later write Redis. A read that crossed DialCache's wait deadline may still be active inside the client, so use client-native telemetry and shutdown controls to drain or terminate that work before disposing adapter-owned resources and closing the connection. DialCache only borrows `redis.client`; it has no close or drain method and never disposes or closes caller resources.
+The application owns the complete Redis lifecycle. It creates and connects the underlying client and passes the semantic adapter to DialCache. During shutdown, stop starting DialCache-backed work and await every promise returned by a cached function, `getOrLoad()`, or `invalidateRemote()`, including calls still running fallbacks that may later write Redis. A read that crossed DialCache's wait deadline may still be active inside the client, so use client-native telemetry and shutdown controls to drain or terminate that work before disposing adapter-owned resources and closing the connection. DialCache only borrows `redis.client`; its `dispose()` method only detaches process-local invalidation coordination and never drains, disposes, or closes caller resources.
 
-The node-redis adapter owns no additional resources, so the application closes the underlying node-redis client after draining work. The GLIDE adapter owns five native `Script` handles but not the wrapped connection. After outstanding operations finish, call its idempotent `dispose()` before closing GLIDE as shown above; disposal while an adapter operation is in flight throws rather than releasing a live script.
+The node-redis command adapter owns no additional resources, so the application closes the underlying node-redis client after draining work. The optional node-redis invalidation coordinator owns its subscription and event listeners, but not its dedicated subscriber connection; see its [shutdown order](#coordinating-process-local-invalidation). The GLIDE adapter owns five eagerly-created native `Script` handles, plus a sixth created lazily if coordinated invalidation is used, but not the wrapped connection. After outstanding operations finish, call its idempotent `dispose()` before closing GLIDE as shown above; disposal while an adapter operation is in flight throws rather than releasing a live script.
 
 Node-redis computes each script's SHA, uses `EVALSHA`, and retries with `EVAL` after `NOSCRIPT`. Its cluster client routes scripts by their first key and performs that fallback on the selected shard. The GLIDE adapter uses GLIDE's native `Script` lifecycle and byte decoder; GLIDE routes scripts from their declared keys. Tracked reads are deliberately routed to primaries so a lagging replica cannot hide an invalidation watermark.
 
@@ -393,7 +396,7 @@ Writes, invalidations, async `cacheConfigProvider` calls, and custom serializer 
 
 #### Serialization
 
-The core Redis boundary is the client-agnostic `DialCacheRedisClient` interface. It exchanges serialized values as `string | Buffer` and does not expose client commands or wire encodings. Distinct untracked/tracked read and write Lua sources, the invalidation source, and wire constants are available from `dialcache/redis-protocol`. Custom adapters can throw the root-exported `DialCacheRedisPayloadError`, `DialCacheRedisPayloadEncodingError`, and `DialCacheRedisProtocolError` classes to distinguish malformed payloads, unsupported encodings, and Lua reply-domain violations in logs. DialCache records bounded `cache_read`, `cache_write`, or `invalidation` metrics by failure site.
+The core Redis boundary is the client-agnostic `DialCacheRedisClient` interface. It exchanges serialized values as `string | Buffer` and does not expose client commands or wire encodings. Distinct untracked/tracked read and write Lua sources, legacy and coordinated invalidation sources, and wire constants are available from `dialcache/redis-protocol`. Custom adapters can throw the root-exported `DialCacheRedisPayloadError`, `DialCacheRedisPayloadEncodingError`, and `DialCacheRedisProtocolError` classes to distinguish malformed payloads, unsupported encodings, and Lua reply-domain violations in logs. DialCache records bounded `cache_read`, `cache_write`, or `invalidation` metrics by failure site.
 
 Redis values use a compact binary frame:
 
@@ -477,7 +480,7 @@ const getUser = dialcache.cached(
     useCase: "GetMutableUser",
     cacheKey: (userId) => userId,
     trackForInvalidation: true,
-    // Strongly invalidated mutable data should disable request-local and process-local caching.
+    // Without coordinated local invalidation, keep mutable data out of both in-memory layers.
     defaultConfig: new DialCacheKeyConfig({
       ttlSec: { [CacheLayer.REMOTE]: 300 },
       ramp: { [CacheLayer.REMOTE]: 100 },
@@ -507,7 +510,130 @@ Size the buffer to cover the maximum expected negative clock skew between promot
 
 This is a timing contract rather than a cancellation or acquisition fence: the buffer prevents stale fallback results from passing that tracked Redis write only while the configured window remains active, and it does not force a fallback to read from an authoritative source.
 
-Targeted invalidation is remote-only and enforced by Redis watermarks. `invalidateRemote` does not evict existing request-local or process-local entries. Strongly invalidated mutable data should disable request-local and process-local caching (or use a very short process-local TTL only when stale reads are acceptable).
+Without a coordinator, targeted invalidation remains remote-only: `invalidateRemote` uses the legacy Redis script and leaves every in-memory entry alone. Strongly invalidated mutable data should therefore disable request-local and process-local caching, or use a very short process-local TTL only when stale reads are acceptable.
+
+### Coordinating process-local invalidation
+
+Coordinated invalidation is an opt-in extension of the same `trackForInvalidation` identity and `invalidateRemote(keyType, id, futureBufferMs)` call. It does not add a generation to cache keys or make local hits consult Redis. Instead, one process-wide coordinator receives Redis Pub/Sub events and synchronously fans them out to its `DialCache` instances:
+
+1. The process calling `invalidateRemote` first installs a provisional monotonic fence and scans each attached local LRU, evicting tracked entries whose namespace, `keyType`, and `id` match. This includes every `useCase` and `args` variant for that identity, but not untracked entries or neighboring ids.
+2. One Redis Lua command advances the watermark, derives its effective remaining window from Redis time, and publishes a versioned event. The returned event immediately extends the origin process's fence, and the origin's subscription normally receives the published echo as well. Subscribed peer processes apply the same Redis-derived duration to their monotonic clocks.
+3. A tracked local miss captures a publication permit. Immediately before an async result enters the LRU, DialCache checks that no matching fence or coordinator health transition occurred since the miss. This prevents a Redis hit, fallback, or serializer that was already in flight from restoring an invalidated local entry during the buffer.
+
+The local key format and normal lookup path are unchanged, so a healthy steady-state local hit has no Pub/Sub, Redis, or fence-map work. The invalidation path does the more expensive work. A peer normally scans its current LRU once for the Pub/Sub event. The origin normally scans three times: once for the provisional signal, once for the authoritative event returned by Redis, and once for its Pub/Sub echo. The returned event and echo can arrive in either order.
+
+Every signal scans deliberately, even when two events carry an equal watermark. Equal watermarks can represent separate mutations, and an entry could have been inserted between them. Suppressing the later scan would leave that entry readable. Each scan is bounded by `localMaxSize`; multiply scan capacity by roughly three for origin-side sizing. Fences are bounded by the same limit; if it is exhausted, DialCache conservatively replaces them with one global deadline rather than growing memory without limit.
+
+The versioned Pub/Sub payload has a hard limit of `MAX_REDIS_INVALIDATION_EVENT_BYTES` (16 KiB), exported from `dialcache/redis-protocol`. The limit applies to the UTF-8 byte length of the complete JSON event, including `namespace`, `keyType`, `id`, timestamps, field names, escaping, and framing. The bundled coordinated Lua script constructs and checks the event before changing the watermark or publishing, so an oversized identity rejects the invalidation without a Redis mutation. Custom protocol adapters must enforce the same pre-mutation limit.
+
+Use a caller-owned, connected node-redis command client and a separate, dedicated standalone subscriber. One coordinator can be shared by all `DialCache` instances with the same namespace in a process:
+
+```ts
+import { createClient } from "redis";
+import { CacheLayer, DialCache, DialCacheKeyConfig } from "dialcache";
+import {
+  createNodeRedisDialCacheClient,
+  createNodeRedisDialCacheInvalidationCoordinator,
+  dialcacheRedisScripts,
+} from "dialcache/node-redis";
+
+const namespace = "users-api";
+const commandClient = createClient({
+  url: process.env.REDIS_URL,
+  scripts: dialcacheRedisScripts,
+  disableOfflineQueue: true,
+});
+const subscriber = createClient({
+  url: process.env.REDIS_URL,
+  disableOfflineQueue: true,
+});
+const reportRedisError = (error: Error) => {
+  logger.error("Redis client error", error);
+};
+commandClient.on("error", reportRedisError);
+subscriber.on("error", reportRedisError);
+await Promise.all([commandClient.connect(), subscriber.connect()]);
+
+const coordinator = await createNodeRedisDialCacheInvalidationCoordinator(
+  subscriber,
+  { namespace },
+);
+const dialcache = new DialCache({
+  namespace,
+  redis: {
+    client: createNodeRedisDialCacheClient(commandClient),
+    coordinator,
+  },
+});
+const USER_INVALIDATION_BUFFER_MS = 5_000;
+
+const getUserLocally = dialcache.cached(
+  (userId: string) => db.fetchUser(userId),
+  {
+    keyType: "user_id",
+    useCase: "GetUserLocally",
+    cacheKey: (userId) => userId,
+    trackForInvalidation: true,
+    defaultConfig: new DialCacheKeyConfig({
+      ttlSec: { [CacheLayer.LOCAL]: 60, [CacheLayer.REMOTE]: 300 },
+      ramp: { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 100 },
+    }),
+  },
+);
+
+await updateUser("123", patch);
+await dialcache.invalidateRemote("user_id", "123", USER_INVALIDATION_BUFFER_MS);
+```
+
+The helper requires the subscriber to be connected, ready, dedicated, and not already in Pub/Sub mode. It owns only its subscription and event listeners; it never creates, connects, or closes the subscriber. Node-redis requires the application to install error listeners before `connect()`; retain those application-owned listeners until after each client closes because coordinator disposal removes only the helper's listener. The namespace must exactly match the `DialCache` namespace. Budget one extra long-lived Redis connection for each process-wide coordinator (normally one per process and namespace).
+
+During shutdown, stop new work and drain all cached calls and invalidations first. Then call `dispose()` on every attached `DialCache`, dispose the shared coordinator, close the subscriber, and finally close the command connection:
+
+```ts
+for (const cache of dialcacheInstances) {
+  cache.dispose();
+}
+await coordinator.dispose();
+await subscriber.quit();
+await commandClient.quit();
+```
+
+`DialCache.dispose()` is synchronous and permanently detaches only that instance; it does not close Redis or the shared coordinator. Coordinator disposal is idempotent, unsubscribes, and detaches its health listeners without closing the subscriber.
+
+#### Delivery and concurrency guarantees
+
+[Redis Pub/Sub is at-most-once](https://redis.io/docs/latest/develop/pubsub/), best-effort notification, not a durable invalidation log. There is no replay, acknowledgement, subscriber quorum, or sequence/generation check. A publish succeeds even when Redis reports zero subscribers. A silently missed event or an invalidation sent by an uncoordinated/older publisher can therefore leave a local entry readable until its TTL expires.
+
+The coordinator treats observable uncertainty conservatively. It starts unavailable, becomes ready only after the subscription acknowledgement, and transitions to unavailable on subscriber errors, reconnects, connection end, a wrong channel, or a malformed event. Each health transition clears tracked local entries and changes the publication epoch; while unavailable, tracked values cannot be inserted into the local LRU. A post-resubscription `ready` transition clears again before allowing new tracked publications. This closes known disconnect gaps, but it cannot turn best-effort Pub/Sub into a strict delivery guarantee. Keep process-local caching disabled when the application requires strict post-invalidation freshness.
+
+Invalidation does not cancel a value already returned to a caller, revoke a request-local memo, or cancel an active process flight. Because process coalescing still happens before the cache lookup, a same-key caller arriving after invalidation can join a leader that started earlier; it and followers already sharing that leader receive the leader's result. The final publication check prevents that result from repopulating the process-local cache while the fence is active, and the Redis watermark independently guards its tracked Redis write. Size `futureBufferMs` to cover the complete stale-work interval; work that finishes after an undersized fence can still publish.
+
+If the Redis operation rejects, `invalidateRemote` rejects as before, while the origin process conservatively retains its provisional local eviction and fence. Treat the remote outcome as ambiguous: Redis Lua does not roll back commands completed before a later runtime error, and a client failure after dispatch also cannot prove whether the script ran. In particular, a watermark can advance even if `PUBLISH` is then denied. Peers may not receive that event, so alert and retry according to the application's mutation protocol rather than treating rejection as “nothing changed.”
+
+Request-local memoization is deliberately excluded because it is an already-observed snapshot owned by the outermost `enable()` scope. If a mutation must be visible later in the same scope, disable request-local caching for that use case or cross a new request boundary. Untracked process-local values are also intentionally unaffected.
+
+#### Redis Cluster, clients, and ACLs
+
+The coordinated Lua script has one watermark key, so a node-redis or GLIDE cluster command client routes it by the same hash tag used for tracked values. The event uses ordinary `PUBLISH`/`SUBSCRIBE`, not sharded Pub/Sub. For node-redis, keep the cluster command client for cache commands and connect the dedicated standalone subscriber to a cluster node or stable endpoint that can reconnect across topology changes. The node-redis Cluster facade is not accepted as the subscriber because it does not expose the ready/reconnect lifecycle required by the fail-safe health contract. Ordinary cluster Pub/Sub propagates across nodes, but its cluster-wide fan-out makes invalidation traffic a capacity input; verify the behavior and reconnect path of any managed Redis proxy or service.
+
+The GLIDE adapter supports the publisher side and lazily allocates the coordinated script when first used. DialCache does not provide a first-party GLIDE subscriber because its available callback/lifecycle surface cannot establish the required health transitions. A GLIDE command client can be paired with the node-redis coordinator above, or with an application-owned implementation of `DialCacheInvalidationCoordinator` that satisfies the same synchronous fan-out and health contract.
+
+Feature-specific ACL requirements are:
+
+- The command connection keeps the existing key/script permissions and adds permission to `PUBLISH` on the deterministic channel returned by `redisInvalidationChannel(namespace)` from `dialcache/redis-protocol` (`dialcache:invalidation:v1:users-api` in the example above).
+- The subscriber needs `SUBSCRIBE` and `UNSUBSCRIBE` plus permission for that exact channel where [channel ACLs](https://redis.io/docs/latest/operate/oss_and_stack/management/security/acl/) are enforced.
+- Both connections still need the authentication, handshake, client-metadata, and health commands required by the selected Redis client. Redis versions and managed services differ, so validate the least-privilege rules in the target environment.
+
+#### Safe rollout
+
+Do not enable tracked process-local caching in a mixed fleet: older publishers use the legacy watermark-only script, and older readers cannot receive events. A safe rollout is:
+
+1. Ramp the process-local layer to zero for mutable tracked use cases across the fleet. Restart pods or wait out the longest old local TTL before relying on that state.
+2. Before enabling coordinated publishing, validate the fleet's worst-case identity sizes against the 16 KiB full-event limit. Count UTF-8 JSON bytes rather than characters; an identity that is valid in a Redis key can still make the event too large.
+3. Deploy the coordinated script adapter, dedicated subscribers, and coordinators everywhere while local caching remains off. Verify ready/unavailable logs, reconnect behavior, Pub/Sub traffic, fallback load, and every mutation path's awaited `invalidateRemote` call.
+4. After every publisher and reader is coordinated, ramp the process-local layer up gradually and watch invalidation latency, LRU scan cost, Redis/cluster Pub/Sub traffic, and source fallback load.
+
+For rollback, ramp tracked local caching back to zero first and leave it off until old entries have expired or pods have restarted; only then remove coordinators or roll back publishers. Omitting `redis.coordinator` always preserves the original uncoordinated behavior and public invalidation call.
 
 ## Request coalescing
 
@@ -624,7 +750,7 @@ The Prometheus adapter emits:
 | `dialcache_miss_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache misses |
 | `dialcache_disabled_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer`, `reason` | Cache skips (`context`, `policy_disabled`, `invalid_ttl`, `invalid_ramp`, `ramped_down`, `config_error`) |
 | `dialcache_error_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer`, `error`, `in_fallback` | Cache/fallback errors classified by a bounded failure site |
-| `dialcache_invalidation_counter` | Counter | `cache_namespace`, `key_type`, `layer` | Invalidation calls for the layers touched |
+| `dialcache_invalidation_counter` | Counter | `cache_namespace`, `key_type`, `layer` | Remote invalidation calls and coordinated local event applications |
 | `dialcache_coalesced_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `scope` | Coalesced requests split by `request_local` or `process` scope |
 | `dialcache_get_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache get latency in seconds |
 | `dialcache_fallback_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Elapsed time until the underlying function settles or timeout rejection is delivered |
@@ -634,6 +760,8 @@ The Prometheus adapter emits:
 `policy_disabled` means that a process-local or Redis layer has no effective TTL after runtime overlays are applied. It is an intentional policy outcome, including the default when `defaultConfig` is omitted, rather than a configuration-loading failure.
 
 Every metric carries `cache_namespace`, including disabled-context, key-construction, coalescing, and invalidation paths that do not have a constructed key. Its value is `DialCacheConfig.namespace`, defaulting to `urn`. The `layer` label is `request_local`, `local` (process-local), or `remote`. Disabled-context, key-construction, and config-provider failures use `noop` because no cache layer was reached. The bounded `scope` label on `dialcache_coalesced_counter` distinguishes request-local from instance-scoped single-flight work. `scope="process"` coordinates calls only within one `DialCache` instance; separate instances in the same process do not share in-flight state.
+
+For coordinated invalidation, `dialcache_invalidation_counter{layer="local"}` counts authoritative event applications per attached `DialCache` instance, not logical mutations or provisional origin fences. A healthy origin commonly increments it twice for one `invalidateRemote` call—once for the event returned by Redis and once for its Pub/Sub echo—while a peer commonly increments it once. Use the remote-layer series to count API calls; interpret the local-layer series as fan-out work. Datadog's `dialcache.invalidation.count` has the same semantics.
 
 ### Datadog
 
@@ -681,7 +809,7 @@ The Datadog adapter emits exact increments of `1` for counters and preserves sec
 | `dialcache.miss.count` | Count | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache misses |
 | `dialcache.disabled.count` | Count | `cache_namespace`, `use_case`, `key_type`, `layer`, `reason` | Cache skips by bounded reason |
 | `dialcache.error.count` | Count | `cache_namespace`, `use_case`, `key_type`, `layer`, `error`, `in_fallback` | Cache/fallback errors by bounded failure site |
-| `dialcache.invalidation.count` | Count | `cache_namespace`, `key_type`, `layer` | Invalidation calls for the layers touched |
+| `dialcache.invalidation.count` | Count | `cache_namespace`, `key_type`, `layer` | Remote invalidation calls and coordinated local event applications |
 | `dialcache.coalesced.count` | Count | `cache_namespace`, `use_case`, `key_type`, `scope` | Coalesced requests by sharing scope |
 | `dialcache.get.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache get latency in seconds |
 | `dialcache.fallback.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Elapsed time until the underlying function settles or timeout rejection is delivered |
@@ -703,7 +831,7 @@ The `error` label reports where an operation failed rather than copying the thro
 | `cache_write` | A local-cache or Redis write failed |
 | `serialization_load` | Deserializing a Redis payload failed |
 | `serialization_dump` | Serializing a value for Redis failed |
-| `invalidation` | Writing an invalidation watermark failed |
+| `invalidation` | Writing or publishing an invalidation watermark failed |
 | `fallback` | The wrapped application function failed or exceeded its DialCache deadline |
 | `unknown` | Reserved for an otherwise unclassified future failure site |
 
@@ -721,9 +849,14 @@ From a repository checkout, run the semantic microbenchmark after installing dep
 
 ```bash
 pnpm benchmark:request-local
+pnpm benchmark:invalidation
 ```
 
-The command builds `dist` before reporting six scenarios: sequential request-local hits, sequential process-local hits, enabled bounded fallbacks, request-local coalescing fan-out, process coalescing fan-out, and remote-read-deadline coalescing fan-out. The benchmark is a maintainer tool and is not included in the published package. It asserts fallback counts, coalescing state, timer cleanup, and returned values but deliberately applies no timing threshold. Override its work sizes with `DIALCACHE_BENCH_ITERATIONS` and `DIALCACHE_BENCH_FANOUT`.
+The request-local command reports six scenarios: sequential request-local hits, sequential process-local hits, enabled bounded fallbacks, request-local coalescing fan-out, process coalescing fan-out, and remote-read-deadline coalescing fan-out. Override its work sizes with `DIALCACHE_BENCH_ITERATIONS` and `DIALCACHE_BENCH_FANOUT`.
+
+The invalidation command compares healthy coordinated and unconfigured tracked process-local hits, measures one peer-event LRU scan at 1,000, 10,000, and 50,000 entries, and measures the origin's three-signal invalidation path at 10,000 entries. Override its work sizes with `DIALCACHE_BENCH_ITERATIONS`, `DIALCACHE_BENCH_ROUNDS`, `DIALCACHE_BENCH_SCAN_ITERATIONS`, and `DIALCACHE_BENCH_LARGE_OCCUPANCY`.
+
+Both commands build `dist` first. They are maintainer tools and are not included in the published package. They assert semantic results and fallback counts but deliberately apply no timing threshold.
 
 ### Releasing
 
