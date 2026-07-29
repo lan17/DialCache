@@ -13,6 +13,8 @@ export type {
   MetricErrorKind,
   MetricLayer,
   SerializationMetricLabels,
+  ShadowValidationMetricLabels,
+  ShadowValidationOutcome,
 } from "./metrics.js";
 export {
   DialCacheError,

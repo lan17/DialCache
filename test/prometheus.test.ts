@@ -14,6 +14,7 @@ import {
   DialCacheKeyConfig,
   type DisabledReason,
   type MetricErrorKind,
+  type ShadowValidationOutcome,
 } from "../src/index.js";
 import { PrometheusDialCacheMetrics, createPrometheusDialCacheMetrics } from "../src/prometheus.js";
 import { FakeRedis } from "./fake-redis.js";
@@ -54,6 +55,14 @@ const DISABLED_REASONS: Readonly<Record<DisabledReason, true>> = {
   invalid_ramp: true,
   ramped_down: true,
   config_error: true,
+};
+const SHADOW_VALIDATION_OUTCOMES: Readonly<Record<ShadowValidationOutcome, true>> = {
+  match: true,
+  mismatch: true,
+  source_error: true,
+  serialization_error: true,
+  timeout: true,
+  dropped: true,
 };
 
 interface IncompatibleCollectorCase {
@@ -149,6 +158,12 @@ describe("Prometheus metrics adapter", () => {
       keyType: labels.keyType,
       scope: "process",
     });
+    metrics.shadowValidation({
+      cacheNamespace: labels.cacheNamespace,
+      useCase: labels.useCase,
+      keyType: labels.keyType,
+      outcome: "match",
+    });
     metrics.observeGet(labels, 0.05);
     metrics.observeFallback(labels, 0.05);
     metrics.observeSerialization({ ...labels, operation: "dump" }, 0.05);
@@ -177,6 +192,10 @@ describe("Prometheus metrics adapter", () => {
         "schema_dialcache_serialization_timer",
         ["cache_namespace", "use_case", "key_type", "layer", "operation"],
         TIMER_BUCKETS,
+      ),
+      counterSchema(
+        "schema_dialcache_shadow_validation_counter",
+        ["cache_namespace", "use_case", "key_type", "outcome"],
       ),
       histogramSchema("schema_dialcache_size_histogram", ["cache_namespace", "use_case", "key_type", "layer"], SIZE_BUCKETS),
     ]);
@@ -258,6 +277,39 @@ describe("Prometheus metrics adapter", () => {
         }),
       ).resolves.toBe(1);
     }
+  });
+
+  it("exports every bounded shadow-validation outcome without adding cache identity or layer labels", async () => {
+    const registry = new Registry();
+    const metrics = new PrometheusDialCacheMetrics({ registry, prefix: "shadow_" });
+    const labels = {
+      cacheNamespace: "users",
+      useCase: "PrometheusShadowValidation",
+      keyType: "user_id",
+    } as const;
+    const outcomes = Object.keys(SHADOW_VALIDATION_OUTCOMES) as ShadowValidationOutcome[];
+
+    for (const outcome of outcomes) {
+      metrics.shadowValidation({ ...labels, outcome });
+    }
+
+    for (const outcome of outcomes) {
+      await expect(
+        sumMetric(registry, "shadow_dialcache_shadow_validation_counter", {
+          cache_namespace: labels.cacheNamespace,
+          use_case: labels.useCase,
+          key_type: labels.keyType,
+          outcome,
+        }),
+      ).resolves.toBe(1);
+    }
+
+    const family = ((await registry.getMetricsAsJSON()) as unknown as MetricFamily[]).find(
+      ({ name }) => name === "shadow_dialcache_shadow_validation_counter",
+    );
+    expect(family?.values.map(({ labels: emitted }) => Object.keys(emitted))).toEqual(
+      outcomes.map(() => ["cache_namespace", "use_case", "key_type", "outcome"]),
+    );
   });
 
   it("reuses existing collectors when multiple adapters share a registry", async () => {

@@ -15,6 +15,12 @@ export class DialCacheKeyConfig {
   readonly ttlSec: LayerConfig;
   readonly ramp: LayerConfig;
   /**
+   * Percentage of tracked Redis-hit keys that asynchronously validate their
+   * cached serializer payload against the source of truth. Omitted and zero
+   * both disable shadow validation.
+   */
+  readonly shadowRamp?: number;
+  /**
    * Memoize successful values for the lifetime of the outermost enabled scope.
    * Request-local caching is disabled by default and has no TTL or ramp.
    */
@@ -28,6 +34,7 @@ export class DialCacheKeyConfig {
   constructor(config: {
     ttlSec?: LayerConfig;
     ramp?: LayerConfig;
+    shadowRamp?: number;
     requestLocal?: boolean;
     remoteReadTimeoutMs?: number;
   }) {
@@ -36,6 +43,9 @@ export class DialCacheKeyConfig {
     }
     this.ttlSec = cloneLayerConfig(config.ttlSec, "ttlSec");
     this.ramp = cloneLayerConfig(config.ramp, "ramp");
+    if (config.shadowRamp !== undefined) {
+      this.shadowRamp = config.shadowRamp;
+    }
     if (config.requestLocal !== undefined && typeof config.requestLocal !== "boolean") {
       throw new TypeError("DialCache requestLocal config must be a boolean");
     }
@@ -111,4 +121,10 @@ export interface DialCacheConfig {
   readonly localMaxSize?: number;
   readonly redis?: RedisConfig;
   readonly metrics?: DialCacheMetricsAdapter;
+  /**
+   * Maximum number of scheduled or running shadow validations per DialCache
+   * instance. There is no queue; excess validations are dropped and measured.
+   * Must be a positive safe integer. Defaults to 1.
+   */
+  readonly shadowMaxInFlight?: number;
 }

@@ -6,7 +6,7 @@ import { invalidationPrefix, redisClusterHashTag, type DialCacheKey } from "../k
 import { labelsFor, type DialCacheMetricsAdapter, type MetricErrorKind } from "../metrics.js";
 import type { DialCacheRedisClient, RedisCachePayload } from "../redis-client.js";
 import { JsonSerializer, type Serializer } from "../serializer.js";
-import type { CacheGetResult } from "./cache-result.js";
+import type { RedisCacheGetResult } from "./cache-result.js";
 import { assertValidDeadlineMs, withMonotonicDeadline } from "./deadline.js";
 import { fetchKeyConfig, resolveLayerConfigResult, type ResolvedLayerConfig } from "./runtime-config.js";
 
@@ -74,7 +74,7 @@ export class RedisCache {
     return result.status === "hit" ? result.value : undefined;
   }
 
-  async getResult<T>(key: DialCacheKey, keyConfig?: DialCacheKeyConfig | null): Promise<CacheGetResult<T>> {
+  async getResult<T>(key: DialCacheKey, keyConfig?: DialCacheKeyConfig | null): Promise<RedisCacheGetResult<T>> {
     const layerConfig = await this.resolveRemoteLayerConfig(key, keyConfig);
     if (layerConfig.status === "disabled") {
       return layerConfig;
@@ -91,7 +91,7 @@ export class RedisCache {
     key: DialCacheKey,
     layerConfig: ResolvedLayerConfig,
     readTimeoutMs = this.readTimeoutMs,
-  ): Promise<CacheGetResult<T>> {
+  ): Promise<RedisCacheGetResult<T>> {
     let payload: RedisCachePayload | null;
     const abortController = new AbortController();
     try {
@@ -119,13 +119,21 @@ export class RedisCache {
     const start = performance.now();
     try {
       const value = (await this.serializerFor(key).load(payload)) as T;
-      return { status: "hit", value };
+      return { status: "hit", value, payload };
     } catch {
       this.recordError(key, "serialization_load");
       return { status: "miss", config: layerConfig };
     } finally {
       this.recordMetric((metrics) => metrics.observeSerialization({ ...labelsFor(key, CacheLayer.REMOTE), operation: "load" }, elapsedSeconds(start)));
     }
+  }
+
+  /**
+   * Serialize a source-of-truth value with the same effective serializer as
+   * the Redis entry, without recording ordinary cache-write telemetry.
+   */
+  async serializeForShadow<T>(key: DialCacheKey, value: T): Promise<RedisCachePayload> {
+    return await this.serializerFor(key).dump(value);
   }
 
   async put<T>(key: DialCacheKey, value: T, config?: { readonly ttlSec: number }): Promise<boolean> {

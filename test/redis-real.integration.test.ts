@@ -33,6 +33,19 @@ const adapterKinds = [
 ] as const;
 type AdapterKind = (typeof adapterKinds)[number]["kind"];
 
+interface Deferred<T> {
+  readonly promise: Promise<T>;
+  resolve(value: T): void;
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 const remoteOnly = new DialCacheKeyConfig({
   ttlSec: { [CacheLayer.REMOTE]: 60 },
   ramp: { [CacheLayer.REMOTE]: 100 },
@@ -277,6 +290,109 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
         }),
       ).toBe(true);
       expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toEqual(trackedPayload);
+    });
+
+    it("shadow-validates the exact tracked payload without repairing a mismatch", async () => {
+      if (client === undefined || admin === undefined) {
+        throw new Error("Redis test clients did not start");
+      }
+      const cachedPayload = Buffer.from([0, 0xff, 0xc3, 0x28, 0x80]);
+      const mismatchPayload = Buffer.from([0, 0xff, 0xc3, 0x28, 0x81]);
+      const namespace = "real-shadow";
+      const useCase = "RealShadowPayload";
+      const valueKey = `{${namespace}:item_id:binary}#${useCase}:dialcache-frame-v1`;
+      const watermarkKey = `{${namespace}:item_id:binary}#watermark`;
+      const storedFrame = encodeFrame(cachedPayload, 1);
+      await admin.set(valueKey, storedFrame, { PX: 60_000 });
+      await admin.set(watermarkKey, "0", { PX: 60_000 });
+
+      const write = vi.fn(client.adapter.write);
+      const invalidate = vi.fn(client.adapter.invalidate);
+      const redisClient: DialCacheRedisClient = { ...client.adapter, write, invalidate };
+      const matched = deferred<void>();
+      const mismatched = deferred<void>();
+      const metrics: DialCacheMetricsAdapter = {
+        request: vi.fn(),
+        miss: vi.fn(),
+        disabled: vi.fn(),
+        error: vi.fn(),
+        invalidation: vi.fn(),
+        coalesced: vi.fn(),
+        shadowValidation: vi.fn(({ outcome }) => {
+          if (outcome === "match") {
+            matched.resolve();
+          } else if (outcome === "mismatch") {
+            mismatched.resolve();
+          }
+        }),
+        observeGet: vi.fn(),
+        observeFallback: vi.fn(),
+        observeSerialization: vi.fn(),
+        observeSize: vi.fn(),
+      };
+      const serializer: Serializer<Buffer> = {
+        dump: vi.fn((value) => value),
+        load: vi.fn((value) => {
+          if (!Buffer.isBuffer(value)) {
+            throw new Error("Expected the binary Redis payload");
+          }
+          return value;
+        }),
+      };
+      const shadowRemoteOnly = new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 100 },
+        shadowRamp: 100,
+      });
+      const dialcache = new DialCache({
+        namespace,
+        redis: { client: redisClient, readTimeoutMs: 10_000 },
+        metrics,
+      });
+      let sourcePayload: Buffer = Buffer.from(cachedPayload);
+      let sourceCalls = 0;
+      const getPayload = dialcache.cached(
+        async (): Promise<Buffer> => {
+          sourceCalls += 1;
+          return sourcePayload;
+        },
+        {
+          keyType: "item_id",
+          useCase,
+          cacheKey: () => "binary",
+          trackForInvalidation: true,
+          defaultConfig: shadowRemoteOnly,
+          serializer,
+        },
+      );
+
+      const matchingHit = await dialcache.enable(async () => await getPayload());
+      expect(matchingHit).toEqual(cachedPayload);
+      await matched.promise;
+
+      sourcePayload = mismatchPayload;
+      const mismatchingHit = await dialcache.enable(async () => await getPayload());
+      expect(mismatchingHit).toEqual(cachedPayload);
+      await mismatched.promise;
+
+      expect(sourceCalls).toBe(2);
+      expect(serializer.load).toHaveBeenCalledTimes(2);
+      expect(serializer.dump).toHaveBeenCalledTimes(2);
+      expect(metrics.shadowValidation).toHaveBeenNthCalledWith(1, {
+        cacheNamespace: namespace,
+        useCase,
+        keyType: "item_id",
+        outcome: "match",
+      });
+      expect(metrics.shadowValidation).toHaveBeenNthCalledWith(2, {
+        cacheNamespace: namespace,
+        useCase,
+        keyType: "item_id",
+        outcome: "mismatch",
+      });
+      expect(write).not.toHaveBeenCalled();
+      expect(invalidate).not.toHaveBeenCalled();
+      expect(await admin.get(commandOptions({ returnBuffers: true }), valueKey)).toEqual(storedFrame);
     });
 
     it("recovers every Lua script after SCRIPT FLUSH", async () => {
