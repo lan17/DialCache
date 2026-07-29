@@ -2,6 +2,15 @@ export { CacheLayer, DialCacheKeyConfig } from "./config.js";
 export type { CacheConfigProvider, DialCacheConfig, LayerConfig, Logger } from "./config.js";
 export { DialCacheContext } from "./context.js";
 export type {
+  DialCacheInvalidationCoordinator,
+  DialCacheInvalidationCoordinatorListener,
+  DialCacheInvalidationCoordinatorState,
+  DialCacheInvalidationEventV1,
+  DialCacheInvalidationIdentity,
+  DialCacheLocalInvalidation,
+  DialCacheLocalInvalidationSource,
+} from "./invalidation.js";
+export type {
   CacheMetricLabels,
   CoalescedMetricLabels,
   CoalescingScope,
@@ -38,10 +47,16 @@ export {
   DialCacheRedisPayloadError,
   DialCacheRedisProtocolError,
 } from "./redis-client.js";
-export type { RedisConfig } from "./internal/redis-cache.js";
 export type {
+  CoordinatedRedisConfig,
+  DialCacheRedisConfig,
+  RedisConfig,
+} from "./internal/redis-cache.js";
+export type {
+  DialCacheCoordinatedRedisClient,
   DialCacheRedisClient,
   RedisCachePayload,
+  RedisCoordinatedInvalidationRequest,
   RedisInvalidationRequest,
   RedisReadContext,
   RedisReadRequest,

@@ -1,6 +1,6 @@
 import type { DialCacheKey } from "./key.js";
 import type { DialCacheMetricsAdapter } from "./metrics.js";
-import type { RedisConfig } from "./internal/redis-cache.js";
+import type { DialCacheRedisConfig } from "./internal/redis-cache.js";
 import { assertValidDeadlineMs } from "./internal/deadline.js";
 
 export enum CacheLayer {
@@ -110,6 +110,13 @@ export interface DialCacheConfig {
    * Zero disables local storage. Defaults to 10,000.
    */
   readonly localMaxSize?: number;
-  readonly redis?: RedisConfig;
+  /**
+   * Optional caller-owned Redis command client and process-local invalidation
+   * coordinator. Without a coordinator, tracked invalidation remains
+   * remote-only. With one, the client must support the coordinated
+   * invalidate-and-publish operation and the coordinator namespace must match
+   * this configuration's namespace.
+   */
+  readonly redis?: DialCacheRedisConfig;
   readonly metrics?: DialCacheMetricsAdapter;
 }

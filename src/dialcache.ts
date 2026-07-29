@@ -10,7 +10,12 @@ import {
 } from "./config.js";
 import { DialCacheContext, getOrCreateRequestLocalCache, type RequestLocalCache } from "./context.js";
 import { FallbackTimeoutError, UseCaseIsAlreadyRegisteredError, UseCaseNameIsReservedError } from "./errors.js";
-import { DialCacheKey, assertValidNamespace, normalizeArgs } from "./key.js";
+import type {
+  DialCacheInvalidationCoordinator,
+  DialCacheInvalidationCoordinatorState,
+  DialCacheLocalInvalidation,
+} from "./invalidation.js";
+import { DialCacheKey, assertValidNamespace, invalidationPrefix, normalizeArgs } from "./key.js";
 import {
   NO_CACHE_LAYER,
   REQUEST_LOCAL_CACHE_LAYER,
@@ -21,6 +26,7 @@ import {
   type MetricErrorKind,
   type MetricLayer,
 } from "./metrics.js";
+import { DialCacheRedisProtocolError } from "./redis-client.js";
 import type { Serializer } from "./serializer.js";
 import type { CacheGetResult, RemoteCacheGetResult } from "./internal/cache-result.js";
 import { MAX_TIMER_DELAY_MS, withMonotonicDeadline } from "./internal/deadline.js";
@@ -29,7 +35,15 @@ import {
   isSupportedCacheTtlSec,
   MAX_CACHE_TTL_SEC,
 } from "./internal/duration.js";
+import {
+  isValidLocalInvalidation,
+  localInvalidationFromEvent,
+} from "./internal/invalidation-event.js";
 import { LocalCache } from "./internal/local-cache.js";
+import {
+  LocalInvalidationState,
+  type LocalPublicationPermit,
+} from "./internal/local-invalidation.js";
 import { RedisCache } from "./internal/redis-cache.js";
 import {
   fetchKeyConfig,
@@ -200,6 +214,9 @@ export class DialCache {
   private readonly logger: Logger;
   private readonly redisCache: RedisCache | null;
   private readonly metrics: DialCacheMetricsAdapter | null;
+  private readonly invalidationCoordinator: DialCacheInvalidationCoordinator | null;
+  private readonly localInvalidation: LocalInvalidationState | null;
+  private removeInvalidationListener: (() => void) | null = null;
   private readonly processFlights = new Map<string, ProcessFlight>();
   private activeProcessFollowers = 0;
 
@@ -226,6 +243,16 @@ export class DialCache {
     this.logger = safeLogger(config.logger ?? defaultLogger);
     this.metrics = safeMetrics(config.metrics ?? null);
     this.localCache = new LocalCache(this.configProvider, localMaxSize);
+    const invalidationCoordinator = config.redis?.coordinator ?? null;
+    if (
+      invalidationCoordinator !== null
+      && invalidationCoordinator.namespace !== namespace
+    ) {
+      throw new TypeError(
+        "Redis invalidation coordinator namespace must match DialCache namespace",
+      );
+    }
+    this.invalidationCoordinator = invalidationCoordinator;
     this.redisCache =
       config.redis === undefined
         ? null
@@ -234,6 +261,16 @@ export class DialCache {
             redis: config.redis,
             metrics: this.metrics,
           });
+    this.localInvalidation =
+      invalidationCoordinator === null || localMaxSize === 0
+        ? null
+        : new LocalInvalidationState(this.localCache, localMaxSize);
+    if (this.localInvalidation !== null) {
+      this.removeInvalidationListener = invalidationCoordinator?.addListener({
+        onInvalidation: (invalidation) => this.applyLocalInvalidation(invalidation),
+        onStateChange: (state, error) => this.applyInvalidationState(state, error),
+      }) ?? null;
+    }
   }
 
   enable<T>(fn: () => Awaitable<T>): Promise<T> {
@@ -254,6 +291,25 @@ export class DialCache {
 
   isEnabled(): boolean {
     return this.context.isEnabled();
+  }
+
+  /**
+   * Permanently detach this instance from its invalidation coordinator.
+   * Coordinated tracked process-local storage remains disabled afterward;
+   * Redis, request-local, and untracked behavior remain available. This does
+   * not dispose or close caller-owned Redis clients or the shared coordinator.
+   */
+  dispose(): void {
+    const removeListener = this.removeInvalidationListener;
+    if (removeListener === null) {
+      return;
+    }
+    this.removeInvalidationListener = null;
+    // Establish the terminal safety state before invoking caller-owned cleanup.
+    // A broken removal callback may leak a listener, but it cannot re-enable
+    // tracked local storage or allow late events to mutate this instance.
+    this.applyInvalidationState("disposed");
+    removeListener();
   }
 
   /** Returns exact process-scoped single-flight state for this instance. */
@@ -371,8 +427,19 @@ export class DialCache {
   /**
    * Writes a remote invalidation watermark for Redis-tracked entries.
    *
-   * This does not synchronously evict local cache hits or untracked Redis values.
-   * Call it only after the source mutation commits.
+   * With an optional Redis invalidation coordinator, this also synchronously
+   * evicts and fences matching tracked process-local entries in this process,
+   * then publishes the authoritative Redis timing to peer processes. Without a
+   * coordinator, process-local behavior is unchanged. Request-local and
+   * untracked values are never evicted. Call only after the source mutation
+   * commits.
+   *
+   * Peer delivery uses at-most-once Redis Pub/Sub and is not part of this
+   * method's completion barrier. Detected subscription uncertainty clears and
+   * disables coordinated tracked local storage until a newly acknowledged
+   * healthy epoch. An undetected delivery gap can still leave a stale peer
+   * entry until its TTL; strict all-pod read-after-invalidation requires
+   * disabling process-local caching or a durable validation/barrier design.
    *
    * `futureBufferMs` is an application-owned safety window. When using the
    * bundled timestamp protocol, every Redis node eligible for primary promotion
@@ -399,10 +466,13 @@ export class DialCache {
    * converts more tracked Redis reads into misses and rejects their tracked
    * writes, but does not delay or suppress returning fallback values.
    *
-   * The watermark fences only invocations that reach the tracked Redis write.
-   * A rejected write also suppresses the corresponding process-local population.
-   * Request-local memoization remains unconditional, and invocations whose
-   * remote layer is disabled or ramped out are not fenced by the watermark.
+   * The Redis watermark fences only invocations that reach the tracked Redis
+   * write. A rejected write also suppresses the corresponding process-local
+   * population. The optional local coordinator separately guards every tracked
+   * local publication path, including remote-disabled or ramped-out fallbacks,
+   * for its known future window. After reconnect, such a path cannot prove it
+   * observed an event missed during the gap. Request-local memoization remains
+   * an unconditional outer-request snapshot.
    *
    * @param futureBufferMs Nonnegative safe integer no greater than
    * 31,536,000,000 (365 days); defaults to zero for backward compatibility.
@@ -410,13 +480,28 @@ export class DialCache {
   async invalidateRemote(keyType: string, id: Id, futureBufferMs = 0): Promise<void> {
     assertSupportedFutureBufferMs(futureBufferMs);
 
-    if (this.redisCache === null) {
+    const redisCache = this.redisCache;
+    if (redisCache === null) {
       return;
     }
 
+    const stringId = String(id);
     this.metrics?.invalidation({ cacheNamespace: this.namespace, keyType, layer: CacheLayer.REMOTE });
     try {
-      await this.redisCache.invalidate(keyType, String(id), futureBufferMs, this.namespace);
+      // Validate before provisional fan-out. Invalid caller input must not
+      // degrade a healthy process-wide coordinator.
+      invalidationPrefix(this.namespace, keyType, stringId);
+      this.invalidationCoordinator?.invalidate({
+        namespace: this.namespace,
+        keyType,
+        id: stringId,
+        remainingMs: futureBufferMs,
+        source: "provisional",
+      });
+      const event = await redisCache.invalidate(keyType, stringId, futureBufferMs, this.namespace);
+      if (event !== null) {
+        this.invalidationCoordinator?.invalidate(localInvalidationFromEvent(event));
+      }
     } catch (error) {
       this.logger.warn("Error writing DialCache invalidation watermark", error);
       this.metrics?.error({
@@ -498,15 +583,24 @@ export class DialCache {
     if (local.status === "hit") {
       return local.value;
     }
+    const publicationPermit = this.captureLocalPublicationPermit(key);
 
     const redisCache = this.redisCache;
     if (redisCache === null) {
-      return await this.finishLocalOnly(key, local, fallback);
+      return await this.finishLocalOnly(key, local, fallback, publicationPermit);
     }
 
     const remoteLayer = await this.resolveRemoteLayerConfig(key, keyConfig);
     if (remoteLayer.status === "disabled") {
-      return await this.finishRedisChain(redisCache, key, local, remoteLayer, fallback);
+      return await this.finishRedisChain(
+        redisCache,
+        key,
+        local,
+        remoteLayer,
+        fallback,
+        undefined,
+        publicationPermit,
+      );
     }
 
     const remote = await this.readRemoteWithResolvedConfig<T>(
@@ -515,13 +609,26 @@ export class DialCache {
       remoteLayer.config,
       keyConfig?.remoteReadTimeoutMs ?? redisCache.readTimeoutMs,
     );
-    return await this.finishRedisChain(redisCache, key, local, remote, fallback, remoteLayer.config);
+    return await this.finishRedisChain(
+      redisCache,
+      key,
+      local,
+      remote,
+      fallback,
+      remoteLayer.config,
+      publicationPermit,
+    );
   }
 
-  private async finishLocalOnly<T>(key: DialCacheKey, local: CacheGetResult<T>, fallback: () => Promise<T>): Promise<T> {
+  private async finishLocalOnly<T>(
+    key: DialCacheKey,
+    local: CacheGetResult<T>,
+    fallback: () => Promise<T>,
+    publicationPermit: LocalPublicationPermit | null,
+  ): Promise<T> {
     const value = await this.callFallback(labelsFor(key, CacheLayer.LOCAL), fallback);
     if (local.status === "miss") {
-      await this.putLocalFailOpen(key, value, local.config);
+      await this.putLocalFailOpen(key, value, local.config, publicationPermit);
     }
     return value;
   }
@@ -533,10 +640,11 @@ export class DialCache {
     remote: RemoteCacheGetResult<T>,
     fallback: () => Promise<T>,
     resolvedRemoteConfig?: ResolvedLayerConfig,
+    publicationPermit: LocalPublicationPermit | null = null,
   ): Promise<T> {
     if (remote.status === "hit") {
       if (local.status === "miss") {
-        await this.putLocalFailOpen(key, remote.value, local.config);
+        await this.putLocalFailOpen(key, remote.value, local.config, publicationPermit);
       }
       return remote.value;
     }
@@ -565,7 +673,7 @@ export class DialCache {
       }
     }
     if (!suppressCacheWrite && local.status === "miss") {
-      await this.putLocalFailOpen(key, value, local.config);
+      await this.putLocalFailOpen(key, value, local.config, publicationPermit);
     }
     return value;
   }
@@ -649,12 +757,72 @@ export class DialCache {
     }
   }
 
-  private async putLocalFailOpen<T>(key: DialCacheKey, value: T, config?: { readonly ttlSec: number }): Promise<void> {
+  private async putLocalFailOpen<T>(
+    key: DialCacheKey,
+    value: T,
+    config?: { readonly ttlSec: number },
+    publicationPermit: LocalPublicationPermit | null = null,
+  ): Promise<void> {
     try {
-      await this.localCache.put(key, value, config);
+      const localInvalidation = this.localInvalidation;
+      const canPublish =
+        localInvalidation === null || publicationPermit === null
+          ? undefined
+          : () => localInvalidation.canPublish(key, publicationPermit);
+      await this.localCache.put(key, value, config, canPublish);
     } catch (error) {
       this.logger.warn("Error putting value in local cache", error);
       this.recordError(key, CacheLayer.LOCAL, "cache_write");
+    }
+  }
+
+  private captureLocalPublicationPermit(key: DialCacheKey): LocalPublicationPermit | null {
+    return key.trackForInvalidation
+      ? this.localInvalidation?.capturePublicationPermit() ?? null
+      : null;
+  }
+
+  private applyLocalInvalidation(invalidation: DialCacheLocalInvalidation): void {
+    const localInvalidation = this.localInvalidation;
+    if (localInvalidation === null || localInvalidation.disposed) {
+      return;
+    }
+    if (!isValidLocalInvalidation(invalidation, this.namespace)) {
+      this.applyInvalidationState(
+        "unavailable",
+        new DialCacheRedisProtocolError("Invalid DialCache local invalidation"),
+      );
+      return;
+    }
+    localInvalidation.apply(invalidation);
+    if (invalidation.source === "event") {
+      this.metrics?.invalidation({
+        cacheNamespace: this.namespace,
+        keyType: invalidation.keyType,
+        layer: CacheLayer.LOCAL,
+      });
+    }
+  }
+
+  private applyInvalidationState(
+    state: DialCacheInvalidationCoordinatorState,
+    error?: unknown,
+  ): void {
+    const transition = this.localInvalidation?.transition(state);
+    if (transition?.changed !== true) {
+      return;
+    }
+
+    if (state === "ready") {
+      this.logger.debug("DialCache local invalidation coordinator ready");
+    } else if (state === "unavailable") {
+      if (error === undefined) {
+        this.logger.warn("DialCache local invalidation coordinator unavailable");
+      } else {
+        this.logger.warn("DialCache local invalidation coordinator unavailable", error);
+      }
+    } else {
+      this.logger.debug("DialCache local invalidation coordinator disposed");
     }
   }
 

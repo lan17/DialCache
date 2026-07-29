@@ -1,4 +1,4 @@
-import { commandOptions, createCluster, type RedisClusterOptions } from "redis";
+import { commandOptions, createClient, createCluster, type RedisClusterOptions } from "redis";
 import {
   GenericContainer,
   Network,
@@ -8,8 +8,19 @@ import {
 } from "testcontainers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { CacheLayer, DialCache, DialCacheKeyConfig, type DialCacheRedisClient } from "../src/index.js";
-import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "../src/node-redis.js";
+import {
+  CacheLayer,
+  DialCache,
+  DialCacheKeyConfig,
+  type DialCacheInvalidationCoordinator,
+  type DialCacheLocalInvalidation,
+  type DialCacheRedisClient,
+} from "../src/index.js";
+import {
+  createNodeRedisDialCacheClient,
+  createNodeRedisDialCacheInvalidationCoordinator,
+  dialcacheRedisScripts,
+} from "../src/node-redis.js";
 
 const remoteOnly = new DialCacheKeyConfig({
   ttlSec: { [CacheLayer.REMOTE]: 60 },
@@ -33,10 +44,50 @@ async function waitForCluster(container: StartedTestContainer): Promise<void> {
   throw new Error("Redis Cluster did not become ready");
 }
 
+function nextInvalidation(
+  coordinator: DialCacheInvalidationCoordinator,
+  expectedId: string,
+): {
+    readonly promise: Promise<DialCacheLocalInvalidation>;
+    cancel(): void;
+  } {
+  let removeListener = (): void => undefined;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const promise = new Promise<DialCacheLocalInvalidation>((resolve, reject) => {
+    timeout = setTimeout(
+      () => reject(new Error(`Timed out waiting for DialCache invalidation ${expectedId}`)),
+      5_000,
+    );
+    removeListener = coordinator.addListener({
+      onInvalidation(invalidation) {
+        if (invalidation.id !== expectedId || invalidation.source !== "event") {
+          return;
+        }
+        if (timeout !== undefined) {
+          clearTimeout(timeout);
+        }
+        removeListener();
+        resolve(invalidation);
+      },
+      onStateChange: () => undefined,
+    });
+  });
+  return {
+    promise,
+    cancel() {
+      if (timeout !== undefined) {
+        clearTimeout(timeout);
+      }
+      removeListener();
+    },
+  };
+}
+
 describe("DialCache Lua protocol on Redis Cluster", () => {
   let network: StartedNetwork | undefined;
   let containers: Array<StartedTestContainer> = [];
   let cluster: ReturnType<typeof createTestCluster> | undefined;
+  let standaloneNodeUrl: string | undefined;
 
   beforeAll(async () => {
     const startedNetwork = await new Network().start();
@@ -73,6 +124,8 @@ describe("DialCache Lua protocol on Redis Cluster", () => {
     if (firstContainer === undefined) {
       throw new Error("Redis Cluster containers did not start");
     }
+    standaloneNodeUrl =
+      `redis://${firstContainer.getHost()}:${firstContainer.getMappedPort(6379)}`;
     const createResult = await firstContainer.exec([
       "redis-cli",
       "--cluster",
@@ -218,5 +271,62 @@ describe("DialCache Lua protocol on Redis Cluster", () => {
       }),
     ).toBe(true);
     expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toEqual(trackedPayload);
+  });
+
+  it("routes coordinated publication and delivers it to a standalone subscriber on a cluster node", async () => {
+    if (cluster === undefined || standaloneNodeUrl === undefined) {
+      throw new Error("Redis Cluster did not start");
+    }
+    const activeCluster = cluster;
+    const namespace = "cluster-coordinated";
+    const subscriber = createClient({ url: standaloneNodeUrl });
+    subscriber.on("error", () => undefined);
+    await subscriber.connect();
+    const coordinator = await createNodeRedisDialCacheInvalidationCoordinator(subscriber, {
+      namespace,
+    });
+    const scriptClient = createNodeRedisDialCacheClient(activeCluster);
+
+    const publishAndAssertDelivery = async (id: string) => {
+      const watermarkKey = `{${namespace}:user_id:${id}}#watermark`;
+      const delivery = nextInvalidation(coordinator, id);
+      try {
+        const event = await scriptClient.invalidateAndPublish({
+          watermarkKey,
+          futureBufferMs: 100,
+          channel: coordinator.channel,
+          namespace,
+          keyType: "user_id",
+          id,
+        });
+        const received = await delivery.promise;
+
+        expect(await activeCluster.get(watermarkKey)).toBe(event.effectiveWatermarkMs);
+        expect(received).toEqual({
+          namespace,
+          keyType: "user_id",
+          id,
+          remainingMs: Number(event.effectiveWatermarkMs) - Number(event.redisNowMs),
+          source: "event",
+        });
+      } finally {
+        delivery.cancel();
+      }
+    };
+
+    try {
+      expect(coordinator.state).toBe("ready");
+      await publishAndAssertDelivery("before-flush");
+      await Promise.all(
+        activeCluster.masters.map(async (master) => {
+          const client = await activeCluster.nodeClient(master);
+          await client.scriptFlush();
+        }),
+      );
+      await publishAndAssertDelivery("after-flush");
+    } finally {
+      await coordinator.dispose();
+      await subscriber.quit();
+    }
   });
 });

@@ -1,4 +1,8 @@
 import { MAX_SUPPORTED_DURATION_MS } from "./duration.js";
+import {
+  MAX_REDIS_INVALIDATION_EVENT_BYTES,
+  REDIS_INVALIDATION_EVENT_VERSION,
+} from "./invalidation-event.js";
 
 export const REDIS_FRAME_VERSION = 1;
 export const REDIS_ENCODING_UTF8 = 0;
@@ -155,4 +159,66 @@ else
   redis.call("SET", KEYS[1], encoded_watermark, "PX", desired_ttl_ms)
 end`,
   "return 1",
+].join("\n\n");
+
+/**
+ * Coordinated invalidation protocol. This is parallel to the legacy script so
+ * custom adapters and raw protocol consumers retain the exact integer-1 reply.
+ */
+export const INVALIDATE_AND_PUBLISH_CACHE_SCRIPT = [
+  PARSE_WATERMARK_LUA,
+  CEIL_FINITE_NUMBER_LUA,
+  String.raw`local future_buffer_ms = ceil_finite_number(ARGV[1])
+if not future_buffer_ms or future_buffer_ms < 0 or future_buffer_ms > ${MAX_SUPPORTED_DURATION_MS} then
+  return redis.error_reply("ERR invalid DialCache future buffer")
+end`,
+  REDIS_TIME_LUA,
+  String.raw`local proposed_watermark = now_ms + future_buffer_ms
+local raw_watermark = redis.call("GET", KEYS[1])
+local current_watermark = 0
+
+if raw_watermark then
+  local parsed_watermark = parse_watermark(raw_watermark)
+  if parsed_watermark then
+    if parsed_watermark - now_ms > ${MAX_SUPPORTED_DURATION_MS} then
+      return redis.error_reply("ERR invalid DialCache watermark")
+    end
+    current_watermark = parsed_watermark
+  end
+end
+
+local watermark = math.ceil(math.max(current_watermark, proposed_watermark))
+local current_ttl_ms = -2
+if raw_watermark then
+  current_ttl_ms = redis.call("PTTL", KEYS[1])
+end
+local desired_ttl_ms = math.max(
+  future_buffer_ms + ${WATERMARK_TTL_MARGIN_MS},
+  watermark - now_ms + ${WATERMARK_TTL_MARGIN_MS}
+)
+if current_ttl_ms > desired_ttl_ms then
+  desired_ttl_ms = current_ttl_ms
+end
+
+local encoded_watermark = string.format("%.0f", watermark)
+local encoded_now = string.format("%.0f", now_ms)
+local event = cjson.encode({
+  version = ${REDIS_INVALIDATION_EVENT_VERSION},
+  namespace = ARGV[3],
+  keyType = ARGV[4],
+  id = ARGV[5],
+  effectiveWatermarkMs = encoded_watermark,
+  redisNowMs = encoded_now
+})
+if string.len(event) > ${MAX_REDIS_INVALIDATION_EVENT_BYTES} then
+  return redis.error_reply("ERR DialCache invalidation event is too large")
+end
+
+if current_ttl_ms == -1 then
+  redis.call("SET", KEYS[1], encoded_watermark)
+else
+  redis.call("SET", KEYS[1], encoded_watermark, "PX", desired_ttl_ms)
+end
+redis.call("PUBLISH", ARGV[2], event)
+return event`,
 ].join("\n\n");

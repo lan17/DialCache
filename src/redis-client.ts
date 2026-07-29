@@ -1,4 +1,8 @@
 import type { Awaitable } from "./config.js";
+import type {
+  DialCacheInvalidationEventV1,
+  DialCacheInvalidationIdentity,
+} from "./invalidation.js";
 
 const redisProtocolErrorBrand = Symbol.for("dialcache.DialCacheRedisProtocolError");
 
@@ -77,6 +81,12 @@ export interface RedisInvalidationRequest {
   readonly futureBufferMs: number;
 }
 
+export interface RedisCoordinatedInvalidationRequest
+  extends RedisInvalidationRequest, DialCacheInvalidationIdentity {
+  /** Exact namespace-scoped Pub/Sub channel on which the event is published. */
+  readonly channel: string;
+}
+
 /**
  * Caller-owned semantic Redis boundary. DialCache borrows this client and does
  * not create, connect, drain, dispose, or close it.
@@ -102,4 +112,23 @@ export interface DialCacheRedisClient {
    * Its TTL is derived from the future buffer and any longer existing TTL.
    */
   invalidate(request: RedisInvalidationRequest): Awaitable<void>;
+}
+
+/**
+ * Optional extension selected only when process-local invalidation
+ * coordination is configured. Legacy clients remain three-method structural
+ * implementations of `DialCacheRedisClient`.
+ */
+export interface DialCacheCoordinatedRedisClient extends DialCacheRedisClient {
+  /**
+   * Atomically advance the watermark and publish one versioned event.
+   *
+   * The result is the authoritative event produced by the same Redis
+   * invocation. A rejected command is an ambiguous write: the watermark may
+   * already have advanced before a later publication or response failure.
+   * Callers must retain their provisional local fence and may retry safely.
+   */
+  invalidateAndPublish(
+    request: RedisCoordinatedInvalidationRequest,
+  ): Awaitable<DialCacheInvalidationEventV1>;
 }

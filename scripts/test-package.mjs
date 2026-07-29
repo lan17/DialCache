@@ -24,9 +24,19 @@ const rootConsumer = `import {
   type CoalescedMetricLabels,
   type CoalescingScope,
   type CoalescingState,
+  type CoordinatedRedisConfig,
   type DialCacheConfig,
+  type DialCacheCoordinatedRedisClient,
+  type DialCacheInvalidationCoordinator,
+  type DialCacheInvalidationCoordinatorListener,
+  type DialCacheInvalidationCoordinatorState,
+  type DialCacheInvalidationEventV1,
+  type DialCacheInvalidationIdentity,
   type DialCacheKeyInit,
+  type DialCacheLocalInvalidation,
+  type DialCacheLocalInvalidationSource,
   type DialCacheMetricsAdapter,
+  type DialCacheRedisConfig,
   type DialCacheRedisClient,
   type DisabledReason,
   type GetOrLoadOptions,
@@ -34,6 +44,7 @@ const rootConsumer = `import {
   type MetricErrorKind,
   type ProcessCoalescingState,
   type RedisConfig,
+  type RedisCoordinatedInvalidationRequest,
   type RedisInvalidationRequest,
   type RedisReadContext,
   type RedisWriteRequest,
@@ -41,8 +52,22 @@ const rootConsumer = `import {
 } from "dialcache";
 // @ts-expect-error The unused MissingKeyConfigError class was removed instead of deprecated.
 import { MissingKeyConfigError } from "dialcache";
-import { createNodeRedisDialCacheClient } from "dialcache/node-redis";
-import { READ_CACHE_SCRIPT } from "dialcache/redis-protocol";
+import { createClient } from "redis";
+import {
+  createNodeRedisDialCacheClient,
+  createNodeRedisDialCacheInvalidationCoordinator,
+  dialcacheRedisScripts,
+  type DialCacheNodeRedisInvalidationCoordinator,
+  type DialCacheNodeRedisSubscriberClient,
+} from "dialcache/node-redis";
+import {
+  INVALIDATE_AND_PUBLISH_CACHE_SCRIPT,
+  MAX_REDIS_INVALIDATION_EVENT_BYTES,
+  READ_CACHE_SCRIPT,
+  REDIS_INVALIDATION_EVENT_VERSION,
+  decodeRedisInvalidationEvent,
+  redisInvalidationChannel,
+} from "dialcache/redis-protocol";
 import {
   DatadogDialCacheMetrics,
   createDatadogDialCacheMetrics,
@@ -259,8 +284,106 @@ const customRedisClient: DialCacheRedisClient = {
   write: async ({ value }) => typeof value === "string" || Buffer.isBuffer(value),
   invalidate: async () => undefined,
 };
+const coordinatedIdentity: DialCacheInvalidationIdentity = {
+  namespace: "consumer-cache",
+  keyType: "id",
+  id: "123",
+};
+const coordinatedSource: DialCacheLocalInvalidationSource = "event";
+const coordinatedLocalInvalidation: DialCacheLocalInvalidation = {
+  ...coordinatedIdentity,
+  remainingMs: 1_000,
+  source: coordinatedSource,
+};
+const coordinatedEvent: DialCacheInvalidationEventV1 = {
+  version: 1,
+  ...coordinatedIdentity,
+  effectiveWatermarkMs: String(Date.now() + 1_000),
+  redisNowMs: String(Date.now()),
+};
+const coordinatedState: DialCacheInvalidationCoordinatorState = "ready";
+const coordinatorListeners = new Set<DialCacheInvalidationCoordinatorListener>();
+const coordinatedInvalidationCoordinator: DialCacheInvalidationCoordinator = {
+  namespace: coordinatedIdentity.namespace,
+  state: coordinatedState,
+  addListener(listener) {
+    coordinatorListeners.add(listener);
+    listener.onStateChange(coordinatedState);
+    return () => coordinatorListeners.delete(listener);
+  },
+  invalidate(invalidation) {
+    for (const listener of coordinatorListeners) {
+      listener.onInvalidation(invalidation);
+    }
+  },
+};
+const coordinatedRedisClient: DialCacheCoordinatedRedisClient = {
+  ...customRedisClient,
+  async invalidateAndPublish(request: RedisCoordinatedInvalidationRequest) {
+    return {
+      version: REDIS_INVALIDATION_EVENT_VERSION,
+      namespace: request.namespace,
+      keyType: request.keyType,
+      id: request.id,
+      effectiveWatermarkMs: String(Date.now() + request.futureBufferMs),
+      redisNowMs: String(Date.now()),
+    };
+  },
+};
+const coordinatedRedisConfig: CoordinatedRedisConfig = {
+  client: coordinatedRedisClient,
+  coordinator: coordinatedInvalidationCoordinator,
+};
+const dialcacheRedisConfig: DialCacheRedisConfig = coordinatedRedisConfig;
+// A coordinated-capable client remains usable without opting into local coordination.
+const coordinatedClientWithoutCoordinator: RedisConfig = { client: coordinatedRedisClient };
+// @ts-expect-error A coordinator requires the atomic invalidate-and-publish client extension.
+const legacyClientWithCoordinator: DialCacheRedisConfig = {
+  client: customRedisClient,
+  coordinator: coordinatedInvalidationCoordinator,
+};
+interface ExtendedRedisConfig extends RedisConfig {
+  readonly applicationName: string;
+}
+class ImplementedRedisConfig implements RedisConfig {
+  readonly client = customRedisClient;
+}
+const extendedRedisConfig: ExtendedRedisConfig = {
+  client: customRedisClient,
+  applicationName: "consumer",
+};
+const implementedRedisConfig: RedisConfig = new ImplementedRedisConfig();
+const coordinatedInvalidationRequest: RedisCoordinatedInvalidationRequest = {
+  ...coordinatedIdentity,
+  watermarkKey: "{consumer-cache:id:123}#watermark",
+  futureBufferMs: 1_000,
+  channel: redisInvalidationChannel(coordinatedIdentity.namespace),
+};
+const decodedCoordinatedEvent: DialCacheInvalidationEventV1 = decodeRedisInvalidationEvent(
+  JSON.stringify(coordinatedEvent),
+  coordinatedIdentity,
+);
+const nodeRedisCommandClient = createClient({ scripts: dialcacheRedisScripts });
+const nodeRedisCoordinatedAdapter: DialCacheCoordinatedRedisClient =
+  createNodeRedisDialCacheClient(nodeRedisCommandClient);
+const nodeRedisSubscriber = createClient();
+const nodeRedisSubscriberSurface: DialCacheNodeRedisSubscriberClient = nodeRedisSubscriber;
+const nodeRedisCoordinatorPromise: Promise<DialCacheNodeRedisInvalidationCoordinator> =
+  createNodeRedisDialCacheInvalidationCoordinator(nodeRedisSubscriber, {
+    namespace: coordinatedIdentity.namespace,
+  });
+const legacyStructuralNodeScriptClient = {
+  dialcacheRead: async () => null,
+  dialcacheReadTracked: async () => null,
+  dialcacheWrite: async () => 1,
+  dialcacheWriteTracked: async () => 1,
+  dialcacheInvalidate: async () => 1,
+};
+const legacyStructuralNodeAdapter: DialCacheRedisClient =
+  createNodeRedisDialCacheClient(legacyStructuralNodeScriptClient);
 const cacheHasNoFlushAll: "flushAll" extends keyof DialCache ? false : true = true;
 const cacheHasNoClose: "close" extends keyof DialCache ? false : true = true;
+const cacheHasDispose: "dispose" extends keyof DialCache ? true : false = true;
 const clientHasNoFlushAll: "flushAll" extends keyof DialCacheRedisClient ? false : true = true;
 type TrackedRedisWriteRequest = Extract<RedisWriteRequest, { readonly watermarkKey: string }>;
 const trackedWriteHasNoWatermarkTtlFloor: "watermarkTtlFloorMs" extends keyof TrackedRedisWriteRequest
@@ -361,7 +484,28 @@ void disabledOverlay;
 void metricErrorKinds;
 void unboundedErrorKind;
 void createNodeRedisDialCacheClient;
+void createNodeRedisDialCacheInvalidationCoordinator;
+void dialcacheRedisScripts.dialcacheInvalidateAndPublish;
+void nodeRedisCommandClient;
+void nodeRedisCoordinatedAdapter.invalidateAndPublish;
+void nodeRedisSubscriberSurface.isReady;
+void nodeRedisCoordinatorPromise;
+void legacyStructuralNodeAdapter.invalidate;
 void READ_CACHE_SCRIPT;
+void INVALIDATE_AND_PUBLISH_CACHE_SCRIPT;
+void MAX_REDIS_INVALIDATION_EVENT_BYTES;
+void coordinatedIdentity;
+void coordinatedLocalInvalidation;
+void coordinatedEvent;
+void coordinatedInvalidationCoordinator;
+void coordinatedRedisConfig;
+void dialcacheRedisConfig;
+void coordinatedClientWithoutCoordinator;
+void legacyClientWithCoordinator;
+void extendedRedisConfig;
+void implementedRedisConfig;
+void coordinatedInvalidationRequest;
+void decodedCoordinatedEvent;
 void customRedisClient;
 const globalSerializer: Serializer<unknown> = {
   dump: () => "global",
@@ -376,6 +520,7 @@ cacheWithGlobalSerializer.cached(async (_id: string) => new Date(0), optionsFor(
 cacheWithGlobalSerializer.getOrLoad(async () => new Date(0), inlineOptionsFor("GlobalSerializerNeedsInlineTypedOverride"));
 void cacheHasNoFlushAll;
 void cacheHasNoClose;
+void cacheHasDispose;
 void clientHasNoFlushAll;
 void trackedWriteHasNoWatermarkTtlFloor;
 void invalidationHasNoWatermarkTtlFloor;
@@ -520,7 +665,7 @@ try {
 const nodeRedis = await import("dialcache/node-redis");
 await import("dialcache/valkey-glide");
 await import("dialcache/datadog");
-await import("dialcache/redis-protocol");
+const redisProtocol = await import("dialcache/redis-protocol");
 const fallbackTimeoutError = new root.FallbackTimeoutError("PackageRuntime", 1000);
 if (!(fallbackTimeoutError instanceof root.DialCacheError) || fallbackTimeoutError.timeoutMs !== 1000) {
   throw new Error("The root ESM fallback-timeout error export is invalid");
@@ -558,6 +703,73 @@ try {
   if (!(error instanceof root.DialCacheRedisProtocolError)) {
     throw new Error("The node-redis protocol error does not match the root ESM export");
   }
+}
+if (
+  typeof nodeRedis.createNodeRedisDialCacheInvalidationCoordinator !== "function"
+  || typeof nodeRedis.dialcacheRedisScripts.dialcacheInvalidateAndPublish?.SCRIPT !== "string"
+  || redisProtocol.INVALIDATE_AND_PUBLISH_CACHE_SCRIPT
+    !== nodeRedis.dialcacheRedisScripts.dialcacheInvalidateAndPublish.SCRIPT
+  || redisProtocol.REDIS_INVALIDATION_EVENT_VERSION !== 1
+  || redisProtocol.MAX_REDIS_INVALIDATION_EVENT_BYTES !== 16 * 1024
+) {
+  throw new Error("The packed ESM coordinated invalidation exports are invalid");
+}
+const protocolNamespace = "packed-esm";
+const protocolEvent = redisProtocol.decodeRedisInvalidationEvent(JSON.stringify({
+  version: redisProtocol.REDIS_INVALIDATION_EVENT_VERSION,
+  namespace: protocolNamespace,
+  keyType: "id",
+  id: "123",
+  effectiveWatermarkMs: "1001",
+  redisNowMs: "1",
+}));
+if (
+  protocolEvent.id !== "123"
+  || redisProtocol.redisInvalidationChannel(protocolNamespace)
+    !== "dialcache:invalidation:v1:packed-esm"
+) {
+  throw new Error("The packed ESM invalidation event helpers are invalid");
+}
+let coordinatedListenerRemoved = false;
+const packageCoordinator = {
+  namespace: protocolNamespace,
+  state: "ready",
+  addListener(listener) {
+    listener.onStateChange("ready");
+    return () => {
+      coordinatedListenerRemoved = true;
+    };
+  },
+  invalidate() {},
+};
+const packageLegacyClient = {
+  async read() { return null; },
+  async write() { return true; },
+  async invalidate() {},
+};
+new root.DialCache({ namespace: "packed-legacy", redis: { client: packageLegacyClient } });
+const packageCoordinatedCache = new root.DialCache({
+  namespace: protocolNamespace,
+  redis: {
+    client: {
+      ...packageLegacyClient,
+      async invalidateAndPublish(request) {
+        return {
+          version: 1,
+          namespace: request.namespace,
+          keyType: request.keyType,
+          id: request.id,
+          effectiveWatermarkMs: "1",
+          redisNowMs: "1",
+        };
+      },
+    },
+    coordinator: packageCoordinator,
+  },
+});
+packageCoordinatedCache.dispose();
+if (!coordinatedListenerRemoved) {
+  throw new Error("The packed ESM DialCache did not detach from its invalidation coordinator");
 }
 if ("MissingKeyConfigError" in root) {
   throw new Error("The removed MissingKeyConfigError class must not be exported from the root ESM entry");
@@ -616,7 +828,7 @@ if (inlineCalls !== 1 || inlineSecond !== inlineFirst) {
 const nodeRedis = require("dialcache/node-redis");
 require("dialcache/valkey-glide");
 require("dialcache/datadog");
-require("dialcache/redis-protocol");
+const redisProtocol = require("dialcache/redis-protocol");
 const fallbackTimeoutError = new root.FallbackTimeoutError("PackageRuntime", 1000);
 if (!(fallbackTimeoutError instanceof root.DialCacheError) || fallbackTimeoutError.timeoutMs !== 1000) {
   throw new Error("The root CommonJS fallback-timeout error export is invalid");
@@ -656,6 +868,73 @@ try {
   if (!(error instanceof root.DialCacheRedisProtocolError)) {
     throw new Error("The node-redis protocol error does not match the root CommonJS export");
   }
+}
+if (
+  typeof nodeRedis.createNodeRedisDialCacheInvalidationCoordinator !== "function"
+  || typeof nodeRedis.dialcacheRedisScripts.dialcacheInvalidateAndPublish?.SCRIPT !== "string"
+  || redisProtocol.INVALIDATE_AND_PUBLISH_CACHE_SCRIPT
+    !== nodeRedis.dialcacheRedisScripts.dialcacheInvalidateAndPublish.SCRIPT
+  || redisProtocol.REDIS_INVALIDATION_EVENT_VERSION !== 1
+  || redisProtocol.MAX_REDIS_INVALIDATION_EVENT_BYTES !== 16 * 1024
+) {
+  throw new Error("The packed CommonJS coordinated invalidation exports are invalid");
+}
+const protocolNamespace = "packed-cjs";
+const protocolEvent = redisProtocol.decodeRedisInvalidationEvent(JSON.stringify({
+  version: redisProtocol.REDIS_INVALIDATION_EVENT_VERSION,
+  namespace: protocolNamespace,
+  keyType: "id",
+  id: "123",
+  effectiveWatermarkMs: "1001",
+  redisNowMs: "1",
+}));
+if (
+  protocolEvent.id !== "123"
+  || redisProtocol.redisInvalidationChannel(protocolNamespace)
+    !== "dialcache:invalidation:v1:packed-cjs"
+) {
+  throw new Error("The packed CommonJS invalidation event helpers are invalid");
+}
+let coordinatedListenerRemoved = false;
+const packageCoordinator = {
+  namespace: protocolNamespace,
+  state: "ready",
+  addListener(listener) {
+    listener.onStateChange("ready");
+    return () => {
+      coordinatedListenerRemoved = true;
+    };
+  },
+  invalidate() {},
+};
+const packageLegacyClient = {
+  async read() { return null; },
+  async write() { return true; },
+  async invalidate() {},
+};
+new root.DialCache({ namespace: "packed-legacy", redis: { client: packageLegacyClient } });
+const packageCoordinatedCache = new root.DialCache({
+  namespace: protocolNamespace,
+  redis: {
+    client: {
+      ...packageLegacyClient,
+      async invalidateAndPublish(request) {
+        return {
+          version: 1,
+          namespace: request.namespace,
+          keyType: request.keyType,
+          id: request.id,
+          effectiveWatermarkMs: "1",
+          redisNowMs: "1",
+        };
+      },
+    },
+    coordinator: packageCoordinator,
+  },
+});
+packageCoordinatedCache.dispose();
+if (!coordinatedListenerRemoved) {
+  throw new Error("The packed CommonJS DialCache did not detach from its invalidation coordinator");
 }
 if ("MissingKeyConfigError" in root) {
   throw new Error("The removed MissingKeyConfigError class must not be exported from the root CommonJS entry");
