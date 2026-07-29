@@ -336,7 +336,7 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
           if (!Buffer.isBuffer(value)) {
             throw new Error("Expected the binary Redis payload");
           }
-          return value;
+          return Buffer.from(value);
         }),
       };
       const shadowRemoteOnly = new DialCacheKeyConfig({

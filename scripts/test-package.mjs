@@ -39,6 +39,8 @@ const rootConsumer = `import {
   type RedisWriteRequest,
   type Serializer,
   type ShadowComparator,
+  type ShadowValidationMetricLabels,
+  type ShadowValidationOutcome,
 } from "dialcache";
 // @ts-expect-error The unused MissingKeyConfigError class was removed instead of deprecated.
 import { MissingKeyConfigError } from "dialcache";
@@ -73,6 +75,20 @@ const metrics: DialCacheMetricsAdapter = {
   observeSerialization: () => undefined,
   observeSize: () => undefined,
 };
+const shadowMetrics: DialCacheMetricsAdapter = {
+  ...metrics,
+  shadowValidation: (labels: ShadowValidationMetricLabels) => {
+    const outcome: ShadowValidationOutcome = labels.outcome;
+    void outcome;
+  },
+};
+const shadowCacheConfig: DialCacheConfig = {
+  namespace: "consumer-shadow-cache",
+  metrics: shadowMetrics,
+  shadowMaxInFlight: 2,
+};
+const shadowCache = new DialCache(shadowCacheConfig);
+const shadowKeyConfig = new DialCacheKeyConfig({ shadowRamp: 50 });
 const dogStatsDClient: DatadogDogStatsDClient = {
   increment: () => undefined,
   histogram: () => undefined,
@@ -204,6 +220,11 @@ cache.cached(async (id: string) => id, {
   ...optionsFor("InvalidShadowComparatorValueType"),
   // @ts-expect-error Shadow comparators receive the cached function's resolved value type.
   shadowComparator: (cachedValue: number, sourceValue: number) => cachedValue === sourceValue,
+});
+cache.cached(async (id: string) => id, {
+  ...optionsFor("InvalidAsyncShadowComparator"),
+  // @ts-expect-error Shadow comparators must return a boolean synchronously.
+  shadowComparator: async (cachedValue, sourceValue) => cachedValue === sourceValue,
 });
 
 const requestLocalConfig = new DialCacheKeyConfig({ requestLocal: true });
@@ -353,6 +374,8 @@ void missingDateSerializer;
 void missingInlineDateSerializer;
 void requestLocalConfig;
 void structuralConfigProvider;
+void shadowCache;
+void shadowKeyConfig;
 void requestLocalCoalescingLabels;
 void cacheMetricLabels;
 void invalidationMetricLabels;

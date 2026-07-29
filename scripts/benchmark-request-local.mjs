@@ -377,7 +377,7 @@ async function benchmarkSequentialTrackedRedisHits(iterations, { scenario, useCa
     elapsedMs,
     fallbackCalls,
     redisReadCalls,
-    deadlineTimers: redisReadCalls,
+    deadlineTimers: "not measured",
   };
 }
 

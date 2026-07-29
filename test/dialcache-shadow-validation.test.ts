@@ -1,3 +1,5 @@
+import { performance } from "node:perf_hooks";
+
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -6,6 +8,7 @@ import {
   DialCacheKey,
   DialCacheKeyConfig,
   type CacheMetricLabels,
+  type DialCacheConfig,
   type DialCacheMetricsAdapter,
   type DisabledMetricLabels,
   type ErrorMetricLabels,
@@ -119,6 +122,27 @@ function metricsWithoutShadow(): DialCacheMetricsAdapter {
   };
 }
 
+function createShadowCache(
+  redis: FakeRedis,
+  metrics: DialCacheMetricsAdapter,
+  config: Omit<DialCacheConfig, "metrics" | "redis"> = {},
+): DialCache {
+  return new DialCache({
+    ...config,
+    redis: { client: redis, readTimeoutMs: 1_000 },
+    metrics,
+  });
+}
+
+function trackedRemoteDefaults(useCase: string, shadowRamp = 100) {
+  return {
+    keyType: "user_id",
+    useCase,
+    trackForInvalidation: true,
+    defaultConfig: remoteOnly(shadowRamp),
+  } as const;
+}
+
 const nextImmediate = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 
 async function waitForShadowEvents(metrics: RecordingMetrics, count: number): Promise<void> {
@@ -136,19 +160,13 @@ describe("DialCache Redis shadow validation", () => {
     seedRedis(redis, { id: "123", useCase, payload: JSON.stringify(cachedValue) });
     const sourceGate = deferred<typeof cachedValue>();
     let sourceCalls = 0;
-    const dialcache = new DialCache({
-      redis: { client: redis, readTimeoutMs: 1_000 },
-      metrics,
-    });
+    const dialcache = createShadowCache(redis, metrics);
     const getUser = dialcache.cached(async (id: string) => {
       sourceCalls += 1;
       return await sourceGate.promise;
     }, {
-      keyType: "user_id",
-      useCase,
+      ...trackedRemoteDefaults(useCase),
       cacheKey: (id) => id,
-      trackForInvalidation: true,
-      defaultConfig: remoteOnly(100),
     });
 
     const result = await dialcache.enable(async () => await getUser("123"));
@@ -176,19 +194,13 @@ describe("DialCache Redis shadow validation", () => {
     };
     const key = seedRedis(redis, { id: "123", useCase, payload: JSON.stringify(cachedValue) });
     const originalFrame = Buffer.from(redis.raw(`${key.urn}:dialcache-frame-v1`));
-    const dialcache = new DialCache({
-      redis: { client: redis, readTimeoutMs: 1_000 },
-      metrics,
-    });
+    const dialcache = createShadowCache(redis, metrics);
     const getUser = dialcache.cached(async () => ({
       profile: { name: "Ada", active: true },
       id: "123",
     }), {
-      keyType: "user_id",
-      useCase,
+      ...trackedRemoteDefaults(useCase),
       cacheKey: () => "123",
-      trackForInvalidation: true,
-      defaultConfig: remoteOnly(100),
     });
 
     expect(await dialcache.enable(async () => await getUser())).toEqual(cachedValue);
@@ -208,16 +220,10 @@ describe("DialCache Redis shadow validation", () => {
       useCase,
       payload: JSON.stringify({ id: "123", version: 1 }),
     });
-    const dialcache = new DialCache({
-      redis: { client: redis, readTimeoutMs: 1_000 },
-      metrics,
-    });
+    const dialcache = createShadowCache(redis, metrics);
     const getUser = dialcache.cached(async () => ({ id: "123", version: 2 }), {
-      keyType: "user_id",
-      useCase,
+      ...trackedRemoteDefaults(useCase),
       cacheKey: () => "123",
-      trackForInvalidation: true,
-      defaultConfig: remoteOnly(100),
     });
 
     expect(await dialcache.enable(async () => await getUser())).toEqual({ id: "123", version: 1 });
@@ -240,16 +246,10 @@ describe("DialCache Redis shadow validation", () => {
         JSON.parse(Buffer.isBuffer(payload) ? payload.toString("utf8") : payload) as typeof cachedValue
       ),
     };
-    const dialcache = new DialCache({
-      redis: { client: redis, readTimeoutMs: 1_000 },
-      metrics,
-    });
+    const dialcache = createShadowCache(redis, metrics);
     const getUser = dialcache.cached(async () => await sourceGate.promise, {
-      keyType: "user_id",
-      useCase,
+      ...trackedRemoteDefaults(useCase),
       cacheKey: () => "123",
-      trackForInvalidation: true,
-      defaultConfig: remoteOnly(100),
       serializer,
     });
 
@@ -275,10 +275,7 @@ describe("DialCache Redis shadow validation", () => {
       tracked: false,
     });
     const source = vi.fn(async () => ({ id: "123", source: "truth" }));
-    const dialcache = new DialCache({
-      redis: { client: redis, readTimeoutMs: 1_000 },
-      metrics,
-    });
+    const dialcache = createShadowCache(redis, metrics);
     const getUser = dialcache.cached(source, {
       keyType: "user_id",
       useCase,
@@ -297,16 +294,10 @@ describe("DialCache Redis shadow validation", () => {
     const redis = new FakeRedis();
     const metrics = new RecordingMetrics();
     const source = vi.fn(async () => ({ id: "123", source: "truth" }));
-    const dialcache = new DialCache({
-      redis: { client: redis, readTimeoutMs: 1_000 },
-      metrics,
-    });
+    const dialcache = createShadowCache(redis, metrics);
     const getUser = dialcache.cached(source, {
-      keyType: "user_id",
-      useCase: "ShadowMiss",
+      ...trackedRemoteDefaults("ShadowMiss"),
       cacheKey: () => "123",
-      trackForInvalidation: true,
-      defaultConfig: remoteOnly(100),
     });
 
     expect(await dialcache.enable(async () => await getUser())).toEqual({ id: "123", source: "truth" });
@@ -328,16 +319,10 @@ describe("DialCache Redis shadow validation", () => {
       }),
       dump: vi.fn(async (value) => JSON.stringify(value)),
     };
-    const dialcache = new DialCache({
-      redis: { client: redis, readTimeoutMs: 1_000 },
-      metrics,
-    });
+    const dialcache = createShadowCache(redis, metrics);
     const getUser = dialcache.cached(source, {
-      keyType: "user_id",
-      useCase,
+      ...trackedRemoteDefaults(useCase),
       cacheKey: () => "123",
-      trackForInvalidation: true,
-      defaultConfig: remoteOnly(100),
       serializer,
     });
 
@@ -353,16 +338,10 @@ describe("DialCache Redis shadow validation", () => {
     const useCase = "ShadowNoMetricHook";
     seedRedis(redis, { id: "123", useCase, payload: JSON.stringify({ id: "123" }) });
     const source = vi.fn(async () => ({ id: "123" }));
-    const dialcache = new DialCache({
-      redis: { client: redis, readTimeoutMs: 1_000 },
-      metrics: metricsWithoutShadow(),
-    });
+    const dialcache = createShadowCache(redis, metricsWithoutShadow());
     const getUser = dialcache.cached(source, {
-      keyType: "user_id",
-      useCase,
+      ...trackedRemoteDefaults(useCase),
       cacheKey: () => "123",
-      trackForInvalidation: true,
-      defaultConfig: remoteOnly(100),
     });
 
     expect(await dialcache.enable(async () => await getUser())).toEqual({ id: "123" });
@@ -392,16 +371,12 @@ describe("DialCache Redis shadow validation", () => {
       ...(shadowRamp === undefined ? {} : { shadowRamp: shadowRamp as number }),
     });
     const source = vi.fn(async () => ({ id: "123", source: "truth" }));
-    const dialcache = new DialCache({
-      redis: { client: redis, readTimeoutMs: 1_000 },
-      metrics,
+    const dialcache = createShadowCache(redis, metrics, {
       cacheConfigProvider: async () => runtimeConfig,
     });
     const getUser = dialcache.cached(source, {
-      keyType: "user_id",
-      useCase,
+      ...trackedRemoteDefaults(useCase),
       cacheKey: () => "123",
-      trackForInvalidation: true,
       defaultConfig: remoteOnly(),
     });
 
@@ -420,6 +395,50 @@ describe("DialCache Redis shadow validation", () => {
           inFallback: false,
         }]
       : []);
+  });
+
+  it.each([
+    {
+      name: "enables a static policy that omits shadow validation",
+      staticShadowRamp: undefined,
+      runtimeShadowRamp: 100,
+      expectedValidations: 1,
+    },
+    {
+      name: "disables a static one-hundred-percent policy",
+      staticShadowRamp: 100,
+      runtimeShadowRamp: 0,
+      expectedValidations: 0,
+    },
+  ])("runtime shadowRamp $name", async ({
+    staticShadowRamp,
+    runtimeShadowRamp,
+    expectedValidations,
+  }) => {
+    const redis = new FakeRedis();
+    const metrics = new RecordingMetrics();
+    const useCase = `ShadowRuntimeOverlay${runtimeShadowRamp}`;
+    const cachedValue = { id: "123" };
+    seedRedis(redis, { id: "123", useCase, payload: JSON.stringify(cachedValue) });
+    const source = vi.fn(async () => cachedValue);
+    const dialcache = createShadowCache(redis, metrics, {
+      cacheConfigProvider: async () => new DialCacheKeyConfig({ shadowRamp: runtimeShadowRamp }),
+    });
+    const getUser = dialcache.cached(source, {
+      ...trackedRemoteDefaults(useCase),
+      cacheKey: () => "123",
+      defaultConfig: remoteOnly(staticShadowRamp),
+    });
+
+    expect(await dialcache.enable(async () => await getUser())).toEqual(cachedValue);
+    if (expectedValidations === 1) {
+      await waitForShadowEvents(metrics, 1);
+    } else {
+      await nextImmediate();
+    }
+
+    expect(source).toHaveBeenCalledTimes(expectedValidations);
+    expect(metrics.shadowEvents).toHaveLength(expectedValidations);
   });
 
   it("keeps partial shadow-ramp membership stable per exact key", async () => {
@@ -449,19 +468,13 @@ describe("DialCache Redis shadow validation", () => {
       payload: JSON.stringify({ id: excludedId }),
     });
     const sourceIds: string[] = [];
-    const dialcache = new DialCache({
-      redis: { client: redis, readTimeoutMs: 1_000 },
-      metrics,
-    });
+    const dialcache = createShadowCache(redis, metrics);
     const getUser = dialcache.cached(async (id: string) => {
       sourceIds.push(id);
       return { id };
     }, {
-      keyType: "user_id",
-      useCase,
+      ...trackedRemoteDefaults(useCase, 50),
       cacheKey: (id) => id,
-      trackForInvalidation: true,
-      defaultConfig: remoteOnly(50),
     });
 
     await dialcache.enable(async () => await getUser(selectedId!));
@@ -485,16 +498,10 @@ describe("DialCache Redis shadow validation", () => {
     const sourceGate = deferred<typeof cachedValue>();
     const setImmediateSpy = vi.spyOn(globalThis, "setImmediate");
     const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
-    const dialcache = new DialCache({
-      redis: { client: redis, readTimeoutMs: 1_000 },
-      metrics,
-    });
+    const dialcache = createShadowCache(redis, metrics);
     const getUser = dialcache.cached(async () => await sourceGate.promise, {
-      keyType: "user_id",
-      useCase,
+      ...trackedRemoteDefaults(useCase),
       cacheKey: () => "123",
-      trackForInvalidation: true,
-      defaultConfig: remoteOnly(100),
       fallbackTimeoutMs: 10_000,
     });
 
@@ -530,19 +537,13 @@ describe("DialCache Redis shadow validation", () => {
     const sourceGate = deferred<typeof cachedValue>();
     const sourceStarted = deferred<void>();
     const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
-    const dialcache = new DialCache({
-      redis: { client: redis, readTimeoutMs: 1_000 },
-      metrics,
-    });
+    const dialcache = createShadowCache(redis, metrics);
     const getUser = dialcache.cached(async () => {
       sourceStarted.resolve();
       return await sourceGate.promise;
     }, {
-      keyType: "user_id",
-      useCase,
+      ...trackedRemoteDefaults(useCase),
       cacheKey: () => "123",
-      trackForInvalidation: true,
-      defaultConfig: remoteOnly(100),
       fallbackTimeoutMs: null,
     });
 
@@ -571,15 +572,10 @@ describe("DialCache Redis shadow validation", () => {
     const useCase = "ShadowNoLocalHit";
     seedRedis(redis, { id: "123", useCase, payload: JSON.stringify({ id: "123" }) });
     const source = vi.fn(async () => ({ id: "123" }));
-    const dialcache = new DialCache({
-      redis: { client: redis, readTimeoutMs: 1_000 },
-      metrics,
-    });
+    const dialcache = createShadowCache(redis, metrics);
     const getUser = dialcache.cached(source, {
-      keyType: "user_id",
-      useCase,
+      ...trackedRemoteDefaults(useCase),
       cacheKey: () => "123",
-      trackForInvalidation: true,
       defaultConfig: localAndRemote(100),
     });
 
@@ -599,15 +595,10 @@ describe("DialCache Redis shadow validation", () => {
     const useCase = "ShadowNoRequestHit";
     seedRedis(redis, { id: "123", useCase, payload: JSON.stringify({ id: "123" }) });
     const source = vi.fn(async () => ({ id: "123" }));
-    const dialcache = new DialCache({
-      redis: { client: redis, readTimeoutMs: 1_000 },
-      metrics,
-    });
+    const dialcache = createShadowCache(redis, metrics);
     const getUser = dialcache.cached(source, {
-      keyType: "user_id",
-      useCase,
+      ...trackedRemoteDefaults(useCase),
       cacheKey: () => "123",
-      trackForInvalidation: true,
       defaultConfig: remoteOnly(100, true),
     });
 
@@ -631,16 +622,10 @@ describe("DialCache Redis shadow validation", () => {
     const source = vi.fn(async () => {
       throw new Error("source unavailable");
     });
-    const dialcache = new DialCache({
-      redis: { client: redis, readTimeoutMs: 1_000 },
-      metrics,
-    });
+    const dialcache = createShadowCache(redis, metrics);
     const getUser = dialcache.cached(source, {
-      keyType: "user_id",
-      useCase,
+      ...trackedRemoteDefaults(useCase),
       cacheKey: () => "123",
-      trackForInvalidation: true,
-      defaultConfig: remoteOnly(100),
     });
 
     expect(await dialcache.enable(async () => await getUser())).toEqual({ id: "123" });
@@ -666,16 +651,10 @@ describe("DialCache Redis shadow validation", () => {
       }),
       dump: vi.fn(async (value) => JSON.stringify(value)),
     };
-    const dialcache = new DialCache({
-      redis: { client: redis, readTimeoutMs: 1_000 },
-      metrics,
-    });
+    const dialcache = createShadowCache(redis, metrics);
     const getUser = dialcache.cached(async () => ({ source: "truth" }), {
-      keyType: "user_id",
-      useCase,
+      ...trackedRemoteDefaults(useCase),
       cacheKey: () => "123",
-      trackForInvalidation: true,
-      defaultConfig: remoteOnly(100),
       serializer,
     });
 
@@ -698,18 +677,12 @@ describe("DialCache Redis shadow validation", () => {
     const shadowComparator = vi.fn(
       (cached: typeof cachedValue, source: typeof sourceValue) => cached.id === source.id,
     );
-    const dialcache = new DialCache({
-      redis: { client: redis, readTimeoutMs: 1_000 },
-      metrics,
-    });
+    const dialcache = createShadowCache(redis, metrics);
 
     const result = await dialcache.enable(async () =>
       await dialcache.getOrLoad(async () => sourceValue, {
+        ...trackedRemoteDefaults(useCase),
         key: "123",
-        keyType: "user_id",
-        useCase,
-        trackForInvalidation: true,
-        defaultConfig: remoteOnly(100),
         shadowComparator,
       })
     );
@@ -741,16 +714,10 @@ describe("DialCache Redis shadow validation", () => {
     const useCase = `ShadowComparisonError${name.replaceAll(" ", "")}`;
     const cachedValue = { id: "123" };
     seedRedis(redis, { id: "123", useCase, payload: JSON.stringify(cachedValue) });
-    const dialcache = new DialCache({
-      redis: { client: redis, readTimeoutMs: 1_000 },
-      metrics,
-    });
+    const dialcache = createShadowCache(redis, metrics);
     const getUser = dialcache.cached(async () => cachedValue, {
-      keyType: "user_id",
-      useCase,
+      ...trackedRemoteDefaults(useCase),
       cacheKey: () => "123",
-      trackForInvalidation: true,
-      defaultConfig: remoteOnly(100),
       shadowComparator: comparator,
     });
 
@@ -759,6 +726,37 @@ describe("DialCache Redis shadow validation", () => {
     await Promise.resolve();
 
     expect(metrics.shadowEvents[0]?.outcome).toBe("comparison_error");
+  });
+
+  it("reports timeout when synchronous comparison crosses the monotonic deadline", async () => {
+    let nowMs = 0;
+    const nowSpy = vi.spyOn(performance, "now").mockImplementation(() => nowMs);
+    const redis = new FakeRedis();
+    const metrics = new RecordingMetrics();
+    const useCase = "ShadowSynchronousComparisonTimeout";
+    const cachedValue = { id: "123" };
+    seedRedis(redis, { id: "123", useCase, payload: JSON.stringify(cachedValue) });
+    const shadowComparator = vi.fn(() => {
+      nowMs = 10;
+      return true;
+    });
+    const dialcache = createShadowCache(redis, metrics);
+    const getUser = dialcache.cached(async () => cachedValue, {
+      ...trackedRemoteDefaults(useCase),
+      cacheKey: () => "123",
+      fallbackTimeoutMs: 10,
+      shadowComparator,
+    });
+
+    try {
+      expect(await dialcache.enable(async () => await getUser())).toEqual(cachedValue);
+      await waitForShadowEvents(metrics, 1);
+
+      expect(shadowComparator).toHaveBeenCalledOnce();
+      expect(metrics.shadowEvents[0]?.outcome).toBe("timeout");
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 
   it("retains a timed-out accidental async comparator flight until it settles", async () => {
@@ -779,20 +777,13 @@ describe("DialCache Redis shadow validation", () => {
       }
       return cached.id === source.id;
     });
-    const dialcache = new DialCache({
-      redis: { client: redis, readTimeoutMs: 1_000 },
-      metrics,
-      shadowMaxInFlight: 1,
-    });
+    const dialcache = createShadowCache(redis, metrics, { shadowMaxInFlight: 1 });
     const getUser = dialcache.cached(async (id: string) => {
       sourceIds.push(id);
       return { id };
     }, {
-      keyType: "user_id",
-      useCase,
+      ...trackedRemoteDefaults(useCase),
       cacheKey: (id) => id,
-      trackForInvalidation: true,
-      defaultConfig: remoteOnly(100),
       fallbackTimeoutMs: 10,
       shadowComparator,
     });
@@ -825,17 +816,10 @@ describe("DialCache Redis shadow validation", () => {
     seedRedis(redis, { id: "123", useCase, payload: JSON.stringify(cachedValue) });
     const gate = deferred<typeof cachedValue>();
     const source = vi.fn(async () => await gate.promise);
-    const dialcache = new DialCache({
-      redis: { client: redis, readTimeoutMs: 1_000 },
-      metrics,
-      shadowMaxInFlight: 2,
-    });
+    const dialcache = createShadowCache(redis, metrics, { shadowMaxInFlight: 2 });
     const getUser = dialcache.cached(source, {
-      keyType: "user_id",
-      useCase,
+      ...trackedRemoteDefaults(useCase),
       cacheKey: () => "123",
-      trackForInvalidation: true,
-      defaultConfig: remoteOnly(100),
     });
 
     await dialcache.enable(async () => await getUser());
@@ -857,20 +841,13 @@ describe("DialCache Redis shadow validation", () => {
     seedRedis(redis, { id: "b", useCase, payload: JSON.stringify({ id: "b" }) });
     const firstGate = deferred<{ readonly id: string }>();
     const sourceIds: string[] = [];
-    const dialcache = new DialCache({
-      redis: { client: redis, readTimeoutMs: 1_000 },
-      metrics,
-      shadowMaxInFlight: 1,
-    });
+    const dialcache = createShadowCache(redis, metrics, { shadowMaxInFlight: 1 });
     const getUser = dialcache.cached(async (id: string) => {
       sourceIds.push(id);
       return id === "a" ? await firstGate.promise : { id };
     }, {
-      keyType: "user_id",
-      useCase,
+      ...trackedRemoteDefaults(useCase),
       cacheKey: (id) => id,
-      trackForInvalidation: true,
-      defaultConfig: remoteOnly(100),
     });
 
     await dialcache.enable(async () => await getUser("a"));
@@ -896,20 +873,13 @@ describe("DialCache Redis shadow validation", () => {
       load: vi.fn(async (payload) => JSON.parse(Buffer.isBuffer(payload) ? payload.toString("utf8") : payload) as typeof cachedValue),
       dump: vi.fn(async (value) => JSON.stringify(value)),
     };
-    const dialcache = new DialCache({
-      redis: { client: redis, readTimeoutMs: 1_000 },
-      metrics,
-      shadowMaxInFlight: 1,
-    });
+    const dialcache = createShadowCache(redis, metrics, { shadowMaxInFlight: 1 });
     const getUser = dialcache.cached(async () => {
       sourceCalls += 1;
       return sourceCalls === 1 ? await firstSourceGate.promise : cachedValue;
     }, {
-      keyType: "user_id",
-      useCase,
+      ...trackedRemoteDefaults(useCase),
       cacheKey: () => "123",
-      trackForInvalidation: true,
-      defaultConfig: remoteOnly(100),
       fallbackTimeoutMs: 10,
       serializer,
     });
@@ -959,20 +929,13 @@ describe("DialCache Redis shadow validation", () => {
       dump: vi.fn(async (value) => JSON.stringify(value)),
     };
     const sourceIds: string[] = [];
-    const dialcache = new DialCache({
-      redis: { client: redis, readTimeoutMs: 1_000 },
-      metrics,
-      shadowMaxInFlight: 1,
-    });
+    const dialcache = createShadowCache(redis, metrics, { shadowMaxInFlight: 1 });
     const getUser = dialcache.cached(async (id: string) => {
       sourceIds.push(id);
       return { id };
     }, {
-      keyType: "user_id",
-      useCase,
+      ...trackedRemoteDefaults(useCase),
       cacheKey: (id) => id,
-      trackForInvalidation: true,
-      defaultConfig: remoteOnly(100),
       fallbackTimeoutMs: 10,
       serializer,
     });
@@ -1007,16 +970,10 @@ describe("DialCache Redis shadow validation", () => {
     const readGate = deferred<void>();
     redis.getGate = readGate.promise;
     const source = vi.fn(async () => cachedValue);
-    const dialcache = new DialCache({
-      redis: { client: redis, readTimeoutMs: 1_000 },
-      metrics,
-    });
+    const dialcache = createShadowCache(redis, metrics);
     const getUser = dialcache.cached(source, {
-      keyType: "user_id",
-      useCase,
+      ...trackedRemoteDefaults(useCase),
       cacheKey: () => "123",
-      trackForInvalidation: true,
-      defaultConfig: remoteOnly(100),
     });
 
     const pending = dialcache.enable(async () => await Promise.all([getUser(), getUser()]));
@@ -1037,19 +994,13 @@ describe("DialCache Redis shadow validation", () => {
     const cachedValue = { id: "123" };
     seedRedis(redis, { id: "123", useCase, payload: JSON.stringify(cachedValue) });
     const enabledStates: boolean[] = [];
-    const dialcache = new DialCache({
-      redis: { client: redis, readTimeoutMs: 1_000 },
-      metrics,
-    });
+    const dialcache = createShadowCache(redis, metrics);
     const getUser = dialcache.cached(async () => {
       enabledStates.push(dialcache.isEnabled());
       return cachedValue;
     }, {
-      keyType: "user_id",
-      useCase,
+      ...trackedRemoteDefaults(useCase),
       cacheKey: () => "123",
-      trackForInvalidation: true,
-      defaultConfig: remoteOnly(100),
     });
 
     await dialcache.enable(async () => await getUser());
@@ -1069,16 +1020,10 @@ describe("DialCache Redis shadow validation", () => {
       ...metricsWithoutShadow(),
       shadowValidation,
     };
-    const dialcache = new DialCache({
-      redis: { client: redis, readTimeoutMs: 1_000 },
-      metrics,
-    });
+    const dialcache = createShadowCache(redis, metrics);
     const getUser = dialcache.cached(async () => cachedValue, {
-      keyType: "user_id",
-      useCase,
+      ...trackedRemoteDefaults(useCase),
       cacheKey: () => "123",
-      trackForInvalidation: true,
-      defaultConfig: remoteOnly(100),
     });
 
     expect(await dialcache.enable(async () => await getUser())).toEqual(cachedValue);
