@@ -11,6 +11,16 @@ export function deterministicRampSample(key: DialCacheKey, layer: CacheLayer): n
   return stablePercent(`${key.urn}:${layer}`);
 }
 
+/**
+ * Assigns each exact cache key to an independent shadow-validation cohort.
+ *
+ * Keep the discriminator and hash stable so partial rollouts do not reshuffle
+ * after an upgrade or correlate with the Redis layer's rollout cohort.
+ */
+export function deterministicShadowRampSample(key: DialCacheKey): number {
+  return stablePercent(`${key.urn}:shadow`);
+}
+
 function stablePercent(value: string): number {
   let hash = 0x811c9dc5;
   for (let index = 0; index < value.length; index += 1) {

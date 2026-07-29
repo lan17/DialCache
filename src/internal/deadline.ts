@@ -9,6 +9,11 @@ interface MonotonicDeadlineOptions<T> {
   readonly timeoutMs: number;
   readonly timeoutError: () => Error;
   readonly onTimeout?: () => void;
+  /**
+   * Allow best-effort background work to stop keeping the process alive.
+   * Request-path deadlines remain referenced by default.
+   */
+  readonly unrefTimer?: boolean;
 }
 
 /**
@@ -21,6 +26,7 @@ export function withMonotonicDeadline<T>({
   timeoutMs,
   timeoutError,
   onTimeout,
+  unrefTimer = false,
 }: MonotonicDeadlineOptions<T>): Promise<T> {
   const startedAtMs = performance.now();
   // Invoke through a promise so a synchronous throw is measured against the
@@ -35,6 +41,12 @@ export function withMonotonicDeadline<T>({
       if (timer !== null) {
         clearTimeout(timer);
         timer = null;
+      }
+    };
+    const scheduleTimer = (delayMs: number): void => {
+      timer = setTimeout(onTimer, delayMs);
+      if (unrefTimer) {
+        timer.unref();
       }
     };
     const rejectTimeout = (): void => {
@@ -58,7 +70,7 @@ export function withMonotonicDeadline<T>({
 
       const remainingMs = timeoutMs - elapsedMs();
       if (remainingMs > 0) {
-        timer = setTimeout(onTimer, Math.ceil(remainingMs));
+        scheduleTimer(Math.ceil(remainingMs));
         return;
       }
       rejectTimeout();
@@ -80,9 +92,7 @@ export function withMonotonicDeadline<T>({
     if (remainingMs <= 0) {
       rejectTimeout();
     } else {
-      // Keep the timer referenced so it can deliver the deadline as the only
-      // remaining active handle.
-      timer = setTimeout(onTimer, Math.ceil(remainingMs));
+      scheduleTimer(Math.ceil(remainingMs));
     }
 
     void pending.then(
