@@ -70,6 +70,9 @@ const remoteOnly = (ttlSec = 60) =>
 const localAndRemote = (ttlSec = 60) => DialCacheKeyConfig.enabled(ttlSec);
 const valueKey = (useCase: string, args = ""): string => `{urn:user_id:123}${args}#${useCase}:dialcache-frame-v1`;
 const watermarkKey = "{urn:user_id:123}#watermark";
+const MAX_CACHE_TTL_SEC = 31_536_000;
+const MAX_SUPPORTED_DURATION_MS = 31_536_000_000;
+const WATERMARK_TTL_MARGIN_MS = 60_000;
 
 describe("DialCache targeted invalidation watermarks", () => {
   beforeEach(() => {
@@ -408,7 +411,52 @@ describe("DialCache targeted invalidation watermarks", () => {
     await expect(dialcache.invalidateRemote("user_id", "123", 1.5)).rejects.toThrow("futureBufferMs");
     await expect(dialcache.invalidateRemote("user_id", "123", Number.NaN)).rejects.toThrow("futureBufferMs");
     await expect(dialcache.invalidateRemote("user_id", "123", Number.POSITIVE_INFINITY)).rejects.toThrow("futureBufferMs");
+    await expect(
+      dialcache.invalidateRemote("user_id", "123", MAX_SUPPORTED_DURATION_MS + 1),
+    ).rejects.toThrow(`no greater than ${MAX_SUPPORTED_DURATION_MS}`);
+    await expect(
+      dialcache.invalidateRemote("user_id", "123", Number.MAX_SAFE_INTEGER),
+    ).rejects.toThrow(`no greater than ${MAX_SUPPORTED_DURATION_MS}`);
     expect(redis.setCalls).toBe(0);
+  });
+
+  it("accepts the maximum TTL across local, Redis, and tracked-watermark storage", async () => {
+    const redis = new FakeRedis();
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
+    let calls = 0;
+    const getUser = dialcache.cached(async (id: string) => ({ id, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "MaximumSupportedTtl",
+      cacheKey: (id) => id,
+      trackForInvalidation: true,
+      defaultConfig: localAndRemote(MAX_CACHE_TTL_SEC),
+    });
+
+    const first = await dialcache.enable(async () => await getUser("123"));
+    const second = await dialcache.enable(async () => await getUser("123"));
+
+    expect(second).toBe(first);
+    expect(calls).toBe(1);
+    expect(redis.mGetCalls).toBe(1);
+    expect(redis.ttlMs(valueKey("MaximumSupportedTtl"))).toBe(MAX_SUPPORTED_DURATION_MS);
+    expect(redis.ttlMs(watermarkKey)).toBe(
+      MAX_SUPPORTED_DURATION_MS + WATERMARK_TTL_MARGIN_MS,
+    );
+  });
+
+  it("accepts the maximum future buffer and derives its watermark TTL safely", async () => {
+    const redis = new FakeRedis();
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
+
+    await dialcache.invalidateRemote("user_id", "123", MAX_SUPPORTED_DURATION_MS);
+
+    expect(redis.setCalls).toBe(1);
+    expect(redis.readWatermarkValue(watermarkKey)).toBe(
+      Date.now() + MAX_SUPPORTED_DURATION_MS,
+    );
+    expect(redis.ttlMs(watermarkKey)).toBe(
+      MAX_SUPPORTED_DURATION_MS + WATERMARK_TTL_MARGIN_MS,
+    );
   });
 
   it("constructs cluster-compatible tracked value and watermark keys", async () => {

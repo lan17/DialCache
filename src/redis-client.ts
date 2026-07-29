@@ -61,6 +61,7 @@ export interface RedisReadContext {
 }
 
 interface RedisWriteBase extends RedisValueRequest {
+  /** Positive integer no greater than 31,536,000,000 (365 days). */
   readonly cacheTtlMs: number;
   readonly value: RedisCachePayload;
 }
@@ -72,6 +73,7 @@ export type RedisWriteRequest = TrackedRedisWriteRequest | UntrackedRedisWriteRe
 
 export interface RedisInvalidationRequest {
   readonly watermarkKey: string;
+  /** Nonnegative integer no greater than 31,536,000,000 (365 days). */
   readonly futureBufferMs: number;
 }
 

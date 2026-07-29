@@ -1,3 +1,5 @@
+import { MAX_SUPPORTED_DURATION_MS } from "./duration.js";
+
 export const REDIS_FRAME_VERSION = 1;
 export const REDIS_ENCODING_UTF8 = 0;
 export const REDIS_ENCODING_BINARY = 1;
@@ -36,7 +38,7 @@ const RETURN_PAYLOAD_LUA = String.raw`return string.sub(value, 10)`;
 
 const VALIDATE_WRITE_ARGUMENTS_LUA = String.raw`local cache_ttl_ms = ceil_finite_number(ARGV[1])
 local encoding = tonumber(ARGV[2])
-if not cache_ttl_ms or cache_ttl_ms <= 0 then
+if not cache_ttl_ms or cache_ttl_ms <= 0 or cache_ttl_ms > ${MAX_SUPPORTED_DURATION_MS} then
   return redis.error_reply("ERR invalid DialCache TTL")
 end
 if not encoding or (encoding ~= ${REDIS_ENCODING_UTF8} and encoding ~= ${REDIS_ENCODING_BINARY}) then
@@ -118,7 +120,7 @@ export const INVALIDATE_CACHE_SCRIPT = [
   PARSE_WATERMARK_LUA,
   CEIL_FINITE_NUMBER_LUA,
   String.raw`local future_buffer_ms = ceil_finite_number(ARGV[1])
-if not future_buffer_ms or future_buffer_ms < 0 then
+if not future_buffer_ms or future_buffer_ms < 0 or future_buffer_ms > ${MAX_SUPPORTED_DURATION_MS} then
   return redis.error_reply("ERR invalid DialCache future buffer")
 end`,
   REDIS_TIME_LUA,
