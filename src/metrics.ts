@@ -13,7 +13,8 @@ export type ShadowValidationOutcome =
   | "match"
   | "mismatch"
   | "source_error"
-  | "serialization_error"
+  | "deserialization_error"
+  | "comparison_error"
   | "timeout"
   | "dropped";
 /** Bounded reasons for skipping cache work; policy_disabled means a shared layer has no effective TTL. */

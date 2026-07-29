@@ -16,7 +16,7 @@ export class DialCacheKeyConfig {
   readonly ramp: LayerConfig;
   /**
    * Percentage of tracked Redis-hit keys that asynchronously validate their
-   * cached serializer payload against the source of truth. Omitted and zero
+   * deserialized cached value against the source of truth. Omitted and zero
    * both disable shadow validation.
    */
   readonly shadowRamp?: number;

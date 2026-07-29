@@ -166,56 +166,85 @@ describe("DialCache Redis shadow validation", () => {
     expect(metrics.shadowEvents[0]).toMatchObject({ useCase, outcome: "match" });
   });
 
-  it.each([
-    {
-      name: "equal strings",
-      cachedPayload: "same",
-      sourcePayload: "same",
-      outcome: "match",
-    },
-    {
-      name: "different strings",
-      cachedPayload: "cached",
-      sourcePayload: "fresh",
-      outcome: "mismatch",
-    },
-    {
-      name: "equal buffers",
-      cachedPayload: Buffer.from("same"),
-      sourcePayload: Buffer.from("same"),
-      outcome: "match",
-    },
-    {
-      name: "different buffers",
-      cachedPayload: Buffer.from("cached"),
-      sourcePayload: Buffer.from("fresh"),
-      outcome: "mismatch",
-    },
-    {
-      name: "identical bytes with mixed representations",
-      cachedPayload: "same",
-      sourcePayload: Buffer.from("same"),
-      outcome: "mismatch",
-    },
-  ] as const)("compares serialized payloads exactly for $name", async ({
-    cachedPayload,
-    sourcePayload,
-    outcome,
-  }) => {
+  it("matches deserialized JSON values with different property insertion order", async () => {
     const redis = new FakeRedis();
     const metrics = new RecordingMetrics();
-    const useCase = `ShadowPayload${outcome}${Buffer.isBuffer(cachedPayload) ? "Buffer" : "String"}${Buffer.isBuffer(sourcePayload) ? "Buffer" : "String"}`;
-    const key = seedRedis(redis, { id: "123", useCase, payload: cachedPayload });
+    const useCase = "ShadowSemanticJsonOrder";
+    const cachedValue = {
+      id: "123",
+      profile: { active: true, name: "Ada" },
+    };
+    const key = seedRedis(redis, { id: "123", useCase, payload: JSON.stringify(cachedValue) });
     const originalFrame = Buffer.from(redis.raw(`${key.urn}:dialcache-frame-v1`));
-    const serializer: Serializer<{ readonly source: string }> = {
-      load: vi.fn(async () => ({ source: "cache" })),
-      dump: vi.fn(async () => sourcePayload),
+    const dialcache = new DialCache({
+      redis: { client: redis, readTimeoutMs: 1_000 },
+      metrics,
+    });
+    const getUser = dialcache.cached(async () => ({
+      profile: { name: "Ada", active: true },
+      id: "123",
+    }), {
+      keyType: "user_id",
+      useCase,
+      cacheKey: () => "123",
+      trackForInvalidation: true,
+      defaultConfig: remoteOnly(100),
+    });
+
+    expect(await dialcache.enable(async () => await getUser())).toEqual(cachedValue);
+    await waitForShadowEvents(metrics, 1);
+
+    expect(metrics.shadowEvents[0]?.outcome).toBe("match");
+    expect(redis.setCalls).toBe(0);
+    expect(redis.raw(`${key.urn}:dialcache-frame-v1`)).toEqual(originalFrame);
+  });
+
+  it("reports a mismatch for a different deserialized source value", async () => {
+    const redis = new FakeRedis();
+    const metrics = new RecordingMetrics();
+    const useCase = "ShadowSemanticMismatch";
+    seedRedis(redis, {
+      id: "123",
+      useCase,
+      payload: JSON.stringify({ id: "123", version: 1 }),
+    });
+    const dialcache = new DialCache({
+      redis: { client: redis, readTimeoutMs: 1_000 },
+      metrics,
+    });
+    const getUser = dialcache.cached(async () => ({ id: "123", version: 2 }), {
+      keyType: "user_id",
+      useCase,
+      cacheKey: () => "123",
+      trackForInvalidation: true,
+      defaultConfig: remoteOnly(100),
+    });
+
+    expect(await dialcache.enable(async () => await getUser())).toEqual({ id: "123", version: 1 });
+    await waitForShadowEvents(metrics, 1);
+
+    expect(metrics.shadowEvents[0]?.outcome).toBe("mismatch");
+    expect(redis.setCalls).toBe(0);
+  });
+
+  it("re-deserializes the retained payload instead of comparing a caller-mutated hit", async () => {
+    const redis = new FakeRedis();
+    const metrics = new RecordingMetrics();
+    const useCase = "ShadowIsolatedCachedSnapshot";
+    const cachedValue = { id: "123", version: 1 };
+    seedRedis(redis, { id: "123", useCase, payload: JSON.stringify(cachedValue) });
+    const sourceGate = deferred<typeof cachedValue>();
+    const serializer: Serializer<typeof cachedValue> = {
+      dump: vi.fn((value) => JSON.stringify(value)),
+      load: vi.fn((payload) =>
+        JSON.parse(Buffer.isBuffer(payload) ? payload.toString("utf8") : payload) as typeof cachedValue
+      ),
     };
     const dialcache = new DialCache({
       redis: { client: redis, readTimeoutMs: 1_000 },
       metrics,
     });
-    const getUser = dialcache.cached(async () => ({ source: "truth" }), {
+    const getUser = dialcache.cached(async () => await sourceGate.promise, {
       keyType: "user_id",
       useCase,
       cacheKey: () => "123",
@@ -224,13 +253,15 @@ describe("DialCache Redis shadow validation", () => {
       serializer,
     });
 
-    expect(await dialcache.enable(async () => await getUser())).toEqual({ source: "cache" });
+    const returned = await dialcache.enable(async () => await getUser());
+    returned.version = 99;
+    sourceGate.resolve(cachedValue);
     await waitForShadowEvents(metrics, 1);
 
-    expect(metrics.shadowEvents[0]?.outcome).toBe(outcome);
-    expect(serializer.dump).toHaveBeenCalledWith({ source: "truth" });
-    expect(redis.setCalls).toBe(0);
-    expect(redis.raw(`${key.urn}:dialcache-frame-v1`)).toEqual(originalFrame);
+    expect(returned.version).toBe(99);
+    expect(serializer.load).toHaveBeenCalledTimes(2);
+    expect(serializer.dump).not.toHaveBeenCalled();
+    expect(metrics.shadowEvents[0]?.outcome).toBe("match");
   });
 
   it("does not validate an untracked Redis hit", async () => {
@@ -619,16 +650,21 @@ describe("DialCache Redis shadow validation", () => {
     expect(redis.setCalls).toBe(0);
   });
 
-  it("reports a serialization error without affecting the cache hit", async () => {
+  it("reports a detached deserialization error without affecting the cache hit", async () => {
     const redis = new FakeRedis();
     const metrics = new RecordingMetrics();
-    const useCase = "ShadowSerializationError";
+    const useCase = "ShadowDeserializationError";
     seedRedis(redis, { id: "123", useCase, payload: "cached" });
+    let loadCalls = 0;
     const serializer: Serializer<{ readonly source: string }> = {
-      load: vi.fn(async () => ({ source: "cache" })),
-      dump: vi.fn(async () => {
-        throw new Error("cannot serialize source value");
+      load: vi.fn(async () => {
+        loadCalls += 1;
+        if (loadCalls === 1) {
+          return { source: "cache" };
+        }
+        throw new Error("cannot deserialize retained payload");
       }),
+      dump: vi.fn(async (value) => JSON.stringify(value)),
     };
     const dialcache = new DialCache({
       redis: { client: redis, readTimeoutMs: 1_000 },
@@ -646,8 +682,139 @@ describe("DialCache Redis shadow validation", () => {
     expect(await dialcache.enable(async () => await getUser())).toEqual({ source: "cache" });
     await waitForShadowEvents(metrics, 1);
 
-    expect(metrics.shadowEvents[0]?.outcome).toBe("serialization_error");
+    expect(metrics.shadowEvents[0]?.outcome).toBe("deserialization_error");
+    expect(serializer.load).toHaveBeenCalledTimes(2);
+    expect(serializer.dump).not.toHaveBeenCalled();
     expect(redis.setCalls).toBe(0);
+  });
+
+  it("uses a custom comparator for getOrLoad semantic equality", async () => {
+    const redis = new FakeRedis();
+    const metrics = new RecordingMetrics();
+    const useCase = "ShadowCustomComparator";
+    const cachedValue = { id: "123", refreshedAt: 1 };
+    const sourceValue = { id: "123", refreshedAt: 2 };
+    seedRedis(redis, { id: "123", useCase, payload: JSON.stringify(cachedValue) });
+    const shadowComparator = vi.fn(
+      (cached: typeof cachedValue, source: typeof sourceValue) => cached.id === source.id,
+    );
+    const dialcache = new DialCache({
+      redis: { client: redis, readTimeoutMs: 1_000 },
+      metrics,
+    });
+
+    const result = await dialcache.enable(async () =>
+      await dialcache.getOrLoad(async () => sourceValue, {
+        key: "123",
+        keyType: "user_id",
+        useCase,
+        trackForInvalidation: true,
+        defaultConfig: remoteOnly(100),
+        shadowComparator,
+      })
+    );
+    await waitForShadowEvents(metrics, 1);
+
+    expect(result).toEqual(cachedValue);
+    expect(shadowComparator).toHaveBeenCalledWith(cachedValue, sourceValue);
+    expect(metrics.shadowEvents[0]?.outcome).toBe("match");
+  });
+
+  it.each([
+    {
+      name: "throws",
+      comparator: () => {
+        throw new Error("cannot compare");
+      },
+    },
+    {
+      name: "returns a non-boolean",
+      comparator: () => "match" as unknown as boolean,
+    },
+    {
+      name: "returns a rejecting promise",
+      comparator: () => Promise.reject(new Error("async comparators are unsupported")) as unknown as boolean,
+    },
+  ])("reports comparison_error when a custom comparator $name", async ({ name, comparator }) => {
+    const redis = new FakeRedis();
+    const metrics = new RecordingMetrics();
+    const useCase = `ShadowComparisonError${name.replaceAll(" ", "")}`;
+    const cachedValue = { id: "123" };
+    seedRedis(redis, { id: "123", useCase, payload: JSON.stringify(cachedValue) });
+    const dialcache = new DialCache({
+      redis: { client: redis, readTimeoutMs: 1_000 },
+      metrics,
+    });
+    const getUser = dialcache.cached(async () => cachedValue, {
+      keyType: "user_id",
+      useCase,
+      cacheKey: () => "123",
+      trackForInvalidation: true,
+      defaultConfig: remoteOnly(100),
+      shadowComparator: comparator,
+    });
+
+    expect(await dialcache.enable(async () => await getUser())).toEqual(cachedValue);
+    await waitForShadowEvents(metrics, 1);
+    await Promise.resolve();
+
+    expect(metrics.shadowEvents[0]?.outcome).toBe("comparison_error");
+  });
+
+  it("retains a timed-out accidental async comparator flight until it settles", async () => {
+    const redis = new FakeRedis();
+    const metrics = new RecordingMetrics();
+    const useCase = "ShadowAsyncComparatorTimeoutRetention";
+    seedRedis(redis, { id: "a", useCase, payload: JSON.stringify({ id: "a" }) });
+    seedRedis(redis, { id: "b", useCase, payload: JSON.stringify({ id: "b" }) });
+    const firstComparisonGate = deferred<boolean>();
+    const firstComparisonStarted = deferred<void>();
+    const sourceIds: string[] = [];
+    let comparisonCalls = 0;
+    const shadowComparator = vi.fn((cached: { readonly id: string }, source: { readonly id: string }) => {
+      comparisonCalls += 1;
+      if (comparisonCalls === 1) {
+        firstComparisonStarted.resolve();
+        return firstComparisonGate.promise as unknown as boolean;
+      }
+      return cached.id === source.id;
+    });
+    const dialcache = new DialCache({
+      redis: { client: redis, readTimeoutMs: 1_000 },
+      metrics,
+      shadowMaxInFlight: 1,
+    });
+    const getUser = dialcache.cached(async (id: string) => {
+      sourceIds.push(id);
+      return { id };
+    }, {
+      keyType: "user_id",
+      useCase,
+      cacheKey: (id) => id,
+      trackForInvalidation: true,
+      defaultConfig: remoteOnly(100),
+      fallbackTimeoutMs: 10,
+      shadowComparator,
+    });
+
+    expect(await dialcache.enable(async () => await getUser("a"))).toEqual({ id: "a" });
+    await firstComparisonStarted.promise;
+    await waitForShadowEvents(metrics, 1);
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["timeout"]);
+
+    await dialcache.enable(async () => await getUser("b"));
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["timeout", "dropped"]);
+    expect(sourceIds).toEqual(["a"]);
+
+    firstComparisonGate.resolve(true);
+    await nextImmediate();
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["timeout", "dropped"]);
+
+    await dialcache.enable(async () => await getUser("b"));
+    await waitForShadowEvents(metrics, 3);
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["timeout", "dropped", "match"]);
+    expect(sourceIds).toEqual(["a", "b"]);
+    expect(shadowComparator).toHaveBeenCalledTimes(2);
   });
 
   it("drops a duplicate exact-key validation instead of queueing it", async () => {
@@ -717,7 +884,7 @@ describe("DialCache Redis shadow validation", () => {
     expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["dropped", "match"]);
   });
 
-  it("retains a timed-out underlying flight until it settles and skips late serialization", async () => {
+  it("retains a timed-out source flight until it settles and skips late deserialization", async () => {
     const redis = new FakeRedis();
     const metrics = new RecordingMetrics();
     const useCase = "ShadowTimeoutRetention";
@@ -758,36 +925,38 @@ describe("DialCache Redis shadow validation", () => {
 
     firstSourceGate.resolve(cachedValue);
     await nextImmediate();
+    expect(serializer.load).toHaveBeenCalledTimes(2);
     expect(serializer.dump).not.toHaveBeenCalled();
 
     await dialcache.enable(async () => await getUser());
     await waitForShadowEvents(metrics, 3);
     expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["timeout", "dropped", "match"]);
     expect(sourceCalls).toBe(2);
-    expect(serializer.dump).toHaveBeenCalledOnce();
+    expect(serializer.load).toHaveBeenCalledTimes(4);
+    expect(serializer.dump).not.toHaveBeenCalled();
   });
 
-  it("retains a timed-out serialization flight and ignores its late comparison result", async () => {
+  it("retains a timed-out deserialization flight and ignores its late comparison result", async () => {
     const redis = new FakeRedis();
     const metrics = new RecordingMetrics();
-    const useCase = "ShadowSerializationTimeoutRetention";
+    const useCase = "ShadowDeserializationTimeoutRetention";
     seedRedis(redis, { id: "a", useCase, payload: JSON.stringify({ id: "a" }) });
     seedRedis(redis, { id: "b", useCase, payload: JSON.stringify({ id: "b" }) });
-    const firstDumpGate = deferred<string>();
-    const firstDumpStarted = deferred<void>();
-    let dumpCalls = 0;
+    const firstShadowLoadGate = deferred<{ readonly id: string }>();
+    const firstShadowLoadStarted = deferred<void>();
+    let loadCalls = 0;
     const serializer: Serializer<{ readonly id: string }> = {
-      load: vi.fn(async (payload) =>
-        JSON.parse(Buffer.isBuffer(payload) ? payload.toString("utf8") : payload) as { readonly id: string }
-      ),
-      dump: vi.fn(async (value) => {
-        dumpCalls += 1;
-        if (dumpCalls === 1) {
-          firstDumpStarted.resolve();
-          return await firstDumpGate.promise;
+      load: vi.fn(async (payload) => {
+        loadCalls += 1;
+        if (loadCalls === 2) {
+          firstShadowLoadStarted.resolve();
+          return await firstShadowLoadGate.promise;
         }
-        return JSON.stringify(value);
+        return JSON.parse(
+          Buffer.isBuffer(payload) ? payload.toString("utf8") : payload,
+        ) as { readonly id: string };
       }),
+      dump: vi.fn(async (value) => JSON.stringify(value)),
     };
     const sourceIds: string[] = [];
     const dialcache = new DialCache({
@@ -809,7 +978,7 @@ describe("DialCache Redis shadow validation", () => {
     });
 
     expect(await dialcache.enable(async () => await getUser("a"))).toEqual({ id: "a" });
-    await firstDumpStarted.promise;
+    await firstShadowLoadStarted.promise;
     await waitForShadowEvents(metrics, 1);
     expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["timeout"]);
 
@@ -817,7 +986,7 @@ describe("DialCache Redis shadow validation", () => {
     expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["timeout", "dropped"]);
     expect(sourceIds).toEqual(["a"]);
 
-    firstDumpGate.resolve(JSON.stringify({ id: "a" }));
+    firstShadowLoadGate.resolve({ id: "a" });
     await nextImmediate();
     expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["timeout", "dropped"]);
 
@@ -825,7 +994,8 @@ describe("DialCache Redis shadow validation", () => {
     await waitForShadowEvents(metrics, 3);
     expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["timeout", "dropped", "match"]);
     expect(sourceIds).toEqual(["a", "b"]);
-    expect(serializer.dump).toHaveBeenCalledTimes(2);
+    expect(serializer.load).toHaveBeenCalledTimes(5);
+    expect(serializer.dump).not.toHaveBeenCalled();
   });
 
   it("starts one validation for coalesced Redis-hit followers", async () => {

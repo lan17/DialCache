@@ -129,11 +129,11 @@ export class RedisCache {
   }
 
   /**
-   * Serialize a source-of-truth value with the same effective serializer as
-   * the Redis entry, without recording ordinary cache-write telemetry.
+   * Decode the retained Redis payload again for detached semantic comparison,
+   * without recording ordinary request-path serialization telemetry.
    */
-  async serializeForShadow<T>(key: DialCacheKey, value: T): Promise<RedisCachePayload> {
-    return await this.serializerFor(key).dump(value);
+  async deserializeForShadow<T>(key: DialCacheKey, payload: RedisCachePayload): Promise<T> {
+    return await this.serializerFor(key).load(payload) as T;
   }
 
   async put<T>(key: DialCacheKey, value: T, config?: { readonly ttlSec: number }): Promise<boolean> {

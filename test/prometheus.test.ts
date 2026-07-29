@@ -60,7 +60,8 @@ const SHADOW_VALIDATION_OUTCOMES: Readonly<Record<ShadowValidationOutcome, true>
   match: true,
   mismatch: true,
   source_error: true,
-  serialization_error: true,
+  deserialization_error: true,
+  comparison_error: true,
   timeout: true,
   dropped: true,
 };

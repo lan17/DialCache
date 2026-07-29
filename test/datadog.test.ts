@@ -101,7 +101,8 @@ const shadowValidationOutcomes: readonly ShadowValidationOutcome[] = [
   "match",
   "mismatch",
   "source_error",
-  "serialization_error",
+  "deserialization_error",
+  "comparison_error",
   "timeout",
   "dropped",
 ];

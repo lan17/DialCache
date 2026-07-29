@@ -121,6 +121,7 @@ Use `cached(fn, options)` for an extracted, reusable function. The wrapped calla
 | `cacheKey` | yes | Selector over `fn`'s parameters; returns a bare id or `{ id, args }`. |
 | `defaultConfig` | no | `DialCacheKeyConfig` baseline policy that runtime config overlays field by field (see [Runtime config](#runtime-config-and-ramp-controls)). |
 | `serializer` | when the return type is not statically JSON-compatible | Per-function `Serializer<T>` for Redis values (see [Serialization](#serialization)). |
+| `shadowComparator` | no | Synchronous application-level equality for shadow validation; defaults to Node's strict deep equality. |
 | `trackForInvalidation` | no (default `false`) | Opts this use case's Redis entries into watermark-based targeted invalidation. |
 | `fallbackTimeoutMs` | no (default `60_000`) | Fallback deadline in milliseconds, at most 2,147,483,647; `null` disables it (see [Fallback deadlines](#fallback-deadlines)). |
 
@@ -452,7 +453,7 @@ This guard is deliberately conservative and is not a proof of runtime data. Type
 
 #### Shadow validation
 
-Shadow validation samples successful tracked Redis hits and compares the cached serializer payload with a fresh source-of-truth read. It is opt-in per use case through `shadowRamp`:
+Shadow validation samples successful tracked Redis hits and compares an isolated deserialized snapshot of the cached value with a fresh source-of-truth read. It is opt-in per use case through `shadowRamp`:
 
 ```ts
 import { CacheLayer, DialCache, DialCacheKeyConfig } from "dialcache";
@@ -473,6 +474,9 @@ const getUser = dialcache.cached(
     useCase: "GetSensitiveUser",
     cacheKey: (userId) => userId,
     trackForInvalidation: true,
+    // Optional: override strict deep equality with use-case semantics.
+    shadowComparator: (cached, source) =>
+      cached.id === source.id && cached.version === source.version,
     defaultConfig: new DialCacheKeyConfig({
       ttlSec: { [CacheLayer.REMOTE]: 300 },
       ramp: { [CacheLayer.REMOTE]: 100 },
@@ -484,25 +488,25 @@ const getUser = dialcache.cached(
 
 Only an actual successful Redis hit is eligible. The operation must set `trackForInvalidation: true`, its effective `shadowRamp` must select the exact cache key, a configured metrics adapter must implement `shadowValidation`, and capacity must be available. The bundled Prometheus and Datadog adapters implement that metric. Request-local and process-local hits, Redis misses, read failures/timeouts, serializer-load failures, disabled calls, untracked values, keys outside the shadow cohort, and adapters without the optional metric do not start validation. Process/request coalescing followers share the Redis-hit leader and do not fan out additional validations.
 
-The request returns the loaded cached value before shadow work starts. DialCache schedules the source read, fresh serialization, comparison, and outcome metric in detached best-effort work; it does not await them or turn a successful hit into a rejection. Its scheduler and deadline timer are unreferenced, so they do not keep an otherwise idle process alive. This is asynchronous detachment on the Node event loop, not a worker thread: synchronous source or serializer work can still occupy the event loop after the request path has been released.
+The request returns the loaded cached value before shadow work starts. DialCache schedules the source read, a second `serializer.load` of the retained Redis payload, comparison, and outcome metric in detached best-effort work; it does not await them or turn a successful hit into a rejection. Its scheduler and deadline timer are unreferenced, so they do not keep an otherwise idle process alive. This is asynchronous detachment on the Node event loop, not a worker thread: synchronous source, serializer, or comparator work can still occupy the event loop after the request path has been released.
 
 Detached execution retains the original `cached()` argument references or `getOrLoad()` loader closure; DialCache cannot generically clone them. Treat object arguments and captured values used by the source read as immutable, or snapshot them before invoking DialCache. Mutating source-selection state after the cache hit resolves can make the fresh read target a value that no longer corresponds to the already-built key and produce a false mismatch.
 
-`shadowMaxInFlight` is a per-instance positive safe integer and defaults to `1`. It counts scheduled validations and underlying source/serializer work that has not settled, including work whose DialCache deadline already elapsed. DialCache also suppresses another validation for the same exact key while that work remains active. There is no queue: exact-key duplicates and work above the instance cap are dropped and reported as `dropped`. Separate instances have independent limits, so this is not a fleet-wide source-of-truth concurrency cap.
+`shadowMaxInFlight` is a per-instance positive safe integer and defaults to `1`. It counts scheduled validations and underlying source/serializer/comparator work that has not settled, including work whose DialCache deadline already elapsed. DialCache also suppresses another validation for the same exact key while that work remains active. There is no queue: exact-key duplicates and work above the instance cap are dropped and reported as `dropped`. Separate instances have independent limits, so this is not a fleet-wide source-of-truth concurrency cap.
 
-Each validation has one monotonic deadline covering the source read, `serializer.dump`, and exact comparison. A finite `fallbackTimeoutMs` is reused as that budget. When `fallbackTimeoutMs` is `null`, the normal miss fallback remains intentionally unbounded, but detached shadow validation still uses a 60-second budget. Once timeout delivery marks the validation abandoned, DialCache releases the retained Redis payload and prevents later phases from starting, but JavaScript promises do not provide cancellation: source or serializer work already in progress may continue and keeps its shadow slot until it settles. Give those dependencies their own native timeout or `AbortSignal` where available.
+Each validation has one monotonic deadline covering the source read, detached `serializer.load`, and comparison. A finite `fallbackTimeoutMs` is reused as that budget. When `fallbackTimeoutMs` is `null`, the normal miss fallback remains intentionally unbounded, but detached shadow validation still uses a 60-second budget. Once timeout delivery marks the validation abandoned, DialCache releases its retained Redis-payload reference and prevents later phases from starting, but JavaScript promises do not provide cancellation: source or serializer work already in progress may continue, retain their own inputs, and keep the shadow slot until they settle. Give those dependencies their own native timeout or `AbortSignal` where available. A synchronous comparator cannot be preempted; it is checked against the deadline after returning.
 
-A `match` means exact serializer-payload identity, not domain-level semantic equality:
+A `match` means application-level value equality:
 
-- two strings match with `===`;
-- two Buffers match with `Buffer.equals`;
-- a string and Buffer are a mismatch, even when they contain equivalent bytes.
+- By default, DialCache uses Node's `util.isDeepStrictEqual`. Plain-object property insertion order does not affect the result; values, array order, prototypes, constructors, Buffers, Maps, Sets, and other supported structures remain strictly compared.
+- An optional typed `shadowComparator(cachedValue, sourceValue)` on `cached()` or `getOrLoad()` can define narrower domain equality, such as ignoring a volatile timestamp. It must synchronously return a boolean and must be deterministic, side-effect-free, non-mutating, and bounded.
+- A comparator throw or non-boolean return is `comparison_error`, never `mismatch`. An accidental promise is not accepted as a comparison result; DialCache consumes its settlement while retaining the shadow slot, subject to the same detached deadline.
 
-The comparison excludes DialCache's Redis frame version, timestamp, encoding byte, TTL, and watermark. DialCache calls `dump(freshValue)` on the same effective serializer used to load the hit and compares that output with the semantic `string | Buffer` returned by the Redis client. It does not add a payload-size-linear copy or hash to the request path.
+DialCache retains the semantic `string | Buffer` returned by the Redis client but never exposes it to the comparator. After the source read completes, detached work calls the same effective serializer's `load` method again to create an independent cached snapshot, then compares that snapshot with the raw value returned by the source loader. It does not reuse the cached object already returned to the caller, so caller mutation after the hit resolves cannot contaminate the validation. No payload copy, deserialization, deep comparison, or hash is added to the request path.
 
-This contract requires deterministic serialization: equivalent current source values must produce stable strings or bytes. Default JSON output is representation-sensitive rather than canonical, so different property insertion order can mismatch. Randomized encryption or compression and serializer-format changes during a mixed deployment can also produce expected mismatches. `serializer.load` must not mutate its input, and a custom `DialCacheRedisClient` must return an operation-owned payload whose string/Buffer contents remain stable after `read()` settles; DialCache retains that same semantic payload for detached comparison.
+The effective serializer's `load` method can therefore run twice for a sampled hit and must be repeatable, non-mutating, and return independently usable values. A custom `DialCacheRedisClient` must return an operation-owned payload whose string/Buffer contents remain stable after `read()` settles. Comparing the deserialized cached snapshot with the raw source value intentionally detects lossy serialization; use a custom comparator only when such normalization or ignored fields are valid use-case semantics.
 
-Shadow metrics use the bounded outcomes `match`, `mismatch`, `source_error`, `serialization_error`, `timeout`, and `dropped`. They include the normal cache namespace, use case, and key type, but never the cache id, cached/source values, serialized payload, Redis key, or raw exception message. Validation is observational only: no outcome writes Redis, refreshes TTL, advances a watermark, invalidates, repairs, evicts process-local state, or changes the value returned to the caller. The wrapped function or inline loader must therefore be safe to invoke as an additional side-effect-free source read.
+Shadow metrics use the bounded outcomes `match`, `mismatch`, `source_error`, `deserialization_error`, `comparison_error`, `timeout`, and `dropped`. They include the normal cache namespace, use case, and key type, but never the cache id, cached/source values, serialized payload, Redis key, or raw exception message. Validation is observational only: no outcome writes Redis, refreshes TTL, advances a watermark, invalidates, repairs, evicts process-local state, or changes the value returned to the caller. The wrapped function or inline loader must therefore be safe to invoke as an additional side-effect-free source read.
 
 ## Cached-value ownership
 

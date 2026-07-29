@@ -292,7 +292,7 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toEqual(trackedPayload);
     });
 
-    it("shadow-validates the exact tracked payload without repairing a mismatch", async () => {
+    it("shadow-validates the deserialized tracked value without repairing a mismatch", async () => {
       if (client === undefined || admin === undefined) {
         throw new Error("Redis test clients did not start");
       }
@@ -376,8 +376,8 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       await mismatched.promise;
 
       expect(sourceCalls).toBe(2);
-      expect(serializer.load).toHaveBeenCalledTimes(2);
-      expect(serializer.dump).toHaveBeenCalledTimes(2);
+      expect(serializer.load).toHaveBeenCalledTimes(4);
+      expect(serializer.dump).not.toHaveBeenCalled();
       expect(metrics.shadowValidation).toHaveBeenNthCalledWith(1, {
         cacheNamespace: namespace,
         useCase,

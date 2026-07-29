@@ -38,6 +38,7 @@ const rootConsumer = `import {
   type RedisReadContext,
   type RedisWriteRequest,
   type Serializer,
+  type ShadowComparator,
 } from "dialcache";
 // @ts-expect-error The unused MissingKeyConfigError class was removed instead of deprecated.
 import { MissingKeyConfigError } from "dialcache";
@@ -93,11 +94,14 @@ const redisReadTimeoutError = new RedisReadTimeoutError("Load", 100);
 const coalescingState: CoalescingState = cache.getCoalescingState();
 const processCoalescingState: ProcessCoalescingState = coalescingState.process;
 const disabledOverlay: DialCacheKeyConfig = DialCacheKeyConfig.disabled();
+const stringShadowComparator: ShadowComparator<string> = (cachedValue, sourceValue) =>
+  cachedValue === sourceValue;
 const load = cache.cached(async (id: string) => id, {
   keyType: "id",
   useCase: "Load",
   cacheKey: (id) => id,
   fallbackTimeoutMs: 1_000,
+  shadowComparator: stringShadowComparator,
   defaultConfig: new DialCacheKeyConfig({
     ttlSec: { [CacheLayer.LOCAL]: 60, [CacheLayer.REMOTE]: 60 },
     ramp: { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 100 },
@@ -116,7 +120,10 @@ const inlineSync: Promise<{ readonly id: string }> = cache.getOrLoad(
 );
 const inlineAsync: Promise<{ readonly id: string }> = cache.getOrLoad(
   async () => ({ id: "async" as const }),
-  inlineOptionsFor("InlineAsync"),
+  {
+    ...inlineOptionsFor("InlineAsync"),
+    shadowComparator: (cachedValue, sourceValue) => cachedValue.id === sourceValue.id,
+  },
 );
 
 interface JsonCompatibleRecord {
@@ -193,6 +200,11 @@ const missingDateSerializer: CachedOptions<DateLoader> = optionsFor("TypedDateOp
 cache.getOrLoad(async () => new Date(0), inlineOptionsFor("InlineDateWithoutSerializer"));
 // @ts-expect-error GetOrLoadOptions itself requires a serializer for Date values.
 const missingInlineDateSerializer: GetOrLoadOptions<Date> = inlineOptionsFor("TypedInlineDateWithoutSerializer");
+cache.cached(async (id: string) => id, {
+  ...optionsFor("InvalidShadowComparatorValueType"),
+  // @ts-expect-error Shadow comparators receive the cached function's resolved value type.
+  shadowComparator: (cachedValue: number, sourceValue: number) => cachedValue === sourceValue,
+});
 
 const requestLocalConfig = new DialCacheKeyConfig({ requestLocal: true });
 const structuralConfigProvider: CacheConfigProvider = () => ({
