@@ -374,7 +374,7 @@ describe("DialCache runtime config and ramp controls", () => {
     }));
   });
 
-  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1])(
+  it.each([null as unknown as number, 0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1])(
     "rejects invalid shadowMaxInFlight value %s",
     (shadowMaxInFlight) => {
       expect(() => new DialCache({ shadowMaxInFlight })).toThrow(

@@ -127,6 +127,9 @@ interface CachedOptionsBase<Fn extends AnyFn> extends CacheOperationOptionsBase 
   /**
    * Select every input dimension that can affect the returned value. Concurrent
    * enabled calls with the same cache key may share one in-flight execution.
+   * When shadow validation is active, the wrapped function runs later with the
+   * original argument references. Treat values it reads as immutable, or
+   * snapshot them before invocation so the detached read still matches this key.
    */
   readonly cacheKey: CacheKeySelector<Fn>;
 }
@@ -150,6 +153,8 @@ interface GetOrLoadOptionsBase extends CacheOperationOptionsBase {
   /**
    * Include every captured value that can affect the loaded result. Concurrent
    * enabled calls with the same cache key may share one in-flight loader.
+   * When shadow validation is active, snapshot mutable captured state before
+   * calling getOrLoad so the detached loader still reads the value for this key.
    */
   readonly key: CacheKeySpec;
 }
@@ -229,7 +234,9 @@ export class DialCache {
       throw new RangeError("DialCache localMaxSize must be a nonnegative safe integer");
     }
 
-    const shadowMaxInFlight = config.shadowMaxInFlight ?? DEFAULT_SHADOW_MAX_IN_FLIGHT;
+    const shadowMaxInFlight = config.shadowMaxInFlight === undefined
+      ? DEFAULT_SHADOW_MAX_IN_FLIGHT
+      : config.shadowMaxInFlight;
     if (!Number.isSafeInteger(shadowMaxInFlight) || shadowMaxInFlight <= 0) {
       throw new RangeError("DialCache shadowMaxInFlight must be a positive safe integer");
     }
