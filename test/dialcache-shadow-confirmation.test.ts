@@ -584,6 +584,63 @@ describe("DialCache Redis shadow confirmation", () => {
     }
   });
 
+  it("releases a ramped-down null-timeout source slot at the shadow deadline", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let nowMs = 0;
+    const performanceSpy = vi.spyOn(performance, "now").mockImplementation(() => nowMs);
+    const sourceGate = deferred<{ readonly id: string }>();
+    const firstReadStarted = deferred<void>();
+    const redis = new ScriptedRedis([
+      () => {
+        firstReadStarted.resolve(undefined);
+        return null;
+      },
+      () => null,
+    ]);
+    const metrics = new RecordingMetrics();
+    const source = vi.fn(async (id: string) =>
+      id === "a" ? await sourceGate.promise : { id }
+    );
+    const dialcache = createCache(redis, metrics, { shadowMaxInFlight: 1 });
+    const getUser = dialcache.cached(source, {
+      ...trackedOptions("ShadowDarkNullSourceCapacity", remoteConfig(0)),
+      cacheKey: (id) => id,
+      fallbackTimeoutMs: null,
+    });
+    const pendingA = dialcache.enable(async () => await getUser("a"));
+
+    try {
+      await firstReadStarted.promise;
+      expect(source).toHaveBeenCalledWith("a");
+      expectTrackedReads(redis, 1);
+
+      nowMs = 60_000;
+      await vi.advanceTimersByTimeAsync(60_000);
+      await nextImmediate();
+      expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["timeout"]);
+
+      await expect(dialcache.enable(async () => await getUser("b"))).resolves.toEqual({ id: "b" });
+      await nextImmediate();
+      await nextImmediate();
+
+      expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["timeout", "filled"]);
+      expect(redis.write).toHaveBeenCalledOnce();
+      expectTrackedReads(redis, 2, { singleWatermark: false });
+
+      sourceGate.resolve({ id: "a" });
+      await expect(pendingA).resolves.toEqual({ id: "a" });
+      await nextImmediate();
+
+      expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["timeout", "filled"]);
+      expect(redis.write).toHaveBeenCalledOnce();
+    } finally {
+      sourceGate.resolve({ id: "a" });
+      await pendingA.catch(() => undefined);
+      performanceSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it("fills a definitive dark Redis miss and attributes the read and write to remote_shadow", async () => {
     const redis = new ScriptedRedis([() => null]);
     const metrics = new RecordingMetrics();
@@ -1243,7 +1300,15 @@ describe("DialCache Redis shadow confirmation", () => {
     expectTrackedReads(redis, 2, { singleWatermark: false });
   });
 
-  it("retains capacity after an overall timeout until an already-dispatched write settles", async () => {
+  it.each([
+    { name: "successful", result: true },
+    { name: "watermark-blocked", result: false },
+  ])("retains capacity after an overall timeout until an already-dispatched $name write settles", async ({
+    result,
+  }) => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let nowMs = 0;
+    const performanceSpy = vi.spyOn(performance, "now").mockImplementation(() => nowMs);
     const writeStarted = deferred<void>();
     const writeGate = deferred<boolean>();
     const redis = new ScriptedRedis([
@@ -1266,6 +1331,8 @@ describe("DialCache Redis shadow confirmation", () => {
       await expect(dialcache.enable(async () => await getUser("a"))).resolves.toEqual({ id: "a" });
       await nextImmediate();
       await writeStarted.promise;
+      nowMs = 50;
+      await vi.advanceTimersByTimeAsync(50);
       await waitForShadowEvents(metrics, 1);
       expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["timeout"]);
 
@@ -1273,7 +1340,7 @@ describe("DialCache Redis shadow confirmation", () => {
       expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["timeout", "dropped"]);
       expect(redis.requests).toHaveLength(1);
 
-      writeGate.resolve(true);
+      writeGate.resolve(result);
       await nextImmediate();
 
       await expect(dialcache.enable(async () => await getUser("b"))).resolves.toEqual({ id: "b" });
@@ -1286,7 +1353,9 @@ describe("DialCache Redis shadow confirmation", () => {
       expect(redis.write).toHaveBeenCalledOnce();
       expectTrackedReads(redis, 2, { singleWatermark: false });
     } finally {
-      writeGate.resolve(true);
+      writeGate.resolve(result);
+      performanceSpy.mockRestore();
+      vi.useRealTimers();
     }
   });
 

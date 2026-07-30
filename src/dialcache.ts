@@ -390,11 +390,6 @@ export class DialCache {
     shadowComparator: ShadowComparator<Value>,
   ): Promise<Value> {
     const rawFallback = async (): Promise<Value> => await load();
-    let sourcePromise: Promise<Value> | null = null;
-    const source = (): Promise<Value> => {
-      sourcePromise ??= rawFallback();
-      return sourcePromise;
-    };
     const noLayerLabels = {
       cacheNamespace: this.namespace,
       useCase: options.useCase,
@@ -409,7 +404,7 @@ export class DialCache {
 
     let callerFallbackTimedOut = false;
     const fallback = (): Promise<Value> => withFallbackTimeout(
-      source,
+      rawFallback,
       options.useCase,
       fallbackTimeoutMs,
       () => {
@@ -417,7 +412,7 @@ export class DialCache {
       },
     );
     const shadowValidation: ShadowValidationPlan<Value> = {
-      source,
+      source: rawFallback,
       comparator: shadowComparator,
       timeoutMs: fallbackTimeoutMs ?? DEFAULT_FALLBACK_TIMEOUT_MS,
       didCallerFallbackTimeout: () => callerFallbackTimedOut,
@@ -509,9 +504,11 @@ export class DialCache {
    * writes, but does not delay or suppress returning fallback values.
    *
    * The watermark fences only invocations that reach the tracked Redis write.
-   * A rejected write also suppresses the corresponding process-local population.
-   * Request-local memoization remains unconditional, and invocations whose
-   * remote layer is disabled or ramped out are not fenced by the watermark.
+   * A rejected caller-path write also suppresses the corresponding process-local
+   * population. Request-local memoization remains unconditional. A ramped-out
+   * invocation without shadow work does not consult the watermark; a selected
+   * shadow path consults it for its tracked read and any clean-miss fill, while
+   * caller-path request-local and process-local publication remains independent.
    *
    * @param futureBufferMs Nonnegative safe integer no greater than
    * 31,536,000,000 (365 days); defaults to zero for backward compatibility.
@@ -868,6 +865,10 @@ export class DialCache {
     const pendingRedisReads = new Set<Promise<void>>();
     let operationFinished = false;
     let released = false;
+    let signalShadowTimeout = (): void => undefined;
+    const shadowTimeoutSignal = new Promise<void>((resolve) => {
+      signalShadowTimeout = resolve;
+    });
     const release = (): void => {
       if (released) {
         return;
@@ -897,14 +898,17 @@ export class DialCache {
       });
       return read.result;
     };
+    const deadlineStartedAtMs = start.kind === "retained"
+      ? performance.now()
+      : flight.startedAtMs;
     const abandonIfExpired = (): boolean => {
-      if (!flight.abandoned && performance.now() - flight.startedAtMs >= plan.timeoutMs) {
+      if (!flight.abandoned && performance.now() - deadlineStartedAtMs >= plan.timeoutMs) {
         flight.abandoned = true;
         flight.cachedPayload = null;
       }
       return flight.abandoned;
     };
-    const elapsedBeforeStartMs = Math.max(performance.now() - flight.startedAtMs, 0);
+    const elapsedBeforeStartMs = Math.max(performance.now() - deadlineStartedAtMs, 0);
     const remainingTimeoutMs = Math.max(plan.timeoutMs - elapsedBeforeStartMs, 0);
 
     const validation = withMonotonicDeadline({
@@ -914,6 +918,7 @@ export class DialCache {
       onTimeout: () => {
         flight.abandoned = true;
         flight.cachedPayload = null;
+        signalShadowTimeout();
       },
       operation: async (): Promise<ShadowValidationOutcome> => {
         try {
@@ -942,7 +947,14 @@ export class DialCache {
           let sourceValue: T;
           try {
             if (start.kind === "redis") {
-              sourceValue = await start.source;
+              const sharedSource = await Promise.race([
+                start.source.then((value) => ({ kind: "value" as const, value })),
+                shadowTimeoutSignal.then(() => ({ kind: "timeout" as const })),
+              ]);
+              if (sharedSource.kind === "timeout") {
+                return "timeout";
+              }
+              sourceValue = sharedSource.value;
               // Let the caller finish its normal SoT continuation before any
               // synchronous shadow deserialization, comparison, or dump work.
               await yieldUnreferencedImmediate();
@@ -966,6 +978,8 @@ export class DialCache {
                 shadowFillConfig,
                 () => !abandonIfExpired(),
               );
+              // A late result remains the already-emitted whole-job timeout:
+              // dispatch success does not retroactively change its outcome.
               if (wroteRemote === null || abandonIfExpired()) {
                 return "timeout";
               }
