@@ -384,6 +384,7 @@ describe("DialCache runtime config and ramp controls", () => {
   it("returns the explicit kill-switch overlay from DialCacheKeyConfig.disabled()", () => {
     expect(DialCacheKeyConfig.disabled()).toEqual(new DialCacheKeyConfig({
       requestLocal: false,
+      shadowRamp: 0,
       ramp: { [CacheLayer.LOCAL]: 0, [CacheLayer.REMOTE]: 0 },
     }));
   });

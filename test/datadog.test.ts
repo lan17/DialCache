@@ -97,15 +97,20 @@ const errorKinds: readonly MetricErrorKind[] = [
   "fallback",
   "unknown",
 ];
-const shadowValidationOutcomes: readonly ShadowValidationOutcome[] = [
-  "match",
-  "mismatch",
-  "source_error",
-  "deserialization_error",
-  "comparison_error",
-  "timeout",
-  "dropped",
-];
+const SHADOW_VALIDATION_OUTCOMES: Readonly<Record<ShadowValidationOutcome, true>> = {
+  match: true,
+  mismatch: true,
+  superseded: true,
+  redis_miss: true,
+  redis_error: true,
+  source_error: true,
+  deserialization_error: true,
+  comparison_error: true,
+  confirmation_error: true,
+  timeout: true,
+  dropped: true,
+};
+const shadowValidationOutcomes = Object.keys(SHADOW_VALIDATION_OUTCOMES) as ShadowValidationOutcome[];
 const metricLayers: readonly MetricLayer[] = [
   CacheLayer.LOCAL,
   CacheLayer.REMOTE,

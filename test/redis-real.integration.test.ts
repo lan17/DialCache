@@ -308,9 +308,10 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       await admin.set(valueKey, storedFrame, { PX: 60_000 });
       await admin.set(watermarkKey, "0", { PX: 60_000 });
 
+      const read = vi.fn(client.adapter.read);
       const write = vi.fn(client.adapter.write);
       const invalidate = vi.fn(client.adapter.invalidate);
-      const redisClient: DialCacheRedisClient = { ...client.adapter, write, invalidate };
+      const redisClient: DialCacheRedisClient = { ...client.adapter, read, write, invalidate };
       const matched = deferred<void>();
       const mismatched = deferred<void>();
       const metrics: DialCacheMetricsAdapter = {
@@ -352,10 +353,20 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
         metrics,
       });
       let sourcePayload: Buffer = Buffer.from(cachedPayload);
+      let sourceMutation: "none" | "watermark" | "payload" | "missing" = "none";
+      let mutatedFrame: Buffer | null = null;
       let sourceCalls = 0;
       const getPayload = dialcache.cached(
         async (): Promise<Buffer> => {
           sourceCalls += 1;
+          if (sourceMutation === "watermark") {
+            await admin!.set(watermarkKey, String(Date.now() + 60_000), { PX: 60_000 });
+          } else if (sourceMutation === "payload") {
+            mutatedFrame = encodeFrame(sourcePayload, 1);
+            await admin!.set(valueKey, mutatedFrame, { PX: 60_000 });
+          } else if (sourceMutation === "missing") {
+            await admin!.del(valueKey);
+          }
           return sourcePayload;
         },
         {
@@ -371,27 +382,165 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       const matchingHit = await dialcache.enable(async () => await getPayload());
       expect(matchingHit).toEqual(cachedPayload);
       await matched.promise;
+      expect(read).toHaveBeenCalledTimes(1);
 
       sourcePayload = mismatchPayload;
       const mismatchingHit = await dialcache.enable(async () => await getPayload());
       expect(mismatchingHit).toEqual(cachedPayload);
       await mismatched.promise;
 
-      expect(sourceCalls).toBe(2);
-      expect(serializer.load).toHaveBeenCalledTimes(4);
+      sourceMutation = "watermark";
+      const invalidatedHit = await dialcache.enable(async () => await getPayload());
+      expect(invalidatedHit).toEqual(cachedPayload);
+      await vi.waitFor(() => {
+        expect(metrics.shadowValidation).toHaveBeenCalledTimes(3);
+      });
+
+      await admin.set(valueKey, storedFrame, { PX: 60_000 });
+      await admin.set(watermarkKey, "0", { PX: 60_000 });
+      sourceMutation = "payload";
+      const supersededHit = await dialcache.enable(async () => await getPayload());
+      expect(supersededHit).toEqual(cachedPayload);
+      await vi.waitFor(() => {
+        expect(metrics.shadowValidation).toHaveBeenCalledTimes(4);
+      });
+      expect(mutatedFrame).not.toBeNull();
+      expect(await admin.get(commandOptions({ returnBuffers: true }), valueKey)).toEqual(mutatedFrame);
+
+      await admin.set(valueKey, storedFrame, { PX: 60_000 });
+      await admin.set(watermarkKey, "0", { PX: 60_000 });
+      sourceMutation = "missing";
+      const missingHit = await dialcache.enable(async () => await getPayload());
+      expect(missingHit).toEqual(cachedPayload);
+      await vi.waitFor(() => {
+        expect(metrics.shadowValidation).toHaveBeenCalledTimes(5);
+      });
+
+      expect(sourceCalls).toBe(5);
+      expect(serializer.load).toHaveBeenCalledTimes(10);
       expect(serializer.dump).not.toHaveBeenCalled();
-      expect(metrics.shadowValidation).toHaveBeenNthCalledWith(1, {
+      expect(metrics.shadowValidation).toHaveBeenCalledWith({
         cacheNamespace: namespace,
         useCase,
         keyType: "item_id",
         outcome: "match",
       });
-      expect(metrics.shadowValidation).toHaveBeenNthCalledWith(2, {
+      expect(metrics.shadowValidation).toHaveBeenCalledWith({
         cacheNamespace: namespace,
         useCase,
         keyType: "item_id",
         outcome: "mismatch",
       });
+      expect(metrics.shadowValidation).toHaveBeenNthCalledWith(3, {
+        cacheNamespace: namespace,
+        useCase,
+        keyType: "item_id",
+        outcome: "superseded",
+      });
+      expect(metrics.shadowValidation).toHaveBeenNthCalledWith(4, {
+        cacheNamespace: namespace,
+        useCase,
+        keyType: "item_id",
+        outcome: "superseded",
+      });
+      expect(metrics.shadowValidation).toHaveBeenNthCalledWith(5, {
+        cacheNamespace: namespace,
+        useCase,
+        keyType: "item_id",
+        outcome: "superseded",
+      });
+      expect(read).toHaveBeenCalledTimes(9);
+      expect(read.mock.calls.every(([request]) =>
+        request.valueKey === valueKey && request.watermarkKey === watermarkKey
+      )).toBe(true);
+      expect(write).not.toHaveBeenCalled();
+      expect(invalidate).not.toHaveBeenCalled();
+      expect(await admin.get(commandOptions({ returnBuffers: true }), valueKey)).toBeNull();
+    });
+
+    it("shadow-reads tracked Redis without serving or writing when the remote ramp is zero", async () => {
+      if (client === undefined || admin === undefined) {
+        throw new Error("Redis test clients did not start");
+      }
+      const namespace = "real-dark-shadow";
+      const useCase = "RealDarkShadowPayload";
+      const valueKey = `{${namespace}:item_id:dark}#${useCase}:dialcache-frame-v1`;
+      const watermarkKey = `{${namespace}:item_id:dark}#watermark`;
+      const cachedValue = { id: "dark", version: 1 };
+      const sourceValue = { id: "dark", version: 2 };
+      const storedFrame = encodeFrame(JSON.stringify(cachedValue), 0);
+      await admin.set(valueKey, storedFrame, { PX: 60_000 });
+      await admin.set(watermarkKey, "0", { PX: 60_000 });
+
+      const read = vi.fn(client.adapter.read);
+      const write = vi.fn(client.adapter.write);
+      const invalidate = vi.fn(client.adapter.invalidate);
+      const redisClient: DialCacheRedisClient = { ...client.adapter, read, write, invalidate };
+      const mismatched = deferred<void>();
+      const metrics: DialCacheMetricsAdapter = {
+        request: vi.fn(),
+        miss: vi.fn(),
+        disabled: vi.fn(),
+        error: vi.fn(),
+        invalidation: vi.fn(),
+        coalesced: vi.fn(),
+        shadowValidation: vi.fn(({ outcome }) => {
+          if (outcome === "mismatch") {
+            mismatched.resolve();
+          }
+        }),
+        observeGet: vi.fn(),
+        observeFallback: vi.fn(),
+        observeSerialization: vi.fn(),
+        observeSize: vi.fn(),
+      };
+      const dialcache = new DialCache({
+        namespace,
+        redis: { client: redisClient, readTimeoutMs: 10_000 },
+        metrics,
+      });
+      const source = vi.fn(async () => sourceValue);
+      const getPayload = dialcache.cached(source, {
+        keyType: "item_id",
+        useCase,
+        cacheKey: () => "dark",
+        trackForInvalidation: true,
+        defaultConfig: new DialCacheKeyConfig({
+          ttlSec: { [CacheLayer.REMOTE]: 60 },
+          ramp: { [CacheLayer.REMOTE]: 0 },
+          shadowRamp: 100,
+        }),
+      });
+
+      const result = await dialcache.enable(async () => await getPayload());
+      expect(result).toBe(sourceValue);
+      await mismatched.promise;
+
+      expect(source).toHaveBeenCalledOnce();
+      expect(read).toHaveBeenCalledTimes(2);
+      expect(read.mock.calls.every(([request]) =>
+        request.valueKey === valueKey && request.watermarkKey === watermarkKey
+      )).toBe(true);
+      expect(metrics.shadowValidation).toHaveBeenCalledOnce();
+      expect(metrics.shadowValidation).toHaveBeenCalledWith({
+        cacheNamespace: namespace,
+        useCase,
+        keyType: "item_id",
+        outcome: "mismatch",
+      });
+      expect(metrics.disabled).toHaveBeenCalledWith({
+        cacheNamespace: namespace,
+        useCase,
+        keyType: "item_id",
+        layer: CacheLayer.REMOTE,
+        reason: "ramped_down",
+      });
+      expect(metrics.request).not.toHaveBeenCalled();
+      expect(metrics.miss).not.toHaveBeenCalled();
+      expect(metrics.error).not.toHaveBeenCalled();
+      expect(metrics.observeGet).not.toHaveBeenCalled();
+      expect(metrics.observeSerialization).not.toHaveBeenCalled();
+      expect(metrics.observeSize).not.toHaveBeenCalled();
       expect(write).not.toHaveBeenCalled();
       expect(invalidate).not.toHaveBeenCalled();
       expect(await admin.get(commandOptions({ returnBuffers: true }), valueKey)).toEqual(storedFrame);

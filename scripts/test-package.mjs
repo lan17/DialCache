@@ -82,6 +82,20 @@ const shadowMetrics: DialCacheMetricsAdapter = {
     void outcome;
   },
 };
+const shadowOutcomes: Readonly<Record<ShadowValidationOutcome, true>> = {
+  match: true,
+  mismatch: true,
+  superseded: true,
+  redis_miss: true,
+  redis_error: true,
+  source_error: true,
+  deserialization_error: true,
+  comparison_error: true,
+  confirmation_error: true,
+  timeout: true,
+  dropped: true,
+};
+void shadowOutcomes;
 const shadowCacheConfig: DialCacheConfig = {
   namespace: "consumer-shadow-cache",
   metrics: shadowMetrics,
@@ -292,6 +306,12 @@ const customRedisClient: DialCacheRedisClient = {
   write: async ({ value }) => typeof value === "string" || Buffer.isBuffer(value),
   invalidate: async () => undefined,
 };
+const redisClientMethods: Readonly<Record<keyof DialCacheRedisClient, true>> = {
+  read: true,
+  write: true,
+  invalidate: true,
+};
+void redisClientMethods;
 const cacheHasNoFlushAll: "flushAll" extends keyof DialCache ? false : true = true;
 const cacheHasNoClose: "close" extends keyof DialCache ? false : true = true;
 const clientHasNoFlushAll: "flushAll" extends keyof DialCacheRedisClient ? false : true = true;
@@ -598,7 +618,7 @@ if ("MissingKeyConfigError" in root) {
   throw new Error("The removed MissingKeyConfigError class must not be exported from the root ESM entry");
 }
 const esmDisabledOverlay = root.DialCacheKeyConfig.disabled();
-if (esmDisabledOverlay.requestLocal !== false || esmDisabledOverlay.ramp[root.CacheLayer.LOCAL] !== 0 || esmDisabledOverlay.ramp[root.CacheLayer.REMOTE] !== 0) {
+if (esmDisabledOverlay.requestLocal !== false || esmDisabledOverlay.shadowRamp !== 0 || esmDisabledOverlay.ramp[root.CacheLayer.LOCAL] !== 0 || esmDisabledOverlay.ramp[root.CacheLayer.REMOTE] !== 0) {
   throw new Error("The packed ESM runtime did not build the disabled() kill-switch overlay");
 }
 let calls = 0;
@@ -696,7 +716,7 @@ if ("MissingKeyConfigError" in root) {
   throw new Error("The removed MissingKeyConfigError class must not be exported from the root CommonJS entry");
 }
 const cjsDisabledOverlay = root.DialCacheKeyConfig.disabled();
-if (cjsDisabledOverlay.requestLocal !== false || cjsDisabledOverlay.ramp[root.CacheLayer.LOCAL] !== 0 || cjsDisabledOverlay.ramp[root.CacheLayer.REMOTE] !== 0) {
+if (cjsDisabledOverlay.requestLocal !== false || cjsDisabledOverlay.shadowRamp !== 0 || cjsDisabledOverlay.ramp[root.CacheLayer.LOCAL] !== 0 || cjsDisabledOverlay.ramp[root.CacheLayer.REMOTE] !== 0) {
   throw new Error("The packed CommonJS runtime did not build the disabled() kill-switch overlay");
 }
 void (async () => {

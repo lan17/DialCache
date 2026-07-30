@@ -31,6 +31,13 @@ interface RedisCacheOptions {
   readonly metrics: DialCacheMetricsAdapter | null;
 }
 
+interface StartedRedisRead {
+  /** Result bounded by the effective Redis read deadline. */
+  readonly result: Promise<RedisCachePayload | null>;
+  /** Fulfills only after the underlying semantic Redis read settles. */
+  readonly settled: Promise<void>;
+}
+
 const defaultSerializer = new JsonSerializer<unknown>();
 const REDIS_FRAME_KEY_SUFFIX = ":dialcache-frame-v1";
 const DEFAULT_REMOTE_READ_TIMEOUT_MS = 50;
@@ -94,21 +101,8 @@ export class RedisCache {
     readTimeoutMs = this.readTimeoutMs,
   ): Promise<RedisCacheGetResult<T>> {
     let payload: RedisCachePayload | null;
-    const abortController = new AbortController();
     try {
-      const redisKey = this.redisKey(key);
-      payload = await withMonotonicDeadline({
-        timeoutMs: readTimeoutMs,
-        operation: () => this.client.read(
-          {
-            valueKey: redisKey,
-            ...(key.trackForInvalidation ? { watermarkKey: this.redisWatermarkKeyFromKey(key) } : {}),
-          },
-          { timeoutMs: readTimeoutMs, signal: abortController.signal },
-        ),
-        onTimeout: () => abortController.abort(),
-        timeoutError: () => new RedisReadTimeoutError(key.useCase, readTimeoutMs),
-      });
+      payload = await this.startPayloadRead(key, readTimeoutMs, false).result;
     } catch (error) {
       this.recordError(key, error instanceof RedisReadTimeoutError ? "cache_read_timeout" : "cache_read");
       throw error;
@@ -135,6 +129,22 @@ export class RedisCache {
    */
   async deserializeForShadow<T>(key: DialCacheKey, payload: RedisCachePayload): Promise<T> {
     return await this.serializerFor(key).load(payload) as T;
+  }
+
+  /**
+   * Start a telemetry-free tracked Redis read for detached shadow work.
+   *
+   * The bounded result may reject before the semantic client operation settles,
+   * so callers must retain shadow capacity until `settled` fulfills.
+   */
+  startTrackedPayloadReadForShadow(
+    key: DialCacheKey,
+    readTimeoutMs: number,
+  ): StartedRedisRead {
+    if (!key.trackForInvalidation) {
+      throw new Error("DialCache shadow Redis reads require tracked keys");
+    }
+    return this.startPayloadRead(key, readTimeoutMs, true);
   }
 
   async put<T>(key: DialCacheKey, value: T, config?: { readonly ttlSec: number }): Promise<boolean> {
@@ -191,6 +201,37 @@ export class RedisCache {
 
   private redisWatermarkKeyFromKey(key: DialCacheKey): string {
     return this.redisWatermarkKey(key.namespace, key.keyType, key.id);
+  }
+
+  private startPayloadRead(
+    key: DialCacheKey,
+    readTimeoutMs: number,
+    unrefTimer: boolean,
+  ): StartedRedisRead {
+    const abortController = new AbortController();
+    const pending = Promise.resolve().then(() =>
+      this.client.read(
+        {
+          valueKey: this.redisKey(key),
+          ...(key.trackForInvalidation ? { watermarkKey: this.redisWatermarkKeyFromKey(key) } : {}),
+        },
+        { timeoutMs: readTimeoutMs, signal: abortController.signal },
+      )
+    );
+    const result = withMonotonicDeadline({
+      timeoutMs: readTimeoutMs,
+      operation: () => pending,
+      onTimeout: () => abortController.abort(),
+      timeoutError: () => new RedisReadTimeoutError(key.useCase, readTimeoutMs),
+      unrefTimer,
+    });
+    return {
+      result,
+      settled: pending.then(
+        () => undefined,
+        () => undefined,
+      ),
+    };
   }
 
   private serializerFor(key: DialCacheKey): Serializer<unknown> {

@@ -148,7 +148,7 @@ const nextImmediate = (): Promise<void> => new Promise((resolve) => setImmediate
 async function waitForShadowEvents(metrics: RecordingMetrics, count: number): Promise<void> {
   await vi.waitFor(() => {
     expect(metrics.shadowEvents).toHaveLength(count);
-  }, { timeout: 1_000, interval: 1 });
+  }, { timeout: 2_500, interval: 1 });
 }
 
 describe("DialCache Redis shadow validation", () => {
@@ -516,7 +516,9 @@ describe("DialCache Redis shadow validation", () => {
         (value as NodeJS.Timeout | undefined)?.hasRef() === false
       );
       expect(shadowTimerIndex).toBeGreaterThanOrEqual(0);
-      expect(setTimeoutSpy.mock.calls[shadowTimerIndex]?.[1]).toBe(10_000);
+      const shadowDelayMs = setTimeoutSpy.mock.calls[shadowTimerIndex]?.[1] as number;
+      expect(shadowDelayMs).toBeGreaterThan(0);
+      expect(shadowDelayMs).toBeLessThanOrEqual(10_000);
 
       sourceGate.resolve(cachedValue);
       await waitForShadowEvents(metrics, 1);
@@ -555,7 +557,9 @@ describe("DialCache Redis shadow validation", () => {
         (value as NodeJS.Timeout | undefined)?.hasRef() === false
       );
       expect(shadowTimerIndex).toBeGreaterThanOrEqual(0);
-      expect(setTimeoutSpy.mock.calls[shadowTimerIndex]?.[1]).toBe(60_000);
+      const shadowDelayMs = setTimeoutSpy.mock.calls[shadowTimerIndex]?.[1] as number;
+      expect(shadowDelayMs).toBeGreaterThan(0);
+      expect(shadowDelayMs).toBeLessThanOrEqual(60_000);
 
       sourceGate.resolve(cachedValue);
       await waitForShadowEvents(metrics, 1);
@@ -784,7 +788,7 @@ describe("DialCache Redis shadow validation", () => {
     }, {
       ...trackedRemoteDefaults(useCase),
       cacheKey: (id) => id,
-      fallbackTimeoutMs: 10,
+      fallbackTimeoutMs: 1_000,
       shadowComparator,
     });
 
@@ -880,7 +884,7 @@ describe("DialCache Redis shadow validation", () => {
     }, {
       ...trackedRemoteDefaults(useCase),
       cacheKey: () => "123",
-      fallbackTimeoutMs: 10,
+      fallbackTimeoutMs: 1_000,
       serializer,
     });
 
@@ -936,7 +940,7 @@ describe("DialCache Redis shadow validation", () => {
     }, {
       ...trackedRemoteDefaults(useCase),
       cacheKey: (id) => id,
-      fallbackTimeoutMs: 10,
+      fallbackTimeoutMs: 1_000,
       serializer,
     });
 

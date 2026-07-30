@@ -59,9 +59,13 @@ const DISABLED_REASONS: Readonly<Record<DisabledReason, true>> = {
 const SHADOW_VALIDATION_OUTCOMES: Readonly<Record<ShadowValidationOutcome, true>> = {
   match: true,
   mismatch: true,
+  superseded: true,
+  redis_miss: true,
+  redis_error: true,
   source_error: true,
   deserialization_error: true,
   comparison_error: true,
+  confirmation_error: true,
   timeout: true,
   dropped: true,
 };
