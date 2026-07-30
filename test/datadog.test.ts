@@ -11,7 +11,11 @@ import {
   type MetricLayer,
   type ShadowValidationOutcome,
 } from "../src/index.js";
-import { NO_CACHE_LAYER, REQUEST_LOCAL_CACHE_LAYER } from "../src/metrics.js";
+import {
+  NO_CACHE_LAYER,
+  REMOTE_SHADOW_CACHE_LAYER,
+  REQUEST_LOCAL_CACHE_LAYER,
+} from "../src/metrics.js";
 import {
   DatadogDialCacheMetrics,
   createDatadogDialCacheMetrics,
@@ -101,7 +105,9 @@ const SHADOW_VALIDATION_OUTCOMES: Readonly<Record<ShadowValidationOutcome, true>
   match: true,
   mismatch: true,
   superseded: true,
-  redis_miss: true,
+  filled: true,
+  fill_blocked: true,
+  fill_error: true,
   redis_error: true,
   source_error: true,
   deserialization_error: true,
@@ -114,6 +120,7 @@ const shadowValidationOutcomes = Object.keys(SHADOW_VALIDATION_OUTCOMES) as Shad
 const metricLayers: readonly MetricLayer[] = [
   CacheLayer.LOCAL,
   CacheLayer.REMOTE,
+  REMOTE_SHADOW_CACHE_LAYER,
   REQUEST_LOCAL_CACHE_LAYER,
   NO_CACHE_LAYER,
 ];

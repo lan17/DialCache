@@ -219,11 +219,18 @@ interface ShadowValidationPlan<Value> {
   readonly source: () => Promise<Value>;
   readonly comparator: ShadowComparator<Value>;
   readonly timeoutMs: number;
+  readonly didCallerFallbackTimeout: () => boolean;
 }
 
-type ShadowValidationStart =
+type ShadowValidationStart<Value> =
   | { readonly kind: "retained"; readonly payload: RedisCachePayload }
-  | { readonly kind: "redis" };
+  | {
+      readonly kind: "redis";
+      /** The caller-owned, fallback-deadline-bounded SoT operation. */
+      readonly source: Promise<Value>;
+      /** Valid remote policy retained even though its serving ramp excluded this key. */
+      readonly remoteConfig: ResolvedLayerConfig;
+    };
 
 const DEFAULT_LOCAL_MAX_SIZE = 10_000;
 const DEFAULT_FALLBACK_TIMEOUT_MS = 60_000;
@@ -390,11 +397,20 @@ export class DialCache {
       return await rawFallback();
     }
 
-    const fallback = (): Promise<Value> => withFallbackTimeout(source, options.useCase, fallbackTimeoutMs);
+    let callerFallbackTimedOut = false;
+    const fallback = (): Promise<Value> => withFallbackTimeout(
+      source,
+      options.useCase,
+      fallbackTimeoutMs,
+      () => {
+        callerFallbackTimedOut = true;
+      },
+    );
     const shadowValidation: ShadowValidationPlan<Value> = {
       source,
       comparator: shadowComparator,
       timeoutMs: fallbackTimeoutMs ?? DEFAULT_FALLBACK_TIMEOUT_MS,
+      didCallerFallbackTimeout: () => callerFallbackTimedOut,
     };
 
     let key: DialCacheKey;
@@ -577,6 +593,7 @@ export class DialCache {
           key,
           keyConfig,
           null,
+          remoteLayer.config,
           labelsFor(key, fallbackLayer),
           fallback,
           shadowValidation,
@@ -630,6 +647,7 @@ export class DialCache {
           key,
           keyConfig,
           local,
+          remoteLayer.config,
           labelsFor(key, CacheLayer.LOCAL),
           fallback,
           shadowValidation,
@@ -677,19 +695,20 @@ export class DialCache {
     key: DialCacheKey,
     keyConfig: DialCacheKeyConfig | null,
     local: CacheGetResult<T> | null,
+    remoteConfig: ResolvedLayerConfig,
     fallbackLabels: CacheMetricLabels,
     fallback: () => Promise<T>,
     shadowValidation: ShadowValidationPlan<T>,
   ): Promise<T> {
+    const valuePromise = this.callFallback(fallbackLabels, fallback);
     this.scheduleShadowValidation(
       redisCache,
       key,
       keyConfig,
-      { kind: "redis" },
+      { kind: "redis", source: valuePromise, remoteConfig },
       shadowValidation,
       keyConfig?.remoteReadTimeoutMs ?? redisCache.readTimeoutMs,
     );
-    const valuePromise = this.callFallback(fallbackLabels, fallback);
 
     const value = await valuePromise;
     if (local?.status === "miss") {
@@ -756,7 +775,7 @@ export class DialCache {
     redisCache: RedisCache,
     key: DialCacheKey,
     keyConfig: DialCacheKeyConfig | null,
-    start: ShadowValidationStart,
+    start: ShadowValidationStart<T>,
     validation: ShadowValidationPlan<T>,
     readTimeoutMs: number,
   ): void {
@@ -795,7 +814,7 @@ export class DialCache {
         redisCache,
         key,
         flight,
-        start.kind === "redis",
+        start,
         validation,
         readTimeoutMs,
       );
@@ -806,7 +825,7 @@ export class DialCache {
     redisCache: RedisCache,
     key: DialCacheKey,
     flight: ShadowFlight,
-    readInitialPayload: boolean,
+    start: ShadowValidationStart<T>,
     plan: ShadowValidationPlan<T>,
     readTimeoutMs: number,
   ): void {
@@ -866,7 +885,8 @@ export class DialCache {
             return "timeout";
           }
 
-          if (readInitialPayload) {
+          let shadowFillConfig: ResolvedLayerConfig | null = null;
+          if (start.kind === "redis") {
             let payload: RedisCachePayload | null;
             try {
               payload = await readShadowPayload();
@@ -877,19 +897,47 @@ export class DialCache {
               return "timeout";
             }
             if (payload === null) {
-              return "redis_miss";
+              shadowFillConfig = start.remoteConfig;
+            } else {
+              flight.cachedPayload = payload;
             }
-            flight.cachedPayload = payload;
           }
 
           let sourceValue: T;
           try {
-            sourceValue = await this.disable(plan.source);
+            if (start.kind === "redis") {
+              sourceValue = await start.source;
+              // Let the caller finish its normal SoT continuation before any
+              // synchronous shadow deserialization, comparison, or dump work.
+              await yieldUnreferencedImmediate();
+            } else {
+              sourceValue = await this.disable(plan.source);
+            }
           } catch {
-            return "source_error";
+            return start.kind === "redis" && plan.didCallerFallbackTimeout()
+              ? "timeout"
+              : "source_error";
           }
           if (abandonIfExpired()) {
             return "timeout";
+          }
+
+          if (shadowFillConfig !== null) {
+            try {
+              const wroteRemote = await redisCache.putForShadow(
+                key,
+                sourceValue,
+                shadowFillConfig,
+                () => !abandonIfExpired(),
+              );
+              if (wroteRemote === null || abandonIfExpired()) {
+                return "timeout";
+              }
+              return wroteRemote ? "filled" : "fill_blocked";
+            } catch (error) {
+              this.logger.warn("Error populating Redis from DialCache shadow work", error);
+              return "fill_error";
+            }
           }
 
           const retainedPayload = flight.cachedPayload;
@@ -1029,19 +1077,11 @@ export class DialCache {
     layerConfig: ResolvedLayerConfig,
     readTimeoutMs: number,
   ): Promise<RemoteCacheGetResult<T>> {
-    const start = performance.now();
-    this.metrics?.request(labelsFor(key, CacheLayer.REMOTE));
     try {
-      const result = await redisCache.getWithResolvedConfig<T>(key, layerConfig, readTimeoutMs);
-      if (result.status === "miss") {
-        this.metrics?.miss(labelsFor(key, CacheLayer.REMOTE));
-      }
-      return result;
+      return await redisCache.getWithResolvedConfig<T>(key, layerConfig, readTimeoutMs);
     } catch (error) {
       this.logger.warn("Error getting value from Redis cache", error);
       return { status: "error", operation: "read" };
-    } finally {
-      this.metrics?.observeGet(labelsFor(key, CacheLayer.REMOTE), elapsedSeconds(start));
     }
   }
 
@@ -1189,6 +1229,12 @@ function elapsedSeconds(startMs: number): number {
   return Math.max((performance.now() - startMs) / 1000, 0);
 }
 
+function yieldUnreferencedImmediate(): Promise<void> {
+  return new Promise((resolve) => {
+    setImmediate(resolve).unref();
+  });
+}
+
 function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): DialCacheKeyConfig | null {
   if (config === null || config === undefined) {
     return null;
@@ -1278,6 +1324,7 @@ function withFallbackTimeout<T>(
   fallback: () => Promise<T>,
   useCase: string,
   timeoutMs: number | null,
+  onTimeout: () => void,
 ): Promise<T> {
   if (timeoutMs === null) {
     return fallback();
@@ -1286,7 +1333,10 @@ function withFallbackTimeout<T>(
   return withMonotonicDeadline({
     operation: fallback,
     timeoutMs,
-    timeoutError: () => new FallbackTimeoutError(useCase, timeoutMs),
+    timeoutError: () => {
+      onTimeout();
+      return new FallbackTimeoutError(useCase, timeoutMs);
+    },
   });
 }
 

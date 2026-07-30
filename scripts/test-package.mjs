@@ -32,6 +32,7 @@ const rootConsumer = `import {
   type GetOrLoadOptions,
   type InvalidationMetricLabels,
   type MetricErrorKind,
+  type MetricLayer,
   type ProcessCoalescingState,
   type RedisConfig,
   type RedisInvalidationRequest,
@@ -86,7 +87,9 @@ const shadowOutcomes: Readonly<Record<ShadowValidationOutcome, true>> = {
   match: true,
   mismatch: true,
   superseded: true,
-  redis_miss: true,
+  filled: true,
+  fill_blocked: true,
+  fill_error: true,
   redis_error: true,
   source_error: true,
   deserialization_error: true,
@@ -96,6 +99,14 @@ const shadowOutcomes: Readonly<Record<ShadowValidationOutcome, true>> = {
   dropped: true,
 };
 void shadowOutcomes;
+const metricLayers: Readonly<Record<MetricLayer, true>> = {
+  [CacheLayer.LOCAL]: true,
+  [CacheLayer.REMOTE]: true,
+  remote_shadow: true,
+  request_local: true,
+  noop: true,
+};
+void metricLayers;
 const shadowCacheConfig: DialCacheConfig = {
   namespace: "consumer-shadow-cache",
   metrics: shadowMetrics,

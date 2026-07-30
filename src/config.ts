@@ -16,8 +16,9 @@ export class DialCacheKeyConfig {
   readonly ttlSec: LayerConfig;
   readonly ramp: LayerConfig;
   /**
-   * Percentage of tracked Redis keys that asynchronously validate Redis
-   * contents against the source of truth. This observation cohort is
+   * Percentage of tracked Redis keys that asynchronously exercise Redis
+   * without changing what serves the caller. Hits validate against the source
+   * of truth and ramped-down clean misses populate Redis. This shadow cohort is
    * independent of the Redis serving ramp. Omitted and zero disable it.
    */
   readonly shadowRamp?: number;
@@ -124,9 +125,9 @@ export interface DialCacheConfig {
   readonly redis?: RedisConfig;
   readonly metrics?: DialCacheMetricsAdapter;
   /**
-   * Maximum number of scheduled or running shadow validations per DialCache
-   * instance, including underlying work that outlives a DialCache deadline.
-   * There is no queue; excess validations are dropped and measured. Must be a
+   * Maximum number of scheduled or running shadow jobs per DialCache instance,
+   * including shadow-owned work that outlives a DialCache deadline. There is no
+   * queue; excess jobs are dropped and measured. Must be a
    * positive safe integer. Defaults to 1.
    */
   readonly shadowMaxInFlight?: number;

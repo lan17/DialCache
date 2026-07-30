@@ -458,7 +458,7 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       expect(await admin.get(commandOptions({ returnBuffers: true }), valueKey)).toBeNull();
     });
 
-    it("shadow-reads tracked Redis without serving or writing when the remote ramp is zero", async () => {
+    it("shadow-reads tracked Redis without serving or repairing a warm hit when the remote ramp is zero", async () => {
       if (client === undefined || admin === undefined) {
         throw new Error("Redis test clients did not start");
       }
@@ -535,15 +535,238 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
         layer: CacheLayer.REMOTE,
         reason: "ramped_down",
       });
-      expect(metrics.request).not.toHaveBeenCalled();
+      expect(metrics.request).toHaveBeenCalledTimes(2);
+      expect(metrics.request).toHaveBeenNthCalledWith(1, {
+        cacheNamespace: namespace,
+        useCase,
+        keyType: "item_id",
+        layer: "remote_shadow",
+      });
+      expect(metrics.request).toHaveBeenNthCalledWith(2, {
+        cacheNamespace: namespace,
+        useCase,
+        keyType: "item_id",
+        layer: "remote_shadow",
+      });
       expect(metrics.miss).not.toHaveBeenCalled();
       expect(metrics.error).not.toHaveBeenCalled();
-      expect(metrics.observeGet).not.toHaveBeenCalled();
-      expect(metrics.observeSerialization).not.toHaveBeenCalled();
+      expect(metrics.observeGet).toHaveBeenCalledTimes(2);
+      expect(metrics.observeGet).toHaveBeenNthCalledWith(1, {
+        cacheNamespace: namespace,
+        useCase,
+        keyType: "item_id",
+        layer: "remote_shadow",
+      }, expect.any(Number));
+      expect(metrics.observeGet).toHaveBeenNthCalledWith(2, {
+        cacheNamespace: namespace,
+        useCase,
+        keyType: "item_id",
+        layer: "remote_shadow",
+      }, expect.any(Number));
+      expect(metrics.observeSerialization).toHaveBeenCalledOnce();
+      expect(metrics.observeSerialization).toHaveBeenCalledWith({
+        cacheNamespace: namespace,
+        useCase,
+        keyType: "item_id",
+        layer: "remote_shadow",
+        operation: "load",
+      }, expect.any(Number));
       expect(metrics.observeSize).not.toHaveBeenCalled();
       expect(write).not.toHaveBeenCalled();
       expect(invalidate).not.toHaveBeenCalled();
       expect(await admin.get(commandOptions({ returnBuffers: true }), valueKey)).toEqual(storedFrame);
+    });
+
+    it("fills a clean tracked shadow miss asynchronously and serves it after Redis ramps up", async () => {
+      if (client === undefined || admin === undefined) {
+        throw new Error("Redis test clients did not start");
+      }
+      const namespace = "real-dark-shadow-fill";
+      const useCase = "RealDarkShadowFill";
+      const valueKey = `{${namespace}:item_id:cold}#${useCase}:dialcache-frame-v1`;
+      const watermarkKey = `{${namespace}:item_id:cold}#watermark`;
+      const sourceValue = { id: "cold", version: 1 };
+      const writeStarted = deferred<void>();
+      const allowWrite = deferred<void>();
+      const filled = deferred<void>();
+      let serveFromRedis = false;
+
+      const read = vi.fn(client.adapter.read);
+      const write = vi.fn(async (request: Parameters<DialCacheRedisClient["write"]>[0]) => {
+        writeStarted.resolve();
+        await allowWrite.promise;
+        return await client!.adapter.write(request);
+      });
+      const invalidate = vi.fn(client.adapter.invalidate);
+      const redisClient: DialCacheRedisClient = { ...client.adapter, read, write, invalidate };
+      const metrics: DialCacheMetricsAdapter = {
+        request: vi.fn(),
+        miss: vi.fn(),
+        disabled: vi.fn(),
+        error: vi.fn(),
+        invalidation: vi.fn(),
+        coalesced: vi.fn(),
+        shadowValidation: vi.fn(({ outcome }) => {
+          if (outcome === "filled") {
+            filled.resolve();
+          }
+        }),
+        observeGet: vi.fn(),
+        observeFallback: vi.fn(),
+        observeSerialization: vi.fn(),
+        observeSize: vi.fn(),
+      };
+      const dialcache = new DialCache({
+        namespace,
+        redis: { client: redisClient, readTimeoutMs: 10_000 },
+        metrics,
+        cacheConfigProvider: async () => new DialCacheKeyConfig({
+          ttlSec: { [CacheLayer.REMOTE]: 60 },
+          ramp: { [CacheLayer.REMOTE]: serveFromRedis ? 100 : 0 },
+          shadowRamp: serveFromRedis ? 0 : 100,
+        }),
+      });
+      const source = vi.fn(async () => sourceValue);
+      const getPayload = dialcache.cached(source, {
+        keyType: "item_id",
+        useCase,
+        cacheKey: () => "cold",
+        trackForInvalidation: true,
+      });
+
+      const result = await dialcache.enable(async () => await getPayload());
+      expect(result).toBe(sourceValue);
+      expect(source).toHaveBeenCalledOnce();
+      await writeStarted.promise;
+      expect(await admin.exists(valueKey)).toBe(0);
+
+      allowWrite.resolve();
+      await filled.promise;
+
+      expect(write).toHaveBeenCalledOnce();
+      expect(write).toHaveBeenCalledWith({
+        valueKey,
+        watermarkKey,
+        cacheTtlMs: 60_000,
+        value: JSON.stringify(sourceValue),
+      });
+      expect(await client.adapter.read({ valueKey, watermarkKey })).toBe(JSON.stringify(sourceValue));
+      expect(await admin.get(watermarkKey)).toBe("0");
+      expect(await admin.pTTL(valueKey)).toBeGreaterThan(55_000);
+      expect(await admin.pTTL(valueKey)).toBeLessThanOrEqual(60_000);
+      expect(await admin.pTTL(watermarkKey)).toBeGreaterThan(115_000);
+      expect(await admin.pTTL(watermarkKey)).toBeLessThanOrEqual(120_000);
+      expect(metrics.shadowValidation).toHaveBeenCalledOnce();
+      expect(metrics.shadowValidation).toHaveBeenCalledWith({
+        cacheNamespace: namespace,
+        useCase,
+        keyType: "item_id",
+        outcome: "filled",
+      });
+      expect(metrics.request).toHaveBeenCalledWith({
+        cacheNamespace: namespace,
+        useCase,
+        keyType: "item_id",
+        layer: "remote_shadow",
+      });
+      expect(metrics.miss).toHaveBeenCalledWith({
+        cacheNamespace: namespace,
+        useCase,
+        keyType: "item_id",
+        layer: "remote_shadow",
+      });
+      expect(metrics.observeSerialization).toHaveBeenCalledWith({
+        cacheNamespace: namespace,
+        useCase,
+        keyType: "item_id",
+        layer: "remote_shadow",
+        operation: "dump",
+      }, expect.any(Number));
+      expect(metrics.observeSize).toHaveBeenCalledWith({
+        cacheNamespace: namespace,
+        useCase,
+        keyType: "item_id",
+        layer: "remote_shadow",
+      }, Buffer.byteLength(JSON.stringify(sourceValue)));
+
+      serveFromRedis = true;
+      const served = await dialcache.enable(async () => await getPayload());
+
+      expect(served).toEqual(sourceValue);
+      expect(source).toHaveBeenCalledOnce();
+      expect(write).toHaveBeenCalledOnce();
+      expect(invalidate).not.toHaveBeenCalled();
+    });
+
+    it("reports a future-watermark-blocked shadow fill without populating Redis", async () => {
+      if (client === undefined || admin === undefined) {
+        throw new Error("Redis test clients did not start");
+      }
+      const namespace = "real-dark-shadow-blocked";
+      const useCase = "RealDarkShadowBlocked";
+      const valueKey = `{${namespace}:item_id:blocked}#${useCase}:dialcache-frame-v1`;
+      const watermarkKey = `{${namespace}:item_id:blocked}#watermark`;
+      await client.adapter.invalidate({ watermarkKey, futureBufferMs: 60_000 });
+      const watermarkBefore = await admin.get(watermarkKey);
+
+      const read = vi.fn(client.adapter.read);
+      const write = vi.fn(client.adapter.write);
+      const invalidate = vi.fn(client.adapter.invalidate);
+      const redisClient: DialCacheRedisClient = { ...client.adapter, read, write, invalidate };
+      const fillBlocked = deferred<void>();
+      const metrics: DialCacheMetricsAdapter = {
+        request: vi.fn(),
+        miss: vi.fn(),
+        disabled: vi.fn(),
+        error: vi.fn(),
+        invalidation: vi.fn(),
+        coalesced: vi.fn(),
+        shadowValidation: vi.fn(({ outcome }) => {
+          if (outcome === "fill_blocked") {
+            fillBlocked.resolve();
+          }
+        }),
+        observeGet: vi.fn(),
+        observeFallback: vi.fn(),
+        observeSerialization: vi.fn(),
+        observeSize: vi.fn(),
+      };
+      const dialcache = new DialCache({
+        namespace,
+        redis: { client: redisClient, readTimeoutMs: 10_000 },
+        metrics,
+      });
+      const sourceValue = { id: "blocked", version: 1 };
+      const source = vi.fn(async () => sourceValue);
+      const getPayload = dialcache.cached(source, {
+        keyType: "item_id",
+        useCase,
+        cacheKey: () => "blocked",
+        trackForInvalidation: true,
+        defaultConfig: new DialCacheKeyConfig({
+          ttlSec: { [CacheLayer.REMOTE]: 60 },
+          ramp: { [CacheLayer.REMOTE]: 0 },
+          shadowRamp: 100,
+        }),
+      });
+
+      const result = await dialcache.enable(async () => await getPayload());
+      expect(result).toBe(sourceValue);
+      await fillBlocked.promise;
+
+      expect(source).toHaveBeenCalledOnce();
+      expect(read).toHaveBeenCalledOnce();
+      expect(write).toHaveBeenCalledOnce();
+      expect(invalidate).not.toHaveBeenCalled();
+      expect(await admin.exists(valueKey)).toBe(0);
+      expect(await admin.get(watermarkKey)).toBe(watermarkBefore);
+      expect(metrics.shadowValidation).toHaveBeenCalledOnce();
+      expect(metrics.shadowValidation).toHaveBeenCalledWith({
+        cacheNamespace: namespace,
+        useCase,
+        keyType: "item_id",
+        outcome: "fill_blocked",
+      });
     });
 
     it("recovers every Lua script after SCRIPT FLUSH", async () => {

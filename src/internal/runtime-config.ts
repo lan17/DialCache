@@ -16,7 +16,16 @@ export interface ResolvedLayerConfig {
 
 export type LayerConfigResolution =
   | { readonly status: "enabled"; readonly config: ResolvedLayerConfig }
-  | { readonly status: "disabled"; readonly reason: DisabledReason };
+  | {
+      readonly status: "disabled";
+      readonly reason: "ramped_down";
+      /** Valid policy retained even though its ramp excluded this key. */
+      readonly config: ResolvedLayerConfig;
+    }
+  | {
+      readonly status: "disabled";
+      readonly reason: Exclude<DisabledReason, "ramped_down">;
+    };
 
 interface ResolveLayerConfigOptions {
   readonly config: DialCacheKeyConfig | null;
@@ -63,7 +72,7 @@ export function resolveLayerConfigResult(options: ResolveLayerConfigOptions): La
 
   const ramp = clampPercentage(configuredRamp);
   if (ramp <= 0) {
-    return { status: "disabled", reason: "ramped_down" };
+    return { status: "disabled", reason: "ramped_down", config: { ttlSec, ramp } };
   }
   if (ramp >= 100) {
     return { status: "enabled", config: { ttlSec, ramp } };
@@ -73,7 +82,7 @@ export function resolveLayerConfigResult(options: ResolveLayerConfigOptions): La
 
   return sample < ramp
     ? { status: "enabled", config: { ttlSec, ramp } }
-    : { status: "disabled", reason: "ramped_down" };
+    : { status: "disabled", reason: "ramped_down", config: { ttlSec, ramp } };
 }
 
 function mergeKeyConfig(

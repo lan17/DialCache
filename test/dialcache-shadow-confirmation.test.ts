@@ -1,3 +1,5 @@
+import { performance } from "node:perf_hooks";
+
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -27,6 +29,7 @@ import {
   deterministicRampSample,
   deterministicShadowRampSample,
 } from "../src/internal/ramp.js";
+import { REMOTE_SHADOW_CACHE_LAYER } from "../src/metrics.js";
 
 interface Deferred<T> {
   readonly promise: Promise<T>;
@@ -333,7 +336,7 @@ describe("DialCache Redis shadow confirmation", () => {
     expectTrackedReads(redis, 2);
   });
 
-  it("reports confirmation_error without adding ordinary Redis-layer errors", async () => {
+  it("reports confirmation_error with its Redis work attributed to remote_shadow", async () => {
     const payload = JSON.stringify({ id: "123", version: 1 });
     const redis = new ScriptedRedis([
       () => payload,
@@ -352,10 +355,25 @@ describe("DialCache Redis shadow confirmation", () => {
     await waitForShadowEvents(metrics, 1);
 
     expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["confirmation_error"]);
-    expect(metrics.ordinaryEvents.filter(({ name }) => name === "error")).toHaveLength(0);
-    expect(metrics.ordinaryEvents.filter(({ name }) => name === "request")).toHaveLength(1);
-    expect(metrics.ordinaryEvents.filter(({ name }) => name === "get")).toHaveLength(1);
-    expect(metrics.ordinaryEvents.filter(({ name }) => name === "serialization")).toHaveLength(1);
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "error"
+      && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+      && labels.error === "cache_read"
+    )).toHaveLength(1);
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "request" && labels.layer === CacheLayer.REMOTE
+    )).toHaveLength(1);
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "request" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+    )).toHaveLength(1);
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "get" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+    )).toHaveLength(1);
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "serialization"
+      && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+      && labels.operation === "load"
+    )).toHaveLength(1);
   });
 
   it("returns the ramped-down SoT result without waiting for a dark C0 read", async () => {
@@ -386,11 +404,21 @@ describe("DialCache Redis shadow confirmation", () => {
     expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["match"]);
     expect(redis.write).not.toHaveBeenCalled();
     expect(redis.invalidate).not.toHaveBeenCalled();
-    expect(
-      metrics.ordinaryEvents.filter(({ name }) =>
-        ["request", "miss", "error", "get", "serialization", "size"].includes(name)
-      ),
-    ).toHaveLength(0);
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "request" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+    )).toHaveLength(1);
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "get" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+    )).toHaveLength(1);
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "serialization"
+      && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+      && labels.operation === "load"
+    )).toHaveLength(1);
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      labels.layer === REMOTE_SHADOW_CACHE_LAYER
+      && ["miss", "error", "size"].includes(name)
+    )).toHaveLength(0);
     expect(
       metrics.ordinaryEvents.filter(({ name, labels }) =>
         name === "disabled"
@@ -398,6 +426,64 @@ describe("DialCache Redis shadow confirmation", () => {
         && labels.reason === "ramped_down"
       ),
     ).toHaveLength(1);
+  });
+
+  it("unrefs ramp-zero shadow C0 and C1 Redis read-deadline timers", async () => {
+    const cachedPayload = JSON.stringify({ id: "123", version: 1 });
+    const c0Started = deferred<void>();
+    const c0Gate = deferred<RedisCachePayload | null>();
+    const c1Started = deferred<void>();
+    const c1Gate = deferred<RedisCachePayload | null>();
+    const redis = new ScriptedRedis([
+      async () => {
+        c0Started.resolve(undefined);
+        return await c0Gate.promise;
+      },
+      async () => {
+        c1Started.resolve(undefined);
+        return await c1Gate.promise;
+      },
+    ]);
+    const metrics = new RecordingMetrics();
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    const dialcache = createCache(redis, metrics);
+    const getUser = dialcache.cached(async () => ({ id: "123", version: 2 }), {
+      ...trackedOptions("ShadowDarkUnrefRedisDeadlines", remoteConfig(0)),
+      cacheKey: () => "123",
+    });
+    const shortUnrefTimers = (): NodeJS.Timeout[] =>
+      setTimeoutSpy.mock.results.flatMap(({ value }, index) => {
+        const delayMs = setTimeoutSpy.mock.calls[index]?.[1];
+        const timer = value as NodeJS.Timeout | undefined;
+        return typeof delayMs === "number"
+          && delayMs > 0
+          && delayMs <= 1_000
+          && timer?.hasRef() === false
+          ? [timer]
+          : [];
+      });
+
+    try {
+      await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({
+        id: "123",
+        version: 2,
+      });
+      await nextImmediate();
+      await c0Started.promise;
+      expect(shortUnrefTimers()).toHaveLength(1);
+
+      c0Gate.resolve(cachedPayload);
+      await c1Started.promise;
+      expect(shortUnrefTimers()).toHaveLength(2);
+
+      c1Gate.resolve(cachedPayload);
+      await waitForShadowEvents(metrics, 1);
+      expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["mismatch"]);
+    } finally {
+      c0Gate.resolve(cachedPayload);
+      c1Gate.resolve(cachedPayload);
+      setTimeoutSpy.mockRestore();
+    }
   });
 
   it("shares a rejecting ramped-down SoT call and reports source_error", async () => {
@@ -421,6 +507,29 @@ describe("DialCache Redis shadow confirmation", () => {
     expectTrackedReads(redis, 1);
   });
 
+  it("does not misclassify a source-propagated FallbackTimeoutError as its own timeout", async () => {
+    const redis = new ScriptedRedis([() => JSON.stringify({ id: "123", source: "cache" })]);
+    const metrics = new RecordingMetrics();
+    const nestedTimeout = new FallbackTimeoutError("NestedUseCase", 25);
+    const source = vi.fn(async () => {
+      throw nestedTimeout;
+    });
+    const dialcache = createCache(redis, metrics);
+    const getUser = dialcache.cached(source, {
+      ...trackedOptions("ShadowDarkNestedTimeout", remoteConfig(0)),
+      cacheKey: () => "123",
+      fallbackTimeoutMs: 1_000,
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).rejects.toBe(nestedTimeout);
+    await waitForShadowEvents(metrics, 1);
+
+    expect(source).toHaveBeenCalledOnce();
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["source_error"]);
+    expectTrackedReads(redis, 1);
+    expect(redis.write).not.toHaveBeenCalled();
+  });
+
   it("shares the ramped-down SoT call while caller and shadow deadlines remain isolated", async () => {
     const sourceGate = deferred<{ readonly id: string }>();
     const redis = new ScriptedRedis([() => JSON.stringify({ id: "123" })]);
@@ -433,7 +542,9 @@ describe("DialCache Redis shadow confirmation", () => {
       fallbackTimeoutMs: 100,
     });
 
-    await expect(dialcache.enable(async () => await getUser())).rejects.toBeInstanceOf(FallbackTimeoutError);
+    const pending = dialcache.enable(async () => await getUser());
+    await nextImmediate();
+    await expect(pending).rejects.toBeInstanceOf(FallbackTimeoutError);
     await waitForShadowEvents(metrics, 1);
 
     expect(source).toHaveBeenCalledOnce();
@@ -444,43 +555,352 @@ describe("DialCache Redis shadow confirmation", () => {
     await nextImmediate();
   });
 
-  it.each([
-    {
-      name: "miss",
-      step: () => null,
-      outcome: "redis_miss",
-    },
-    {
-      name: "error",
-      step: async () => {
-        throw new Error("dark Redis unavailable");
-      },
-      outcome: "redis_error",
-    },
-  ] as const)("reports a dark Redis $name only through the shadow outcome", async ({
-    name,
-    step,
-    outcome,
-  }) => {
-    const redis = new ScriptedRedis([step]);
+  it("fills a definitive dark Redis miss and attributes the read and write to remote_shadow", async () => {
+    const redis = new ScriptedRedis([() => null]);
     const metrics = new RecordingMetrics();
     const source = vi.fn(async () => ({ id: "123" }));
     const dialcache = createCache(redis, metrics);
     const getUser = dialcache.cached(source, {
-      ...trackedOptions(`ShadowDark${name}`, remoteConfig(0)),
+      ...trackedOptions("ShadowDarkMissFill", remoteConfig(0)),
       cacheKey: () => "123",
     });
 
     await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ id: "123" });
     await waitForShadowEvents(metrics, 1);
 
-    expect(metrics.shadowEvents.map(({ outcome: actual }) => actual)).toEqual([outcome]);
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["filled"]);
     expect(source).toHaveBeenCalledOnce();
-    expect(
-      metrics.ordinaryEvents.filter(({ name: metricName }) =>
-        ["request", "miss", "error", "get", "serialization", "size"].includes(metricName)
-      ),
-    ).toHaveLength(0);
+    expect(redis.write).toHaveBeenCalledOnce();
+    expect(redis.write).toHaveBeenCalledWith(expect.objectContaining({
+      cacheTtlMs: 60_000,
+      watermarkKey: expect.any(String),
+    }));
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "request" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+    )).toHaveLength(1);
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "miss" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+    )).toHaveLength(1);
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "get" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+    )).toHaveLength(1);
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "serialization"
+      && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+      && labels.operation === "dump"
+    )).toHaveLength(1);
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "size" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+    )).toHaveLength(1);
+  });
+
+  it("reports fill_blocked when tracked invalidation rejects a detached fill", async () => {
+    const redis = new ScriptedRedis([() => null]);
+    redis.write.mockImplementationOnce(async () => false);
+    const metrics = new RecordingMetrics();
+    const sourceValue = { id: "123", version: 2 };
+    const dialcache = createCache(redis, metrics);
+    const getUser = dialcache.cached(async () => sourceValue, {
+      ...trackedOptions("ShadowDarkFillBlocked", remoteConfig(0)),
+      cacheKey: () => "123",
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).resolves.toBe(sourceValue);
+    await waitForShadowEvents(metrics, 1);
+
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["fill_blocked"]);
+    expect(redis.write).toHaveBeenCalledOnce();
+    expect(redis.write).toHaveBeenCalledWith(expect.objectContaining({
+      cacheTtlMs: 60_000,
+      watermarkKey: expect.any(String),
+    }));
+    expect(redis.invalidate).not.toHaveBeenCalled();
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "error"
+      && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+    )).toHaveLength(0);
+  });
+
+  it("reports a detached serializer dump failure as fill_error with an exact remote_shadow error", async () => {
+    const redis = new ScriptedRedis([() => null]);
+    const metrics = new RecordingMetrics();
+    const serializer: Serializer<{ readonly id: string }> = {
+      dump: vi.fn(async () => {
+        throw new Error("cannot serialize shadow fill");
+      }),
+      load: vi.fn(async () => ({ id: "cached" })),
+    };
+    const dialcache = createCache(redis, metrics, {
+      logger: {
+        debug: () => undefined,
+        warn: () => undefined,
+        error: () => undefined,
+      },
+    });
+    const getUser = dialcache.cached(async () => ({ id: "123" }), {
+      ...trackedOptions("ShadowDarkFillDumpError", remoteConfig(0)),
+      cacheKey: () => "123",
+      serializer,
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ id: "123" });
+    await waitForShadowEvents(metrics, 1);
+
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["fill_error"]);
+    expect(serializer.dump).toHaveBeenCalledOnce();
+    expect(serializer.load).not.toHaveBeenCalled();
+    expect(redis.write).not.toHaveBeenCalled();
+    expect(metrics.ordinaryEvents.filter(({ name }) => name === "error").map(({ labels }) => labels)).toEqual([
+      {
+        cacheNamespace: "urn",
+        useCase: "ShadowDarkFillDumpError",
+        keyType: "user_id",
+        layer: REMOTE_SHADOW_CACHE_LAYER,
+        error: "serialization_dump",
+        inFallback: false,
+      },
+    ]);
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "size" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+    )).toHaveLength(0);
+  });
+
+  it("reports a dispatched Redis write failure as fill_error with an exact remote_shadow error", async () => {
+    const redis = new ScriptedRedis([() => null]);
+    redis.write.mockImplementationOnce(async () => {
+      throw new Error("shadow write unavailable");
+    });
+    const metrics = new RecordingMetrics();
+    const dialcache = createCache(redis, metrics, {
+      logger: {
+        debug: () => undefined,
+        warn: () => undefined,
+        error: () => undefined,
+      },
+    });
+    const getUser = dialcache.cached(async () => ({ id: "123" }), {
+      ...trackedOptions("ShadowDarkFillWriteError", remoteConfig(0)),
+      cacheKey: () => "123",
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ id: "123" });
+    await waitForShadowEvents(metrics, 1);
+
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["fill_error"]);
+    expect(redis.write).toHaveBeenCalledOnce();
+    expect(metrics.ordinaryEvents.filter(({ name }) => name === "error").map(({ labels }) => labels)).toEqual([
+      {
+        cacheNamespace: "urn",
+        useCase: "ShadowDarkFillWriteError",
+        keyType: "user_id",
+        layer: REMOTE_SHADOW_CACHE_LAYER,
+        error: "cache_write",
+        inFallback: false,
+      },
+    ]);
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "serialization"
+      && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+      && labels.operation === "dump"
+    )).toHaveLength(1);
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "size" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+    )).toHaveLength(1);
+  });
+
+  it("never repairs a non-null C0 whose detached deserialization fails", async () => {
+    const redis = new ScriptedRedis([() => "present-but-undecodable"]);
+    const metrics = new RecordingMetrics();
+    const serializer: Serializer<{ readonly id: string }> = {
+      dump: vi.fn((value) => JSON.stringify(value)),
+      load: vi.fn(async () => {
+        throw new Error("cannot decode existing payload");
+      }),
+    };
+    const sourceValue = { id: "123" };
+    const dialcache = createCache(redis, metrics);
+    const getUser = dialcache.cached(async () => sourceValue, {
+      ...trackedOptions("ShadowDarkExistingDecodeError", remoteConfig(0)),
+      cacheKey: () => "123",
+      serializer,
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).resolves.toBe(sourceValue);
+    await waitForShadowEvents(metrics, 1);
+
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["deserialization_error"]);
+    expect(serializer.load).toHaveBeenCalledOnce();
+    expect(serializer.dump).not.toHaveBeenCalled();
+    expect(redis.write).not.toHaveBeenCalled();
+    expect(redis.invalidate).not.toHaveBeenCalled();
+    expect(metrics.ordinaryEvents.filter(({ name }) => name === "error").map(({ labels }) => labels)).toEqual([
+      {
+        cacheNamespace: "urn",
+        useCase: "ShadowDarkExistingDecodeError",
+        keyType: "user_id",
+        layer: REMOTE_SHADOW_CACHE_LAYER,
+        error: "serialization_load",
+        inFallback: false,
+      },
+    ]);
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "miss" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+    )).toHaveLength(0);
+  });
+
+  it("returns the caller's SoT result without awaiting detached dump or write work", async () => {
+    const dumpStarted = deferred<void>();
+    const dumpGate = deferred<void>();
+    const writeStarted = deferred<void>();
+    const writeGate = deferred<boolean>();
+    const redis = new ScriptedRedis([() => null]);
+    redis.write.mockImplementationOnce(async () => {
+      writeStarted.resolve(undefined);
+      return await writeGate.promise;
+    });
+    const metrics = new RecordingMetrics();
+    const sourceValue = { id: "123" };
+    const serializer: Serializer<typeof sourceValue> = {
+      dump: vi.fn(async (value) => {
+        dumpStarted.resolve(undefined);
+        await dumpGate.promise;
+        return JSON.stringify(value);
+      }),
+      load: vi.fn(async () => sourceValue),
+    };
+    const dialcache = createCache(redis, metrics);
+    const getUser = dialcache.cached(async () => sourceValue, {
+      ...trackedOptions("ShadowDarkDetachedFill", remoteConfig(0)),
+      cacheKey: () => "123",
+      serializer,
+    });
+
+    try {
+      await expect(dialcache.enable(async () => await getUser())).resolves.toBe(sourceValue);
+      expect(serializer.dump).not.toHaveBeenCalled();
+      expect(redis.write).not.toHaveBeenCalled();
+
+      await nextImmediate();
+      await dumpStarted.promise;
+      expect(metrics.shadowEvents).toHaveLength(0);
+      expect(redis.write).not.toHaveBeenCalled();
+
+      dumpGate.resolve(undefined);
+      await writeStarted.promise;
+      expect(metrics.shadowEvents).toHaveLength(0);
+
+      writeGate.resolve(true);
+      await waitForShadowEvents(metrics, 1);
+      expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["filled"]);
+    } finally {
+      dumpGate.resolve(undefined);
+      writeGate.resolve(true);
+    }
+  });
+
+  it("never fills after the shared bounded SoT times out and its raw work resolves late", async () => {
+    const sourceGate = deferred<{ readonly id: string }>();
+    const redis = new ScriptedRedis([() => null]);
+    const metrics = new RecordingMetrics();
+    const serializer: Serializer<{ readonly id: string }> = {
+      dump: vi.fn((value) => JSON.stringify(value)),
+      load: vi.fn(async () => ({ id: "cached" })),
+    };
+    const source = vi.fn(async () => await sourceGate.promise);
+    const dialcache = createCache(redis, metrics);
+    const getUser = dialcache.cached(source, {
+      ...trackedOptions("ShadowDarkLateSourceNoFill", remoteConfig(0)),
+      cacheKey: () => "123",
+      serializer,
+      fallbackTimeoutMs: 100,
+    });
+
+    const pending = dialcache.enable(async () => await getUser());
+    await nextImmediate();
+    await expect(pending).rejects.toBeInstanceOf(FallbackTimeoutError);
+    await waitForShadowEvents(metrics, 1);
+
+    expect(source).toHaveBeenCalledOnce();
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["timeout"]);
+    expect(serializer.dump).not.toHaveBeenCalled();
+    expect(redis.write).not.toHaveBeenCalled();
+
+    sourceGate.resolve({ id: "123" });
+    await nextImmediate();
+
+    expect(serializer.dump).not.toHaveBeenCalled();
+    expect(redis.write).not.toHaveBeenCalled();
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["timeout"]);
+  });
+
+  it("uses the invocation's runtime TTL snapshot without refetching config for a detached fill", async () => {
+    const redis = new ScriptedRedis([() => null]);
+    const metrics = new RecordingMetrics();
+    let runtimeTtlSec = 17;
+    const cacheConfigProvider = vi.fn(async () => new DialCacheKeyConfig({
+      ttlSec: { [CacheLayer.REMOTE]: runtimeTtlSec },
+      ramp: { [CacheLayer.REMOTE]: 0 },
+      shadowRamp: 100,
+      remoteReadTimeoutMs: 321,
+    }));
+    const dialcache = createCache(redis, metrics, { cacheConfigProvider });
+    const getUser = dialcache.cached(async () => {
+      runtimeTtlSec = 99;
+      return { id: "123" };
+    }, {
+      ...trackedOptions("ShadowDarkRuntimeTtlSnapshot", remoteConfig(100, 0)),
+      cacheKey: () => "123",
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ id: "123" });
+    await waitForShadowEvents(metrics, 1);
+
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["filled"]);
+    expect(cacheConfigProvider).toHaveBeenCalledOnce();
+    expect(redis.contexts).toHaveLength(1);
+    expect(redis.contexts[0]?.timeoutMs).toBe(321);
+    expect(redis.write).toHaveBeenCalledOnce();
+    expect(redis.write).toHaveBeenCalledWith(expect.objectContaining({
+      cacheTtlMs: 17_000,
+      watermarkKey: expect.any(String),
+    }));
+  });
+
+  it("reports a dark Redis error with remote_shadow read telemetry and never writes", async () => {
+    const redis = new ScriptedRedis([
+      async () => {
+        throw new Error("dark Redis unavailable");
+      },
+    ]);
+    const metrics = new RecordingMetrics();
+    const source = vi.fn(async () => ({ id: "123" }));
+    const dialcache = createCache(redis, metrics);
+    const getUser = dialcache.cached(source, {
+      ...trackedOptions("ShadowDarkError", remoteConfig(0)),
+      cacheKey: () => "123",
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ id: "123" });
+    await waitForShadowEvents(metrics, 1);
+
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["redis_error"]);
+    expect(source).toHaveBeenCalledOnce();
+    expect(redis.write).not.toHaveBeenCalled();
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "request" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+    )).toHaveLength(1);
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "error"
+      && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+      && labels.error === "cache_read"
+    )).toHaveLength(1);
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "get" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+    )).toHaveLength(1);
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      labels.layer === REMOTE_SHADOW_CACHE_LAYER
+      && ["miss", "serialization", "size"].includes(name)
+    )).toHaveLength(0);
   });
 
   it("dark-reads only an otherwise valid tracked remote policy with observable shadowing", async () => {
@@ -775,6 +1195,113 @@ describe("DialCache Redis shadow confirmation", () => {
 
     expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["redis_error", "dropped", "match"]);
     expectTrackedReads(redis, 2, { singleWatermark: false });
+  });
+
+  it("retains capacity after an overall timeout until an already-dispatched write settles", async () => {
+    const writeStarted = deferred<void>();
+    const writeGate = deferred<boolean>();
+    const redis = new ScriptedRedis([
+      () => null,
+      () => JSON.stringify({ id: "b" }),
+    ]);
+    redis.write.mockImplementationOnce(async () => {
+      writeStarted.resolve(undefined);
+      return await writeGate.promise;
+    });
+    const metrics = new RecordingMetrics();
+    const dialcache = createCache(redis, metrics, { shadowMaxInFlight: 1 });
+    const getUser = dialcache.cached(async (id: string) => ({ id }), {
+      ...trackedOptions("ShadowDarkWriteTimeoutRetention", remoteConfig(0)),
+      cacheKey: (id) => id,
+      fallbackTimeoutMs: 50,
+    });
+
+    try {
+      await expect(dialcache.enable(async () => await getUser("a"))).resolves.toEqual({ id: "a" });
+      await nextImmediate();
+      await writeStarted.promise;
+      await waitForShadowEvents(metrics, 1);
+      expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["timeout"]);
+
+      await expect(dialcache.enable(async () => await getUser("b"))).resolves.toEqual({ id: "b" });
+      expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["timeout", "dropped"]);
+      expect(redis.requests).toHaveLength(1);
+
+      writeGate.resolve(true);
+      await nextImmediate();
+
+      await expect(dialcache.enable(async () => await getUser("b"))).resolves.toEqual({ id: "b" });
+      await waitForShadowEvents(metrics, 3);
+      expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual([
+        "timeout",
+        "dropped",
+        "match",
+      ]);
+      expect(redis.write).toHaveBeenCalledOnce();
+      expectTrackedReads(redis, 2, { singleWatermark: false });
+    } finally {
+      writeGate.resolve(true);
+    }
+  });
+
+  it("prevents a Redis write when serialization settles after the shadow deadline", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let nowMs = 0;
+    const performanceSpy = vi.spyOn(performance, "now").mockImplementation(() => nowMs);
+    const dumpStarted = deferred<void>();
+    const dumpGate = deferred<void>();
+    const redis = new ScriptedRedis([
+      () => null,
+      () => JSON.stringify({ id: "b" }),
+    ]);
+    const metrics = new RecordingMetrics();
+    const serializer: Serializer<{ readonly id: string }> = {
+      dump: vi.fn(async (value) => {
+        dumpStarted.resolve(undefined);
+        await dumpGate.promise;
+        return JSON.stringify(value);
+      }),
+      load: vi.fn(async (payload) => JSON.parse(payload.toString()) as { readonly id: string }),
+    };
+    const dialcache = createCache(redis, metrics, { shadowMaxInFlight: 1 });
+    const getUser = dialcache.cached(async (id: string) => ({ id }), {
+      ...trackedOptions("ShadowDarkDumpTimeoutRetention", remoteConfig(0)),
+      cacheKey: (id) => id,
+      fallbackTimeoutMs: 50,
+      serializer,
+    });
+
+    try {
+      await expect(dialcache.enable(async () => await getUser("a"))).resolves.toEqual({ id: "a" });
+      await nextImmediate();
+      await dumpStarted.promise;
+      nowMs = 50;
+      await vi.advanceTimersByTimeAsync(50);
+      expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["timeout"]);
+
+      await expect(dialcache.enable(async () => await getUser("b"))).resolves.toEqual({ id: "b" });
+      expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["timeout", "dropped"]);
+      expect(redis.requests).toHaveLength(1);
+      expect(redis.write).not.toHaveBeenCalled();
+
+      dumpGate.resolve(undefined);
+      await nextImmediate();
+      expect(redis.write).not.toHaveBeenCalled();
+
+      await expect(dialcache.enable(async () => await getUser("b"))).resolves.toEqual({ id: "b" });
+      await waitForShadowEvents(metrics, 3);
+      expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual([
+        "timeout",
+        "dropped",
+        "match",
+      ]);
+      expect(redis.write).not.toHaveBeenCalled();
+      expectTrackedReads(redis, 2, { singleWatermark: false });
+    } finally {
+      dumpGate.resolve(undefined);
+      performanceSpy.mockRestore();
+      vi.useRealTimers();
+    }
   });
 
   it("retains capacity after a confirmation deadline until the raw C1 read settles", async () => {

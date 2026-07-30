@@ -81,7 +81,7 @@ request-local cache -> process-local cache -> Redis cache -> fallback function
 - Process-local hits return immediately.
 - Process-local misses try Redis and populate the process-local cache on a Redis hit.
 - Redis misses call the fallback and attempt to populate Redis and, when active, the process-local cache. Tracked invalidation may suppress both publications.
-- Selected tracked Redis observations can validate cache coherence against the source of truth in detached [shadow work](#shadow-validation), even before Redis is allowed to serve callers.
+- Selected tracked Redis keys can execute non-serving [shadow work](#shadow-validation) that validates hits and fills clean misses, even before Redis is allowed to serve callers.
 - Redis read failures and timeouts are logged, counted in metrics, and fail open without attempting a second Redis operation. Redis write failures also fail open. `invalidateRemote` logs/counts Redis failures and rethrows them so callers do not assume invalidation succeeded.
 - Cache-key construction and config-provider failures also fail open and run the fallback uncached.
 - A missing effective process-local/Redis TTL disables that layer by policy; a configured TTL with no ramp defaults to 100%. Disabled layers record a disabled reason and fall through to the next layer/fallback.
@@ -202,7 +202,7 @@ Instance-wide behavior is set through the `DialCache` constructor:
 | `namespace` | `"urn"` | Logical cache namespace and first key component (see [Keys, ids, and extra dimensions](#keys-ids-and-extra-dimensions)). |
 | `redis` | none | `{ client: DialCacheRedisClient, readTimeoutMs?: number }`; enables the Redis layer with a 50 ms default read deadline (see [Redis-backed TTL cache](#redis-backed-ttl-cache)). |
 | `localMaxSize` | `10_000` | Global process-local entry cap; `0` disables process-local storage. Nonnegative safe integer. |
-| `shadowMaxInFlight` | `1` | Maximum scheduled or active shadow validations per `DialCache` instance, including uncancellable underlying work. Positive safe integer; excess work is dropped without queuing. |
+| `shadowMaxInFlight` | `1` | Maximum scheduled or active shadow jobs per `DialCache` instance, including uncancellable underlying work. Positive safe integer; excess work is dropped without queuing. |
 | `cacheConfigProvider` | none | Resolves runtime config per enabled invocation as a sparse overlay on the function's `defaultConfig`; `null` applies no overrides. |
 | `metrics` | disabled | A `DialCacheMetricsAdapter` (see [Metrics](#metrics)). |
 | `logger` | `console` | Receives operational cache failures (`debug`, `warn`, `error`). |
@@ -211,11 +211,11 @@ Per-invocation cache policy is a `DialCacheKeyConfig`: per-layer `ttlSec` and `r
 
 Every cached definition or `getOrLoad()` invocation can provide an optional per-use-case `defaultConfig`. It is the baseline policy, and the `cacheConfigProvider` result is a sparse field-level overlay on that baseline. For cache enablement fields, precedence is runtime config, then `defaultConfig`, then DialCache's disabled baseline. For the remote-read deadline, precedence is runtime `remoteReadTimeoutMs`, `defaultConfig.remoteReadTimeoutMs`, `redis.readTimeoutMs`, then the 50 ms library default.
 
-The disabled baseline sets `requestLocal` to false, leaves the process-local and Redis TTLs unset, and sets shadow validation to 0%. A shared layer with no effective TTL is disabled by policy. When a shared layer has an effective TTL but no effective ramp, its ramp defaults to 100%. Shadow validation remains disabled unless `shadowRamp` is explicitly greater than zero.
+The disabled baseline sets `requestLocal` to false, leaves the process-local and Redis TTLs unset, and sets shadow work to 0%. A shared layer with no effective TTL is disabled by policy. When a shared layer has an effective TTL but no effective ramp, its ramp defaults to 100%. Shadow work remains disabled unless `shadowRamp` is explicitly greater than zero.
 
 `DialCacheKeyConfig` preserves an omitted `requestLocal` as `undefined` so the overlay can distinguish omission from an explicit `false`; the effective value still defaults to false after resolution.
 
-A provider result of `null` (or defensive `undefined`) applies no overrides. An empty `DialCacheKeyConfig` and omitted runtime fields also inherit the baseline. Use explicit values to override inherited policy: `requestLocal: false` disables request-local caching and a layer ramp of `0` disables that shared layer. `DialCacheKeyConfig.disabled()` is the complete kill switch in one call: request-local and shadow observation off, with both shared layers ramped to 0.
+A provider result of `null` (or defensive `undefined`) applies no overrides. An empty `DialCacheKeyConfig` and omitted runtime fields also inherit the baseline. Use explicit values to override inherited policy: `requestLocal: false` disables request-local caching and a layer ramp of `0` disables that shared layer. `DialCacheKeyConfig.disabled()` is the complete kill switch in one call: request-local and shadow work off, with both shared layers ramped to 0.
 
 DialCache validates `defaultConfig` when `cached()` registers a definition and whenever `getOrLoad()` is invoked: TTLs must be positive safe integers no greater than 31,536,000 seconds (a fixed 365-day duration), remote-read deadlines must be positive safe integers within their documented limit, layer and shadow ramps must be finite percentages from 0 to 100, layer maps must be objects, and `requestLocal` must be a boolean when present. Invalid defaults are rejected immediately.
 
@@ -223,7 +223,7 @@ Each registration or one-shot invocation captures an immutable internal snapshot
 
 Runtime TTL and ramp leaves are used as supplied instead of falling back to valid default leaves. A TTL outside the same 1-to-31,536,000-second range disables that layer with `invalid_ttl`; a non-finite or nonnumeric ramp disables it with `invalid_ramp`; finite runtime ramps retain the defensive clamp to 0–100. Other layers can still run, and invalid leaves also record a `config_resolution` error so provider garbage is alertable separately from intentional ramp-downs. A malformed runtime config object, layer-map shape, `requestLocal` value, or explicit `remoteReadTimeoutMs` fails config resolution for the invocation, records `config_error`, and executes the fallback uncached without attempting Redis.
 
-An invalid runtime `shadowRamp` does not affect the cache result or disable an otherwise valid Redis policy. If normal traversal reaches an otherwise shadow-eligible Redis path, DialCache skips validation and records a `config_resolution` error.
+An invalid runtime `shadowRamp` does not affect the cache result or disable an otherwise valid Redis policy. If normal traversal reaches an otherwise shadow-eligible Redis path, DialCache skips shadow work and records a `config_resolution` error.
 
 `cacheConfigProvider` is called for every enabled cache invocation before DialCache performs any cache lookup. Keep it cheap, cache any remote/config-store reads inside the provider, and avoid work that would erase the benefit of a cache hit.
 
@@ -236,7 +236,7 @@ const dialcache = new DialCache({
       return new DialCacheKeyConfig({
         // Sparse override: inherit both TTLs and the local ramp from defaultConfig.
         ramp: { [CacheLayer.REMOTE]: 25 },
-        // Independently sample tracked Redis hits for coherence validation.
+        // Independently sample tracked Redis keys for detached validation/fill.
         shadowRamp: 5,
         // Can be changed by the provider at runtime for this use case.
         remoteReadTimeoutMs: 35,
@@ -259,7 +259,9 @@ const getUser = dialcache.cached((userId: string) => db.fetchUser(userId), {
 
 `ramp` values are percentages from 0 to 100. `0` disables the layer, `100` enables it, and intermediate values are deterministically sampled by cache key and layer, so the same key is consistently sampled in or out of a partial rollout across calls and instances. The assignment algorithm is owned by DialCache and remains stable across releases. Applications that need an externally coordinated cohort can use `cacheConfigProvider` to return a sparse per-key ramp override of `0` or `100`. DialCache fetches and resolves one config snapshot per enabled invocation. Provider errors do not activate defaults: they fail open, record `config_error`, and execute the fallback function uncached.
 
-`shadowRamp` uses the same inclusive 0–100 percentage domain but is independent of cache-layer serving ramps. Omission and `0` disable validation; `100` selects every eligible tracked Redis observation; intermediate values assign each exact cache key to a stable shadow cohort across calls and instances. A valid remote policy can therefore use `ramp.remote: 0` with a nonzero `shadowRamp` to observe Redis before serving from it. `shadowRamp` does not create another `CacheLayer`, activate Redis without a valid remote TTL, or make a request-local/process-local hit continue to Redis.
+`shadowRamp` uses the same inclusive 0–100 percentage domain but is independent of cache-layer serving ramps. Omission and `0` disable shadow work; `100` selects every eligible tracked Redis key; intermediate values assign each exact cache key to a stable shadow cohort across calls and instances. A valid remote policy can therefore use `ramp.remote: 0` with a nonzero `shadowRamp` to exercise and populate Redis without serving from it. A nonzero value explicitly authorizes detached tracked writes after clean shadow-only misses. It does not create another `CacheLayer`, activate Redis without a valid remote TTL, or make a request-local/process-local hit continue to Redis.
+
+Remote serving and shadow sampling use independent deterministic cohorts. Equal partial percentages do not imply the same keys, so a partial shadow cohort does not guarantee that every key admitted by a later partial serving ramp was warmed or validated. Use `shadowRamp: 100` when every otherwise eligible invocation must exercise the non-serving Redis path before a serving-ramp increase.
 
 ## Cache layers
 
@@ -345,7 +347,7 @@ const dialcache = new DialCache({
 
 async function shutdown(): Promise<void> {
   // Stop new work and await every outstanding request-path call and invalidation first.
-  // Detached shadow validation is best-effort and has no drain handle.
+  // Detached shadow work is best-effort and has no drain handle.
   await redisClient.quit();
 }
 ```
@@ -373,7 +375,7 @@ const dialcache = new DialCache({
 
 function shutdown(): void {
   // After draining request-path calls and invalidations, release scripts before closing GLIDE.
-  // Detached shadow validation is best-effort and has no drain handle.
+  // Detached shadow work is best-effort and has no drain handle.
   redisClient.dispose();
   glideClient.close();
 }
@@ -386,7 +388,7 @@ version cannot accidentally mix native script handles.
 
 The application owns the complete Redis lifecycle. It creates and connects the underlying client and passes the semantic adapter to DialCache. During shutdown, stop starting DialCache-backed work and await every promise returned by a cached function, `getOrLoad()`, or `invalidateRemote()`, including calls still running fallbacks that may later write Redis. A read that crossed DialCache's wait deadline may still be active inside the client, so use client-native telemetry and shutdown controls to drain or terminate that work before disposing adapter-owned resources and closing the connection. DialCache only borrows `redis.client`; it has no close or drain method and never disposes or closes caller resources.
 
-Awaiting those public promises does not drain detached shadow validation. Shadow scheduling and deadline timers are unreferenced and completion is not guaranteed during shutdown; source reads, serializers, and asynchronous telemetry already started by shadow work remain caller-owned and may still be active. Stop new work before closing their dependencies and accept that in-flight shadow outcomes can be lost or fail during teardown. DialCache does not add a shutdown hook or keep the process alive to deliver best-effort validation.
+Awaiting those public promises does not drain detached shadow work. Shadow scheduling and deadline timers are unreferenced and completion is not guaranteed during shutdown; Redis operations, source reads, serializers, and asynchronous telemetry already started by shadow work remain caller-owned and may still be active. Stop new work before closing their dependencies and accept that an in-flight shadow fill may have been dispatched even if its final outcome is lost during teardown. DialCache does not add a shutdown hook or keep the process alive to deliver best-effort outcomes.
 
 The node-redis adapter owns no additional resources, so the application closes the underlying node-redis client after draining work. The GLIDE adapter owns five native `Script` handles but not the wrapped connection. After outstanding operations finish, call its idempotent `dispose()` before closing GLIDE as shown above; disposal while an adapter operation is in flight throws rather than releasing a live script.
 
@@ -423,7 +425,7 @@ DialCache uses native `JSON.stringify` and `JSON.parse` by default. There is no 
 
 When `serializer.load` rejects a Redis payload, DialCache records a `serialization_load` error, counts the read as a remote cache miss, runs the fallback, and attempts to replace the rejected payload. A validating custom serializer can therefore treat an incompatible cached value as a refreshable miss without adding a schema version to the cache key.
 
-`JsonSerializer` validates JSON syntax only. It cannot detect that a structurally valid payload came from an incompatible application value schema. Applications that keep the same `useCase` across deployments must keep default-JSON values backward compatible. For an incompatible change, either provide a serializer whose `load` method validates and rejects the old shape, or change `useCase` to isolate the new cache entries. During a mixed deployment, mutually incompatible validating serializers can repeatedly reject and replace each other's values; correctness is preserved, but expect additional fallback and Redis-write load until the rollout converges.
+`JsonSerializer` validates JSON syntax only. It cannot detect that a structurally valid payload came from an incompatible application value schema. Applications that keep the same `useCase` across deployments must keep default-JSON values backward compatible. For an incompatible change, either provide a serializer whose `load` method validates and rejects the old shape, or change `useCase` to isolate the new cache entries. On the caller-serving Redis path, mutually incompatible validating serializers in a mixed deployment can repeatedly reject and replace each other's values; correctness is preserved, but expect additional fallback and Redis-write load until the rollout converges. Shadow work reports a non-null payload that fails `load` as `deserialization_error` and never replaces it.
 
 When a cached function or inline loader's resolved return type is statically JSON-compatible, `serializer` remains optional. This includes JSON primitives, arrays, plain object/interface shapes, optional object fields, and a top-level `undefined`. Types known not to survive the default round trip require a typed `Serializer<T>`:
 
@@ -453,7 +455,7 @@ This guard is deliberately conservative and is not a proof of runtime data. Type
 
 #### Shadow validation
 
-Shadow validation samples tracked Redis observations and compares an isolated deserialized snapshot with the source of truth (SoT). Redis serving and observation are independent: an operation can shadow-read Redis while its remote serving ramp is zero. Shadowing is opt-in per use case through `shadowRamp`:
+Shadow mode runs a sampled, detached Redis path for tracked keys without allowing that path to serve the caller. A Redis hit is compared with the source of truth (SoT); a clean Redis miss can be filled from the caller-accepted SoT value. Redis serving and shadow execution are independent, and shadowing is opt-in per use case through `shadowRamp`:
 
 ```ts
 import { CacheLayer, DialCache, DialCacheKeyConfig } from "dialcache";
@@ -463,7 +465,7 @@ const dialcache = new DialCache({
   redis: { client: redisClient },
   // A bundled or custom adapter with shadowValidation support is required.
   metrics,
-  // At most one scheduled or running validation by default; tune deliberately.
+  // At most one scheduled or running shadow job by default; tune deliberately.
   shadowMaxInFlight: 4,
 });
 
@@ -479,7 +481,7 @@ const getUser = dialcache.cached(
       cached.id === source.id && cached.version === source.version,
     defaultConfig: new DialCacheKeyConfig({
       ttlSec: { [CacheLayer.REMOTE]: 300 },
-      // Validate Redis before allowing it to serve callers.
+      // Exercise and populate Redis without serving it to callers.
       ramp: { [CacheLayer.REMOTE]: 0 },
       shadowRamp: 5,
     }),
@@ -487,33 +489,38 @@ const getUser = dialcache.cached(
 );
 ```
 
-An observation is eligible only when the operation sets `trackForInvalidation: true`, a valid remote TTL/policy exists, its effective `shadowRamp` selects the exact cache key, a configured metrics adapter implements `shadowValidation`, and capacity is available. The bundled Prometheus and Datadog adapters implement that hook. There are two eligible paths:
+Shadow work is eligible only when the operation sets `trackForInvalidation: true`, a valid remote TTL/policy exists, its effective `shadowRamp` selects the exact cache key, a configured metrics adapter implements `shadowValidation`, and capacity is available. The bundled Prometheus and Datadog adapters implement that hook. There are two paths:
 
 - When remote serving is enabled and produces a tracked Redis hit, DialCache retains the exact serialized payload that supplied the caller as `C0`.
-- When the remote policy is valid but disabled specifically by `ramped_down`, DialCache may issue a detached tracked Redis read for `C0`. That value is observational only and can never supply the caller.
+- When the remote policy is valid but disabled specifically by `ramped_down`, DialCache starts a detached tracked Redis read for `C0`. Its result can be validated or used to decide whether a clean miss may be filled, but can never supply the caller or populate an in-memory layer.
 
-A missing or invalid remote policy, config-provider failure, absent Redis client, disabled call, untracked key, omitted metrics hook, zero/omitted shadow ramp, cohort exclusion, capacity rejection, or earlier request-local/process-local hit does not launch a shadow-only Redis read. Shadow work begins only if normal traversal reaches the Redis layer.
+A missing or invalid remote policy, config-provider failure, absent Redis client, disabled call, untracked key, omitted metrics hook, zero/omitted shadow ramp, cohort exclusion, capacity rejection, or earlier request-local/process-local hit does not launch a shadow-only Redis path. Shadow work begins only if normal traversal reaches the Redis layer. A normally enabled remote miss already follows the caller's ordinary fallback-and-fill path and does not launch a duplicate shadow fill.
 
-On a served hit, DialCache returns the already-decoded cached value before starting the SoT read or any confirmation work. On a ramped-down path, it starts the caller's normal fallback exactly once and returns or rejects with that result normally; detached validation reuses the same underlying SoT promise instead of calling the loader again. A slow, failed, or timed-out shadow-only Redis read cannot delay or change the caller. Its Redis value is never returned, published to request-local/process-local cache, or written back.
+On a served hit, DialCache returns the already-decoded cached value before starting the SoT read or any confirmation work. On a ramped-down path, the caller invokes and awaits its normal configured fallback exactly once and receives only that result; detached work reuses the same accepted `S` instead of calling the loader again. The caller never awaits shadow `C0`, comparison, confirmation `C1`, shadow serialization, or fill. Slow, failed, or timed-out shadow work cannot delay, reject, or change the caller result.
 
-Shadow validation uses this bounded `C0 → S → conditional C1` algorithm:
+The detached job uses this bounded algorithm:
 
 1. Obtain the original tracked Redis payload as `C0`.
-2. Obtain the source value as `S`, deserialize an isolated snapshot of `C0`, and run the default or custom semantic comparator.
-3. If `C0` and `S` match semantically, emit `match` without another Redis read.
-4. Otherwise, reread tracked Redis directly as `C1`, bypassing request-local and process-local cache.
-5. If `C1` is missing or differs byte-for-byte from `C0`, emit `superseded`; if it is identical, emit `mismatch`.
-6. If the confirmation read fails or reaches its Redis-read deadline, emit `confirmation_error`.
+2. If `C0` is missing, wait for the caller's successfully accepted `S` after its configured fallback boundary and attempt one normal tracked Redis write using the resolved TTL and watermark machinery. Emit `filled` when Redis accepts it, `fill_blocked` when the invalidation watermark rejects it, or `fill_error` when serialization or the write fails.
+3. If `C0` is non-null, obtain `S`, deserialize an isolated snapshot of `C0`, and run the default or custom semantic comparator. Any non-null `C0` is observation-only: DialCache never repairs or overwrites it, including when deserialization fails.
+4. If `C0` and `S` match semantically, emit `match` without another Redis read.
+5. Otherwise, reread tracked Redis directly as `C1`, bypassing request-local and process-local cache.
+6. If `C1` is missing or differs byte-for-byte from `C0`, emit `superseded`; if it is identical, emit `mismatch`.
+7. If the confirmation read fails or reaches its Redis-read deadline, emit `confirmation_error`.
 
-Both detached Redis reads use the existing watermark-aware tracked-read protocol, primary-read behavior, and effective `remoteReadTimeoutMs`. Strings compare exactly, Buffers compare by bytes, and string/Buffer pairs compare by their UTF-8 bytes. DialCache does not deserialize `C1`, compare it with `S`, or chase another version.
+Here a clean miss means the tracked semantic Redis read returned `null`; it does not include a non-null payload that later fails deserialization. A caller fallback rejection or timeout never becomes accepted `S` and never starts the fill.
+
+Both detached Redis reads use the existing watermark-aware tracked-read protocol, primary-read behavior, and effective `remoteReadTimeoutMs`. The clean-miss fill uses the same serializer, TTL, Redis-time timestamp, and invalidation watermark as an ordinary tracked fill. Strings compare exactly, Buffers compare by bytes, and string/Buffer pairs compare by their UTF-8 bytes. DialCache does not deserialize `C1`, compare it with `S`, or chase another version.
 
 The detached scheduler, Redis-read deadline timers, and overall shadow deadline timer are unreferenced, so they do not keep an otherwise idle process alive. Detachment is asynchronous work on the Node event loop, not a worker thread: synchronous source, serializer, or comparator work can still occupy the event loop after the request path has been released.
 
-Detached execution retains the original `cached()` argument references or `getOrLoad()` loader closure; DialCache cannot generically clone them. Treat object arguments and captured values used by the source read as immutable, or snapshot them before invoking DialCache. Mutating source-selection state after the cache hit resolves can make the fresh read target a value that no longer corresponds to the already-built key and produce a false mismatch.
+Detached execution retains the original `cached()` argument references or `getOrLoad()` loader closure; DialCache cannot generically clone them. Treat object arguments, captured source-selection state, and the returned `S` as immutable, or snapshot them before invoking DialCache. Mutating them after the caller continues can compare or serialize a value that no longer corresponds to the already-built key.
 
-`shadowMaxInFlight` is a per-instance positive safe integer and defaults to `1`. It counts scheduled validations and all underlying Redis/source/serializer/comparator work that has not settled, including work whose DialCache deadline already elapsed. The optional `C1` remains in the original slot. DialCache also suppresses another validation for the same exact key while that work remains active. There is no queue: exact-key duplicates and work above the instance cap are dropped and reported as `dropped`. Separate instances have independent limits, so this is not a fleet-wide source-of-truth or Redis concurrency cap.
+`shadowMaxInFlight` is a per-instance positive safe integer and defaults to `1`. It counts admitted jobs until shadow-owned Redis/source/serializer/comparator work settles, including detached reads or dispatched writes whose DialCache deadline already elapsed. The optional `C1` and clean-miss fill remain in the original slot. On a ramped-down path, shadow work shares the caller's bounded SoT promise; if that promise times out, the raw caller-owned loader may continue without retaining the shadow slot. DialCache also suppresses another job for the same exact key while shadow-owned work remains active. There is no queue: exact-key duplicates and work above the instance cap are dropped and reported as `dropped`. Separate instances have independent limits, so this is not a fleet-wide source-of-truth or Redis concurrency cap.
 
-Each validation has one monotonic deadline, measured from admission, across detached `C0`, the SoT read, `serializer.load`, comparison, and optional `C1`. Each Redis operation also has its own effective read deadline. A finite `fallbackTimeoutMs` is reused as the overall shadow budget. When `fallbackTimeoutMs` is `null`, the normal miss fallback remains intentionally unbounded, but detached shadow validation still uses a 60-second budget. Once timeout delivery marks the validation abandoned, DialCache releases its retained `C0` reference and prevents later phases from starting. JavaScript promises and some Redis clients do not provide guaranteed cancellation: work already in progress may continue, retain its own inputs, and keep the shadow slot until it settles. Give source dependencies their own native timeout or `AbortSignal` where available. A synchronous comparator cannot be preempted; it is checked against the deadline after returning.
+Each job has one monotonic deadline, measured from admission, across detached `C0`, the SoT result, serializer work, comparison, optional `C1`, and clean-miss fill. Each Redis read also has its effective read deadline. A finite `fallbackTimeoutMs` is reused as the overall shadow budget. When `fallbackTimeoutMs` is `null`, the normal fallback remains intentionally unbounded, but detached shadow work still uses a 60-second budget. Once timeout delivery marks a job abandoned, DialCache releases retained `C0` references and prevents later phases from starting.
+
+JavaScript promises and Redis writes do not provide a general cancellation or transaction boundary. Work already dispatched may continue and keeps the shadow slot until it settles. A write rejection, `fill_error`, or shadow `timeout` after dispatch does not prove that Redis was unchanged; the command may have executed before its result became unavailable. Conversely, `filled` means the semantic client returned success, not that the value is still present. Give dependencies finite native budgets and treat shadow outcomes as best-effort operational evidence.
 
 A `match` means application-level value equality:
 
@@ -523,15 +530,19 @@ A `match` means application-level value equality:
 
 DialCache retains the semantic `string | Buffer` returned by the Redis client but never exposes it to the comparator. After the source read completes, detached work calls the same effective serializer's `load` method to create an independent cached snapshot, then compares that snapshot with the raw value returned by the source loader. It does not reuse the cached object already returned to a served-hit caller, so caller mutation cannot contaminate validation. No payload copy, shadow deserialization, deep comparison, or hash is added to the served-hit request path.
 
-The effective serializer's `load` method therefore runs a second time for a sampled served hit and once in detached work for a shadow-only hit. It must be repeatable, non-mutating, and return independently usable values. A custom `DialCacheRedisClient` must return an operation-owned payload whose string/Buffer contents remain stable after `read()` settles. Comparing the deserialized cached snapshot with the raw source value intentionally detects lossy serialization; use a custom comparator only when such normalization or ignored fields are valid use-case semantics.
+The effective serializer's `load` method therefore runs a second time for a sampled served hit and once in detached work for a shadow-only hit. It must be repeatable, non-mutating, and return independently usable values. On a clean miss, its `dump` method may run after the caller has received `S`, so `S` must remain immutable through detached serialization. A custom `DialCacheRedisClient` must return an operation-owned payload whose string/Buffer contents remain stable after `read()` settles. Comparing the deserialized cached snapshot with the raw source value intentionally detects lossy serialization; use a custom comparator only when such normalization or ignored fields are valid use-case semantics.
 
-Shadow metrics use the bounded outcomes `match`, `mismatch`, `superseded`, `redis_miss`, `redis_error`, `source_error`, `deserialization_error`, `comparison_error`, `confirmation_error`, `timeout`, and `dropped`. `redis_miss` and `redis_error` apply to a shadow-only initial `C0` read; `confirmation_error` applies to `C1`. The widened exported `ShadowValidationOutcome` union can require an update in TypeScript consumers that exhaustively switch over outcomes. Labels include the normal cache namespace, use case, and key type, but never the cache id, values, payloads, Redis key, or raw exception text.
+Shadow metrics use the bounded outcomes `match`, `mismatch`, `superseded`, `filled`, `fill_blocked`, `fill_error`, `redis_error`, `source_error`, `deserialization_error`, `comparison_error`, `confirmation_error`, `timeout`, and `dropped`. `redis_error` applies to the initial shadow-only `C0` read; `confirmation_error` applies to `C1`. A clean `C0` miss is an ordinary `miss{layer="remote_shadow"}` and terminates with a fill, source, or timeout outcome rather than a second shadow outcome for the miss itself. Labels never contain cache ids, values, payloads, Redis keys, or raw exception text.
 
-Detached `C0` and `C1` reads intentionally emit no ordinary layer requests, misses, errors, disabled events, get/serialization timers, or size observations. The request-path Redis read that supplied a served `C0` keeps its existing `layer="remote"` telemetry, and a ramped-down caller keeps its existing `disabled{layer="remote", reason="ramped_down"}` event.
+Detached Redis reads, serializer loads/dumps, payload sizes, and read/write errors use the existing layer label with `layer="remote_shadow"`. This distinguishes non-serving Redis cost from caller-path `layer="remote"` telemetry without adding a metric or label. The request-path read that supplied a served `C0` keeps `layer="remote"`, and a ramped-down caller keeps `disabled{layer="remote", reason="ramped_down"}`. No `disabled{layer="remote_shadow"}` event is emitted for ineligible or dropped work; `dropped` remains the terminal shadow outcome. Confirmation reads use the same `remote_shadow` value, with `superseded` or `confirmation_error` describing their role.
 
-The command amplification is bounded: a selected served hit adds one SoT read and adds `C1` only for a semantic mismatch candidate; a selected ramped-down invocation adds one detached `C0`, reuses the caller's existing SoT read, and likewise adds `C1` only for a candidate. `superseded` means only that the original observation could not be confirmed. `mismatch` means the exact `C0` payload survived a tracked Redis read after the SoT disagreement; it is not a cross-system atomic snapshot or a guarantee that the mismatch persists.
+The command amplification is bounded: a selected served hit adds one SoT read and adds `C1` only for a semantic mismatch candidate; a selected ramped-down hit adds detached `C0`, reuses the caller's existing SoT read, and likewise adds `C1` only for a candidate; a selected ramped-down miss adds detached `C0` and at most one tracked fill. `superseded` means only that the original observation could not be confirmed. `mismatch` means the exact `C0` payload survived a tracked Redis read after the SoT disagreement; it is not a cross-system atomic snapshot or a guarantee that the mismatch persists.
 
-Validation is observational only: no outcome writes Redis, refreshes TTL, advances a watermark, invalidates, repairs, evicts local state, or changes the value returned to the caller. A served-hit shadow sample invokes the wrapped function or inline loader as an additional source read, so that loader must be safe to call for observation. A ramped-down sample reuses the caller's ordinary invocation and does not add another SoT call.
+The initial `C0` read and later fill are not atomic. The fill is a normal tracked overwrite, not a compare-and-set or write-if-still-missing operation: another writer can populate Redis after the clean miss and be overwritten by the shadow fill. Invalidation watermarks still fence writes using Redis time, so size `futureBufferMs` to cover the complete SoT, serialization, client queue, network, and write interval when stale-publication protection matters. Shadow mode never repairs a non-null `C0`, refreshes its TTL, invalidates, evicts local state, or changes the value returned to the caller.
+
+A served-hit sample invokes the wrapped function or inline loader as an additional source read, so that loader must be safe to call for observation. A ramped-down sample reuses the caller's ordinary invocation and does not add another SoT call.
+
+Existing behavior is unchanged when `shadowRamp` is omitted or `0`. The opt-in feature adds the per-key `shadowRamp` and `shadowComparator` settings, the per-instance `shadowMaxInFlight` limit, and the `shadowValidation` metrics hook/instrument. The clean-miss bootstrap adds no additional ramp knob, Redis protocol operation, metric instrument, or label key; enabling shadowing authorizes the tracked Redis write described above. Exported unions widen: `MetricLayer` gains `remote_shadow`, and `ShadowValidationOutcome` gains `superseded`, `filled`, `fill_blocked`, `fill_error`, `redis_error`, and `confirmation_error`. TypeScript consumers with exhaustive switches or `Record` values must add those cases, and dashboards restricted to `layer="remote"` intentionally exclude detached traffic.
 
 ## Cached-value ownership
 
@@ -588,7 +599,7 @@ Invalidation writes a Redis watermark at `{encodedNamespace:encodedKeyType:encod
 
 The internal `:dialcache-frame-v1` suffix identifies values written with DialCache's binary protocol. Watermarks are stored as decimal timestamps.
 
-A cached Redis value whose Redis-created timestamp is older than or equal to the watermark is treated as stale and refreshed through fallback. `invalidateRemote(keyType, id, futureBufferMs)` sets the watermark to the greater of its existing value and Redis's current time plus the buffer. While that future window is active, an invocation that reaches the tracked Redis read treats the covered value as a miss. If its fallback then reaches the tracked Redis write, Redis rejects the write and DialCache also suppresses the corresponding process-local population; the fallback value still returns to its caller. Request-local memoization remains unconditional, and invocations whose remote layer is disabled or ramped out do not consult the watermark and are not fenced by it.
+A cached Redis value whose Redis-created timestamp is older than or equal to the watermark is treated as stale and refreshed through fallback. `invalidateRemote(keyType, id, futureBufferMs)` sets the watermark to the greater of its existing value and Redis's current time plus the buffer. While that future window is active, an invocation that reaches the tracked Redis read treats the covered value as a miss. If its fallback then reaches the tracked Redis write, Redis rejects the write and DialCache also suppresses the corresponding process-local population; the fallback value still returns to its caller. Request-local memoization remains unconditional. A ramped-out invocation without shadow work does not consult the watermark; a selected shadow path does consult it for `C0` and any clean-miss fill, although caller-path request-local/process-local publication remains independent.
 
 The bundled timestamp protocol assumes that system clocks are synchronized across every Redis node eligible for primary promotion. Redis does not guarantee that `TIME` is monotonic across nodes, and DialCache does not detect or compensate for cross-node clock skew. If this deployment assumption is violated, failover can temporarily suppress tracked cache fills or allow a pre-invalidation value to remain readable until it expires or a later invalidation advances the watermark past its timestamp.
 
@@ -618,9 +629,9 @@ await dialcache.enable(async () => {
 });
 ```
 
-With Redis configured, an instance-scoped leader that misses the process-local cache runs one bounded Redis read and, on a normal miss, the fallback/cache write; followers share its remaining read budget and await the same result. On a shadow-selected served Redis hit, only that leader can schedule validation, so followers do not multiply source reads. Process-local-only misses share the leader's fallback/cache write. This protects Redis and the source of truth from a thundering herd on hot keys.
+With Redis configured, an instance-scoped leader that misses the process-local cache runs one bounded Redis read and, on a normal miss, the fallback/cache write; followers share its remaining read budget and await the same result. On a shadow-selected served Redis hit, only that leader can schedule detached validation, so followers do not multiply source reads. Process-local-only misses share the leader's fallback/cache write. This protects Redis and the source of truth from a thundering herd on hot keys.
 
-Coalescing only applies when at least one cache layer is active. Calls outside `enable()` are true pass-through. Calls where request-local, process-local, and Redis serving are all disabled are uncached and uncoalesced, even if shadowing independently schedules a dark Redis read; same-key shadow deduplication drops duplicate observation work but does not combine caller fallbacks. Because these calls were initially enabled, the fallback deadline below still applies.
+Coalescing only applies when at least one cache layer is active. Calls outside `enable()` are true pass-through. Calls where request-local, process-local, and Redis serving are all disabled are uncached and uncoalesced, even if shadowing independently schedules detached Redis work; same-key shadow deduplication drops duplicate jobs but does not combine caller fallbacks. Because these calls were initially enabled, the fallback deadline below still applies.
 
 Because coalescing is keyed by the selected or direct key, concurrent calls with the same key share the leader's execution. Any function argument or captured value omitted from the key must be safe to share this way; include inputs such as locale, auth context, or cancellation behavior when they can change the returned value or whether the underlying loader should run separately.
 
@@ -658,7 +669,7 @@ The timer starts only when the fallback begins, including after a remote-read de
 
 Deadline delivery requires the JavaScript event loop to make progress. It cannot preempt a synchronous fallback prefix or other event-loop blocking, so rejection can arrive later than the configured duration; when control returns, DialCache checks the monotonic deadline before accepting the result. The deadline timer remains referenced until the fallback settles or times out. Consequently, an abandoned enabled fallback can keep an otherwise idle short-lived process alive until that deadline; shutdown code should drain outstanding DialCache work rather than discarding its promises.
 
-Timing out rejects the DialCache chain and clears its flight normally. A later fallback resolution is ignored, so that timed-out invocation cannot proceed to serializer, Redis, or local-cache publication. The underlying function is not canceled and may continue its own I/O or side effects; give the source operation its own native timeout or `AbortSignal` whenever possible. `fallbackTimeoutMs: null` disables this guard and makes finite fallback settlement entirely application-owned. Use the `null` escape hatch only after intentionally accepting that liveness risk. It does not create an unbounded detached shadow operation: [shadow validation](#shadow-validation) still uses a 60-second whole-validation budget.
+Timing out rejects the DialCache chain and clears its flight normally. A later fallback resolution is ignored, so that timed-out invocation cannot become the accepted `S` for a shadow fill or proceed to ordinary serializer, Redis, or local-cache publication. The underlying function is not canceled and may continue its own I/O or side effects; give the source operation its own native timeout or `AbortSignal` whenever possible. `fallbackTimeoutMs: null` disables this guard and makes finite fallback settlement entirely application-owned. Use the `null` escape hatch only after intentionally accepting that liveness risk. It does not create an unbounded detached shadow operation: [shadow validation](#shadow-validation) still uses a 60-second whole-job budget.
 
 Timeout failures retain the bounded metrics classification `error="fallback"` with `in_fallback="true"`; the typed error provides the timeout details without adding high-cardinality labels.
 
@@ -721,7 +732,7 @@ The Prometheus adapter emits:
 | `dialcache_error_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer`, `error`, `in_fallback` | Cache/fallback errors classified by a bounded failure site |
 | `dialcache_invalidation_counter` | Counter | `cache_namespace`, `key_type`, `layer` | Invalidation calls for the layers touched |
 | `dialcache_coalesced_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `scope` | Coalesced requests split by `request_local` or `process` scope |
-| `dialcache_shadow_validation_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `outcome` | Sampled Redis shadow-validation outcomes |
+| `dialcache_shadow_validation_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `outcome` | Sampled Redis shadow-job outcomes |
 | `dialcache_get_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache get latency in seconds |
 | `dialcache_fallback_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Elapsed time until the underlying function settles or timeout rejection is delivered |
 | `dialcache_serialization_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer`, `operation` | Redis serializer dump/load latency |
@@ -729,7 +740,7 @@ The Prometheus adapter emits:
 
 `policy_disabled` means that a process-local or Redis layer has no effective TTL after runtime overlays are applied. It is an intentional policy outcome, including the default when `defaultConfig` is omitted, rather than a configuration-loading failure.
 
-Every metric carries `cache_namespace`, including disabled-context, key-construction, coalescing, shadow-validation, and invalidation paths that do not have a constructed key. Its value is `DialCacheConfig.namespace`, defaulting to `urn`. The `layer` label is `request_local`, `local` (process-local), or `remote`; shadow validation has the dedicated bounded `outcome` label instead of pretending to be another layer. Detached shadow Redis reads emit no layer metrics, so `layer="remote"` continues to describe caller-path Redis traffic only. Disabled-context, key-construction, and config-provider failures use `noop` because no cache layer was reached. The bounded `scope` label on `dialcache_coalesced_counter` distinguishes request-local from instance-scoped single-flight work. `scope="process"` coordinates calls only within one `DialCache` instance; separate instances in the same process do not share in-flight state.
+Every metric carries `cache_namespace`, including disabled-context, key-construction, coalescing, shadow-validation, and invalidation paths that do not have a constructed key. Its value is `DialCacheConfig.namespace`, defaulting to `urn`. The `layer` label is `request_local`, `local` (process-local), `remote` (caller-serving Redis), or `remote_shadow` (detached, non-serving Redis work); `noop` means no cache layer was reached. Detached reads, serializer work, payload sizes, and Redis read/write errors use `remote_shadow`, while the dedicated bounded shadow `outcome` records the terminal job result. The bounded `scope` label on `dialcache_coalesced_counter` distinguishes request-local from instance-scoped single-flight work. `scope="process"` coordinates calls only within one `DialCache` instance; separate instances in the same process do not share in-flight state.
 
 ### Datadog
 
@@ -779,7 +790,7 @@ The Datadog adapter emits exact increments of `1` for counters and preserves sec
 | `dialcache.error.count` | Count | `cache_namespace`, `use_case`, `key_type`, `layer`, `error`, `in_fallback` | Cache/fallback errors by bounded failure site |
 | `dialcache.invalidation.count` | Count | `cache_namespace`, `key_type`, `layer` | Invalidation calls for the layers touched |
 | `dialcache.coalesced.count` | Count | `cache_namespace`, `use_case`, `key_type`, `scope` | Coalesced requests by sharing scope |
-| `dialcache.shadow.count` | Count | `cache_namespace`, `use_case`, `key_type`, `outcome` | Sampled Redis shadow-validation outcomes |
+| `dialcache.shadow.count` | Count | `cache_namespace`, `use_case`, `key_type`, `outcome` | Sampled Redis shadow-job outcomes |
 | `dialcache.get.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache get latency in seconds |
 | `dialcache.fallback.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Elapsed time until the underlying function settles or timeout rejection is delivered |
 | `dialcache.serialization.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer`, `operation` | Redis serializer dump/load latency in seconds |
@@ -808,7 +819,7 @@ These values are defined by the backend-neutral core and are identical for every
 
 ### Custom adapters
 
-For other telemetry backends, implement `DialCacheMetricsAdapter` and pass the adapter through `new DialCache({ metrics })`. Every backend-neutral label object exposes the logical namespace as camel-case `cacheNamespace`; adapters should map it to their backend's `cache_namespace` label/tag. This field is present even when no key or cache layer was reached. Implement the optional `shadowValidation` method to enable shadow work as well as record its outcomes; omitting it leaves shadow validation disabled even when `shadowRamp` is nonzero. Synchronous adapter failures are isolated from cache behavior and application fallbacks. If `shadowValidation` returns a thenable at runtime, DialCache consumes a later rejection without awaiting it. Omit `metrics` to disable metrics.
+For other telemetry backends, implement `DialCacheMetricsAdapter` and pass the adapter through `new DialCache({ metrics })`. Every backend-neutral label object exposes the logical namespace as camel-case `cacheNamespace`; adapters should map it to their backend's `cache_namespace` label/tag. This field is present even when no key or cache layer was reached. Implement the optional `shadowValidation` method to enable shadow work as well as record its outcomes; omitting it leaves all shadow work disabled even when `shadowRamp` is nonzero. Synchronous adapter failures are isolated from cache behavior and application fallbacks. If `shadowValidation` returns a thenable at runtime, DialCache consumes a later rejection without awaiting it. Omit `metrics` to disable metrics.
 
 ## Maintainers
 
@@ -820,7 +831,7 @@ From a repository checkout, run the semantic microbenchmark after installing dep
 pnpm benchmark:request-local
 ```
 
-The command builds `dist` before reporting nine scenarios: sequential request-local hits, sequential process-local hits, enabled bounded fallbacks, request-local coalescing fan-out, process coalescing fan-out, remote-read-deadline coalescing fan-out, tracked Redis hits with shadow omitted, tracked Redis hits deterministically outside a partial shadow ramp, and a ramped-down dark read whose caller completes before Redis. The benchmark is a maintainer tool and is not included in the published package. It asserts fallback counts, Redis behavior, coalescing state, timer cleanup, returned values, exactly-once SoT reuse, and conditional confirmation without applying a timing threshold. Override its work sizes with `DIALCACHE_BENCH_ITERATIONS` and `DIALCACHE_BENCH_FANOUT`.
+The command builds `dist` before reporting ten scenarios: sequential request-local hits, sequential process-local hits, enabled bounded fallbacks, request-local coalescing fan-out, process coalescing fan-out, remote-read-deadline coalescing fan-out, tracked Redis hits with shadow omitted, tracked Redis hits deterministically outside a partial shadow ramp, a ramped-down warm-hit confirmation, and a ramped-down clean-miss fill. Both shadow scenarios prove that the caller completes before detached Redis work. The benchmark is a maintainer tool and is not included in the published package. It asserts fallback counts, Redis behavior, coalescing state, timer cleanup, returned values, exactly-once SoT reuse, and conditional confirmation/fill without applying a timing threshold. Override its work sizes with `DIALCACHE_BENCH_ITERATIONS` and `DIALCACHE_BENCH_FANOUT`.
 
 ### Releasing
 
