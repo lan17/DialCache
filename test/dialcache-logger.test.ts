@@ -27,7 +27,34 @@ function throwingLogger() {
   } satisfies Logger;
 }
 
+const nextImmediate = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
+
 describe("DialCache logger isolation", () => {
+  it("consumes rejecting thenables returned by every logger method without awaiting them", async () => {
+    const then = vi.fn((
+      _onFulfilled: ((value: unknown) => unknown) | null | undefined,
+      onRejected: ((reason: unknown) => unknown) | null | undefined,
+    ) => {
+      onRejected?.(new Error("logger transport failed"));
+    });
+    const thenable = { then };
+    const logger = {
+      debug: vi.fn(() => thenable),
+      error: vi.fn(() => thenable),
+      warn: vi.fn(() => thenable),
+    } as unknown as Logger;
+    const dialcache = new DialCache({ logger });
+    const isolatedLogger = (dialcache as unknown as { readonly logger: Logger }).logger;
+
+    isolatedLogger.debug("debug");
+    isolatedLogger.error("error");
+    isolatedLogger.warn("warn");
+
+    expect(then).not.toHaveBeenCalled();
+    await nextImmediate();
+    expect(then).toHaveBeenCalledTimes(3);
+  });
+
   it("preserves fallback behavior when key construction and logging both fail", async () => {
     const logger = throwingLogger();
     const dialcache = new DialCache({ logger });

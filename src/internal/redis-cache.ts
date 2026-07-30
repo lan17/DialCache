@@ -3,7 +3,13 @@ import { performance } from "node:perf_hooks";
 import { CacheLayer, type CacheConfigProvider, type DialCacheKeyConfig } from "../config.js";
 import { RedisReadTimeoutError } from "../errors.js";
 import { invalidationPrefix, redisClusterHashTag, type DialCacheKey } from "../key.js";
-import { labelsFor, type DialCacheMetricsAdapter, type MetricErrorKind } from "../metrics.js";
+import {
+  labelsFor,
+  REMOTE_SHADOW_CACHE_LAYER,
+  type DialCacheMetricsAdapter,
+  type MetricErrorKind,
+  type MetricLayer,
+} from "../metrics.js";
 import type { DialCacheRedisClient, RedisCachePayload } from "../redis-client.js";
 import { JsonSerializer, type Serializer } from "../serializer.js";
 import type { RedisCacheGetResult } from "./cache-result.js";
@@ -29,6 +35,13 @@ interface RedisCacheOptions {
   readonly configProvider: CacheConfigProvider;
   readonly redis: RedisConfig;
   readonly metrics: DialCacheMetricsAdapter | null;
+}
+
+interface StartedRedisRead {
+  /** Result bounded by the effective Redis read deadline. */
+  readonly result: Promise<RedisCachePayload | null>;
+  /** Fulfills only after the underlying semantic Redis read settles. */
+  readonly settled: Promise<void>;
 }
 
 const defaultSerializer = new JsonSerializer<unknown>();
@@ -93,48 +106,66 @@ export class RedisCache {
     layerConfig: ResolvedLayerConfig,
     readTimeoutMs = this.readTimeoutMs,
   ): Promise<RedisCacheGetResult<T>> {
-    let payload: RedisCachePayload | null;
-    const abortController = new AbortController();
-    try {
-      const redisKey = this.redisKey(key);
-      payload = await withMonotonicDeadline({
-        timeoutMs: readTimeoutMs,
-        operation: () => this.client.read(
-          {
-            valueKey: redisKey,
-            ...(key.trackForInvalidation ? { watermarkKey: this.redisWatermarkKeyFromKey(key) } : {}),
-          },
-          { timeoutMs: readTimeoutMs, signal: abortController.signal },
-        ),
-        onTimeout: () => abortController.abort(),
-        timeoutError: () => new RedisReadTimeoutError(key.useCase, readTimeoutMs),
-      });
-    } catch (error) {
-      this.recordError(key, error instanceof RedisReadTimeoutError ? "cache_read_timeout" : "cache_read");
-      throw error;
-    }
-    if (payload === null) {
-      return { status: "miss", config: layerConfig };
-    }
-
+    const metricLayer = CacheLayer.REMOTE;
     const start = performance.now();
+    this.recordMetric((metrics) => metrics.request(labelsFor(key, metricLayer)));
     try {
-      const value = (await this.serializerFor(key).load(payload)) as T;
-      return { status: "hit", value, payload };
-    } catch {
-      this.recordError(key, "serialization_load");
-      return { status: "miss", config: layerConfig };
+      let payload: RedisCachePayload | null;
+      try {
+        payload = await this.startPayloadRead(key, readTimeoutMs, false).result;
+      } catch (error) {
+        this.recordError(
+          key,
+          metricLayer,
+          error instanceof RedisReadTimeoutError ? "cache_read_timeout" : "cache_read",
+        );
+        throw error;
+      }
+      if (payload === null) {
+        this.recordMetric((metrics) => metrics.miss(labelsFor(key, metricLayer)));
+        return { status: "miss", config: layerConfig };
+      }
+
+      try {
+        const value = await this.deserializePayload<T>(key, payload, metricLayer);
+        return { status: "hit", value, payload };
+      } catch {
+        this.recordMetric((metrics) => metrics.miss(labelsFor(key, metricLayer)));
+        return { status: "miss", config: layerConfig };
+      }
     } finally {
-      this.recordMetric((metrics) => metrics.observeSerialization({ ...labelsFor(key, CacheLayer.REMOTE), operation: "load" }, elapsedSeconds(start)));
+      // Preserve the established caller-serving boundary: Redis read plus load.
+      this.recordMetric((metrics) => metrics.observeGet(labelsFor(key, metricLayer), elapsedSeconds(start)));
     }
   }
 
   /**
    * Decode the retained Redis payload again for detached semantic comparison,
-   * without recording ordinary request-path serialization telemetry.
+   * recording it separately from caller-serving Redis work.
    */
   async deserializeForShadow<T>(key: DialCacheKey, payload: RedisCachePayload): Promise<T> {
-    return await this.serializerFor(key).load(payload) as T;
+    return await this.deserializePayload<T>(key, payload, REMOTE_SHADOW_CACHE_LAYER);
+  }
+
+  /**
+   * Start a measured tracked Redis read for detached shadow work.
+   *
+   * The bounded result may reject before the semantic client operation settles,
+   * so callers must retain shadow capacity until `settled` fulfills.
+   */
+  startTrackedPayloadReadForShadow(
+    key: DialCacheKey,
+    readTimeoutMs: number,
+  ): StartedRedisRead {
+    if (!key.trackForInvalidation) {
+      throw new Error("DialCache shadow Redis reads require tracked keys");
+    }
+    return this.startMeasuredPayloadRead(
+      key,
+      readTimeoutMs,
+      REMOTE_SHADOW_CACHE_LAYER,
+      true,
+    );
   }
 
   async put<T>(key: DialCacheKey, value: T, config?: { readonly ttlSec: number }): Promise<boolean> {
@@ -142,6 +173,48 @@ export class RedisCache {
     if (ttlSec === null) {
       return true;
     }
+    return await this.putWithLayer(key, value, ttlSec, CacheLayer.REMOTE);
+  }
+
+  /** Populate a definitive detached tracked miss using the caller's resolved policy snapshot. */
+  async putForShadow<T>(
+    key: DialCacheKey,
+    value: T,
+    config: { readonly ttlSec: number },
+    shouldWrite: () => boolean,
+  ): Promise<boolean | null> {
+    if (!key.trackForInvalidation) {
+      throw new Error("DialCache shadow Redis writes require tracked keys");
+    }
+    return await this.putWithLayer(
+      key,
+      value,
+      config.ttlSec,
+      REMOTE_SHADOW_CACHE_LAYER,
+      shouldWrite,
+    );
+  }
+
+  private putWithLayer<T>(
+    key: DialCacheKey,
+    value: T,
+    ttlSec: number,
+    metricLayer: MetricLayer,
+  ): Promise<boolean>;
+  private putWithLayer<T>(
+    key: DialCacheKey,
+    value: T,
+    ttlSec: number,
+    metricLayer: MetricLayer,
+    shouldWrite: () => boolean,
+  ): Promise<boolean | null>;
+  private async putWithLayer<T>(
+    key: DialCacheKey,
+    value: T,
+    ttlSec: number,
+    metricLayer: MetricLayer,
+    shouldWrite?: () => boolean,
+  ): Promise<boolean | null> {
     const cacheTtlMs = cacheTtlSecToMs(ttlSec);
 
     const start = performance.now();
@@ -149,12 +222,15 @@ export class RedisCache {
     try {
       serialized = await this.serializerFor(key).dump(value);
     } catch (error) {
-      this.recordError(key, "serialization_dump");
+      this.recordError(key, metricLayer, "serialization_dump");
       throw error;
     } finally {
-      this.recordMetric((metrics) => metrics.observeSerialization({ ...labelsFor(key, CacheLayer.REMOTE), operation: "dump" }, elapsedSeconds(start)));
+      this.recordMetric((metrics) => metrics.observeSerialization({ ...labelsFor(key, metricLayer), operation: "dump" }, elapsedSeconds(start)));
     }
-    this.recordMetric((metrics) => metrics.observeSize(labelsFor(key, CacheLayer.REMOTE), payloadSize(serialized)));
+    this.recordMetric((metrics) => metrics.observeSize(labelsFor(key, metricLayer), payloadSize(serialized)));
+    if (shouldWrite !== undefined && !shouldWrite()) {
+      return null;
+    }
 
     try {
       const request = {
@@ -169,7 +245,7 @@ export class RedisCache {
           })
         : await this.client.write(request);
     } catch (error) {
-      this.recordError(key, "cache_write");
+      this.recordError(key, metricLayer, "cache_write");
       throw error;
     }
   }
@@ -191,6 +267,86 @@ export class RedisCache {
 
   private redisWatermarkKeyFromKey(key: DialCacheKey): string {
     return this.redisWatermarkKey(key.namespace, key.keyType, key.id);
+  }
+
+  private startPayloadRead(
+    key: DialCacheKey,
+    readTimeoutMs: number,
+    unrefTimer: boolean,
+  ): StartedRedisRead {
+    const abortController = new AbortController();
+    const pending = Promise.resolve().then(() =>
+      this.client.read(
+        {
+          valueKey: this.redisKey(key),
+          ...(key.trackForInvalidation ? { watermarkKey: this.redisWatermarkKeyFromKey(key) } : {}),
+        },
+        { timeoutMs: readTimeoutMs, signal: abortController.signal },
+      )
+    );
+    const result = withMonotonicDeadline({
+      timeoutMs: readTimeoutMs,
+      operation: () => pending,
+      onTimeout: () => abortController.abort(),
+      timeoutError: () => new RedisReadTimeoutError(key.useCase, readTimeoutMs),
+      unrefTimer,
+    });
+    return {
+      result,
+      settled: pending.then(
+        () => undefined,
+        () => undefined,
+      ),
+    };
+  }
+
+  private startMeasuredPayloadRead(
+    key: DialCacheKey,
+    readTimeoutMs: number,
+    metricLayer: MetricLayer,
+    unrefTimer: boolean,
+  ): StartedRedisRead {
+    const start = performance.now();
+    this.recordMetric((metrics) => metrics.request(labelsFor(key, metricLayer)));
+    const read = this.startPayloadRead(key, readTimeoutMs, unrefTimer);
+    const result = read.result.then(
+      (payload) => {
+        if (payload === null) {
+          this.recordMetric((metrics) => metrics.miss(labelsFor(key, metricLayer)));
+        }
+        return payload;
+      },
+      (error: unknown) => {
+        this.recordError(
+          key,
+          metricLayer,
+          error instanceof RedisReadTimeoutError ? "cache_read_timeout" : "cache_read",
+        );
+        throw error;
+      },
+    ).finally(() => {
+      this.recordMetric((metrics) => metrics.observeGet(labelsFor(key, metricLayer), elapsedSeconds(start)));
+    });
+    return { result, settled: read.settled };
+  }
+
+  private async deserializePayload<T>(
+    key: DialCacheKey,
+    payload: RedisCachePayload,
+    metricLayer: MetricLayer,
+  ): Promise<T> {
+    const start = performance.now();
+    try {
+      return await this.serializerFor(key).load(payload) as T;
+    } catch (error) {
+      this.recordError(key, metricLayer, "serialization_load");
+      throw error;
+    } finally {
+      this.recordMetric((metrics) => metrics.observeSerialization(
+        { ...labelsFor(key, metricLayer), operation: "load" },
+        elapsedSeconds(start),
+      ));
+    }
   }
 
   private serializerFor(key: DialCacheKey): Serializer<unknown> {
@@ -222,8 +378,8 @@ export class RedisCache {
     }
   }
 
-  private recordError(key: DialCacheKey, kind: MetricErrorKind): void {
-    this.recordMetric((metrics) => metrics.error({ ...labelsFor(key, CacheLayer.REMOTE), error: kind, inFallback: false }));
+  private recordError(key: DialCacheKey, layer: MetricLayer, kind: MetricErrorKind): void {
+    this.recordMetric((metrics) => metrics.error({ ...labelsFor(key, layer), error: kind, inFallback: false }));
   }
 }
 

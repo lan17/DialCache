@@ -184,6 +184,36 @@ describe("DialCache Redis shadow validation", () => {
     expect(metrics.shadowEvents[0]).toMatchObject({ useCase, outcome: "match" });
   });
 
+  it("starts a served-hit deadline when detached validation begins", async () => {
+    let nowMs = 0;
+    const nowSpy = vi.spyOn(performance, "now").mockImplementation(() => nowMs);
+    const redis = new FakeRedis();
+    const metrics = new RecordingMetrics();
+    const useCase = "ShadowDetachedDeadlineStart";
+    const cachedValue = { id: "123" };
+    seedRedis(redis, { id: "123", useCase, payload: JSON.stringify(cachedValue) });
+    const source = vi.fn(async () => cachedValue);
+    const dialcache = createShadowCache(redis, metrics);
+    const getUser = dialcache.cached(source, {
+      ...trackedRemoteDefaults(useCase),
+      cacheKey: () => "123",
+      fallbackTimeoutMs: 10,
+    });
+
+    try {
+      expect(await dialcache.enable(async () => await getUser())).toEqual(cachedValue);
+      expect(source).not.toHaveBeenCalled();
+
+      nowMs = 100;
+      await waitForShadowEvents(metrics, 1);
+
+      expect(source).toHaveBeenCalledOnce();
+      expect(metrics.shadowEvents[0]?.outcome).toBe("match");
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
   it("matches deserialized JSON values with different property insertion order", async () => {
     const redis = new FakeRedis();
     const metrics = new RecordingMetrics();
@@ -516,7 +546,9 @@ describe("DialCache Redis shadow validation", () => {
         (value as NodeJS.Timeout | undefined)?.hasRef() === false
       );
       expect(shadowTimerIndex).toBeGreaterThanOrEqual(0);
-      expect(setTimeoutSpy.mock.calls[shadowTimerIndex]?.[1]).toBe(10_000);
+      const shadowDelayMs = setTimeoutSpy.mock.calls[shadowTimerIndex]?.[1] as number;
+      expect(shadowDelayMs).toBeGreaterThan(9_000);
+      expect(shadowDelayMs).toBeLessThanOrEqual(10_000);
 
       sourceGate.resolve(cachedValue);
       await waitForShadowEvents(metrics, 1);
@@ -555,7 +587,9 @@ describe("DialCache Redis shadow validation", () => {
         (value as NodeJS.Timeout | undefined)?.hasRef() === false
       );
       expect(shadowTimerIndex).toBeGreaterThanOrEqual(0);
-      expect(setTimeoutSpy.mock.calls[shadowTimerIndex]?.[1]).toBe(60_000);
+      const shadowDelayMs = setTimeoutSpy.mock.calls[shadowTimerIndex]?.[1] as number;
+      expect(shadowDelayMs).toBeGreaterThan(59_000);
+      expect(shadowDelayMs).toBeLessThanOrEqual(60_000);
 
       sourceGate.resolve(cachedValue);
       await waitForShadowEvents(metrics, 1);

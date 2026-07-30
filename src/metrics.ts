@@ -2,19 +2,27 @@ import type { CacheLayer } from "./config.js";
 import type { DialCacheKey } from "./key.js";
 
 export const NO_CACHE_LAYER = "noop";
+export const REMOTE_SHADOW_CACHE_LAYER = "remote_shadow";
 export const REQUEST_LOCAL_CACHE_LAYER = "request_local";
 
 type NoCacheLayer = typeof NO_CACHE_LAYER;
+type RemoteShadowCacheLayer = typeof REMOTE_SHADOW_CACHE_LAYER;
 type RequestLocalCacheLayer = typeof REQUEST_LOCAL_CACHE_LAYER;
-export type MetricLayer = CacheLayer | RequestLocalCacheLayer | NoCacheLayer;
+export type MetricLayer = CacheLayer | RequestLocalCacheLayer | RemoteShadowCacheLayer | NoCacheLayer;
 export type CoalescingScope = "request_local" | "process";
 /** Bounded terminal outcomes for sampled Redis shadow validation. */
 export type ShadowValidationOutcome =
   | "match"
   | "mismatch"
+  | "superseded"
+  | "filled"
+  | "fill_blocked"
+  | "fill_error"
+  | "redis_error"
   | "source_error"
   | "deserialization_error"
   | "comparison_error"
+  | "confirmation_error"
   | "timeout"
   | "dropped";
 /** Bounded reasons for skipping cache work; policy_disabled means a shared layer has no effective TTL. */

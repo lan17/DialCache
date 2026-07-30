@@ -384,6 +384,7 @@ describe("DialCache runtime config and ramp controls", () => {
   it("returns the explicit kill-switch overlay from DialCacheKeyConfig.disabled()", () => {
     expect(DialCacheKeyConfig.disabled()).toEqual(new DialCacheKeyConfig({
       requestLocal: false,
+      shadowRamp: 0,
       ramp: { [CacheLayer.LOCAL]: 0, [CacheLayer.REMOTE]: 0 },
     }));
   });
@@ -586,54 +587,84 @@ describe("DialCache runtime config and ramp controls", () => {
     expect(redis.setCalls).toBe(1);
   });
 
-  it("clamps finite runtime ramps and disables non-finite ramp config", async () => {
-    // Given configured ramps can come from dynamic config and may be outside the normal 0-100 range.
-    const clampedCache = new DialCache({
+  it("rejects runtime ramps outside the inclusive 0-100 domain", async () => {
+    // Given malformed ramp leaves arrive through otherwise well-shaped runtime config.
+    const invalidRamps: readonly unknown[] = [
+      -1,
+      101,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+      "50",
+    ];
+
+    for (const [index, configuredRamp] of invalidRamps.entries()) {
+      let calls = 0;
+      const dialcache = new DialCache({
+        cacheConfigProvider: async () => configFor(
+          { [CacheLayer.LOCAL]: 60 },
+          { [CacheLayer.LOCAL]: configuredRamp as number },
+        ),
+      });
+      const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+        keyType: "user_id",
+        useCase: `InvalidRuntimeRamp${index}`,
+        cacheKey: (userId) => userId,
+      });
+
+      const first = await dialcache.enable(async () => await getUser("123"));
+      const second = await dialcache.enable(async () => await getUser("123"));
+
+      expect(first).toEqual({ userId: "123", calls: 1 });
+      expect(second).toEqual({ userId: "123", calls: 2 });
+    }
+  });
+
+  it("preserves valid runtime ramp boundaries and other active layers", async () => {
+    // Given exact boundary ramps and one invalid remote ramp paired with a valid local layer.
+    const boundaryCache = new DialCache({
       cacheConfigProvider: async (key) => configFor(
         { [CacheLayer.LOCAL]: 60 },
-        {
-          [CacheLayer.LOCAL]: key.useCase === "NegativeConfiguredRamp"
-            ? -10
-            : key.useCase === "OverHundredConfiguredRamp"
-              ? 150
-              : Number.NaN,
-        },
+        { [CacheLayer.LOCAL]: key.useCase === "ZeroRuntimeRamp" ? 0 : 100 },
       ),
     });
-    let negativeCalls = 0;
-    const negativeRamp = clampedCache.cached(async (userId: string) => ({ userId, calls: ++negativeCalls }), {
+    let zeroCalls = 0;
+    const zeroRamp = boundaryCache.cached(async () => ++zeroCalls, {
       keyType: "user_id",
-      useCase: "NegativeConfiguredRamp",
-      cacheKey: (userId) => userId,
+      useCase: "ZeroRuntimeRamp",
+      cacheKey: () => "123",
     });
-    let overHundredCalls = 0;
-    const overHundredRamp = clampedCache.cached(async (userId: string) => ({ userId, calls: ++overHundredCalls }), {
+    let hundredCalls = 0;
+    const hundredRamp = boundaryCache.cached(async () => ++hundredCalls, {
       keyType: "user_id",
-      useCase: "OverHundredConfiguredRamp",
-      cacheKey: (userId) => userId,
-    });
-    let nanConfiguredCalls = 0;
-    const nanConfiguredRamp = clampedCache.cached(async (userId: string) => ({ userId, calls: ++nanConfiguredCalls }), {
-      keyType: "user_id",
-      useCase: "NanConfiguredRamp",
-      cacheKey: (userId) => userId,
+      useCase: "HundredRuntimeRamp",
+      cacheKey: () => "456",
     });
 
-    // When the same keys are read twice.
-    const negativeFirst = await clampedCache.enable(async () => await negativeRamp("123"));
-    const negativeSecond = await clampedCache.enable(async () => await negativeRamp("123"));
-    const overHundredFirst = await clampedCache.enable(async () => await overHundredRamp("456"));
-    const overHundredSecond = await clampedCache.enable(async () => await overHundredRamp("456"));
-    const nanConfiguredFirst = await clampedCache.enable(async () => await nanConfiguredRamp("789"));
-    const nanConfiguredSecond = await clampedCache.enable(async () => await nanConfiguredRamp("789"));
+    expect(await boundaryCache.enable(async () => await zeroRamp())).toBe(1);
+    expect(await boundaryCache.enable(async () => await zeroRamp())).toBe(2);
+    expect(await boundaryCache.enable(async () => await hundredRamp())).toBe(1);
+    expect(await boundaryCache.enable(async () => await hundredRamp())).toBe(1);
 
-    // Then finite out-of-range ramps clamp to safe terminal behavior, and non-finite config disables caching.
-    expect(negativeFirst).toEqual({ userId: "123", calls: 1 });
-    expect(negativeSecond).toEqual({ userId: "123", calls: 2 });
-    expect(overHundredFirst).toEqual({ userId: "456", calls: 1 });
-    expect(overHundredSecond).toEqual({ userId: "456", calls: 1 });
-    expect(nanConfiguredFirst).toEqual({ userId: "789", calls: 1 });
-    expect(nanConfiguredSecond).toEqual({ userId: "789", calls: 2 });
+    const redis = new FakeRedis();
+    let mixedCalls = 0;
+    const mixedCache = new DialCache({
+      redis: { client: redis },
+      cacheConfigProvider: async () => configFor(
+        { [CacheLayer.LOCAL]: 60, [CacheLayer.REMOTE]: 60 },
+        { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: -1 },
+      ),
+    });
+    const mixedRamp = mixedCache.cached(async () => ++mixedCalls, {
+      keyType: "user_id",
+      useCase: "InvalidRemoteValidLocalRamp",
+      cacheKey: () => "789",
+    });
+
+    expect(await mixedCache.enable(async () => await mixedRamp())).toBe(1);
+    expect(await mixedCache.enable(async () => await mixedRamp())).toBe(1);
+    expect(redis.getCalls).toBe(0);
+    expect(redis.setCalls).toBe(0);
   });
 
   it("rejects unsupported runtime TTLs before cache or serialization work", async () => {

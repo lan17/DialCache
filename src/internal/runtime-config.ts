@@ -16,7 +16,16 @@ export interface ResolvedLayerConfig {
 
 export type LayerConfigResolution =
   | { readonly status: "enabled"; readonly config: ResolvedLayerConfig }
-  | { readonly status: "disabled"; readonly reason: DisabledReason };
+  | {
+      readonly status: "disabled";
+      readonly reason: "ramped_down";
+      /** Valid policy retained even though its ramp excluded this key. */
+      readonly config: ResolvedLayerConfig;
+    }
+  | {
+      readonly status: "disabled";
+      readonly reason: Exclude<DisabledReason, "ramped_down">;
+    };
 
 interface ResolveLayerConfigOptions {
   readonly config: DialCacheKeyConfig | null;
@@ -55,15 +64,20 @@ export function resolveLayerConfigResult(options: ResolveLayerConfigOptions): La
     return { status: "disabled", reason: "invalid_ttl" };
   }
 
-  const configuredRampValue = config.ramp[options.layer];
+  const configuredRampValue: unknown = config.ramp[options.layer];
   const configuredRamp = configuredRampValue === undefined ? 100 : configuredRampValue;
-  if (!Number.isFinite(configuredRamp)) {
+  if (
+    typeof configuredRamp !== "number"
+    || !Number.isFinite(configuredRamp)
+    || configuredRamp < 0
+    || configuredRamp > 100
+  ) {
     return { status: "disabled", reason: "invalid_ramp" };
   }
 
-  const ramp = clampPercentage(configuredRamp);
+  const ramp = configuredRamp;
   if (ramp <= 0) {
-    return { status: "disabled", reason: "ramped_down" };
+    return { status: "disabled", reason: "ramped_down", config: { ttlSec, ramp } };
   }
   if (ramp >= 100) {
     return { status: "enabled", config: { ttlSec, ramp } };
@@ -73,7 +87,7 @@ export function resolveLayerConfigResult(options: ResolveLayerConfigOptions): La
 
   return sample < ramp
     ? { status: "enabled", config: { ttlSec, ramp } }
-    : { status: "disabled", reason: "ramped_down" };
+    : { status: "disabled", reason: "ramped_down", config: { ttlSec, ramp } };
 }
 
 function mergeKeyConfig(
@@ -135,14 +149,4 @@ function assertLayerConfig(config: LayerConfig | undefined, name: "ttlSec" | "ra
   if (config !== undefined && (config === null || typeof config !== "object" || Array.isArray(config))) {
     throw new TypeError(`DialCache ${name} config must be a layer map`);
   }
-}
-
-function clampPercentage(value: number): number {
-  if (value <= 0) {
-    return 0;
-  }
-  if (value >= 100) {
-    return 100;
-  }
-  return value;
 }

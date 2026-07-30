@@ -59,9 +59,15 @@ const DISABLED_REASONS: Readonly<Record<DisabledReason, true>> = {
 const SHADOW_VALIDATION_OUTCOMES: Readonly<Record<ShadowValidationOutcome, true>> = {
   match: true,
   mismatch: true,
+  superseded: true,
+  filled: true,
+  fill_blocked: true,
+  fill_error: true,
+  redis_error: true,
   source_error: true,
   deserialization_error: true,
   comparison_error: true,
+  confirmation_error: true,
   timeout: true,
   dropped: true,
 };
@@ -311,6 +317,38 @@ describe("Prometheus metrics adapter", () => {
     expect(family?.values.map(({ labels: emitted }) => Object.keys(emitted))).toEqual(
       outcomes.map(() => ["cache_namespace", "use_case", "key_type", "outcome"]),
     );
+  });
+
+  it("uses the existing layer label for detached Redis telemetry", async () => {
+    const registry = new Registry();
+    const metrics = new PrometheusDialCacheMetrics({ registry, prefix: "shadow_layer_" });
+    const labels = {
+      cacheNamespace: "users",
+      useCase: "PrometheusRemoteShadow",
+      keyType: "user_id",
+      layer: "remote_shadow",
+    } as const;
+
+    metrics.request(labels);
+    metrics.miss(labels);
+    metrics.observeGet(labels, 0.01);
+
+    await expect(
+      sumMetric(registry, "shadow_layer_dialcache_request_counter", {
+        cache_namespace: labels.cacheNamespace,
+        use_case: labels.useCase,
+        key_type: labels.keyType,
+        layer: labels.layer,
+      }),
+    ).resolves.toBe(1);
+    await expect(
+      sumMetric(registry, "shadow_layer_dialcache_miss_counter", {
+        cache_namespace: labels.cacheNamespace,
+        use_case: labels.useCase,
+        key_type: labels.keyType,
+        layer: labels.layer,
+      }),
+    ).resolves.toBe(1);
   });
 
   it("reuses existing collectors when multiple adapters share a registry", async () => {

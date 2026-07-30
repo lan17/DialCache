@@ -9,6 +9,8 @@ const exec = promisify(execFile);
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspace = await mkdtemp(join(tmpdir(), "dialcache-package-"));
 const fallbackTimeoutMarker = "dialcache-fallback-timeout-delivered";
+const observerIsolationMarker = "dialcache-observer-rejections-isolated";
+const shadowPayloadReleaseMarker = "dialcache-shadow-payload-released";
 const rootConsumer = `import {
   CacheLayer,
   DialCache,
@@ -32,6 +34,7 @@ const rootConsumer = `import {
   type GetOrLoadOptions,
   type InvalidationMetricLabels,
   type MetricErrorKind,
+  type MetricLayer,
   type ProcessCoalescingState,
   type RedisConfig,
   type RedisInvalidationRequest,
@@ -82,6 +85,30 @@ const shadowMetrics: DialCacheMetricsAdapter = {
     void outcome;
   },
 };
+const shadowOutcomes: Readonly<Record<ShadowValidationOutcome, true>> = {
+  match: true,
+  mismatch: true,
+  superseded: true,
+  filled: true,
+  fill_blocked: true,
+  fill_error: true,
+  redis_error: true,
+  source_error: true,
+  deserialization_error: true,
+  comparison_error: true,
+  confirmation_error: true,
+  timeout: true,
+  dropped: true,
+};
+void shadowOutcomes;
+const metricLayers: Readonly<Record<MetricLayer, true>> = {
+  [CacheLayer.LOCAL]: true,
+  [CacheLayer.REMOTE]: true,
+  remote_shadow: true,
+  request_local: true,
+  noop: true,
+};
+void metricLayers;
 const shadowCacheConfig: DialCacheConfig = {
   namespace: "consumer-shadow-cache",
   metrics: shadowMetrics,
@@ -292,6 +319,12 @@ const customRedisClient: DialCacheRedisClient = {
   write: async ({ value }) => typeof value === "string" || Buffer.isBuffer(value),
   invalidate: async () => undefined,
 };
+const redisClientMethods: Readonly<Record<keyof DialCacheRedisClient, true>> = {
+  read: true,
+  write: true,
+  invalidate: true,
+};
+void redisClientMethods;
 const cacheHasNoFlushAll: "flushAll" extends keyof DialCache ? false : true = true;
 const cacheHasNoClose: "close" extends keyof DialCache ? false : true = true;
 const clientHasNoFlushAll: "flushAll" extends keyof DialCacheRedisClient ? false : true = true;
@@ -598,7 +631,7 @@ if ("MissingKeyConfigError" in root) {
   throw new Error("The removed MissingKeyConfigError class must not be exported from the root ESM entry");
 }
 const esmDisabledOverlay = root.DialCacheKeyConfig.disabled();
-if (esmDisabledOverlay.requestLocal !== false || esmDisabledOverlay.ramp[root.CacheLayer.LOCAL] !== 0 || esmDisabledOverlay.ramp[root.CacheLayer.REMOTE] !== 0) {
+if (esmDisabledOverlay.requestLocal !== false || esmDisabledOverlay.shadowRamp !== 0 || esmDisabledOverlay.ramp[root.CacheLayer.LOCAL] !== 0 || esmDisabledOverlay.ramp[root.CacheLayer.REMOTE] !== 0) {
   throw new Error("The packed ESM runtime did not build the disabled() kill-switch overlay");
 }
 let calls = 0;
@@ -641,6 +674,140 @@ if (inlineCalls !== 1 || inlineSecond !== inlineFirst) {
   );
   if (!esmRootRuntimeOutput.includes(fallbackTimeoutMarker)) {
     throw new Error("The packaged ESM only-handle fallback timeout marker is missing");
+  }
+
+  const { stdout: observerIsolationOutput } = await exec(
+    process.execPath,
+    [
+      "--unhandled-rejections=strict",
+      "--input-type=module",
+      "--eval",
+      `const root = await import("dialcache");
+const rejectObserver = () => Promise.reject(new Error("observer transport failed"));
+const metrics = {
+  request: rejectObserver,
+  miss: rejectObserver,
+  disabled: rejectObserver,
+  error: rejectObserver,
+  invalidation: rejectObserver,
+  observeGet: rejectObserver,
+  observeFallback: rejectObserver,
+  observeSerialization: rejectObserver,
+  observeSize: rejectObserver,
+};
+const cache = new root.DialCache({
+  logger: {
+    debug: rejectObserver,
+    error: rejectObserver,
+    warn: rejectObserver,
+  },
+  metrics,
+});
+const load = cache.cached(async () => "fallback", {
+  keyType: "id",
+  useCase: "PackageObserverIsolation",
+  cacheKey: () => {
+    throw new Error("key construction failed");
+  },
+  defaultConfig: root.DialCacheKeyConfig.enabled(60),
+});
+const value = await cache.enable(() => load());
+if (value !== "fallback") {
+  throw new Error("Observer rejection changed the packaged fallback result");
+}
+await new Promise((resolve) => setImmediate(resolve));
+console.log("${observerIsolationMarker}");`,
+    ],
+    { cwd: workspace },
+  );
+  if (!observerIsolationOutput.includes(observerIsolationMarker)) {
+    throw new Error("The packaged observer-rejection isolation marker is missing");
+  }
+
+  const { stdout: shadowPayloadReleaseOutput } = await exec(
+    process.execPath,
+    [
+      "--expose-gc",
+      "--input-type=module",
+      "--eval",
+      `const root = await import("dialcache");
+let payload = Buffer.alloc(4 * 1024 * 1024, 1);
+const payloadReference = new WeakRef(payload);
+const redis = {
+  read: async () => payload,
+  write: async () => true,
+  invalidate: async () => undefined,
+};
+let resolveTimeout;
+const timeoutObserved = new Promise((resolve) => {
+  resolveTimeout = resolve;
+});
+const metrics = {
+  request: () => undefined,
+  miss: () => undefined,
+  disabled: () => undefined,
+  error: () => undefined,
+  invalidation: () => undefined,
+  observeGet: () => undefined,
+  observeFallback: () => undefined,
+  observeSerialization: () => undefined,
+  observeSize: () => undefined,
+  shadowValidation: ({ outcome }) => {
+    if (outcome === "timeout") {
+      resolveTimeout();
+    }
+  },
+};
+const cache = new root.DialCache({
+  redis: { client: redis, serializer: {
+    dump: () => "unused",
+    load: () => ({ id: "123" }),
+  } },
+  metrics,
+});
+const load = cache.cached(async () => await new Promise(() => undefined), {
+  keyType: "id",
+  useCase: "PackageShadowPayloadRelease",
+  cacheKey: () => "123",
+  trackForInvalidation: true,
+  fallbackTimeoutMs: 20,
+  defaultConfig: new root.DialCacheKeyConfig({
+    ttlSec: { [root.CacheLayer.REMOTE]: 60 },
+    ramp: { [root.CacheLayer.REMOTE]: 100 },
+    shadowRamp: 100,
+  }),
+});
+let value = await cache.enable(() => load());
+if (value.id !== "123") {
+  throw new Error("The packaged shadow payload setup did not produce a served hit");
+}
+value = null;
+payload = null;
+let shadowTimeoutGuard;
+const missingShadowTimeout = new Promise((_, reject) => {
+  shadowTimeoutGuard = setTimeout(() => {
+    reject(new Error("The packaged shadow payload test did not observe timeout delivery"));
+  }, 2_000);
+});
+try {
+  await Promise.race([timeoutObserved, missingShadowTimeout]);
+  for (let attempt = 0; attempt < 40 && payloadReference.deref() !== undefined; attempt += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+    Buffer.alloc(4 * 1024 * 1024);
+    globalThis.gc();
+  }
+  if (payloadReference.deref() !== undefined) {
+    throw new Error("A timed-out shadow operation retained its original Redis payload");
+  }
+} finally {
+  clearTimeout(shadowTimeoutGuard);
+}
+console.log("${shadowPayloadReleaseMarker}");`,
+    ],
+    { cwd: workspace, timeout: 10_000 },
+  );
+  if (!shadowPayloadReleaseOutput.includes(shadowPayloadReleaseMarker)) {
+    throw new Error("The packaged shadow-payload release marker is missing");
   }
 
   const { stdout: cjsRootRuntimeOutput } = await exec(
@@ -696,7 +863,7 @@ if ("MissingKeyConfigError" in root) {
   throw new Error("The removed MissingKeyConfigError class must not be exported from the root CommonJS entry");
 }
 const cjsDisabledOverlay = root.DialCacheKeyConfig.disabled();
-if (cjsDisabledOverlay.requestLocal !== false || cjsDisabledOverlay.ramp[root.CacheLayer.LOCAL] !== 0 || cjsDisabledOverlay.ramp[root.CacheLayer.REMOTE] !== 0) {
+if (cjsDisabledOverlay.requestLocal !== false || cjsDisabledOverlay.shadowRamp !== 0 || cjsDisabledOverlay.ramp[root.CacheLayer.LOCAL] !== 0 || cjsDisabledOverlay.ramp[root.CacheLayer.REMOTE] !== 0) {
   throw new Error("The packed CommonJS runtime did not build the disabled() kill-switch overlay");
 }
 void (async () => {

@@ -16,9 +16,10 @@ export class DialCacheKeyConfig {
   readonly ttlSec: LayerConfig;
   readonly ramp: LayerConfig;
   /**
-   * Percentage of tracked Redis-hit keys that asynchronously validate their
-   * deserialized cached value against the source of truth. Omitted and zero
-   * both disable shadow validation.
+   * Percentage of tracked Redis keys that asynchronously exercise Redis
+   * without changing what serves the caller. Hits validate against the source
+   * of truth and ramped-down clean misses populate Redis. This shadow cohort is
+   * independent of the Redis serving ramp. Omitted and zero disable it.
    */
   readonly shadowRamp?: number;
   /**
@@ -73,13 +74,16 @@ export class DialCacheKeyConfig {
   }
 
   /**
-   * The explicit kill switch: request-local caching off and both shared
-   * layers ramped to 0. As a provider overlay it disables every inherited
-   * layer instead of relying on field omission, which inherits the baseline.
+   * The explicit cache-invocation kill switch: request-local caching and
+   * shadow work off, with both shared layers ramped to 0. As a provider
+   * overlay it disables every inherited path instead of relying on field
+   * omission. It does not cancel admitted work or disable explicit
+   * maintenance operations.
    */
   static disabled(): DialCacheKeyConfig {
     return new DialCacheKeyConfig({
       requestLocal: false,
+      shadowRamp: 0,
       ramp: {
         [CacheLayer.LOCAL]: 0,
         [CacheLayer.REMOTE]: 0,
@@ -123,9 +127,10 @@ export interface DialCacheConfig {
   readonly redis?: RedisConfig;
   readonly metrics?: DialCacheMetricsAdapter;
   /**
-   * Maximum number of scheduled or running shadow validations per DialCache
-   * instance. There is no queue; excess validations are dropped and measured.
-   * Must be a positive safe integer. Defaults to 1.
+   * Maximum number of scheduled or running shadow jobs per DialCache instance,
+   * including shadow-owned work that outlives a DialCache deadline. There is no
+   * queue; excess jobs are dropped and measured. Must be a
+   * positive safe integer. Defaults to 1.
    */
   readonly shadowMaxInFlight?: number;
 }
