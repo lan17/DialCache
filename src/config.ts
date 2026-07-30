@@ -74,9 +74,11 @@ export class DialCacheKeyConfig {
   }
 
   /**
-   * The explicit kill switch: request-local caching and shadow observation
-   * off, with both shared layers ramped to 0. As a provider overlay it
-   * disables every inherited path instead of relying on field omission.
+   * The explicit cache-invocation kill switch: request-local caching and
+   * shadow work off, with both shared layers ramped to 0. As a provider
+   * overlay it disables every inherited path instead of relying on field
+   * omission. It does not cancel admitted work or disable explicit
+   * maintenance operations.
    */
   static disabled(): DialCacheKeyConfig {
     return new DialCacheKeyConfig({
