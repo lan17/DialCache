@@ -230,6 +230,16 @@ type ShadowValidationStart<Value> =
       readonly source: Promise<Value>;
       /** Valid remote policy retained even though its serving ramp excluded this key. */
       readonly remoteConfig: ResolvedLayerConfig;
+      /** Includes synchronous SoT work that ran before shadow admission. */
+      readonly startedAtMs: number | null;
+    };
+
+type ShadowValidationRunStart<Value> =
+  | { readonly kind: "retained" }
+  | {
+      readonly kind: "redis";
+      readonly source: Promise<Value>;
+      readonly remoteConfig: ResolvedLayerConfig;
     };
 
 const DEFAULT_LOCAL_MAX_SIZE = 10_000;
@@ -700,12 +710,15 @@ export class DialCache {
     fallback: () => Promise<T>,
     shadowValidation: ShadowValidationPlan<T>,
   ): Promise<T> {
+    const shadowStartedAtMs = keyConfig?.shadowRamp === undefined || keyConfig.shadowRamp === 0
+      ? null
+      : performance.now();
     const valuePromise = this.callFallback(fallbackLabels, fallback);
     this.scheduleShadowValidation(
       redisCache,
       key,
       keyConfig,
-      { kind: "redis", source: valuePromise, remoteConfig },
+      { kind: "redis", source: valuePromise, remoteConfig, startedAtMs: shadowStartedAtMs },
       shadowValidation,
       keyConfig?.remoteReadTimeoutMs ?? redisCache.readTimeoutMs,
     );
@@ -806,9 +819,32 @@ export class DialCache {
     const flight: ShadowFlight = {
       cachedPayload: start.kind === "retained" ? start.payload : null,
       abandoned: false,
-      startedAtMs: performance.now(),
+      startedAtMs: start.kind === "redis" && start.startedAtMs !== null
+        ? start.startedAtMs
+        : performance.now(),
     };
+    const runStart: ShadowValidationRunStart<T> = start.kind === "retained"
+      ? { kind: "retained" }
+      : { kind: "redis", source: start.source, remoteConfig: start.remoteConfig };
     this.shadowFlights.set(key.urn, flight);
+    this.deferShadowValidation(
+      redisCache,
+      key,
+      flight,
+      runStart,
+      validation,
+      readTimeoutMs,
+    );
+  }
+
+  private deferShadowValidation<T>(
+    redisCache: RedisCache,
+    key: DialCacheKey,
+    flight: ShadowFlight,
+    start: ShadowValidationRunStart<T>,
+    validation: ShadowValidationPlan<T>,
+    readTimeoutMs: number,
+  ): void {
     setImmediate(() => {
       this.runShadowValidation(
         redisCache,
@@ -825,7 +861,7 @@ export class DialCache {
     redisCache: RedisCache,
     key: DialCacheKey,
     flight: ShadowFlight,
-    start: ShadowValidationStart<T>,
+    start: ShadowValidationRunStart<T>,
     plan: ShadowValidationPlan<T>,
     readTimeoutMs: number,
   ): void {
@@ -1342,18 +1378,10 @@ function withFallbackTimeout<T>(
 
 function safeLogger(logger: Logger): Logger {
   return {
-    debug: (...args: Parameters<Logger["debug"]>) => callLogger(() => logger.debug(...args)),
-    error: (...args: Parameters<Logger["error"]>) => callLogger(() => logger.error(...args)),
-    warn: (...args: Parameters<Logger["warn"]>) => callLogger(() => logger.warn(...args)),
+    debug: (...args: Parameters<Logger["debug"]>) => callObserver(() => logger.debug(...args)),
+    error: (...args: Parameters<Logger["error"]>) => callObserver(() => logger.error(...args)),
+    warn: (...args: Parameters<Logger["warn"]>) => callObserver(() => logger.warn(...args)),
   };
-}
-
-function callLogger(log: () => void): void {
-  try {
-    log();
-  } catch {
-    // Injected loggers must not affect cache correctness or application fallbacks.
-  }
 }
 
 function safeMetrics(metrics: DialCacheMetricsAdapter | null): DialCacheMetricsAdapter | null {
@@ -1362,43 +1390,35 @@ function safeMetrics(metrics: DialCacheMetricsAdapter | null): DialCacheMetricsA
   }
 
   return {
-    request: (labels) => callMetric(() => metrics.request(labels)),
-    miss: (labels) => callMetric(() => metrics.miss(labels)),
-    disabled: (labels) => callMetric(() => metrics.disabled(labels)),
-    error: (labels) => callMetric(() => metrics.error(labels)),
-    invalidation: (labels) => callMetric(() => metrics.invalidation(labels)),
-    coalesced: (labels) => callMetric(() => metrics.coalesced?.(labels)),
+    request: (labels) => callObserver(() => metrics.request(labels)),
+    miss: (labels) => callObserver(() => metrics.miss(labels)),
+    disabled: (labels) => callObserver(() => metrics.disabled(labels)),
+    error: (labels) => callObserver(() => metrics.error(labels)),
+    invalidation: (labels) => callObserver(() => metrics.invalidation(labels)),
+    coalesced: (labels) => callObserver(() => metrics.coalesced?.(labels)),
     ...(typeof metrics.shadowValidation === "function"
       ? {
           shadowValidation: (labels) =>
-            callMaybeAsyncMetric(() => metrics.shadowValidation!(labels)),
+            callObserver(() => metrics.shadowValidation!(labels)),
         }
       : {}),
-    observeGet: (labels, seconds) => callMetric(() => metrics.observeGet(labels, seconds)),
-    observeFallback: (labels, seconds) => callMetric(() => metrics.observeFallback(labels, seconds)),
-    observeSerialization: (labels, seconds) => callMetric(() => metrics.observeSerialization(labels, seconds)),
-    observeSize: (labels, bytes) => callMetric(() => metrics.observeSize(labels, bytes)),
+    observeGet: (labels, seconds) => callObserver(() => metrics.observeGet(labels, seconds)),
+    observeFallback: (labels, seconds) => callObserver(() => metrics.observeFallback(labels, seconds)),
+    observeSerialization: (labels, seconds) => callObserver(() => metrics.observeSerialization(labels, seconds)),
+    observeSize: (labels, bytes) => callObserver(() => metrics.observeSize(labels, bytes)),
   };
 }
 
-function callMetric(record: () => void): void {
-  try {
-    record();
-  } catch {
-    // Metrics adapters must not affect cache correctness or application fallbacks.
-  }
-}
-
-function callMaybeAsyncMetric(record: () => unknown): void {
+function callObserver(record: () => unknown): void {
   try {
     const result = record();
     if (result !== undefined) {
       void Promise.resolve(result).catch(() => {
-        // Async metrics adapters must not produce unhandled rejections.
+        // Observer failures must not produce unhandled rejections.
       });
     }
   } catch {
-    // Metrics adapters must not affect cache correctness or application fallbacks.
+    // Injected observers must not affect cache correctness or application fallbacks.
   }
 }
 

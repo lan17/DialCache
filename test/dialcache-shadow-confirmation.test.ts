@@ -555,6 +555,35 @@ describe("DialCache Redis shadow confirmation", () => {
     await nextImmediate();
   });
 
+  it("includes synchronous SoT work in the null-timeout shadow budget", async () => {
+    let nowMs = 0;
+    const performanceSpy = vi.spyOn(performance, "now").mockImplementation(() => nowMs);
+    const redis = new ScriptedRedis([]);
+    const metrics = new RecordingMetrics();
+    const source = vi.fn(async () => {
+      nowMs = 60_001;
+      return { id: "123" };
+    });
+    const dialcache = createCache(redis, metrics);
+    const getUser = dialcache.cached(source, {
+      ...trackedOptions("ShadowDarkSynchronousSourceBudget", remoteConfig(0)),
+      cacheKey: () => "123",
+      fallbackTimeoutMs: null,
+    });
+
+    try {
+      await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ id: "123" });
+      await waitForShadowEvents(metrics, 1);
+
+      expect(source).toHaveBeenCalledOnce();
+      expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["timeout"]);
+      expect(redis.requests).toHaveLength(0);
+      expect(redis.write).not.toHaveBeenCalled();
+    } finally {
+      performanceSpy.mockRestore();
+    }
+  });
+
   it("fills a definitive dark Redis miss and attributes the read and write to remote_shadow", async () => {
     const redis = new ScriptedRedis([() => null]);
     const metrics = new RecordingMetrics();
@@ -671,10 +700,13 @@ describe("DialCache Redis shadow confirmation", () => {
       throw new Error("shadow write unavailable");
     });
     const metrics = new RecordingMetrics();
+    const warn = vi.fn(async () => {
+      throw new Error("logger transport unavailable");
+    });
     const dialcache = createCache(redis, metrics, {
       logger: {
         debug: () => undefined,
-        warn: () => undefined,
+        warn,
         error: () => undefined,
       },
     });
@@ -685,9 +717,11 @@ describe("DialCache Redis shadow confirmation", () => {
 
     await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ id: "123" });
     await waitForShadowEvents(metrics, 1);
+    await nextImmediate();
 
     expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["fill_error"]);
     expect(redis.write).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledOnce();
     expect(metrics.ordinaryEvents.filter(({ name }) => name === "error").map(({ labels }) => labels)).toEqual([
       {
         cacheNamespace: "urn",
@@ -966,9 +1000,21 @@ describe("DialCache Redis shadow confirmation", () => {
         }),
       },
       {
-        name: "invalid ramp",
+        name: "non-finite ramp",
         provider: async () => new DialCacheKeyConfig({
           ramp: { [CacheLayer.REMOTE]: Number.NaN },
+        }),
+      },
+      {
+        name: "negative ramp",
+        provider: async () => new DialCacheKeyConfig({
+          ramp: { [CacheLayer.REMOTE]: -1 },
+        }),
+      },
+      {
+        name: "over-100 ramp",
+        provider: async () => new DialCacheKeyConfig({
+          ramp: { [CacheLayer.REMOTE]: 101 },
         }),
       },
       {

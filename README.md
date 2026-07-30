@@ -205,7 +205,7 @@ Instance-wide behavior is set through the `DialCache` constructor:
 | `shadowMaxInFlight` | `1` | Maximum scheduled or active shadow jobs per `DialCache` instance, including uncancellable underlying work. Positive safe integer; excess work is dropped without queuing. |
 | `cacheConfigProvider` | none | Resolves runtime config per enabled invocation as a sparse overlay on the function's `defaultConfig`; `null` applies no overrides. |
 | `metrics` | disabled | A `DialCacheMetricsAdapter` (see [Metrics](#metrics)). |
-| `logger` | `console` | Receives operational cache failures (`debug`, `warn`, `error`). |
+| `logger` | `console` | Receives operational cache failures (`debug`, `warn`, `error`). Synchronous throws and rejections from returned promises or thenables are isolated without being awaited. |
 
 Per-invocation cache policy is a `DialCacheKeyConfig`: per-layer `ttlSec` and `ramp` maps keyed by `CacheLayer.LOCAL` (process-local) and `CacheLayer.REMOTE` (Redis), a `requestLocal` boolean, an optional `remoteReadTimeoutMs`, and the scalar `shadowRamp` percentage.
 
@@ -221,7 +221,7 @@ DialCache validates `defaultConfig` when `cached()` registers a definition and w
 
 Each registration or one-shot invocation captures an immutable internal snapshot of `defaultConfig`; mutating the supplied config or its maps later does not change that operation's baseline. Runtime policy changes belong in the provider's returned overlay.
 
-Runtime TTL and ramp leaves are used as supplied instead of falling back to valid default leaves. A TTL outside the same 1-to-31,536,000-second range disables that layer with `invalid_ttl`; a non-finite or nonnumeric ramp disables it with `invalid_ramp`; finite runtime ramps retain the defensive clamp to 0–100. Other layers can still run, and invalid leaves also record a `config_resolution` error so provider garbage is alertable separately from intentional ramp-downs. A malformed runtime config object, layer-map shape, `requestLocal` value, or explicit `remoteReadTimeoutMs` fails config resolution for the invocation, records `config_error`, and executes the fallback uncached without attempting Redis.
+Runtime TTL and ramp leaves are used as supplied instead of falling back to valid default leaves. A TTL outside the same 1-to-31,536,000-second range disables that layer with `invalid_ttl`; a nonnumeric, non-finite, or out-of-range ramp disables it with `invalid_ramp`. Valid ramps include both `0` and `100`. Other layers can still run, and invalid leaves also record a `config_resolution` error so provider garbage is alertable separately from intentional ramp-downs. A malformed runtime config object, layer-map shape, `requestLocal` value, or explicit `remoteReadTimeoutMs` fails config resolution for the invocation, records `config_error`, and executes the fallback uncached without attempting Redis.
 
 An invalid runtime `shadowRamp` does not affect the cache result or disable an otherwise valid Redis policy. If normal traversal reaches an otherwise shadow-eligible Redis path, DialCache skips shadow work and records a `config_resolution` error.
 
@@ -518,7 +518,7 @@ Detached execution retains the original `cached()` argument references or `getOr
 
 `shadowMaxInFlight` is a per-instance positive safe integer and defaults to `1`. It counts admitted jobs until shadow-owned Redis/source/serializer/comparator work settles, including detached reads or dispatched writes whose DialCache deadline already elapsed. The optional `C1` and clean-miss fill remain in the original slot. On a ramped-down path, shadow work shares the caller's bounded SoT promise; if that promise times out, the raw caller-owned loader may continue without retaining the shadow slot. DialCache also suppresses another job for the same exact key while shadow-owned work remains active. There is no queue: exact-key duplicates and work above the instance cap are dropped and reported as `dropped`. Separate instances have independent limits, so this is not a fleet-wide source-of-truth or Redis concurrency cap.
 
-Each job has one monotonic deadline, measured from admission, across detached `C0`, the SoT result, serializer work, comparison, optional `C1`, and clean-miss fill. Each Redis read also has its effective read deadline. A finite `fallbackTimeoutMs` is reused as the overall shadow budget. When `fallbackTimeoutMs` is `null`, the normal fallback remains intentionally unbounded, but detached shadow work still uses a 60-second budget. Once timeout delivery marks a job abandoned, DialCache releases retained `C0` references and prevents later phases from starting.
+Each job has one monotonic deadline across detached `C0`, the SoT result, serializer work, comparison, optional `C1`, and clean-miss fill. Served-hit timing begins at shadow admission. On a ramped-down path, timing begins immediately before the caller's SoT invocation so synchronous source work that runs before admission still consumes the same budget. Each Redis read also has its effective read deadline. A finite `fallbackTimeoutMs` is reused as the overall shadow budget. When `fallbackTimeoutMs` is `null`, the normal fallback remains intentionally unbounded, but detached shadow work still uses a 60-second budget. Once timeout delivery marks a job abandoned, DialCache releases retained `C0` references and prevents later phases from starting.
 
 JavaScript promises and Redis writes do not provide a general cancellation or transaction boundary. Work already dispatched may continue and keeps the shadow slot until it settles. A write rejection, `fill_error`, or shadow `timeout` after dispatch does not prove that Redis was unchanged; the command may have executed before its result became unavailable. Conversely, `filled` means the semantic client returned success, not that the value is still present. Give dependencies finite native budgets and treat shadow outcomes as best-effort operational evidence.
 
@@ -796,7 +796,7 @@ The Datadog adapter emits exact increments of `1` for counters and preserves sec
 | `dialcache.serialization.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer`, `operation` | Redis serializer dump/load latency in seconds |
 | `dialcache.serialization.size` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Serialized Redis payload size in bytes |
 
-Synchronous client throws are isolated by DialCache's fail-open metrics boundary. Buffered transport failures happen outside that synchronous call, so configure the DogStatsD client's error handling and shutdown behavior as part of application ownership.
+Observer throws and rejections from returned promises or thenables are isolated by DialCache's fail-open metrics boundary. Buffered transport failures that are not represented by a returned thenable happen outside that boundary, so configure the DogStatsD client's error handling and shutdown behavior as part of application ownership.
 
 ### Error categories
 
@@ -819,7 +819,7 @@ These values are defined by the backend-neutral core and are identical for every
 
 ### Custom adapters
 
-For other telemetry backends, implement `DialCacheMetricsAdapter` and pass the adapter through `new DialCache({ metrics })`. Every backend-neutral label object exposes the logical namespace as camel-case `cacheNamespace`; adapters should map it to their backend's `cache_namespace` label/tag. This field is present even when no key or cache layer was reached. Implement the optional `shadowValidation` method to enable shadow work as well as record its outcomes; omitting it leaves all shadow work disabled even when `shadowRamp` is nonzero. Synchronous adapter failures are isolated from cache behavior and application fallbacks. If `shadowValidation` returns a thenable at runtime, DialCache consumes a later rejection without awaiting it. Omit `metrics` to disable metrics.
+For other telemetry backends, implement `DialCacheMetricsAdapter` and pass the adapter through `new DialCache({ metrics })`. Every backend-neutral label object exposes the logical namespace as camel-case `cacheNamespace`; adapters should map it to their backend's `cache_namespace` label/tag. This field is present even when no key or cache layer was reached. Implement the optional `shadowValidation` method to enable shadow work as well as record its outcomes; omitting it leaves all shadow work disabled even when `shadowRamp` is nonzero. Every metrics callback is fire-and-forget: DialCache isolates synchronous throws and consumes rejections from returned promises or thenables, but never awaits or drains observer work. Omit `metrics` to disable metrics.
 
 ## Maintainers
 

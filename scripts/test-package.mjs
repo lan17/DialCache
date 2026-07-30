@@ -9,6 +9,8 @@ const exec = promisify(execFile);
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspace = await mkdtemp(join(tmpdir(), "dialcache-package-"));
 const fallbackTimeoutMarker = "dialcache-fallback-timeout-delivered";
+const observerIsolationMarker = "dialcache-observer-rejections-isolated";
+const shadowPayloadReleaseMarker = "dialcache-shadow-payload-released";
 const rootConsumer = `import {
   CacheLayer,
   DialCache,
@@ -672,6 +674,135 @@ if (inlineCalls !== 1 || inlineSecond !== inlineFirst) {
   );
   if (!esmRootRuntimeOutput.includes(fallbackTimeoutMarker)) {
     throw new Error("The packaged ESM only-handle fallback timeout marker is missing");
+  }
+
+  const { stdout: observerIsolationOutput } = await exec(
+    process.execPath,
+    [
+      "--unhandled-rejections=strict",
+      "--input-type=module",
+      "--eval",
+      `const root = await import("dialcache");
+const rejectObserver = () => Promise.reject(new Error("observer transport failed"));
+const metrics = {
+  request: rejectObserver,
+  miss: rejectObserver,
+  disabled: rejectObserver,
+  error: rejectObserver,
+  invalidation: rejectObserver,
+  observeGet: rejectObserver,
+  observeFallback: rejectObserver,
+  observeSerialization: rejectObserver,
+  observeSize: rejectObserver,
+};
+const cache = new root.DialCache({
+  logger: {
+    debug: rejectObserver,
+    error: rejectObserver,
+    warn: rejectObserver,
+  },
+  metrics,
+});
+const load = cache.cached(async () => "fallback", {
+  keyType: "id",
+  useCase: "PackageObserverIsolation",
+  cacheKey: () => {
+    throw new Error("key construction failed");
+  },
+  defaultConfig: root.DialCacheKeyConfig.enabled(60),
+});
+const value = await cache.enable(() => load());
+if (value !== "fallback") {
+  throw new Error("Observer rejection changed the packaged fallback result");
+}
+await new Promise((resolve) => setImmediate(resolve));
+console.log("${observerIsolationMarker}");`,
+    ],
+    { cwd: workspace },
+  );
+  if (!observerIsolationOutput.includes(observerIsolationMarker)) {
+    throw new Error("The packaged observer-rejection isolation marker is missing");
+  }
+
+  const { stdout: shadowPayloadReleaseOutput } = await exec(
+    process.execPath,
+    [
+      "--expose-gc",
+      "--input-type=module",
+      "--eval",
+      `const root = await import("dialcache");
+let payload = Buffer.alloc(4 * 1024 * 1024, 1);
+const payloadReference = new WeakRef(payload);
+const redis = {
+  read: async () => payload,
+  write: async () => true,
+  invalidate: async () => undefined,
+};
+let resolveTimeout;
+const timeoutObserved = new Promise((resolve) => {
+  resolveTimeout = resolve;
+});
+const metrics = {
+  request: () => undefined,
+  miss: () => undefined,
+  disabled: () => undefined,
+  error: () => undefined,
+  invalidation: () => undefined,
+  observeGet: () => undefined,
+  observeFallback: () => undefined,
+  observeSerialization: () => undefined,
+  observeSize: () => undefined,
+  shadowValidation: ({ outcome }) => {
+    if (outcome === "timeout") {
+      resolveTimeout();
+    }
+  },
+};
+const cache = new root.DialCache({
+  redis: { client: redis, serializer: {
+    dump: () => "unused",
+    load: () => ({ id: "123" }),
+  } },
+  metrics,
+});
+const load = cache.cached(async () => await new Promise(() => undefined), {
+  keyType: "id",
+  useCase: "PackageShadowPayloadRelease",
+  cacheKey: () => "123",
+  trackForInvalidation: true,
+  fallbackTimeoutMs: 20,
+  defaultConfig: new root.DialCacheKeyConfig({
+    ttlSec: { [root.CacheLayer.REMOTE]: 60 },
+    ramp: { [root.CacheLayer.REMOTE]: 100 },
+    shadowRamp: 100,
+  }),
+});
+let value = await cache.enable(() => load());
+if (value.id !== "123") {
+  throw new Error("The packaged shadow payload setup did not produce a served hit");
+}
+value = null;
+payload = null;
+const keepAlive = setInterval(() => undefined, 1_000);
+try {
+  await timeoutObserved;
+  for (let attempt = 0; attempt < 40 && payloadReference.deref() !== undefined; attempt += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+    Buffer.alloc(4 * 1024 * 1024);
+    globalThis.gc();
+  }
+  if (payloadReference.deref() !== undefined) {
+    throw new Error("A timed-out shadow operation retained its original Redis payload");
+  }
+} finally {
+  clearInterval(keepAlive);
+}
+console.log("${shadowPayloadReleaseMarker}");`,
+    ],
+    { cwd: workspace },
+  );
+  if (!shadowPayloadReleaseOutput.includes(shadowPayloadReleaseMarker)) {
+    throw new Error("The packaged shadow-payload release marker is missing");
   }
 
   const { stdout: cjsRootRuntimeOutput } = await exec(

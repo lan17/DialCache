@@ -64,13 +64,18 @@ export function resolveLayerConfigResult(options: ResolveLayerConfigOptions): La
     return { status: "disabled", reason: "invalid_ttl" };
   }
 
-  const configuredRampValue = config.ramp[options.layer];
+  const configuredRampValue: unknown = config.ramp[options.layer];
   const configuredRamp = configuredRampValue === undefined ? 100 : configuredRampValue;
-  if (!Number.isFinite(configuredRamp)) {
+  if (
+    typeof configuredRamp !== "number"
+    || !Number.isFinite(configuredRamp)
+    || configuredRamp < 0
+    || configuredRamp > 100
+  ) {
     return { status: "disabled", reason: "invalid_ramp" };
   }
 
-  const ramp = clampPercentage(configuredRamp);
+  const ramp = configuredRamp;
   if (ramp <= 0) {
     return { status: "disabled", reason: "ramped_down", config: { ttlSec, ramp } };
   }
@@ -144,14 +149,4 @@ function assertLayerConfig(config: LayerConfig | undefined, name: "ttlSec" | "ra
   if (config !== undefined && (config === null || typeof config !== "object" || Array.isArray(config))) {
     throw new TypeError(`DialCache ${name} config must be a layer map`);
   }
-}
-
-function clampPercentage(value: number): number {
-  if (value <= 0) {
-    return 0;
-  }
-  if (value >= 100) {
-    return 100;
-  }
-  return value;
 }
