@@ -783,9 +783,14 @@ if (value.id !== "123") {
 }
 value = null;
 payload = null;
-const keepAlive = setInterval(() => undefined, 1_000);
+let shadowTimeoutGuard;
+const missingShadowTimeout = new Promise((_, reject) => {
+  shadowTimeoutGuard = setTimeout(() => {
+    reject(new Error("The packaged shadow payload test did not observe timeout delivery"));
+  }, 2_000);
+});
 try {
-  await timeoutObserved;
+  await Promise.race([timeoutObserved, missingShadowTimeout]);
   for (let attempt = 0; attempt < 40 && payloadReference.deref() !== undefined; attempt += 1) {
     await new Promise((resolve) => setImmediate(resolve));
     Buffer.alloc(4 * 1024 * 1024);
@@ -795,11 +800,11 @@ try {
     throw new Error("A timed-out shadow operation retained its original Redis payload");
   }
 } finally {
-  clearInterval(keepAlive);
+  clearTimeout(shadowTimeoutGuard);
 }
 console.log("${shadowPayloadReleaseMarker}");`,
     ],
-    { cwd: workspace },
+    { cwd: workspace, timeout: 10_000 },
   );
   if (!shadowPayloadReleaseOutput.includes(shadowPayloadReleaseMarker)) {
     throw new Error("The packaged shadow-payload release marker is missing");
