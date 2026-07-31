@@ -8,6 +8,7 @@ import type {
   ErrorMetricLabels,
   InvalidationMetricLabels,
   SerializationMetricLabels,
+  ShadowValidationMetricLabels,
 } from "./metrics.js";
 
 export interface PrometheusMetricsOptions {
@@ -23,6 +24,7 @@ type ErrorLabels = CounterLabels | "error" | "in_fallback";
 type SerializationLabels = CounterLabels | "operation";
 type InvalidationLabels = "cache_namespace" | "key_type" | "layer";
 type CoalescedLabels = "cache_namespace" | "use_case" | "key_type" | "scope";
+type ShadowValidationLabels = "cache_namespace" | "use_case" | "key_type" | "outcome";
 
 interface BaseCollectorConfig<T extends string> {
   readonly name: string;
@@ -60,6 +62,7 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
   private readonly errorCounter: Counter<ErrorLabels>;
   private readonly invalidationCounter: Counter<InvalidationLabels>;
   private readonly coalescedCounter: Counter<CoalescedLabels>;
+  private readonly shadowValidationCounter: Counter<ShadowValidationLabels>;
   private readonly getTimer: Histogram<CounterLabels>;
   private readonly fallbackTimer: Histogram<CounterLabels>;
   private readonly serializationTimer: Histogram<SerializationLabels>;
@@ -77,6 +80,7 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
     this.errorCounter = counter(registry, collectors.errorCounter);
     this.invalidationCounter = counter(registry, collectors.invalidationCounter);
     this.coalescedCounter = counter(registry, collectors.coalescedCounter);
+    this.shadowValidationCounter = counter(registry, collectors.shadowValidationCounter);
     this.getTimer = histogram(registry, collectors.getTimer);
     this.fallbackTimer = histogram(registry, collectors.fallbackTimer);
     this.serializationTimer = histogram(registry, collectors.serializationTimer);
@@ -117,6 +121,15 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
       use_case: labels.useCase,
       key_type: labels.keyType,
       scope: labels.scope,
+    });
+  }
+
+  shadowValidation(labels: ShadowValidationMetricLabels): void {
+    this.shadowValidationCounter.inc({
+      cache_namespace: labels.cacheNamespace,
+      use_case: labels.useCase,
+      key_type: labels.keyType,
+      outcome: labels.outcome,
     });
   }
 
@@ -187,6 +200,12 @@ function collectorConfigs(prefix: string) {
       name: `${prefix}dialcache_coalesced_counter`,
       help: "DialCache requests coalesced onto in-flight work by sharing scope.",
       labelNames: ["cache_namespace", "use_case", "key_type", "scope"],
+    },
+    shadowValidationCounter: {
+      type: "counter",
+      name: `${prefix}dialcache_shadow_validation_counter`,
+      help: "Sampled DialCache Redis shadow-validation outcomes.",
+      labelNames: ["cache_namespace", "use_case", "key_type", "outcome"],
     },
     getTimer: {
       type: "histogram",

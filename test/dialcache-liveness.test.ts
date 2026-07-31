@@ -520,6 +520,7 @@ describe("DialCache fallback liveness", () => {
     const loadGate = deferred<string>();
     const loadStarted = deferred<void>();
     const fallback = vi.fn(async () => "fallback");
+    const metrics = metricsWithError(vi.fn());
     const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
     const serializer: Serializer<string> = {
       dump: (value) => value,
@@ -533,7 +534,7 @@ describe("DialCache fallback liveness", () => {
       write: async () => true,
       invalidate: async () => undefined,
     };
-    const dialcache = new DialCache({ redis: { client: redis } });
+    const dialcache = new DialCache({ redis: { client: redis }, metrics });
     const load = dialcache.cached(async () => await fallback(), {
       keyType: "id",
       useCase: "PendingSerializerLoadHasCallerOwnedDeadline",
@@ -551,10 +552,12 @@ describe("DialCache fallback liveness", () => {
     expect(setTimeoutSpy).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(0);
     expect(dialcache.getCoalescingState().process.activeLeaders).toBe(1);
+    expect(metrics.observeGet).not.toHaveBeenCalled();
 
     loadGate.resolve("cached");
     await expect(result).resolves.toBe("cached");
     expect(dialcache.getCoalescingState().process.activeLeaders).toBe(0);
+    expect(metrics.observeGet).toHaveBeenCalledOnce();
   });
 
   it("does not apply a completed fallback's deadline to serializer dump or Redis write", async () => {

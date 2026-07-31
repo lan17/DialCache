@@ -13,6 +13,7 @@ import {
   type InvalidationMetricLabels,
   type SerializationMetricLabels,
   type Serializer,
+  type ShadowValidationMetricLabels,
 } from "../src/index.js";
 import { FakeRedis } from "./fake-redis.js";
 
@@ -79,6 +80,69 @@ const remoteOnly = () =>
 const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("DialCache observability metrics", () => {
+  it("consumes rejecting thenables returned by every metrics method without awaiting them", async () => {
+    const then = vi.fn((
+      _onFulfilled: ((value: unknown) => unknown) | null | undefined,
+      onRejected: ((reason: unknown) => unknown) | null | undefined,
+    ) => {
+      onRejected?.(new Error("metrics transport failed"));
+    });
+    const thenable = { then };
+    const metrics = {
+      request: vi.fn(() => thenable),
+      miss: vi.fn(() => thenable),
+      disabled: vi.fn(() => thenable),
+      error: vi.fn(() => thenable),
+      invalidation: vi.fn(() => thenable),
+      coalesced: vi.fn(() => thenable),
+      shadowValidation: vi.fn(() => thenable),
+      observeGet: vi.fn(() => thenable),
+      observeFallback: vi.fn(() => thenable),
+      observeSerialization: vi.fn(() => thenable),
+      observeSize: vi.fn(() => thenable),
+    } as unknown as DialCacheMetricsAdapter;
+    const dialcache = new DialCache({ metrics });
+    const isolatedMetrics = (dialcache as unknown as {
+      readonly metrics: DialCacheMetricsAdapter;
+    }).metrics;
+    const labels: CacheMetricLabels = {
+      cacheNamespace: "urn",
+      useCase: "RejectingMetricsThenable",
+      keyType: "user_id",
+      layer: CacheLayer.LOCAL,
+    };
+
+    isolatedMetrics.request(labels);
+    isolatedMetrics.miss(labels);
+    isolatedMetrics.disabled({ ...labels, reason: "ramped_down" });
+    isolatedMetrics.error({ ...labels, error: "cache_read", inFallback: false });
+    isolatedMetrics.invalidation({
+      cacheNamespace: "urn",
+      keyType: "user_id",
+      layer: CacheLayer.REMOTE,
+    });
+    isolatedMetrics.coalesced?.({
+      cacheNamespace: "urn",
+      useCase: "RejectingMetricsThenable",
+      keyType: "user_id",
+      scope: "process",
+    });
+    isolatedMetrics.shadowValidation?.({
+      cacheNamespace: "urn",
+      useCase: "RejectingMetricsThenable",
+      keyType: "user_id",
+      outcome: "match",
+    } satisfies ShadowValidationMetricLabels);
+    isolatedMetrics.observeGet(labels, 0);
+    isolatedMetrics.observeFallback(labels, 0);
+    isolatedMetrics.observeSerialization({ ...labels, operation: "dump" }, 0);
+    isolatedMetrics.observeSize(labels, 0);
+
+    expect(then).not.toHaveBeenCalled();
+    await tick();
+    expect(then).toHaveBeenCalledTimes(11);
+  });
+
   it("includes the configured cache namespace on every metric path", async () => {
     const metrics = new RecordingMetrics();
     const redis = new FakeRedis();

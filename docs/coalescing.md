@@ -12,6 +12,9 @@ settle, but eventual cleanup still requires finite application-owned budgets
 for every injected operation. They do not replace cross-process coordination,
 source-native cancellation, admission control, or backpressure.
 
+Detached [shadow work](shadow-validation.md) has a separate instance-level
+registry and capacity limit. It is not another coalescing scope.
+
 ## Request coalescing
 
 DialCache has two sharing scopes.
@@ -78,6 +81,23 @@ key when it can change:
 - the returned value;
 - whether the underlying function should run independently; or
 - whether two callers may safely share one result.
+
+### Shadow work does not enable caller coalescing
+
+Shadow admission does not make an otherwise all-disabled caller path
+coalesced.
+
+When the remote layer is the only configured serving layer and its ramp
+excludes a key, concurrent calls each run their own source fallback. Same-key
+shadow jobs are deduplicated by admitting one and reporting the others as
+`dropped`; callers do not join or await that job.
+
+A serving Redis hit reached through a process-scoped leader schedules at most
+one shadow job for its coalesced followers. `shadowMaxInFlight` limits scheduled
+or running shadow jobs across the instance, independently of request-local and
+process-scoped flights. See
+[Shadow validation and Redis bootstrap](shadow-validation.md) for the full
+admission and lifecycle contract.
 
 ## Fallback deadlines
 
@@ -148,8 +168,10 @@ the result. The timer remains referenced until the fallback settles or times
 out. An abandoned enabled fallback can keep an otherwise idle short-lived
 process alive until the deadline.
 
-Shutdown code should drain outstanding DialCache work rather than discarding
-its promises.
+Shutdown code should await outstanding caller-path DialCache promises rather
+than discard them. This does not drain detached shadow jobs; see
+[Redis lifecycle ownership](redis.md#lifecycle-ownership) for dependency
+shutdown requirements.
 
 ### Timeout does not cancel the source
 
@@ -176,9 +198,29 @@ details without adding high-cardinality labels.
 A shared remote-read timeout emits one `cache_read_timeout` error for the
 leader, not one per follower.
 
+### Shadow deadlines are separate
+
+A finite `fallbackTimeoutMs` also supplies the whole-job deadline for detached
+shadow work. Setting it to `null` removes the caller fallback deadline, but
+shadow work still uses the 60-second default.
+
+For a served Redis hit, the shadow clock starts when detached validation
+begins. For a remote-ramped-down call, it starts before the caller's source
+operation, so synchronous source work consumes the same budget. Shadow work
+never delays or rejects the caller.
+
+The shadow scheduler and deadline timer are unreferenced. A deadline prevents
+later serialization or write dispatch, but cannot cancel an already-started
+source call, serializer, raw Redis read, or dispatched Redis write.
+
+Underlying shadow-owned work that has already started can retain a capacity
+slot until it settles, even after the bounded outcome is reported. A
+caller-owned source promise reused by a ramped-down shadow path is the
+exception: by itself, it stops retaining that slot at the shadow deadline.
+
 ## Inspecting process-scoped flights
 
-`getCoalescingState()` returns a detached, point-in-time snapshot of
+`getCoalescingState()` returns a point-in-time copy of caller-path
 process-scoped flights owned by one `DialCache` instance:
 
 ```ts
@@ -193,15 +235,21 @@ A leader is one exact cache key currently tracked by the instance-scoped
 coalescer. A follower is each later invocation that joined that pending leader;
 the initiating invocation is not counted as a follower.
 
-Followers remain counted until their leader settles because abandoning a
-JavaScript promise is not observable. Request-local flights are deliberately
-excluded because their lifecycle is bounded by the outer `enable()` scope.
+Followers remain counted until their leader's DialCache promise settles,
+including by deadline rejection. The underlying source operation may continue
+after that point.
+
+Request-local flights are deliberately excluded because their lifecycle is
+bounded by the outer `enable()` scope. Shadow jobs are also excluded; they use
+their own capacity registry and outcome metrics.
 `oldestLeaderAgeMs` uses a monotonic clock and is computed when the snapshot is
 requested.
 
 ## Admission control remains application-owned
 
-There is no library-wide flight cap or age-based replacement.
+There is no library-wide cap or age-based replacement for caller-path
+request-local or process-scoped flights. `shadowMaxInFlight` bounds only
+detached shadow jobs.
 
 A registry cap would bound only DialCache metadata. Overflow or eviction could
 still create unbounded source work and unsafe duplicate publication.

@@ -9,8 +9,13 @@ import {
   type DialCacheRedisClient,
   type MetricErrorKind,
   type MetricLayer,
+  type ShadowValidationOutcome,
 } from "../src/index.js";
-import { NO_CACHE_LAYER, REQUEST_LOCAL_CACHE_LAYER } from "../src/metrics.js";
+import {
+  NO_CACHE_LAYER,
+  REMOTE_SHADOW_CACHE_LAYER,
+  REQUEST_LOCAL_CACHE_LAYER,
+} from "../src/metrics.js";
 import {
   DatadogDialCacheMetrics,
   createDatadogDialCacheMetrics,
@@ -96,9 +101,26 @@ const errorKinds: readonly MetricErrorKind[] = [
   "fallback",
   "unknown",
 ];
+const SHADOW_VALIDATION_OUTCOMES: Readonly<Record<ShadowValidationOutcome, true>> = {
+  match: true,
+  mismatch: true,
+  superseded: true,
+  filled: true,
+  fill_blocked: true,
+  fill_error: true,
+  redis_error: true,
+  source_error: true,
+  deserialization_error: true,
+  comparison_error: true,
+  confirmation_error: true,
+  timeout: true,
+  dropped: true,
+};
+const shadowValidationOutcomes = Object.keys(SHADOW_VALIDATION_OUTCOMES) as ShadowValidationOutcome[];
 const metricLayers: readonly MetricLayer[] = [
   CacheLayer.LOCAL,
   CacheLayer.REMOTE,
+  REMOTE_SHADOW_CACHE_LAYER,
   REQUEST_LOCAL_CACHE_LAYER,
   NO_CACHE_LAYER,
 ];
@@ -118,6 +140,12 @@ describe("Datadog metrics adapter", () => {
       useCase: "LoadUser",
       keyType: "user_id",
       scope: "process",
+    });
+    metrics.shadowValidation({
+      cacheNamespace: cacheLabels.cacheNamespace,
+      useCase: "LoadUser",
+      keyType: "user_id",
+      outcome: "match",
     });
     metrics.observeGet(cacheLabels, 0.125);
     metrics.observeFallback(cacheLabels, 0.5);
@@ -151,6 +179,12 @@ describe("Datadog metrics adapter", () => {
         name: "dialcache.coalesced.count",
         value: 1,
         tags: { cache_namespace: "users", use_case: "LoadUser", key_type: "user_id", scope: "process" },
+      },
+      {
+        method: "increment",
+        name: "dialcache.shadow.count",
+        value: 1,
+        tags: { cache_namespace: "users", use_case: "LoadUser", key_type: "user_id", outcome: "match" },
       },
       { method: "distribution", name: "dialcache.get.duration", value: 0.125, tags: baseTags },
       { method: "distribution", name: "dialcache.fallback.duration", value: 0.5, tags: baseTags },
@@ -214,6 +248,14 @@ describe("Datadog metrics adapter", () => {
         scope,
       });
     }
+    for (const outcome of shadowValidationOutcomes) {
+      metrics.shadowValidation({
+        cacheNamespace: cacheLabels.cacheNamespace,
+        useCase: cacheLabels.useCase,
+        keyType: cacheLabels.keyType,
+        outcome,
+      });
+    }
 
     expect(client.calls.slice(0, metricLayers.length).map(({ tags }) => tags.layer)).toEqual(metricLayers);
     expect(
@@ -236,6 +278,18 @@ describe("Datadog metrics adapter", () => {
         .filter(({ name }) => name === "dialcache.coalesced.count")
         .map(({ tags }) => tags.scope),
     ).toEqual(["request_local", "process"]);
+    expect(
+      client.calls
+        .filter(({ name }) => name === "dialcache.shadow.count")
+        .map(({ tags }) => tags),
+    ).toEqual(
+      shadowValidationOutcomes.map((outcome) => ({
+        cache_namespace: cacheLabels.cacheNamespace,
+        use_case: cacheLabels.useCase,
+        key_type: cacheLabels.keyType,
+        outcome,
+      })),
+    );
   });
 
   it("accepts hot-shots directly and emits DogStatsD distribution datagrams", () => {
@@ -299,6 +353,27 @@ describe("Datadog metrics adapter", () => {
 
     expect(first).toEqual({ id: "123", calls: 1 });
     expect(second).toEqual({ id: "123", calls: 1 });
+  });
+
+  it("propagates a shadow metric thenable at runtime for DialCache to consume", async () => {
+    const metricError = new Error("DogStatsD async failure");
+    const client = {
+      increment: async () => {
+        throw metricError;
+      },
+      histogram: () => undefined,
+      distribution: () => undefined,
+    } satisfies DatadogDogStatsDClient;
+    const metrics = new DatadogDialCacheMetrics({ client, observationMetricType: "distribution" });
+
+    const returned = metrics.shadowValidation({
+      cacheNamespace: "users",
+      useCase: "AsyncShadowMetric",
+      keyType: "user_id",
+      outcome: "match",
+    }) as unknown as Promise<void>;
+
+    await expect(returned).rejects.toBe(metricError);
   });
 
   it("never emits cache ids, arguments, Redis keys, or raw errors as Datadog tags", async () => {

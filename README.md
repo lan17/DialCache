@@ -16,8 +16,9 @@ and optional Redis or Valkey layers are active.
 
 Around that core path, DialCache provides patterns that high-scale services
 otherwise have to build themselves: request coalescing, per-use-case runtime
-policy, deterministic ramp-up and ramp-down, fail-open cache access, targeted
-invalidation, serialization, deadlines, and backend-neutral metrics.
+policy, deterministic ramp-up and ramp-down, detached shadow validation,
+fail-open cache access, targeted invalidation, serialization, deadlines, and
+backend-neutral metrics.
 
 The “dial” is the runtime policy: start a use case at zero, expand local or
 remote caching to stable key cohorts, and reverse the rollout without changing
@@ -45,6 +46,7 @@ invalidation windows, admission control, and resource budgets.
 - [Install](#install)
 - [Quick start](#quick-start)
 - [Dial caching up or down](#dial-caching-up-or-down)
+- [Validate Redis before serving it](#validate-redis-before-serving-it)
 - [How the read path works](#how-the-read-path-works)
 - [Core concepts](#core-concepts)
 - [Production checklist](#production-checklist)
@@ -135,11 +137,14 @@ A typical adoption path is:
 
 1. start with the process-local cache shown above;
 2. add [Prometheus or Datadog](https://github.com/lan17/DialCache/blob/main/docs/observability.md)
-   before increasing production exposure; and
-3. extend the policy with a remote TTL and a remote ramp of `0`, using an
-   application-owned runtime configuration source; then
+   before increasing production exposure;
+3. extend the policy with a remote TTL, remote serving ramp of `0`, and shadow
+   ramp of `0`, using an application-owned runtime configuration source;
 4. add [Redis or Valkey](https://github.com/lan17/DialCache/blob/main/docs/redis.md)
-   and ramp a stable subset of keys as described next.
+   without serving from it; and
+5. for tracked use cases, optionally
+   [validate and fill Redis in shadow mode](https://github.com/lan17/DialCache/blob/main/docs/shadow-validation.md)
+   before ramping a stable serving cohort as described next.
 
 ## Dial caching up or down
 
@@ -174,6 +179,7 @@ const getUser = dialcache.cached(
         [CacheLayer.LOCAL]: 0,
         [CacheLayer.REMOTE]: 0,
       },
+      shadowRamp: 0,
     }),
   },
 );
@@ -186,6 +192,7 @@ runtimePolicies.set(
       [CacheLayer.LOCAL]: 10,
       [CacheLayer.REMOTE]: 0,
     },
+    shadowRamp: 0,
   }),
 );
 
@@ -197,6 +204,7 @@ runtimePolicies.set(
       [CacheLayer.LOCAL]: 100,
       [CacheLayer.REMOTE]: 100,
     },
+    shadowRamp: 0,
   }),
 );
 
@@ -204,12 +212,13 @@ runtimePolicies.set(
 runtimePolicies.set("GetUser", DialCacheKeyConfig.disabled());
 ```
 
-The zero-ramp baseline is the safety net: if the provider has no matching
-entry, both layers remain off.
+In this example, the zero-ramp `defaultConfig` is the safety net: if the
+provider has no matching entry, both shared serving layers and shadow work
+remain off.
 
 In production, the provider can read from an application-owned dynamic config
 client instead of an in-memory map. DialCache resolves one policy snapshot per
-enabled invocation.
+enabled `cached()` or `getOrLoad()` invocation.
 
 The process-local and remote layers each need an effective TTL. With a TTL but
 no ramp, a layer defaults to `100`; a ramp of `0` disables it, `100` selects
@@ -225,12 +234,36 @@ entries rather than deleting them; a later ramp-up can reuse entries that
 remain valid.
 
 Request-local caching is controlled separately by the `requestLocal` boolean.
-`DialCacheKeyConfig.disabled()` sets it to `false` and ramps both the
-process-local and remote layers to `0`.
+`DialCacheKeyConfig.disabled()` sets it to `false`, sets `shadowRamp` to `0`,
+and ramps both the process-local and remote layers to `0`.
+
+A remote serving ramp of `0` alone does not override an inherited nonzero
+shadow ramp; set both values to `0` to stop new invocation-driven Redis reads
+and fills.
 
 See [Configuration and cache layers](https://github.com/lan17/DialCache/blob/main/docs/configuration.md)
 for sparse-overlay precedence, provider failure behavior, externally
 coordinated cohorts, remote-read deadlines, and layer validation.
+
+## Validate Redis before serving it
+
+For invalidation-tracked use cases, shadow mode can exercise Redis before Redis
+is allowed to serve callers. On a selected tracked Redis hit, DialCache returns
+the cached value first, then compares a fresh decoding of the retained payload
+with a detached source read.
+
+When the remote serving ramp excludes a selected key, shadow work reuses the
+caller's source result to inspect Redis and can fill a clean miss.
+
+Shadow work never supplies, delays, or rejects the caller. It is separately
+sampled by `shadowRamp`, bounded per instance by `shadowMaxInFlight`, and
+disabled unless the metrics adapter implements the shadow outcome hook. It can
+add source and Redis work, remains best-effort during shutdown, and requires
+tracked keys plus a valid remote TTL.
+
+See [Shadow validation and Redis bootstrap](https://github.com/lan17/DialCache/blob/main/docs/shadow-validation.md)
+for eligibility, rollout design, comparison semantics, command amplification,
+deadlines, metrics, invalidation, and lifecycle requirements.
 
 ## How the read path works
 
@@ -250,16 +283,20 @@ open.
 - A process-local miss can read Redis and populate the process-local cache.
 - A remote miss runs the fallback and attempts to populate the active cache
   layers.
-- A remote read failure or timeout runs the fallback without a second Redis
-  operation. Tracked invalidation adds a stricter
+- Selected tracked keys can schedule detached shadow work after a Redis serving
+  hit or when the Redis serving ramp excludes the key. Shadow work never serves
+  the caller; it can validate a hit or fill a clean miss.
+- A caller-path remote read failure or timeout runs the fallback without a
+  second caller-path Redis operation. Tracked invalidation adds a stricter
   [publication rule](https://github.com/lan17/DialCache/blob/main/docs/invalidation.md#read-and-write-behavior).
-- Same-key concurrent work is coalesced at the lifetime of the first active
+- Same-key concurrent work is coalesced within the scope of the first active
   layer.
 
-When all layers are disabled by policy, an initially enabled call remains
-uncached and uncoalesced, but its fallback deadline still applies. A call that
-started outside an enabled scope remains a true pass-through and does not get a
-DialCache deadline.
+When all serving layers are disabled by policy, an initially enabled call
+remains uncached and uncoalesced even if selected shadow work runs
+independently; its fallback deadline still applies. A call that started outside
+an enabled scope remains a true pass-through and does not get a DialCache
+deadline or shadow work.
 
 ## Core concepts
 
@@ -274,14 +311,15 @@ DialCache deadline.
 | `cacheKey` | yes | Selects the bare id or `{ id, args }` from the function parameters. |
 | `defaultConfig` | no | Supplies the baseline policy overlaid by runtime config. |
 | `serializer` | for statically non-JSON return types | Defines the Redis representation for this operation's value. |
+| `shadowComparator` | no | Defines synchronous application-level equality for shadow validation; strict deep equality is the default. |
 | `trackForInvalidation` | no | Opts the remote entries into watermark-based targeted invalidation. |
 | `fallbackTimeoutMs` | no | Sets the fallback deadline; defaults to `60_000`, and `null` disables it. |
 
 Use `getOrLoad(load, options)` when a one-shot calculation should remain inline.
 It follows the same cache, policy, coalescing, invalidation, serialization, and
 deadline contracts, but takes a direct `key` instead of a `cacheKey` selector.
-It does not register `useCase`, so repeated calls should reuse one stable,
-deployment-defined name.
+For repeated inline calls that represent the same operation, reuse one stable,
+deployment-defined `useCase`.
 
 The selected or direct key must include every input dimension that can affect
 the returned value. Same-key concurrent calls may share the leader's execution,
@@ -316,6 +354,10 @@ scopes with bounded key cardinality. Process-local values count toward one
 instance-wide entry cap. Remote values use a serializer selected by the cache
 operation or the Redis configuration.
 
+Shadow validation uses detached Redis work but is not another serving
+`CacheLayer`. Its sampling, capacity, deduplication, deadline, and metrics
+contracts are independent of request coalescing and the remote serving ramp.
+
 Cached in-memory values are shared by reference. Treat every returned value as
 immutable, or copy it explicitly before mutation.
 
@@ -337,8 +379,8 @@ Invalidation is deliberately remote-only. It does not evict existing
 request-local or process-local values, so strongly invalidated mutable data
 should disable those layers or tolerate their TTL-bounded staleness.
 
-The buffer must be a named, application-owned nonzero value sized for clock
-skew and the full stale-work window. See
+The buffer must be a named, application-owned nonzero value no greater than
+365 days, sized for clock skew and the full stale-work window. See
 [Targeted invalidation](https://github.com/lan17/DialCache/blob/main/docs/invalidation.md)
 before enabling it in production.
 
@@ -365,8 +407,10 @@ for exact sharing, deadline, cleanup, and admission-control contracts.
 
 Metrics are disabled unless a `DialCacheMetricsAdapter` is supplied. First-party
 adapters support caller-owned Prometheus registries and Datadog DogStatsD
-clients. Bounded labels report layer requests, misses, disabled reasons,
-coalescing scopes, serialization work, and cache versus fallback failures.
+clients. Their fixed schemas report layer requests, misses, disabled reasons,
+coalescing scopes, serialization work, shadow outcomes, and cache versus
+fallback failures. Keep application-owned namespaces, use-case names, and key
+types stable and low-cardinality.
 
 See [Observability](https://github.com/lan17/DialCache/blob/main/docs/observability.md)
 for installation, collector schemas, metric names, and custom adapters.
@@ -388,11 +432,13 @@ Before ramping a use case:
   serializers, and source operation;
 - use a conservative `localMaxSize` and bounded request-local scopes;
 - treat cached values as immutable;
-- verify serializer compatibility across mixed application versions; and
-- for tracked invalidation, synchronize promotion-eligible Redis clocks,
-  preserve watermark keys for their derived TTL with `noeviction` or an
-  equivalent guarantee, choose suitable persistence and failover behavior, and
-  size a nonzero buffer from measured or conservatively bounded timings.
+- verify serializer compatibility across mixed application versions;
+- before enabling shadow mode, confirm the loader is safe for an extra
+  observational read, preserve immutable inputs and results, bound concurrency,
+  and monitor added load and outcomes;
+- plan shutdown around detached shadow work and application-owned dependencies; and
+- for tracked invalidation, use synchronized Redis clocks, durable non-evictable
+  watermarks, and an application-sized nonzero buffer.
 
 ## Reference guides
 
@@ -401,6 +447,9 @@ Before ramping a use case:
   ownership.
 - [Redis and Valkey](https://github.com/lan17/DialCache/blob/main/docs/redis.md) — node-redis and GLIDE setup, lifecycle,
   liveness, binary protocol, and serialization.
+- [Shadow validation and Redis bootstrap](https://github.com/lan17/DialCache/blob/main/docs/shadow-validation.md) —
+  non-serving rollout, eligibility, comparison, clean-miss filling, capacity,
+  deadlines, metrics, and lifecycle.
 - [Targeted invalidation](https://github.com/lan17/DialCache/blob/main/docs/invalidation.md) — watermarks, Redis Cluster
   placement, clock assumptions, and buffer sizing.
 - [Coalescing and fallback liveness](https://github.com/lan17/DialCache/blob/main/docs/coalescing.md) — sharing scopes,

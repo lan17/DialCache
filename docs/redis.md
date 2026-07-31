@@ -7,6 +7,10 @@ Redis Cluster. The application creates, connects, configures, drains, and closes
 the underlying client. DialCache borrows a client-independent
 `DialCacheRedisClient` adapter and does not own the connection lifecycle.
 
+Sampled non-serving Redis reads and fills use the same adapter and tracked
+protocol. See [Redis shadow validation](shadow-validation.md) for eligibility,
+comparison, capacity, metrics, and rollout behavior.
+
 ## Install a client
 
 Choose one supported integration:
@@ -119,19 +123,28 @@ routes scripts from their declared keys.
 The application owns the complete Redis lifecycle:
 
 1. Create and connect the underlying client.
-2. Construct the semantic DialCache adapter.
+2. Construct the DialCache-compatible adapter.
 3. Pass that adapter as `redis.client`.
 4. During shutdown, stop starting DialCache-backed work.
 5. Await every outstanding cached-function, `getOrLoad()`, and
    `invalidateRemote()` promise, including fallbacks that may still write
    Redis.
 6. Drain or terminate client-native Redis work that may have outlived
-   DialCache's remote-read wait.
+   DialCache's caller-serving or shadow-read wait.
 7. Dispose adapter-owned resources.
 8. Close the underlying connection.
 
 DialCache has no `close()` or drain method. It never disposes or closes caller
 resources.
+
+Awaiting public DialCache promises does not drain detached shadow work. Shadow
+scheduling and deadline timers are unreferenced, and there is no shadow drain
+handle.
+
+A source read, serializer, Redis command, or metrics delivery started by a
+shadow job can remain active during teardown. Stop new work before closing
+dependencies and use their native drain or termination controls. An
+already-dispatched shadow fill may have executed even if its outcome is lost.
 
 The node-redis adapter owns no additional resources, so close the underlying
 client after draining work.
@@ -144,8 +157,9 @@ client-side invocation has settled.
 
 ## Remote-read deadlines and async liveness
 
-Every active remote-read leader has a finite monotonic deadline.
-DialCache uses this precedence for `cached()` and `getOrLoad()`:
+Every caller-serving Redis read and each detached shadow read has a finite
+monotonic deadline. DialCache uses this precedence for `cached()` and
+`getOrLoad()`:
 
 ```text
 runtime remoteReadTimeoutMs
@@ -156,10 +170,13 @@ runtime remoteReadTimeoutMs
 
 Each explicit value must be a positive safe integer no greater than
 2,147,483,647 milliseconds. Remote reads have no unbounded escape hatch.
-Outside an enabled scope, on a local hit, or when remote policy is disabled or
-ramped out, DialCache creates no remote-read timer.
 
-### Timeout and fail-open behavior
+Outside an enabled scope and on an earlier in-memory hit, DialCache creates no
+remote-read timer. A key ramped out of Redis serving creates no caller-serving
+timer, but an independently selected shadow job can create unreferenced timers
+for its tracked `C0` and optional `C1` reads.
+
+### Caller-serving timeout and fail-open behavior
 
 When the deadline expires, DialCache:
 
@@ -189,6 +206,19 @@ The `fallbackTimeoutMs` timer is separate and starts only if and when the source
 loader begins. The remote-read timer covers neither config resolution,
 serializer loading, the fallback, Redis writes, nor invalidation.
 
+### Shadow-read deadlines
+
+Shadow `C0` and `C1` reads use the same effective `remoteReadTimeoutMs` and
+cooperative abort signal as caller-serving reads. Their timers are
+unreferenced. A `C0` failure or read timeout produces `redis_error`; the same
+failure at `C1` produces `confirmation_error`. Both paths also record the
+ordinary bounded Redis error under `layer="remote_shadow"`.
+
+The read deadline bounds DialCache's wait, not the underlying client
+operation. Shadow capacity remains occupied while a timed-out raw Redis read
+is still settling. The whole shadow job has a separate deadline described in
+[Redis shadow validation](shadow-validation.md#capacity-deadlines-and-detachment).
+
 ### Custom-client contract
 
 Custom adapters implement the complete client-independent read, write, and
@@ -212,9 +242,9 @@ interface DialCacheRedisClient {
 
 | Method | Required semantics |
 | --- | --- |
-| `read` | Return the serialized `string` or `Buffer`, or `null` for a miss. For a tracked request, compare the value timestamp and watermark atomically; a missing watermark or a value at or behind it is a miss. |
-| `write` | Apply `cacheTtlMs` and record server time atomically. For a tracked request, create a missing baseline, retain it for at least the value TTL plus one minute without shortening a longer or persistent lifetime, and return `false` when it rejects publication. Return `true` only when the value was written. |
-| `invalidate` | Advance `watermarkKey` monotonically to at least server time plus `futureBufferMs`. Retain it long enough to cover that buffer and any still-future existing watermark, plus one minute, without shortening a longer or persistent lifetime. Reject on failure. |
+| `read` | Return an operation-owned serialized `string` or `Buffer`, or `null` for a miss. The payload must remain stable after settlement because DialCache can retain it for shadow work; an adapter that recycles response storage must return a dedicated Buffer. For a tracked request, compare the value timestamp and watermark atomically; a missing watermark or a value at or behind it is a miss. |
+| `write` | Accept `cacheTtlMs` as a positive integer no greater than `31_536_000_000` milliseconds (365 days), apply that TTL, and record server time atomically. For a tracked request, create a missing baseline, retain it for at least the value TTL plus one minute without shortening a longer or persistent lifetime, and return `false` when it rejects publication. Return `true` only when the value was written. |
+| `invalidate` | Accept `futureBufferMs` as a nonnegative integer no greater than `31_536_000_000` milliseconds (365 days). Advance `watermarkKey` monotonically to at least server time plus that buffer. Retain it long enough to cover the buffer and any still-future existing watermark, plus one minute, without shortening a longer or persistent lifetime. Reject on failure. |
 
 `write()` returning `false` is a safe publication refusal, not an adapter error.
 DialCache still returns the fallback value but skips the corresponding
@@ -255,10 +285,13 @@ termination behavior that matches the application's resource and ambiguity
 requirements.
 
 Redis writes and invalidations, asynchronous `cacheConfigProvider` work, and
-custom `Serializer` methods still require their own finite budgets. Do not put
-writes or invalidations behind a bare `Promise.race`: rejecting the outer
-promise neither removes queued work nor proves that a dispatched mutation did
-not execute.
+custom `Serializer` methods still require their own finite budgets. The same
+is true for detached source, Redis, serializer, and telemetry work admitted by
+shadow validation.
+
+Do not put writes or invalidations behind a bare `Promise.race`: rejecting the
+outer promise neither removes queued work nor proves that a dispatched
+mutation did not execute.
 
 DialCache's [fallback deadline](coalescing.md#fallback-deadlines) covers only the
 source loader. Prefer resource-native budgets and cooperative cancellation for
@@ -287,6 +320,8 @@ When `serializer.load` rejects a Redis payload, DialCache:
 
 A validating custom serializer can therefore treat an incompatible cached
 value as a refreshable miss without adding a schema version to the cache key.
+This replacement behavior describes the caller-serving path. Shadow work
+reports `deserialization_error` for a non-null payload and never repairs it.
 
 `JsonSerializer` validates JSON syntax only. It cannot detect that a
 structurally valid payload came from an incompatible application value schema.
@@ -360,6 +395,12 @@ Providing `Serializer<T>`, including an explicitly typed
 `JsonSerializer<T>`, is a trusted caller assertion. DialCache does not perform
 an additional serialize-and-deserialize cycle to validate it.
 
+Shadow validation can call `load` again for the same served payload and can
+call `dump` after a ramped-down caller has received its source result. Custom
+serializers must treat payloads and values as borrowed and immutable, return
+independent values from repeated loads, and copy a Buffer before mutating it.
+See [Data ownership and custom integrations](shadow-validation.md#data-ownership-and-custom-integrations).
+
 ### Advanced wire protocol
 
 The core Redis boundary is the client-independent `DialCacheRedisClient`
@@ -386,6 +427,10 @@ throw these root-exported error classes:
 They distinguish malformed payloads, unsupported encodings, and invalid Lua
 reply domains in logs. DialCache records bounded `cache_read`,
 `cache_read_timeout`, `cache_write`, or `invalidation` metrics by failure site.
+
+Shadow validation adds no Redis protocol operation. It composes the same
+tracked read and write requests: `C0` and `C1` are tracked reads, and a clean
+miss can use one tracked write.
 
 #### Binary frame
 

@@ -56,7 +56,8 @@ await dialcache.invalidateRemote(
 ```
 
 The buffer is an application-owned safety value. DialCache cannot choose a
-universally safe nonzero default.
+universally safe nonzero default. It must be a nonnegative safe integer no
+greater than `31_536_000_000` milliseconds (365 days).
 
 ## Identity and Redis Cluster placement
 
@@ -107,9 +108,9 @@ While that future window is active:
 4. DialCache also suppresses the corresponding process-local population.
 5. The fallback value still returns to its caller.
 
-Request-local memoization remains unconditional. An invocation whose remote
-layer is disabled or ramped out does not consult the watermark and is not
-fenced by it.
+Request-local memoization remains unconditional. A ramped-out invocation
+without selected shadow work does not consult the watermark and is not fenced
+by it.
 
 This is a timing contract, not a cancellation or acquisition fence. The buffer
 blocks stale fallback results from passing the tracked Redis write only while
@@ -121,6 +122,24 @@ establish watermark safety. It runs the fallback but skips both the Redis write
 and process-local publication. This differs from a normal tracked miss, which
 can attempt the fenced Redis write. Untracked fallbacks may still populate
 process-local cache, and request-local memoization remains unconditional.
+
+### Shadow reads and fills
+
+[Shadow mode](shadow-validation.md) uses the same tracked protocol. A sampled
+path can perform a tracked Redis read even when the remote serving ramp excludes
+the key. A definitive `null` result can then attempt a tracked fill from the
+caller-accepted source value, using the invocation's resolved remote TTL.
+
+An active future watermark rejects that fill and produces the bounded
+`fill_blocked` shadow outcome. It does not reject or replace the value returned
+to the caller. Caller-path request-local and process-local publication remains
+independent when the remote serving layer is ramped out.
+
+The shadow read and fill are not atomic. An ordinary tracked cache write can
+land between them, and either write can overwrite the other according to
+arrival order when the watermark permits it. Shadow mode never repairs or
+overwrites a non-null initial Redis payload; it only fills a definitive clean
+miss.
 
 ## Redis clock contract
 
@@ -157,7 +176,8 @@ provide strong consistency across failover.
 
 Tracked writes create a missing baseline watermark and ensure its TTL is at
 least the value TTL plus one minute. They never shorten a longer or persistent
-watermark TTL.
+watermark TTL. Because cache TTLs cap at 365 days, the derived marker TTL can
+reach 365 days plus the fixed one-minute margin.
 
 Invalidation ensures the TTL covers both the requested future buffer and any
 still-future existing watermark, plus one minute. It also preserves a longer or
@@ -167,8 +187,10 @@ lifetime.
 
 ## Choosing `futureBufferMs`
 
-`futureBufferMs` must be a nonnegative safe integer. The API default is zero,
-but zero provides no stale-publication protection once Redis time advances.
+`futureBufferMs` must be a nonnegative safe integer no greater than
+`31_536_000_000` milliseconds (365 days). The API default is zero, but zero
+provides no stale-publication protection once Redis time advances. Larger
+values are rejected before DialCache calls Redis.
 
 Every production invalidation should pass a named, application-owned nonzero
 value based on measured or conservatively bounded timings. Size it to cover:
@@ -182,6 +204,14 @@ value based on measured or conservatively bounded timings. Size it to cover:
 - Lua script execution;
 - the Redis write itself; and
 - a safety margin.
+
+Include the remaining lifetime of any sampled shadow fill based on a source
+read that may have observed the pre-mutation state. A shadow deadline can stop
+work before write dispatch, but it cannot prove that an already-dispatched
+Redis command did not execute.
+
+Account for the underlying client's queue, dispatch, retry, and settlement
+bounds as well as DialCache's shadow deadline.
 
 Invalidate only after the source mutation commits.
 

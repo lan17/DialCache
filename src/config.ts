@@ -12,8 +12,16 @@ export type Awaitable<T> = T | Promise<T>;
 export type LayerConfig = Partial<Record<CacheLayer, number>>;
 
 export class DialCacheKeyConfig {
+  /** Per-layer TTLs in seconds, from 1 through 31,536,000 (365 days). */
   readonly ttlSec: LayerConfig;
   readonly ramp: LayerConfig;
+  /**
+   * Percentage of tracked Redis keys that asynchronously exercise Redis
+   * without changing what serves the caller. Hits validate against the source
+   * of truth and ramped-down clean misses populate Redis. This shadow cohort is
+   * independent of the Redis serving ramp. Omitted and zero disable it.
+   */
+  readonly shadowRamp?: number;
   /**
    * Memoize successful values for the lifetime of the outermost enabled scope.
    * Request-local caching is disabled by default and has no TTL or ramp.
@@ -28,6 +36,7 @@ export class DialCacheKeyConfig {
   constructor(config: {
     ttlSec?: LayerConfig;
     ramp?: LayerConfig;
+    shadowRamp?: number;
     requestLocal?: boolean;
     remoteReadTimeoutMs?: number;
   }) {
@@ -36,6 +45,9 @@ export class DialCacheKeyConfig {
     }
     this.ttlSec = cloneLayerConfig(config.ttlSec, "ttlSec");
     this.ramp = cloneLayerConfig(config.ramp, "ramp");
+    if (config.shadowRamp !== undefined) {
+      this.shadowRamp = config.shadowRamp;
+    }
     if (config.requestLocal !== undefined && typeof config.requestLocal !== "boolean") {
       throw new TypeError("DialCache requestLocal config must be a boolean");
     }
@@ -62,13 +74,16 @@ export class DialCacheKeyConfig {
   }
 
   /**
-   * The explicit kill switch: request-local caching off and both shared
-   * layers ramped to 0. As a provider overlay it disables every inherited
-   * layer instead of relying on field omission, which inherits the baseline.
+   * The explicit cache-invocation kill switch: request-local caching and
+   * shadow work off, with both shared layers ramped to 0. As a provider
+   * overlay it disables every inherited path instead of relying on field
+   * omission. It does not cancel admitted work or disable explicit
+   * maintenance operations.
    */
   static disabled(): DialCacheKeyConfig {
     return new DialCacheKeyConfig({
       requestLocal: false,
+      shadowRamp: 0,
       ramp: {
         [CacheLayer.LOCAL]: 0,
         [CacheLayer.REMOTE]: 0,
@@ -111,4 +126,11 @@ export interface DialCacheConfig {
   readonly localMaxSize?: number;
   readonly redis?: RedisConfig;
   readonly metrics?: DialCacheMetricsAdapter;
+  /**
+   * Maximum number of scheduled or running shadow jobs per DialCache instance,
+   * including shadow-owned work that outlives a DialCache deadline. There is no
+   * queue; excess jobs are dropped and measured. Must be a
+   * positive safe integer. Defaults to 1.
+   */
+  readonly shadowMaxInFlight?: number;
 }

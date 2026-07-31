@@ -2,7 +2,7 @@
 
 ## Project overview
 
-DialCache is a TypeScript caching library with explicit request-scoped enablement, local and Redis layers, runtime rollout controls, request coalescing, targeted invalidation, and adapter-based observability.
+DialCache is a TypeScript caching library with explicit request-scoped enablement, local and Redis layers, runtime rollout controls, request coalescing, detached Redis shadow validation and bootstrap, targeted invalidation, and adapter-based observability.
 
 ## Structure
 
@@ -16,8 +16,10 @@ src/
   key.ts                # Structured cache keys and Redis hash tags
   metrics.ts            # Backend-neutral metrics adapter contract
   prometheus.ts         # Optional Prometheus adapter
+  datadog.ts            # Optional Datadog adapter
   redis-client.ts       # Client-independent semantic Redis interface
   node-redis.ts          # node-redis adapter and script registration
+  valkey-glide.ts       # Valkey GLIDE adapter and script registration
   redis-protocol.ts      # Public Lua protocol exports
   serializer.ts         # Serializer contract and JSON implementation
   internal/             # Cache layers, runtime config, and Lua scripts
@@ -30,6 +32,9 @@ test/                   # Unit and Redis integration tests
 - Disabled calls are true pass-through and must not build keys, resolve config, or coalesce work.
 - Active same-key work is coalesced before the first active cache layer, using
   request scope for request-local caching and process scope for shared layers.
+- Shadow validation is opt-in, detached, tracked-key-only work that never
+  supplies or delays the caller; it has separate sampling, capacity, deadline,
+  invalidation, and observability contracts.
 - Cache plumbing fails open; explicit maintenance operations surface mutation failures.
 - Tracked Redis values and invalidation watermarks share a Redis Cluster hash tag.
 - Tracked reads run on primaries so replica lag cannot hide invalidation.

@@ -63,6 +63,7 @@ The names below exclude the optional caller-selected prefix:
 | `dialcache_error_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer`, `error`, `in_fallback` | Cache or fallback errors by bounded failure site |
 | `dialcache_invalidation_counter` | Counter | `cache_namespace`, `key_type`, `layer` | Invalidation calls for the layers touched |
 | `dialcache_coalesced_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `scope` | Coalesced requests split by request-local or process scope |
+| `dialcache_shadow_validation_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `outcome` | Terminal outcomes for sampled Redis shadow jobs |
 | `dialcache_get_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache get latency in seconds |
 | `dialcache_fallback_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Elapsed time until the wrapped fallback settles or timeout rejection is delivered |
 | `dialcache_serialization_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer`, `operation` | Redis serializer dump/load latency in seconds |
@@ -91,7 +92,9 @@ The `layer` label is:
 
 - `request_local`;
 - `local`, meaning process-local;
-- `remote`; or
+- `remote`;
+- `remote_shadow` for Redis reads, fills, serialization, and payload sizes
+  performed by detached shadow jobs; or
 - `noop` for disabled-context, key-construction, and config-provider failures
   where no cache layer was reached.
 
@@ -99,6 +102,34 @@ The bounded `scope` label on `dialcache_coalesced_counter` distinguishes
 `request_local` from `process`. `scope="process"` coordinates calls only within
 one `DialCache` instance; separate instances in the same process do not share
 in-flight state.
+
+### Shadow outcomes
+
+`dialcache_shadow_validation_counter` reports one terminal outcome for each
+admitted or explicitly dropped shadow job. Datadog exposes the same bounded
+outcomes through `dialcache.shadow.count`:
+
+| `outcome` | Meaning |
+| --- | --- |
+| `match` | The cached and source values matched. |
+| `mismatch` | They differed, and a confirmation read found the original Redis payload unchanged. |
+| `superseded` | They differed, but the Redis payload changed or disappeared before confirmation. |
+| `filled` | A clean shadow miss was populated successfully. |
+| `fill_blocked` | An invalidation watermark blocked a clean-miss fill. |
+| `fill_error` | Serializing or writing a clean-miss fill failed. |
+| `redis_error` | The initial detached Redis read failed. |
+| `source_error` | The source-of-truth read failed. |
+| `deserialization_error` | The retained Redis payload could not be deserialized for comparison. |
+| `comparison_error` | The comparator threw or did not return a synchronous boolean. |
+| `confirmation_error` | The confirmation Redis read failed. |
+| `timeout` | The shadow deadline expired. |
+| `dropped` | Per-key deduplication or the instance flight cap rejected the job. |
+
+The outcome counter deliberately has no `layer` or cache-id label. Operational
+Redis metrics produced inside the same job use `layer="remote_shadow"`, which
+keeps detached work separate from caller-serving `layer="remote"` telemetry.
+See [Shadow validation](shadow-validation.md) for the read, confirmation, fill,
+and deadline semantics behind these outcomes.
 
 ## Datadog
 
@@ -208,15 +239,17 @@ and bytes without unit conversion:
 | `dialcache.error.count` | Count | `cache_namespace`, `use_case`, `key_type`, `layer`, `error`, `in_fallback` | Cache or fallback errors by bounded failure site |
 | `dialcache.invalidation.count` | Count | `cache_namespace`, `key_type`, `layer` | Invalidation calls for the layers touched |
 | `dialcache.coalesced.count` | Count | `cache_namespace`, `use_case`, `key_type`, `scope` | Coalesced requests by sharing scope |
+| `dialcache.shadow.count` | Count | `cache_namespace`, `use_case`, `key_type`, `outcome` | Terminal outcomes for sampled Redis shadow jobs |
 | `dialcache.get.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache get latency in seconds |
 | `dialcache.fallback.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Elapsed time until the wrapped fallback settles or timeout rejection is delivered |
 | `dialcache.serialization.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer`, `operation` | Redis serializer dump/load latency in seconds |
 | `dialcache.serialization.size` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Serialized Redis payload size in bytes |
 
-Synchronous client throws are isolated by DialCache's fail-open metrics
-boundary. Buffered transport failures happen outside that synchronous call.
-Configure the DogStatsD client's error handling and shutdown behavior as part
-of application ownership.
+Client throws and rejected returned thenables are isolated by DialCache's
+fire-and-forget observer boundary. Buffered transport failures that happen
+after the client call returns remain outside that boundary. Configure the
+DogStatsD client's error handling and shutdown behavior as part of application
+ownership.
 
 ## Error categories
 
@@ -246,9 +279,12 @@ details remain out of labels and are available on the logged
 `RedisReadTimeoutError`.
 
 Raw thrown values, error names, messages, cache ids, arguments, and Redis keys
-are never included in labels. Operational errors still reach the configured
-logger. `in_fallback` remains the explicit distinction between cache plumbing
-and application fallback failures.
+are never included in labels. When DialCache logs a cache-plumbing failure,
+the raw details remain available through the configured logger; not every
+metric error or shadow outcome has a matching log entry.
+
+`in_fallback` remains the explicit distinction between cache plumbing and
+application fallback failures.
 
 ## Custom adapters
 
@@ -263,19 +299,35 @@ Implement `DialCacheMetricsAdapter` and pass it through
 | `error(labels)` | yes | One bounded failure site with `inFallback`. |
 | `invalidation(labels)` | yes | One explicit remote invalidation call. |
 | `coalesced(labels)` | no | One follower that joined request-local or process-scoped work. |
+| `shadowValidation(labels)` | no | One terminal sampled-shadow outcome. This hook must be implemented for shadow jobs to execute. |
 | `observeGet(labels, seconds)` | yes | Cache-read duration in seconds. |
 | `observeFallback(labels, seconds)` | yes | Fallback duration in seconds. |
 | `observeSerialization(labels, seconds)` | yes | Serializer dump/load duration in seconds. |
 | `observeSize(labels, bytes)` | yes | Serialized remote payload size in bytes. |
 
 The root package exports `DialCacheMetricsAdapter` and every associated label,
-reason, error-kind, layer, and scope type. All hooks are synchronous; adapters
-that buffer or transmit asynchronously own that later lifecycle. Keep label
-values bounded and preserve the seconds and bytes units shown above.
+reason, error-kind, layer, scope, and shadow-outcome type, including
+`ShadowValidationMetricLabels` and `ShadowValidationOutcome`.
+`shadowValidation` remains optional so existing custom adapters keep
+compiling, but DialCache does not admit shadow work when the configured
+adapter omits it. The Prometheus and Datadog adapters implement the hook.
+
+Metrics and logger methods are typed `void` and invoked as fire-and-forget
+observers. DialCache also defensively consumes, but never awaits, a thenable
+returned at runtime.
+
+Synchronous throws and asynchronous rejections are isolated so telemetry
+cannot change cache correctness, fallback results, or shadow outcomes.
+
+A custom adapter may buffer or transmit asynchronously, but it owns delivery,
+flushing, resources, and shutdown after the call returns. Keep
+application-owned namespace, use-case, and key-type labels stable and
+low-cardinality, and preserve the seconds and bytes units shown above.
 
 Every backend-neutral label object exposes the logical namespace as camel-case
 `cacheNamespace`. Map it to the backend's `cache_namespace` label or tag. This
 field is present even when no key or cache layer was reached.
 
-Synchronous adapter failures are isolated from cache behavior and application
-fallbacks. Omit `metrics` to disable metrics entirely.
+Omit `metrics` to disable metrics entirely. Because shadow jobs require an
+observable terminal outcome, omitting metrics also disables shadow execution
+even when a key policy sets `shadowRamp`.

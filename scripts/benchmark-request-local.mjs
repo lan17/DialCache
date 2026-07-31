@@ -6,6 +6,19 @@ import { CacheLayer, DialCache, DialCacheKeyConfig } from "../dist/index.js";
 
 const sequentialIterations = readPositiveInteger("DIALCACHE_BENCH_ITERATIONS", 50_000);
 const coalescingFanout = readPositiveInteger("DIALCACHE_BENCH_FANOUT", 1_000);
+const noOpMetrics = {
+  request() {},
+  miss() {},
+  disabled() {},
+  error() {},
+  invalidation() {},
+  coalesced() {},
+  shadowValidation() {},
+  observeGet() {},
+  observeFallback() {},
+  observeSerialization() {},
+  observeSize() {},
+};
 
 const results = [
   await benchmarkSequentialRequestLocalHits(sequentialIterations),
@@ -14,6 +27,18 @@ const results = [
   await benchmarkRequestLocalCoalescing(coalescingFanout),
   await benchmarkProcessCoalescing(coalescingFanout),
   await benchmarkRedisReadDeadlineCoalescing(coalescingFanout),
+  await benchmarkSequentialTrackedRedisHits(sequentialIterations, {
+    scenario: "tracked Redis hits, shadow omitted",
+    useCase: "BenchmarkTrackedRedisShadowOmitted",
+  }),
+  await benchmarkSequentialTrackedRedisHits(sequentialIterations, {
+    scenario: "tracked Redis hits, shadow ramped out",
+    useCase: "BenchmarkTrackedRedisShadowRampedOut",
+    // This exact key's stable shadow sample is about 90.11.
+    shadowRamp: 50,
+  }),
+  await benchmarkDarkShadowDetachment(),
+  await benchmarkDarkShadowFillDetachment(),
 ];
 
 console.table(
@@ -287,6 +312,242 @@ async function benchmarkRedisReadDeadlineCoalescing(fanout) {
     globalThis.setTimeout = originalSetTimeout;
     globalThis.clearTimeout = originalClearTimeout;
   }
+}
+
+async function benchmarkSequentialTrackedRedisHits(iterations, { scenario, useCase, shadowRamp }) {
+  let redisReadCalls = 0;
+  let redisWriteCalls = 0;
+  let redisInvalidationCalls = 0;
+  const redisClient = {
+    async read({ watermarkKey }) {
+      assert.equal(typeof watermarkKey, "string", "the benchmark must exercise tracked Redis reads");
+      redisReadCalls += 1;
+      return JSON.stringify("shared");
+    },
+    async write() {
+      redisWriteCalls += 1;
+      return true;
+    },
+    async invalidate() {
+      redisInvalidationCalls += 1;
+    },
+  };
+  const dialcache = new DialCache({
+    redis: { client: redisClient, readTimeoutMs: 60_000 },
+    // Keep both scenarios on the path where shadow telemetry is available.
+    metrics: noOpMetrics,
+  });
+  let fallbackCalls = 0;
+  const getValue = dialcache.cached(
+    async (id) => {
+      fallbackCalls += 1;
+      return id;
+    },
+    {
+      keyType: "benchmark_id",
+      useCase,
+      cacheKey: (id) => id,
+      trackForInvalidation: true,
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 100 },
+        ...(shadowRamp === undefined ? {} : { shadowRamp }),
+      }),
+    },
+  );
+
+  let actual;
+  const start = performance.now();
+  await dialcache.enable(async () => {
+    for (let index = 0; index < iterations; index += 1) {
+      actual = await getValue("shared");
+    }
+  });
+  const elapsedMs = performance.now() - start;
+  // Let an incorrectly selected detached validation start before checking that
+  // omitted and ramped-out shadow policies never invoke the source loader.
+  await nextTurn();
+
+  assert.equal(actual, "shared");
+  assert.equal(redisReadCalls, iterations, "every benchmark operation should be a Redis hit");
+  assert.equal(redisWriteCalls, 0, "successful Redis hits must not write");
+  assert.equal(redisInvalidationCalls, 0, "successful Redis hits must not invalidate");
+  assert.equal(fallbackCalls, 0, "shadow-omitted and ramped-out hits must not invoke the source loader");
+  return {
+    scenario,
+    operations: iterations,
+    elapsedMs,
+    fallbackCalls,
+    redisReadCalls,
+    deadlineTimers: "not measured",
+  };
+}
+
+async function benchmarkDarkShadowDetachment() {
+  const readGate = deferred();
+  const outcomeGate = deferred();
+  let redisReadCalls = 0;
+  let redisWriteCalls = 0;
+  let redisInvalidationCalls = 0;
+  const cachedValue = { source: "redis" };
+  const sourceValue = { source: "truth" };
+  const redisClient = {
+    async read({ watermarkKey }) {
+      assert.equal(typeof watermarkKey, "string", "dark shadow reads must remain tracked");
+      redisReadCalls += 1;
+      return await readGate.promise;
+    },
+    async write() {
+      redisWriteCalls += 1;
+      return true;
+    },
+    async invalidate() {
+      redisInvalidationCalls += 1;
+    },
+  };
+  const metrics = {
+    ...noOpMetrics,
+    shadowValidation({ outcome }) {
+      outcomeGate.resolve(outcome);
+    },
+  };
+  const dialcache = new DialCache({
+    redis: { client: redisClient, readTimeoutMs: 60_000 },
+    metrics,
+  });
+  let fallbackCalls = 0;
+  const getValue = dialcache.cached(
+    async () => {
+      fallbackCalls += 1;
+      return sourceValue;
+    },
+    {
+      keyType: "benchmark_id",
+      useCase: "BenchmarkDarkShadowDetachment",
+      cacheKey: () => "shared",
+      trackForInvalidation: true,
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 0 },
+        shadowRamp: 100,
+      }),
+    },
+  );
+
+  let callerSettled = false;
+  const start = performance.now();
+  const caller = dialcache.enable(async () => await getValue()).then((value) => {
+    callerSettled = true;
+    return value;
+  });
+  await nextTurn();
+  const elapsedMs = performance.now() - start;
+
+  assert.equal(callerSettled, true, "a dark Redis read must not delay the caller's SoT result");
+  assert.strictEqual(await caller, sourceValue);
+  for (let turn = 0; turn < 10 && redisReadCalls === 0; turn += 1) {
+    await nextTurn();
+  }
+  assert.equal(redisReadCalls, 1, "the detached C0 read should have started");
+  assert.equal(fallbackCalls, 1, "the caller and shadow validation must share one SoT invocation");
+
+  readGate.resolve(JSON.stringify(cachedValue));
+  await nextTurn();
+  assert.equal(await outcomeGate.promise, "mismatch");
+  assert.equal(redisReadCalls, 2, "only a mismatch candidate should add confirmation C1");
+  assert.equal(redisWriteCalls, 0, "dark shadow work must not write Redis");
+  assert.equal(redisInvalidationCalls, 0, "dark shadow work must not invalidate Redis");
+
+  return {
+    scenario: "ramped-down Redis shadow detachment",
+    operations: 1,
+    elapsedMs,
+    fallbackCalls,
+    redisReadCalls,
+    deadlineTimers: "not measured",
+  };
+}
+
+async function benchmarkDarkShadowFillDetachment() {
+  const writeGate = deferred();
+  const writeStarted = deferred();
+  const outcomeGate = deferred();
+  let redisReadCalls = 0;
+  let redisWriteCalls = 0;
+  const sourceValue = { source: "truth" };
+  const redisClient = {
+    async read({ watermarkKey }) {
+      assert.equal(typeof watermarkKey, "string", "dark shadow reads must remain tracked");
+      redisReadCalls += 1;
+      return null;
+    },
+    async write({ watermarkKey }) {
+      assert.equal(typeof watermarkKey, "string", "dark shadow fills must remain tracked");
+      redisWriteCalls += 1;
+      writeStarted.resolve();
+      await writeGate.promise;
+      return true;
+    },
+    async invalidate() {},
+  };
+  const metrics = {
+    ...noOpMetrics,
+    shadowValidation({ outcome }) {
+      outcomeGate.resolve(outcome);
+    },
+  };
+  const dialcache = new DialCache({
+    redis: { client: redisClient, readTimeoutMs: 60_000 },
+    metrics,
+  });
+  let fallbackCalls = 0;
+  const getValue = dialcache.cached(
+    async () => {
+      fallbackCalls += 1;
+      return sourceValue;
+    },
+    {
+      keyType: "benchmark_id",
+      useCase: "BenchmarkDarkShadowFillDetachment",
+      cacheKey: () => "shared",
+      trackForInvalidation: true,
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 0 },
+        shadowRamp: 100,
+      }),
+    },
+  );
+
+  let callerSettled = false;
+  const start = performance.now();
+  const caller = dialcache.enable(async () => await getValue()).then((value) => {
+    callerSettled = true;
+    return value;
+  });
+  await nextTurn();
+  const elapsedMs = performance.now() - start;
+
+  assert.equal(callerSettled, true, "a dark Redis fill must not delay the caller's SoT result");
+  assert.strictEqual(await caller, sourceValue);
+  await nextTurn();
+  await writeStarted.promise;
+  assert.equal(fallbackCalls, 1, "the caller and shadow fill must share one SoT invocation");
+  assert.equal(redisReadCalls, 1, "a cold detached C0 should read Redis exactly once");
+  assert.equal(redisWriteCalls, 1, "a definitive detached C0 miss should start one tracked fill");
+
+  writeGate.resolve();
+  await nextTurn();
+  assert.equal(await outcomeGate.promise, "filled");
+
+  return {
+    scenario: "ramped-down Redis shadow fill detachment",
+    operations: 1,
+    elapsedMs,
+    fallbackCalls,
+    redisReadCalls,
+    deadlineTimers: "not measured",
+  };
 }
 
 function deferred() {

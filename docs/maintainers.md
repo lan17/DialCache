@@ -28,16 +28,26 @@ corresponding packed, unit, and integration assertions:
 - package root and explicit adapter/protocol entry points;
 - full cache-key identity, encoding, namespace behavior, and Redis Cluster hash
   tags;
-- deterministic partial-ramp assignment, which must not reshuffle cohorts
-  across releases;
+- deterministic serving- and shadow-ramp assignment, whose independent cohorts
+  must not reshuffle across releases;
 - the binary Redis frame, Lua arguments and reply domains, tracked
-  read/write/invalidation semantics, and mixed-version serializer behavior; and
-- bounded metrics names, labels, reasons, error categories, scopes, and units.
+  read/write/invalidation semantics, mixed-version serializer behavior, and the
+  ownership and immutability contract for retained string and `Buffer`
+  payloads;
+- shadow confirmation, clean-miss fill, capacity, deadline, detached work, and
+  payload-release behavior;
+- exhaustive public unions and packed exports, including `MetricLayer`,
+  `ShadowValidationOutcome`, and `ShadowComparator`; and
+- bounded metrics names, labels, reasons, error categories, scopes, outcomes,
+  units, and observer isolation from synchronous throws and rejected thenables.
 
 When changing user-facing examples, parse TypeScript fences, validate local
 files and anchors, verify that README repository links are absolute for npm
 rendering, and inspect the packed README. The package ships `README.md` but not
 `docs/`.
+
+See [Shadow validation](shadow-validation.md) for the contract that the shadow
+unit, integration, adapter, package, and benchmark assertions protect.
 
 ## Cache-path benchmark
 
@@ -47,19 +57,27 @@ From a repository checkout, install dependencies and run:
 corepack pnpm benchmark:request-local
 ```
 
-The command builds `dist` before reporting six scenarios:
+The command builds `dist` before reporting ten scenarios:
 
 - sequential request-local hits;
 - sequential process-local hits;
 - enabled bounded fallbacks;
 - request-local coalescing fan-out;
-- process coalescing fan-out; and
-- Redis read-deadline coalescing.
+- process coalescing fan-out;
+- Redis read-deadline coalescing;
+- tracked Redis hits with shadow omitted;
+- tracked Redis hits outside a partial shadow cohort;
+- ramped-down Redis shadow-read detachment; and
+- ramped-down Redis shadow-fill detachment.
 
 The benchmark is a maintainer tool and is not included in the published
-package. It asserts fallback counts, coalescing state, returned values, and one
-semantic read and one cleaned-up deadline timer for the remote coalescing
-scenario. It deliberately applies no timing threshold.
+package.
+
+It asserts fallback counts, coalescing state, returned values, semantic Redis
+calls, cleaned-up deadline timers, stable shadow exclusion, tracked dark reads
+and fills, caller detachment, mismatch confirmation, and the absence of shadow
+writes or invalidations on warm hits. It deliberately applies no timing
+threshold.
 
 Override its work sizes with:
 
