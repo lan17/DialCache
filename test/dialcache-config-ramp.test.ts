@@ -443,6 +443,7 @@ describe("DialCache runtime config and ramp controls", () => {
     ["an array", []],
     ["a null layer map", { ttlSec: null, ramp: {} }],
     ["an array shadow config", { ttlSec: {}, ramp: {}, shadow: [] }],
+    ["the removed shadowRamp field", { ttlSec: {}, ramp: {}, shadowRamp: 100 }],
     ["a null requestLocal value", { ttlSec: {}, ramp: {}, requestLocal: null }],
   ] as const)("fails open instead of inheriting defaults when the provider returns %s", async (_name, runtimeConfig) => {
     const cacheConfigProvider = vi.fn(async () => runtimeConfig as unknown as DialCacheKeyConfig);

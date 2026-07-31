@@ -668,54 +668,6 @@ describe("DialCache observability metrics", () => {
     expect(JSON.stringify(events(metrics, "error", {}))).not.toMatch(/Tenant123ConfigProviderError|tenant-123/);
   });
 
-  it("reports a stale runtime shadowRamp leaf without disabling inherited cache layers", async () => {
-    const metrics = new RecordingMetrics();
-    const redis = new FakeRedis();
-    const cacheConfigProvider = vi.fn(async () => ({
-      shadowRamp: 50,
-    } as unknown as DialCacheKeyConfig));
-    const dialcache = new DialCache({
-      redis: { client: redis, readTimeoutMs: 1_000 },
-      metrics,
-      cacheConfigProvider,
-    });
-    const source = vi.fn(async (id: string) => ({ id, source: "fallback" }));
-    const getUser = dialcache.cached(source, {
-      keyType: "user_id",
-      useCase: "IgnoredRuntimeShadowRamp",
-      cacheKey: (id) => id,
-      defaultConfig: new DialCacheKeyConfig({
-        ttlSec: {
-          [CacheLayer.LOCAL]: 60,
-          [CacheLayer.REMOTE]: 60,
-        },
-        ramp: {
-          [CacheLayer.LOCAL]: 100,
-          [CacheLayer.REMOTE]: 100,
-        },
-      }),
-    });
-
-    const first = await dialcache.enable(async () => await getUser("123"));
-    const second = await dialcache.enable(async () => await getUser("123"));
-
-    expect(second).toBe(first);
-    expect(source).toHaveBeenCalledOnce();
-    expect(cacheConfigProvider).toHaveBeenCalledTimes(2);
-    expect(redis.getCalls).toBe(1);
-    expect(redis.setCalls).toBe(1);
-    expect(events(metrics, "error", {
-      useCase: "IgnoredRuntimeShadowRamp",
-      layer: CacheLayer.REMOTE,
-      error: "config_resolution",
-      inFallback: false,
-    })).toHaveLength(2);
-    expect(events(metrics, "disabled", {
-      useCase: "IgnoredRuntimeShadowRamp",
-      reason: "config_error",
-    })).toHaveLength(0);
-  });
-
   it("classifies local cache reads and writes", async () => {
     const metrics = new RecordingMetrics();
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };

@@ -75,53 +75,6 @@ describe("DialCache observability internal compatibility paths", () => {
     }
   });
 
-  it("ignores and reports a legacy runtime shadowRamp leaf after merging valid leaves", async () => {
-    const defaultConfig = new DialCacheKeyConfig({
-      requestLocal: true,
-      ttlSec: { [CacheLayer.LOCAL]: 60, [CacheLayer.REMOTE]: 120 },
-      ramp: { [CacheLayer.LOCAL]: 25, [CacheLayer.REMOTE]: 50 },
-      shadow: {
-        ramp: 20,
-        logMismatches: true,
-      },
-    });
-    const runtime = {
-      shadowRamp: 80,
-      ramp: { [CacheLayer.REMOTE]: 75 },
-      shadow: { logMismatches: false },
-    } as unknown as DialCacheKeyConfig;
-    let ignoredLegacyLeaves = 0;
-
-    await expect(fetchKeyConfig(
-      async () => runtime,
-      key(defaultConfig),
-      () => {
-        ignoredLegacyLeaves += 1;
-      },
-    )).resolves.toEqual(new DialCacheKeyConfig({
-      requestLocal: true,
-      ttlSec: { [CacheLayer.LOCAL]: 60, [CacheLayer.REMOTE]: 120 },
-      ramp: { [CacheLayer.LOCAL]: 25, [CacheLayer.REMOTE]: 75 },
-      shadow: {
-        ramp: 20,
-        logMismatches: false,
-      },
-    }));
-    expect(ignoredLegacyLeaves).toBe(1);
-
-    await expect(fetchKeyConfig(
-      async () => ({
-        shadowRamp: 80,
-        shadow: [],
-      } as unknown as DialCacheKeyConfig),
-      key(defaultConfig),
-      () => {
-        ignoredLegacyLeaves += 1;
-      },
-    )).rejects.toThrow("DialCache shadow config must be an object");
-    expect(ignoredLegacyLeaves).toBe(1);
-  });
-
   it("keeps LocalCache get/getIfPresent compatibility while exposing disabled reads", async () => {
     // Given a local cache with enabled config and a second key with no config.
     const cache = new LocalCache(async () => null, 10);

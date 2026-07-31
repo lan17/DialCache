@@ -439,11 +439,7 @@ export class DialCache {
 
     let keyConfig: DialCacheKeyConfig | null;
     try {
-      keyConfig = await fetchKeyConfig(
-        this.configProvider,
-        key,
-        () => this.recordError(key, CacheLayer.REMOTE, "config_resolution"),
-      );
+      keyConfig = await fetchKeyConfig(this.configProvider, key);
     } catch (error) {
       // Provider failure: fail open and run uncached, mirroring the per-layer config_error path.
       this.logger.warn("Could not resolve DialCache key config", error);
