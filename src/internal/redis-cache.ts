@@ -10,7 +10,11 @@ import {
   type MetricErrorKind,
   type MetricLayer,
 } from "../metrics.js";
-import type { DialCacheRedisClient, RedisCachePayload } from "../redis-client.js";
+import type {
+  DialCacheRedisClient,
+  RedisCachePayload,
+  RedisInvalidationRequest,
+} from "../redis-client.js";
 import { JsonSerializer, type Serializer } from "../serializer.js";
 import type { RedisCacheGetResult } from "./cache-result.js";
 import { awaitAll } from "./await-all.js";
@@ -252,10 +256,7 @@ export class RedisCache {
   }
 
   async invalidate(keyType: string, id: string, futureBufferMs = 0, namespace = "urn"): Promise<void> {
-    await this.client.invalidate({
-      watermarkKey: this.redisWatermarkKey(namespace, keyType, id),
-      futureBufferMs,
-    });
+    await this.client.invalidate(this.redisInvalidationRequest(namespace, keyType, id, futureBufferMs));
   }
 
   async invalidateMany(
@@ -264,14 +265,10 @@ export class RedisCache {
     namespace = "urn",
   ): Promise<void> {
     // Derive every key before dispatch so invalid input cannot partially mutate Redis.
-    const requests = targets.map(({ keyType, id }) => ({
-      watermarkKey: this.redisWatermarkKey(namespace, keyType, id),
-      futureBufferMs,
-    }));
+    const requests = targets.map(({ keyType, id }) =>
+      this.redisInvalidationRequest(namespace, keyType, id, futureBufferMs),
+    );
 
-    if (requests.length === 0) {
-      return;
-    }
     if (this.client.invalidateMany !== undefined) {
       await this.client.invalidateMany(requests);
       return;
@@ -289,6 +286,18 @@ export class RedisCache {
 
   redisWatermarkKey(namespace: string, keyType: string, id: string): string {
     return `${redisClusterHashTag(invalidationPrefix(namespace, keyType, id))}#watermark`;
+  }
+
+  private redisInvalidationRequest(
+    namespace: string,
+    keyType: string,
+    id: string,
+    futureBufferMs: number,
+  ): RedisInvalidationRequest {
+    return {
+      watermarkKey: this.redisWatermarkKey(namespace, keyType, id),
+      futureBufferMs,
+    };
   }
 
   private redisWatermarkKeyFromKey(key: DialCacheKey): string {

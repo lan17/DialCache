@@ -89,6 +89,8 @@ interface DialCacheGlideScripts<TScript> {
   readonly invalidate: TScript;
 }
 
+// GLIDE 2.4.2 exposes script-cache misses only through Error.message. Match
+// the observed GLIDE form and Redis's standard token, and fail closed otherwise.
 function isScriptCacheMiss(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return false;

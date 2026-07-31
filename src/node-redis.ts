@@ -179,6 +179,15 @@ interface NodeRedisInvalidationRequest {
   readonly futureBufferMs: number;
 }
 
+// Pipelines are not transactions, so their size is a resource bound rather
+// than a correctness requirement. Bound how much one batch queues at a time.
+const MAX_INVALIDATION_COMMANDS_PER_CHUNK = 1_000;
+
+interface NodeRedisInvalidationPartition {
+  readonly mode: "pipeline" | "scalar";
+  readonly requests: readonly NodeRedisInvalidationRequest[];
+}
+
 function hasNodeRedisPipeline(client: NodeRedisScriptClient): client is NodeRedisPipelineClient {
   return client.multi !== undefined;
 }
@@ -190,18 +199,23 @@ function isNodeRedisClusterClient(client: NodeRedisPipelineClient): client is No
 function partitionClusterInvalidations(
   client: NodeRedisClusterClient,
   requests: readonly NodeRedisInvalidationRequest[],
-): NodeRedisInvalidationRequest[][] {
-  const partitions: NodeRedisInvalidationRequest[][] = [];
+): NodeRedisInvalidationPartition[] {
+  const partitions: NodeRedisInvalidationPartition[] = [];
   const partitionsByOwner = new Map<string, NodeRedisInvalidationRequest[]>();
+  let unmappedRequests: NodeRedisInvalidationRequest[] | undefined;
   const slots = client.slots;
 
   for (const request of requests) {
     const slot = redisClusterSlot(request.watermarkKey);
     const ownerId = slots[slot]?.master?.id;
     if (ownerId === undefined) {
-      // A stale or incomplete topology entry cannot be safely combined with another slot.
-      // Keep it isolated and let node-redis route it from its own key.
-      partitions.push([request]);
+      // Registered scalar scripts route from their own key and avoid sending
+      // the full Lua source through a one-command pipeline.
+      if (unmappedRequests === undefined) {
+        unmappedRequests = [];
+        partitions.push({ mode: "scalar", requests: unmappedRequests });
+      }
+      unmappedRequests.push(request);
       continue;
     }
 
@@ -209,7 +223,7 @@ function partitionClusterInvalidations(
     if (existing === undefined) {
       const partition = [request];
       partitionsByOwner.set(ownerId, partition);
-      partitions.push(partition);
+      partitions.push({ mode: "pipeline", requests: partition });
     } else {
       existing.push(request);
     }
@@ -218,43 +232,31 @@ function partitionClusterInvalidations(
   return partitions;
 }
 
+async function executeScalarInvalidation(
+  client: NodeRedisScriptClient,
+  { watermarkKey, futureBufferMs }: NodeRedisInvalidationRequest,
+): Promise<void> {
+  const reply = await client.dialcacheInvalidate(watermarkKey, futureBufferMs);
+  validateRedisScriptInvalidationReply(reply);
+}
+
 async function executeScalarInvalidations(
   client: NodeRedisScriptClient,
   requests: readonly NodeRedisInvalidationRequest[],
 ): Promise<void> {
-  await awaitAll(
-    requests.map(async ({ watermarkKey, futureBufferMs }) => {
-      const reply = await client.dialcacheInvalidate(watermarkKey, futureBufferMs);
-      validateRedisScriptInvalidationReply(reply);
-    }),
-    "Multiple DialCache invalidations failed",
-  );
-}
-
-function isDirectRedisClusterRedirection(error: unknown): boolean {
-  return error instanceof Error
-    && (error.message.startsWith("MOVED ") || error.message.startsWith("ASK "));
+  for (let index = 0; index < requests.length; index += MAX_INVALIDATION_COMMANDS_PER_CHUNK) {
+    await awaitAll(
+      requests
+        .slice(index, index + MAX_INVALIDATION_COMMANDS_PER_CHUNK)
+        .map(async (request) => await executeScalarInvalidation(client, request)),
+      "Multiple DialCache invalidations failed",
+    );
+  }
 }
 
 function isRedisClusterRedirection(error: unknown): boolean {
-  if (!(error instanceof Error) || !("replies" in error) || !("errorIndexes" in error)) {
-    return isDirectRedisClusterRedirection(error);
-  }
-
-  const { replies, errorIndexes } = error as Error & {
-    readonly replies: unknown;
-    readonly errorIndexes: unknown;
-  };
-  if (!Array.isArray(replies) || !Array.isArray(errorIndexes) || errorIndexes.length === 0) {
-    return false;
-  }
-
-  return errorIndexes.every((index: unknown) =>
-    typeof index === "number"
-    && Number.isInteger(index)
-    && index >= 0
-    && index < replies.length
-    && isDirectRedisClusterRedirection(replies[index]));
+  return error instanceof Error
+    && (error.message.startsWith("MOVED ") || error.message.startsWith("ASK "));
 }
 
 async function executeInvalidationPipeline(
@@ -293,6 +295,18 @@ async function executeInvalidationPipeline(
   }
   for (const reply of replies) {
     validateRedisScriptInvalidationReply(reply);
+  }
+}
+
+async function executeInvalidationPipelineChunks(
+  client: NodeRedisPipelineClient,
+  requests: readonly NodeRedisInvalidationRequest[],
+): Promise<void> {
+  for (let index = 0; index < requests.length; index += MAX_INVALIDATION_COMMANDS_PER_CHUNK) {
+    await executeInvalidationPipeline(
+      client,
+      requests.slice(index, index + MAX_INVALIDATION_COMMANDS_PER_CHUNK),
+    );
   }
 }
 
@@ -342,11 +356,17 @@ export function createNodeRedisDialCacheClient(client: NodeRedisScriptClient): D
         return;
       }
 
-      const partitions = isNodeRedisClusterClient(client)
+      const partitions: readonly NodeRedisInvalidationPartition[] = isNodeRedisClusterClient(client)
         ? partitionClusterInvalidations(client, requests)
-        : [requests];
+        : [{ mode: "pipeline", requests }];
       await awaitAll(
-        partitions.map(async (partition) => await executeInvalidationPipeline(client, partition)),
+        partitions.map(async (partition) => {
+          if (partition.mode === "scalar") {
+            await executeScalarInvalidations(client, partition.requests);
+            return;
+          }
+          await executeInvalidationPipelineChunks(client, partition.requests);
+        }),
         "Multiple DialCache invalidation partitions failed",
       );
     },
