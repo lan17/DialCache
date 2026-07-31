@@ -1,4 +1,4 @@
-import { inspect } from "node:util";
+import { inspect, types as utilTypes } from "node:util";
 
 import { describe, expect, it, vi } from "vitest";
 
@@ -13,6 +13,11 @@ import {
 
 describe("shadow mismatch log previews", () => {
   it("keeps exact-limit strings and byte-clamps oversized ASCII and Unicode strings", () => {
+    expect(previewShadowLogKey("")).toEqual({
+      text: "",
+      truncated: false,
+    });
+
     const exact = "a".repeat(SHADOW_LOG_KEY_MAX_BYTES);
     const exactKeyPreview = previewShadowLogKey(exact);
     expect(exactKeyPreview).toEqual({
@@ -42,6 +47,46 @@ describe("shadow mismatch log previews", () => {
     }
   });
 
+  it("rolls byte-clipped keys back to a complete two-, three-, or four-byte UTF-8 sequence", () => {
+    const contentLimit = SHADOW_LOG_KEY_MAX_BYTES - Buffer.byteLength(SHADOW_LOG_TRUNCATION_MARKER);
+
+    for (const character of ["é", "€", "🙂"]) {
+      const prefix = "a".repeat(contentLimit - 1);
+      const preview = previewShadowLogKey(
+        `${prefix}${character}${"z".repeat(SHADOW_LOG_KEY_MAX_BYTES)}`,
+      );
+
+      expect(preview).toEqual({
+        text: `${prefix}${SHADOW_LOG_TRUNCATION_MARKER}`,
+        truncated: true,
+      });
+      expect(Buffer.byteLength(preview.text)).toBeLessThanOrEqual(SHADOW_LOG_KEY_MAX_BYTES);
+      expect(preview.text).not.toContain("\uFFFD");
+    }
+  });
+
+  it("uses length-only markers before inspecting very large rope strings", () => {
+    let rope = "x";
+    for (let index = 0; index < 17; index += 1) {
+      rope += rope;
+    }
+    expect(rope.length).toBe(131_072);
+    const marker = `[String length=${rope.length} code units]${SHADOW_LOG_TRUNCATION_MARKER}`;
+
+    expect(previewShadowLogKey(rope)).toEqual({
+      text: marker,
+      truncated: true,
+    });
+    expect(previewShadowLogValue(rope)).toEqual({
+      text: marker,
+      truncated: true,
+    });
+    expect(previewShadowLogValue({ [rope]: 1 })).toEqual({
+      text: `{[PropertyName length=${rope.length} code units]: 1}${SHADOW_LOG_TRUNCATION_MARKER}`,
+      truncated: true,
+    });
+  });
+
   it("renders supported primitives and escaped strings without truncation", () => {
     expect(previewShadowLogValue({
       undefined,
@@ -53,6 +98,31 @@ describe("shadow mismatch log previews", () => {
         + '"values": Array(8) [true, false, 1, -0, NaN, Infinity, -Infinity, 12n]}',
       truncated: false,
     });
+  });
+
+  it("escapes every supported string control and separator sequence", () => {
+    const cases = [
+      ['"', '\\"'],
+      ["\\", "\\\\"],
+      ["\b", "\\b"],
+      ["\f", "\\f"],
+      ["\n", "\\n"],
+      ["\r", "\\r"],
+      ["\t", "\\t"],
+      ["\u0000", "\\u0000"],
+      ["\u001f", "\\u001f"],
+      ["\u2028", "\\u2028"],
+      ["\u2029", "\\u2029"],
+      ["\ud800", "\\ud800"],
+      ["\udfff", "\\udfff"],
+    ] as const;
+
+    for (const [input, escaped] of cases) {
+      expect(previewShadowLogValue(input)).toEqual({
+        text: `"${escaped}"`,
+        truncated: false,
+      });
+    }
   });
 
   it("bounds large values and aggregates field truncation", () => {
@@ -102,7 +172,7 @@ describe("shadow mismatch log previews", () => {
       },
       {
         name: "structurally unsupported cached value",
-        details: shadowMismatchLogDetails("key", new Map(), "source"),
+        details: shadowMismatchLogDetails("key", new Map([["key", "value"]]), "source"),
         truncatedField: "cachedValuePreview",
       },
     ] as const;
@@ -132,6 +202,7 @@ describe("shadow mismatch log previews", () => {
       Promise.resolve(),
       new WeakMap(),
       new WeakSet(),
+      new Proxy(() => undefined, {}),
     ]) {
       const preview = previewShadowLogValue(value);
 
@@ -141,18 +212,173 @@ describe("shadow mismatch log previews", () => {
     }
   });
 
-  it("renders exotic and class instances opaquely", () => {
+  it("renders dates with intrinsic methods and distinguishes different timestamps", () => {
+    const valueOf = vi.fn(() => {
+      throw new Error("overridden valueOf invoked");
+    });
+    const toISOString = vi.fn(() => {
+      throw new Error("overridden toISOString invoked");
+    });
+    const hostileDate = new Date("2026-07-30T00:00:00.000Z");
+    Object.defineProperties(hostileDate, {
+      valueOf: { value: valueOf },
+      toISOString: { value: toISOString },
+    });
+
+    expect(previewShadowLogValue(hostileDate)).toEqual({
+      text: "Date(2026-07-30T00:00:00.000Z)",
+      truncated: false,
+    });
+    expect(previewShadowLogValue(new Date("2026-07-31T00:00:00.000Z"))).toEqual({
+      text: "Date(2026-07-31T00:00:00.000Z)",
+      truncated: false,
+    });
+    expect(previewShadowLogValue(new Date(Number.NaN))).toEqual({
+      text: "Date(Invalid)",
+      truncated: false,
+    });
+    expect(previewShadowLogValue({ updatedAt: hostileDate })).toEqual({
+      text: '{"updatedAt": Date(2026-07-30T00:00:00.000Z)}',
+      truncated: false,
+    });
+    expect(valueOf).not.toHaveBeenCalled();
+    expect(toISOString).not.toHaveBeenCalled();
+  });
+
+  it("renders collection sizes without invoking instance hooks or iterators", () => {
+    const hook = vi.fn(() => {
+      throw new Error("collection hook invoked");
+    });
+    const map = new Map<unknown, unknown>([["a", 1], ["b", 2]]);
+    const set = new Set<unknown>(["a", "b", "c"]);
+    Object.defineProperties(map, {
+      size: { get: hook },
+      entries: { value: hook },
+      [Symbol.iterator]: { value: hook },
+    });
+    Object.defineProperties(set, {
+      size: { get: hook },
+      values: { value: hook },
+      [Symbol.iterator]: { value: hook },
+    });
+
+    expect(previewShadowLogValue(new Map())).toEqual({
+      text: "Map(0)",
+      truncated: false,
+    });
+    expect(previewShadowLogValue(new Set())).toEqual({
+      text: "Set(0)",
+      truncated: false,
+    });
+    expect(previewShadowLogValue(map)).toEqual({
+      text: `Map(2)${SHADOW_LOG_TRUNCATION_MARKER}`,
+      truncated: true,
+    });
+    expect(previewShadowLogValue(set)).toEqual({
+      text: `Set(3)${SHADOW_LOG_TRUNCATION_MARKER}`,
+      truncated: true,
+    });
+    expect(hook).not.toHaveBeenCalled();
+  });
+
+  it("renders bounded raw bytes for buffers and every supported typed-array brand", () => {
+    expect(previewShadowLogValue(Buffer.from([0, 1, 255]))).toEqual({
+      text: "Buffer(3 bytes) [00 01 ff]",
+      truncated: false,
+    });
+
+    const typedArrays = [
+      ["Uint8Array", new Uint8Array(1)],
+      ["Uint8ClampedArray", new Uint8ClampedArray(1)],
+      ["Uint16Array", new Uint16Array(1)],
+      ["Uint32Array", new Uint32Array(1)],
+      ["Int8Array", new Int8Array(1)],
+      ["Int16Array", new Int16Array(1)],
+      ["Int32Array", new Int32Array(1)],
+      ["Float32Array", new Float32Array(1)],
+      ["Float64Array", new Float64Array(1)],
+      ["BigInt64Array", new BigInt64Array(1)],
+      ["BigUint64Array", new BigUint64Array(1)],
+    ] as const;
+
+    for (const [name, value] of typedArrays) {
+      expect(previewShadowLogValue(value)).toEqual({
+        text: `${name}(${value.byteLength} bytes) [${Array.from(
+          { length: value.byteLength },
+          () => "00",
+        ).join(" ")}]`,
+        truncated: false,
+      });
+    }
+
+    const oversized = Uint8Array.from({ length: 65 }, (_, index) => index);
+    const oversizedPreview = previewShadowLogValue(oversized);
+    expect(oversizedPreview.truncated).toBe(true);
+    expect(oversizedPreview.text).toBe(
+      `Uint8Array(65 bytes) [${Array.from(
+        { length: 64 },
+        (_, index) => index.toString(16).padStart(2, "0"),
+      ).join(" ")}]${SHADOW_LOG_TRUNCATION_MARKER}`,
+    );
+    expect(Buffer.byteLength(oversizedPreview.text)).toBeLessThanOrEqual(SHADOW_LOG_VALUE_MAX_BYTES);
+  });
+
+  it("keeps later typed-array brands working on the Node 22.0 util.types surface", () => {
+    const descriptor = Object.getOwnPropertyDescriptor(utilTypes, "isFloat16Array");
+    expect(descriptor).toBeDefined();
+    Reflect.deleteProperty(utilTypes, "isFloat16Array");
+
+    try {
+      expect(previewShadowLogValue(new Float64Array(1))).toEqual({
+        text: "Float64Array(8 bytes) [00 00 00 00 00 00 00 00]",
+        truncated: false,
+      });
+      expect(previewShadowLogValue(new BigUint64Array(1))).toEqual({
+        text: "BigUint64Array(8 bytes) [00 00 00 00 00 00 00 00]",
+        truncated: false,
+      });
+    } finally {
+      Object.defineProperty(utilTypes, "isFloat16Array", descriptor!);
+    }
+  });
+
+  it("reads binary metadata through intrinsics instead of instance overrides", () => {
+    const hook = vi.fn(() => {
+      throw new Error("typed-array hook invoked");
+    });
+    const value = Uint8Array.from([5, 6]);
+    Object.defineProperties(value, {
+      buffer: { get: hook },
+      byteOffset: { get: hook },
+      byteLength: { get: hook },
+      constructor: { get: hook },
+      [Symbol.iterator]: { value: hook },
+    });
+
+    expect(previewShadowLogValue(value)).toEqual({
+      text: "Uint8Array(2 bytes) [05 06]",
+      truncated: false,
+    });
+    expect(hook).not.toHaveBeenCalled();
+  });
+
+  it("fails closed for a detached typed-array buffer", () => {
+    const value = Uint8Array.from([1, 2]);
+    structuredClone(value.buffer, { transfer: [value.buffer] });
+
+    expect(previewShadowLogValue(value)).toEqual({
+      text: `[unavailable]${SHADOW_LOG_TRUNCATION_MARKER}`,
+      truncated: true,
+    });
+  });
+
+  it("keeps unsupported exotic and class instances opaque", () => {
     class Example {
       readonly visible = true;
     }
     const values = [
-      Buffer.from([0, 1, 255]),
-      new Uint16Array([1, 2]),
       new DataView(Uint8Array.from([3, 4]).buffer),
       Uint8Array.from([5, 6]).buffer,
-      new Map<unknown, unknown>([["key", { value: 1 }]]),
-      new Set<unknown>(["value"]),
-      new Date("2026-07-30T00:00:00.000Z"),
       /cache/giu,
       new Error("nope"),
       new Example(),
@@ -227,8 +453,8 @@ describe("shadow mismatch log previews", () => {
       truncated: true,
     });
     expect(typedArrayPreview).toEqual({
-      text: `[Object]${SHADOW_LOG_TRUNCATION_MARKER}`,
-      truncated: true,
+      text: "Uint8Array(2 bytes) [01 02]",
+      truncated: false,
     });
     expect(proxyPreview.text).toBe(`[Proxy]${SHADOW_LOG_TRUNCATION_MARKER}`);
     expect(revokedPreview.text).toBe(`[Proxy]${SHADOW_LOG_TRUNCATION_MARKER}`);
@@ -277,6 +503,17 @@ describe("shadow mismatch log previews", () => {
       text: '{"visible": 1}',
       truncated: false,
     });
+  });
+
+  it("does not render a value after an oversized property name fills the preview", () => {
+    const preview = previewShadowLogValue({
+      ["p".repeat(SHADOW_LOG_VALUE_MAX_BYTES)]: "must-not-appear",
+    });
+
+    expect(preview.truncated).toBe(true);
+    expect(preview.text).not.toContain("must-not-appear");
+    expect(preview.text.endsWith(SHADOW_LOG_TRUNCATION_MARKER)).toBe(true);
+    expect(Buffer.byteLength(preview.text)).toBeLessThanOrEqual(SHADOW_LOG_VALUE_MAX_BYTES);
   });
 
   it("marks detailed output complete only when every field is complete", () => {

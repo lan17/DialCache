@@ -459,7 +459,6 @@ describe("DialCache runtime config and ramp controls", () => {
     ["a null layer map", { ttlSec: null, ramp: {} }],
     ["an array shadow config", { ttlSec: {}, ramp: {}, shadow: [] }],
     ["a null requestLocal value", { ttlSec: {}, ramp: {}, requestLocal: null }],
-    ["the removed shadowRamp field", { ttlSec: {}, ramp: {}, shadowRamp: 100 }],
   ] as const)("fails open instead of inheriting defaults when the provider returns %s", async (_name, runtimeConfig) => {
     const cacheConfigProvider = vi.fn(async () => runtimeConfig as unknown as DialCacheKeyConfig);
     const dialcache = new DialCache({ cacheConfigProvider });

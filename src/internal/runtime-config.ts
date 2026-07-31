@@ -37,13 +37,14 @@ interface ResolveLayerConfigOptions {
 export async function fetchKeyConfig(
   configProvider: CacheConfigProvider,
   key: DialCacheKey,
+  onIgnoredRuntimeShadowRamp?: () => void,
 ): Promise<DialCacheKeyConfig | null> {
   const defaultConfig = key.defaultConfig;
   const runtimeConfig = (await configProvider(key)) as DialCacheKeyConfig | null | undefined;
   if (runtimeConfig === null || runtimeConfig === undefined) {
     return defaultConfig;
   }
-  return mergeKeyConfig(defaultConfig, runtimeConfig);
+  return mergeKeyConfig(defaultConfig, runtimeConfig, onIgnoredRuntimeShadowRamp);
 }
 
 export function resolveLayerConfig(options: ResolveLayerConfigOptions): ResolvedLayerConfig | null {
@@ -94,10 +95,11 @@ export function resolveLayerConfigResult(options: ResolveLayerConfigOptions): La
 function mergeKeyConfig(
   defaultConfig: DialCacheKeyConfig | null,
   runtimeConfig: DialCacheKeyConfig | null | undefined,
+  onIgnoredRuntimeShadowRamp?: () => void,
 ): DialCacheKeyConfig {
   const overlay = runtimeConfig ?? undefined;
   assertKeyConfig(defaultConfig);
-  assertKeyConfig(overlay);
+  assertKeyConfigShape(overlay);
   const defaultRequestLocal = defaultConfig?.requestLocal;
   const overlayRequestLocal = overlay?.requestLocal;
   const requestLocal = overlayRequestLocal !== undefined
@@ -110,21 +112,29 @@ function mergeKeyConfig(
     : defaultConfig?.remoteReadTimeoutMs;
   const shadow = mergeShadowConfig(defaultConfig?.shadow, overlay?.shadow);
 
-  return new DialCacheKeyConfig({
+  const merged = new DialCacheKeyConfig({
     ttlSec: mergeLayerConfig(defaultConfig?.ttlSec, overlay?.ttlSec, "ttlSec"),
     ramp: mergeLayerConfig(defaultConfig?.ramp, overlay?.ramp, "ramp"),
     requestLocal,
     ...(remoteReadTimeoutMs === undefined ? {} : { remoteReadTimeoutMs }),
     ...(shadow === undefined ? {} : { shadow }),
   });
+  if (overlay !== undefined && Object.hasOwn(overlay, "shadowRamp")) {
+    onIgnoredRuntimeShadowRamp?.();
+  }
+  return merged;
 }
 
 function assertKeyConfig(config: DialCacheKeyConfig | null | undefined): void {
-  if (config !== null && config !== undefined && (typeof config !== "object" || Array.isArray(config))) {
-    throw new TypeError("DialCache key config must be an object");
-  }
+  assertKeyConfigShape(config);
   if (config !== null && config !== undefined && Object.hasOwn(config, "shadowRamp")) {
     throw new TypeError('DialCacheKeyConfig.shadowRamp was replaced by "shadow.ramp"');
+  }
+}
+
+function assertKeyConfigShape(config: DialCacheKeyConfig | null | undefined): void {
+  if (config !== null && config !== undefined && (typeof config !== "object" || Array.isArray(config))) {
+    throw new TypeError("DialCache key config must be an object");
   }
 }
 

@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { types as utilTypes } from "node:util";
 
 export const SHADOW_LOG_KEY_MAX_BYTES = 2 * 1024;
@@ -7,8 +8,20 @@ export const SHADOW_LOG_TRUNCATION_MARKER = "...[truncated]";
 const MAX_DEPTH = 4;
 const MAX_CONTAINER_ENTRIES = 32;
 const MAX_VISITED_NODES = 128;
+const MAX_BINARY_PREVIEW_BYTES = 64;
+const MAX_STRING_INPUT_CODE_UNITS = 64 * 1024;
 const MAX_RENDERED_BIGINT_MAGNITUDE = 10n ** 100n;
 
+const DATE_VALUE_OF = Date.prototype.valueOf;
+const DATE_TO_ISO_STRING = Date.prototype.toISOString;
+const MAP_SIZE = Object.getOwnPropertyDescriptor(Map.prototype, "size")!.get!;
+const SET_SIZE = Object.getOwnPropertyDescriptor(Set.prototype, "size")!.get!;
+const TYPED_ARRAY_PROTOTYPE = Object.getPrototypeOf(Uint8Array.prototype);
+const TYPED_ARRAY_BUFFER = Object.getOwnPropertyDescriptor(TYPED_ARRAY_PROTOTYPE, "buffer")!.get!;
+const TYPED_ARRAY_BYTE_OFFSET = Object.getOwnPropertyDescriptor(TYPED_ARRAY_PROTOTYPE, "byteOffset")!.get!;
+const TYPED_ARRAY_BYTE_LENGTH = Object.getOwnPropertyDescriptor(TYPED_ARRAY_PROTOTYPE, "byteLength")!.get!;
+const NATIVE_UINT8_ARRAY = Uint8Array;
+const IS_BUFFER = Buffer.isBuffer;
 const UTF8_ENCODER = new TextEncoder();
 const UTF8_DECODER = new TextDecoder("utf-8", { fatal: true });
 const TRUNCATION_MARKER_BYTES = UTF8_ENCODER.encode(SHADOW_LOG_TRUNCATION_MARKER);
@@ -91,7 +104,11 @@ class Utf8PreviewWriter {
 
 export function previewShadowLogKey(value: string): BoundedLogPreview {
   const writer = new Utf8PreviewWriter(SHADOW_LOG_KEY_MAX_BYTES);
-  writer.write(value);
+  if (value.length > MAX_STRING_INPUT_CODE_UNITS) {
+    writeOversizedStringMarker(writer, "String", value.length);
+  } else {
+    writer.write(value);
+  }
   return writer.finish();
 }
 
@@ -102,12 +119,8 @@ export function previewShadowLogValue(value: unknown): BoundedLogPreview {
     visitedNodes: 0,
   };
 
-  try {
-    renderValue(state, value, 0);
-    return state.writer.finish();
-  } catch {
-    return unavailablePreview();
-  }
+  renderValue(state, value, 0);
+  return state.writer.finish();
 }
 
 export function shadowMismatchLogDetails(
@@ -148,7 +161,11 @@ function renderValue(state: PreviewState, value: unknown, depth: number): void {
         state.writer.write("undefined");
         return;
       case "string":
-        writeQuotedString(state.writer, value);
+        if (value.length > MAX_STRING_INPUT_CODE_UNITS) {
+          writeOversizedStringMarker(state.writer, "String", value.length);
+        } else {
+          writeQuotedString(state.writer, value);
+        }
         return;
       case "boolean":
         state.writer.write(value ? "true" : "false");
@@ -192,6 +209,14 @@ function renderObject(state: PreviewState, value: object, depth: number): void {
   try {
     if (Array.isArray(value)) {
       renderArray(state, value, depth);
+    } else if (utilTypes.isDate(value)) {
+      renderDate(state, value);
+    } else if (utilTypes.isMap(value)) {
+      renderCollectionSize(state, "Map", MAP_SIZE.call(value) as number);
+    } else if (utilTypes.isSet(value)) {
+      renderCollectionSize(state, "Set", SET_SIZE.call(value) as number);
+    } else if (utilTypes.isTypedArray(value)) {
+      renderTypedArray(state, value);
     } else if (isPlainRecord(value)) {
       renderRecord(state, value, depth);
     } else {
@@ -200,6 +225,85 @@ function renderObject(state: PreviewState, value: object, depth: number): void {
   } finally {
     state.ancestors.delete(value);
   }
+}
+
+function renderDate(state: PreviewState, value: Date): void {
+  const timestamp = DATE_VALUE_OF.call(value);
+  state.writer.write(Number.isNaN(timestamp)
+    ? "Date(Invalid)"
+    : `Date(${DATE_TO_ISO_STRING.call(value)})`);
+}
+
+function renderCollectionSize(state: PreviewState, name: "Map" | "Set", size: number): void {
+  state.writer.write(`${name}(${size})`);
+  if (size > 0) {
+    state.writer.markTruncated();
+  }
+}
+
+function renderTypedArray(state: PreviewState, value: NodeJS.TypedArray): void {
+  const buffer = TYPED_ARRAY_BUFFER.call(value) as ArrayBufferLike;
+  const byteOffset = TYPED_ARRAY_BYTE_OFFSET.call(value) as number;
+  const byteLength = TYPED_ARRAY_BYTE_LENGTH.call(value) as number;
+  const renderedByteLength = Math.min(byteLength, MAX_BINARY_PREVIEW_BYTES);
+  const bytes = new NATIVE_UINT8_ARRAY(buffer, byteOffset, renderedByteLength);
+  state.writer.write(`${typedArrayBrand(value)}(${byteLength} bytes) [`);
+  for (let index = 0; index < renderedByteLength; index += 1) {
+    if (index > 0) {
+      state.writer.write(" ");
+    }
+    state.writer.write(bytes[index]!.toString(16).padStart(2, "0"));
+  }
+  state.writer.write("]");
+  if (byteLength > renderedByteLength) {
+    state.writer.markTruncated();
+  }
+}
+
+function typedArrayBrand(value: NodeJS.TypedArray): string {
+  if (IS_BUFFER(value)) {
+    return "Buffer";
+  }
+  if (utilTypes.isUint8Array(value)) {
+    return "Uint8Array";
+  }
+  if (utilTypes.isUint8ClampedArray(value)) {
+    return "Uint8ClampedArray";
+  }
+  if (utilTypes.isUint16Array(value)) {
+    return "Uint16Array";
+  }
+  if (utilTypes.isUint32Array(value)) {
+    return "Uint32Array";
+  }
+  if (utilTypes.isInt8Array(value)) {
+    return "Int8Array";
+  }
+  if (utilTypes.isInt16Array(value)) {
+    return "Int16Array";
+  }
+  if (utilTypes.isInt32Array(value)) {
+    return "Int32Array";
+  }
+  if (utilTypes.isFloat32Array(value)) {
+    return "Float32Array";
+  }
+  if (
+    typeof utilTypes.isFloat16Array === "function"
+    && utilTypes.isFloat16Array(value)
+  ) {
+    return "Float16Array";
+  }
+  if (utilTypes.isFloat64Array(value)) {
+    return "Float64Array";
+  }
+  if (utilTypes.isBigInt64Array(value)) {
+    return "BigInt64Array";
+  }
+  if (utilTypes.isBigUint64Array(value)) {
+    return "BigUint64Array";
+  }
+  return "TypedArray";
 }
 
 function renderArray(state: PreviewState, value: readonly unknown[], depth: number): void {
@@ -240,7 +344,11 @@ function renderRecord(state: PreviewState, value: Record<string, unknown>, depth
     if (emittedEntries > 0) {
       state.writer.write(", ");
     }
-    writeQuotedString(state.writer, property);
+    if (property.length > MAX_STRING_INPUT_CODE_UNITS) {
+      writeOversizedStringMarker(state.writer, "PropertyName", property.length);
+    } else {
+      writeQuotedString(state.writer, property);
+    }
     state.writer.write(": ");
     const descriptor = Object.getOwnPropertyDescriptor(value, property);
     if (descriptor === undefined) {
@@ -296,6 +404,15 @@ function writeQuotedString(writer: Utf8PreviewWriter, value: string): void {
   writer.write('"');
 }
 
+function writeOversizedStringMarker(
+  writer: Utf8PreviewWriter,
+  kind: "String" | "PropertyName",
+  codeUnits: number,
+): void {
+  writer.write(`[${kind} length=${codeUnits} code units]`);
+  writer.markTruncated();
+}
+
 function escapeCharacter(codePoint: number, character: string): string {
   switch (character) {
     case '"':
@@ -334,13 +451,6 @@ function isPlainRecord(value: object): value is Record<string, unknown> {
   return prototype === null || prototype === Object.prototype;
 }
 
-function unavailablePreview(): BoundedLogPreview {
-  const writer = new Utf8PreviewWriter(SHADOW_LOG_VALUE_MAX_BYTES);
-  writer.write("[unavailable]");
-  writer.markTruncated();
-  return writer.finish();
-}
-
 function completeUtf8PrefixLength(bytes: Uint8Array, proposedLength: number): number {
   if (proposedLength === 0) {
     return 0;
@@ -352,24 +462,9 @@ function completeUtf8PrefixLength(bytes: Uint8Array, proposedLength: number): nu
   if (sequenceStart === proposedLength) {
     return proposedLength;
   }
-  return sequenceStart + utf8SequenceLength(bytes[sequenceStart]!) <= proposedLength
-    ? proposedLength
-    : sequenceStart;
+  return sequenceStart;
 }
 
 function isUtf8ContinuationByte(value: number): boolean {
   return (value & 0xc0) === 0x80;
-}
-
-function utf8SequenceLength(firstByte: number): number {
-  if ((firstByte & 0x80) === 0) {
-    return 1;
-  }
-  if ((firstByte & 0xe0) === 0xc0) {
-    return 2;
-  }
-  if ((firstByte & 0xf0) === 0xe0) {
-    return 3;
-  }
-  return 4;
 }

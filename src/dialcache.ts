@@ -444,7 +444,11 @@ export class DialCache {
 
     let keyConfig: DialCacheKeyConfig | null;
     try {
-      keyConfig = await fetchKeyConfig(this.configProvider, key);
+      keyConfig = await fetchKeyConfig(
+        this.configProvider,
+        key,
+        () => this.recordError(key, CacheLayer.REMOTE, "config_resolution"),
+      );
     } catch (error) {
       // Provider failure: fail open and run uncached, mirroring the per-layer config_error path.
       this.logger.warn("Could not resolve DialCache key config", error);
@@ -830,7 +834,6 @@ export class DialCache {
       this.recordError(key, CacheLayer.REMOTE, "config_resolution");
       return;
     }
-    const shadowLogging = this.resolveShadowLogging(key, resolvedShadowConfig);
     if (this.metrics?.shadowValidation === undefined) {
       return;
     }
@@ -842,6 +845,7 @@ export class DialCache {
       this.recordShadowValidation(key, "dropped");
       return;
     }
+    const shadowLogging = this.resolveShadowLogging(key, resolvedShadowConfig);
 
     const flight: ShadowFlight = {
       cachedPayload: start.kind === "retained" ? start.payload : null,
@@ -873,11 +877,12 @@ export class DialCache {
     const configuredLogMismatchDetails = shadowConfig.logMismatchDetails;
 
     let logMismatches = false;
+    let invalidLogging = false;
     if (configuredLogMismatches !== undefined) {
       if (typeof configuredLogMismatches === "boolean") {
         logMismatches = configuredLogMismatches;
       } else {
-        this.recordError(key, CacheLayer.REMOTE, "config_resolution");
+        invalidLogging = true;
       }
     }
 
@@ -886,8 +891,11 @@ export class DialCache {
       if (typeof configuredLogMismatchDetails === "boolean") {
         logMismatchDetails = configuredLogMismatchDetails;
       } else {
-        this.recordError(key, CacheLayer.REMOTE, "config_resolution");
+        invalidLogging = true;
       }
+    }
+    if (invalidLogging) {
+      this.recordError(key, CacheLayer.REMOTE, "config_resolution");
     }
 
     return {
@@ -1148,19 +1156,25 @@ export class DialCache {
       keyType: key.keyType,
       outcome: "mismatch",
     } as const;
-    this.logger.warn(
-      "DialCache shadow validation mismatch",
-      logging.logMismatchDetails && mismatchDetails !== undefined
-        ? {
-          ...warning,
-          ...shadowMismatchLogDetails(
-            key.urn,
-            mismatchDetails.cachedValue,
-            mismatchDetails.sourceValue,
-          ),
-        }
-        : warning,
-    );
+    if (logging.logMismatchDetails && mismatchDetails !== undefined) {
+      try {
+        this.logger.warn(
+          "DialCache shadow validation mismatch",
+          {
+            ...warning,
+            ...shadowMismatchLogDetails(
+              key.urn,
+              mismatchDetails.cachedValue,
+              mismatchDetails.sourceValue,
+            ),
+          },
+        );
+        return;
+      } catch {
+        // Preview construction is best-effort; preserve the metadata warning.
+      }
+    }
+    this.logger.warn("DialCache shadow validation mismatch", warning);
   }
 
   private async resolveLocalLayerConfig(

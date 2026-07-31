@@ -402,17 +402,10 @@ describe("DialCache Redis shadow validation", () => {
 
     expect(source).not.toHaveBeenCalled();
     expect(warn).not.toHaveBeenCalled();
-    expect(error).toHaveBeenCalledWith({
-      cacheNamespace: "urn",
-      useCase,
-      keyType: "user_id",
-      layer: CacheLayer.REMOTE,
-      error: "config_resolution",
-      inFallback: false,
-    });
+    expect(error).not.toHaveBeenCalled();
   });
 
-  it("reports malformed runtime shadow logging for a key outside the shadow cohort", async () => {
+  it("does not validate shadow logging for a key outside the shadow cohort", async () => {
     const redis = new FakeRedis();
     const metrics = new RecordingMetrics();
     const useCase = "ShadowExcludedInvalidLogging";
@@ -457,7 +450,7 @@ describe("DialCache Redis shadow validation", () => {
     expect(metrics.errorEvents.filter((labels) =>
       labels.layer === CacheLayer.REMOTE
       && labels.error === "config_resolution"
-    )).toHaveLength(1);
+    )).toHaveLength(0);
   });
 
   it.each([
@@ -955,7 +948,14 @@ describe("DialCache Redis shadow validation", () => {
     seedRedis(redis, { id: "b", useCase, payload: JSON.stringify({ id: "b" }) });
     const firstGate = deferred<{ readonly id: string }>();
     const sourceIds: string[] = [];
-    const dialcache = createShadowCache(redis, metrics, { shadowMaxInFlight: 1 });
+    const dialcache = createShadowCache(redis, metrics, {
+      shadowMaxInFlight: 1,
+      cacheConfigProvider: async (key) => key.id === "b"
+        ? new DialCacheKeyConfig({
+            shadow: { logMismatches: "yes" as never },
+          })
+        : null,
+    });
     const getUser = dialcache.cached(async (id: string) => {
       sourceIds.push(id);
       return id === "a" ? await firstGate.promise : { id };
@@ -970,6 +970,10 @@ describe("DialCache Redis shadow validation", () => {
     expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["dropped"]);
     await nextImmediate();
     expect(sourceIds).toEqual(["a"]);
+    expect(metrics.errorEvents.filter((labels) =>
+      labels.layer === CacheLayer.REMOTE
+      && labels.error === "config_resolution"
+    )).toHaveLength(0);
     firstGate.resolve({ id: "a" });
     await waitForShadowEvents(metrics, 2);
     expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["dropped", "match"]);
