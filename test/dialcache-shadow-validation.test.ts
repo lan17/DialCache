@@ -60,16 +60,16 @@ function deferred<T>(): Deferred<T> {
   return { promise, resolve, reject };
 }
 
-function remoteOnly(shadowRamp?: number, requestLocal = false): DialCacheKeyConfig {
+function remoteOnly(shadowPercentage?: number, requestLocal = false): DialCacheKeyConfig {
   return new DialCacheKeyConfig({
     ttlSec: { [CacheLayer.REMOTE]: 60 },
     ramp: { [CacheLayer.REMOTE]: 100 },
-    ...(shadowRamp === undefined ? {} : { shadowRamp }),
+    ...(shadowPercentage === undefined ? {} : { shadow: { ramp: shadowPercentage } }),
     ...(requestLocal ? { requestLocal: true } : {}),
   });
 }
 
-function localAndRemote(shadowRamp: number): DialCacheKeyConfig {
+function localAndRemote(shadowPercentage: number): DialCacheKeyConfig {
   return new DialCacheKeyConfig({
     ttlSec: {
       [CacheLayer.LOCAL]: 60,
@@ -79,7 +79,7 @@ function localAndRemote(shadowRamp: number): DialCacheKeyConfig {
       [CacheLayer.LOCAL]: 100,
       [CacheLayer.REMOTE]: 100,
     },
-    shadowRamp,
+    shadow: { ramp: shadowPercentage },
   });
 }
 
@@ -134,12 +134,12 @@ function createShadowCache(
   });
 }
 
-function trackedRemoteDefaults(useCase: string, shadowRamp = 100) {
+function trackedRemoteDefaults(useCase: string, shadowPercentage = 100) {
   return {
     keyType: "user_id",
     useCase,
     trackForInvalidation: true,
-    defaultConfig: remoteOnly(shadowRamp),
+    defaultConfig: remoteOnly(shadowPercentage),
   } as const;
 }
 
@@ -368,9 +368,31 @@ describe("DialCache Redis shadow validation", () => {
     const useCase = "ShadowNoMetricHook";
     seedRedis(redis, { id: "123", useCase, payload: JSON.stringify({ id: "123" }) });
     const source = vi.fn(async () => ({ id: "123" }));
-    const dialcache = createShadowCache(redis, metricsWithoutShadow());
+    const error = vi.fn();
+    const warn = vi.fn();
+    const dialcache = createShadowCache(redis, {
+      ...metricsWithoutShadow(),
+      error,
+    }, {
+      cacheConfigProvider: async () => new DialCacheKeyConfig({
+        shadow: { logMismatches: "yes" as never },
+      }),
+      logger: {
+        debug: () => undefined,
+        error: () => undefined,
+        warn,
+      },
+    });
     const getUser = dialcache.cached(source, {
       ...trackedRemoteDefaults(useCase),
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 100 },
+        shadow: {
+          ramp: 100,
+          logMismatches: true,
+        },
+      }),
       cacheKey: () => "123",
     });
 
@@ -378,18 +400,68 @@ describe("DialCache Redis shadow validation", () => {
     await nextImmediate();
 
     expect(source).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it("does not validate shadow logging for a key outside the shadow cohort", async () => {
+    const redis = new FakeRedis();
+    const metrics = new RecordingMetrics();
+    const useCase = "ShadowExcludedInvalidLogging";
+    const excludedId = Array.from({ length: 1_000 }, (_, index) => `excluded-${index}`)
+      .find((id) => deterministicShadowRampSample(new DialCacheKey({
+        keyType: "user_id",
+        id,
+        useCase,
+        trackForInvalidation: true,
+      })) >= 50);
+    if (excludedId === undefined) {
+      throw new Error("Could not find a key outside the partial shadow cohort");
+    }
+    seedRedis(redis, {
+      id: excludedId,
+      useCase,
+      payload: JSON.stringify({ id: excludedId }),
+    });
+    const source = vi.fn(async (id: string) => ({ id }));
+    const dialcache = createShadowCache(redis, metrics, {
+      cacheConfigProvider: async () => new DialCacheKeyConfig({
+        shadow: { logMismatches: "yes" as never },
+      }),
+    });
+    const getUser = dialcache.cached(source, {
+      keyType: "user_id",
+      useCase,
+      trackForInvalidation: true,
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 100 },
+        shadow: { ramp: 50 },
+      }),
+      cacheKey: (id: string) => id,
+    });
+
+    expect(await dialcache.enable(async () => await getUser(excludedId))).toEqual({ id: excludedId });
+    await nextImmediate();
+
+    expect(source).not.toHaveBeenCalled();
+    expect(metrics.shadowEvents).toHaveLength(0);
+    expect(metrics.errorEvents.filter((labels) =>
+      labels.layer === CacheLayer.REMOTE
+      && labels.error === "config_resolution"
+    )).toHaveLength(0);
   });
 
   it.each([
-    { name: "omitted", shadowRamp: undefined, recordsError: false },
-    { name: "zero", shadowRamp: 0, recordsError: false },
-    { name: "a string", shadowRamp: "100", recordsError: true },
-    { name: "NaN", shadowRamp: Number.NaN, recordsError: true },
-    { name: "negative", shadowRamp: -1, recordsError: true },
-    { name: "above one hundred", shadowRamp: 101, recordsError: true },
-  ])("treats runtime shadowRamp $name as a no-op without disturbing a valid Redis hit", async ({
+    { name: "omitted", shadowPercentage: undefined, recordsError: false },
+    { name: "zero", shadowPercentage: 0, recordsError: false },
+    { name: "a string", shadowPercentage: "100", recordsError: true },
+    { name: "NaN", shadowPercentage: Number.NaN, recordsError: true },
+    { name: "negative", shadowPercentage: -1, recordsError: true },
+    { name: "above one hundred", shadowPercentage: 101, recordsError: true },
+  ])("treats runtime shadow.ramp $name as a no-op without disturbing a valid Redis hit", async ({
     name,
-    shadowRamp,
+    shadowPercentage,
     recordsError,
   }) => {
     const redis = new FakeRedis();
@@ -398,7 +470,7 @@ describe("DialCache Redis shadow validation", () => {
     const cachedValue = { id: "123", source: "cache" };
     seedRedis(redis, { id: "123", useCase, payload: JSON.stringify(cachedValue) });
     const runtimeConfig = new DialCacheKeyConfig({
-      ...(shadowRamp === undefined ? {} : { shadowRamp: shadowRamp as number }),
+      ...(shadowPercentage === undefined ? {} : { shadow: { ramp: shadowPercentage as number } }),
     });
     const source = vi.fn(async () => ({ id: "123", source: "truth" }));
     const dialcache = createShadowCache(redis, metrics, {
@@ -440,7 +512,7 @@ describe("DialCache Redis shadow validation", () => {
       runtimeShadowRamp: 0,
       expectedValidations: 0,
     },
-  ])("runtime shadowRamp $name", async ({
+  ])("runtime shadow.ramp $name", async ({
     staticShadowRamp,
     runtimeShadowRamp,
     expectedValidations,
@@ -452,7 +524,7 @@ describe("DialCache Redis shadow validation", () => {
     seedRedis(redis, { id: "123", useCase, payload: JSON.stringify(cachedValue) });
     const source = vi.fn(async () => cachedValue);
     const dialcache = createShadowCache(redis, metrics, {
-      cacheConfigProvider: async () => new DialCacheKeyConfig({ shadowRamp: runtimeShadowRamp }),
+      cacheConfigProvider: async () => new DialCacheKeyConfig({ shadow: { ramp: runtimeShadowRamp } }),
     });
     const getUser = dialcache.cached(source, {
       ...trackedRemoteDefaults(useCase),
@@ -875,7 +947,14 @@ describe("DialCache Redis shadow validation", () => {
     seedRedis(redis, { id: "b", useCase, payload: JSON.stringify({ id: "b" }) });
     const firstGate = deferred<{ readonly id: string }>();
     const sourceIds: string[] = [];
-    const dialcache = createShadowCache(redis, metrics, { shadowMaxInFlight: 1 });
+    const dialcache = createShadowCache(redis, metrics, {
+      shadowMaxInFlight: 1,
+      cacheConfigProvider: async (key) => key.id === "b"
+        ? new DialCacheKeyConfig({
+            shadow: { logMismatches: "yes" as never },
+          })
+        : null,
+    });
     const getUser = dialcache.cached(async (id: string) => {
       sourceIds.push(id);
       return id === "a" ? await firstGate.promise : { id };
@@ -890,6 +969,10 @@ describe("DialCache Redis shadow validation", () => {
     expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["dropped"]);
     await nextImmediate();
     expect(sourceIds).toEqual(["a"]);
+    expect(metrics.errorEvents.filter((labels) =>
+      labels.layer === CacheLayer.REMOTE
+      && labels.error === "config_resolution"
+    )).toHaveLength(0);
     firstGate.resolve({ id: "a" });
     await waitForShadowEvents(metrics, 2);
     expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["dropped", "match"]);

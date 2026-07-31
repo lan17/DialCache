@@ -205,25 +205,25 @@ Instance-wide behavior is set through the `DialCache` constructor:
 | `shadowMaxInFlight` | `1` | Maximum scheduled or active shadow jobs per `DialCache` instance, including uncancellable underlying work. Positive safe integer; excess work is dropped without queuing. |
 | `cacheConfigProvider` | none | Resolves runtime config per enabled invocation as a sparse overlay on the function's `defaultConfig`; `null` applies no overrides. |
 | `metrics` | disabled | A `DialCacheMetricsAdapter` (see [Metrics](#metrics)). |
-| `logger` | `console` | Receives operational cache failures (`debug`, `warn`, `error`). Synchronous throws and rejections from returned promises or thenables are isolated without being awaited. |
+| `logger` | `console` | Receives operational cache failures and opted-in confirmed shadow mismatch warnings (`debug`, `warn`, `error`). Synchronous throws and rejections from returned promises or thenables are isolated without being awaited. |
 
-Per-invocation cache policy is a `DialCacheKeyConfig`: per-layer `ttlSec` and `ramp` maps keyed by `CacheLayer.LOCAL` (process-local) and `CacheLayer.REMOTE` (Redis), a `requestLocal` boolean, an optional `remoteReadTimeoutMs`, and the scalar `shadowRamp` percentage.
+Per-invocation cache policy is a `DialCacheKeyConfig`: per-layer `ttlSec` and `ramp` maps keyed by `CacheLayer.LOCAL` (process-local) and `CacheLayer.REMOTE` (Redis), a `requestLocal` boolean, an optional `remoteReadTimeoutMs`, and an optional `shadow` group. `ShadowConfig` contains the independent shadow `ramp` percentage plus the default-off `logMismatches` control.
 
 Every cached definition or `getOrLoad()` invocation can provide an optional per-use-case `defaultConfig`. It is the baseline policy, and the `cacheConfigProvider` result is a sparse field-level overlay on that baseline. For cache enablement fields, precedence is runtime config, then `defaultConfig`, then DialCache's disabled baseline. For the remote-read deadline, precedence is runtime `remoteReadTimeoutMs`, `defaultConfig.remoteReadTimeoutMs`, `redis.readTimeoutMs`, then the 50 ms library default.
 
-The disabled baseline sets `requestLocal` to false, leaves the process-local and Redis TTLs unset, and sets shadow work to 0%. A shared layer with no effective TTL is disabled by policy. When a shared layer has an effective TTL but no effective ramp, its ramp defaults to 100%. Shadow work remains disabled unless `shadowRamp` is explicitly greater than zero.
+The disabled baseline sets `requestLocal` to false, leaves the process-local and Redis TTLs unset, and sets `shadow.ramp` to 0% with mismatch logging false. A shared layer with no effective TTL is disabled by policy. When a shared layer has an effective TTL but no effective ramp, its ramp defaults to 100%. Shadow work remains disabled unless `shadow.ramp` is explicitly greater than zero.
 
 `DialCacheKeyConfig` preserves an omitted `requestLocal` as `undefined` so the overlay can distinguish omission from an explicit `false`; the effective value still defaults to false after resolution.
 
-A provider result of `null` (or defensive `undefined`) applies no overrides. An empty `DialCacheKeyConfig` and omitted runtime fields also inherit the baseline. Use explicit values to override inherited policy: `requestLocal: false` disables request-local caching and a layer ramp of `0` disables that shared layer. `DialCacheKeyConfig.disabled()` is the complete new-cache-invocation kill switch in one call: request-local and shadow work off, with both shared layers ramped to 0. It does not cancel already-admitted work, and explicit maintenance operations such as `invalidateRemote()` remain available. To stop new cache-invocation Redis reads and fills while preserving other runtime settings, explicitly set both `ramp.remote` and `shadowRamp` to `0`; the remote ramp alone stops serving but does not override an inherited nonzero shadow ramp.
+A provider result of `null` (or defensive `undefined`) applies no overrides. An empty `DialCacheKeyConfig` and omitted runtime fields also inherit the baseline. Top-level fields, cache-layer leaves, and leaves inside `shadow` merge independently; an explicit `false` logging flag overrides an inherited `true`. Use explicit values to override inherited policy: `requestLocal: false` disables request-local caching and a layer ramp of `0` disables that shared layer. `DialCacheKeyConfig.disabled()` is the complete new-cache-invocation kill switch in one call: request-local and shadow work off, shadow logging off, and both shared layers ramped to 0. It does not cancel already-admitted work, and explicit maintenance operations such as `invalidateRemote()` remain available. To stop new cache-invocation Redis reads and fills while preserving other runtime settings, explicitly set both `ramp.remote` and `shadow.ramp` to `0`; the remote ramp alone stops serving but does not override an inherited nonzero shadow ramp.
 
-DialCache validates `defaultConfig` when `cached()` registers a definition and whenever `getOrLoad()` is invoked: TTLs must be positive safe integers no greater than 31,536,000 seconds (a fixed 365-day duration), remote-read deadlines must be positive safe integers within their documented limit, layer and shadow ramps must be finite percentages from 0 to 100, layer maps must be objects, and `requestLocal` must be a boolean when present. Invalid defaults are rejected immediately.
+DialCache validates `defaultConfig` when `cached()` registers a definition and whenever `getOrLoad()` is invoked: TTLs must be positive safe integers no greater than 31,536,000 seconds (a fixed 365-day duration), remote-read deadlines must be positive safe integers within their documented limit, layer and shadow ramps must be finite percentages from 0 to 100, layer maps and `shadow` must be objects, and `requestLocal` and `shadow.logMismatches` must be booleans when present. Invalid defaults are rejected immediately.
 
 Each registration or one-shot invocation captures an immutable internal snapshot of `defaultConfig`; mutating the supplied config or its maps later does not change that operation's baseline. Runtime policy changes belong in the provider's returned overlay.
 
-Runtime TTL and ramp leaves are used as supplied instead of falling back to valid default leaves. A TTL outside the same 1-to-31,536,000-second range disables that layer with `invalid_ttl`; a nonnumeric, non-finite, or out-of-range ramp disables it with `invalid_ramp`. Valid ramps include both `0` and `100`. Other layers can still run, and invalid leaves also record a `config_resolution` error so provider garbage is alertable separately from intentional ramp-downs. A malformed runtime config object, layer-map shape, `requestLocal` value, or explicit `remoteReadTimeoutMs` fails config resolution for the invocation, records `config_error`, and executes the fallback uncached without attempting Redis.
+Runtime TTL and ramp leaves are used as supplied instead of falling back to valid default leaves. A TTL outside the same 1-to-31,536,000-second range disables that layer with `invalid_ttl`; a nonnumeric, non-finite, or out-of-range ramp disables it with `invalid_ramp`. Valid ramps include both `0` and `100`. Other layers can still run, and invalid leaves also record a `config_resolution` error so provider garbage is alertable separately from intentional ramp-downs. A malformed runtime config object, layer-map shape, `requestLocal` value, explicit `remoteReadTimeoutMs`, or removed top-level `shadowRamp` fails config resolution for the invocation, records `config_error`, and executes the fallback uncached without attempting Redis. The public `DialCacheKeyConfig` constructor and static defaults likewise reject `shadowRamp` immediately; migrate it to `shadow.ramp`.
 
-An invalid runtime `shadowRamp` does not affect the cache result or disable an otherwise valid Redis policy. If normal traversal reaches an otherwise shadow-eligible Redis path, DialCache skips shadow work and records a `config_resolution` error.
+An invalid runtime `shadow.ramp` does not affect the cache result or disable an otherwise valid Redis policy. If normal traversal reaches an otherwise shadow-eligible Redis path, DialCache skips shadow work and records a `config_resolution` error. An invalid runtime `shadow.logMismatches` likewise preserves the cache result, Redis policy, shadow result, and shadow metric while suppressing the warning. DialCache validates this diagnostic leaf only after the metrics hook, exact-key cohort, and capacity gates admit shadow work, then records one remote `config_resolution` error for that admitted resolution.
 
 `cacheConfigProvider` is called for every enabled cache invocation before DialCache performs any cache lookup. Keep it cheap, cache any remote/config-store reads inside the provider, and avoid work that would erase the benefit of a cache hit.
 
@@ -237,7 +237,11 @@ const dialcache = new DialCache({
         // Sparse override: inherit both TTLs and the local ramp from defaultConfig.
         ramp: { [CacheLayer.REMOTE]: 25 },
         // Independently sample tracked Redis keys for detached validation/fill.
-        shadowRamp: 5,
+        shadow: {
+          ramp: 5,
+          // Emit one warning with a bounded key and native-JSON value strings.
+          logMismatches: true,
+        },
         // Can be changed by the provider at runtime for this use case.
         remoteReadTimeoutMs: 35,
       });
@@ -259,9 +263,9 @@ const getUser = dialcache.cached((userId: string) => db.fetchUser(userId), {
 
 `ramp` values are percentages from 0 to 100. `0` disables the layer, `100` enables it, and intermediate values are deterministically sampled by cache key and layer, so the same key is consistently sampled in or out of a partial rollout across calls and instances. The assignment algorithm is owned by DialCache and remains stable across releases. Applications that need an externally coordinated cohort can use `cacheConfigProvider` to return a sparse per-key ramp override of `0` or `100`. DialCache fetches and resolves one config snapshot per enabled invocation. Provider errors do not activate defaults: they fail open, record `config_error`, and execute the fallback function uncached.
 
-`shadowRamp` uses the same inclusive 0–100 percentage domain but is independent of cache-layer serving ramps. Omission and `0` disable shadow work; `100` selects every eligible tracked Redis key; intermediate values assign each exact cache key to a stable shadow cohort across calls and instances. A valid remote policy can therefore use `ramp.remote: 0` with a nonzero `shadowRamp` to exercise and populate Redis without serving from it. A nonzero value explicitly authorizes detached tracked writes after clean shadow-only misses. It does not create another `CacheLayer`, activate Redis without a valid remote TTL, or make a request-local/process-local hit continue to Redis.
+`shadow.ramp` uses the same inclusive 0–100 percentage domain but is independent of cache-layer serving ramps. Omission and `0` disable shadow work; `100` selects every eligible tracked Redis key; intermediate values assign each exact cache key to a stable shadow cohort across calls and instances. A valid remote policy can therefore use `ramp.remote: 0` with a nonzero `shadow.ramp` to exercise and populate Redis without serving from it. A nonzero value explicitly authorizes detached tracked writes after clean shadow-only misses. It does not create another `CacheLayer`, activate Redis without a valid remote TTL, or make a request-local/process-local hit continue to Redis.
 
-Remote serving and shadow sampling use independent deterministic cohorts. Equal partial percentages do not imply the same keys, so a partial shadow cohort does not guarantee that every key admitted by a later partial serving ramp was warmed or validated. Use `shadowRamp: 100` when every otherwise eligible invocation must exercise the non-serving Redis path before a serving-ramp increase.
+Remote serving and shadow sampling use independent deterministic cohorts. Equal partial percentages do not imply the same keys, so a partial shadow cohort does not guarantee that every key admitted by a later partial serving ramp was warmed or validated. Use `shadow: { ramp: 100 }` when every otherwise eligible invocation must exercise the non-serving Redis path before a serving-ramp increase.
 
 ## Cache layers
 
@@ -455,7 +459,7 @@ This guard is deliberately conservative and is not a proof of runtime data. Type
 
 #### Shadow validation
 
-Shadow mode runs a sampled, detached Redis path for tracked keys without allowing that path to serve the caller. A Redis hit is compared with the source of truth (SoT); a clean Redis miss can be filled from the caller-accepted SoT value. Redis serving and shadow execution are independent, and shadowing is opt-in per use case through `shadowRamp`:
+Shadow mode runs a sampled, detached Redis path for tracked keys without allowing that path to serve the caller. A Redis hit is compared with the source of truth (SoT); a clean Redis miss can be filled from the caller-accepted SoT value. Redis serving and shadow execution are independent, and shadowing is opt-in per use case through `shadow.ramp`:
 
 ```ts
 import { CacheLayer, DialCache, DialCacheKeyConfig } from "dialcache";
@@ -473,7 +477,7 @@ const getUser = dialcache.cached(
   (userId: string) => db.fetchUser(userId),
   {
     keyType: "user_id",
-    useCase: "GetSensitiveUser",
+    useCase: "GetUser",
     cacheKey: (userId) => userId,
     trackForInvalidation: true,
     // Optional: override strict deep equality with use-case semantics.
@@ -483,13 +487,18 @@ const getUser = dialcache.cached(
       ttlSec: { [CacheLayer.REMOTE]: 300 },
       // Exercise and populate Redis without serving it to callers.
       ramp: { [CacheLayer.REMOTE]: 0 },
-      shadowRamp: 5,
+      shadow: {
+        ramp: 5,
+        // Default-off warning with a bounded key and native-JSON value strings.
+        // Enable only after approving the logger and data-handling policy.
+        logMismatches: true,
+      },
     }),
   },
 );
 ```
 
-Shadow work is eligible only when the operation sets `trackForInvalidation: true`, a valid remote TTL/policy exists, its effective `shadowRamp` selects the exact cache key, a configured metrics adapter implements `shadowValidation`, and capacity is available. The bundled Prometheus and Datadog adapters implement that hook. There are two paths:
+Shadow work is eligible only when the operation sets `trackForInvalidation: true`, a valid remote TTL/policy exists, its effective `shadow.ramp` selects the exact cache key, a configured metrics adapter implements `shadowValidation`, and capacity is available. Logging is supplemental to that metric; enabling `logMismatches` does not activate shadow work without the metrics hook. The bundled Prometheus and Datadog adapters implement that hook. There are two paths:
 
 - When remote serving is enabled and produces a tracked Redis hit, DialCache retains the exact serialized payload that supplied the caller as `C0`.
 - When the remote policy is valid but disabled specifically by `ramped_down`, DialCache starts a detached tracked Redis read for `C0`. Its result can be validated or used to decide whether a clean miss may be filled, but can never supply the caller or populate an in-memory layer.
@@ -534,6 +543,12 @@ The effective serializer's `load` method therefore runs a second time for a samp
 
 Shadow metrics use the bounded outcomes `match`, `mismatch`, `superseded`, `filled`, `fill_blocked`, `fill_error`, `redis_error`, `source_error`, `deserialization_error`, `comparison_error`, `confirmation_error`, `timeout`, and `dropped`. `redis_error` applies to the initial shadow-only `C0` read; `confirmation_error` applies to `C1`. A clean `C0` miss is an ordinary `miss{layer="remote_shadow"}` and terminates with a fill, source, or timeout outcome rather than a second shadow outcome for the miss itself. Labels never contain cache ids, values, payloads, Redis keys, or raw exception text.
 
+Confirmed-mismatch logging is separately opt-in through `shadow.logMismatches`; it never replaces the required `shadowValidation` metric or emits for a mismatch candidate that becomes `superseded`. The single warning contains `cacheNamespace`, `useCase`, `keyType`, `outcome: "mismatch"`, `cacheKey`, `cachedValueJson`, and `sourceValueJson`. `cacheKey` is the logical DialCache URN capped at 2 KiB, not the physical Redis storage key. DialCache independently applies native `JSON.stringify` to the deserialized cached snapshot and raw source value supplied to the comparator, then caps each resulting string at 8 KiB. A byte-clipped field ends in `...[truncated]`, counted inside its cap. If native JSON throws or returns `undefined`, the corresponding JSON field is `null`; the other side is still attempted. DialCache does not compute a textual diff or call the configured serializer again for logging.
+
+Mismatch logging is intentionally default-off. Logical URNs can contain ids and arguments, while cached and source values may contain secrets or personal data; truncation is not redaction. DialCache creates the JSON strings only after terminal mismatch confirmation and never passes the raw compared-value references to the logger. Native JSON semantics apply: getters and `toJSON` methods may run, unsupported values may be omitted or normalized, and cycles or `bigint` can make a field unavailable. Stringification is synchronous, and the 8 KiB caps apply only after `JSON.stringify` returns; they do not bound input traversal, hook execution, event-loop time, or the intermediate JSON string. Enable mismatch logging only for trusted, reasonably bounded values and with an approved logger, redaction, transport, access, and retention policy.
+
+The byte caps apply before logger framing or escaping, so they do not guarantee a final transport event below a sink-specific limit; the metadata fields are not size-clamped. A detail-construction failure degrades to the metadata-only warning. Logger throws and rejected promises or thenables remain isolated from cache and shadow correctness.
+
 Detached Redis reads, serializer loads/dumps, payload sizes, and read/write errors use the existing layer label with `layer="remote_shadow"`. This distinguishes non-serving Redis cost from caller-path `layer="remote"` telemetry without adding a metric or label. The established `observeGet{layer="remote"}` boundary includes caller-path deserialization, while `observeGet{layer="remote_shadow"}` ends when the deadline-bounded Redis read result settles; detached serializer work and any later raw-client settlement are outside that timer. The request-path read that supplied a served `C0` keeps `layer="remote"`, and a ramped-down caller keeps `disabled{layer="remote", reason="ramped_down"}`. No `disabled{layer="remote_shadow"}` event is emitted for ineligible or dropped work; `dropped` remains the terminal shadow outcome. Confirmation reads use the same `remote_shadow` value, with `superseded` or `confirmation_error` describing their role.
 
 The command amplification is bounded: a selected served hit adds one SoT read and adds `C1` only for a semantic mismatch candidate; a selected ramped-down hit adds detached `C0`, reuses the caller's existing SoT read, and likewise adds `C1` only for a candidate; a selected ramped-down miss adds detached `C0` and at most one tracked fill. `superseded` means only that the original observation could not be confirmed. `mismatch` means the exact `C0` payload survived a tracked Redis read after the SoT disagreement; it is not a cross-system atomic snapshot or a guarantee that the mismatch persists.
@@ -542,7 +557,7 @@ The initial `C0` read and later fill are not atomic. The fill is a normal tracke
 
 A served-hit sample invokes the wrapped function or inline loader as an additional source read, so that loader must be safe to call for observation. A ramped-down sample reuses the caller's ordinary invocation and does not add another SoT call.
 
-For valid policies, shadow-specific source calls, cache-path Redis traffic, returned values, and metrics are unchanged when `shadowRamp` is omitted or `0`. Independently of shadow execution, this release rejects malformed runtime ramps instead of clamping them, isolates rejected observer promises and thenables, and makes `DialCacheKeyConfig.disabled()` explicitly set `shadowRamp: 0`. The opt-in feature adds the per-key `shadowRamp` and `shadowComparator` settings, the per-instance `shadowMaxInFlight` limit, and the `shadowValidation` metrics hook/instrument. The clean-miss bootstrap adds no additional ramp knob, Redis protocol operation, metric instrument, or label key; enabling shadowing authorizes the tracked Redis write described above. Exported unions widen: `MetricLayer` gains `remote_shadow`, and `ShadowValidationOutcome` gains `superseded`, `filled`, `fill_blocked`, `fill_error`, `redis_error`, and `confirmation_error`. TypeScript consumers with exhaustive switches or `Record` values must add those cases, and dashboards restricted to `layer="remote"` intentionally exclude detached traffic.
+For valid policies, shadow-specific source calls, cache-path Redis traffic, returned values, and metrics are unchanged when `shadow` is omitted or `shadow.ramp` is `0`. Shadow policy is grouped under `DialCacheKeyConfig.shadow`; consumers of the former flat ramp field must migrate to `shadow: { ramp }`. The public constructor, static defaults, and runtime provider results reject the removed field. `DialCacheKeyConfig.disabled()` explicitly disables the shadow ramp and mismatch logging. `shadowComparator` remains a typed `cached()` / `getOrLoad()` option because it defines stable use-case equality, while `shadowMaxInFlight` remains a per-instance concurrency limit. The clean-miss bootstrap adds no additional ramp knob, Redis protocol operation, metric instrument, or label key; enabling shadowing authorizes the tracked Redis write described above. Exported unions include `remote_shadow` in `MetricLayer` and `superseded`, `filled`, `fill_blocked`, `fill_error`, `redis_error`, and `confirmation_error` in `ShadowValidationOutcome`. TypeScript consumers with exhaustive switches or `Record` values must include those cases, and dashboards restricted to `layer="remote"` intentionally exclude detached traffic.
 
 ## Cached-value ownership
 
@@ -819,7 +834,7 @@ These values are defined by the backend-neutral core and are identical for every
 
 ### Custom adapters
 
-For other telemetry backends, implement `DialCacheMetricsAdapter` and pass the adapter through `new DialCache({ metrics })`. Every backend-neutral label object exposes the logical namespace as camel-case `cacheNamespace`; adapters should map it to their backend's `cache_namespace` label/tag. This field is present even when no key or cache layer was reached. Implement the optional `shadowValidation` method to enable shadow work as well as record its outcomes; omitting it leaves all shadow work disabled even when `shadowRamp` is nonzero. Every metrics callback is fire-and-forget: DialCache isolates synchronous throws and consumes rejections from returned promises or thenables, but never awaits or drains observer work. Omit `metrics` to disable metrics.
+For other telemetry backends, implement `DialCacheMetricsAdapter` and pass the adapter through `new DialCache({ metrics })`. Every backend-neutral label object exposes the logical namespace as camel-case `cacheNamespace`; adapters should map it to their backend's `cache_namespace` label/tag. This field is present even when no key or cache layer was reached. Implement the optional `shadowValidation` method to enable shadow work as well as record its outcomes; omitting it leaves all shadow work disabled even when `shadow.ramp` is nonzero or mismatch logging is enabled. Every metrics callback is fire-and-forget: DialCache isolates synchronous throws and consumes rejections from returned promises or thenables, but never awaits or drains observer work. Omit `metrics` to disable metrics.
 
 ## Maintainers
 
