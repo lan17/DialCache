@@ -11,6 +11,7 @@ import {
 
 const redisUrl = process.env.DIALCACHE_BENCH_REDIS_URL ?? "redis://127.0.0.1:6379";
 const sizes = [10, 100, 1_000];
+const repetitions = positiveIntegerFromEnvironment("DIALCACHE_BENCH_REPETITIONS", 5);
 const runId = `${process.pid}-${Date.now()}`;
 const redisClient = createClient({
   url: redisUrl,
@@ -35,25 +36,43 @@ try {
   await dialcache.invalidateRemote("benchmark_warmup", runId);
 
   for (const size of sizes) {
-    const scalarTargets = targetsFor(`scalar-${size}`, size);
-    const scalarStartedAt = performance.now();
-    await Promise.all(
-      scalarTargets.map(({ keyType, id }) => dialcache.invalidateRemote(keyType, id)),
-    );
-    const scalarMs = performance.now() - scalarStartedAt;
-    assert.equal(await countWatermarks(namespace, scalarTargets), size);
+    const scalarSamples = [];
+    const batchSamples = [];
+    for (let repetition = 0; repetition < repetitions; repetition += 1) {
+      const scalarTargets = targetsFor(`scalar-${size}-${repetition}`, size);
+      const batchTargets = targetsFor(`batch-${size}-${repetition}`, size);
+      const runScalar = async () => {
+        const startedAt = performance.now();
+        await Promise.all(
+          scalarTargets.map(({ keyType, id }) => dialcache.invalidateRemote(keyType, id)),
+        );
+        scalarSamples.push(performance.now() - startedAt);
+        assert.equal(await countWatermarks(namespace, scalarTargets), size);
+      };
+      const runBatch = async () => {
+        const startedAt = performance.now();
+        await dialcache.invalidateRemoteMany(batchTargets);
+        batchSamples.push(performance.now() - startedAt);
+        assert.equal(await countWatermarks(namespace, batchTargets), size);
+      };
 
-    const batchTargets = targetsFor(`batch-${size}`, size);
-    const batchStartedAt = performance.now();
-    await dialcache.invalidateRemoteMany(batchTargets);
-    const batchMs = performance.now() - batchStartedAt;
-    assert.equal(await countWatermarks(namespace, batchTargets), size);
+      if (repetition % 2 === 0) {
+        await runScalar();
+        await runBatch();
+      } else {
+        await runBatch();
+        await runScalar();
+      }
+    }
+    const scalarMedianMs = median(scalarSamples);
+    const batchMedianMs = median(batchSamples);
 
     results.push({
       targets: size,
-      "Promise.all scalar (ms)": scalarMs.toFixed(2),
-      "single batch call (ms)": batchMs.toFixed(2),
-      "scalar / batch": (scalarMs / batchMs).toFixed(2),
+      repetitions,
+      "Promise.all scalar median (ms)": scalarMedianMs.toFixed(2),
+      "batch median (ms)": batchMedianMs.toFixed(2),
+      "median scalar / batch": (scalarMedianMs / batchMedianMs).toFixed(2),
     });
   }
 
@@ -76,4 +95,25 @@ async function countWatermarks(namespace, targets) {
   const keys = targets.map(({ keyType, id }) =>
     `${redisClusterHashTag(invalidationPrefix(namespace, keyType, String(id)))}#watermark`);
   return await redisClient.exists(keys);
+}
+
+function median(values) {
+  assert.ok(values.length > 0);
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[middle - 1] + sorted[middle]) / 2
+    : sorted[middle];
+}
+
+function positiveIntegerFromEnvironment(name, fallback) {
+  const raw = process.env[name];
+  if (raw === undefined) {
+    return fallback;
+  }
+  const parsed = Number(raw);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive safe integer`);
+  }
+  return parsed;
 }

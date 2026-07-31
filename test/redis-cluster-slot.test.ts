@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  groupByRedisClusterSlot,
-  redisClusterSlot,
-} from "../src/internal/redis-cluster-slot.js";
+import { redisClusterSlot } from "../src/internal/redis-cluster-slot.js";
 
 describe("Redis Cluster slot calculation", () => {
   it.each([
@@ -33,22 +30,5 @@ describe("Redis Cluster slot calculation", () => {
     ["{東京}:key", 16_157],
   ])("hashes the UTF-8 bytes of %j", (key, expectedSlot) => {
     expect(redisClusterSlot(key)).toBe(expectedSlot);
-  });
-
-  it("groups different hash tags that collide on the same exact slot", () => {
-    const requests = [
-      { watermarkKey: "prefix:{k-620}:watermark", id: "first" },
-      { watermarkKey: "prefix:{different}:watermark", id: "other" },
-      { watermarkKey: "prefix:{k-1000}:watermark", id: "second" },
-    ];
-
-    expect(redisClusterSlot(requests[0]!.watermarkKey)).toBe(6_474);
-    expect(redisClusterSlot(requests[2]!.watermarkKey)).toBe(6_474);
-
-    const groups = groupByRedisClusterSlot(requests, ({ watermarkKey }) => watermarkKey);
-
-    expect(groups.get(6_474)).toEqual([requests[0], requests[2]]);
-    expect([...groups.values()].flat()).toHaveLength(requests.length);
-    expect(groups.size).toBe(2);
   });
 });

@@ -6,25 +6,6 @@ export function redisClusterSlot(key: string): number {
   return crc16Xmodem(Buffer.from(redisHashInput(key), "utf8")) % REDIS_CLUSTER_SLOT_COUNT;
 }
 
-export function groupByRedisClusterSlot<T>(
-  items: readonly T[],
-  keyOf: (item: T) => string,
-): Map<number, T[]> {
-  const groups = new Map<number, T[]>();
-
-  for (const item of items) {
-    const slot = redisClusterSlot(keyOf(item));
-    const group = groups.get(slot);
-    if (group === undefined) {
-      groups.set(slot, [item]);
-    } else {
-      group.push(item);
-    }
-  }
-
-  return groups;
-}
-
 function redisHashInput(key: string): string {
   const tagStart = key.indexOf("{");
   if (tagStart === -1) {

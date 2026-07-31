@@ -331,6 +331,16 @@ const customRedisClient: DialCacheRedisClient = {
   write: async ({ value }) => typeof value === "string" || Buffer.isBuffer(value),
   invalidate: async () => undefined,
 };
+const narrowNodeRedisScriptClient = {
+  dialcacheRead: async () => null,
+  dialcacheReadTracked: async () => null,
+  dialcacheWrite: async () => 1,
+  dialcacheWriteTracked: async () => 1,
+  dialcacheInvalidate: async () => 1,
+};
+const nodeRedisAdapterWithoutMulti: DialCacheRedisClient = createNodeRedisDialCacheClient(
+  narrowNodeRedisScriptClient,
+);
 const cacheWithScalarOnlyInvalidation = new DialCache({ redis: { client: customRedisClient } });
 const scalarOnlyFallbackBatch: Promise<void> = cacheWithScalarOnlyInvalidation.invalidateRemoteMany(
   remoteInvalidationTargets,
@@ -449,6 +459,8 @@ void disabledOverlay;
 void metricErrorKinds;
 void unboundedErrorKind;
 void createNodeRedisDialCacheClient;
+void narrowNodeRedisScriptClient;
+void nodeRedisAdapterWithoutMulti;
 void READ_CACHE_SCRIPT;
 void customRedisClient;
 void cacheWithScalarOnlyInvalidation;

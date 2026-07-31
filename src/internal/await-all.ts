@@ -1,17 +1,14 @@
 /** Wait for every launched operation, preserving one error or aggregating many. */
-export async function awaitAll<T>(
-  operations: readonly Promise<T>[],
+export async function awaitAll(
+  operations: readonly Promise<unknown>[],
   aggregateMessage: string,
-): Promise<T[]> {
+): Promise<void> {
   const results = await Promise.allSettled(operations);
   const errors: unknown[] = [];
-  const values: T[] = [];
 
   for (const result of results) {
     if (result.status === "rejected") {
       errors.push(result.reason);
-    } else {
-      values.push(result.value);
     }
   }
 
@@ -21,5 +18,4 @@ export async function awaitAll<T>(
   if (errors.length > 1) {
     throw new AggregateError(errors, aggregateMessage);
   }
-  return values;
 }

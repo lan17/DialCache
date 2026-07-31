@@ -1,7 +1,7 @@
 import { commandOptions, defineScript } from "redis";
 
 import { awaitAll } from "./internal/await-all.js";
-import { groupByRedisClusterSlot } from "./internal/redis-cluster-slot.js";
+import { redisClusterSlot } from "./internal/redis-cluster-slot.js";
 import {
   INVALIDATE_CACHE_SCRIPT,
   READ_CACHE_SCRIPT,
@@ -151,8 +151,8 @@ interface NodeRedisScriptClient {
     payload: string | Buffer,
   ): Promise<number>;
   dialcacheInvalidate(watermarkKey: string, futureBufferMs: number): Promise<number>;
-  multi(routing?: NodeRedisArgument): NodeRedisMultiCommand;
-  readonly slots?: unknown;
+  multi?(routing?: NodeRedisArgument): NodeRedisMultiCommand;
+  readonly slots?: readonly (NodeRedisClusterSlot | undefined)[];
 }
 
 interface NodeRedisMultiCommand {
@@ -160,13 +160,106 @@ interface NodeRedisMultiCommand {
   execAsPipeline(): Promise<unknown[]>;
 }
 
-function isNodeRedisClusterClient(client: NodeRedisScriptClient): boolean {
+interface NodeRedisClusterSlot {
+  readonly master?: {
+    readonly id?: string;
+  };
+}
+
+interface NodeRedisPipelineClient extends NodeRedisScriptClient {
+  multi(routing?: NodeRedisArgument): NodeRedisMultiCommand;
+}
+
+interface NodeRedisClusterClient extends NodeRedisPipelineClient {
+  readonly slots: readonly (NodeRedisClusterSlot | undefined)[];
+}
+
+interface NodeRedisInvalidationRequest {
+  readonly watermarkKey: string;
+  readonly futureBufferMs: number;
+}
+
+function hasNodeRedisPipeline(client: NodeRedisScriptClient): client is NodeRedisPipelineClient {
+  return client.multi !== undefined;
+}
+
+function isNodeRedisClusterClient(client: NodeRedisPipelineClient): client is NodeRedisClusterClient {
   return Array.isArray(client.slots);
 }
 
-async function executeInvalidationPipeline(
+function partitionClusterInvalidations(
+  client: NodeRedisClusterClient,
+  requests: readonly NodeRedisInvalidationRequest[],
+): NodeRedisInvalidationRequest[][] {
+  const partitions: NodeRedisInvalidationRequest[][] = [];
+  const partitionsByOwner = new Map<string, NodeRedisInvalidationRequest[]>();
+  const slots = client.slots;
+
+  for (const request of requests) {
+    const slot = redisClusterSlot(request.watermarkKey);
+    const ownerId = slots[slot]?.master?.id;
+    if (ownerId === undefined) {
+      // A stale or incomplete topology entry cannot be safely combined with another slot.
+      // Keep it isolated and let node-redis route it from its own key.
+      partitions.push([request]);
+      continue;
+    }
+
+    const existing = partitionsByOwner.get(ownerId);
+    if (existing === undefined) {
+      const partition = [request];
+      partitionsByOwner.set(ownerId, partition);
+      partitions.push(partition);
+    } else {
+      existing.push(request);
+    }
+  }
+
+  return partitions;
+}
+
+async function executeScalarInvalidations(
   client: NodeRedisScriptClient,
-  requests: readonly { readonly watermarkKey: string; readonly futureBufferMs: number }[],
+  requests: readonly NodeRedisInvalidationRequest[],
+): Promise<void> {
+  await awaitAll(
+    requests.map(async ({ watermarkKey, futureBufferMs }) => {
+      const reply = await client.dialcacheInvalidate(watermarkKey, futureBufferMs);
+      validateRedisScriptInvalidationReply(reply);
+    }),
+    "Multiple DialCache invalidations failed",
+  );
+}
+
+function isDirectRedisClusterRedirection(error: unknown): boolean {
+  return error instanceof Error
+    && (error.message.startsWith("MOVED ") || error.message.startsWith("ASK "));
+}
+
+function isRedisClusterRedirection(error: unknown): boolean {
+  if (!(error instanceof Error) || !("replies" in error) || !("errorIndexes" in error)) {
+    return isDirectRedisClusterRedirection(error);
+  }
+
+  const { replies, errorIndexes } = error as Error & {
+    readonly replies: unknown;
+    readonly errorIndexes: unknown;
+  };
+  if (!Array.isArray(replies) || !Array.isArray(errorIndexes) || errorIndexes.length === 0) {
+    return false;
+  }
+
+  return errorIndexes.every((index: unknown) =>
+    typeof index === "number"
+    && Number.isInteger(index)
+    && index >= 0
+    && index < replies.length
+    && isDirectRedisClusterRedirection(replies[index]));
+}
+
+async function executeInvalidationPipeline(
+  client: NodeRedisPipelineClient,
+  requests: readonly NodeRedisInvalidationRequest[],
 ): Promise<void> {
   const first = requests[0];
   if (first === undefined) {
@@ -179,7 +272,20 @@ async function executeInvalidationPipeline(
   for (const { watermarkKey, futureBufferMs } of requests) {
     pipeline.dialcacheInvalidate(watermarkKey, futureBufferMs);
   }
-  const replies = await pipeline.execAsPipeline();
+  let replies: unknown[];
+  try {
+    replies = await pipeline.execAsPipeline();
+  } catch (error) {
+    if (!isRedisClusterRedirection(error)) {
+      throw error;
+    }
+
+    // node-redis routes the mixed-slot pipeline using its first key. If topology
+    // changes, a different key can keep redirecting that pipeline to the wrong
+    // owner. Registered scalar calls are idempotent and route each key afresh.
+    await executeScalarInvalidations(client, requests);
+    return;
+  }
   if (replies.length !== requests.length) {
     throw new DialCacheRedisProtocolError(
       `Invalid DialCache Redis invalidate batch reply count; expected ${requests.length}, received ${replies.length}`,
@@ -230,8 +336,14 @@ export function createNodeRedisDialCacheClient(client: NodeRedisScriptClient): D
       if (requests.length === 0) {
         return;
       }
+
+      if (!hasNodeRedisPipeline(client)) {
+        await executeScalarInvalidations(client, requests);
+        return;
+      }
+
       const partitions = isNodeRedisClusterClient(client)
-        ? [...groupByRedisClusterSlot(requests, ({ watermarkKey }) => watermarkKey).values()]
+        ? partitionClusterInvalidations(client, requests)
         : [requests];
       await awaitAll(
         partitions.map(async (partition) => await executeInvalidationPipeline(client, partition)),
