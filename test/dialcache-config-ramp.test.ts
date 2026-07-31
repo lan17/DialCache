@@ -326,6 +326,11 @@ describe("DialCache runtime config and ramp controls", () => {
       "DialCache shadow config must be an object",
     ],
     [
+      "an array shadow config",
+      () => new DialCacheKeyConfig({ shadow: [] as never }),
+      "DialCache shadow config must be an object",
+    ],
+    [
       "the removed shadowRamp field",
       () => new DialCacheKeyConfig({ shadowRamp: 100 } as never),
       'DialCacheKeyConfig.shadowRamp was replaced by "shadow.ramp"',
@@ -411,6 +416,12 @@ describe("DialCache runtime config and ramp controls", () => {
       "must be a layer map",
     ],
     [
+      "array shadow config",
+      { ttlSec: {}, ramp: {}, shadow: [] } as unknown as DialCacheKeyConfig,
+      TypeError,
+      "shadow must be an object",
+    ],
+    [
       "removed shadowRamp",
       { ttlSec: {}, ramp: {}, shadowRamp: 100 } as unknown as DialCacheKeyConfig,
       TypeError,
@@ -446,6 +457,7 @@ describe("DialCache runtime config and ramp controls", () => {
     ["a primitive", 42],
     ["an array", []],
     ["a null layer map", { ttlSec: null, ramp: {} }],
+    ["an array shadow config", { ttlSec: {}, ramp: {}, shadow: [] }],
     ["a null requestLocal value", { ttlSec: {}, ramp: {}, requestLocal: null }],
     ["the removed shadowRamp field", { ttlSec: {}, ramp: {}, shadowRamp: 100 }],
   ] as const)("fails open instead of inheriting defaults when the provider returns %s", async (_name, runtimeConfig) => {

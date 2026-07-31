@@ -7,7 +7,6 @@ export const SHADOW_LOG_TRUNCATION_MARKER = "...[truncated]";
 const MAX_DEPTH = 4;
 const MAX_CONTAINER_ENTRIES = 32;
 const MAX_VISITED_NODES = 128;
-const MAX_OBJECT_SCAN = MAX_CONTAINER_ENTRIES * 2;
 const MAX_RENDERED_BIGINT_MAGNITUDE = 10n ** 100n;
 
 const UTF8_ENCODER = new TextEncoder();
@@ -228,15 +227,15 @@ function renderArray(state: PreviewState, value: readonly unknown[], depth: numb
 function renderRecord(state: PreviewState, value: Record<string, unknown>, depth: number): void {
   state.writer.write("{");
   let emittedEntries = 0;
-  let scannedEntries = 0;
   for (const property in value) {
-    scannedEntries += 1;
-    if (scannedEntries > MAX_OBJECT_SCAN || emittedEntries >= MAX_CONTAINER_ENTRIES) {
-      state.writer.markTruncated();
+    // Ordinary-object enumeration yields own fields before inherited fields.
+    // Inherited fields are outside the documented preview domain.
+    if (!Object.hasOwn(value, property)) {
       break;
     }
-    if (!Object.hasOwn(value, property)) {
-      continue;
+    if (emittedEntries >= MAX_CONTAINER_ENTRIES) {
+      state.writer.markTruncated();
+      break;
     }
     if (emittedEntries > 0) {
       state.writer.write(", ");

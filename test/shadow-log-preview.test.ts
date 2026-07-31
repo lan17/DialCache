@@ -71,6 +71,52 @@ describe("shadow mismatch log previews", () => {
     expect(details.sourceValuePreview.endsWith(SHADOW_LOG_TRUNCATION_MARKER)).toBe(true);
   });
 
+  it("aggregates byte and structural truncation from each detail field independently", () => {
+    const cases = [
+      {
+        name: "cache key",
+        details: shadowMismatchLogDetails(
+          "k".repeat(SHADOW_LOG_KEY_MAX_BYTES + 1),
+          "cached",
+          "source",
+        ),
+        truncatedField: "cacheKey",
+      },
+      {
+        name: "cached value",
+        details: shadowMismatchLogDetails(
+          "key",
+          "c".repeat(SHADOW_LOG_VALUE_MAX_BYTES + 1),
+          "source",
+        ),
+        truncatedField: "cachedValuePreview",
+      },
+      {
+        name: "source value",
+        details: shadowMismatchLogDetails(
+          "key",
+          "cached",
+          "s".repeat(SHADOW_LOG_VALUE_MAX_BYTES + 1),
+        ),
+        truncatedField: "sourceValuePreview",
+      },
+      {
+        name: "structurally unsupported cached value",
+        details: shadowMismatchLogDetails("key", new Map(), "source"),
+        truncatedField: "cachedValuePreview",
+      },
+    ] as const;
+
+    for (const { name, details, truncatedField } of cases) {
+      expect(details.detailsTruncated, name).toBe(true);
+      expect(
+        (["cacheKey", "cachedValuePreview", "sourceValuePreview"] as const)
+          .filter((field) => details[field].endsWith(SHADOW_LOG_TRUNCATION_MARKER)),
+        name,
+      ).toEqual([truncatedField]);
+    }
+  });
+
   it("limits depth, entry count, node count, large BigInts, and opaque values", () => {
     const deep = { one: { two: { three: { four: { five: "hidden" } } } } };
     const wide = Object.fromEntries(Array.from({ length: 40 }, (_, index) => [`key${index}`, index]));
@@ -204,6 +250,31 @@ describe("shadow mismatch log previews", () => {
     });
     expect(previewShadowLogValue(array)).toEqual({
       text: "Array(1) [1]",
+      truncated: false,
+    });
+  });
+
+  it("ignores inherited enumerable fields without reporting truncation", () => {
+    const inheritedFields = Array.from({ length: 65 }, (_, index) => `__dialcache_preview_${index}`);
+    const preview = (() => {
+      try {
+        for (const [index, field] of inheritedFields.entries()) {
+          Object.defineProperty(Object.prototype, field, {
+            value: index,
+            enumerable: true,
+            configurable: true,
+          });
+        }
+        return previewShadowLogValue({ visible: 1 });
+      } finally {
+        for (const field of inheritedFields) {
+          delete (Object.prototype as Record<string, unknown>)[field];
+        }
+      }
+    })();
+
+    expect(preview).toEqual({
+      text: '{"visible": 1}',
       truncated: false,
     });
   });
