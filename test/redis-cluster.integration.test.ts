@@ -8,7 +8,15 @@ import {
 } from "testcontainers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { CacheLayer, DialCache, DialCacheKeyConfig, type DialCacheRedisClient } from "../src/index.js";
+import {
+  CacheLayer,
+  DialCache,
+  DialCacheKeyConfig,
+  invalidationPrefix,
+  redisClusterHashTag,
+  type DialCacheRedisClient,
+} from "../src/index.js";
+import { redisClusterSlot } from "../src/internal/redis-cluster-slot.js";
 import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "../src/node-redis.js";
 
 const remoteOnly = new DialCacheKeyConfig({
@@ -188,6 +196,107 @@ describe("DialCache Lua protocol on Redis Cluster", () => {
     expect(before).toEqual({ id: "123", version: 1 });
     expect(after).toEqual({ id: "123", version: 2 });
     await expect(cluster.dialcacheReadTracked("{slot-a}:value", "{slot-b}:watermark")).rejects.toThrow(/CROSSSLOT/);
+  });
+
+  it("batches same-slot and cross-slot invalidations after per-node SCRIPT FLUSH", async () => {
+    if (cluster === undefined) {
+      throw new Error("Redis Cluster did not start");
+    }
+    const activeCluster = cluster;
+    const namespace = "cluster-batch";
+    const keyType = "item_id";
+    const watermarkFor = (id: string) =>
+      `${redisClusterHashTag(invalidationPrefix(namespace, keyType, id))}#watermark`;
+    const idsBySlot = new Map<number, string>();
+    let sameSlotIds: readonly [string, string] | undefined;
+    // A collision is guaranteed after 16,384 distinct keys, though one usually appears much sooner.
+    for (let index = 0; index <= 16_384 && sameSlotIds === undefined; index += 1) {
+      const id = `item-${index}`;
+      const slot = redisClusterSlot(watermarkFor(id));
+      const existing = idsBySlot.get(slot);
+      if (existing === undefined) {
+        idsBySlot.set(slot, id);
+      } else {
+        sameSlotIds = [existing, id];
+      }
+    }
+    if (sameSlotIds === undefined) {
+      throw new Error("Could not find two generated invalidation keys in the same Redis Cluster slot");
+    }
+    const sameSlot = redisClusterSlot(watermarkFor(sameSlotIds[0]));
+    const sameSlotOwner = activeCluster.slots[sameSlot]?.master.id;
+    if (sameSlotOwner === undefined) {
+      throw new Error("Could not resolve the primary owning the generated same-slot keys");
+    }
+    let otherSlotId: string | undefined;
+    for (let index = 0; index <= 16_384; index += 1) {
+      const id = `item-${index}`;
+      const slotOwner = activeCluster.slots[redisClusterSlot(watermarkFor(id))]?.master.id;
+      if (slotOwner !== undefined && slotOwner !== sameSlotOwner) {
+        otherSlotId = id;
+        break;
+      }
+    }
+    if (otherSlotId === undefined) {
+      throw new Error("Could not find an invalidation key owned by a different Redis Cluster primary");
+    }
+    const ids = [...sameSlotIds, otherSlotId];
+    const firstMaster = activeCluster.masters[0];
+    if (firstMaster === undefined) {
+      throw new Error("Redis Cluster has no primary nodes");
+    }
+    const slotInspector = await activeCluster.nodeClient(firstMaster);
+
+    for (const key of [
+      ...ids.map(watermarkFor),
+      "123456789",
+      "foo{}{bar}",
+      "unicode:{café}:key",
+    ]) {
+      expect(await slotInspector.clusterKeySlot(key)).toBe(redisClusterSlot(key));
+    }
+    expect(await slotInspector.clusterKeySlot(watermarkFor(ids[0]!))).toBe(
+      await slotInspector.clusterKeySlot(watermarkFor(ids[1]!)),
+    );
+    expect(await slotInspector.clusterKeySlot(watermarkFor(ids[2]!))).not.toBe(
+      await slotInspector.clusterKeySlot(watermarkFor(ids[0]!)),
+    );
+    expect(activeCluster.slots[redisClusterSlot(watermarkFor(ids[2]!))]?.master.id).not.toBe(
+      sameSlotOwner,
+    );
+
+    const scriptClient = createNodeRedisDialCacheClient(activeCluster);
+    const dialcache = new DialCache({
+      namespace,
+      redis: { client: scriptClient, readTimeoutMs: 10_000 },
+    });
+    const versions = new Map(ids.map((id) => [id, 1]));
+    const getValue = dialcache.cached(async (id: string) => ({ id, version: versions.get(id)! }), {
+      keyType,
+      useCase: "ClusterBatchInvalidation",
+      cacheKey: (id) => id,
+      trackForInvalidation: true,
+      defaultConfig: remoteOnly,
+    });
+
+    const before = await dialcache.enable(async () => await Promise.all(ids.map(getValue)));
+    for (const id of ids) {
+      versions.set(id, 2);
+    }
+    await Promise.all(
+      activeCluster.masters.map(async (master) => {
+        const client = await activeCluster.nodeClient(master);
+        await client.scriptFlush();
+      }),
+    );
+    await dialcache.invalidateRemoteMany(ids.map((id) => ({ keyType, id })));
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    const after = await dialcache.enable(async () => await Promise.all(ids.map(getValue)));
+
+    expect(before).toEqual(ids.map((id) => ({ id, version: 1 })));
+    expect(after).toEqual(ids.map((id) => ({ id, version: 2 })));
+    const watermarks = await Promise.all(ids.map(async (id) => await activeCluster.get(watermarkFor(id))));
+    expect(watermarks.every((watermark) => watermark !== null && /^\d+$/.test(watermark))).toBe(true);
   });
 
   it("round-trips binary payloads through cluster script routing", async () => {

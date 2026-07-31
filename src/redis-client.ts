@@ -110,4 +110,13 @@ export interface DialCacheRedisClient {
    * Its TTL is derived from the future buffer and any longer existing TTL.
    */
   invalidate(request: RedisInvalidationRequest): Awaitable<void>;
+  /**
+   * Advance multiple watermarks as one client-side batch when supported.
+   *
+   * Each invalidation remains independently atomic, but the batch is not
+   * atomic as a whole and can partially complete. A rejected operation can
+   * also have an ambiguous server-side outcome. Retrying the complete batch is
+   * safe because watermark advancement is monotonic.
+   */
+  invalidateMany?(requests: readonly RedisInvalidationRequest[]): Awaitable<void>;
 }

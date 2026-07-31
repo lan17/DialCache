@@ -192,7 +192,7 @@ function collectorConfigs(prefix: string) {
     invalidationCounter: {
       type: "counter",
       name: `${prefix}dialcache_invalidation_counter`,
-      help: "DialCache invalidation calls by key type and layer.",
+      help: "DialCache invalidation targets by key type and layer.",
       labelNames: ["cache_namespace", "key_type", "layer"],
     },
     coalescedCounter: {

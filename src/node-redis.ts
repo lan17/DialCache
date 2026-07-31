@@ -1,5 +1,7 @@
 import { commandOptions, defineScript } from "redis";
 
+import { awaitAll } from "./internal/await-all.js";
+import { groupByRedisClusterSlot } from "./internal/redis-cluster-slot.js";
 import {
   INVALIDATE_CACHE_SCRIPT,
   READ_CACHE_SCRIPT,
@@ -12,7 +14,7 @@ import {
   validateRedisScriptInvalidationReply,
   validateRedisScriptWriteReply,
 } from "./internal/redis-script-reply.js";
-import type { DialCacheRedisClient } from "./redis-client.js";
+import { DialCacheRedisProtocolError, type DialCacheRedisClient } from "./redis-client.js";
 
 type BufferReplyOptions = ReturnType<
   typeof commandOptions<{
@@ -149,6 +151,43 @@ interface NodeRedisScriptClient {
     payload: string | Buffer,
   ): Promise<number>;
   dialcacheInvalidate(watermarkKey: string, futureBufferMs: number): Promise<number>;
+  multi(routing?: NodeRedisArgument): NodeRedisMultiCommand;
+  readonly slots?: unknown;
+}
+
+interface NodeRedisMultiCommand {
+  dialcacheInvalidate(watermarkKey: string, futureBufferMs: number): NodeRedisMultiCommand;
+  execAsPipeline(): Promise<unknown[]>;
+}
+
+function isNodeRedisClusterClient(client: NodeRedisScriptClient): boolean {
+  return Array.isArray(client.slots);
+}
+
+async function executeInvalidationPipeline(
+  client: NodeRedisScriptClient,
+  requests: readonly { readonly watermarkKey: string; readonly futureBufferMs: number }[],
+): Promise<void> {
+  const first = requests[0];
+  if (first === undefined) {
+    return;
+  }
+
+  // Supplying the first key is required for correct node-redis Cluster routing.
+  // Standalone clients harmlessly ignore the extra optional argument.
+  const pipeline = client.multi(first.watermarkKey);
+  for (const { watermarkKey, futureBufferMs } of requests) {
+    pipeline.dialcacheInvalidate(watermarkKey, futureBufferMs);
+  }
+  const replies = await pipeline.execAsPipeline();
+  if (replies.length !== requests.length) {
+    throw new DialCacheRedisProtocolError(
+      `Invalid DialCache Redis invalidate batch reply count; expected ${requests.length}, received ${replies.length}`,
+    );
+  }
+  for (const reply of replies) {
+    validateRedisScriptInvalidationReply(reply);
+  }
 }
 
 /**
@@ -186,6 +225,18 @@ export function createNodeRedisDialCacheClient(client: NodeRedisScriptClient): D
     async invalidate({ watermarkKey, futureBufferMs }) {
       const result = await client.dialcacheInvalidate(watermarkKey, futureBufferMs);
       validateRedisScriptInvalidationReply(result);
+    },
+    async invalidateMany(requests) {
+      if (requests.length === 0) {
+        return;
+      }
+      const partitions = isNodeRedisClusterClient(client)
+        ? [...groupByRedisClusterSlot(requests, ({ watermarkKey }) => watermarkKey).values()]
+        : [requests];
+      await awaitAll(
+        partitions.map(async (partition) => await executeInvalidationPipeline(client, partition)),
+        "Multiple DialCache invalidation partitions failed",
+      );
     },
   };
 }

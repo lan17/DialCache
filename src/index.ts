@@ -32,6 +32,7 @@ export type {
   CoalescingState,
   GetOrLoadOptions,
   ProcessCoalescingState,
+  RemoteInvalidationTarget,
   ShadowComparator,
 } from "./dialcache.js";
 export { DialCacheKey, invalidationPrefix, normalizeArgs, redisClusterHashTag } from "./key.js";

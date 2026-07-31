@@ -13,6 +13,7 @@ import {
 import type { DialCacheRedisClient, RedisCachePayload } from "../redis-client.js";
 import { JsonSerializer, type Serializer } from "../serializer.js";
 import type { RedisCacheGetResult } from "./cache-result.js";
+import { awaitAll } from "./await-all.js";
 import { assertValidDeadlineMs, withMonotonicDeadline } from "./deadline.js";
 import { cacheTtlSecToMs } from "./duration.js";
 import { fetchKeyConfig, resolveLayerConfigResult, type ResolvedLayerConfig } from "./runtime-config.js";
@@ -255,6 +256,31 @@ export class RedisCache {
       watermarkKey: this.redisWatermarkKey(namespace, keyType, id),
       futureBufferMs,
     });
+  }
+
+  async invalidateMany(
+    targets: readonly { readonly keyType: string; readonly id: string }[],
+    futureBufferMs = 0,
+    namespace = "urn",
+  ): Promise<void> {
+    // Derive every key before dispatch so invalid input cannot partially mutate Redis.
+    const requests = targets.map(({ keyType, id }) => ({
+      watermarkKey: this.redisWatermarkKey(namespace, keyType, id),
+      futureBufferMs,
+    }));
+
+    if (requests.length === 0) {
+      return;
+    }
+    if (this.client.invalidateMany !== undefined) {
+      await this.client.invalidateMany(requests);
+      return;
+    }
+
+    await awaitAll(
+      requests.map(async (request) => await this.client.invalidate(request)),
+      "Multiple DialCache invalidations failed",
+    );
   }
 
   redisKey(key: DialCacheKey): string {

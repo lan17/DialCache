@@ -41,6 +41,43 @@ function fakeClient(replies: FakeReplies = {}) {
   };
 }
 
+interface FakePipeline {
+  readonly routing: string | Buffer | undefined;
+  readonly commands: Array<readonly [watermarkKey: string, futureBufferMs: number]>;
+  readonly execAsPipeline: ReturnType<typeof vi.fn>;
+}
+
+function fakeBatchClient(options: {
+  readonly cluster?: boolean;
+  readonly execute?: (pipeline: FakePipeline) => Promise<unknown[]>;
+} = {}) {
+  const pipelines: FakePipeline[] = [];
+  const client = {
+    ...fakeClient(),
+    ...(options.cluster === true ? { slots: [] } : {}),
+    multi: vi.fn((routing?: string | Buffer) => {
+      const commands: Array<readonly [string, number]> = [];
+      const pipeline: FakePipeline & {
+        dialcacheInvalidate(watermarkKey: string, futureBufferMs: number): unknown;
+      } = {
+        routing,
+        commands,
+        dialcacheInvalidate(watermarkKey: string, futureBufferMs: number) {
+          commands.push([watermarkKey, futureBufferMs]);
+          return pipeline;
+        },
+        execAsPipeline: vi.fn(async () =>
+          options.execute === undefined
+            ? commands.map(() => 1)
+            : await options.execute(pipeline)),
+      };
+      pipelines.push(pipeline);
+      return pipeline;
+    }),
+  };
+  return { client, pipelines };
+}
+
 async function expectProtocolError(operation: Promise<unknown>, message: string): Promise<void> {
   let rejection: unknown;
   try {
@@ -111,6 +148,110 @@ describe("node-redis adapter", () => {
     await expect(
       adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 }),
     ).resolves.toBeUndefined();
+  });
+
+  it("pipelines a standalone invalidation batch in one explicitly routed call", async () => {
+    const { client, pipelines } = fakeBatchClient();
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await adapter.invalidateMany?.([
+      { watermarkKey: "cache:{one}:watermark", futureBufferMs: 0 },
+      { watermarkKey: "cache:{two}:watermark", futureBufferMs: 250 },
+    ]);
+
+    expect(client.multi).toHaveBeenCalledOnce();
+    expect(client.multi).toHaveBeenCalledWith("cache:{one}:watermark");
+    expect(pipelines).toHaveLength(1);
+    expect(pipelines[0]?.commands).toEqual([
+      ["cache:{one}:watermark", 0],
+      ["cache:{two}:watermark", 250],
+    ]);
+    expect(pipelines[0]?.execAsPipeline).toHaveBeenCalledOnce();
+  });
+
+  it("partitions node-redis Cluster pipelines by exact slot", async () => {
+    const { client, pipelines } = fakeBatchClient({ cluster: true });
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await adapter.invalidateMany?.([
+      { watermarkKey: "cache:{k-620}:watermark", futureBufferMs: 10 },
+      { watermarkKey: "cache:{different}:watermark", futureBufferMs: 20 },
+      { watermarkKey: "cache:{k-1000}:watermark", futureBufferMs: 30 },
+    ]);
+
+    expect(client.multi).toHaveBeenCalledTimes(2);
+    expect(pipelines.map(({ routing }) => routing)).toEqual([
+      "cache:{k-620}:watermark",
+      "cache:{different}:watermark",
+    ]);
+    expect(pipelines[0]?.commands).toEqual([
+      ["cache:{k-620}:watermark", 10],
+      ["cache:{k-1000}:watermark", 30],
+    ]);
+    expect(pipelines[1]?.commands).toEqual([
+      ["cache:{different}:watermark", 20],
+    ]);
+  });
+
+  it("waits for every Cluster partition before surfacing a failure", async () => {
+    let releaseSecond!: () => void;
+    const secondGate = new Promise<void>((resolve) => {
+      releaseSecond = resolve;
+    });
+    const firstError = new Error("first partition failed");
+    const { client, pipelines } = fakeBatchClient({
+      cluster: true,
+      execute: async ({ routing, commands }) => {
+        if (routing === "cache:{one}:watermark") {
+          throw firstError;
+        }
+        await secondGate;
+        return commands.map(() => 1);
+      },
+    });
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    let settled = false;
+    const operation = Promise.resolve(adapter.invalidateMany?.([
+      { watermarkKey: "cache:{one}:watermark", futureBufferMs: 0 },
+      { watermarkKey: "cache:{two}:watermark", futureBufferMs: 0 },
+    ])).finally(() => {
+      settled = true;
+    });
+    await vi.waitFor(() => expect(pipelines).toHaveLength(2));
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    releaseSecond();
+    await expect(operation).rejects.toBe(firstError);
+    expect(settled).toBe(true);
+  });
+
+  it("rejects malformed invalidation batch replies and skips empty batches", async () => {
+    const tooShort = fakeBatchClient({ execute: async () => [1] });
+    const shortAdapter = createNodeRedisDialCacheClient(tooShort.client as never);
+    await expectProtocolError(
+      shortAdapter.invalidateMany?.([
+        { watermarkKey: "cache:{one}:watermark", futureBufferMs: 0 },
+        { watermarkKey: "cache:{two}:watermark", futureBufferMs: 0 },
+      ]) ?? Promise.resolve(),
+      "Invalid DialCache Redis invalidate batch reply count; expected 2, received 1",
+    );
+
+    const malformed = fakeBatchClient({ execute: async () => [1, 0] });
+    const malformedAdapter = createNodeRedisDialCacheClient(malformed.client as never);
+    await expectProtocolError(
+      malformedAdapter.invalidateMany?.([
+        { watermarkKey: "cache:{one}:watermark", futureBufferMs: 0 },
+        { watermarkKey: "cache:{two}:watermark", futureBufferMs: 0 },
+      ]) ?? Promise.resolve(),
+      "Invalid DialCache Redis invalidate reply; expected integer 1",
+    );
+
+    const empty = fakeBatchClient();
+    const emptyAdapter = createNodeRedisDialCacheClient(empty.client as never);
+    await emptyAdapter.invalidateMany?.([]);
+    expect(empty.client.multi).not.toHaveBeenCalled();
   });
 
   it("passes the cooperative read signal through node-redis command options", async () => {

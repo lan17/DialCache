@@ -40,6 +40,7 @@ const rootConsumer = `import {
   type RedisInvalidationRequest,
   type RedisReadContext,
   type RedisWriteRequest,
+  type RemoteInvalidationTarget,
   type Serializer,
   type ShadowComparator,
   type ShadowConfig,
@@ -136,6 +137,12 @@ const datadogClassAdapter = new DatadogDialCacheMetrics(datadogOptions);
 // @ts-expect-error The observation type is an explicit, required choice.
 const missingObservationType: DatadogMetricsOptions = { client: dogStatsDClient };
 const cache = new DialCache({ namespace: "consumer-cache", metrics });
+const remoteInvalidationTargets: readonly RemoteInvalidationTarget[] = [
+  { keyType: "id", id: "123" },
+  { keyType: "tenant_id", id: 456 },
+  { keyType: "organization_id", id: 789n },
+];
+const batchInvalidation: Promise<void> = cache.invalidateRemoteMany(remoteInvalidationTargets, 1_000);
 const redisProtocolError = new DialCacheRedisProtocolError("Invalid DialCache Redis write reply");
 const fallbackTimeoutError = new FallbackTimeoutError("Load", 1_000);
 const redisReadTimeoutError = new RedisReadTimeoutError("Load", 100);
@@ -324,12 +331,20 @@ const customRedisClient: DialCacheRedisClient = {
   write: async ({ value }) => typeof value === "string" || Buffer.isBuffer(value),
   invalidate: async () => undefined,
 };
+const cacheWithScalarOnlyInvalidation = new DialCache({ redis: { client: customRedisClient } });
+const scalarOnlyFallbackBatch: Promise<void> = cacheWithScalarOnlyInvalidation.invalidateRemoteMany(
+  remoteInvalidationTargets,
+);
 const redisClientMethods: Readonly<Record<keyof DialCacheRedisClient, true>> = {
   read: true,
   write: true,
   invalidate: true,
+  invalidateMany: true,
 };
 void redisClientMethods;
+const clientAllowsScalarOnlyInvalidation: {} extends Pick<DialCacheRedisClient, "invalidateMany">
+  ? true
+  : false = true;
 const cacheHasNoFlushAll: "flushAll" extends keyof DialCache ? false : true = true;
 const cacheHasNoClose: "close" extends keyof DialCache ? false : true = true;
 const clientHasNoFlushAll: "flushAll" extends keyof DialCacheRedisClient ? false : true = true;
@@ -436,6 +451,11 @@ void unboundedErrorKind;
 void createNodeRedisDialCacheClient;
 void READ_CACHE_SCRIPT;
 void customRedisClient;
+void cacheWithScalarOnlyInvalidation;
+void scalarOnlyFallbackBatch;
+void remoteInvalidationTargets;
+void batchInvalidation;
+void clientAllowsScalarOnlyInvalidation;
 const globalSerializer: Serializer<unknown> = {
   dump: () => "global",
   load: () => ({ source: "global" }),

@@ -49,6 +49,17 @@ type Id = string | number | bigint;
 /** A cache-key spec: a bare id, or an id plus extra (secondary) key dimensions. */
 export type CacheKeySpec = Id | { readonly id: Id; readonly args?: CacheKeyArgs };
 
+/** One remote invalidation identity. */
+export interface RemoteInvalidationTarget {
+  readonly keyType: string;
+  readonly id: Id;
+}
+
+interface NormalizedRemoteInvalidationTarget {
+  readonly keyType: string;
+  readonly id: string;
+}
+
 // "Any function" without using `any`, so Parameters/ReturnType still apply.
 type AnyFn = (...args: never[]) => unknown;
 /** The cached value type, derived from the wrapped function's return. */
@@ -539,6 +550,56 @@ export class DialCache {
         error: "invalidation",
         inFallback: false,
       });
+      throw error;
+    }
+  }
+
+  /**
+   * Writes remote invalidation watermarks for multiple Redis-tracked identities.
+   *
+   * Canonically duplicate targets are coalesced. Each watermark update is
+   * atomic, but the batch is not atomic as a whole and can partially complete.
+   * Retrying the full batch is safe because watermarks advance monotonically.
+   * This has the same remote-only and future-buffer contract as
+   * {@link invalidateRemote}.
+   */
+  async invalidateRemoteMany(
+    targets: readonly RemoteInvalidationTarget[],
+    futureBufferMs = 0,
+  ): Promise<void> {
+    assertSupportedFutureBufferMs(futureBufferMs);
+
+    if (this.redisCache === null) {
+      return;
+    }
+
+    let normalizedTargets: readonly NormalizedRemoteInvalidationTarget[] = [];
+    try {
+      normalizedTargets = normalizeRemoteInvalidationTargets(targets);
+      if (normalizedTargets.length === 0) {
+        return;
+      }
+
+      for (const { keyType } of normalizedTargets) {
+        this.metrics?.invalidation({
+          cacheNamespace: this.namespace,
+          keyType,
+          layer: CacheLayer.REMOTE,
+        });
+      }
+      await this.redisCache.invalidateMany(normalizedTargets, futureBufferMs, this.namespace);
+    } catch (error) {
+      this.logger.warn("Error writing DialCache invalidation watermarks", error);
+      for (const keyType of new Set(normalizedTargets.map(({ keyType }) => keyType))) {
+        this.metrics?.error({
+          cacheNamespace: this.namespace,
+          useCase: "watermark",
+          keyType,
+          layer: CacheLayer.REMOTE,
+          error: "invalidation",
+          inFallback: false,
+        });
+      }
       throw error;
     }
   }
@@ -1493,6 +1554,29 @@ function withFallbackTimeout<T>(
       return new FallbackTimeoutError(useCase, timeoutMs);
     },
   });
+}
+
+function normalizeRemoteInvalidationTargets(
+  targets: readonly RemoteInvalidationTarget[],
+): NormalizedRemoteInvalidationTarget[] {
+  const idsByKeyType = new Map<string, Set<string>>();
+  const normalized: NormalizedRemoteInvalidationTarget[] = [];
+
+  for (const target of targets) {
+    const id = String(target.id);
+    let ids = idsByKeyType.get(target.keyType);
+    if (ids === undefined) {
+      ids = new Set<string>();
+      idsByKeyType.set(target.keyType, ids);
+    }
+    if (ids.has(id)) {
+      continue;
+    }
+    ids.add(id);
+    normalized.push({ keyType: target.keyType, id });
+  }
+
+  return normalized;
 }
 
 function safeLogger(logger: Logger): Logger {
