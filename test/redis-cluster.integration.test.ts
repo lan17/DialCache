@@ -1,3 +1,4 @@
+import * as valkeyGlide from "@valkey/valkey-glide";
 import { commandOptions, createCluster, type RedisClusterOptions } from "redis";
 import {
   GenericContainer,
@@ -6,7 +7,7 @@ import {
   type StartedTestContainer,
   Wait,
 } from "testcontainers";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
   CacheLayer,
@@ -18,6 +19,7 @@ import {
 } from "../src/index.js";
 import { redisClusterSlot } from "../src/internal/redis-cluster-slot.js";
 import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "../src/node-redis.js";
+import { createValkeyGlideDialCacheClient } from "../src/valkey-glide.js";
 
 const remoteOnly = new DialCacheKeyConfig({
   ttlSec: { [CacheLayer.REMOTE]: 60 },
@@ -41,10 +43,61 @@ async function waitForCluster(container: StartedTestContainer): Promise<void> {
   throw new Error("Redis Cluster did not become ready");
 }
 
+async function configureAdvertisedClusterEndpoint(container: StartedTestContainer): Promise<void> {
+  // GLIDE discovers every primary from the server topology and has no node-address remapping hook.
+  // Advertise the host-reachable client endpoint while cluster creation and bus traffic use bridge IPs.
+  const settings = [
+    ["cluster-announce-hostname", container.getHost()],
+    ["cluster-preferred-endpoint-type", "hostname"],
+    ["cluster-announce-port", String(container.getMappedPort(6379))],
+  ] as const;
+  for (const [name, value] of settings) {
+    const result = await container.exec(["redis-cli", "CONFIG", "SET", name, value]);
+    if (result.exitCode !== 0 || !result.output.includes("OK")) {
+      throw new Error(`Could not configure Redis Cluster endpoint ${name}: ${result.output}`);
+    }
+  }
+}
+
+function selectCrossPrimaryBatchIds(
+  activeCluster: ReturnType<typeof createTestCluster>,
+  watermarkFor: (id: string) => string,
+): readonly [string, string, string] {
+  const idsBySlot = new Map<number, string>();
+  let sameSlotIds: readonly [string, string] | undefined;
+  // A collision is guaranteed after 16,384 distinct keys, though one usually appears much sooner.
+  for (let index = 0; index <= 16_384 && sameSlotIds === undefined; index += 1) {
+    const id = `item-${index}`;
+    const slot = redisClusterSlot(watermarkFor(id));
+    const existing = idsBySlot.get(slot);
+    if (existing === undefined) {
+      idsBySlot.set(slot, id);
+    } else {
+      sameSlotIds = [existing, id];
+    }
+  }
+  if (sameSlotIds === undefined) {
+    throw new Error("Could not find two generated invalidation keys in the same Redis Cluster slot");
+  }
+  const sameSlotOwner = activeCluster.slots[redisClusterSlot(watermarkFor(sameSlotIds[0]))]?.master.id;
+  if (sameSlotOwner === undefined) {
+    throw new Error("Could not resolve the primary owning the generated same-slot keys");
+  }
+  for (let index = 0; index <= 16_384; index += 1) {
+    const id = `item-${index}`;
+    const slotOwner = activeCluster.slots[redisClusterSlot(watermarkFor(id))]?.master.id;
+    if (slotOwner !== undefined && slotOwner !== sameSlotOwner) {
+      return [sameSlotIds[0], sameSlotIds[1], id];
+    }
+  }
+  throw new Error("Could not find an invalidation key owned by a different Redis Cluster primary");
+}
+
 describe("DialCache Lua protocol on Redis Cluster", () => {
   let network: StartedNetwork | undefined;
   let containers: Array<StartedTestContainer> = [];
   let cluster: ReturnType<typeof createTestCluster> | undefined;
+  let glideCluster: valkeyGlide.GlideClusterClient | undefined;
 
   beforeAll(async () => {
     const startedNetwork = await new Network().start();
@@ -74,6 +127,8 @@ describe("DialCache Lua protocol on Redis Cluster", () => {
           .start(),
       );
     }
+
+    await Promise.all(containers.map(configureAdvertisedClusterEndpoint));
 
     const networkName = network.getName();
     const internalAddresses = containers.map((container) => `${container.getIpAddress(networkName)}:6379`);
@@ -107,9 +162,19 @@ describe("DialCache Lua protocol on Redis Cluster", () => {
     });
     cluster.on("error", () => undefined);
     await cluster.connect();
+    glideCluster = await valkeyGlide.GlideClusterClient.createClient({
+      addresses: containers.map((container) => ({
+        host: container.getHost(),
+        port: container.getMappedPort(6379),
+      })),
+      requestTimeout: 10_000,
+      periodicChecks: "disabled",
+      advancedConfiguration: { connectionTimeout: 5_000 },
+    });
   });
 
   afterAll(async () => {
+    glideCluster?.close();
     await cluster?.quit();
     await Promise.all(containers.map(async (container) => await container.stop()));
     await network?.stop();
@@ -207,40 +272,12 @@ describe("DialCache Lua protocol on Redis Cluster", () => {
     const keyType = "item_id";
     const watermarkFor = (id: string) =>
       `${redisClusterHashTag(invalidationPrefix(namespace, keyType, id))}#watermark`;
-    const idsBySlot = new Map<number, string>();
-    let sameSlotIds: readonly [string, string] | undefined;
-    // A collision is guaranteed after 16,384 distinct keys, though one usually appears much sooner.
-    for (let index = 0; index <= 16_384 && sameSlotIds === undefined; index += 1) {
-      const id = `item-${index}`;
-      const slot = redisClusterSlot(watermarkFor(id));
-      const existing = idsBySlot.get(slot);
-      if (existing === undefined) {
-        idsBySlot.set(slot, id);
-      } else {
-        sameSlotIds = [existing, id];
-      }
-    }
-    if (sameSlotIds === undefined) {
-      throw new Error("Could not find two generated invalidation keys in the same Redis Cluster slot");
-    }
-    const sameSlot = redisClusterSlot(watermarkFor(sameSlotIds[0]));
+    const ids = selectCrossPrimaryBatchIds(activeCluster, watermarkFor);
+    const sameSlot = redisClusterSlot(watermarkFor(ids[0]));
     const sameSlotOwner = activeCluster.slots[sameSlot]?.master.id;
     if (sameSlotOwner === undefined) {
       throw new Error("Could not resolve the primary owning the generated same-slot keys");
     }
-    let otherSlotId: string | undefined;
-    for (let index = 0; index <= 16_384; index += 1) {
-      const id = `item-${index}`;
-      const slotOwner = activeCluster.slots[redisClusterSlot(watermarkFor(id))]?.master.id;
-      if (slotOwner !== undefined && slotOwner !== sameSlotOwner) {
-        otherSlotId = id;
-        break;
-      }
-    }
-    if (otherSlotId === undefined) {
-      throw new Error("Could not find an invalidation key owned by a different Redis Cluster primary");
-    }
-    const ids = [...sameSlotIds, otherSlotId];
     const firstMaster = activeCluster.masters[0];
     if (firstMaster === undefined) {
       throw new Error("Redis Cluster has no primary nodes");
@@ -297,6 +334,61 @@ describe("DialCache Lua protocol on Redis Cluster", () => {
     expect(after).toEqual(ids.map((id) => ({ id, version: 2 })));
     const watermarks = await Promise.all(ids.map(async (id) => await activeCluster.get(watermarkFor(id))));
     expect(watermarks.every((watermark) => watermark !== null && /^\d+$/.test(watermark))).toBe(true);
+  });
+
+  it("batches same-slot and cross-primary invalidations through Valkey GLIDE Cluster", async () => {
+    if (cluster === undefined || glideCluster === undefined) {
+      throw new Error("Redis Cluster clients did not start");
+    }
+    const activeCluster = cluster;
+    const activeGlideCluster = glideCluster;
+    const namespace = "glide-cluster-batch";
+    const keyType = "item_id";
+    const watermarkFor = (id: string) =>
+      `${redisClusterHashTag(invalidationPrefix(namespace, keyType, id))}#watermark`;
+    const ids = selectCrossPrimaryBatchIds(activeCluster, watermarkFor);
+    const scriptClient = createValkeyGlideDialCacheClient(activeGlideCluster, valkeyGlide);
+    const executeBatch = vi.spyOn(activeGlideCluster, "exec");
+    const dialcache = new DialCache({
+      namespace,
+      redis: { client: scriptClient, readTimeoutMs: 10_000 },
+    });
+    const versions = new Map(ids.map((id) => [id, 1]));
+    const getValue = dialcache.cached(async (id: string) => ({ id, version: versions.get(id)! }), {
+      keyType,
+      useCase: "GlideClusterBatchInvalidation",
+      cacheKey: (id) => id,
+      trackForInvalidation: true,
+      defaultConfig: remoteOnly,
+    });
+
+    try {
+      const before = await dialcache.enable(async () => await Promise.all(ids.map(getValue)));
+      for (const id of ids) {
+        versions.set(id, 2);
+      }
+      await activeGlideCluster.scriptFlush({ route: "allPrimaries" });
+      await dialcache.invalidateRemoteMany(ids.map((id) => ({ keyType, id })));
+      expect(executeBatch).toHaveBeenCalledOnce();
+      expect(executeBatch.mock.calls[0]?.[0]).toBeInstanceOf(valkeyGlide.ClusterBatch);
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      const after = await dialcache.enable(async () => await Promise.all(ids.map(getValue)));
+
+      expect(before).toEqual(ids.map((id) => ({ id, version: 1 })));
+      expect(after).toEqual(ids.map((id) => ({ id, version: 2 })));
+      const watermarks = await Promise.all(
+        ids.map(async (id) => await activeGlideCluster.get(
+          watermarkFor(id),
+          { decoder: valkeyGlide.Decoder.String },
+        )),
+      );
+      expect(watermarks.every(
+        (watermark) => typeof watermark === "string" && /^\d+$/.test(watermark),
+      )).toBe(true);
+    } finally {
+      executeBatch.mockRestore();
+      scriptClient.dispose();
+    }
   });
 
   it("round-trips binary payloads through cluster script routing", async () => {
