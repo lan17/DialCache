@@ -345,7 +345,7 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       const shadowRemoteOnly = new DialCacheKeyConfig({
         ttlSec: { [CacheLayer.REMOTE]: 60 },
         ramp: { [CacheLayer.REMOTE]: 100 },
-        shadowRamp: 100,
+        shadow: { ramp: 100 },
       });
       const dialcache = new DialCache({
         namespace,
@@ -508,7 +508,7 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
         defaultConfig: new DialCacheKeyConfig({
           ttlSec: { [CacheLayer.REMOTE]: 60 },
           ramp: { [CacheLayer.REMOTE]: 0 },
-          shadowRamp: 100,
+          shadow: { ramp: 100 },
         }),
       });
 
@@ -623,7 +623,7 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
         cacheConfigProvider: async () => new DialCacheKeyConfig({
           ttlSec: { [CacheLayer.REMOTE]: 60 },
           ramp: { [CacheLayer.REMOTE]: serveFromRedis ? 100 : 0 },
-          shadowRamp: serveFromRedis ? 0 : 100,
+          shadow: { ramp: serveFromRedis ? 0 : 100 },
         }),
       });
       const source = vi.fn(async () => sourceValue);
@@ -746,7 +746,7 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
         defaultConfig: new DialCacheKeyConfig({
           ttlSec: { [CacheLayer.REMOTE]: 60 },
           ramp: { [CacheLayer.REMOTE]: 0 },
-          shadowRamp: 100,
+          shadow: { ramp: 100 },
         }),
       });
 

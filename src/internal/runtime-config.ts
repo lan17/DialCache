@@ -3,6 +3,7 @@ import {
   DialCacheKeyConfig,
   type CacheConfigProvider,
   type LayerConfig,
+  type ShadowConfig,
 } from "../config.js";
 import type { DialCacheKey } from "../key.js";
 import type { DisabledReason } from "../metrics.js";
@@ -107,22 +108,23 @@ function mergeKeyConfig(
   const remoteReadTimeoutMs = overlay?.remoteReadTimeoutMs !== undefined
     ? overlay.remoteReadTimeoutMs
     : defaultConfig?.remoteReadTimeoutMs;
-  const shadowRamp = overlay?.shadowRamp !== undefined
-    ? overlay.shadowRamp
-    : defaultConfig?.shadowRamp;
+  const shadow = mergeShadowConfig(defaultConfig?.shadow, overlay?.shadow);
 
   return new DialCacheKeyConfig({
     ttlSec: mergeLayerConfig(defaultConfig?.ttlSec, overlay?.ttlSec, "ttlSec"),
     ramp: mergeLayerConfig(defaultConfig?.ramp, overlay?.ramp, "ramp"),
     requestLocal,
     ...(remoteReadTimeoutMs === undefined ? {} : { remoteReadTimeoutMs }),
-    ...(shadowRamp === undefined ? {} : { shadowRamp }),
+    ...(shadow === undefined ? {} : { shadow }),
   });
 }
 
 function assertKeyConfig(config: DialCacheKeyConfig | null | undefined): void {
   if (config !== null && config !== undefined && (typeof config !== "object" || Array.isArray(config))) {
     throw new TypeError("DialCache key config must be an object");
+  }
+  if (config !== null && config !== undefined && Object.hasOwn(config, "shadowRamp")) {
+    throw new TypeError('DialCacheKeyConfig.shadowRamp was replaced by "shadow.ramp"');
   }
 }
 
@@ -148,5 +150,37 @@ function mergeLayerConfig(
 function assertLayerConfig(config: LayerConfig | undefined, name: "ttlSec" | "ramp"): void {
   if (config !== undefined && (config === null || typeof config !== "object" || Array.isArray(config))) {
     throw new TypeError(`DialCache ${name} config must be a layer map`);
+  }
+}
+
+function mergeShadowConfig(
+  defaults: ShadowConfig | undefined,
+  overlay: ShadowConfig | undefined,
+): ShadowConfig | undefined {
+  assertShadowConfig(defaults);
+  assertShadowConfig(overlay);
+
+  if (defaults === undefined && overlay === undefined) {
+    return undefined;
+  }
+
+  const ramp = overlay?.ramp !== undefined ? overlay.ramp : defaults?.ramp;
+  const logMismatches = overlay?.logMismatches !== undefined
+    ? overlay.logMismatches
+    : defaults?.logMismatches;
+  const logMismatchDetails = overlay?.logMismatchDetails !== undefined
+    ? overlay.logMismatchDetails
+    : defaults?.logMismatchDetails;
+
+  return {
+    ...(ramp === undefined ? {} : { ramp }),
+    ...(logMismatches === undefined ? {} : { logMismatches }),
+    ...(logMismatchDetails === undefined ? {} : { logMismatchDetails }),
+  };
+}
+
+function assertShadowConfig(config: ShadowConfig | undefined): void {
+  if (config !== undefined && (config === null || typeof config !== "object" || Array.isArray(config))) {
+    throw new TypeError("DialCache shadow config must be an object");
   }
 }

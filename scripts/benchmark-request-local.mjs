@@ -35,7 +35,7 @@ const results = [
     scenario: "tracked Redis hits, shadow ramped out",
     useCase: "BenchmarkTrackedRedisShadowRampedOut",
     // This exact key's stable shadow sample is about 90.11.
-    shadowRamp: 50,
+    shadowPercentage: 50,
   }),
   await benchmarkDarkShadowDetachment(),
   await benchmarkDarkShadowFillDetachment(),
@@ -314,7 +314,7 @@ async function benchmarkRedisReadDeadlineCoalescing(fanout) {
   }
 }
 
-async function benchmarkSequentialTrackedRedisHits(iterations, { scenario, useCase, shadowRamp }) {
+async function benchmarkSequentialTrackedRedisHits(iterations, { scenario, useCase, shadowPercentage }) {
   let redisReadCalls = 0;
   let redisWriteCalls = 0;
   let redisInvalidationCalls = 0;
@@ -351,7 +351,7 @@ async function benchmarkSequentialTrackedRedisHits(iterations, { scenario, useCa
       defaultConfig: new DialCacheKeyConfig({
         ttlSec: { [CacheLayer.REMOTE]: 60 },
         ramp: { [CacheLayer.REMOTE]: 100 },
-        ...(shadowRamp === undefined ? {} : { shadowRamp }),
+        ...(shadowPercentage === undefined ? {} : { shadow: { ramp: shadowPercentage } }),
       }),
     },
   );
@@ -429,7 +429,7 @@ async function benchmarkDarkShadowDetachment() {
       defaultConfig: new DialCacheKeyConfig({
         ttlSec: { [CacheLayer.REMOTE]: 60 },
         ramp: { [CacheLayer.REMOTE]: 0 },
-        shadowRamp: 100,
+        shadow: { ramp: 100 },
       }),
     },
   );
@@ -514,7 +514,7 @@ async function benchmarkDarkShadowFillDetachment() {
       defaultConfig: new DialCacheKeyConfig({
         ttlSec: { [CacheLayer.REMOTE]: 60 },
         ramp: { [CacheLayer.REMOTE]: 0 },
-        shadowRamp: 100,
+        shadow: { ramp: 100 },
       }),
     },
   );
