@@ -18,11 +18,39 @@ export function previewShadowLogKey(value: string): string {
 
 export function previewShadowLogJson(value: unknown): string | null {
   try {
-    const json = JSON.stringify(value);
+    if (value instanceof Uint8Array) {
+      // Skipped before `Buffer.prototype.toJSON` can expand the whole view.
+      return JSON.stringify(binaryMarker(value.byteLength));
+    }
+    const json = JSON.stringify(value, replaceBinary);
     return json === undefined ? null : clampUtf8(json, SHADOW_LOG_VALUE_MAX_BYTES);
   } catch {
     return null;
   }
+}
+
+/**
+ * Byte arrays carry no diagnostic value as JSON: native semantics expand them
+ * into one decimal element per byte, so a clamped preview is a run of digits.
+ * Plain views are replaced before expansion; `Buffer` runs its own `toJSON`
+ * first, so it is recognized from that result instead.
+ */
+function replaceBinary(_key: string, value: unknown): unknown {
+  if (value instanceof Uint8Array) {
+    return binaryMarker(value.byteLength);
+  }
+  return isBufferJson(value) ? binaryMarker(value.data.length) : value;
+}
+
+function isBufferJson(value: unknown): value is { readonly data: readonly unknown[] } {
+  return typeof value === "object"
+    && value !== null
+    && (value as { type?: unknown }).type === "Buffer"
+    && Array.isArray((value as { data?: unknown }).data);
+}
+
+function binaryMarker(byteLength: number): string {
+  return `<binary ${byteLength} bytes>`;
 }
 
 export function shadowMismatchLogDetails(
