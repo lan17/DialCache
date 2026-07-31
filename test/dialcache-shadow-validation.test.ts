@@ -375,7 +375,7 @@ describe("DialCache Redis shadow validation", () => {
       error,
     }, {
       cacheConfigProvider: async () => new DialCacheKeyConfig({
-        shadow: { logMismatchDetails: "yes" as never },
+        shadow: { logMismatches: "yes" as never },
       }),
       logger: {
         debug: () => undefined,
@@ -391,7 +391,6 @@ describe("DialCache Redis shadow validation", () => {
         shadow: {
           ramp: 100,
           logMismatches: true,
-          logMismatchDetails: true,
         },
       }),
       cacheKey: () => "123",

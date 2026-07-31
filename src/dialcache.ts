@@ -41,7 +41,7 @@ import {
   type LayerConfigResolution,
   type ResolvedLayerConfig,
 } from "./internal/runtime-config.js";
-import { shadowMismatchLogDetails } from "./internal/shadow-log-preview.js";
+import { shadowMismatchLogDetails } from "./internal/shadow-log-json.js";
 
 type CacheKeyArgs = Record<string, string | number | boolean | bigint | null | undefined>;
 type Id = string | number | bigint;
@@ -221,11 +221,6 @@ interface ShadowValidationPlan<Value> {
   readonly comparator: ShadowComparator<Value>;
   readonly timeoutMs: number;
   readonly didCallerFallbackTimeout: () => boolean;
-}
-
-interface ResolvedShadowLogging {
-  readonly logMismatches: boolean;
-  readonly logMismatchDetails: boolean;
 }
 
 interface ShadowMismatchDetails {
@@ -845,7 +840,7 @@ export class DialCache {
       this.recordShadowValidation(key, "dropped");
       return;
     }
-    const shadowLogging = this.resolveShadowLogging(key, resolvedShadowConfig);
+    const logMismatches = this.resolveShadowLogging(key, resolvedShadowConfig);
 
     const flight: ShadowFlight = {
       cachedPayload: start.kind === "retained" ? start.payload : null,
@@ -865,43 +860,23 @@ export class DialCache {
       runStart,
       validation,
       readTimeoutMs,
-      shadowLogging,
+      logMismatches,
     );
   }
 
   private resolveShadowLogging(
     key: DialCacheKey,
     shadowConfig: Record<string, unknown>,
-  ): ResolvedShadowLogging {
+  ): boolean {
     const configuredLogMismatches = shadowConfig.logMismatches;
-    const configuredLogMismatchDetails = shadowConfig.logMismatchDetails;
-
-    let logMismatches = false;
-    let invalidLogging = false;
-    if (configuredLogMismatches !== undefined) {
-      if (typeof configuredLogMismatches === "boolean") {
-        logMismatches = configuredLogMismatches;
-      } else {
-        invalidLogging = true;
-      }
+    if (configuredLogMismatches === undefined) {
+      return false;
     }
-
-    let logMismatchDetails = false;
-    if (configuredLogMismatchDetails !== undefined) {
-      if (typeof configuredLogMismatchDetails === "boolean") {
-        logMismatchDetails = configuredLogMismatchDetails;
-      } else {
-        invalidLogging = true;
-      }
-    }
-    if (invalidLogging) {
+    if (typeof configuredLogMismatches !== "boolean") {
       this.recordError(key, CacheLayer.REMOTE, "config_resolution");
+      return false;
     }
-
-    return {
-      logMismatches,
-      logMismatchDetails: logMismatches && logMismatchDetails,
-    };
+    return configuredLogMismatches;
   }
 
   private deferShadowValidation<T>(
@@ -911,7 +886,7 @@ export class DialCache {
     start: ShadowValidationRunStart<T>,
     validation: ShadowValidationPlan<T>,
     readTimeoutMs: number,
-    shadowLogging: ResolvedShadowLogging,
+    logMismatches: boolean,
   ): void {
     setImmediate(() => {
       this.runShadowValidation(
@@ -921,7 +896,7 @@ export class DialCache {
         start,
         validation,
         readTimeoutMs,
-        shadowLogging,
+        logMismatches,
       );
     }).unref();
   }
@@ -933,7 +908,7 @@ export class DialCache {
     start: ShadowValidationRunStart<T>,
     plan: ShadowValidationPlan<T>,
     readTimeoutMs: number,
-    shadowLogging: ResolvedShadowLogging,
+    logMismatches: boolean,
   ): void {
     const pendingRedisReads = new Set<Promise<void>>();
     let operationFinished = false;
@@ -1117,7 +1092,7 @@ export class DialCache {
           if (confirmationPayload === null || !redisPayloadsEqual(originalPayload, confirmationPayload)) {
             return "superseded";
           }
-          if (shadowLogging.logMismatchDetails) {
+          if (logMismatches) {
             mismatchDetails = { cachedValue, sourceValue };
           }
           return "mismatch";
@@ -1128,7 +1103,7 @@ export class DialCache {
     });
 
     void validation.then(
-      (outcome) => this.recordShadowValidation(key, outcome, shadowLogging, mismatchDetails),
+      (outcome) => this.recordShadowValidation(key, outcome, logMismatches, mismatchDetails),
       () => this.recordShadowValidation(key, "timeout"),
     );
   }
@@ -1136,7 +1111,7 @@ export class DialCache {
   private recordShadowValidation(
     key: DialCacheKey,
     outcome: ShadowValidationOutcome,
-    logging?: ResolvedShadowLogging,
+    logMismatches = false,
     mismatchDetails?: ShadowMismatchDetails,
   ): void {
     const labels = {
@@ -1146,7 +1121,7 @@ export class DialCache {
       outcome,
     } as const;
     this.metrics?.shadowValidation?.(labels);
-    if (outcome !== "mismatch" || logging?.logMismatches !== true) {
+    if (outcome !== "mismatch" || !logMismatches) {
       return;
     }
 
@@ -1156,7 +1131,7 @@ export class DialCache {
       keyType: key.keyType,
       outcome: "mismatch",
     } as const;
-    if (logging.logMismatchDetails && mismatchDetails !== undefined) {
+    if (mismatchDetails !== undefined) {
       try {
         this.logger.warn(
           "DialCache shadow validation mismatch",
@@ -1171,7 +1146,7 @@ export class DialCache {
         );
         return;
       } catch {
-        // Preview construction is best-effort; preserve the metadata warning.
+        // JSON detail construction is best-effort; preserve the metadata warning.
       }
     }
     this.logger.warn("DialCache shadow validation mismatch", warning);
@@ -1464,12 +1439,6 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
     }
     if (snapshot.shadow.logMismatches !== undefined && typeof snapshot.shadow.logMismatches !== "boolean") {
       throw new TypeError("DialCache defaultConfig shadow.logMismatches must be a boolean");
-    }
-    if (
-      snapshot.shadow.logMismatchDetails !== undefined
-      && typeof snapshot.shadow.logMismatchDetails !== "boolean"
-    ) {
-      throw new TypeError("DialCache defaultConfig shadow.logMismatchDetails must be a boolean");
     }
   }
 

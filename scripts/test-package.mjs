@@ -119,7 +119,6 @@ const shadowCache = new DialCache(shadowCacheConfig);
 const shadowConfig: ShadowConfig = {
   ramp: 50,
   logMismatches: true,
-  logMismatchDetails: false,
 };
 const shadowKeyConfig = new DialCacheKeyConfig({ shadow: shadowConfig });
 const dogStatsDClient: DatadogDogStatsDClient = {
@@ -641,7 +640,6 @@ if (
   esmDisabledOverlay.requestLocal !== false
   || esmDisabledOverlay.shadow?.ramp !== 0
   || esmDisabledOverlay.shadow.logMismatches !== false
-  || esmDisabledOverlay.shadow.logMismatchDetails !== false
   || esmDisabledOverlay.ramp[root.CacheLayer.LOCAL] !== 0
   || esmDisabledOverlay.ramp[root.CacheLayer.REMOTE] !== 0
 ) {
@@ -880,7 +878,6 @@ if (
   cjsDisabledOverlay.requestLocal !== false
   || cjsDisabledOverlay.shadow?.ramp !== 0
   || cjsDisabledOverlay.shadow.logMismatches !== false
-  || cjsDisabledOverlay.shadow.logMismatchDetails !== false
   || cjsDisabledOverlay.ramp[root.CacheLayer.LOCAL] !== 0
   || cjsDisabledOverlay.ramp[root.CacheLayer.REMOTE] !== 0
 ) {

@@ -18,7 +18,6 @@ describe("DialCache observability internal compatibility paths", () => {
       shadow: {
         ramp: 20,
         logMismatches: true,
-        logMismatchDetails: true,
       },
     });
     const cases = [
@@ -36,7 +35,6 @@ describe("DialCache observability internal compatibility paths", () => {
           shadow: {
             ramp: 80,
             logMismatches: true,
-            logMismatchDetails: true,
           },
         }),
       },
@@ -46,7 +44,6 @@ describe("DialCache observability internal compatibility paths", () => {
           ramp: { [CacheLayer.LOCAL]: 10 },
           shadow: {
             logMismatches: false,
-            logMismatchDetails: false,
           },
         }),
         expected: new DialCacheKeyConfig({
@@ -56,7 +53,6 @@ describe("DialCache observability internal compatibility paths", () => {
           shadow: {
             ramp: 20,
             logMismatches: false,
-            logMismatchDetails: false,
           },
         }),
       },
@@ -69,7 +65,6 @@ describe("DialCache observability internal compatibility paths", () => {
           shadow: {
             ramp: 20,
             logMismatches: true,
-            logMismatchDetails: true,
           },
         }),
       },
@@ -88,7 +83,6 @@ describe("DialCache observability internal compatibility paths", () => {
       shadow: {
         ramp: 20,
         logMismatches: true,
-        logMismatchDetails: true,
       },
     });
     const runtime = {
@@ -111,7 +105,6 @@ describe("DialCache observability internal compatibility paths", () => {
       shadow: {
         ramp: 20,
         logMismatches: false,
-        logMismatchDetails: true,
       },
     }));
     expect(ignoredLegacyLeaves).toBe(1);

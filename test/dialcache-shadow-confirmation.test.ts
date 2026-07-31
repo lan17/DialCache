@@ -33,7 +33,7 @@ import {
   SHADOW_LOG_KEY_MAX_BYTES,
   SHADOW_LOG_TRUNCATION_MARKER,
   SHADOW_LOG_VALUE_MAX_BYTES,
-} from "../src/internal/shadow-log-preview.js";
+} from "../src/internal/shadow-log-json.js";
 import { REMOTE_SHADOW_CACHE_LAYER } from "../src/metrics.js";
 
 interface Deferred<T> {
@@ -148,7 +148,6 @@ function remoteConfig(
   shadowPercentage = 100,
   logging: {
     readonly logMismatches?: boolean;
-    readonly logMismatchDetails?: boolean;
   } = {},
 ): DialCacheKeyConfig {
   return new DialCacheKeyConfig({
@@ -266,10 +265,7 @@ describe("DialCache Redis shadow confirmation", () => {
     expect(redis.invalidate).not.toHaveBeenCalled();
   });
 
-  it.each([
-    { name: "logging is omitted", logging: {} },
-    { name: "only detail logging is enabled", logging: { logMismatchDetails: true } },
-  ] as const)("does not log confirmed mismatches when $name", async ({ name, logging }) => {
+  it("does not log confirmed mismatches when logging is omitted", async () => {
     const payload = JSON.stringify({ id: "private-id", version: 1 });
     const redis = new ScriptedRedis([() => payload, () => payload]);
     const metrics = new RecordingMetrics();
@@ -283,10 +279,8 @@ describe("DialCache Redis shadow confirmation", () => {
     });
     const getUser = dialcache.cached(async () => ({ id: "private-id", version: 2 }), {
       ...trackedOptions(
-        name === "logging is omitted"
-          ? "ShadowMismatchLoggingOff"
-          : "ShadowMismatchDetailsOnly",
-        remoteConfig(100, 100, logging),
+        "ShadowMismatchLoggingOff",
+        remoteConfig(100),
       ),
       cacheKey: () => ({
         id: "private-id",
@@ -301,7 +295,7 @@ describe("DialCache Redis shadow confirmation", () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
-  it("logs one bounded warning for a served-hit confirmed mismatch", async () => {
+  it("logs one bounded JSON warning for a served-hit confirmed mismatch", async () => {
     const payload = JSON.stringify({ id: "private-id", version: 1 });
     const redis = new ScriptedRedis([() => payload, () => payload]);
     const metrics = new RecordingMetrics();
@@ -323,7 +317,7 @@ describe("DialCache Redis shadow confirmation", () => {
     });
     const getUser = dialcache.cached(async () => ({ id: "private-id", version: 2 }), {
       ...trackedOptions(
-        "ShadowMismatchMetadata",
+        "ShadowMismatchJson",
         remoteConfig(100, 100, { logMismatches: true }),
       ),
       cacheKey: () => ({
@@ -340,9 +334,12 @@ describe("DialCache Redis shadow confirmation", () => {
       "DialCache shadow validation mismatch",
       {
         cacheNamespace: "private-namespace",
-        useCase: "ShadowMismatchMetadata",
+        useCase: "ShadowMismatchJson",
         keyType: "user_id",
         outcome: "mismatch",
+        cacheKey: "{private-namespace:user_id:private-id}?tenant=private-tenant#ShadowMismatchJson",
+        cachedValueJson: '{"id":"private-id","version":1}',
+        sourceValueJson: '{"id":"private-id","version":2}',
       },
     );
     await nextImmediate();
@@ -370,10 +367,9 @@ describe("DialCache Redis shadow confirmation", () => {
     });
     const getUser = dialcache.cached(async () => sourceValue, {
       ...trackedOptions(
-        "ShadowMismatchDetails",
+        "ShadowMismatchRampedDownJson",
         remoteConfig(0, 100, {
           logMismatches: true,
-          logMismatchDetails: true,
         }),
       ),
       cacheKey: () => ({
@@ -391,19 +387,18 @@ describe("DialCache Redis shadow confirmation", () => {
       "DialCache shadow validation mismatch",
       {
         cacheNamespace: "urn",
-        useCase: "ShadowMismatchDetails",
+        useCase: "ShadowMismatchRampedDownJson",
         keyType: "user_id",
         outcome: "mismatch",
-        cacheKey: "{urn:user_id:123}?locale=en-US#ShadowMismatchDetails",
-        cachedValuePreview: '{"id": "123", "version": 1}',
-        sourceValuePreview: '{"id": "123", "version": 2}',
-        detailsTruncated: false,
+        cacheKey: "{urn:user_id:123}?locale=en-US#ShadowMismatchRampedDownJson",
+        cachedValueJson: '{"id":"123","version":1}',
+        sourceValueJson: '{"id":"123","version":2}',
       },
     );
     expect(serializer.dump).not.toHaveBeenCalled();
   });
 
-  it("falls back to a metadata warning when detailed preview construction throws", async () => {
+  it("falls back to a metadata warning when JSON detail construction throws", async () => {
     const cachedValue = { id: "123", version: 1 };
     const sourceValue = { id: "123", version: 2 };
     const payload = JSON.stringify(cachedValue);
@@ -424,10 +419,9 @@ describe("DialCache Redis shadow confirmation", () => {
       return await sourceGate.promise;
     }, {
       ...trackedOptions(
-        "ShadowMismatchPreviewFailure",
+        "ShadowMismatchJsonFailure",
         remoteConfig(100, 100, {
           logMismatches: true,
-          logMismatchDetails: true,
         }),
       ),
       cacheKey: () => "123",
@@ -448,7 +442,7 @@ describe("DialCache Redis shadow confirmation", () => {
         "DialCache shadow validation mismatch",
         {
           cacheNamespace: "urn",
-          useCase: "ShadowMismatchPreviewFailure",
+          useCase: "ShadowMismatchJsonFailure",
           keyType: "user_id",
           outcome: "mismatch",
         },
@@ -459,7 +453,7 @@ describe("DialCache Redis shadow confirmation", () => {
     }
   });
 
-  it("clamps the logical key and both value previews before handing details to the logger", async () => {
+  it("clamps the logical key and both JSON strings before handing details to the logger", async () => {
     const id = "k".repeat(SHADOW_LOG_KEY_MAX_BYTES + 100);
     const cachedValue = { id, content: "🙂".repeat(SHADOW_LOG_VALUE_MAX_BYTES) };
     const sourceValue = { id, content: "s".repeat(SHADOW_LOG_VALUE_MAX_BYTES + 1) };
@@ -476,10 +470,9 @@ describe("DialCache Redis shadow confirmation", () => {
     });
     const getUser = dialcache.cached(async () => sourceValue, {
       ...trackedOptions(
-        "ShadowMismatchClampedDetails",
+        "ShadowMismatchClampedJson",
         remoteConfig(100, 100, {
           logMismatches: true,
-          logMismatchDetails: true,
         }),
       ),
       cacheKey: () => id,
@@ -493,11 +486,10 @@ describe("DialCache Redis shadow confirmation", () => {
     const warning = warn.mock.calls[0]?.[1] as Record<string, unknown>;
     expect(warning).not.toHaveProperty("cachedValue");
     expect(warning).not.toHaveProperty("sourceValue");
-    expect(warning.detailsTruncated).toBe(true);
     for (const [field, maxBytes] of [
       ["cacheKey", SHADOW_LOG_KEY_MAX_BYTES],
-      ["cachedValuePreview", SHADOW_LOG_VALUE_MAX_BYTES],
-      ["sourceValuePreview", SHADOW_LOG_VALUE_MAX_BYTES],
+      ["cachedValueJson", SHADOW_LOG_VALUE_MAX_BYTES],
+      ["sourceValueJson", SHADOW_LOG_VALUE_MAX_BYTES],
     ] as const) {
       const preview = warning[field];
       expect(typeof preview).toBe("string");
@@ -555,7 +547,6 @@ describe("DialCache Redis shadow confirmation", () => {
         "ShadowMismatchSuperseded",
         remoteConfig(100, 100, {
           logMismatches: true,
-          logMismatchDetails: true,
         }),
       ),
       cacheKey: () => "123",
@@ -1395,42 +1386,8 @@ describe("DialCache Redis shadow confirmation", () => {
     }
   });
 
-  it.each([
-    {
-      name: "base logging flag",
-      useCase: "ShadowInvalidLoggingBase",
-      runtimeShadow: {
-        logMismatches: "yes" as never,
-      },
-      expectedWarning: null,
-    },
-    {
-      name: "detail logging flag",
-      useCase: "ShadowInvalidLoggingDetails",
-      runtimeShadow: {
-        logMismatchDetails: "yes" as never,
-      },
-      expectedWarning: {
-        cacheNamespace: "urn",
-        useCase: "ShadowInvalidLoggingDetails",
-        keyType: "user_id",
-        outcome: "mismatch",
-      },
-    },
-    {
-      name: "both logging flags",
-      useCase: "ShadowInvalidLoggingBoth",
-      runtimeShadow: {
-        logMismatches: "yes" as never,
-        logMismatchDetails: "yes" as never,
-      },
-      expectedWarning: null,
-    },
-  ] as const)("fails closed for an invalid runtime $name without suppressing mismatch metrics", async ({
-    useCase,
-    runtimeShadow,
-    expectedWarning,
-  }) => {
+  it("fails closed for invalid runtime mismatch logging without suppressing the metric", async () => {
+    const useCase = "ShadowInvalidLogging";
     const cachedValue = { id: "123", version: 1 };
     const sourceValue = { id: "123", version: 2 };
     const payload = JSON.stringify(cachedValue);
@@ -1439,7 +1396,7 @@ describe("DialCache Redis shadow confirmation", () => {
     const warn = vi.fn();
     const dialcache = createCache(redis, metrics, {
       cacheConfigProvider: async () => new DialCacheKeyConfig({
-        shadow: runtimeShadow,
+        shadow: { logMismatches: "yes" as never },
       }),
       logger: {
         debug: () => undefined,
@@ -1452,7 +1409,6 @@ describe("DialCache Redis shadow confirmation", () => {
         useCase,
         remoteConfig(100, 100, {
           logMismatches: true,
-          logMismatchDetails: true,
         }),
       ),
       cacheKey: () => "123",
@@ -1467,14 +1423,7 @@ describe("DialCache Redis shadow confirmation", () => {
       && labels.layer === CacheLayer.REMOTE
       && labels.error === "config_resolution"
     )).toHaveLength(1);
-    if (expectedWarning === null) {
-      expect(warn).not.toHaveBeenCalled();
-    } else {
-      expect(warn).toHaveBeenCalledWith(
-        "DialCache shadow validation mismatch",
-        expectedWarning,
-      );
-    }
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it("treats DialCacheKeyConfig.disabled() as a complete shadow kill switch", async () => {

@@ -178,14 +178,10 @@ function mergeShadowConfig(
   const logMismatches = overlay?.logMismatches !== undefined
     ? overlay.logMismatches
     : defaults?.logMismatches;
-  const logMismatchDetails = overlay?.logMismatchDetails !== undefined
-    ? overlay.logMismatchDetails
-    : defaults?.logMismatchDetails;
 
   return {
     ...(ramp === undefined ? {} : { ramp }),
     ...(logMismatches === undefined ? {} : { logMismatches }),
-    ...(logMismatchDetails === undefined ? {} : { logMismatchDetails }),
   };
 }
 

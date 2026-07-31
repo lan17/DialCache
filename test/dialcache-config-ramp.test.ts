@@ -45,12 +45,10 @@ describe("DialCache runtime config and ramp controls", () => {
       shadow: {
         ramp: 0,
         logMismatches: false,
-        logMismatchDetails: false,
       },
     }).shadow).toEqual({
       ramp: 0,
       logMismatches: false,
-      logMismatchDetails: false,
     });
   });
 
@@ -58,19 +56,16 @@ describe("DialCache runtime config and ramp controls", () => {
     const suppliedShadow = {
       ramp: 25,
       logMismatches: true,
-      logMismatchDetails: true,
     };
     const config = new DialCacheKeyConfig({ shadow: suppliedShadow });
 
     suppliedShadow.ramp = 0;
     suppliedShadow.logMismatches = false;
-    suppliedShadow.logMismatchDetails = false;
 
     expect(config.shadow).not.toBe(suppliedShadow);
     expect(config.shadow).toEqual({
       ramp: 25,
       logMismatches: true,
-      logMismatchDetails: true,
     });
   });
 
@@ -81,7 +76,6 @@ describe("DialCache runtime config and ramp controls", () => {
       shadow: {
         ramp: 25,
         logMismatches: true,
-        logMismatchDetails: true,
       },
     });
     const observedDefaults: Array<DialCacheKeyConfig | null> = [];
@@ -105,11 +99,9 @@ describe("DialCache runtime config and ramp controls", () => {
     const mutableShadow = suppliedDefault.shadow as {
       ramp?: number;
       logMismatches?: boolean;
-      logMismatchDetails?: boolean;
     };
     mutableShadow.ramp = 0;
     mutableShadow.logMismatches = false;
-    mutableShadow.logMismatchDetails = false;
     const first = await dialcache.enable(async () => await getUser("123"));
     const second = await dialcache.enable(async () => await getUser("123"));
 
@@ -123,7 +115,6 @@ describe("DialCache runtime config and ramp controls", () => {
     expect(observedDefaults[0]?.shadow).toEqual({
       ramp: 25,
       logMismatches: true,
-      logMismatchDetails: true,
     });
     expect(Object.isFrozen(observedDefaults[0])).toBe(true);
     expect(Object.isFrozen(observedDefaults[0]?.ttlSec)).toBe(true);
@@ -401,12 +392,6 @@ describe("DialCache runtime config and ramp controls", () => {
       TypeError,
       "must be a boolean",
     ],
-    [
-      "wrong-type shadow mismatch detail flag",
-      new DialCacheKeyConfig({ shadow: { logMismatchDetails: null as unknown as boolean } }),
-      TypeError,
-      "must be a boolean",
-    ],
     ["primitive config", 42 as unknown as DialCacheKeyConfig, TypeError, "must be an object"],
     ["array config", [] as unknown as DialCacheKeyConfig, TypeError, "must be an object"],
     [
@@ -484,7 +469,6 @@ describe("DialCache runtime config and ramp controls", () => {
       shadow: {
         ramp: 0,
         logMismatches: false,
-        logMismatchDetails: false,
       },
       ramp: { [CacheLayer.LOCAL]: 0, [CacheLayer.REMOTE]: 0 },
     }));

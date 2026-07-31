@@ -15,14 +15,11 @@ export type LayerConfig = Partial<Record<CacheLayer, number>>;
 export interface ShadowConfig {
   /** Independent stable cohort percentage. Omitted and zero disable shadow work. */
   readonly ramp?: number;
-  /** Emit one warning for each confirmed mismatch. Defaults to false. */
-  readonly logMismatches?: boolean;
   /**
-   * Enrich that warning with bounded previews of the logical cache key and
-   * compared values.
-   * Defaults to false and has no effect unless `logMismatches` is true.
+   * Emit one warning with the logical key and bounded native-JSON strings for
+   * the compared values for each confirmed mismatch. Defaults to false.
    */
-  readonly logMismatchDetails?: boolean;
+  readonly logMismatches?: boolean;
 }
 
 export class DialCacheKeyConfig {
@@ -99,7 +96,6 @@ export class DialCacheKeyConfig {
       shadow: {
         ramp: 0,
         logMismatches: false,
-        logMismatchDetails: false,
       },
       ramp: {
         [CacheLayer.LOCAL]: 0,
