@@ -18,7 +18,8 @@ export interface ShadowConfig {
   /** Emit one warning for each confirmed mismatch. Defaults to false. */
   readonly logMismatches?: boolean;
   /**
-   * Enrich that warning with the logical cache key and compared values.
+   * Enrich that warning with bounded previews of the logical cache key and
+   * compared values.
    * Defaults to false and has no effect unless `logMismatches` is true.
    */
   readonly logMismatchDetails?: boolean;

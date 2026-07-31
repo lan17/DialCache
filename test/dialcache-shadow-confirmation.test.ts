@@ -29,6 +29,11 @@ import {
   deterministicRampSample,
   deterministicShadowRampSample,
 } from "../src/internal/ramp.js";
+import {
+  SHADOW_LOG_KEY_MAX_BYTES,
+  SHADOW_LOG_TRUNCATION_MARKER,
+  SHADOW_LOG_VALUE_MAX_BYTES,
+} from "../src/internal/shadow-log-preview.js";
 import { REMOTE_SHADOW_CACHE_LAYER } from "../src/metrics.js";
 
 interface Deferred<T> {
@@ -390,11 +395,60 @@ describe("DialCache Redis shadow confirmation", () => {
         keyType: "user_id",
         outcome: "mismatch",
         cacheKey: "{urn:user_id:123}?locale=en-US#ShadowMismatchDetails",
-        cachedValue,
-        sourceValue,
+        cachedValuePreview: '{"id": "123", "version": 1}',
+        sourceValuePreview: '{"id": "123", "version": 2}',
+        detailsTruncated: false,
       },
     );
     expect(serializer.dump).not.toHaveBeenCalled();
+  });
+
+  it("clamps the logical key and both value previews before handing details to the logger", async () => {
+    const id = "k".repeat(SHADOW_LOG_KEY_MAX_BYTES + 100);
+    const cachedValue = { id, content: "🙂".repeat(SHADOW_LOG_VALUE_MAX_BYTES) };
+    const sourceValue = { id, content: "s".repeat(SHADOW_LOG_VALUE_MAX_BYTES + 1) };
+    const payload = JSON.stringify(cachedValue);
+    const redis = new ScriptedRedis([() => payload, () => payload]);
+    const metrics = new RecordingMetrics();
+    const warn = vi.fn();
+    const dialcache = createCache(redis, metrics, {
+      logger: {
+        debug: () => undefined,
+        error: () => undefined,
+        warn,
+      },
+    });
+    const getUser = dialcache.cached(async () => sourceValue, {
+      ...trackedOptions(
+        "ShadowMismatchClampedDetails",
+        remoteConfig(100, 100, {
+          logMismatches: true,
+          logMismatchDetails: true,
+        }),
+      ),
+      cacheKey: () => id,
+    });
+
+    await dialcache.enable(async () => await getUser());
+    await waitForShadowEvents(metrics, 1);
+
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["mismatch"]);
+    expect(warn).toHaveBeenCalledTimes(1);
+    const warning = warn.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(warning).not.toHaveProperty("cachedValue");
+    expect(warning).not.toHaveProperty("sourceValue");
+    expect(warning.detailsTruncated).toBe(true);
+    for (const [field, maxBytes] of [
+      ["cacheKey", SHADOW_LOG_KEY_MAX_BYTES],
+      ["cachedValuePreview", SHADOW_LOG_VALUE_MAX_BYTES],
+      ["sourceValuePreview", SHADOW_LOG_VALUE_MAX_BYTES],
+    ] as const) {
+      const preview = warning[field];
+      expect(typeof preview).toBe("string");
+      expect(Buffer.byteLength(preview as string)).toBeLessThanOrEqual(maxBytes);
+      expect((preview as string).endsWith(SHADOW_LOG_TRUNCATION_MARKER)).toBe(true);
+      expect(preview).not.toContain("\uFFFD");
+    }
   });
 
   it.each([

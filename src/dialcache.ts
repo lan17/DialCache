@@ -41,6 +41,7 @@ import {
   type LayerConfigResolution,
   type ResolvedLayerConfig,
 } from "./internal/runtime-config.js";
+import { shadowMismatchLogDetails } from "./internal/shadow-log-preview.js";
 
 type CacheKeyArgs = Record<string, string | number | boolean | bigint | null | undefined>;
 type Id = string | number | bigint;
@@ -1152,9 +1153,11 @@ export class DialCache {
       logging.logMismatchDetails && mismatchDetails !== undefined
         ? {
           ...warning,
-          cacheKey: key.urn,
-          cachedValue: mismatchDetails.cachedValue,
-          sourceValue: mismatchDetails.sourceValue,
+          ...shadowMismatchLogDetails(
+            key.urn,
+            mismatchDetails.cachedValue,
+            mismatchDetails.sourceValue,
+          ),
         }
         : warning,
     );
