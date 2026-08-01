@@ -412,7 +412,7 @@ describe("DialCache targeted invalidation watermarks", () => {
     });
   });
 
-  it("batches unique canonical invalidation targets through an optimized client", async () => {
+  it("batches unique canonical invalidation targets through a batch-capable client", async () => {
     const invalidate = vi.fn(async () => undefined);
     const invalidateMany = vi.fn(async () => undefined);
     const redis: DialCacheRedisClient = {

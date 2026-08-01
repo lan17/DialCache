@@ -99,8 +99,23 @@ function isScriptCacheMiss(error: unknown): boolean {
     || /\bNoScriptError:\s*No matching script(?:\.|\s|$)/.test(error.message);
 }
 
+// A native batch is one protobuf request regardless of its command count, and
+// scalar wrappers can exhaust GLIDE's in-flight limit. Bound both paths.
+const MAX_INVALIDATION_COMMANDS_PER_CHUNK = 1_000;
+
+function validateInvalidationBatchReplies(raw: unknown, expectedReplies: number): void {
+  if (!Array.isArray(raw) || raw.length !== expectedReplies) {
+    throw new DialCacheRedisProtocolError(
+      `Invalid DialCache Redis invalidate batch reply; expected ${expectedReplies} replies`,
+    );
+  }
+  for (const reply of raw) {
+    validateRedisScriptInvalidationReply(reply);
+  }
+}
+
 export interface ValkeyGlideDialCacheClient extends DialCacheRedisClient {
-  /** Advance multiple watermarks in one non-atomic GLIDE batch. */
+  /** Advance multiple watermarks as one semantic operation through non-atomic GLIDE chunks. */
   invalidateMany(requests: readonly RedisInvalidationRequest[]): Promise<void>;
   /** Release the adapter-owned GLIDE Script handles. Does not close the wrapped GLIDE client. */
   dispose(): void;
@@ -199,22 +214,29 @@ export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScri
         || GlideClusterClient === undefined
       ) {
         await invokeTracked(async () => {
-          await awaitAll(
-            requests.map(async ({ watermarkKey, futureBufferMs }) => {
-              const raw = await client.invokeScript(scripts.invalidate, {
-                keys: [watermarkKey],
-                args: [String(futureBufferMs)],
-                decoder: glide.Decoder.Bytes,
-              });
-              validateRedisScriptInvalidationReply(raw);
-            }),
-            "Multiple DialCache invalidations failed",
-          );
+          for (
+            let index = 0;
+            index < requests.length;
+            index += MAX_INVALIDATION_COMMANDS_PER_CHUNK
+          ) {
+            const chunk = requests.slice(index, index + MAX_INVALIDATION_COMMANDS_PER_CHUNK);
+            await awaitAll(
+              chunk.map(async ({ watermarkKey, futureBufferMs }) => {
+                const raw = await client.invokeScript(scripts.invalidate, {
+                  keys: [watermarkKey],
+                  args: [String(futureBufferMs)],
+                  decoder: glide.Decoder.Bytes,
+                });
+                validateRedisScriptInvalidationReply(raw);
+              }),
+              "Multiple DialCache invalidations failed",
+            );
+          }
         });
         return;
       }
 
-      const raw = await invokeTracked(async () => {
+      await invokeTracked(async () => {
         const isCluster = client instanceof GlideClusterClient;
         const Batch = isCluster ? ClusterBatch : StandaloneBatch;
         const options: ValkeyGlideBatchExecutionOptions<TDecoder> = isCluster
@@ -226,9 +248,13 @@ export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScri
               },
             }
           : { decoder: glide.Decoder.Bytes };
-        const executeBatch = async (script: string, command: "EVAL" | "EVALSHA") => {
+        const executeBatch = async (
+          chunk: readonly RedisInvalidationRequest[],
+          script: string,
+          command: "EVAL" | "EVALSHA",
+        ) => {
           const batch = new Batch(false);
-          for (const { watermarkKey, futureBufferMs } of requests) {
+          for (const { watermarkKey, futureBufferMs } of chunk) {
             batch.customCommand([
               command,
               script,
@@ -241,26 +267,28 @@ export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScri
         };
 
         const scriptHash = scripts.invalidate.getHash?.();
-        if (scriptHash === undefined) {
-          return await executeBatch(INVALIDATE_CACHE_SCRIPT, "EVAL");
-        }
-        try {
-          return await executeBatch(scriptHash, "EVALSHA");
-        } catch (error) {
-          if (!isScriptCacheMiss(error)) {
-            throw error;
+        for (
+          let index = 0;
+          index < requests.length;
+          index += MAX_INVALIDATION_COMMANDS_PER_CHUNK
+        ) {
+          const chunk = requests.slice(index, index + MAX_INVALIDATION_COMMANDS_PER_CHUNK);
+          let raw: unknown;
+          if (scriptHash === undefined) {
+            raw = await executeBatch(chunk, INVALIDATE_CACHE_SCRIPT, "EVAL");
+          } else {
+            try {
+              raw = await executeBatch(chunk, scriptHash, "EVALSHA");
+            } catch (error) {
+              if (!isScriptCacheMiss(error)) {
+                throw error;
+              }
+              raw = await executeBatch(chunk, INVALIDATE_CACHE_SCRIPT, "EVAL");
+            }
           }
-          return await executeBatch(INVALIDATE_CACHE_SCRIPT, "EVAL");
+          validateInvalidationBatchReplies(raw, chunk.length);
         }
       });
-      if (!Array.isArray(raw) || raw.length !== requests.length) {
-        throw new DialCacheRedisProtocolError(
-          `Invalid DialCache Redis invalidate batch reply; expected ${requests.length} replies`,
-        );
-      }
-      for (const reply of raw) {
-        validateRedisScriptInvalidationReply(reply);
-      }
     },
     dispose() {
       if (disposed) {

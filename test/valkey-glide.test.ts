@@ -106,6 +106,13 @@ function fakeClient(...replies: unknown[]) {
   };
 }
 
+function invalidationRequests(count: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    watermarkKey: `cache:{${index}}:watermark`,
+    futureBufferMs: index,
+  }));
+}
+
 async function expectProtocolError(operation: Promise<unknown>, message: string): Promise<void> {
   let rejection: unknown;
   try {
@@ -237,6 +244,48 @@ describe("Valkey GLIDE adapter", () => {
     expect(scriptInstances[4]?.getHash).toHaveBeenCalledTimes(1);
   });
 
+  it("bounds native standalone batches and dispatches their chunks sequentially", async () => {
+    let resolveFirstChunk: ((value: unknown[]) => void) | undefined;
+    let resolveSecondChunk: ((value: unknown[]) => void) | undefined;
+    const client = fakeClient();
+    client.exec
+      .mockImplementationOnce(
+        async () => await new Promise<unknown[]>((resolve) => {
+          resolveFirstChunk = resolve;
+        }),
+      )
+      .mockImplementationOnce(
+        async () => await new Promise<unknown[]>((resolve) => {
+          resolveSecondChunk = resolve;
+        }),
+      );
+    const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
+
+    const invalidation = adapter.invalidateMany(invalidationRequests(1_001));
+    await vi.waitFor(() => {
+      expect(client.exec).toHaveBeenCalledTimes(1);
+    });
+    expect(batchInstances).toHaveLength(1);
+    expect(batchInstances[0]?.commands).toHaveLength(1_000);
+    expect(() => adapter.dispose()).toThrow(
+      "Cannot dispose Valkey GLIDE DialCache client while operations are in flight",
+    );
+
+    resolveFirstChunk?.(Array.from({ length: 1_000 }, () => 1));
+    await vi.waitFor(() => {
+      expect(client.exec).toHaveBeenCalledTimes(2);
+    });
+    expect(batchInstances).toHaveLength(2);
+    expect(batchInstances[1]?.commands).toHaveLength(1);
+    expect(() => adapter.dispose()).toThrow(
+      "Cannot dispose Valkey GLIDE DialCache client while operations are in flight",
+    );
+
+    resolveSecondChunk?.([1]);
+    await expect(invalidation).resolves.toBeUndefined();
+    adapter.dispose();
+  });
+
   it.each([
     ["standard Redis", new Error("NOSCRIPT No matching script. Please use EVAL.")],
     [
@@ -265,6 +314,23 @@ describe("Valkey GLIDE adapter", () => {
       ["EVAL", expect.any(String), "1", "cache:{one}:watermark", "0"],
       ["EVAL", expect.any(String), "1", "cache:{two}:watermark", "250"],
     ]);
+  });
+
+  it("retries a script miss within only the affected native chunk", async () => {
+    const client = fakeClient();
+    client.exec
+      .mockResolvedValueOnce(Array.from({ length: 1_000 }, () => 1))
+      .mockRejectedValueOnce(new Error("NOSCRIPT No matching script. Please use EVAL."))
+      .mockResolvedValueOnce([1]);
+    const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
+
+    await expect(adapter.invalidateMany(invalidationRequests(1_001))).resolves.toBeUndefined();
+
+    expect(client.exec).toHaveBeenCalledTimes(3);
+    expect(batchInstances.map(({ commands }) => commands.length)).toEqual([1_000, 1, 1]);
+    expect(batchInstances[0]?.commands[0]?.[0]).toBe("EVALSHA");
+    expect(batchInstances[1]?.commands[0]?.[0]).toBe("EVALSHA");
+    expect(batchInstances[2]?.commands[0]?.[0]).toBe("EVAL");
   });
 
   it("preserves unrelated native batch errors without retrying", async () => {
@@ -337,6 +403,61 @@ describe("Valkey GLIDE adapter", () => {
     );
   });
 
+  it("bounds legacy scalar invalidations and dispatches their windows sequentially", async () => {
+    let resolveFirstWindow: ((value: number) => void) | undefined;
+    const firstWindow = new Promise<number>((resolve) => {
+      resolveFirstWindow = resolve;
+    });
+    const client = {
+      invokeScript: vi.fn(async () => {
+        if (client.invokeScript.mock.calls.length <= 1_000) {
+          return await firstWindow;
+        }
+        return 1;
+      }),
+    };
+    const legacyGlide = {
+      Decoder: { Bytes: decoderBytes },
+      Script: MockScript,
+    };
+    const adapter = createValkeyGlideDialCacheClient(client, legacyGlide);
+
+    const invalidation = adapter.invalidateMany(invalidationRequests(1_001));
+    await vi.waitFor(() => {
+      expect(client.invokeScript).toHaveBeenCalledTimes(1_000);
+    });
+    expect(() => adapter.dispose()).toThrow(
+      "Cannot dispose Valkey GLIDE DialCache client while operations are in flight",
+    );
+
+    resolveFirstWindow?.(1);
+    await expect(invalidation).resolves.toBeUndefined();
+    expect(client.invokeScript).toHaveBeenCalledTimes(1_001);
+    adapter.dispose();
+  });
+
+  it("settles a failed scalar window without dispatching later windows", async () => {
+    const failure = new Error("first scalar invalidation failed");
+    const client = {
+      invokeScript: vi.fn(async () => {
+        if (client.invokeScript.mock.calls.length === 1) {
+          throw failure;
+        }
+        return 1;
+      }),
+    };
+    const legacyGlide = {
+      Decoder: { Bytes: decoderBytes },
+      Script: MockScript,
+    };
+    const adapter = createValkeyGlideDialCacheClient(client, legacyGlide);
+
+    await expect(adapter.invalidateMany(invalidationRequests(1_001))).rejects.toBe(failure);
+
+    expect(client.invokeScript).toHaveBeenCalledTimes(1_000);
+    adapter.dispose();
+  });
+
   it("uses one native cluster batch for invalidations across hash slots", async () => {
     const client = new MockClusterClient();
     client.exec.mockResolvedValueOnce([1, 1]);
@@ -361,6 +482,46 @@ describe("Valkey GLIDE adapter", () => {
         },
       },
     );
+  });
+
+  it("uses bounded sequential native ClusterBatch chunks", async () => {
+    const client = new MockClusterClient();
+    client.exec.mockImplementation(async (batch) => batch.commands.map(() => 1));
+    const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
+
+    await expect(adapter.invalidateMany(invalidationRequests(1_001))).resolves.toBeUndefined();
+
+    expect(clusterBatchInstances).toHaveLength(2);
+    expect(clusterBatchInstances.map(({ commands }) => commands.length)).toEqual([1_000, 1]);
+    expect(client.exec).toHaveBeenCalledTimes(2);
+    for (const batch of clusterBatchInstances) {
+      expect(client.exec).toHaveBeenCalledWith(
+        batch,
+        true,
+        {
+          decoder: decoderBytes,
+          retryStrategy: {
+            retryServerError: true,
+            retryConnectionError: true,
+          },
+        },
+      );
+    }
+  });
+
+  it("validates a native chunk before dispatching the next one", async () => {
+    const client = fakeClient();
+    client.exec.mockResolvedValueOnce(Array.from({ length: 999 }, () => 1));
+    const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
+
+    await expectProtocolError(
+      adapter.invalidateMany(invalidationRequests(1_001)),
+      "Invalid DialCache Redis invalidate batch reply; expected 1000 replies",
+    );
+
+    expect(client.exec).toHaveBeenCalledTimes(1);
+    expect(batchInstances).toHaveLength(1);
+    adapter.dispose();
   });
 
   it("rejects malformed invalidation batch replies", async () => {

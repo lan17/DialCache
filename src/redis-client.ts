@@ -111,12 +111,13 @@ export interface DialCacheRedisClient {
    */
   invalidate(request: RedisInvalidationRequest): Awaitable<void>;
   /**
-   * Advance multiple watermarks as one client-side batch when supported.
+   * Advance multiple watermarks as one semantic client operation when supported.
    *
-   * Each invalidation remains independently atomic, but the batch is not
-   * atomic as a whole and can partially complete. A rejected operation can
-   * also have an ambiguous server-side outcome. Retrying the complete batch is
-   * safe because watermark advancement is monotonic.
+   * Adapters own physical dispatch and may use multiple native chunks. Each
+   * invalidation remains independently atomic, but the operation is not atomic
+   * as a whole and can partially complete. A rejected operation can also have
+   * an ambiguous server-side outcome. Retrying the complete target set is safe
+   * because watermark advancement is monotonic.
    */
   invalidateMany?(requests: readonly RedisInvalidationRequest[]): Awaitable<void>;
 }
