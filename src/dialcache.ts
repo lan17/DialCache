@@ -481,6 +481,10 @@ export class DialCache {
   /**
    * Writes a remote invalidation watermark for Redis-tracked entries.
    *
+   * Requires a Redis client in the DialCache configuration. If Redis is not
+   * configured, the call rejects rather than reporting an invalidation that
+   * did not occur.
+   *
    * This does not synchronously evict local cache hits or untracked Redis values.
    * Call it only after the source mutation commits.
    *
@@ -522,12 +526,12 @@ export class DialCache {
   async invalidateRemote(keyType: string, id: Id, futureBufferMs = 0): Promise<void> {
     assertSupportedFutureBufferMs(futureBufferMs);
 
-    if (this.redisCache === null) {
-      return;
-    }
-
     this.metrics?.invalidation({ cacheNamespace: this.namespace, keyType, layer: CacheLayer.REMOTE });
     try {
+      if (this.redisCache === null) {
+        throw new TypeError("DialCache invalidateRemote requires a configured Redis client");
+      }
+
       await this.redisCache.invalidate(keyType, String(id), futureBufferMs, this.namespace);
     } catch (error) {
       this.logger.warn("Error writing DialCache invalidation watermark", error);

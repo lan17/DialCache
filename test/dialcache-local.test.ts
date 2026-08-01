@@ -79,9 +79,11 @@ describe("DialCache local-only MVP", () => {
     expect(calls).toBe(1);
   });
 
-  it("supports local caching with metrics omitted and no-op invalidation without Redis", async () => {
+  it("supports local caching with metrics omitted while invalidation without Redis rejects", async () => {
     // Given metrics and Redis are both absent.
-    const dialcache = new DialCache();
+    const dialcache = new DialCache({
+      logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    });
     let calls = 0;
     const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
       keyType: "user_id",
@@ -92,7 +94,9 @@ describe("DialCache local-only MVP", () => {
 
     // When local caching is used and targeted invalidation is requested without a Redis layer.
     const first = await dialcache.enable(async () => await getUser("123"));
-    await dialcache.invalidateRemote("user_id", "123");
+    await expect(dialcache.invalidateRemote("user_id", "123")).rejects.toThrow(
+      "DialCache invalidateRemote requires a configured Redis client",
+    );
     const second = await dialcache.enable(async () => await getUser("123"));
 
     // Then no metrics adapter or Redis layer is required for the local path to work.
