@@ -168,6 +168,14 @@ type CacheOperationOptions<Value> = CacheOperationOptionsBase<Value> & {
  */
 export type CachedOptions<Fn extends AnyFn> = CachedOptionsBase<Fn> & SerializerOption<CachedValue<Fn>>;
 
+interface CachedDefinition<Fn extends AnyFn> {
+  readonly keyType: string;
+  readonly useCase: string;
+  readonly cacheKey: CacheKeySelector<Fn>;
+  readonly serializer: Serializer<CachedValue<Fn>> | null;
+  readonly trackForInvalidation: boolean;
+}
+
 interface GetOrLoadOptionsBase<Value> extends CacheOperationOptionsBase<Value> {
   /**
    * Include every captured value that can affect the loaded result. Concurrent
@@ -350,15 +358,16 @@ export class DialCache {
     const defaultConfig = snapshotDefaultConfig(options.defaultConfig);
     const fallbackTimeoutMs = resolveFallbackTimeoutMs(options.fallbackTimeoutMs);
     const shadowComparator = resolveShadowComparator(options.shadowComparator);
-    this.registerUseCase(options.useCase);
+    const definition = snapshotCachedDefinition(options);
+    this.registerUseCase(definition.useCase);
 
     return (...args: Parameters<Fn>): Promise<CachedValue<Fn>> =>
       this.executeCacheOperation(
         // `Fn` preserves the public parameter and return types, but its
         // `AnyFn` constraint erases the invocation result to `unknown`.
         () => fn(...args) as Awaitable<CachedValue<Fn>>,
-        () => options.cacheKey(...args),
-        options,
+        () => definition.cacheKey(...args),
+        definition,
         defaultConfig,
         fallbackTimeoutMs,
         shadowComparator,
@@ -1371,6 +1380,16 @@ function yieldUnreferencedImmediate(): Promise<void> {
   return new Promise((resolve) => {
     setImmediate(resolve).unref();
   });
+}
+
+function snapshotCachedDefinition<Fn extends AnyFn>(options: CachedOptions<Fn>): CachedDefinition<Fn> {
+  return {
+    useCase: options.useCase,
+    keyType: options.keyType,
+    cacheKey: options.cacheKey,
+    serializer: (options.serializer as Serializer<CachedValue<Fn>> | null | undefined) ?? null,
+    trackForInvalidation: options.trackForInvalidation ?? false,
+  };
 }
 
 function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): DialCacheKeyConfig | null {
