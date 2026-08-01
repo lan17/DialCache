@@ -82,7 +82,7 @@ request-local cache -> process-local cache -> Redis cache -> fallback function
 - Process-local misses try Redis and populate the process-local cache on a Redis hit.
 - Redis misses call the fallback and attempt to populate Redis and, when active, the process-local cache. Tracked invalidation may suppress both publications.
 - Selected tracked Redis keys can execute non-serving [shadow work](#shadow-validation) that validates hits and fills clean misses, even before Redis is allowed to serve callers.
-- Redis read failures and timeouts are logged, counted in metrics, and fail open without attempting a second Redis operation. Redis write failures also fail open. `invalidateRemote` logs/counts Redis failures and rethrows them so callers do not assume invalidation succeeded.
+- Redis read failures and timeouts are logged, counted in metrics, and fail open without attempting a second Redis operation. Redis write failures also fail open. `invalidateRemote` requires a configured Redis client; missing configuration and Redis failures are logged, counted, and rethrown so callers do not assume invalidation succeeded.
 - Cache-key construction and config-provider failures also fail open and run the fallback uncached.
 - A missing effective process-local/Redis TTL disables that layer by policy; a configured TTL with no ramp defaults to 100%. Disabled layers record a disabled reason and fall through to the next layer/fallback.
 
@@ -577,7 +577,7 @@ Use a narrower copy when its semantics are sufficient; the ownership boundary is
 
 ## Targeted invalidation and watermarks
 
-Mutable Redis-backed use cases can opt into targeted invalidation by setting `trackForInvalidation: true` in the options and calling `dialcache.invalidateRemote(keyType, id, futureBufferMs)` after writes. The buffer is an application-owned safety value; DialCache cannot choose a universally safe nonzero value:
+Mutable Redis-backed use cases can opt into targeted invalidation by setting `trackForInvalidation: true` in the options and calling `dialcache.invalidateRemote(keyType, id, futureBufferMs)` after writes. `invalidateRemote` requires `DialCacheConfig.redis`; local-only caching remains supported, but this explicit remote maintenance operation rejects when Redis is absent. The buffer is an application-owned safety value; DialCache cannot choose a universally safe nonzero value:
 
 ```ts
 import { CacheLayer, DialCache, DialCacheKeyConfig } from "dialcache";

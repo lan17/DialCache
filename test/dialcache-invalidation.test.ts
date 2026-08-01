@@ -403,9 +403,81 @@ describe("DialCache targeted invalidation watermarks", () => {
     });
   });
 
+  it("rejects missing Redis configuration and records the invalidation failure", async () => {
+    const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const metrics = new RecordingMetrics();
+    const dialcache = new DialCache({ logger, metrics });
+
+    const rejection = await dialcache.invalidateRemote("user_id", "123").catch((error: unknown) => error);
+
+    expect(rejection).toBeInstanceOf(TypeError);
+    expect(rejection).toHaveProperty(
+      "message",
+      "DialCache invalidateRemote requires a configured Redis client",
+    );
+    expect(logger.warn).toHaveBeenCalledOnce();
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Error writing DialCache invalidation watermark",
+      rejection,
+    );
+    expect(metrics.events).toEqual([
+      {
+        name: "invalidation",
+        labels: { cacheNamespace: "urn", keyType: "user_id", layer: CacheLayer.REMOTE },
+      },
+      {
+        name: "error",
+        labels: {
+          cacheNamespace: "urn",
+          useCase: "watermark",
+          keyType: "user_id",
+          layer: CacheLayer.REMOTE,
+          error: "invalidation",
+          inFallback: false,
+        },
+      },
+    ]);
+  });
+
+  it("preserves the missing Redis error when invalidation observers fail", async () => {
+    const observerError = new Error("observer failed");
+    const logger = {
+      debug: vi.fn(),
+      error: vi.fn(),
+      warn: vi.fn(() => {
+        throw observerError;
+      }),
+    };
+    const metrics = new RecordingMetrics();
+    const invalidationMetric = vi.spyOn(metrics, "invalidation").mockImplementation(() => {
+      throw observerError;
+    });
+    const errorMetric = vi.spyOn(metrics, "error").mockImplementation(() => {
+      throw observerError;
+    });
+    const dialcache = new DialCache({ logger, metrics });
+
+    const rejection = await dialcache.invalidateRemote("user_id", "123").catch((error: unknown) => error);
+
+    expect(rejection).toBeInstanceOf(TypeError);
+    expect(rejection).toHaveProperty(
+      "message",
+      "DialCache invalidateRemote requires a configured Redis client",
+    );
+    expect(logger.warn).toHaveBeenCalledOnce();
+    expect(invalidationMetric).toHaveBeenCalledOnce();
+    expect(errorMetric).toHaveBeenCalledOnce();
+  });
+
   it("rejects invalid future buffers before calling Redis", async () => {
     const redis = new FakeRedis();
-    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
+    const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const metrics = new RecordingMetrics();
+    const dialcache = new DialCache({
+      redis: { client: redis, readTimeoutMs: 1_000 },
+      logger,
+      metrics,
+    });
 
     await expect(dialcache.invalidateRemote("user_id", "123", -1)).rejects.toThrow("futureBufferMs");
     await expect(dialcache.invalidateRemote("user_id", "123", 1.5)).rejects.toThrow("futureBufferMs");
@@ -418,6 +490,8 @@ describe("DialCache targeted invalidation watermarks", () => {
       dialcache.invalidateRemote("user_id", "123", Number.MAX_SAFE_INTEGER),
     ).rejects.toThrow(`no greater than ${MAX_SUPPORTED_DURATION_MS}`);
     expect(redis.setCalls).toBe(0);
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(metrics.events).toEqual([]);
   });
 
   it("accepts the maximum TTL across local, Redis, and tracked-watermark storage", async () => {
