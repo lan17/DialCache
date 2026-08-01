@@ -10,9 +10,14 @@ import {
   type MetricErrorKind,
   type MetricLayer,
 } from "../metrics.js";
-import type { DialCacheRedisClient, RedisCachePayload } from "../redis-client.js";
+import type {
+  DialCacheRedisClient,
+  RedisCachePayload,
+  RedisInvalidationRequest,
+} from "../redis-client.js";
 import { JsonSerializer, type Serializer } from "../serializer.js";
 import type { RedisCacheGetResult } from "./cache-result.js";
+import { awaitAll } from "./await-all.js";
 import { assertValidDeadlineMs, withMonotonicDeadline } from "./deadline.js";
 import { cacheTtlSecToMs } from "./duration.js";
 import { fetchKeyConfig, resolveLayerConfigResult, type ResolvedLayerConfig } from "./runtime-config.js";
@@ -251,10 +256,28 @@ export class RedisCache {
   }
 
   async invalidate(keyType: string, id: string, futureBufferMs = 0, namespace = "urn"): Promise<void> {
-    await this.client.invalidate({
-      watermarkKey: this.redisWatermarkKey(namespace, keyType, id),
-      futureBufferMs,
-    });
+    await this.client.invalidate(this.redisInvalidationRequest(namespace, keyType, id, futureBufferMs));
+  }
+
+  async invalidateMany(
+    targets: readonly { readonly keyType: string; readonly id: string }[],
+    futureBufferMs = 0,
+    namespace = "urn",
+  ): Promise<void> {
+    // Derive every key before dispatch so invalid input cannot partially mutate Redis.
+    const requests = targets.map(({ keyType, id }) =>
+      this.redisInvalidationRequest(namespace, keyType, id, futureBufferMs),
+    );
+
+    if (this.client.invalidateMany !== undefined) {
+      await this.client.invalidateMany(requests);
+      return;
+    }
+
+    await awaitAll(
+      requests.map(async (request) => await this.client.invalidate(request)),
+      "Multiple DialCache invalidations failed",
+    );
   }
 
   redisKey(key: DialCacheKey): string {
@@ -263,6 +286,18 @@ export class RedisCache {
 
   redisWatermarkKey(namespace: string, keyType: string, id: string): string {
     return `${redisClusterHashTag(invalidationPrefix(namespace, keyType, id))}#watermark`;
+  }
+
+  private redisInvalidationRequest(
+    namespace: string,
+    keyType: string,
+    id: string,
+    futureBufferMs: number,
+  ): RedisInvalidationRequest {
+    return {
+      watermarkKey: this.redisWatermarkKey(namespace, keyType, id),
+      futureBufferMs,
+    };
   }
 
   private redisWatermarkKeyFromKey(key: DialCacheKey): string {

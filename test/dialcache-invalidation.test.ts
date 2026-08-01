@@ -9,6 +9,7 @@ import {
   redisClusterHashTag,
   type CacheMetricLabels,
   type DisabledMetricLabels,
+  type DialCacheRedisClient,
   type ErrorMetricLabels,
   type DialCacheMetricsAdapter,
   type InvalidationMetricLabels,
@@ -73,6 +74,14 @@ const watermarkKey = "{urn:user_id:123}#watermark";
 const MAX_CACHE_TTL_SEC = 31_536_000;
 const MAX_SUPPORTED_DURATION_MS = 31_536_000_000;
 const WATERMARK_TTL_MARGIN_MS = 60_000;
+
+function deferred(): { readonly promise: Promise<void>; resolve(): void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
 
 describe("DialCache targeted invalidation watermarks", () => {
   beforeEach(() => {
@@ -401,6 +410,210 @@ describe("DialCache targeted invalidation watermarks", () => {
         inFallback: false,
       },
     });
+  });
+
+  it("batches unique canonical invalidation targets through a batch-capable client", async () => {
+    const invalidate = vi.fn(async () => undefined);
+    const invalidateMany = vi.fn(async () => undefined);
+    const redis: DialCacheRedisClient = {
+      read: async () => null,
+      write: async () => true,
+      invalidate,
+      invalidateMany,
+    };
+    const metrics = new RecordingMetrics();
+    const dialcache = new DialCache({
+      namespace: "batch:cache",
+      redis: { client: redis, readTimeoutMs: 1_000 },
+      metrics,
+    });
+
+    await dialcache.invalidateRemoteMany([
+      { keyType: "user_id", id: 1 },
+      { keyType: "user_id", id: "1" },
+      { keyType: "user_id", id: 1n },
+      { keyType: "account_id", id: "1" },
+      { keyType: "user_id", id: "2" },
+    ], 250);
+
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(invalidateMany).toHaveBeenCalledOnce();
+    expect(invalidateMany).toHaveBeenCalledWith([
+      { watermarkKey: "{batch%3Acache:user_id:1}#watermark", futureBufferMs: 250 },
+      { watermarkKey: "{batch%3Acache:account_id:1}#watermark", futureBufferMs: 250 },
+      { watermarkKey: "{batch%3Acache:user_id:2}#watermark", futureBufferMs: 250 },
+    ]);
+    expect(metrics.events.filter(({ name }) => name === "invalidation")).toEqual([
+      {
+        name: "invalidation",
+        labels: { cacheNamespace: "batch:cache", keyType: "user_id", layer: CacheLayer.REMOTE },
+      },
+      {
+        name: "invalidation",
+        labels: { cacheNamespace: "batch:cache", keyType: "account_id", layer: CacheLayer.REMOTE },
+      },
+      {
+        name: "invalidation",
+        labels: { cacheNamespace: "batch:cache", keyType: "user_id", layer: CacheLayer.REMOTE },
+      },
+    ]);
+  });
+
+  it("keeps scalar-only custom clients compatible and waits for every launched invalidation", async () => {
+    const gate = deferred();
+    const firstError = new Error("first invalidation failed");
+    const invalidate = vi.fn(async ({ watermarkKey }: { readonly watermarkKey: string }) => {
+      if (watermarkKey.includes(":first}")) {
+        throw firstError;
+      }
+      await gate.promise;
+    });
+    const redis: DialCacheRedisClient = {
+      read: async () => null,
+      write: async () => true,
+      invalidate,
+    };
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
+
+    let settled = false;
+    const operation = dialcache.invalidateRemoteMany([
+      { keyType: "user_id", id: "first" },
+      { keyType: "user_id", id: "second" },
+    ]).finally(() => {
+      settled = true;
+    });
+    await vi.waitFor(() => expect(invalidate).toHaveBeenCalledTimes(2));
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    gate.resolve();
+    await expect(operation).rejects.toBe(firstError);
+    expect(settled).toBe(true);
+  });
+
+  it("aggregates multiple scalar fallback failures in target order", async () => {
+    const errors = [new Error("first"), new Error("second")];
+    let call = 0;
+    const redis: DialCacheRedisClient = {
+      read: async () => null,
+      write: async () => true,
+      invalidate: async () => {
+        throw errors[call++]!;
+      },
+    };
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
+
+    let rejection: unknown;
+    try {
+      await dialcache.invalidateRemoteMany([
+        { keyType: "user_id", id: "first" },
+        { keyType: "user_id", id: "second" },
+      ]);
+    } catch (error) {
+      rejection = error;
+    }
+
+    expect(rejection).toBeInstanceOf(AggregateError);
+    expect((rejection as AggregateError).errors).toEqual(errors);
+  });
+
+  it("validates the whole batch before dispatch and treats an empty batch as a no-op", async () => {
+    const invalidate = vi.fn(async () => undefined);
+    const invalidateMany = vi.fn(async () => undefined);
+    const redis: DialCacheRedisClient = {
+      read: async () => null,
+      write: async () => true,
+      invalidate,
+      invalidateMany,
+    };
+    const metrics = new RecordingMetrics();
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 }, metrics });
+
+    await dialcache.invalidateRemoteMany([]);
+    await expect(dialcache.invalidateRemoteMany([], -1)).rejects.toThrow("futureBufferMs");
+    await expect(dialcache.invalidateRemoteMany([
+      { keyType: "user_id", id: "valid" },
+      { keyType: "user_id", id: "{invalid}" },
+    ])).rejects.toThrow(/hash tag/);
+
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(invalidateMany).not.toHaveBeenCalled();
+    expect(metrics.events.filter(({ name }) => name === "invalidation")).toHaveLength(2);
+  });
+
+  it("logs batch failure once and records each distinct targeted key type", async () => {
+    const batchError = new Error("batch failed");
+    const redis: DialCacheRedisClient = {
+      read: async () => null,
+      write: async () => true,
+      invalidate: async () => undefined,
+      invalidateMany: async () => {
+        throw batchError;
+      },
+    };
+    const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const metrics = new RecordingMetrics();
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 }, logger, metrics });
+
+    await expect(dialcache.invalidateRemoteMany([
+      { keyType: "user_id", id: "1" },
+      { keyType: "user_id", id: "2" },
+      { keyType: "account_id", id: "1" },
+    ])).rejects.toBe(batchError);
+
+    expect(logger.warn).toHaveBeenCalledOnce();
+    expect(logger.warn).toHaveBeenCalledWith("Error writing DialCache invalidation watermarks", batchError);
+    expect(metrics.events.filter(({ name }) => name === "error")).toEqual([
+      {
+        name: "error",
+        labels: {
+          cacheNamespace: "urn",
+          useCase: "watermark",
+          keyType: "user_id",
+          layer: CacheLayer.REMOTE,
+          error: "invalidation",
+          inFallback: false,
+        },
+      },
+      {
+        name: "error",
+        labels: {
+          cacheNamespace: "urn",
+          useCase: "watermark",
+          keyType: "account_id",
+          layer: CacheLayer.REMOTE,
+          error: "invalidation",
+          inFallback: false,
+        },
+      },
+    ]);
+  });
+
+  it("refreshes multiple tracked identities after one public batch call", async () => {
+    const redis = new FakeRedis();
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
+    const versions = new Map([["1", 1], ["2", 1]]);
+    const getUser = dialcache.cached(async (id: string) => ({ id, version: versions.get(id)! }), {
+      keyType: "user_id",
+      useCase: "BatchRefreshUsers",
+      cacheKey: (id) => id,
+      trackForInvalidation: true,
+      defaultConfig: remoteOnly(),
+    });
+
+    await dialcache.enable(async () => await Promise.all([getUser("1"), getUser("2")]));
+    versions.set("1", 2);
+    versions.set("2", 2);
+    await dialcache.invalidateRemoteMany([
+      { keyType: "user_id", id: "1" },
+      { keyType: "user_id", id: "2" },
+    ]);
+    vi.advanceTimersByTime(1);
+
+    await expect(dialcache.enable(async () => await Promise.all([getUser("1"), getUser("2")]))).resolves.toEqual([
+      { id: "1", version: 2 },
+      { id: "2", version: 2 },
+    ]);
   });
 
   it("rejects invalid future buffers before calling Redis", async () => {

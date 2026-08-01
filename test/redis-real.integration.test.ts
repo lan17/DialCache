@@ -803,6 +803,27 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       ).resolves.toBeUndefined();
     });
 
+    it("batches invalidation scripts after SCRIPT FLUSH", async () => {
+      if (client === undefined || admin === undefined) {
+        throw new Error("Redis test clients did not start");
+      }
+      const invalidateMany = client.adapter.invalidateMany;
+      if (invalidateMany === undefined) {
+        throw new Error("Bundled adapter does not support batch invalidation");
+      }
+      const requests = ["one", "two", "three"].map((id) => ({
+        watermarkKey: `batch-recovery:{item:${id}}:watermark`,
+        futureBufferMs: 100,
+      }));
+
+      await admin.scriptFlush();
+      await expect(invalidateMany.call(client.adapter, requests)).resolves.toBeUndefined();
+
+      const watermarks = await admin.mGet(requests.map(({ watermarkKey }) => watermarkKey));
+      expect(watermarks).toHaveLength(requests.length);
+      expect(watermarks.every((watermark) => watermark !== null && /^\d+$/.test(watermark))).toBe(true);
+    });
+
     it("treats every invalid read frame and watermark state as a miss", async () => {
       if (client === undefined || admin === undefined) {
         throw new Error("Redis test clients did not start");

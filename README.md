@@ -4,7 +4,7 @@
 [![Codecov](https://codecov.io/gh/lan17/DialCache/branch/main/graph/badge.svg)](https://codecov.io/gh/lan17/DialCache)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/lan17/DialCache/badge)](https://scorecard.dev/viewer/?uri=github.com/lan17/DialCache)
 
-Fine-grained TypeScript caching with explicit enabled contexts, request-local memoization, process-local and Redis TTL caching, stable key construction, runtime rollout controls, request coalescing, adapter-based observability, and Redis watermark-based targeted invalidation.
+Fine-grained TypeScript caching with explicit enabled contexts, request-local memoization, process-local and Redis TTL caching, stable key construction, runtime rollout controls, request coalescing, adapter-based observability, and Redis watermark-based scalar and batch invalidation.
 
 ## Contents
 
@@ -82,7 +82,7 @@ request-local cache -> process-local cache -> Redis cache -> fallback function
 - Process-local misses try Redis and populate the process-local cache on a Redis hit.
 - Redis misses call the fallback and attempt to populate Redis and, when active, the process-local cache. Tracked invalidation may suppress both publications.
 - Selected tracked Redis keys can execute non-serving [shadow work](#shadow-validation) that validates hits and fills clean misses, even before Redis is allowed to serve callers.
-- Redis read failures and timeouts are logged, counted in metrics, and fail open without attempting a second Redis operation. Redis write failures also fail open. `invalidateRemote` logs/counts Redis failures and rethrows them so callers do not assume invalidation succeeded.
+- Redis read failures and timeouts are logged, counted in metrics, and fail open without attempting a second Redis operation. Redis write failures also fail open. `invalidateRemote` and `invalidateRemoteMany` log/count Redis failures and rethrow them so callers do not assume invalidation succeeded.
 - Cache-key construction and config-provider failures also fail open and run the fallback uncached.
 - A missing effective process-local/Redis TTL disables that layer by policy; a configured TTL with no ramp defaults to 100%. Disabled layers record a disabled reason and fall through to the next layer/fallback.
 
@@ -185,7 +185,7 @@ const dialcache = new DialCache({
 
 That produces Redis keys beginning with `users-api:...`, or `{users-api:...}` for invalidation-tracked values. `namespace` is DialCache's single cache-identity and key-partitioning setting: it participates in request-local, process-local, Redis, coalescing, deterministic ramp, invalidation, and metrics. It may not contain `{` or `}` because DialCache reserves those characters for Redis Cluster hash tags. Use a namespace to express any required application or environment separation, such as `production-users-api`.
 
-- **`keyType` + `id` is the invalidation unit for tracked Redis entries.** `dialcache.invalidateRemote("user_id", "123", futureBufferMs)` writes one watermark for that user; any `trackForInvalidation` Redis entry with the same `keyType` and `id` is refreshed across all `args` variants when Redis is read. `invalidateRemote` does not evict existing request-local or process-local entries (see [Targeted invalidation](#targeted-invalidation-and-watermarks)), and untracked Redis entries do not consult the watermark. `useCase` identifies the individual cache (it's the metrics label and part of the stored key).
+- **`keyType` + `id` is the invalidation unit for tracked Redis entries.** `dialcache.invalidateRemote("user_id", "123", futureBufferMs)` writes one watermark for that user; `invalidateRemoteMany([{ keyType: "user_id", id: "123" }], futureBufferMs)` applies the same operation to a batch. Any `trackForInvalidation` Redis entry with the same `keyType` and `id` is refreshed across all `args` variants when Redis is read. Neither method evicts existing request-local or process-local entries (see [Targeted invalidation](#targeted-invalidation-and-watermarks)), and untracked Redis entries do not consult the watermark. `useCase` identifies the individual cache (it's the metrics label and part of the stored key).
 - **`args` are part of the cache key** — different `args` produce different entries — but invalidation is by `id` only.
 - **Scalar key equality is string-based.** Runtime type is not an identity dimension: for matching surrounding dimensions, numeric `1`, string `"1"`, and bigint `1n` identify the same key; argument values `null` and `"null"` also match. `-0` matches `0`, and an `undefined` argument is omitted. If a deployment changes the logical meaning represented by a scalar, change an explicit identity dimension such as `keyType`, `useCase`, or an argument name/value.
 - **Non-key inputs** (for example a db handle) are parameters ignored by a `cacheKey` selector or values captured by a `getOrLoad()` loader. They still reach non-coalesced executions, but concurrent same-key cache misses share the leader's execution, so do not omit values like auth context, locale, or cancellation behavior unless sharing one result is correct.
@@ -215,7 +215,7 @@ The disabled baseline sets `requestLocal` to false, leaves the process-local and
 
 `DialCacheKeyConfig` preserves an omitted `requestLocal` as `undefined` so the overlay can distinguish omission from an explicit `false`; the effective value still defaults to false after resolution.
 
-A provider result of `null` (or defensive `undefined`) applies no overrides. An empty `DialCacheKeyConfig` and omitted runtime fields also inherit the baseline. Top-level fields, cache-layer leaves, and leaves inside `shadow` merge independently; an explicit `false` logging flag overrides an inherited `true`. Use explicit values to override inherited policy: `requestLocal: false` disables request-local caching and a layer ramp of `0` disables that shared layer. `DialCacheKeyConfig.disabled()` is the complete new-cache-invocation kill switch in one call: request-local and shadow work off, shadow logging off, and both shared layers ramped to 0. It does not cancel already-admitted work, and explicit maintenance operations such as `invalidateRemote()` remain available. To stop new cache-invocation Redis reads and fills while preserving other runtime settings, explicitly set both `ramp.remote` and `shadow.ramp` to `0`; the remote ramp alone stops serving but does not override an inherited nonzero shadow ramp.
+A provider result of `null` (or defensive `undefined`) applies no overrides. An empty `DialCacheKeyConfig` and omitted runtime fields also inherit the baseline. Top-level fields, cache-layer leaves, and leaves inside `shadow` merge independently; an explicit `false` logging flag overrides an inherited `true`. Use explicit values to override inherited policy: `requestLocal: false` disables request-local caching and a layer ramp of `0` disables that shared layer. `DialCacheKeyConfig.disabled()` is the complete new-cache-invocation kill switch in one call: request-local and shadow work off, shadow logging off, and both shared layers ramped to 0. It does not cancel already-admitted work, and explicit maintenance operations such as `invalidateRemote()` and `invalidateRemoteMany()` remain available. To stop new cache-invocation Redis reads and fills while preserving other runtime settings, explicitly set both `ramp.remote` and `shadow.ramp` to `0`; the remote ramp alone stops serving but does not override an inherited nonzero shadow ramp.
 
 DialCache validates `defaultConfig` when `cached()` registers a definition and whenever `getOrLoad()` is invoked: TTLs must be positive safe integers no greater than 31,536,000 seconds (a fixed 365-day duration), remote-read deadlines must be positive safe integers within their documented limit, layer and shadow ramps must be finite percentages from 0 to 100, layer maps and `shadow` must be objects, and `requestLocal` and `shadow.logMismatches` must be booleans when present. Invalid defaults are rejected immediately.
 
@@ -390,13 +390,21 @@ Pass the same module namespace that created the client. DialCache uses its
 itself, so linked workspaces and applications with another installed GLIDE
 version cannot accidentally mix native script handles.
 
-The application owns the complete Redis lifecycle. It creates and connects the underlying client and passes the semantic adapter to DialCache. During shutdown, stop starting DialCache-backed work and await every promise returned by a cached function, `getOrLoad()`, or `invalidateRemote()`, including calls still running fallbacks that may later write Redis. A read that crossed DialCache's wait deadline may still be active inside the client, so use client-native telemetry and shutdown controls to drain or terminate that work before disposing adapter-owned resources and closing the connection. DialCache only borrows `redis.client`; it has no close or drain method and never disposes or closes caller resources.
+The application owns the complete Redis lifecycle. It creates and connects the underlying client and passes the semantic adapter to DialCache. During shutdown, stop starting DialCache-backed work and await every promise returned by a cached function, `getOrLoad()`, `invalidateRemote()`, or `invalidateRemoteMany()`, including calls still running fallbacks that may later write Redis. Batch invalidation can have multiple in-flight primary-owner partitions, so do not close the client after the first partition rejects. A read that crossed DialCache's wait deadline may still be active inside the client, so use client-native telemetry and shutdown controls to drain or terminate that work before disposing adapter-owned resources and closing the connection. DialCache only borrows `redis.client`; it has no close or drain method and never disposes or closes caller resources.
 
 Awaiting those public promises does not drain detached shadow work. Shadow scheduling and deadline timers are unreferenced and completion is not guaranteed during shutdown; Redis operations, source reads, serializers, and asynchronous telemetry already started by shadow work remain caller-owned and may still be active. Stop new work before closing their dependencies and accept that an in-flight shadow fill may have been dispatched even if its final outcome is lost during teardown. DialCache does not add a shutdown hook or keep the process alive to deliver best-effort outcomes.
 
 The node-redis adapter owns no additional resources, so the application closes the underlying node-redis client after draining work. The GLIDE adapter owns five native `Script` handles but not the wrapped connection. After outstanding operations finish, call its idempotent `dispose()` before closing GLIDE as shown above; disposal while an adapter operation is in flight throws rather than releasing a live script.
 
-Node-redis computes each script's SHA, uses `EVALSHA`, and retries with `EVAL` after `NOSCRIPT`. Its cluster client routes scripts by their first key and performs that fallback on the selected shard. The GLIDE adapter uses GLIDE's native `Script` lifecycle and byte decoder; GLIDE routes scripts from their declared keys. Tracked reads are deliberately routed to primaries so a lagging replica cannot hide an invalidation watermark.
+Node-redis computes each script's SHA, uses `EVALSHA`, and retries with `EVAL` after `NOSCRIPT`. Its cluster client routes scalar scripts by their first key and performs that fallback on the selected shard. For batch invalidation, the adapter uses sequential non-transactional pipelines of at most 1,000 commands on standalone Redis. On Redis Cluster it computes each watermark key's slot, maps that slot through node-redis's current topology, groups the requests by primary owner, and runs the owner groups concurrently while sending at most 1,000 commands per sequential pipeline for each owner; node-redis still selects the node from the chunk's first key. This ceiling bounds DialCache's queued contribution per execution chunk but cannot guarantee admission when the caller configured a lower `commandsQueueMaxLength` or the queue is already occupied. Requests whose slots have no mapped owner use registered scalar scripts, also in sequential groups of at most 1,000 concurrent commands. If an owner chunk ultimately fails with `MOVED` or `ASK` while topology changes, the adapter conservatively retries that chunk through independently routed scalar commands. Recovery begins only after node-redis exhausts its configured `maxCommandRedirections` budget, which is 16 retries by default, so resharding can add those pipeline attempts before scalar fallback starts. Other pipeline failures retain the normal partial-execution and aggregate-error semantics. A narrow structural node-redis wrapper without `multi` remains compatible through scalar fallback.
+
+Warm concurrent scalar invalidations are already auto-pipelined by node-redis, so the explicit standalone pipeline is not a general steady-state throughput guarantee. It retains bounded dispatch, per-chunk reply-count validation, and one source-bearing `EVAL` per pipeline instead of independent full-source recovery for every scalar command after `SCRIPT FLUSH`.
+
+The GLIDE adapter uses GLIDE's native `Script` lifecycle and byte decoder for scalar operations and, when the supplied runtime exposes the necessary capabilities, its native standalone or cluster batch support for batch invalidation. Native batches run in sequential chunks of at most 1,000 commands; GLIDE continues routing each non-atomic Cluster chunk across its target nodes. Scalar-only compatibility wrappers use sequential windows of at most 1,000 concurrent script invocations. The native batch path uses the invalidation script's hash with `EVALSHA`; after a cold `SCRIPT FLUSH`, a script-cache miss retries only the affected idempotent chunk once with `EVAL`, and subsequent chunks return to `EVALSHA`. A runtime whose `Script` handle does not expose `getHash()` uses `EVAL` directly. A failed native chunk or scalar window prevents later work from starting. The ceiling bounds DialCache's contribution but cannot guarantee scalar-path admission against a lower or already-occupied GLIDE in-flight request limit. GLIDE Cluster batches enable GLIDE's server-error and connection-error retries, so a chunk may be replayed; monotonic invalidation makes that replay safe. Standalone batches do not opt into those retry flags.
+
+Cluster batch selection relies on `client instanceof glide.GlideClusterClient`, using the constructor from the same supplied GLIDE module namespace. A structural cluster wrapper that does not preserve that identity should expose only scalar scripting rather than forwarding `exec`; it then remains compatible through scalar fallback. Passing a cluster wrapper that forwards `exec` but loses the native cluster identity is unsupported because the adapter cannot safely distinguish its batch type. Tracked reads are deliberately routed to primaries so a lagging replica cannot hide an invalidation watermark.
+
+The semantic `DialCacheRedisClient.invalidateMany` capability is optional. A custom adapter can implement it for client-native batching; an existing scalar-only adapter remains valid, and DialCache falls back by launching its `invalidate` operation concurrently for every target and settling every result. Custom adapters own any additional dispatch limits. Adapter batch implementations must preserve the scalar invalidation semantics, but the batching and Redis Cluster routing strategy stays inside the adapter rather than leaking client-specific concepts into the core API.
 
 #### Remote read deadlines and async liveness
 
@@ -408,7 +416,7 @@ Same-key followers share the leader's remaining remote-read budget. The timer co
 
 The bundled node-redis adapter passes the signal through per-command options, which can remove queued work where supported. Aborting after dispatch does not unsend a command or prove that Redis stopped executing it. GLIDE's current script API has no per-invocation signal, so its invocation may continue after DialCache has fallen back. Keep client-native connection, retry, queue, and response budgets in place; they bound underlying resource lifetime while DialCache's deadline bounds caller wait time.
 
-Writes, invalidations, async `cacheConfigProvider` calls, and custom serializer methods still need finite application-owned budgets. Do not put mutations behind a bare `Promise.race`: rejecting the outer promise neither removes queued work nor proves whether a dispatched mutation executed.
+Writes, scalar or batch invalidations, async `cacheConfigProvider` calls, and custom serializer methods still need finite application-owned budgets. Do not put mutations behind a bare `Promise.race`: rejecting the outer promise neither removes queued work nor proves whether a dispatched mutation executed.
 
 #### Serialization
 
@@ -577,10 +585,15 @@ Use a narrower copy when its semantics are sufficient; the ownership boundary is
 
 ## Targeted invalidation and watermarks
 
-Mutable Redis-backed use cases can opt into targeted invalidation by setting `trackForInvalidation: true` in the options and calling `dialcache.invalidateRemote(keyType, id, futureBufferMs)` after writes. The buffer is an application-owned safety value; DialCache cannot choose a universally safe nonzero value:
+Mutable Redis-backed use cases can opt into targeted invalidation by setting `trackForInvalidation: true` in the options and calling `dialcache.invalidateRemote(keyType, id, futureBufferMs)` after one write or `dialcache.invalidateRemoteMany(targets, futureBufferMs)` after a write affecting multiple invalidation units. The buffer is an application-owned safety value; DialCache cannot choose a universally safe nonzero value:
 
 ```ts
-import { CacheLayer, DialCache, DialCacheKeyConfig } from "dialcache";
+import {
+  CacheLayer,
+  DialCache,
+  DialCacheKeyConfig,
+  type RemoteInvalidationTarget,
+} from "dialcache";
 import { createNodeRedisDialCacheClient } from "dialcache/node-redis";
 
 const dialcache = new DialCache({
@@ -608,13 +621,24 @@ const getUser = dialcache.cached(
 
 await updateUser("123", patch);
 await dialcache.invalidateRemote("user_id", "123", USER_INVALIDATION_BUFFER_MS);
+
+const affectedTargets = [
+  { keyType: "user_id", id: "123" },
+  { keyType: "organization_id", id: "acme" },
+] satisfies readonly RemoteInvalidationTarget[];
+await updateMembership("123", "acme", membershipPatch);
+await dialcache.invalidateRemoteMany(affectedTargets, USER_INVALIDATION_BUFFER_MS);
 ```
+
+`invalidateRemoteMany` is one public semantic batch operation. An empty target list is a no-op and does not call Redis. Before dispatch, DialCache canonicalizes each id with `String(id)` and de-duplicates identical `keyType` plus canonical-id pairs, so numeric `1`, string `"1"`, and bigint `1n` for one key type advance one watermark. Each attempted unique target records one invalidation metric before Redis dispatch. If a batch fails, invalidation errors are counted once per distinct key type rather than once per id, keeping metric cardinality bounded.
+
+Batch invalidation is one non-atomic semantic client operation, not a guarantee of fewer network round trips or higher throughput. Exact dispatch and timing depend on the adapter, topology, client auto-pipelining, script-cache state, and target count. Standalone pipelines can partially execute if a connection fails, and Redis Cluster work executes independently across nodes; topology or cold-script recovery can also replay an affected chunk. The bundled adapters run chunks sequentially within each execution group, and a failed chunk prevents later chunks in that group from being submitted. Node-redis Cluster owner and unmapped-scalar groups start concurrently, while GLIDE submits one native chunk at a time and lets GLIDE route that chunk. DialCache waits for every already-started node-redis group before rejecting. A rejected call can still have complete, partial, or ambiguous server-side effects; there is no rollback. Retrying the full canonical target list is safe because each invalidation script advances its watermark monotonically and never lowers it.
 
 Invalidation writes a Redis watermark at `{encodedNamespace:encodedKeyType:encodedId}#watermark`. Tracked Redis cache entries use the same Redis Cluster hash tag, for example `{users-api:user_id:123}?locale=en#GetMutableUser:dialcache-frame-v1`, so the value key and watermark key live in the same slot. Key components are percent-encoded before joining so delimiters inside IDs or args cannot collide with delimiters in the key format. Components may not contain `{` or `}` because those characters would corrupt the hash tag.
 
 The internal `:dialcache-frame-v1` suffix identifies values written with DialCache's binary protocol. Watermarks are stored as decimal timestamps.
 
-A cached Redis value whose Redis-created timestamp is older than or equal to the watermark is treated as stale and refreshed through fallback. `invalidateRemote(keyType, id, futureBufferMs)` sets the watermark to the greater of its existing value and Redis's current time plus the buffer. While that future window is active, an invocation that reaches the tracked Redis read treats the covered value as a miss. If its fallback then reaches the tracked Redis write, Redis rejects the write and DialCache also suppresses the corresponding process-local population; the fallback value still returns to its caller. Request-local memoization remains unconditional. A ramped-out invocation without shadow work does not consult the watermark; a selected shadow path does consult it for `C0` and any clean-miss fill, although caller-path request-local/process-local publication remains independent.
+A cached Redis value whose Redis-created timestamp is older than or equal to the watermark is treated as stale and refreshed through fallback. Both invalidation methods set every selected watermark to the greater of its existing value and Redis's current time plus the buffer. While that future window is active, an invocation that reaches the tracked Redis read treats the covered value as a miss. If its fallback then reaches the tracked Redis write, Redis rejects the write and DialCache also suppresses the corresponding process-local population; the fallback value still returns to its caller. Request-local memoization remains unconditional. A ramped-out invocation without shadow work does not consult the watermark; a selected shadow path does consult it for `C0` and any clean-miss fill, although caller-path request-local/process-local publication remains independent.
 
 The bundled timestamp protocol assumes that system clocks are synchronized across every Redis node eligible for primary promotion. Redis does not guarantee that `TIME` is monotonic across nodes, and DialCache does not detect or compensate for cross-node clock skew. If this deployment assumption is violated, failover can temporarily suppress tracked cache fills or allow a pre-invalidation value to remain readable until it expires or a later invalidation advances the watermark past its timestamp.
 
@@ -628,7 +652,7 @@ Size the buffer to cover the maximum expected negative clock skew between promot
 
 This is a timing contract rather than a cancellation or acquisition fence: the buffer prevents stale fallback results from passing that tracked Redis write only while the configured window remains active, and it does not force a fallback to read from an authoritative source.
 
-Targeted invalidation is remote-only and enforced by Redis watermarks. `invalidateRemote` does not evict existing request-local or process-local entries. Strongly invalidated mutable data should disable request-local and process-local caching (or use a very short process-local TTL only when stale reads are acceptable).
+Targeted invalidation is remote-only and enforced by Redis watermarks. Neither `invalidateRemote` nor `invalidateRemoteMany` evicts existing request-local or process-local entries. Strongly invalidated mutable data should disable request-local and process-local caching (or use a very short process-local TTL only when stale reads are acceptable).
 
 ## Request coalescing
 
@@ -745,7 +769,7 @@ The Prometheus adapter emits:
 | `dialcache_miss_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache misses |
 | `dialcache_disabled_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer`, `reason` | Cache skips (`context`, `policy_disabled`, `invalid_ttl`, `invalid_ramp`, `ramped_down`, `config_error`) |
 | `dialcache_error_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer`, `error`, `in_fallback` | Cache/fallback errors classified by a bounded failure site |
-| `dialcache_invalidation_counter` | Counter | `cache_namespace`, `key_type`, `layer` | Invalidation calls for the layers touched |
+| `dialcache_invalidation_counter` | Counter | `cache_namespace`, `key_type`, `layer` | Attempted unique invalidation targets for the layers touched |
 | `dialcache_coalesced_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `scope` | Coalesced requests split by `request_local` or `process` scope |
 | `dialcache_shadow_validation_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `outcome` | Sampled Redis shadow-job outcomes |
 | `dialcache_get_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache get latency in seconds |
@@ -803,7 +827,7 @@ The Datadog adapter emits exact increments of `1` for counters and preserves sec
 | `dialcache.miss.count` | Count | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache misses |
 | `dialcache.disabled.count` | Count | `cache_namespace`, `use_case`, `key_type`, `layer`, `reason` | Cache skips by bounded reason |
 | `dialcache.error.count` | Count | `cache_namespace`, `use_case`, `key_type`, `layer`, `error`, `in_fallback` | Cache/fallback errors by bounded failure site |
-| `dialcache.invalidation.count` | Count | `cache_namespace`, `key_type`, `layer` | Invalidation calls for the layers touched |
+| `dialcache.invalidation.count` | Count | `cache_namespace`, `key_type`, `layer` | Attempted unique invalidation targets for the layers touched |
 | `dialcache.coalesced.count` | Count | `cache_namespace`, `use_case`, `key_type`, `scope` | Coalesced requests by sharing scope |
 | `dialcache.shadow.count` | Count | `cache_namespace`, `use_case`, `key_type`, `outcome` | Sampled Redis shadow-job outcomes |
 | `dialcache.get.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache get latency in seconds |
@@ -847,6 +871,17 @@ pnpm benchmark:request-local
 ```
 
 The command builds `dist` before reporting ten scenarios: sequential request-local hits, sequential process-local hits, enabled bounded fallbacks, request-local coalescing fan-out, process coalescing fan-out, remote-read-deadline coalescing fan-out, tracked Redis hits with shadow omitted, tracked Redis hits deterministically outside a partial shadow ramp, a ramped-down warm-hit confirmation, and a ramped-down clean-miss fill. Both shadow scenarios prove that the caller completes before detached Redis work. The benchmark is a maintainer tool and is not included in the published package. It asserts fallback counts, Redis behavior, coalescing state, timer cleanup, returned values, exactly-once SoT reuse, and conditional confirmation/fill without applying a timing threshold. Override its work sizes with `DIALCACHE_BENCH_ITERATIONS` and `DIALCACHE_BENCH_FANOUT`.
+
+### Batch-invalidation benchmark
+
+With a live standalone Redis available, compare one batch-invalidation call with concurrent scalar calls through both bundled adapters:
+
+```bash
+# Defaults to redis://127.0.0.1:6379.
+DIALCACHE_BENCH_REDIS_URL=redis://127.0.0.1:6379 pnpm benchmark:batch-invalidation
+```
+
+The command builds `dist`, creates standalone node-redis and Valkey GLIDE clients, warms the Lua protocol for each adapter, and reports one row per adapter and target count. Each row contains median timings over five repetitions for 10, 100, and 1,000 unique targets using `invalidateRemoteMany(...)` versus `Promise.all(targets.map(invalidateRemote))`. Each repetition uses fresh targets, alternates which path runs first, and verifies that every expected watermark was written. The benchmark gives both clients 10,000-command/request queue headroom so the 1,000-way scalar leg is admissible; this is benchmark configuration, not a production sizing recommendation. Set `DIALCACHE_BENCH_REPETITIONS` to a positive integer to adjust the sample count. The script uses a unique namespace and never flushes Redis; its watermark keys expire under the normal invalidation protocol. It measures warm standalone behavior only, not Redis Cluster, cold-script recovery, or requests above 1,000 targets. Results are directional and depend on Redis topology, network latency, and client configuration, so the script intentionally asserts no performance threshold. The maintainer-only script is not included in the published package.
 
 ### Releasing
 
