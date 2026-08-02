@@ -13,7 +13,7 @@ import {
   type RedisReadRequest,
   type Serializer,
 } from "../src/index.js";
-import { encodeFrame, FakeRedis } from "./fake-redis.js";
+import { decodeFrame, encodeFrame, FakeRedis } from "./fake-redis.js";
 
 const FRESH_TTL_SEC = 1;
 const MAX_AGE_SEC = 10;
@@ -236,9 +236,10 @@ describe("DialCache stale-on-error recovery", () => {
     expect(staleRecovery).not.toHaveBeenCalled();
   });
 
-  it("does not reread after a logical miss when the source succeeds and writes with maximum retention", async () => {
+  it("refreshes a retained logically stale frame without a recovery reread and writes with maximum retention", async () => {
     const useCase = "StaleRecoverySourceSuccess";
     const redis = new RecordingRedis();
+    seedStale(redis, useCase, { id: "123", version: 1 });
     const { metrics, staleRecovery } = recordingMetrics();
     const sourceValue = { id: "123", version: 2 };
     const source = vi.fn(async () => sourceValue);
@@ -252,10 +253,145 @@ describe("DialCache stale-on-error recovery", () => {
 
     await expect(dialcache.enable(async () => await getUser())).resolves.toBe(sourceValue);
 
+    expect(source).toHaveBeenCalledOnce();
     expect(redis.readRequests.map(({ maxAgeMs }) => maxAgeMs)).toEqual([1_000]);
     expect(redis.setCalls).toBe(1);
     expect(redis.ttlMs(redisValueKey(useCase))).toBe(10_000);
+    const refreshedFrame = decodeFrame(redis.raw(redisValueKey(useCase)));
+    expect(refreshedFrame.createdAtMs).toBe(Date.now());
+    expect(JSON.parse(refreshedFrame.payload as string)).toEqual(sourceValue);
     expect(staleRecovery).not.toHaveBeenCalled();
+  });
+
+  it("rejects with the original source error when a retained frame reaches the exact maximum age", async () => {
+    const useCase = "StaleRecoveryCrossesMaximumDuringSource";
+    const redis = new RecordingRedis();
+    const valueKey = redisValueKey(useCase);
+    redis.setRaw(
+      valueKey,
+      encodeFrame({ id: "123", version: 1 }, Date.now() - 9_000),
+      20_000,
+    );
+    const sourceError = Object.freeze({ code: "SOURCE_UNAVAILABLE" });
+    const sourceStarted = deferred<void>();
+    const sourceGate = deferred<{ readonly id: string; readonly version: number }>();
+    const { metrics, staleRecovery } = recordingMetrics();
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 }, metrics });
+    const getUser = dialcache.cached(async () => {
+      sourceStarted.resolve();
+      return await sourceGate.promise;
+    }, {
+      keyType: "user_id",
+      useCase,
+      cacheKey: () => "123",
+      defaultConfig: staleConfig(),
+    });
+
+    const result = Promise.allSettled([dialcache.enable(async () => await getUser())]);
+    await sourceStarted.promise;
+    await vi.advanceTimersByTimeAsync(1_000);
+    sourceGate.reject(sourceError);
+    const [settled] = await result;
+
+    expect(rejectionReason(settled!)).toBe(sourceError);
+    expect(redis.readRequests.map(({ maxAgeMs }) => maxAgeMs)).toEqual([1_000, 10_000]);
+    expect(redis.ttlMs(valueKey)).toBe(19_000);
+    expect(redis.setCalls).toBe(0);
+    expect(staleRecovery).toHaveBeenCalledOnce();
+    expect(staleRecovery).toHaveBeenCalledWith(expect.objectContaining({ outcome: "miss" }));
+  });
+
+  it("uses one runtime policy snapshot for the initial read and delayed recovery", async () => {
+    const useCase = "StaleRecoveryRuntimePolicySnapshot";
+    const redis = new RecordingRedis();
+    const staleValue = { id: "123", version: 1 };
+    seedStale(redis, useCase, staleValue);
+    const sourceError = Object.freeze({ code: "SOURCE_UNAVAILABLE" });
+    const sourceStarted = deferred<void>();
+    const sourceGate = deferred<{ readonly id: string; readonly version: number }>();
+    let freshTtlSec = 1;
+    let maxAgeSec = 3;
+    let remoteReadTimeoutMs = 25;
+    const cacheConfigProvider = vi.fn(async () => new DialCacheKeyConfig({
+      ttlSec: { [CacheLayer.REMOTE]: freshTtlSec },
+      ramp: { [CacheLayer.REMOTE]: 100 },
+      staleOnErrorMaxAgeSec: maxAgeSec,
+      remoteReadTimeoutMs,
+    }));
+    const dialcache = new DialCache({
+      redis: { client: redis, readTimeoutMs: 1_000 },
+      cacheConfigProvider,
+    });
+    const getUser = dialcache.cached(async () => {
+      sourceStarted.resolve();
+      return await sourceGate.promise;
+    }, {
+      keyType: "user_id",
+      useCase,
+      cacheKey: () => "123",
+    });
+
+    const result = Promise.allSettled([dialcache.enable(async () => await getUser())]);
+    await sourceStarted.promise;
+    freshTtlSec = 4;
+    maxAgeSec = 20;
+    remoteReadTimeoutMs = 75;
+    sourceGate.reject(sourceError);
+    const [settled] = await result;
+
+    expect(settled).toEqual({ status: "fulfilled", value: staleValue });
+    expect(cacheConfigProvider).toHaveBeenCalledOnce();
+    expect(redis.readRequests.map(({ maxAgeMs }) => maxAgeMs)).toEqual([1_000, 3_000]);
+    expect(redis.readContexts.map((context) => context?.timeoutMs)).toEqual([25, 25]);
+  });
+
+  it("applies the current runtime fresh age to an existing retained frame", async () => {
+    const useCase = "StaleRecoveryRuntimeFreshAge";
+    const redis = new RecordingRedis();
+    const retainedValue = { id: "123", version: 1 };
+    redis.setRaw(
+      redisValueKey(useCase),
+      encodeFrame(retainedValue, Date.now() - 3_000),
+      MAX_AGE_SEC * 1_000,
+    );
+    const sourceError = Object.freeze({ code: "SOURCE_UNAVAILABLE" });
+    const source = vi.fn(async () => {
+      throw sourceError;
+    });
+    let freshTtlSec = 4;
+    const cacheConfigProvider = vi.fn(async () => new DialCacheKeyConfig({
+      ttlSec: { [CacheLayer.REMOTE]: freshTtlSec },
+      ramp: { [CacheLayer.REMOTE]: 100 },
+      staleOnErrorMaxAgeSec: MAX_AGE_SEC,
+    }));
+    const dialcache = new DialCache({
+      redis: { client: redis, readTimeoutMs: 1_000 },
+      cacheConfigProvider,
+    });
+    const getUser = dialcache.cached(source, {
+      keyType: "user_id",
+      useCase,
+      cacheKey: () => "123",
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).resolves.toEqual(retainedValue);
+    expect(source).not.toHaveBeenCalled();
+
+    freshTtlSec = 2;
+    await expect(dialcache.enable(async () => await getUser())).resolves.toEqual(retainedValue);
+    expect(source).toHaveBeenCalledOnce();
+
+    freshTtlSec = 4;
+    await expect(dialcache.enable(async () => await getUser())).resolves.toEqual(retainedValue);
+
+    expect(source).toHaveBeenCalledOnce();
+    expect(cacheConfigProvider).toHaveBeenCalledTimes(3);
+    expect(redis.readRequests.map(({ maxAgeMs }) => maxAgeMs)).toEqual([
+      4_000,
+      2_000,
+      10_000,
+      4_000,
+    ]);
   });
 
   it("retains a tracked watermark through the maximum age plus its existing margin", async () => {
@@ -301,6 +437,7 @@ describe("DialCache stale-on-error recovery", () => {
 
     expect(rejectionReason(settled!)).toBe(sourceError);
     expect(redis.readRequests.map(({ maxAgeMs }) => maxAgeMs)).toEqual([1_000, 10_000]);
+    expect(staleRecovery).toHaveBeenCalledOnce();
     expect(staleRecovery).toHaveBeenCalledWith(expect.objectContaining({ outcome: "miss" }));
   });
 
@@ -355,6 +492,7 @@ describe("DialCache stale-on-error recovery", () => {
 
     expect(rejectionReason(settled!)).toBe(sourceError);
     expect(redis.readRequests).toHaveLength(2);
+    expect(staleRecovery).toHaveBeenCalledOnce();
     expect(staleRecovery).toHaveBeenCalledWith(expect.objectContaining({ outcome: "read_error" }));
   });
 
@@ -387,6 +525,7 @@ describe("DialCache stale-on-error recovery", () => {
     expect(rejectionReason(settled!)).toBe(sourceError);
     expect(redis.readContexts[1]?.timeoutMs).toBe(10);
     expect(redis.readContexts[1]?.signal.aborted).toBe(true);
+    expect(staleRecovery).toHaveBeenCalledOnce();
     expect(staleRecovery).toHaveBeenCalledWith(expect.objectContaining({ outcome: "read_timeout" }));
   });
 
@@ -445,6 +584,7 @@ describe("DialCache stale-on-error recovery", () => {
     await expect(result).resolves.toEqual({ id: "123", version: 1 });
     expect(redis.readRequests).toHaveLength(2);
     expect(redis.setCalls).toBe(0);
+    expect(staleRecovery).toHaveBeenCalledOnce();
     expect(staleRecovery).toHaveBeenCalledWith(expect.objectContaining({ outcome: "served" }));
 
     sourceGate.resolve({ id: "123", version: 2 });
@@ -492,6 +632,7 @@ describe("DialCache stale-on-error recovery", () => {
 
     const [recoverySettled] = await Promise.allSettled([dialcache.enable(async () => await recover())]);
     expect(rejectionReason(recoverySettled!)).toBe(sourceError);
+    expect(staleRecovery).toHaveBeenCalledOnce();
     expect(staleRecovery).toHaveBeenCalledWith(expect.objectContaining({
       useCase: recoveryUseCase,
       outcome: "deserialization_error",
@@ -503,6 +644,7 @@ describe("DialCache stale-on-error recovery", () => {
     ]);
     expect(rejectionReason(initialSettled!)).toBe(sourceError);
     expect(redis.readRequests).toHaveLength(readsBeforeInitialFailure + 1);
+    expect(staleRecovery).toHaveBeenCalledTimes(1);
     expect(staleRecovery).not.toHaveBeenCalledWith(expect.objectContaining({ useCase: normalUseCase }));
   });
 
@@ -536,6 +678,7 @@ describe("DialCache stale-on-error recovery", () => {
     expect(rejectionReason(settled!)).toBe(sourceError);
     expect(redis.readRequests).toHaveLength(2);
     expect(redis.readRequests.every(({ watermarkKey: key }) => key === watermarkKey())).toBe(true);
+    expect(staleRecovery).toHaveBeenCalledOnce();
     expect(staleRecovery).toHaveBeenCalledWith(expect.objectContaining({ outcome: "miss" }));
   });
 

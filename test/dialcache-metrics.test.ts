@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   CacheLayer,
   DialCache,
+  DialCacheKey,
   DialCacheKeyConfig,
   type CacheMetricLabels,
   type CoalescedMetricLabels,
@@ -16,7 +17,7 @@ import {
   type ShadowValidationMetricLabels,
   type StaleRecoveryMetricLabels,
 } from "../src/index.js";
-import { FakeRedis } from "./fake-redis.js";
+import { encodeFrame, FakeRedis } from "./fake-redis.js";
 
 class RecordingMetrics implements DialCacheMetricsAdapter {
   readonly events: Array<{ readonly name: string; readonly labels: Record<string, unknown>; readonly value?: number }> = [];
@@ -516,6 +517,87 @@ describe("DialCache observability metrics", () => {
     expect(JSON.stringify(events(metrics, "error", {}))).not.toMatch(
       /Tenant123RedisError|Tenant456DatabaseError|tenant-123|tenant-456|urn:user_id/,
     );
+  });
+
+  it("records one complete telemetry trail when stale recovery serves a retained value", async () => {
+    const metrics = new RecordingMetrics();
+    const redis = new FakeRedis();
+    const useCase = "StaleRecoveryServedMetrics";
+    const staleValue = { userId: "123", version: 1 };
+    const key = new DialCacheKey({ keyType: "user_id", id: "123", useCase });
+    redis.setRaw(
+      `${key.urn}:dialcache-frame-v1`,
+      encodeFrame(staleValue, Date.now() - 2_000),
+      10_000,
+    );
+    const source = vi.fn(async () => {
+      throw new Error("source unavailable");
+    });
+    const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const dialcache = new DialCache({
+      metrics,
+      redis: { client: redis, readTimeoutMs: 1_000 },
+      logger,
+    });
+    const getUser = dialcache.cached(source, {
+      keyType: "user_id",
+      useCase,
+      cacheKey: () => "123",
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 1 },
+        ramp: { [CacheLayer.REMOTE]: 100 },
+        staleOnErrorMaxAgeSec: 10,
+      }),
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).resolves.toEqual(staleValue);
+
+    expect(source).toHaveBeenCalledOnce();
+    expect(events(metrics, "error", { useCase })).toEqual([
+      {
+        name: "error",
+        labels: {
+          cacheNamespace: "urn",
+          useCase,
+          keyType: "user_id",
+          layer: CacheLayer.REMOTE,
+          error: "fallback",
+          inFallback: true,
+        },
+      },
+    ]);
+    const remoteLabels = {
+      cacheNamespace: "urn",
+      useCase,
+      keyType: "user_id",
+      layer: CacheLayer.REMOTE,
+    };
+    expect(events(metrics, "fallback", { useCase })).toEqual([
+      { name: "fallback", labels: remoteLabels, value: expect.any(Number) },
+    ]);
+    expect(events(metrics, "miss", { useCase })).toEqual([
+      { name: "miss", labels: remoteLabels },
+    ]);
+    expect(events(metrics, "request", { useCase })).toEqual([
+      { name: "request", labels: remoteLabels },
+      { name: "request", labels: remoteLabels },
+    ]);
+    expect(events(metrics, "get", { useCase })).toEqual([
+      { name: "get", labels: remoteLabels, value: expect.any(Number) },
+      { name: "get", labels: remoteLabels, value: expect.any(Number) },
+    ]);
+    expect(events(metrics, "staleRecovery", { useCase })).toEqual([
+      {
+        name: "staleRecovery",
+        labels: {
+          cacheNamespace: "urn",
+          useCase,
+          keyType: "user_id",
+          outcome: "served",
+        },
+      },
+    ]);
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 
   it("classifies config, Redis write, and serializer failures by stable operation", async () => {

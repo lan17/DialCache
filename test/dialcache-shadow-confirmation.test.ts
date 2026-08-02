@@ -24,6 +24,7 @@ import {
   type SerializationMetricLabels,
   type Serializer,
   type ShadowValidationMetricLabels,
+  type StaleRecoveryMetricLabels,
 } from "../src/index.js";
 import {
   deterministicRampSample,
@@ -52,7 +53,9 @@ function deferred<T>(): Deferred<T> {
   return { promise, resolve, reject };
 }
 
-type ReadStep = () => RedisCachePayload | null | Promise<RedisCachePayload | null>;
+type ReadStep = (
+  request: RedisReadRequest,
+) => RedisCachePayload | null | Promise<RedisCachePayload | null>;
 
 class ScriptedRedis implements DialCacheRedisClient {
   readonly enforcesMaxAge = true as const;
@@ -70,7 +73,7 @@ class ScriptedRedis implements DialCacheRedisClient {
     if (step === undefined) {
       throw new Error("Unexpected Redis read");
     }
-    return await step();
+    return await step(request);
   }
 }
 
@@ -94,6 +97,7 @@ interface OrdinaryMetricEvent {
 class RecordingMetrics implements DialCacheMetricsAdapter {
   readonly ordinaryEvents: OrdinaryMetricEvent[] = [];
   readonly shadowEvents: ShadowValidationMetricLabels[] = [];
+  readonly staleRecoveryEvents: StaleRecoveryMetricLabels[] = [];
 
   request(labels: CacheMetricLabels): void {
     this.record("request", labels);
@@ -121,6 +125,10 @@ class RecordingMetrics implements DialCacheMetricsAdapter {
 
   shadowValidation(labels: ShadowValidationMetricLabels): void {
     this.shadowEvents.push({ ...labels });
+  }
+
+  staleRecovery(labels: StaleRecoveryMetricLabels): void {
+    this.staleRecoveryEvents.push({ ...labels });
   }
 
   observeGet(labels: CacheMetricLabels, _seconds: number): void {
@@ -782,6 +790,55 @@ describe("DialCache Redis shadow confirmation", () => {
     expect(source).toHaveBeenCalledOnce();
     expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["source_error"]);
     expectTrackedReads(redis, 1);
+  });
+
+  it("never serves retained stale data when remote serving is ramped down", async () => {
+    const stalePayload = JSON.stringify({ id: "123", source: "stale-cache" });
+    const redis = new ScriptedRedis([
+      ({ maxAgeMs }) => maxAgeMs === 60_000 ? null : stalePayload,
+      ({ maxAgeMs }) => maxAgeMs === 3_600_000 ? stalePayload : null,
+    ]);
+    const metrics = new RecordingMetrics();
+    const sourceError = Object.freeze({ code: "SOURCE_UNAVAILABLE" });
+    const source = vi.fn(async () => {
+      throw sourceError;
+    });
+    const dialcache = createCache(redis, metrics);
+    const getUser = dialcache.cached(source, {
+      ...trackedOptions("ShadowDarkRetainedStale", new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 0 },
+        staleOnErrorMaxAgeSec: 3_600,
+        shadow: { ramp: 100 },
+      })),
+      cacheKey: () => "123",
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).rejects.toBe(sourceError);
+    await waitForShadowEvents(metrics, 1);
+
+    expect(source).toHaveBeenCalledOnce();
+    expectTrackedReads(redis, 1, { maxAgeMs: 60_000 });
+    expect(metrics.staleRecoveryEvents).toHaveLength(0);
+    expect(redis.write).not.toHaveBeenCalled();
+    expect(redis.invalidate).not.toHaveBeenCalled();
+    expect(metrics.shadowEvents).toEqual([{
+      cacheNamespace: "urn",
+      useCase: "ShadowDarkRetainedStale",
+      keyType: "user_id",
+      outcome: "source_error",
+    }]);
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "request" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+    )).toHaveLength(1);
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "get" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+    )).toHaveLength(1);
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "disabled"
+      && labels.layer === CacheLayer.REMOTE
+      && labels.reason === "ramped_down"
+    )).toHaveLength(1);
   });
 
   it("does not misclassify a source-propagated FallbackTimeoutError as its own timeout", async () => {

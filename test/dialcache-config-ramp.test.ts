@@ -730,6 +730,72 @@ describe("DialCache runtime config and ramp controls", () => {
     ).resolves.toMatchObject({ staleOnErrorMaxAgeSec: 0 });
   });
 
+  it.each([
+    [
+      "an explicit stale-on-error zero",
+      () => new DialCacheKeyConfig({ staleOnErrorMaxAgeSec: 0 }),
+      1,
+    ],
+    [
+      "an invalid stale-on-error maximum",
+      () => new DialCacheKeyConfig({ staleOnErrorMaxAgeSec: 1 }),
+      1,
+    ],
+    ["the complete disabled overlay", () => DialCacheKeyConfig.disabled(), 0],
+  ] as const)(
+    "does not recover a retained stale value after $0",
+    async (_name, disabledOverlay, expectedRemoteReads) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-08-02T12:00:00.000Z"));
+      try {
+        const useCase = `RetainedStaleRuntimeDisable${expectedRemoteReads}`;
+        const redis = new FakeRedis();
+        const sourceError = Object.freeze({ code: "SOURCE_UNAVAILABLE" });
+        const source = vi.fn<() => Promise<{ readonly id: string; readonly version: number }>>()
+          .mockResolvedValueOnce({ id: "123", version: 1 })
+          .mockRejectedValueOnce(sourceError);
+        let runtimeConfig = new DialCacheKeyConfig({});
+        const dialcache = new DialCache({
+          redis: { client: redis, readTimeoutMs: 1_000 },
+          cacheConfigProvider: async () => runtimeConfig,
+        });
+        const getUser = dialcache.cached(source, {
+          keyType: "user_id",
+          useCase,
+          cacheKey: () => "123",
+          defaultConfig: new DialCacheKeyConfig({
+            ttlSec: { [CacheLayer.REMOTE]: 1 },
+            ramp: { [CacheLayer.REMOTE]: 100 },
+            staleOnErrorMaxAgeSec: 10,
+          }),
+        });
+        const valueKey = `${new DialCacheKey({
+          keyType: "user_id",
+          id: "123",
+          useCase,
+        }).urn}:dialcache-frame-v1`;
+
+        await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({
+          id: "123",
+          version: 1,
+        });
+        expect(redis.ttlMs(valueKey)).toBe(10_000);
+        await vi.advanceTimersByTimeAsync(2_000);
+        runtimeConfig = disabledOverlay();
+        const readsBeforeDisabledCall = redis.getCalls;
+
+        await expect(dialcache.enable(async () => await getUser())).rejects.toBe(sourceError);
+
+        expect(redis.getCalls - readsBeforeDisabledCall).toBe(expectedRemoteReads);
+        expect(redis.setCalls).toBe(1);
+        expect(redis.ttlMs(valueKey)).toBe(8_000);
+        expect(source).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
   it("applies runtime config changes to subsequent calls", async () => {
     // Given a provider whose config can change without redeploying the cached function.
     let runtimeConfig: DialCacheKeyConfig | null = DialCacheKeyConfig.enabled(60);
