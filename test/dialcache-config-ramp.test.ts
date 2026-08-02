@@ -9,6 +9,7 @@ import {
   type Serializer,
 } from "../src/index.js";
 import { deterministicRampSample, deterministicShadowRampSample } from "../src/internal/ramp.js";
+import { fetchKeyConfig } from "../src/internal/runtime-config.js";
 import { FakeRedis } from "./fake-redis.js";
 
 const configFor = (ttlSec: Partial<Record<CacheLayer, number>>, ramp: Partial<Record<CacheLayer, number>>) =>
@@ -36,6 +37,12 @@ describe("DialCache runtime config and ramp controls", () => {
   it("preserves requestLocal omission until baseline and runtime config are merged", () => {
     expect(new DialCacheKeyConfig({}).requestLocal).toBeUndefined();
     expect(new DialCacheKeyConfig({ requestLocal: false }).requestLocal).toBe(false);
+  });
+
+  it("preserves stale-on-error omission and explicit disable values", () => {
+    expect(new DialCacheKeyConfig({}).staleOnErrorMaxAgeSec).toBeUndefined();
+    expect(new DialCacheKeyConfig({ staleOnErrorMaxAgeSec: 0 }).staleOnErrorMaxAgeSec).toBe(0);
+    expect(new DialCacheKeyConfig({ staleOnErrorMaxAgeSec: 3_600 }).staleOnErrorMaxAgeSec).toBe(3_600);
   });
 
   it("preserves shadow omission and explicit kill-switch values", () => {
@@ -71,12 +78,13 @@ describe("DialCache runtime config and ramp controls", () => {
 
   it("captures an immutable default policy snapshot when the use case is registered", async () => {
     const suppliedDefault = new DialCacheKeyConfig({
-      ttlSec: { [CacheLayer.LOCAL]: 60 },
-      ramp: { [CacheLayer.LOCAL]: 100 },
+      ttlSec: { [CacheLayer.LOCAL]: 60, [CacheLayer.REMOTE]: 60 },
+      ramp: { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 100 },
       shadow: {
         ramp: 25,
         logMismatches: true,
       },
+      staleOnErrorMaxAgeSec: 3_600,
     });
     const observedDefaults: Array<DialCacheKeyConfig | null> = [];
     const dialcache = new DialCache({
@@ -96,6 +104,7 @@ describe("DialCache runtime config and ramp controls", () => {
 
     suppliedDefault.ttlSec[CacheLayer.LOCAL] = 0;
     suppliedDefault.ramp[CacheLayer.LOCAL] = 0;
+    (suppliedDefault as { staleOnErrorMaxAgeSec?: number }).staleOnErrorMaxAgeSec = 0;
     const mutableShadow = suppliedDefault.shadow as {
       ramp?: number;
       logMismatches?: boolean;
@@ -112,6 +121,7 @@ describe("DialCache runtime config and ramp controls", () => {
     expect(observedDefaults[1]).toBe(observedDefaults[0]);
     expect(observedDefaults[0]?.ttlSec[CacheLayer.LOCAL]).toBe(60);
     expect(observedDefaults[0]?.ramp[CacheLayer.LOCAL]).toBe(100);
+    expect(observedDefaults[0]?.staleOnErrorMaxAgeSec).toBe(3_600);
     expect(observedDefaults[0]?.shadow).toEqual({
       ramp: 25,
       logMismatches: true,
@@ -347,6 +357,75 @@ describe("DialCache runtime config and ramp controls", () => {
       RangeError,
       `no greater than ${MAX_CACHE_TTL_SEC}`,
     ],
+    [
+      "negative stale-on-error max age",
+      new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        staleOnErrorMaxAgeSec: -1,
+      }),
+      RangeError,
+      "nonnegative safe integer",
+    ],
+    [
+      "fractional stale-on-error max age",
+      new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        staleOnErrorMaxAgeSec: 60.5,
+      }),
+      RangeError,
+      "nonnegative safe integer",
+    ],
+    [
+      "non-finite stale-on-error max age",
+      new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        staleOnErrorMaxAgeSec: Number.NaN,
+      }),
+      RangeError,
+      "nonnegative safe integer",
+    ],
+    [
+      "unsafe stale-on-error max age",
+      new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        staleOnErrorMaxAgeSec: Number.MAX_SAFE_INTEGER + 1,
+      }),
+      RangeError,
+      "nonnegative safe integer",
+    ],
+    [
+      "over-maximum stale-on-error max age",
+      new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        staleOnErrorMaxAgeSec: MAX_CACHE_TTL_SEC + 1,
+      }),
+      RangeError,
+      `no greater than ${MAX_CACHE_TTL_SEC}`,
+    ],
+    [
+      "stale-on-error max age equal to the remote TTL",
+      new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        staleOnErrorMaxAgeSec: 60,
+      }),
+      RangeError,
+      "must be greater than ttlSec.remote",
+    ],
+    [
+      "positive stale-on-error max age without a remote TTL",
+      new DialCacheKeyConfig({ staleOnErrorMaxAgeSec: 3_600 }),
+      RangeError,
+      "requires ttlSec.remote",
+    ],
+    [
+      "stale-on-error max age below the remote TTL",
+      new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        staleOnErrorMaxAgeSec: 30,
+      }),
+      RangeError,
+      "must be greater than ttlSec.remote",
+    ],
     ["negative ramp", new DialCacheKeyConfig({ ramp: { [CacheLayer.LOCAL]: -1 } }), RangeError, "between 0 and 100"],
     ["over-100 ramp", new DialCacheKeyConfig({ ramp: { [CacheLayer.LOCAL]: 101 } }), RangeError, "between 0 and 100"],
     ["non-finite ramp", new DialCacheKeyConfig({ ramp: { [CacheLayer.LOCAL]: Number.POSITIVE_INFINITY } }), RangeError, "between 0 and 100"],
@@ -391,6 +470,12 @@ describe("DialCache runtime config and ramp controls", () => {
       new DialCacheKeyConfig({ shadow: { logMismatches: null as unknown as boolean } }),
       TypeError,
       "must be a boolean",
+    ],
+    [
+      "wrong-type stale-on-error max age",
+      new DialCacheKeyConfig({ staleOnErrorMaxAgeSec: "3600" as unknown as number }),
+      TypeError,
+      "must be a number",
     ],
     ["primitive config", 42 as unknown as DialCacheKeyConfig, TypeError, "must be an object"],
     ["array config", [] as unknown as DialCacheKeyConfig, TypeError, "must be an object"],
@@ -438,6 +523,35 @@ describe("DialCache runtime config and ramp controls", () => {
     })).not.toThrow();
   });
 
+  it("accepts disabled and exact-maximum static stale-on-error policy", () => {
+    const dialcache = new DialCache();
+
+    expect(() => dialcache.cached(async () => "value", {
+      keyType: "item_id",
+      useCase: "DisabledStaticStaleOnErrorWithoutRemote",
+      cacheKey: () => "000",
+      defaultConfig: new DialCacheKeyConfig({ staleOnErrorMaxAgeSec: 0 }),
+    })).not.toThrow();
+    expect(() => dialcache.cached(async () => "value", {
+      keyType: "item_id",
+      useCase: "DisabledStaticStaleOnError",
+      cacheKey: () => "123",
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        staleOnErrorMaxAgeSec: 0,
+      }),
+    })).not.toThrow();
+    expect(() => dialcache.cached(async () => "value", {
+      keyType: "item_id",
+      useCase: "MaximumStaticStaleOnError",
+      cacheKey: () => "456",
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: MAX_CACHE_TTL_SEC - 1 },
+        staleOnErrorMaxAgeSec: MAX_CACHE_TTL_SEC,
+      }),
+    })).not.toThrow();
+  });
+
   it.each([
     ["a primitive", 42],
     ["an array", []],
@@ -467,6 +581,7 @@ describe("DialCache runtime config and ramp controls", () => {
   it("returns the explicit kill-switch overlay from DialCacheKeyConfig.disabled()", () => {
     expect(DialCacheKeyConfig.disabled()).toEqual(new DialCacheKeyConfig({
       requestLocal: false,
+      staleOnErrorMaxAgeSec: 0,
       shadow: {
         ramp: 0,
         logMismatches: false,
@@ -550,6 +665,69 @@ describe("DialCache runtime config and ramp controls", () => {
 
     expect(first.calls).toBe(1);
     expect(second.calls).toBe(2);
+  });
+
+  it.each([
+    ["null", null],
+    ["negative", -1],
+    ["fractional", 60.5],
+    ["NaN", Number.NaN],
+    ["infinite", Number.POSITIVE_INFINITY],
+    ["far over maximum", Number.MAX_SAFE_INTEGER],
+    ["unsafe", Number.MAX_SAFE_INTEGER + 1],
+    ["over maximum", MAX_CACHE_TTL_SEC + 1],
+    ["equal to fresh TTL", 60],
+    ["below fresh TTL", 30],
+    ["wrong type", "3600"],
+  ] as const)(
+    "disables only stale recovery for an invalid runtime max age ($0)",
+    async (_name, configuredMaxAge) => {
+      const redis = new FakeRedis();
+      const dialcache = new DialCache({
+        redis: { client: redis, readTimeoutMs: 1_000 },
+        cacheConfigProvider: async () => new DialCacheKeyConfig({
+          ttlSec: { [CacheLayer.REMOTE]: 60 },
+          staleOnErrorMaxAgeSec: configuredMaxAge as unknown as number,
+        }),
+      });
+      let calls = 0;
+      const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+        keyType: "user_id",
+        useCase: `InvalidRuntimeStaleMaxAge${String(_name)}`,
+        cacheKey: (userId) => userId,
+      });
+
+      const first = await dialcache.enable(async () => await getUser("123"));
+      const second = await dialcache.enable(async () => await getUser("123"));
+
+      expect(second).toEqual(first);
+      expect(calls).toBe(1);
+      expect(redis.getCalls).toBe(2);
+      expect(redis.setCalls).toBe(1);
+    },
+  );
+
+  it("inherits, overrides, and explicitly disables stale-on-error runtime policy", async () => {
+    const defaultConfig = new DialCacheKeyConfig({
+      ttlSec: { [CacheLayer.REMOTE]: 60 },
+      staleOnErrorMaxAgeSec: 3_600,
+    });
+    const key = new DialCacheKey({
+      keyType: "user_id",
+      id: "123",
+      useCase: "StaleOnErrorOverlay",
+      defaultConfig,
+    });
+
+    await expect(fetchKeyConfig(async () => new DialCacheKeyConfig({}), key)).resolves.toMatchObject({
+      staleOnErrorMaxAgeSec: 3_600,
+    });
+    await expect(
+      fetchKeyConfig(async () => new DialCacheKeyConfig({ staleOnErrorMaxAgeSec: 7_200 }), key),
+    ).resolves.toMatchObject({ staleOnErrorMaxAgeSec: 7_200 });
+    await expect(
+      fetchKeyConfig(async () => new DialCacheKeyConfig({ staleOnErrorMaxAgeSec: 0 }), key),
+    ).resolves.toMatchObject({ staleOnErrorMaxAgeSec: 0 });
   });
 
   it("applies runtime config changes to subsequent calls", async () => {

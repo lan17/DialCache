@@ -14,6 +14,7 @@ import {
   type SerializationMetricLabels,
   type Serializer,
   type ShadowValidationMetricLabels,
+  type StaleRecoveryMetricLabels,
 } from "../src/index.js";
 import { FakeRedis } from "./fake-redis.js";
 
@@ -42,6 +43,10 @@ class RecordingMetrics implements DialCacheMetricsAdapter {
 
   coalesced(labels: CoalescedMetricLabels): void {
     this.record("coalesced", labels);
+  }
+
+  staleRecovery(labels: StaleRecoveryMetricLabels): void {
+    this.record("staleRecovery", labels);
   }
 
   observeGet(labels: CacheMetricLabels, seconds: number): void {
@@ -96,6 +101,7 @@ describe("DialCache observability metrics", () => {
       invalidation: vi.fn(() => thenable),
       coalesced: vi.fn(() => thenable),
       shadowValidation: vi.fn(() => thenable),
+      staleRecovery: vi.fn(() => thenable),
       observeGet: vi.fn(() => thenable),
       observeFallback: vi.fn(() => thenable),
       observeSerialization: vi.fn(() => thenable),
@@ -133,6 +139,12 @@ describe("DialCache observability metrics", () => {
       keyType: "user_id",
       outcome: "match",
     } satisfies ShadowValidationMetricLabels);
+    isolatedMetrics.staleRecovery?.({
+      cacheNamespace: "urn",
+      useCase: "RejectingMetricsThenable",
+      keyType: "user_id",
+      outcome: "served",
+    } satisfies StaleRecoveryMetricLabels);
     isolatedMetrics.observeGet(labels, 0);
     isolatedMetrics.observeFallback(labels, 0);
     isolatedMetrics.observeSerialization({ ...labels, operation: "dump" }, 0);
@@ -140,7 +152,7 @@ describe("DialCache observability metrics", () => {
 
     expect(then).not.toHaveBeenCalled();
     await tick();
-    expect(then).toHaveBeenCalledTimes(11);
+    expect(then).toHaveBeenCalledTimes(12);
   });
 
   it("includes the configured cache namespace on every metric path", async () => {
@@ -410,6 +422,43 @@ describe("DialCache observability metrics", () => {
     expect(events(metrics, "error", { useCase: "DisabledByPolicy" })).toHaveLength(0);
   });
 
+  it("reports invalid stale-on-error policy without disabling fresh Redis", async () => {
+    const metrics = new RecordingMetrics();
+    const redis = new FakeRedis();
+    const dialcache = new DialCache({
+      metrics,
+      redis: { client: redis, readTimeoutMs: 1_000 },
+      cacheConfigProvider: async () => new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        staleOnErrorMaxAgeSec: 60,
+      }),
+    });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "InvalidStaleOnErrorPolicy",
+      cacheKey: (userId) => userId,
+    });
+
+    const first = await dialcache.enable(async () => await getUser("123"));
+    const second = await dialcache.enable(async () => await getUser("123"));
+
+    expect(second).toEqual(first);
+    expect(calls).toBe(1);
+    expect(redis.getCalls).toBe(2);
+    expect(redis.setCalls).toBe(1);
+    expect(events(metrics, "error", {
+      useCase: "InvalidStaleOnErrorPolicy",
+      layer: CacheLayer.REMOTE,
+      error: "config_resolution",
+      inFallback: false,
+    })).toHaveLength(2);
+    expect(events(metrics, "disabled", {
+      useCase: "InvalidStaleOnErrorPolicy",
+      layer: CacheLayer.REMOTE,
+    })).toHaveLength(0);
+  });
+
   it("labels cache errors separately from fallback errors", async () => {
     // Given cache and fallback errors carry caller-defined names containing dynamic identifiers.
     const metrics = new RecordingMetrics();
@@ -417,6 +466,7 @@ describe("DialCache observability metrics", () => {
     const cacheError = new Error("redis key urn:user_id:tenant-123 failed");
     cacheError.name = "Tenant123RedisError";
     const failingRedis: DialCacheRedisClient = {
+      enforcesMaxAge: true,
       read: vi.fn(async () => {
         throw cacheError;
       }),

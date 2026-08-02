@@ -55,6 +55,7 @@ function deferred<T>(): Deferred<T> {
 type ReadStep = () => RedisCachePayload | null | Promise<RedisCachePayload | null>;
 
 class ScriptedRedis implements DialCacheRedisClient {
+  readonly enforcesMaxAge = true as const;
   readonly requests: RedisReadRequest[] = [];
   readonly contexts: Array<RedisReadContext | undefined> = [];
   readonly write = vi.fn(async (_request: RedisWriteRequest): Promise<boolean> => true);
@@ -217,10 +218,11 @@ async function waitForShadowEvents(metrics: RecordingMetrics, count: number): Pr
 function expectTrackedReads(
   redis: ScriptedRedis,
   count: number,
-  options: { readonly singleWatermark?: boolean } = { singleWatermark: true },
+  options: { readonly singleWatermark?: boolean; readonly maxAgeMs?: number } = { singleWatermark: true },
 ): void {
   expect(redis.requests).toHaveLength(count);
   expect(redis.requests.every(({ watermarkKey }) => typeof watermarkKey === "string")).toBe(true);
+  expect(redis.requests.every(({ maxAgeMs }) => maxAgeMs === (options.maxAgeMs ?? 60_000))).toBe(true);
   if (options.singleWatermark !== false) {
     expect(new Set(redis.requests.map(({ watermarkKey }) => watermarkKey)).size).toBe(1);
   }
@@ -953,6 +955,31 @@ describe("DialCache Redis shadow confirmation", () => {
     expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
       name === "size" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
     )).toHaveLength(1);
+  });
+
+  it("uses the fresh age for a dark read and maximum retention for its stale-enabled fill", async () => {
+    const redis = new ScriptedRedis([() => null]);
+    const metrics = new RecordingMetrics();
+    const dialcache = createCache(redis, metrics);
+    const getUser = dialcache.cached(async () => ({ id: "123" }), {
+      ...trackedOptions("ShadowDarkStaleRetention", new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 0 },
+        staleOnErrorMaxAgeSec: 3_600,
+        shadow: { ramp: 100 },
+      })),
+      cacheKey: () => "123",
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ id: "123" });
+    await waitForShadowEvents(metrics, 1);
+
+    expectTrackedReads(redis, 1, { maxAgeMs: 60_000 });
+    expect(redis.write).toHaveBeenCalledWith(expect.objectContaining({
+      cacheTtlMs: 3_600_000,
+      watermarkKey: expect.any(String),
+    }));
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["filled"]);
   });
 
   it("reports fill_blocked when tracked invalidation rejects a detached fill", async () => {

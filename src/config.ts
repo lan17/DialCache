@@ -34,6 +34,14 @@ export class DialCacheKeyConfig {
    */
   readonly requestLocal?: boolean;
   /**
+   * Absolute Redis-frame age in seconds through which a retained value may be
+   * returned after the source of truth rejects. Omission disables recovery by
+   * default and inherits in runtime overlays; zero explicitly disables an
+   * inherited policy. A positive value requires a smaller positive remote TTL
+   * and may not exceed 31,536,000 seconds (365 days).
+   */
+  readonly staleOnErrorMaxAgeSec?: number;
+  /**
    * Maximum time DialCache waits for a remote read before failing open to the
    * source of truth. Overrides the instance default for this use case.
    */
@@ -44,6 +52,7 @@ export class DialCacheKeyConfig {
     ramp?: LayerConfig;
     shadow?: ShadowConfig;
     requestLocal?: boolean;
+    staleOnErrorMaxAgeSec?: number;
     remoteReadTimeoutMs?: number;
   }) {
     if (config === null || typeof config !== "object" || Array.isArray(config)) {
@@ -63,6 +72,11 @@ export class DialCacheKeyConfig {
     }
     if (config.requestLocal !== undefined) {
       this.requestLocal = config.requestLocal;
+    }
+    // Like ttlSec/ramp leaves, validation is deferred to static-default capture
+    // or runtime resolution so malformed runtime policy can fail open narrowly.
+    if (config.staleOnErrorMaxAgeSec !== undefined) {
+      this.staleOnErrorMaxAgeSec = config.staleOnErrorMaxAgeSec;
     }
     if (config.remoteReadTimeoutMs !== undefined) {
       assertValidDeadlineMs(config.remoteReadTimeoutMs, "DialCache remoteReadTimeoutMs");
@@ -93,6 +107,7 @@ export class DialCacheKeyConfig {
   static disabled(): DialCacheKeyConfig {
     return new DialCacheKeyConfig({
       requestLocal: false,
+      staleOnErrorMaxAgeSec: 0,
       shadow: {
         ramp: 0,
         logMismatches: false,

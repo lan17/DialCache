@@ -15,6 +15,8 @@ export type {
   SerializationMetricLabels,
   ShadowValidationMetricLabels,
   ShadowValidationOutcome,
+  StaleRecoveryMetricLabels,
+  StaleRecoveryOutcome,
 } from "./metrics.js";
 export {
   DialCacheError,

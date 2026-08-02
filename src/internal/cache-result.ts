@@ -13,7 +13,11 @@ export type CacheGetResult<T> =
 
 export type RedisCacheGetResult<T> =
   | { readonly status: "hit"; readonly value: T; readonly payload: RedisCachePayload }
-  | Exclude<CacheGetResult<T>, { readonly status: "hit" }>;
+  | (Extract<CacheGetResult<T>, { readonly status: "miss" }> & {
+      /** The present payload failed normal deserialization and cannot later qualify as stale. */
+      readonly skipStaleRecovery?: boolean;
+    })
+  | Extract<CacheGetResult<T>, { readonly status: "disabled" }>;
 
 export type RemoteCacheGetResult<T> =
   | RedisCacheGetResult<T>

@@ -159,6 +159,7 @@ describe("DialCache logger isolation", () => {
     const logger = throwingLogger();
     const invalidationError = new Error("invalidation failed");
     const redis = {
+      enforcesMaxAge: true,
       read: vi.fn(async () => null),
       write: vi.fn(async () => true),
       invalidate: vi.fn(async () => {

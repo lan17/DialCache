@@ -9,6 +9,7 @@ import type {
   InvalidationMetricLabels,
   SerializationMetricLabels,
   ShadowValidationMetricLabels,
+  StaleRecoveryMetricLabels,
 } from "./metrics.js";
 
 export interface PrometheusMetricsOptions {
@@ -25,6 +26,7 @@ type SerializationLabels = CounterLabels | "operation";
 type InvalidationLabels = "cache_namespace" | "key_type" | "layer";
 type CoalescedLabels = "cache_namespace" | "use_case" | "key_type" | "scope";
 type ShadowValidationLabels = "cache_namespace" | "use_case" | "key_type" | "outcome";
+type StaleRecoveryLabels = "cache_namespace" | "use_case" | "key_type" | "outcome";
 
 interface BaseCollectorConfig<T extends string> {
   readonly name: string;
@@ -63,6 +65,7 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
   private readonly invalidationCounter: Counter<InvalidationLabels>;
   private readonly coalescedCounter: Counter<CoalescedLabels>;
   private readonly shadowValidationCounter: Counter<ShadowValidationLabels>;
+  private readonly staleRecoveryCounter: Counter<StaleRecoveryLabels>;
   private readonly getTimer: Histogram<CounterLabels>;
   private readonly fallbackTimer: Histogram<CounterLabels>;
   private readonly serializationTimer: Histogram<SerializationLabels>;
@@ -81,6 +84,7 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
     this.invalidationCounter = counter(registry, collectors.invalidationCounter);
     this.coalescedCounter = counter(registry, collectors.coalescedCounter);
     this.shadowValidationCounter = counter(registry, collectors.shadowValidationCounter);
+    this.staleRecoveryCounter = counter(registry, collectors.staleRecoveryCounter);
     this.getTimer = histogram(registry, collectors.getTimer);
     this.fallbackTimer = histogram(registry, collectors.fallbackTimer);
     this.serializationTimer = histogram(registry, collectors.serializationTimer);
@@ -126,6 +130,15 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
 
   shadowValidation(labels: ShadowValidationMetricLabels): void {
     this.shadowValidationCounter.inc({
+      cache_namespace: labels.cacheNamespace,
+      use_case: labels.useCase,
+      key_type: labels.keyType,
+      outcome: labels.outcome,
+    });
+  }
+
+  staleRecovery(labels: StaleRecoveryMetricLabels): void {
+    this.staleRecoveryCounter.inc({
       cache_namespace: labels.cacheNamespace,
       use_case: labels.useCase,
       key_type: labels.keyType,
@@ -205,6 +218,12 @@ function collectorConfigs(prefix: string) {
       type: "counter",
       name: `${prefix}dialcache_shadow_validation_counter`,
       help: "Sampled DialCache Redis shadow-validation outcomes.",
+      labelNames: ["cache_namespace", "use_case", "key_type", "outcome"],
+    },
+    staleRecoveryCounter: {
+      type: "counter",
+      name: `${prefix}dialcache_stale_recovery_counter`,
+      help: "DialCache stale-on-error Redis recovery outcomes.",
       labelNames: ["cache_namespace", "use_case", "key_type", "outcome"],
     },
     getTimer: {

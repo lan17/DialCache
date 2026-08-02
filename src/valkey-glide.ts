@@ -93,10 +93,11 @@ export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScri
   };
 
   return {
-    async read({ valueKey, watermarkKey }) {
+    enforcesMaxAge: true,
+    async read({ valueKey, watermarkKey, maxAgeMs }) {
       const raw = watermarkKey === undefined
-        ? await invoke(scripts.read, [valueKey])
-        : await invoke(scripts.readTracked, [valueKey, watermarkKey]);
+        ? await invoke(scripts.read, [valueKey], [String(maxAgeMs)])
+        : await invoke(scripts.readTracked, [valueKey, watermarkKey], [String(maxAgeMs)]);
       if (raw === null) {
         return null;
       }

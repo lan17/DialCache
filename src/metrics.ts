@@ -25,6 +25,13 @@ export type ShadowValidationOutcome =
   | "confirmation_error"
   | "timeout"
   | "dropped";
+/** Bounded terminal outcomes for an attempted stale-on-error Redis recovery. */
+export type StaleRecoveryOutcome =
+  | "served"
+  | "miss"
+  | "read_error"
+  | "read_timeout"
+  | "deserialization_error";
 /** Bounded reasons for skipping cache work; policy_disabled means a shared layer has no effective TTL. */
 export type DisabledReason = "context" | "policy_disabled" | "invalid_ttl" | "invalid_ramp" | "ramped_down" | "config_error";
 /** Stable failure sites used instead of backend- or application-defined error names. */
@@ -81,6 +88,13 @@ export interface ShadowValidationMetricLabels {
   readonly outcome: ShadowValidationOutcome;
 }
 
+export interface StaleRecoveryMetricLabels {
+  readonly cacheNamespace: string;
+  readonly useCase: string;
+  readonly keyType: string;
+  readonly outcome: StaleRecoveryOutcome;
+}
+
 export interface DialCacheMetricsAdapter {
   request(labels: CacheMetricLabels): void;
   miss(labels: CacheMetricLabels): void;
@@ -91,6 +105,8 @@ export interface DialCacheMetricsAdapter {
   coalesced?(labels: CoalescedMetricLabels): void;
   // Optional so existing custom adapters keep compiling without changes.
   shadowValidation?(labels: ShadowValidationMetricLabels): void;
+  // Optional so existing custom adapters keep compiling without changes.
+  staleRecovery?(labels: StaleRecoveryMetricLabels): void;
   observeGet(labels: CacheMetricLabels, seconds: number): void;
   observeFallback(labels: CacheMetricLabels, seconds: number): void;
   observeSerialization(labels: SerializationMetricLabels, seconds: number): void;

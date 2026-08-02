@@ -15,6 +15,7 @@ import {
   type DisabledReason,
   type MetricErrorKind,
   type ShadowValidationOutcome,
+  type StaleRecoveryOutcome,
 } from "../src/index.js";
 import { PrometheusDialCacheMetrics, createPrometheusDialCacheMetrics } from "../src/prometheus.js";
 import { FakeRedis } from "./fake-redis.js";
@@ -70,6 +71,13 @@ const SHADOW_VALIDATION_OUTCOMES: Readonly<Record<ShadowValidationOutcome, true>
   confirmation_error: true,
   timeout: true,
   dropped: true,
+};
+const STALE_RECOVERY_OUTCOMES: Readonly<Record<StaleRecoveryOutcome, true>> = {
+  served: true,
+  miss: true,
+  read_error: true,
+  read_timeout: true,
+  deserialization_error: true,
 };
 
 interface IncompatibleCollectorCase {
@@ -171,6 +179,12 @@ describe("Prometheus metrics adapter", () => {
       keyType: labels.keyType,
       outcome: "match",
     });
+    metrics.staleRecovery({
+      cacheNamespace: labels.cacheNamespace,
+      useCase: labels.useCase,
+      keyType: labels.keyType,
+      outcome: "served",
+    });
     metrics.observeGet(labels, 0.05);
     metrics.observeFallback(labels, 0.05);
     metrics.observeSerialization({ ...labels, operation: "dump" }, 0.05);
@@ -205,6 +219,10 @@ describe("Prometheus metrics adapter", () => {
         ["cache_namespace", "use_case", "key_type", "outcome"],
       ),
       histogramSchema("schema_dialcache_size_histogram", ["cache_namespace", "use_case", "key_type", "layer"], SIZE_BUCKETS),
+      counterSchema(
+        "schema_dialcache_stale_recovery_counter",
+        ["cache_namespace", "use_case", "key_type", "outcome"],
+      ),
     ]);
 
     const serialization = families.find(({ name }) => name === "schema_dialcache_serialization_timer");
@@ -313,6 +331,39 @@ describe("Prometheus metrics adapter", () => {
 
     const family = ((await registry.getMetricsAsJSON()) as unknown as MetricFamily[]).find(
       ({ name }) => name === "shadow_dialcache_shadow_validation_counter",
+    );
+    expect(family?.values.map(({ labels: emitted }) => Object.keys(emitted))).toEqual(
+      outcomes.map(() => ["cache_namespace", "use_case", "key_type", "outcome"]),
+    );
+  });
+
+  it("exports every bounded stale-recovery outcome without adding cache identity or layer labels", async () => {
+    const registry = new Registry();
+    const metrics = new PrometheusDialCacheMetrics({ registry, prefix: "stale_" });
+    const labels = {
+      cacheNamespace: "users",
+      useCase: "PrometheusStaleRecovery",
+      keyType: "user_id",
+    } as const;
+    const outcomes = Object.keys(STALE_RECOVERY_OUTCOMES) as StaleRecoveryOutcome[];
+
+    for (const outcome of outcomes) {
+      metrics.staleRecovery({ ...labels, outcome });
+    }
+
+    for (const outcome of outcomes) {
+      await expect(
+        sumMetric(registry, "stale_dialcache_stale_recovery_counter", {
+          cache_namespace: labels.cacheNamespace,
+          use_case: labels.useCase,
+          key_type: labels.keyType,
+          outcome,
+        }),
+      ).resolves.toBe(1);
+    }
+
+    const family = ((await registry.getMetricsAsJSON()) as unknown as MetricFamily[]).find(
+      ({ name }) => name === "stale_dialcache_stale_recovery_counter",
     );
     expect(family?.values.map(({ labels: emitted }) => Object.keys(emitted))).toEqual(
       outcomes.map(() => ["cache_namespace", "use_case", "key_type", "outcome"]),
