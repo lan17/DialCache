@@ -77,6 +77,7 @@
   ],
   "scripts": {
     "benchmark:request-local": "pnpm build && node scripts/benchmark-request-local.mjs",
+    "benchmark:stale-on-error": "pnpm build && node scripts/benchmark-stale-on-error.mjs",
     "build": "tsup src/index.ts src/datadog.ts src/node-redis.ts src/prometheus.ts src/redis-protocol.ts src/valkey-glide.ts --format esm,cjs --dts --clean",
     "check": "pnpm typecheck && pnpm test && pnpm build && pnpm test:package",
     "typecheck": "tsc --noEmit",

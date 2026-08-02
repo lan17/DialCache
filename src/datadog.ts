@@ -7,6 +7,7 @@ import type {
   InvalidationMetricLabels,
   SerializationMetricLabels,
   ShadowValidationMetricLabels,
+  StaleRecoveryMetricLabels,
 } from "./metrics.js";
 
 export type DatadogObservationMetricType = "histogram" | "distribution";
@@ -46,6 +47,7 @@ const METRIC_SUFFIXES = {
   invalidation: "invalidation.count",
   coalesced: "coalesced.count",
   shadowValidation: "shadow.count",
+  staleRecovery: "stale_recovery.count",
   get: "get.duration",
   fallback: "fallback.duration",
   serialization: "serialization.duration",
@@ -115,6 +117,15 @@ export class DatadogDialCacheMetrics implements DialCacheMetricsAdapter {
 
   shadowValidation(labels: ShadowValidationMetricLabels): void {
     return this.increment(this.metricNames.shadowValidation, {
+      cache_namespace: labels.cacheNamespace,
+      use_case: labels.useCase,
+      key_type: labels.keyType,
+      outcome: labels.outcome,
+    });
+  }
+
+  staleRecovery(labels: StaleRecoveryMetricLabels): void {
+    return this.increment(this.metricNames.staleRecovery, {
       cache_namespace: labels.cacheNamespace,
       use_case: labels.useCase,
       key_type: labels.keyType,

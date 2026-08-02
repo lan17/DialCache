@@ -56,13 +56,17 @@ describe("node-redis adapter", () => {
   it("provides the expected arguments for every bundled script", () => {
     const binary = Buffer.from([0, 0xff]);
 
-    expect(dialcacheRedisScripts.dialcacheRead.transformArguments("plain:value")).toEqual(["plain:value"]);
+    expect(dialcacheRedisScripts.dialcacheRead.transformArguments("plain:value", 60_000)).toEqual([
+      "plain:value",
+      "60000",
+    ]);
     expect(
       dialcacheRedisScripts.dialcacheReadTracked.transformArguments(
         "tracked:{id}:value",
         "tracked:{id}:watermark",
+        120_000,
       ),
-    ).toEqual(["tracked:{id}:value", "tracked:{id}:watermark"]);
+    ).toEqual(["tracked:{id}:value", "tracked:{id}:watermark", "120000"]);
     expect(dialcacheRedisScripts.dialcacheWrite.transformArguments("plain:value", 1_000, 0, "plain")).toEqual([
       "plain:value",
       "1000",
@@ -93,9 +97,14 @@ describe("node-redis adapter", () => {
     });
     const adapter = createNodeRedisDialCacheClient(client as never);
 
-    await expect(adapter.read({ valueKey: "plain:value" })).resolves.toBe("plain");
+    expect(adapter.enforcesMaxAge).toBe(true);
+    await expect(adapter.read({ valueKey: "plain:value", maxAgeMs: 60_000 })).resolves.toBe("plain");
     await expect(
-      adapter.read({ valueKey: "tracked:{id}:value", watermarkKey: "tracked:{id}:watermark" }),
+      adapter.read({
+        valueKey: "tracked:{id}:value",
+        watermarkKey: "tracked:{id}:watermark",
+        maxAgeMs: 120_000,
+      }),
     ).resolves.toEqual(Buffer.from([0, 0xff]));
     await expect(
       adapter.write({ valueKey: "plain:value", cacheTtlMs: 1_000, value: "plain" }),
@@ -119,20 +128,26 @@ describe("node-redis adapter", () => {
     const controller = new AbortController();
     const context = { timeoutMs: 25, signal: controller.signal } as const;
 
-    await adapter.read({ valueKey: "plain:value" }, context);
+    await adapter.read({ valueKey: "plain:value", maxAgeMs: 60_000 }, context);
     await adapter.read(
-      { valueKey: "tracked:{id}:value", watermarkKey: "tracked:{id}:watermark" },
+      {
+        valueKey: "tracked:{id}:value",
+        watermarkKey: "tracked:{id}:watermark",
+        maxAgeMs: 120_000,
+      },
       context,
     );
 
     expect(client.dialcacheRead).toHaveBeenCalledWith(
       expect.objectContaining({ returnBuffers: true, signal: controller.signal }),
       "plain:value",
+      60_000,
     );
     expect(client.dialcacheReadTracked).toHaveBeenCalledWith(
       expect.objectContaining({ returnBuffers: true, signal: controller.signal }),
       "tracked:{id}:value",
       "tracked:{id}:watermark",
+      120_000,
     );
   });
 

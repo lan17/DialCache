@@ -46,8 +46,11 @@ function defineDialCacheScript<Args extends Array<unknown>, Reply>(
 }
 
 export type DialCacheNodeRedisScripts = {
-  readonly dialcacheRead: NodeRedisScript<[valueKey: string], string | null>;
-  readonly dialcacheReadTracked: NodeRedisScript<[valueKey: string, watermarkKey: string], string | null>;
+  readonly dialcacheRead: NodeRedisScript<[valueKey: string, maxAgeMs: number], string | null>;
+  readonly dialcacheReadTracked: NodeRedisScript<
+    [valueKey: string, watermarkKey: string, maxAgeMs: number],
+    string | null
+  >;
   readonly dialcacheWrite: NodeRedisScript<
     [valueKey: string, cacheTtlMs: number, encoding: number, payload: string | Buffer],
     number
@@ -74,8 +77,8 @@ export const dialcacheRedisScripts: DialCacheNodeRedisScripts = {
     NUMBER_OF_KEYS: 1,
     FIRST_KEY_INDEX: 0,
     IS_READ_ONLY: true,
-    transformArguments(valueKey: string): Array<string> {
-      return [valueKey];
+    transformArguments(valueKey: string, maxAgeMs: number): Array<string> {
+      return [valueKey, String(maxAgeMs)];
     },
     transformReply: readReply,
   }),
@@ -85,8 +88,8 @@ export const dialcacheRedisScripts: DialCacheNodeRedisScripts = {
     FIRST_KEY_INDEX: 0,
     // Replica lag must not hide a newly-written invalidation watermark.
     IS_READ_ONLY: false,
-    transformArguments(valueKey: string, watermarkKey: string): Array<string> {
-      return [valueKey, watermarkKey];
+    transformArguments(valueKey: string, watermarkKey: string, maxAgeMs: number): Array<string> {
+      return [valueKey, watermarkKey, String(maxAgeMs)];
     },
     transformReply: readReply,
   }),
@@ -134,11 +137,12 @@ export const dialcacheRedisScripts: DialCacheNodeRedisScripts = {
 };
 
 interface NodeRedisScriptClient {
-  dialcacheRead(options: BufferReplyOptions, valueKey: string): Promise<Buffer | null>;
+  dialcacheRead(options: BufferReplyOptions, valueKey: string, maxAgeMs: number): Promise<Buffer | null>;
   dialcacheReadTracked(
     options: BufferReplyOptions,
     valueKey: string,
     watermarkKey: string,
+    maxAgeMs: number,
   ): Promise<Buffer | null>;
   dialcacheWrite(valueKey: string, cacheTtlMs: number, encoding: number, payload: string | Buffer): Promise<number>;
   dialcacheWriteTracked(
@@ -160,13 +164,14 @@ interface NodeRedisScriptClient {
  */
 export function createNodeRedisDialCacheClient(client: NodeRedisScriptClient): DialCacheRedisClient {
   return {
-    async read({ valueKey, watermarkKey }, context) {
+    enforcesMaxAge: true,
+    async read({ valueKey, watermarkKey, maxAgeMs }, context) {
       const options: BufferReplyOptions = context === undefined
         ? bufferReplyOptions
         : commandOptions({ returnBuffers: true, signal: context.signal });
       const raw = watermarkKey === undefined
-        ? await client.dialcacheRead(options, valueKey)
-        : await client.dialcacheReadTracked(options, valueKey, watermarkKey);
+        ? await client.dialcacheRead(options, valueKey, maxAgeMs)
+        : await client.dialcacheReadTracked(options, valueKey, watermarkKey, maxAgeMs);
       return raw === null ? null : decodeRedisPayload(raw);
     },
     async write(request) {

@@ -485,6 +485,7 @@ describe("DialCache fallback liveness", () => {
     const fallback = vi.fn(async () => "value");
     const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
     const redis: DialCacheRedisClient = {
+      enforcesMaxAge: true,
       read: async () => {
         readStarted.resolve();
         return await readGate.promise;
@@ -530,6 +531,7 @@ describe("DialCache fallback liveness", () => {
       },
     };
     const redis: DialCacheRedisClient = {
+      enforcesMaxAge: true,
       read: async () => "stored",
       write: async () => true,
       invalidate: async () => undefined,
@@ -574,6 +576,7 @@ describe("DialCache fallback liveness", () => {
       load: (value) => value.toString(),
     };
     const redis: DialCacheRedisClient = {
+      enforcesMaxAge: true,
       read: async () => null,
       write: async () => {
         writeStarted.resolve();

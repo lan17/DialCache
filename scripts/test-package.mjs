@@ -39,12 +39,15 @@ const rootConsumer = `import {
   type RedisConfig,
   type RedisInvalidationRequest,
   type RedisReadContext,
+  type RedisReadRequest,
   type RedisWriteRequest,
   type Serializer,
   type ShadowComparator,
   type ShadowConfig,
   type ShadowValidationMetricLabels,
   type ShadowValidationOutcome,
+  type StaleRecoveryMetricLabels,
+  type StaleRecoveryOutcome,
 } from "dialcache";
 // @ts-expect-error The unused MissingKeyConfigError class was removed instead of deprecated.
 import { MissingKeyConfigError } from "dialcache";
@@ -86,6 +89,13 @@ const shadowMetrics: DialCacheMetricsAdapter = {
     void outcome;
   },
 };
+const staleRecoveryMetrics: DialCacheMetricsAdapter = {
+  ...metrics,
+  staleRecovery: (labels: StaleRecoveryMetricLabels) => {
+    const outcome: StaleRecoveryOutcome = labels.outcome;
+    void outcome;
+  },
+};
 const shadowOutcomes: Readonly<Record<ShadowValidationOutcome, true>> = {
   match: true,
   mismatch: true,
@@ -102,6 +112,14 @@ const shadowOutcomes: Readonly<Record<ShadowValidationOutcome, true>> = {
   dropped: true,
 };
 void shadowOutcomes;
+const staleRecoveryOutcomes: Readonly<Record<StaleRecoveryOutcome, true>> = {
+  served: true,
+  miss: true,
+  read_error: true,
+  read_timeout: true,
+  deserialization_error: true,
+};
+void staleRecoveryOutcomes;
 const metricLayers: Readonly<Record<MetricLayer, true>> = {
   [CacheLayer.LOCAL]: true,
   [CacheLayer.REMOTE]: true,
@@ -153,6 +171,7 @@ const load = cache.cached(async (id: string) => id, {
   defaultConfig: new DialCacheKeyConfig({
     ttlSec: { [CacheLayer.LOCAL]: 60, [CacheLayer.REMOTE]: 60 },
     ramp: { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 100 },
+    staleOnErrorMaxAgeSec: 3_600,
     remoteReadTimeoutMs: 100,
   }),
 });
@@ -319,17 +338,39 @@ const metricErrorKinds: Readonly<Record<MetricErrorKind, true>> = {
 const unboundedErrorKind: MetricErrorKind = "Tenant123Error";
 
 const customRedisClient: DialCacheRedisClient = {
-  // The optional second read argument preserves one-argument custom clients.
-  read: async () => Buffer.from([0, 255]),
+  enforcesMaxAge: true,
+  // Implementations may ignore the optional context, but every request carries a required age bound.
+  read: async ({ maxAgeMs }) => maxAgeMs > 0 ? Buffer.from([0, 255]) : null,
   write: async ({ value }) => typeof value === "string" || Buffer.isBuffer(value),
   invalidate: async () => undefined,
 };
+// @ts-expect-error Legacy clients must explicitly attest Redis-server max-age enforcement.
+const legacyCustomRedisClient: DialCacheRedisClient = {
+  read: async () => null,
+  write: async () => true,
+  invalidate: async () => undefined,
+};
+const untrackedRedisReadRequest: RedisReadRequest = {
+  valueKey: "plain:value",
+  maxAgeMs: 60_000,
+};
+const trackedRedisReadRequest: RedisReadRequest = {
+  valueKey: "tracked:{id}:value",
+  watermarkKey: "tracked:{id}:watermark",
+  maxAgeMs: 60_000,
+};
+// @ts-expect-error Logical age is a required part of the semantic read contract.
+const legacyRedisReadRequest: RedisReadRequest = { valueKey: "legacy:value" };
 const redisClientMethods: Readonly<Record<keyof DialCacheRedisClient, true>> = {
+  enforcesMaxAge: true,
   read: true,
   write: true,
   invalidate: true,
 };
 void redisClientMethods;
+void untrackedRedisReadRequest;
+void trackedRedisReadRequest;
+void legacyRedisReadRequest;
 const cacheHasNoFlushAll: "flushAll" extends keyof DialCache ? false : true = true;
 const cacheHasNoClose: "close" extends keyof DialCache ? false : true = true;
 const clientHasNoFlushAll: "flushAll" extends keyof DialCacheRedisClient ? false : true = true;
@@ -413,6 +454,7 @@ void missingInlineDateSerializer;
 void requestLocalConfig;
 void structuralConfigProvider;
 void shadowCache;
+void staleRecoveryMetrics;
 void shadowKeyConfig;
 void requestLocalCoalescingLabels;
 void cacheMetricLabels;
@@ -436,6 +478,7 @@ void unboundedErrorKind;
 void createNodeRedisDialCacheClient;
 void READ_CACHE_SCRIPT;
 void customRedisClient;
+void legacyCustomRedisClient;
 const globalSerializer: Serializer<unknown> = {
   dump: () => "global",
   load: () => ({ source: "global" }),
@@ -607,6 +650,19 @@ const idleCoalescingState = { process: { activeLeaders: 0, activeFollowers: 0, o
 if (JSON.stringify(coalescingState) !== JSON.stringify(idleCoalescingState)) {
   throw new Error("The root ESM coalescing snapshot export is invalid");
 }
+const legacyRedisClient = {
+  read: async () => null,
+  write: async () => true,
+  invalidate: async () => undefined,
+};
+try {
+  new root.DialCache({ redis: { client: legacyRedisClient } });
+  throw new Error("Expected the packed ESM runtime to reject a legacy Redis client");
+} catch (error) {
+  if (!(error instanceof TypeError) || error.message !== "DialCache Redis client must declare enforcesMaxAge: true") {
+    throw error;
+  }
+}
 const timeoutCache = new root.DialCache();
 const neverSettles = timeoutCache.cached(async () => await new Promise(() => undefined), {
   keyType: "id",
@@ -638,6 +694,7 @@ if ("MissingKeyConfigError" in root) {
 const esmDisabledOverlay = root.DialCacheKeyConfig.disabled();
 if (
   esmDisabledOverlay.requestLocal !== false
+  || esmDisabledOverlay.staleOnErrorMaxAgeSec !== 0
   || esmDisabledOverlay.shadow?.ramp !== 0
   || esmDisabledOverlay.shadow.logMismatches !== false
   || esmDisabledOverlay.ramp[root.CacheLayer.LOCAL] !== 0
@@ -745,7 +802,11 @@ console.log("${observerIsolationMarker}");`,
 let payload = Buffer.alloc(4 * 1024 * 1024, 1);
 const payloadReference = new WeakRef(payload);
 const redis = {
-  read: async () => payload,
+  enforcesMaxAge: true,
+  read: async ({ maxAgeMs }) => {
+    if (!(maxAgeMs > 0)) throw new Error("missing Redis read age");
+    return payload;
+  },
   write: async () => true,
   invalidate: async () => undefined,
 };
@@ -843,6 +904,19 @@ const idleCoalescingState = { process: { activeLeaders: 0, activeFollowers: 0, o
 if (JSON.stringify(coalescingState) !== JSON.stringify(idleCoalescingState)) {
   throw new Error("The root CommonJS coalescing snapshot export is invalid");
 }
+const legacyRedisClient = {
+  read: async () => null,
+  write: async () => true,
+  invalidate: async () => undefined,
+};
+try {
+  new root.DialCache({ redis: { client: legacyRedisClient } });
+  throw new Error("Expected the packed CommonJS runtime to reject a legacy Redis client");
+} catch (error) {
+  if (!(error instanceof TypeError) || error.message !== "DialCache Redis client must declare enforcesMaxAge: true") {
+    throw error;
+  }
+}
 const timeoutCache = new root.DialCache();
 const neverSettles = timeoutCache.cached(async () => await new Promise(() => undefined), {
   keyType: "id",
@@ -876,6 +950,7 @@ if ("MissingKeyConfigError" in root) {
 const cjsDisabledOverlay = root.DialCacheKeyConfig.disabled();
 if (
   cjsDisabledOverlay.requestLocal !== false
+  || cjsDisabledOverlay.staleOnErrorMaxAgeSec !== 0
   || cjsDisabledOverlay.shadow?.ramp !== 0
   || cjsDisabledOverlay.shadow.logMismatches !== false
   || cjsDisabledOverlay.ramp[root.CacheLayer.LOCAL] !== 0

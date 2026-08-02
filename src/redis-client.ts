@@ -41,15 +41,20 @@ interface RedisValueRequest {
   readonly valueKey: string;
 }
 
-interface TrackedRedisValueRequest extends RedisValueRequest {
+interface RedisReadBase extends RedisValueRequest {
+  /** Positive integer no greater than 31,536,000,000 (365 days). */
+  readonly maxAgeMs: number;
+}
+
+interface TrackedRedisReadRequest extends RedisReadBase {
   readonly watermarkKey: string;
 }
 
-interface UntrackedRedisValueRequest extends RedisValueRequest {
+interface UntrackedRedisReadRequest extends RedisReadBase {
   readonly watermarkKey?: never;
 }
 
-export type RedisReadRequest = TrackedRedisValueRequest | UntrackedRedisValueRequest;
+export type RedisReadRequest = TrackedRedisReadRequest | UntrackedRedisReadRequest;
 
 /**
  * Per-use-case read policy supplied by DialCache. Adapters may use the signal
@@ -61,13 +66,17 @@ export interface RedisReadContext {
 }
 
 interface RedisWriteBase extends RedisValueRequest {
-  /** Positive integer no greater than 31,536,000,000 (365 days). */
+  /**
+   * Physical key retention in milliseconds. This is the fresh TTL when stale
+   * recovery is disabled and its maximum age when enabled. Positive integer no
+   * greater than 31,536,000,000 (365 days).
+   */
   readonly cacheTtlMs: number;
   readonly value: RedisCachePayload;
 }
 
-type TrackedRedisWriteRequest = RedisWriteBase & TrackedRedisValueRequest;
-type UntrackedRedisWriteRequest = RedisWriteBase & UntrackedRedisValueRequest;
+type TrackedRedisWriteRequest = RedisWriteBase & { readonly watermarkKey: string };
+type UntrackedRedisWriteRequest = RedisWriteBase & { readonly watermarkKey?: never };
 
 export type RedisWriteRequest = TrackedRedisWriteRequest | UntrackedRedisWriteRequest;
 
@@ -94,7 +103,14 @@ export interface RedisInvalidationRequest {
  */
 export interface DialCacheRedisClient {
   /**
-   * Atomically read and validate a value against its watermark when tracked.
+   * Safety capability marker. Custom clients must explicitly attest that every
+   * read atomically enforces `RedisReadRequest.maxAgeMs` using Redis server
+   * time. DialCache also checks this marker at runtime for JavaScript clients.
+   */
+  readonly enforcesMaxAge: true;
+  /**
+   * Atomically read a value whose Redis-server age is strictly less than
+   * `maxAgeMs`, and validate it against its watermark when tracked.
    *
    * A non-null payload is transferred to DialCache. A returned Buffer must
    * remain stable and must not be mutated, pooled, or reused after this method

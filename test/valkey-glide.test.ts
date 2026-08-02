@@ -70,23 +70,28 @@ describe("Valkey GLIDE adapter", () => {
     const client = fakeClient(Buffer.from([0, ...Buffer.from("plain")]), Buffer.from([1, 0, 0xff]), null);
     const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
 
-    await expect(adapter.read({ valueKey: "plain:value" })).resolves.toBe("plain");
+    expect(adapter.enforcesMaxAge).toBe(true);
+    await expect(adapter.read({ valueKey: "plain:value", maxAgeMs: 60_000 })).resolves.toBe("plain");
     await expect(
-      adapter.read({ valueKey: "tracked:{id}:value", watermarkKey: "tracked:{id}:watermark" }),
+      adapter.read({
+        valueKey: "tracked:{id}:value",
+        watermarkKey: "tracked:{id}:watermark",
+        maxAgeMs: 120_000,
+      }),
     ).resolves.toEqual(Buffer.from([0, 0xff]));
-    await expect(adapter.read({ valueKey: "missing:value" })).resolves.toBeNull();
+    await expect(adapter.read({ valueKey: "missing:value", maxAgeMs: 60_000 })).resolves.toBeNull();
 
     expect(client.invokeScript).toHaveBeenNthCalledWith(
       1,
       expect.any(MockScript),
-      { keys: ["plain:value"], args: [], decoder: decoderBytes },
+      { keys: ["plain:value"], args: ["60000"], decoder: decoderBytes },
     );
     expect(client.invokeScript).toHaveBeenNthCalledWith(
       2,
       expect.any(MockScript),
       {
         keys: ["tracked:{id}:value", "tracked:{id}:watermark"],
-        args: [],
+        args: ["120000"],
         decoder: decoderBytes,
       },
     );
@@ -99,13 +104,13 @@ describe("Valkey GLIDE adapter", () => {
     const controller = new AbortController();
 
     await adapter.read(
-      { valueKey: "plain:value" },
+      { valueKey: "plain:value", maxAgeMs: 60_000 },
       { timeoutMs: 25, signal: controller.signal },
     );
 
     expect(client.invokeScript).toHaveBeenCalledWith(
       expect.any(MockScript),
-      { keys: ["plain:value"], args: [], decoder: decoderBytes },
+      { keys: ["plain:value"], args: ["60000"], decoder: decoderBytes },
     );
     adapter.dispose();
   });
@@ -155,9 +160,13 @@ describe("Valkey GLIDE adapter", () => {
     const client = fakeClient("not-bytes", Buffer.alloc(0), Buffer.from([2, 1]), "not-an-integer", null);
     const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
 
-    await expect(adapter.read({ valueKey: "wrong-type" })).rejects.toBeInstanceOf(DialCacheRedisPayloadError);
-    await expect(adapter.read({ valueKey: "empty" })).rejects.toBeInstanceOf(DialCacheRedisPayloadError);
-    await expect(adapter.read({ valueKey: "wrong-encoding" })).rejects.toBeInstanceOf(
+    await expect(adapter.read({ valueKey: "wrong-type", maxAgeMs: 60_000 })).rejects.toBeInstanceOf(
+      DialCacheRedisPayloadError,
+    );
+    await expect(adapter.read({ valueKey: "empty", maxAgeMs: 60_000 })).rejects.toBeInstanceOf(
+      DialCacheRedisPayloadError,
+    );
+    await expect(adapter.read({ valueKey: "wrong-encoding", maxAgeMs: 60_000 })).rejects.toBeInstanceOf(
       DialCacheRedisPayloadEncodingError,
     );
     await expectProtocolError(
@@ -221,7 +230,9 @@ describe("Valkey GLIDE adapter", () => {
     for (const script of scriptInstances) {
       expect(script.release).toHaveBeenCalledTimes(1);
     }
-    await expect(adapter.read({ valueKey: "disposed" })).rejects.toThrow("Valkey GLIDE DialCache client is disposed");
+    await expect(adapter.read({ valueKey: "disposed", maxAgeMs: 60_000 })).rejects.toThrow(
+      "Valkey GLIDE DialCache client is disposed",
+    );
     expect(client.invokeScript).not.toHaveBeenCalled();
   });
 
@@ -235,7 +246,7 @@ describe("Valkey GLIDE adapter", () => {
     );
     const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
 
-    const read = adapter.read({ valueKey: "in-flight" });
+    const read = adapter.read({ valueKey: "in-flight", maxAgeMs: 60_000 });
     expect(() => adapter.dispose()).toThrow(
       "Cannot dispose Valkey GLIDE DialCache client while operations are in flight",
     );
@@ -258,7 +269,7 @@ describe("Valkey GLIDE adapter", () => {
     const client = fakeClient(null);
     const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
 
-    await adapter.read({ valueKey: "module-instance" });
+    await adapter.read({ valueKey: "module-instance", maxAgeMs: 60_000 });
 
     const [script, options] = client.invokeScript.mock.calls[0] ?? [];
     expect(script).toBeInstanceOf(MockScript);

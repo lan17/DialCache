@@ -38,8 +38,10 @@ import { RedisCache } from "./internal/redis-cache.js";
 import {
   fetchKeyConfig,
   resolveLayerConfigResult,
+  resolveRemoteLayerConfigResult,
   type LayerConfigResolution,
   type ResolvedLayerConfig,
+  type ResolvedRemoteLayerConfig,
 } from "./internal/runtime-config.js";
 import { shadowMismatchLogDetails } from "./internal/shadow-log-json.js";
 
@@ -229,23 +231,27 @@ interface ShadowMismatchDetails {
 }
 
 type ShadowValidationStart<Value> =
-  | { readonly kind: "retained"; readonly payload: RedisCachePayload }
+  | {
+      readonly kind: "retained";
+      readonly payload: RedisCachePayload;
+      readonly remoteConfig: ResolvedRemoteLayerConfig;
+    }
   | {
       readonly kind: "redis";
       /** The caller-owned, fallback-deadline-bounded SoT operation. */
       readonly source: Promise<Value>;
       /** Valid remote policy retained even though its serving ramp excluded this key. */
-      readonly remoteConfig: ResolvedLayerConfig;
+      readonly remoteConfig: ResolvedRemoteLayerConfig;
       /** Includes synchronous SoT work that ran before shadow admission. */
       readonly startedAtMs: number | null;
     };
 
 type ShadowValidationRunStart<Value> =
-  | { readonly kind: "retained" }
+  | { readonly kind: "retained"; readonly remoteConfig: ResolvedRemoteLayerConfig }
   | {
       readonly kind: "redis";
       readonly source: Promise<Value>;
-      readonly remoteConfig: ResolvedLayerConfig;
+      readonly remoteConfig: ResolvedRemoteLayerConfig;
     };
 
 const DEFAULT_LOCAL_MAX_SIZE = 10_000;
@@ -712,7 +718,7 @@ export class DialCache {
     key: DialCacheKey,
     keyConfig: DialCacheKeyConfig | null,
     local: CacheGetResult<T> | null,
-    remoteConfig: ResolvedLayerConfig,
+    remoteConfig: ResolvedRemoteLayerConfig,
     fallbackLabels: CacheMetricLabels,
     fallback: () => Promise<T>,
     shadowValidation: ShadowValidationPlan<T>,
@@ -745,20 +751,22 @@ export class DialCache {
     remote: RemoteCacheGetResult<T>,
     fallback: () => Promise<T>,
     shadowValidation: ShadowValidationPlan<T>,
-    resolvedRemoteConfig?: ResolvedLayerConfig,
+    resolvedRemoteConfig?: ResolvedRemoteLayerConfig,
   ): Promise<T> {
     if (remote.status === "hit") {
       if (local.status === "miss") {
         await this.putLocalFailOpen(key, remote.value, local.config);
       }
-      this.scheduleShadowValidation(
-        redisCache,
-        key,
-        keyConfig,
-        { kind: "retained", payload: remote.payload },
-        shadowValidation,
-        keyConfig?.remoteReadTimeoutMs ?? redisCache.readTimeoutMs,
-      );
+      if (resolvedRemoteConfig !== undefined) {
+        this.scheduleShadowValidation(
+          redisCache,
+          key,
+          keyConfig,
+          { kind: "retained", payload: remote.payload, remoteConfig: resolvedRemoteConfig },
+          shadowValidation,
+          keyConfig?.remoteReadTimeoutMs ?? redisCache.readTimeoutMs,
+        );
+      }
       return remote.value;
     }
 
@@ -771,9 +779,37 @@ export class DialCache {
     }
 
     const remoteErrored = remote.status === "disabled" && remote.reason === "config_error";
-    const remoteWriteConfig = remote.status === "miss" ? remote.config : remoteErrored ? resolvedRemoteConfig : undefined;
+    const remoteWriteConfig = remote.status === "miss" || remoteErrored ? resolvedRemoteConfig : undefined;
     const fallbackLayer = remote.status === "miss" || remoteErrored ? CacheLayer.REMOTE : CacheLayer.LOCAL;
-    const value = await this.callFallback(labelsFor(key, fallbackLayer), fallback);
+    let value: T;
+    try {
+      value = await this.callFallback(labelsFor(key, fallbackLayer), fallback);
+    } catch (fallbackError) {
+      if (
+        remote.status === "miss"
+        && remote.skipStaleRecovery !== true
+        && resolvedRemoteConfig !== undefined
+        && resolvedRemoteConfig.staleOnErrorMaxAgeSec !== null
+      ) {
+        try {
+          const recovered = await redisCache.recoverWithResolvedConfig<T>(
+            key,
+            resolvedRemoteConfig,
+            keyConfig?.remoteReadTimeoutMs ?? redisCache.readTimeoutMs,
+          );
+          if (recovered.status === "hit") {
+            return recovered.value;
+          }
+          if (recovered.status === "error") {
+            this.logger.warn("Error getting value from Redis cache during stale recovery", recovered.error);
+          }
+        } catch (recoveryError) {
+          // Recovery is subordinate to the source rejection and must never replace it.
+          this.logger.warn("Error getting value from Redis cache during stale recovery", recoveryError);
+        }
+      }
+      throw fallbackError;
+    }
     const skipCacheWrite = (remote.status === "miss" || remote.status === "disabled") && remote.skipCacheWrite === true;
     let suppressCacheWrite = skipCacheWrite;
     if (!suppressCacheWrite && remoteWriteConfig !== undefined) {
@@ -850,7 +886,7 @@ export class DialCache {
         : performance.now(),
     };
     const runStart: ShadowValidationRunStart<T> = start.kind === "retained"
-      ? { kind: "retained" }
+      ? { kind: "retained", remoteConfig: start.remoteConfig }
       : { kind: "redis", source: start.source, remoteConfig: start.remoteConfig };
     this.shadowFlights.set(key.urn, flight);
     this.deferShadowValidation(
@@ -938,7 +974,11 @@ export class DialCache {
       maybeRelease();
     };
     const readShadowPayload = (): Promise<RedisCachePayload | null> => {
-      const read = redisCache.startTrackedPayloadReadForShadow(key, readTimeoutMs);
+      const read = redisCache.startTrackedPayloadReadForShadow(
+        key,
+        start.remoteConfig.ttlSec,
+        readTimeoutMs,
+      );
       pendingRedisReads.add(read.settled);
       void read.settled.then(() => {
         pendingRedisReads.delete(read.settled);
@@ -975,7 +1015,7 @@ export class DialCache {
             return "timeout";
           }
 
-          let shadowFillConfig: ResolvedLayerConfig | null = null;
+          let shadowFillConfig: ResolvedRemoteLayerConfig | null = null;
           if (start.kind === "redis") {
             let payload: RedisCachePayload | null;
             try {
@@ -1191,11 +1231,13 @@ export class DialCache {
 
   private async resolveRemoteLayerConfig(key: DialCacheKey, keyConfig: DialCacheKeyConfig | null) {
     try {
-      const result = resolveLayerConfigResult({
+      const result = resolveRemoteLayerConfigResult({
         config: keyConfig,
         key,
-        layer: CacheLayer.REMOTE,
       });
+      if (result.staleOnErrorConfigError === true) {
+        this.recordError(key, CacheLayer.REMOTE, "config_resolution");
+      }
       if (result.status === "disabled") {
         this.metrics?.disabled({ ...labelsFor(key, CacheLayer.REMOTE), reason: result.reason });
         this.recordInvalidLeaf(key, CacheLayer.REMOTE, result.reason);
@@ -1212,7 +1254,7 @@ export class DialCache {
   private async readRemoteWithResolvedConfig<T>(
     redisCache: RedisCache,
     key: DialCacheKey,
-    layerConfig: ResolvedLayerConfig,
+    layerConfig: ResolvedRemoteLayerConfig,
     readTimeoutMs: number,
   ): Promise<RemoteCacheGetResult<T>> {
     try {
@@ -1387,6 +1429,7 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
   const rampConfig = config.ramp;
   const shadowConfig = config.shadow;
   const requestLocal = config.requestLocal;
+  const staleOnErrorMaxAgeSec = config.staleOnErrorMaxAgeSec;
   const remoteReadTimeoutMs = config.remoteReadTimeoutMs;
   if (requestLocal !== undefined && typeof requestLocal !== "boolean") {
     throw new TypeError("DialCache defaultConfig requestLocal must be a boolean");
@@ -1400,6 +1443,7 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
     ttlSec: ttlSecConfig,
     ramp: rampConfig,
     ...(requestLocal === undefined ? {} : { requestLocal }),
+    ...(staleOnErrorMaxAgeSec === undefined ? {} : { staleOnErrorMaxAgeSec }),
     ...(remoteReadTimeoutMs === undefined ? {} : { remoteReadTimeoutMs }),
     ...(shadowConfig === undefined ? {} : { shadow: shadowConfig }),
   });
@@ -1424,6 +1468,31 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
       }
       if (!Number.isFinite(ramp) || ramp < 0 || ramp > 100) {
         throw new RangeError(`DialCache defaultConfig ramp.${layer} must be between 0 and 100`);
+      }
+    }
+  }
+
+  if (snapshot.staleOnErrorMaxAgeSec !== undefined) {
+    const maxAgeSec = snapshot.staleOnErrorMaxAgeSec;
+    if (typeof maxAgeSec !== "number") {
+      throw new TypeError("DialCache defaultConfig staleOnErrorMaxAgeSec must be a number");
+    }
+    if (!Number.isSafeInteger(maxAgeSec) || maxAgeSec < 0 || maxAgeSec > MAX_CACHE_TTL_SEC) {
+      throw new RangeError(
+        `DialCache defaultConfig staleOnErrorMaxAgeSec must be a nonnegative safe integer no greater than ${MAX_CACHE_TTL_SEC}`,
+      );
+    }
+    if (maxAgeSec > 0) {
+      const remoteTtlSec = snapshot.ttlSec[CacheLayer.REMOTE];
+      if (remoteTtlSec === undefined) {
+        throw new RangeError(
+          "DialCache defaultConfig staleOnErrorMaxAgeSec requires ttlSec.remote",
+        );
+      }
+      if (maxAgeSec <= remoteTtlSec) {
+        throw new RangeError(
+          "DialCache defaultConfig staleOnErrorMaxAgeSec must be greater than ttlSec.remote",
+        );
       }
     }
   }
@@ -1523,6 +1592,12 @@ function safeMetrics(metrics: DialCacheMetricsAdapter | null): DialCacheMetricsA
       ? {
           shadowValidation: (labels) =>
             callObserver(() => metrics.shadowValidation!(labels)),
+        }
+      : {}),
+    ...(typeof metrics.staleRecovery === "function"
+      ? {
+          staleRecovery: (labels) =>
+            callObserver(() => metrics.staleRecovery!(labels)),
         }
       : {}),
     observeGet: (labels, seconds) => callObserver(() => metrics.observeGet(labels, seconds)),

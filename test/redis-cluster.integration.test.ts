@@ -187,7 +187,64 @@ describe("DialCache Lua protocol on Redis Cluster", () => {
 
     expect(before).toEqual({ id: "123", version: 1 });
     expect(after).toEqual({ id: "123", version: 2 });
-    await expect(cluster.dialcacheReadTracked("{slot-a}:value", "{slot-b}:watermark")).rejects.toThrow(/CROSSSLOT/);
+    await expect(cluster.dialcacheReadTracked("{slot-a}:value", "{slot-b}:watermark", 60_000)).rejects.toThrow(
+      /CROSSSLOT/,
+    );
+  });
+
+  it("recovers a logically stale tracked value through Cluster routing", async () => {
+    if (cluster === undefined) {
+      throw new Error("Redis Cluster did not start");
+    }
+    const activeCluster = cluster;
+    const namespace = "cluster-stale";
+    const useCase = "ClusterTrackedStaleOnError";
+    const id = "123";
+    const valueKey = `{${namespace}:user_id:${id}}#${useCase}:dialcache-frame-v1`;
+    const watermarkKey = `{${namespace}:user_id:${id}}#watermark`;
+    const scriptClient = createNodeRedisDialCacheClient(activeCluster);
+    const dialcache = new DialCache({
+      namespace,
+      redis: { client: scriptClient, readTimeoutMs: 10_000 },
+    });
+    const sourceError = new Error("cluster source unavailable");
+    let sourceCalls = 0;
+    let sourceAvailable = true;
+    const getUser = dialcache.cached(async () => {
+      sourceCalls += 1;
+      if (!sourceAvailable) {
+        throw sourceError;
+      }
+      return { id, version: 1 };
+    }, {
+      keyType: "user_id",
+      useCase,
+      cacheKey: () => id,
+      trackForInvalidation: true,
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 1 },
+        ramp: { [CacheLayer.REMOTE]: 100 },
+        staleOnErrorMaxAgeSec: 60,
+      }),
+    });
+
+    const fresh = await dialcache.enable(async () => await getUser());
+    const stored = await activeCluster.get(commandOptions({ returnBuffers: true }), valueKey);
+    if (stored === null) {
+      throw new Error("Tracked Cluster value was not written");
+    }
+    const logicallyStale = Buffer.from(stored);
+    logicallyStale.writeBigUInt64BE(BigInt(Date.now() - 5_000), 1);
+    await activeCluster.set(valueKey, logicallyStale, { PX: 60_000 });
+    const ttlBeforeRecovery = await activeCluster.pTTL(valueKey);
+
+    sourceAvailable = false;
+    const recovered = await dialcache.enable(async () => await getUser());
+
+    expect(recovered).toEqual(fresh);
+    expect(sourceCalls).toBe(2);
+    expect(await activeCluster.get(watermarkKey)).toBe("0");
+    expect(await activeCluster.pTTL(valueKey)).toBeLessThanOrEqual(ttlBeforeRecovery);
   });
 
   it("round-trips binary payloads through cluster script routing", async () => {
@@ -199,7 +256,7 @@ describe("DialCache Lua protocol on Redis Cluster", () => {
     const payload = Buffer.from(Array.from({ length: 256 }, (_, index) => index));
 
     expect(await scriptClient.write({ valueKey, cacheTtlMs: 60_000, value: payload })).toBe(true);
-    expect(await scriptClient.read({ valueKey })).toEqual(payload);
+    expect(await scriptClient.read({ valueKey, maxAgeMs: 60_000 })).toEqual(payload);
 
     const stored = await cluster.get(commandOptions({ returnBuffers: true }), valueKey);
     expect(stored?.length).toBe(10 + payload.length);
@@ -217,6 +274,8 @@ describe("DialCache Lua protocol on Redis Cluster", () => {
         value: trackedPayload,
       }),
     ).toBe(true);
-    expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toEqual(trackedPayload);
+    expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey, maxAgeMs: 60_000 })).toEqual(
+      trackedPayload,
+    );
   });
 });

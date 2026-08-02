@@ -300,13 +300,57 @@ describe("DialCache Redis TTL layer", () => {
     const payload = Buffer.from([0, 1, 2, 0xff]);
     await redis.write({ valueKey, cacheTtlMs: 60_000, value: payload });
 
-    const firstRead = await redis.read({ valueKey });
+    const firstRead = await redis.read({ valueKey, maxAgeMs: 60_000 });
     if (!Buffer.isBuffer(firstRead)) {
       throw new Error("Expected a binary Redis payload");
     }
     firstRead[0] = 0xff;
 
-    expect(await redis.read({ valueKey })).toEqual(payload);
+    expect(await redis.read({ valueKey, maxAgeMs: 60_000 })).toEqual(payload);
+  });
+
+  it("enforces the fresh and stale maximum-age boundaries exactly", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-02T12:00:00.000Z"));
+    const redis = new FakeRedis();
+    const freshBeforeKey = "age-boundary:{item:f-minus-one}:value";
+    const freshAtKey = "age-boundary:{item:f}:value";
+    const staleBeforeKey = "age-boundary:{item:m-minus-one}:value";
+    const staleAtKey = "age-boundary:{item:m}:value";
+    const nowMs = Date.now();
+    const freshMaxAgeMs = 1_000;
+    const staleMaxAgeMs = 3_000;
+
+    redis.setRaw(freshBeforeKey, encodeFrame("F-1", nowMs - (freshMaxAgeMs - 1)));
+    redis.setRaw(freshAtKey, encodeFrame("F", nowMs - freshMaxAgeMs));
+    redis.setRaw(staleBeforeKey, encodeFrame("M-1", nowMs - (staleMaxAgeMs - 1)));
+    redis.setRaw(staleAtKey, encodeFrame("M", nowMs - staleMaxAgeMs));
+
+    await expect(redis.read({ valueKey: freshBeforeKey, maxAgeMs: freshMaxAgeMs })).resolves.toBe("F-1");
+    await expect(redis.read({ valueKey: freshAtKey, maxAgeMs: freshMaxAgeMs })).resolves.toBeNull();
+    await expect(redis.read({ valueKey: staleBeforeKey, maxAgeMs: staleMaxAgeMs })).resolves.toBe("M-1");
+    await expect(redis.read({ valueKey: staleAtKey, maxAgeMs: staleMaxAgeMs })).resolves.toBeNull();
+  });
+
+  it("validates FakeRedis maximum ages before reading", async () => {
+    const redis = new FakeRedis();
+    const valueKey = "age-validation:{item:1}:value";
+    await redis.write({ valueKey, cacheTtlMs: 60_000, value: "value" });
+
+    await expect(redis.read({ valueKey, maxAgeMs: 31_536_000_000 })).resolves.toBe("value");
+    for (const maxAgeMs of [
+      0,
+      -1,
+      1.5,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+      31_536_000_001,
+      Number.MAX_SAFE_INTEGER,
+    ]) {
+      await expect(redis.read({ valueKey, maxAgeMs })).rejects.toThrow("Invalid DialCache Redis maxAgeMs");
+    }
+    expect(redis.getCalls).toBe(1);
   });
 
   it("fails open when Redis serializer dump fails", async () => {
@@ -421,6 +465,7 @@ describe("DialCache Redis TTL layer", () => {
 
   it("records a distinct metric label when a Redis adapter reports invalid payload encoding", async () => {
     const redisClient: DialCacheRedisClient = {
+      enforcesMaxAge: true,
       read: vi.fn(async () => {
         throw new DialCacheRedisPayloadEncodingError("Invalid DialCache Redis payload encoding");
       }),

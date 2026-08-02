@@ -244,6 +244,7 @@ async function benchmarkRedisReadDeadlineCoalescing(fanout) {
   const originalSetTimeout = globalThis.setTimeout;
   const originalClearTimeout = globalThis.clearTimeout;
   const redisClient = {
+    enforcesMaxAge: true,
     async read() {
       redisReadCalls += 1;
       started.resolve();
@@ -319,6 +320,7 @@ async function benchmarkSequentialTrackedRedisHits(iterations, { scenario, useCa
   let redisWriteCalls = 0;
   let redisInvalidationCalls = 0;
   const redisClient = {
+    enforcesMaxAge: true,
     async read({ watermarkKey }) {
       assert.equal(typeof watermarkKey, "string", "the benchmark must exercise tracked Redis reads");
       redisReadCalls += 1;
@@ -392,6 +394,7 @@ async function benchmarkDarkShadowDetachment() {
   const cachedValue = { source: "redis" };
   const sourceValue = { source: "truth" };
   const redisClient = {
+    enforcesMaxAge: true,
     async read({ watermarkKey }) {
       assert.equal(typeof watermarkKey, "string", "dark shadow reads must remain tracked");
       redisReadCalls += 1;
@@ -476,6 +479,7 @@ async function benchmarkDarkShadowFillDetachment() {
   let redisWriteCalls = 0;
   const sourceValue = { source: "truth" };
   const redisClient = {
+    enforcesMaxAge: true,
     async read({ watermarkKey }) {
       assert.equal(typeof watermarkKey, "string", "dark shadow reads must remain tracked");
       redisReadCalls += 1;

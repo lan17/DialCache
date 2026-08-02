@@ -34,6 +34,18 @@ if string.byte(value, 1) ~= ${REDIS_FRAME_VERSION} then
   return false
 end`;
 
+const VALIDATE_READ_ARGUMENTS_LUA = String.raw`local max_age_ms = tonumber(ARGV[1])
+if not max_age_ms
+  or max_age_ms ~= max_age_ms
+  or max_age_ms >= math.huge
+  or max_age_ms <= -math.huge
+  or max_age_ms ~= math.floor(max_age_ms)
+  or max_age_ms <= 0
+  or max_age_ms > ${MAX_SUPPORTED_DURATION_MS}
+then
+  return redis.error_reply("ERR invalid DialCache max age")
+end`;
+
 const RETURN_PAYLOAD_LUA = String.raw`return string.sub(value, 10)`;
 
 const VALIDATE_WRITE_ARGUMENTS_LUA = String.raw`local cache_ttl_ms = ceil_finite_number(ARGV[1])
@@ -48,17 +60,31 @@ end`;
 const REDIS_TIME_LUA = String.raw`local redis_time = redis.call("TIME")
 local now_ms = tonumber(redis_time[1]) * 1000 + math.floor(tonumber(redis_time[2]) / 1000)`;
 
+const VALIDATE_FRAME_AGE_LUA = String.raw`local created_at = struct.unpack(">I8", string.sub(value, 2, 9))
+if now_ms - created_at >= max_age_ms then
+  return false
+end`;
+
 const WRITE_FRAME_LUA = String.raw`local frame = string.char(${REDIS_FRAME_VERSION})
   .. struct.pack(">I8", now_ms)
   .. string.char(encoding)
   .. ARGV[3]
 redis.call("SET", KEYS[1], frame, "PX", cache_ttl_ms)`;
 
-export const READ_CACHE_SCRIPT = [READ_FRAME_LUA, RETURN_PAYLOAD_LUA].join("\n\n");
+export const READ_CACHE_SCRIPT = [
+  VALIDATE_READ_ARGUMENTS_LUA,
+  READ_FRAME_LUA,
+  REDIS_TIME_LUA,
+  VALIDATE_FRAME_AGE_LUA,
+  RETURN_PAYLOAD_LUA,
+].join("\n\n");
 
 export const READ_TRACKED_CACHE_SCRIPT = [
   PARSE_WATERMARK_LUA,
+  VALIDATE_READ_ARGUMENTS_LUA,
   READ_FRAME_LUA,
+  REDIS_TIME_LUA,
+  VALIDATE_FRAME_AGE_LUA,
   String.raw`local raw_watermark = redis.call("GET", KEYS[2])
 if not raw_watermark then
   return false
@@ -69,7 +95,6 @@ if not watermark then
   return false
 end
 
-local created_at = struct.unpack(">I8", string.sub(value, 2, 9))
 if created_at <= watermark then
   return false
 end`,
