@@ -41,6 +41,7 @@ import {
   type LayerConfigResolution,
   type ResolvedLayerConfig,
 } from "./internal/runtime-config.js";
+import { shadowMismatchLogDetails } from "./internal/shadow-log-json.js";
 
 type CacheKeyArgs = Record<string, string | number | boolean | bigint | null | undefined>;
 type Id = string | number | bigint;
@@ -220,6 +221,11 @@ interface ShadowValidationPlan<Value> {
   readonly comparator: ShadowComparator<Value>;
   readonly timeoutMs: number;
   readonly didCallerFallbackTimeout: () => boolean;
+}
+
+interface ShadowMismatchDetails {
+  readonly cachedValue: unknown;
+  readonly sourceValue: unknown;
 }
 
 type ShadowValidationStart<Value> =
@@ -475,6 +481,10 @@ export class DialCache {
   /**
    * Writes a remote invalidation watermark for Redis-tracked entries.
    *
+   * Requires a Redis client in the DialCache configuration. If Redis is not
+   * configured, the call rejects rather than reporting an invalidation that
+   * did not occur.
+   *
    * This does not synchronously evict local cache hits or untracked Redis values.
    * Call it only after the source mutation commits.
    *
@@ -516,12 +526,12 @@ export class DialCache {
   async invalidateRemote(keyType: string, id: Id, futureBufferMs = 0): Promise<void> {
     assertSupportedFutureBufferMs(futureBufferMs);
 
-    if (this.redisCache === null) {
-      return;
-    }
-
     this.metrics?.invalidation({ cacheNamespace: this.namespace, keyType, layer: CacheLayer.REMOTE });
     try {
+      if (this.redisCache === null) {
+        throw new TypeError("DialCache invalidateRemote requires a configured Redis client");
+      }
+
       await this.redisCache.invalidate(keyType, String(id), futureBufferMs, this.namespace);
     } catch (error) {
       this.logger.warn("Error writing DialCache invalidation watermark", error);
@@ -707,7 +717,7 @@ export class DialCache {
     fallback: () => Promise<T>,
     shadowValidation: ShadowValidationPlan<T>,
   ): Promise<T> {
-    const shadowStartedAtMs = keyConfig?.shadowRamp === undefined || keyConfig.shadowRamp === 0
+    const shadowStartedAtMs = keyConfig?.shadow?.ramp === undefined || keyConfig.shadow.ramp === 0
       ? null
       : performance.now();
     const valuePromise = this.callFallback(fallbackLabels, fallback);
@@ -793,18 +803,36 @@ export class DialCache {
       return;
     }
 
-    const shadowRamp = keyConfig?.shadowRamp;
-    if (shadowRamp === undefined || shadowRamp === 0) {
+    const shadowConfig: unknown = keyConfig?.shadow;
+    if (
+      shadowConfig === null
+      || typeof shadowConfig !== "object"
+      || Array.isArray(shadowConfig)
+    ) {
+      if (shadowConfig !== undefined) {
+        this.recordError(key, CacheLayer.REMOTE, "config_resolution");
+      }
       return;
     }
-    if (typeof shadowRamp !== "number" || !Number.isFinite(shadowRamp) || shadowRamp < 0 || shadowRamp > 100) {
+
+    const resolvedShadowConfig = shadowConfig as Record<string, unknown>;
+    const shadowPercentage: unknown = resolvedShadowConfig.ramp;
+    if (shadowPercentage === undefined || shadowPercentage === 0) {
+      return;
+    }
+    if (
+      typeof shadowPercentage !== "number"
+      || !Number.isFinite(shadowPercentage)
+      || shadowPercentage < 0
+      || shadowPercentage > 100
+    ) {
       this.recordError(key, CacheLayer.REMOTE, "config_resolution");
       return;
     }
     if (this.metrics?.shadowValidation === undefined) {
       return;
     }
-    if (shadowRamp < 100 && deterministicShadowRampSample(key) >= shadowRamp) {
+    if (shadowPercentage < 100 && deterministicShadowRampSample(key) >= shadowPercentage) {
       return;
     }
 
@@ -812,6 +840,7 @@ export class DialCache {
       this.recordShadowValidation(key, "dropped");
       return;
     }
+    const logMismatches = this.resolveShadowLogging(key, resolvedShadowConfig);
 
     const flight: ShadowFlight = {
       cachedPayload: start.kind === "retained" ? start.payload : null,
@@ -831,7 +860,23 @@ export class DialCache {
       runStart,
       validation,
       readTimeoutMs,
+      logMismatches,
     );
+  }
+
+  private resolveShadowLogging(
+    key: DialCacheKey,
+    shadowConfig: Record<string, unknown>,
+  ): boolean {
+    const configuredLogMismatches = shadowConfig.logMismatches;
+    if (configuredLogMismatches === undefined) {
+      return false;
+    }
+    if (typeof configuredLogMismatches !== "boolean") {
+      this.recordError(key, CacheLayer.REMOTE, "config_resolution");
+      return false;
+    }
+    return configuredLogMismatches;
   }
 
   private deferShadowValidation<T>(
@@ -841,6 +886,7 @@ export class DialCache {
     start: ShadowValidationRunStart<T>,
     validation: ShadowValidationPlan<T>,
     readTimeoutMs: number,
+    logMismatches: boolean,
   ): void {
     setImmediate(() => {
       this.runShadowValidation(
@@ -850,6 +896,7 @@ export class DialCache {
         start,
         validation,
         readTimeoutMs,
+        logMismatches,
       );
     }).unref();
   }
@@ -861,6 +908,7 @@ export class DialCache {
     start: ShadowValidationRunStart<T>,
     plan: ShadowValidationPlan<T>,
     readTimeoutMs: number,
+    logMismatches: boolean,
   ): void {
     const pendingRedisReads = new Set<Promise<void>>();
     let operationFinished = false;
@@ -910,6 +958,7 @@ export class DialCache {
     };
     const elapsedBeforeStartMs = Math.max(performance.now() - deadlineStartedAtMs, 0);
     const remainingTimeoutMs = Math.max(plan.timeoutMs - elapsedBeforeStartMs, 0);
+    let mismatchDetails: ShadowMismatchDetails | undefined;
 
     const validation = withMonotonicDeadline({
       timeoutMs: remainingTimeoutMs,
@@ -1040,9 +1089,13 @@ export class DialCache {
           if (originalPayload === null) {
             return "timeout";
           }
-          return confirmationPayload === null || !redisPayloadsEqual(originalPayload, confirmationPayload)
-            ? "superseded"
-            : "mismatch";
+          if (confirmationPayload === null || !redisPayloadsEqual(originalPayload, confirmationPayload)) {
+            return "superseded";
+          }
+          if (logMismatches) {
+            mismatchDetails = { cachedValue, sourceValue };
+          }
+          return "mismatch";
         } finally {
           finishOperation();
         }
@@ -1050,18 +1103,53 @@ export class DialCache {
     });
 
     void validation.then(
-      (outcome) => this.recordShadowValidation(key, outcome),
+      (outcome) => this.recordShadowValidation(key, outcome, logMismatches, mismatchDetails),
       () => this.recordShadowValidation(key, "timeout"),
     );
   }
 
-  private recordShadowValidation(key: DialCacheKey, outcome: ShadowValidationOutcome): void {
-    this.metrics?.shadowValidation?.({
+  private recordShadowValidation(
+    key: DialCacheKey,
+    outcome: ShadowValidationOutcome,
+    logMismatches = false,
+    mismatchDetails?: ShadowMismatchDetails,
+  ): void {
+    const labels = {
       cacheNamespace: key.namespace,
       useCase: key.useCase,
       keyType: key.keyType,
       outcome,
-    });
+    } as const;
+    this.metrics?.shadowValidation?.(labels);
+    if (outcome !== "mismatch" || !logMismatches) {
+      return;
+    }
+
+    const warning = {
+      cacheNamespace: key.namespace,
+      useCase: key.useCase,
+      keyType: key.keyType,
+      outcome: "mismatch",
+    } as const;
+    if (mismatchDetails !== undefined) {
+      try {
+        this.logger.warn(
+          "DialCache shadow validation mismatch",
+          {
+            ...warning,
+            ...shadowMismatchLogDetails(
+              key.urn,
+              mismatchDetails.cachedValue,
+              mismatchDetails.sourceValue,
+            ),
+          },
+        );
+        return;
+      } catch {
+        // JSON detail construction is best-effort; preserve the metadata warning.
+      }
+    }
+    this.logger.warn("DialCache shadow validation mismatch", warning);
   }
 
   private async resolveLocalLayerConfig(
@@ -1292,9 +1380,12 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
   if (typeof config !== "object" || Array.isArray(config)) {
     throw new TypeError("DialCache defaultConfig must be an object");
   }
+  if (Object.hasOwn(config, "shadowRamp")) {
+    throw new TypeError('DialCacheKeyConfig.shadowRamp was replaced by "shadow.ramp"');
+  }
   const ttlSecConfig = config.ttlSec;
   const rampConfig = config.ramp;
-  const shadowRamp = config.shadowRamp;
+  const shadowConfig = config.shadow;
   const requestLocal = config.requestLocal;
   const remoteReadTimeoutMs = config.remoteReadTimeoutMs;
   if (requestLocal !== undefined && typeof requestLocal !== "boolean") {
@@ -1303,13 +1394,14 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
 
   assertDefaultLayerMap(ttlSecConfig, "ttlSec");
   assertDefaultLayerMap(rampConfig, "ramp");
+  assertDefaultShadowConfig(shadowConfig);
 
   const snapshot = new DialCacheKeyConfig({
     ttlSec: ttlSecConfig,
     ramp: rampConfig,
     ...(requestLocal === undefined ? {} : { requestLocal }),
     ...(remoteReadTimeoutMs === undefined ? {} : { remoteReadTimeoutMs }),
-    ...(shadowRamp === undefined ? {} : { shadowRamp }),
+    ...(shadowConfig === undefined ? {} : { shadow: shadowConfig }),
   });
 
   for (const layer of [CacheLayer.LOCAL, CacheLayer.REMOTE]) {
@@ -1336,23 +1428,40 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
     }
   }
 
-  if (snapshot.shadowRamp !== undefined) {
-    if (typeof snapshot.shadowRamp !== "number") {
-      throw new TypeError("DialCache defaultConfig shadowRamp must be a number");
+  if (snapshot.shadow !== undefined) {
+    if (snapshot.shadow.ramp !== undefined) {
+      if (typeof snapshot.shadow.ramp !== "number") {
+        throw new TypeError("DialCache defaultConfig shadow.ramp must be a number");
+      }
+      if (!Number.isFinite(snapshot.shadow.ramp) || snapshot.shadow.ramp < 0 || snapshot.shadow.ramp > 100) {
+        throw new RangeError("DialCache defaultConfig shadow.ramp must be between 0 and 100");
+      }
     }
-    if (!Number.isFinite(snapshot.shadowRamp) || snapshot.shadowRamp < 0 || snapshot.shadowRamp > 100) {
-      throw new RangeError("DialCache defaultConfig shadowRamp must be between 0 and 100");
+    if (snapshot.shadow.logMismatches !== undefined && typeof snapshot.shadow.logMismatches !== "boolean") {
+      throw new TypeError("DialCache defaultConfig shadow.logMismatches must be a boolean");
     }
   }
 
   Object.freeze(snapshot.ttlSec);
   Object.freeze(snapshot.ramp);
+  if (snapshot.shadow !== undefined) {
+    Object.freeze(snapshot.shadow);
+  }
   return Object.freeze(snapshot);
 }
 
 function assertDefaultLayerMap(config: unknown, name: "ttlSec" | "ramp"): void {
   if (config === null || typeof config !== "object" || Array.isArray(config)) {
     throw new TypeError(`DialCache defaultConfig ${name} must be a layer map`);
+  }
+}
+
+function assertDefaultShadowConfig(config: unknown): asserts config is Record<string, unknown> | undefined {
+  if (
+    config !== undefined
+    && (config === null || typeof config !== "object" || Array.isArray(config))
+  ) {
+    throw new TypeError("DialCache defaultConfig shadow must be an object");
   }
 }
 

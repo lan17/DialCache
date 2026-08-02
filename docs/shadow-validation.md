@@ -28,7 +28,7 @@ served, selected for both, or selected for neither.
 ## Configure a shadow cohort
 
 Shadow validation requires a tracked operation, a valid remote TTL, a metrics
-adapter with the optional shadow hook, and a positive `shadowRamp`:
+adapter with the optional shadow hook, and a positive `shadow.ramp`:
 
 ```ts
 import { CacheLayer, DialCache, DialCacheKeyConfig } from "dialcache";
@@ -54,13 +54,13 @@ const getUser = dialcache.cached(
       ttlSec: { [CacheLayer.REMOTE]: 300 },
       // Exercise and fill Redis without allowing it to serve this cohort.
       ramp: { [CacheLayer.REMOTE]: 0 },
-      shadowRamp: 5,
+      shadow: { ramp: 5 },
     }),
   },
 );
 ```
 
-`shadowRamp` accepts percentages from `0` through `100`. An effective value of
+`shadow.ramp` accepts percentages from `0` through `100`. An effective value of
 `0`, or omission from both baseline and runtime policy, disables shadow work;
 `100` selects every otherwise eligible exact cache key.
 
@@ -69,10 +69,20 @@ Intermediate values select a stable key cohort across calls and instances. The
 shadow bucket is independent of the remote serving bucket, so equal ramp
 percentages do not select the same keys.
 
-Use `shadowRamp: 100` when every eligible invocation should exercise the
+Use `shadow: { ramp: 100 }` when every eligible invocation should exercise the
 non-serving Redis path before a later serving-ramp increase. This still
 observes only keys invoked during the shadow period; it is not a full keyspace
 scan or warming guarantee.
+
+The root-exported `ShadowConfig` groups `ramp` with the default-off
+`logMismatches` diagnostic policy. Runtime overlays merge those two leaves
+independently: an omitted leaf inherits its baseline, while
+`logMismatches: false` explicitly disables inherited logging.
+
+The former flat `shadowRamp` field has been removed; migrate it to
+`shadow.ramp`. Public construction and static defaults reject the old field,
+and a raw runtime provider result containing it fails config resolution and
+runs the fallback uncached rather than inheriting defaults.
 
 ## Eligibility
 
@@ -83,7 +93,7 @@ DialCache schedules shadow work only when all of these conditions hold:
 - normal traversal reaches the remote layer;
 - the operation sets `trackForInvalidation: true`;
 - the resolved remote policy has a valid TTL;
-- the effective `shadowRamp` is positive and selects the exact key;
+- the effective `shadow.ramp` is positive and selects the exact key;
 - the configured metrics adapter implements `shadowValidation`; and
 - the instance has capacity and no shadow job already owns that exact key.
 
@@ -95,11 +105,21 @@ omitted metrics hook, an invalid or zero shadow ramp, cohort exclusion, an
 earlier in-memory hit, or a disabled call does not start a shadow-only Redis
 path.
 
-An invalid runtime `shadowRamp` does not disturb an otherwise valid
+An invalid runtime `shadow.ramp` does not disturb an otherwise valid
 caller-serving Redis hit. DialCache skips shadow work and records a
-`config_resolution` error. `DialCacheKeyConfig.disabled()` sets the shadow ramp
-and both serving ramps to `0`, so it is the complete kill switch for new cache
-invocations. It does not cancel work already admitted.
+`config_resolution` error.
+
+`DialCacheKeyConfig.disabled()` sets the shadow ramp and both serving ramps to
+`0`, and sets `shadow.logMismatches` to `false`, so it is the complete kill
+switch for new cache invocations. It does not cancel work already admitted.
+
+An invalid runtime `shadow.logMismatches` does not change the cache result,
+shadow result, or terminal shadow metric. For an admitted job, DialCache records
+one remote `config_resolution` error and suppresses the warning.
+
+DialCache validates this diagnostic leaf only after the metrics-hook,
+exact-key-cohort, and capacity gates; ineligible, cohort-excluded, and
+explicitly dropped work does not report that configuration error.
 
 See [Configuration and cache layers](configuration.md) for runtime-overlay
 precedence and policy validation.
@@ -219,6 +239,62 @@ object already returned to a serving-hit caller. The source input is the raw
 loader result. This deliberately exposes lossy serialization unless a custom
 comparator declares that normalization acceptable.
 
+## Confirmed mismatch logging
+
+The bounded shadow outcome metric is the default diagnostic. A use case can
+separately opt in to one warning for each terminal `mismatch`:
+
+```ts
+new DialCacheKeyConfig({
+  shadow: {
+    ramp: 5,
+    logMismatches: true,
+  },
+});
+```
+
+Logging does not activate shadow work: the operation must still pass every
+eligibility gate, including the required `metrics.shadowValidation` hook. A
+warning is emitted only after `C1` is byte-identical to `C0` and the terminal
+`mismatch` metric is recorded. Matches, candidates that become `superseded`,
+timeouts, dropped work, and errors remain metric-only.
+
+The warning message is `DialCache shadow validation mismatch`. Its details are:
+
+| Field | Value |
+| --- | --- |
+| `cacheNamespace`, `useCase`, `keyType`, `outcome` | Stable metadata; `outcome` is always `"mismatch"`. |
+| `cacheKey` | The logical DialCache URN, not the physical Redis storage key; capped at 2 KiB of UTF-8. |
+| `cachedValueJson` | Native JSON for the newly deserialized `C0` comparator input; capped at 8 KiB of UTF-8. |
+| `sourceValueJson` | Native JSON for the raw source comparator input; capped at 8 KiB of UTF-8. |
+
+DialCache applies `JSON.stringify` independently to the two values. If it throws
+or returns `undefined`, that field is `null` and the other side is still
+attempted.
+
+A byte-clipped string ends in `...[truncated]` within its cap without splitting
+a UTF-8 sequence. DialCache never passes the raw compared-value references to
+the logger, calls the configured serializer again, or computes a textual diff.
+
+These bounds limit the fields handed to the logger, not the data DialCache must
+inspect to build them:
+
+- truncation is not redaction; the logical URN can contain ids and arguments,
+  and either value can contain secrets or personal data;
+- native JSON invokes getters and `toJSON`, can omit or normalize unsupported
+  values, and produces `null` here for cycles, `bigint`, or other failures;
+- stringification is synchronous, and the 8 KiB cap applies only after it
+  returns, so it does not bound traversal, hook execution, event-loop time, or
+  the intermediate string; and
+- metadata, logger framing, and transport escaping are outside the field caps,
+  so the final event can exceed a sink-specific size limit.
+
+Enable mismatch logging only for trusted, reasonably bounded values and with an
+approved logger, redaction, transport, access, and retention policy. An
+unexpected detail-construction failure degrades to the metadata-only warning.
+Synchronous logger throws and rejected promises or thenables remain isolated
+from cache and shadow correctness.
+
 ## Capacity, deadlines, and detachment
 
 `shadowMaxInFlight` is a positive safe integer on each `DialCache` instance and
@@ -329,7 +405,7 @@ retention, and future-buffer contracts.
 | Serving Redis miss | None beyond the ordinary path | None beyond the ordinary read and fill |
 
 Capacity limits bound concurrent jobs, not total work over time. Measure source
-and Redis load while increasing `shadowRamp`.
+and Redis load while increasing `shadow.ramp`.
 
 ## Metrics and compatibility
 
@@ -354,7 +430,9 @@ capacity cap, reports one bounded terminal outcome:
 
 Ineligible or cohort-excluded invocations do not emit a shadow outcome.
 Outcome labels contain the logical cache namespace, `useCase`, and `keyType`;
-they never contain ids, values, payloads, Redis keys, or exception text.
+they never contain ids, values, payloads, Redis keys, or exception text. The
+separately opted-in mismatch warning is value-bearing and does not change this
+metric-label contract.
 
 Redis reads, serializer work, payload sizes, and Redis errors inside detached
 jobs use the existing metric hooks with `layer="remote_shadow"`. This keeps
@@ -377,7 +455,7 @@ names, units, labels, and the custom-adapter interface.
 
 ## Rollout checklist
 
-Before increasing `shadowRamp`:
+Before increasing `shadow.ramp`:
 
 - confirm the source loader is safe to invoke observationally on serving hits;
 - use a valid remote TTL with the serving ramp at `0`;
@@ -388,6 +466,10 @@ Before increasing `shadowRamp`:
 - arrange application-owned shutdown for dependencies that can outlive the
   DialCache deadline.
 
+Keep `shadow.logMismatches` off unless the logged key and values have been
+classified and the application has approved their synchronous JSON cost,
+redaction, transport, access, and retention policy.
+
 During rollout, monitor outcome ratios together with detached source latency,
 `remote_shadow` Redis errors, fill load, and ordinary source health. Treat
 `mismatch` as a signal to investigate value meaning, serialization, key
@@ -396,7 +478,7 @@ identity, and source consistency—not as an automatic repair instruction.
 Increase the Redis serving ramp only after the observed cohort, source load,
 and invalidation behavior meet the application's acceptance criteria. To stop
 new Redis serving and shadow activity through runtime policy, set both the
-remote serving ramp and `shadowRamp` to `0`.
+remote serving ramp and `shadow.ramp` to `0`.
 
 ## Shutdown
 

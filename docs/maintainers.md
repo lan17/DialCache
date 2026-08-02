@@ -25,19 +25,24 @@ syntax cannot silently raise the published requirement.
 Before changing a compatibility-sensitive surface, identify and extend the
 corresponding packed, unit, and integration assertions:
 
-- package root and explicit adapter/protocol entry points;
+- package root and explicit adapter/protocol entry points in packed ESM and CJS
+  consumers;
 - full cache-key identity, encoding, namespace behavior, and Redis Cluster hash
   tags;
 - deterministic serving- and shadow-ramp assignment, whose independent cohorts
-  must not reshuffle across releases;
+  must not reshuffle across releases, plus nested shadow-policy snapshot,
+  overlay, validation, and legacy `shadowRamp` rejection;
 - the binary Redis frame, Lua arguments and reply domains, tracked
   read/write/invalidation semantics, mixed-version serializer behavior, and the
   ownership and immutability contract for retained string and `Buffer`
   payloads;
+- rejection and bounded error telemetry when `invalidateRemote()` is called
+  without a configured Redis client;
 - shadow confirmation, clean-miss fill, capacity, deadline, detached work, and
-  payload-release behavior;
+  payload-release behavior, plus default-off confirmed-mismatch logging and its
+  byte-capped native-JSON detail fields;
 - exhaustive public unions and packed exports, including `MetricLayer`,
-  `ShadowValidationOutcome`, and `ShadowComparator`; and
+  `ShadowValidationOutcome`, `ShadowComparator`, and `ShadowConfig`; and
 - bounded metrics names, labels, reasons, error categories, scopes, outcomes,
   units, and observer isolation from synchronous throws and rejected thenables.
 

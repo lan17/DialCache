@@ -131,6 +131,23 @@ keeps detached work separate from caller-serving `layer="remote"` telemetry.
 See [Shadow validation](shadow-validation.md) for the read, confirmation, fill,
 and deadline semantics behind these outcomes.
 
+### Confirmed mismatch warnings
+
+Shadow metrics remain bounded and contain no cache ids or values. A use case can
+separately set `shadow.logMismatches: true` to emit one warning after a terminal
+`mismatch` is confirmed. Logging is default-off, does not replace the outcome
+metric, and does not activate shadow work without the `shadowValidation` hook.
+
+The warning contains stable metadata, the logical cache key capped at 2 KiB,
+and independently generated native-JSON strings for the cached and source
+comparator inputs capped at 8 KiB each. Those fields are value-bearing, and
+truncation is not redaction.
+
+See
+[Confirmed mismatch logging](shadow-validation.md#confirmed-mismatch-logging)
+for confirmation semantics, exact fields, JSON behavior, operational limits,
+and the required data-handling review.
+
 ## Datadog
 
 Install `hot-shots` separately:
@@ -272,6 +289,12 @@ thrown value's class or `Error.name`:
 These values are defined by the backend-neutral core and are identical for
 every adapter.
 
+A valid `invalidateRemote()` call without a configured Redis client is still an
+invalidation attempt: DialCache records `dialcache_invalidation_counter` (or
+`dialcache.invalidation.count`), logs the failure, records
+`error="invalidation"`, and rejects with the original focused `TypeError`.
+Invalid `futureBufferMs` input is rejected before these observers run.
+
 Remote-read timeouts use `layer="remote"` and `in_fallback="false"`. They are
 errors rather than misses, and the remote get-duration observation includes
 the wait. Coalesced followers do not multiply the timeout error. Deadline
@@ -279,9 +302,12 @@ details remain out of labels and are available on the logged
 `RedisReadTimeoutError`.
 
 Raw thrown values, error names, messages, cache ids, arguments, and Redis keys
-are never included in labels. When DialCache logs a cache-plumbing failure,
-the raw details remain available through the configured logger; not every
-metric error or shadow outcome has a matching log entry.
+are never included in labels. When DialCache logs a cache-plumbing failure, the
+raw details remain available through the configured logger; not every metric
+error or shadow outcome has a matching log entry.
+
+The explicitly opted-in confirmed-mismatch warning is a separate value-bearing
+log and does not alter the metric schema.
 
 `in_fallback` remains the explicit distinction between cache plumbing and
 application fallback failures.
@@ -330,4 +356,5 @@ field is present even when no key or cache layer was reached.
 
 Omit `metrics` to disable metrics entirely. Because shadow jobs require an
 observable terminal outcome, omitting metrics also disables shadow execution
-even when a key policy sets `shadowRamp`.
+even when a key policy sets `shadow.ramp` or enables
+`shadow.logMismatches`.

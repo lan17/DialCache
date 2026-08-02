@@ -11,17 +11,23 @@ export enum CacheLayer {
 export type Awaitable<T> = T | Promise<T>;
 export type LayerConfig = Partial<Record<CacheLayer, number>>;
 
+/** Per-use-case runtime policy for detached Redis shadow work. */
+export interface ShadowConfig {
+  /** Independent stable cohort percentage. Omitted and zero disable shadow work. */
+  readonly ramp?: number;
+  /**
+   * Emit one warning with the logical key and bounded native-JSON strings for
+   * the compared values for each confirmed mismatch. Defaults to false.
+   */
+  readonly logMismatches?: boolean;
+}
+
 export class DialCacheKeyConfig {
   /** Per-layer TTLs in seconds, from 1 through 31,536,000 (365 days). */
   readonly ttlSec: LayerConfig;
   readonly ramp: LayerConfig;
-  /**
-   * Percentage of tracked Redis keys that asynchronously exercise Redis
-   * without changing what serves the caller. Hits validate against the source
-   * of truth and ramped-down clean misses populate Redis. This shadow cohort is
-   * independent of the Redis serving ramp. Omitted and zero disable it.
-   */
-  readonly shadowRamp?: number;
+  /** Per-use-case runtime policy for detached Redis shadow work. */
+  readonly shadow?: ShadowConfig;
   /**
    * Memoize successful values for the lifetime of the outermost enabled scope.
    * Request-local caching is disabled by default and has no TTL or ramp.
@@ -36,17 +42,21 @@ export class DialCacheKeyConfig {
   constructor(config: {
     ttlSec?: LayerConfig;
     ramp?: LayerConfig;
-    shadowRamp?: number;
+    shadow?: ShadowConfig;
     requestLocal?: boolean;
     remoteReadTimeoutMs?: number;
   }) {
     if (config === null || typeof config !== "object" || Array.isArray(config)) {
       throw new TypeError("DialCache key config must be an object");
     }
+    if (Object.hasOwn(config, "shadowRamp")) {
+      throw new TypeError('DialCacheKeyConfig.shadowRamp was replaced by "shadow.ramp"');
+    }
     this.ttlSec = cloneLayerConfig(config.ttlSec, "ttlSec");
     this.ramp = cloneLayerConfig(config.ramp, "ramp");
-    if (config.shadowRamp !== undefined) {
-      this.shadowRamp = config.shadowRamp;
+    const shadow = cloneShadowConfig(config.shadow);
+    if (shadow !== undefined) {
+      this.shadow = shadow;
     }
     if (config.requestLocal !== undefined && typeof config.requestLocal !== "boolean") {
       throw new TypeError("DialCache requestLocal config must be a boolean");
@@ -83,7 +93,10 @@ export class DialCacheKeyConfig {
   static disabled(): DialCacheKeyConfig {
     return new DialCacheKeyConfig({
       requestLocal: false,
-      shadowRamp: 0,
+      shadow: {
+        ramp: 0,
+        logMismatches: false,
+      },
       ramp: {
         [CacheLayer.LOCAL]: 0,
         [CacheLayer.REMOTE]: 0,
@@ -98,6 +111,16 @@ function cloneLayerConfig(config: LayerConfig | undefined, name: "ttlSec" | "ram
   }
   if (config === null || typeof config !== "object" || Array.isArray(config)) {
     throw new TypeError(`DialCache ${name} config must be a layer map`);
+  }
+  return { ...config };
+}
+
+function cloneShadowConfig(config: ShadowConfig | undefined): ShadowConfig | undefined {
+  if (config === undefined) {
+    return undefined;
+  }
+  if (config === null || typeof config !== "object" || Array.isArray(config)) {
+    throw new TypeError("DialCache shadow config must be an object");
   }
   return { ...config };
 }

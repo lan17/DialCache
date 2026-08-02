@@ -66,6 +66,12 @@ users should register the supplied scripts and wrap the connected client with
 instance-wide value or use `DialCacheKeyConfig.remoteReadTimeoutMs` for
 per-use-case static and runtime policy.
 
+Local-only caching does not require a Redis client, but the explicit remote
+maintenance operation `invalidateRemote()` does. It rejects when Redis is not
+configured so a caller cannot mistake an absent watermark write for successful
+invalidation. See [Targeted invalidation](invalidation.md) for the complete
+contract.
+
 The adapter computes each script's SHA, uses `EVALSHA`, and retries with `EVAL`
 after `NOSCRIPT`. Its cluster client routes scripts by their first key and
 performs that fallback on the selected shard. Tracked reads are deliberately
@@ -225,6 +231,8 @@ Custom adapters implement the complete client-independent read, write, and
 invalidate contract:
 
 ```ts
+type Awaitable<T> = T | Promise<T>;
+
 interface RedisReadContext {
   readonly timeoutMs: number;
   readonly signal: AbortSignal;
@@ -240,11 +248,36 @@ interface DialCacheRedisClient {
 }
 ```
 
-| Method | Required semantics |
-| --- | --- |
-| `read` | Return an operation-owned serialized `string` or `Buffer`, or `null` for a miss. The payload must remain stable after settlement because DialCache can retain it for shadow work; an adapter that recycles response storage must return a dedicated Buffer. For a tracked request, compare the value timestamp and watermark atomically; a missing watermark or a value at or behind it is a miss. |
-| `write` | Accept `cacheTtlMs` as a positive integer no greater than `31_536_000_000` milliseconds (365 days), apply that TTL, and record server time atomically. For a tracked request, create a missing baseline, retain it for at least the value TTL plus one minute without shortening a longer or persistent lifetime, and return `false` when it rejects publication. Return `true` only when the value was written. |
-| `invalidate` | Accept `futureBufferMs` as a nonnegative integer no greater than `31_536_000_000` milliseconds (365 days). Advance `watermarkKey` monotonically to at least server time plus that buffer. Retain it long enough to cover the buffer and any still-future existing watermark, plus one minute, without shortening a longer or persistent lifetime. Reject on failure. |
+#### `read`
+
+- Return an operation-owned serialized `string` or `Buffer`, or `null` for a
+  miss.
+- Keep the payload stable after settlement because DialCache can retain it for
+  shadow work. An adapter that recycles response storage must return a
+  dedicated `Buffer`.
+- For a tracked request, compare the value timestamp and watermark atomically.
+  A missing watermark or a value at or behind it is a miss.
+
+#### `write`
+
+- Accept `cacheTtlMs` as a positive integer no greater than
+  `31_536_000_000` milliseconds (365 days), apply that TTL, and record server
+  time atomically.
+- For a tracked request, create a missing baseline and retain it for at least
+  the value TTL plus one minute without shortening a longer or persistent
+  lifetime.
+- Return `true` only when the value was written and `false` when publication is
+  rejected.
+
+#### `invalidate`
+
+- Accept `futureBufferMs` as a nonnegative integer no greater than
+  `31_536_000_000` milliseconds (365 days).
+- Advance `watermarkKey` monotonically to at least server time plus that buffer.
+- Retain the watermark long enough to cover the buffer and any still-future
+  existing watermark, plus one minute, without shortening a longer or
+  persistent lifetime.
+- Reject on failure.
 
 `write()` returning `false` is a safe publication refusal, not an adapter error.
 DialCache still returns the fallback value but skips the corresponding
@@ -394,6 +427,12 @@ explicit serializer.
 Providing `Serializer<T>`, including an explicitly typed
 `JsonSerializer<T>`, is a trusted caller assertion. DialCache does not perform
 an additional serialize-and-deserialize cycle to validate it.
+
+Opted-in confirmed-mismatch logging is separate from cache serialization. It
+uses native `JSON.stringify` on the deserialized cached snapshot and source
+value and does not call the configured serializer again. Its byte caps are not
+redaction; review the data-handling contract in
+[Redis shadow validation](shadow-validation.md) before enabling it.
 
 Shadow validation can call `load` again for the same served payload and can
 call `dump` after a ramped-down caller has received its source result. Custom

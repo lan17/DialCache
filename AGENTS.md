@@ -35,7 +35,11 @@ test/                   # Unit and Redis integration tests
 - Shadow validation is opt-in, detached, tracked-key-only work that never
   supplies or delays the caller; it has separate sampling, capacity, deadline,
   invalidation, and observability contracts.
+- Shadow policy is grouped under `DialCacheKeyConfig.shadow`. Mismatch logging
+  is default-off diagnostic output; its size limits are not redaction.
 - Cache plumbing fails open; explicit maintenance operations surface mutation failures.
+- `invalidateRemote()` requires a configured Redis client and rejects when the
+  client is absent or the watermark mutation fails.
 - Tracked Redis values and invalidation watermarks share a Redis Cluster hash tag.
 - Tracked reads run on primaries so replica lag cannot hide invalidation.
 - Local entries are process-local and are not synchronously invalidated across instances.
@@ -47,7 +51,9 @@ test/                   # Unit and Redis integration tests
   contracts in a focused `docs/` guide and link it from the relevant README
   summary.
 - Keep Redis client-specific behavior in adapters; core code depends on `DialCacheRedisClient`.
-- Public exports belong in the root or an explicit integration entry point such as `src/node-redis.ts`, `src/prometheus.ts`, or `src/redis-protocol.ts`.
+- Public exports belong in the root or an explicit integration entry point such
+  as `src/node-redis.ts`, `src/valkey-glide.ts`, `src/prometheus.ts`,
+  `src/datadog.ts`, or `src/redis-protocol.ts`.
 - Use `corepack pnpm` for project commands.
 
 ## Validation

@@ -59,6 +59,12 @@ The buffer is an application-owned safety value. DialCache cannot choose a
 universally safe nonzero default. It must be a nonnegative safe integer no
 greater than `31_536_000_000` milliseconds (365 days).
 
+`invalidateRemote()` is an explicit remote maintenance operation and requires
+`DialCacheConfig.redis`. A local-only `DialCache` remains valid for normal cache
+operations, but invalidation does not silently become a no-op: without Redis it
+rejects a `TypeError` whose message is
+`DialCache invalidateRemote requires a configured Redis client`.
+
 ## Identity and Redis Cluster placement
 
 Invalidation writes a watermark at:
@@ -189,8 +195,13 @@ lifetime.
 
 `futureBufferMs` must be a nonnegative safe integer no greater than
 `31_536_000_000` milliseconds (365 days). The API default is zero, but zero
-provides no stale-publication protection once Redis time advances. Larger
-values are rejected before DialCache calls Redis.
+provides no stale-publication protection once Redis time advances.
+
+Larger values, negative values, fractions, non-finite values, and wrong-type
+values are rejected with a `RangeError` before DialCache records metrics, logs,
+checks whether Redis is configured, or calls the client. An invalid buffer
+therefore takes precedence over the missing-Redis `TypeError` and has no
+invalidation telemetry side effects.
 
 Every production invalidation should pass a named, application-owned nonzero
 value based on measured or conservatively bounded timings. Size it to cover:
@@ -222,6 +233,18 @@ publishing stale values.
 
 A larger buffer does not delay or suppress returning fallback values to
 callers.
+
+## Failure behavior and telemetry
+
+For a valid buffer, DialCache invokes the configured invalidation metric hook
+with `layer="remote"` before it checks the Redis prerequisite.
+
+Missing configuration and Redis write failures then follow the same observable
+failure path: DialCache logs `Error writing DialCache invalidation watermark`,
+invokes the configured error metric hook with `useCase="watermark"`,
+`layer="remote"`, `error="invalidation"`, and `inFallback=false`, then rethrows
+the original error. Logger and metrics callback failures are isolated and
+cannot replace that rejection.
 
 ## In-memory layers remain local
 
