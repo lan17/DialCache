@@ -324,7 +324,7 @@ The limit counts entries rather than estimating JavaScript object memory. Recent
 
 ### Redis-backed TTL cache
 
-The Redis layer supports standalone Redis, Valkey, and Redis Cluster. Register DialCache's native node-redis scripts when creating the client, then pass that client to DialCache:
+The Redis layer supports standalone Redis, Valkey, and Redis Cluster. Register DialCache's bundled node-redis scripts when creating the client, then pass that client to DialCache:
 
 ```ts
 import { createClient } from "redis";
@@ -356,7 +356,7 @@ async function shutdown(): Promise<void> {
 }
 ```
 
-`redis.client` is required when Redis is configured and accepts the semantic `DialCacheRedisClient` interface. `redis.readTimeoutMs` is optional and sets the instance default for remote reads; omit it to use 50 ms. Create and connect the underlying client before constructing `DialCache`. Node-redis users should register the supplied scripts and wrap their client with `createNodeRedisDialCacheClient` as shown above.
+`redis.client` is required when Redis is configured and accepts the semantic `DialCacheRedisClient` interface. `redis.readTimeoutMs` is optional and sets the instance default for remote reads; omit it to use 50 ms. Create and connect the underlying client before constructing `DialCache`. Node-redis users should register the supplied scripts and wrap their client with `createNodeRedisDialCacheClient` as shown above. The two deprecated read-script registrations remain for source compatibility but are not used by the adapter.
 
 Valkey GLIDE users pass an already-created standalone or cluster client and its
 module namespace to the GLIDE adapter:
@@ -386,7 +386,7 @@ function shutdown(): void {
 ```
 
 Pass the same module namespace that created the client. DialCache uses its
-`Script` constructor and `Decoder.Bytes` value without importing a GLIDE runtime
+`Batch` and `Script` constructors plus `Decoder.Bytes` without importing a GLIDE runtime
 itself, so linked workspaces and applications with another installed GLIDE
 version cannot accidentally mix native script handles.
 
@@ -394,9 +394,13 @@ The application owns the complete Redis lifecycle. It creates and connects the u
 
 Awaiting those public promises does not drain detached shadow work. Shadow scheduling and deadline timers are unreferenced and completion is not guaranteed during shutdown; Redis operations, source reads, serializers, and asynchronous telemetry already started by shadow work remain caller-owned and may still be active. Stop new work before closing their dependencies and accept that an in-flight shadow fill may have been dispatched even if its final outcome is lost during teardown. DialCache does not add a shutdown hook or keep the process alive to deliver best-effort outcomes.
 
-The node-redis adapter owns no additional resources, so the application closes the underlying node-redis client after draining work. The GLIDE adapter owns five native `Script` handles but not the wrapped connection. After outstanding operations finish, call its idempotent `dispose()` before closing GLIDE as shown above; disposal while an adapter operation is in flight throws rather than releasing a live script.
+The node-redis adapter owns no additional resources, so the application closes the underlying node-redis client after draining work. The GLIDE adapter owns three native `Script` handles for writes and invalidation, but not the wrapped connection. After outstanding operations finish, call its idempotent `dispose()` before closing GLIDE as shown above; disposal while an adapter operation is in flight throws rather than releasing a live script.
 
-Node-redis computes each script's SHA, uses `EVALSHA`, and retries with `EVAL` after `NOSCRIPT`. Its cluster client routes scripts by their first key and performs that fallback on the selected shard. The GLIDE adapter uses GLIDE's native `Script` lifecycle and byte decoder; GLIDE routes scripts from their declared keys. Tracked reads are deliberately routed to primaries so a lagging replica cannot hide an invalidation watermark.
+Reads use native `GET` for untracked entries and one atomic `MGET` for each tracked value-and-watermark pair. The adapters validate and decode the returned frame in the Node process. Tracked reads are deliberately routed to primaries so a lagging replica cannot hide an invalidation watermark.
+
+Node-redis forces tracked cluster commands to the slot primary. GLIDE uses an explicit primary route in cluster mode; in standalone mode it sends `MGET` through a one-command non-atomic batch because direct read commands follow the client's replica-read preference. Standalone batches use the primary, and `MGET` itself provides the atomic snapshot without consuming caller-owned `WATCH` state.
+
+For mutations, node-redis computes each script's SHA, uses `EVALSHA`, and retries with `EVAL` after `NOSCRIPT`. Its cluster client routes scripts by their first key and performs that fallback on the selected shard. The GLIDE adapter uses GLIDE's native `Script` lifecycle and byte decoder; GLIDE routes mutation scripts from their declared keys.
 
 #### Remote read deadlines and async liveness
 
@@ -406,13 +410,13 @@ When the deadline expires, DialCache aborts the optional `RedisReadContext.signa
 
 Same-key followers share the leader's remaining remote-read budget. The timer covers only the semantic Redis read, not config resolution, serializer load, fallback work, Redis writes, or invalidation. `fallbackTimeoutMs` starts separately when the source fallback begins.
 
-The bundled node-redis adapter passes the signal through per-command options, which can remove queued work where supported. Aborting after dispatch does not unsend a command or prove that Redis stopped executing it. GLIDE's current script API has no per-invocation signal, so its invocation may continue after DialCache has fallen back. Keep client-native connection, retry, queue, and response budgets in place; they bound underlying resource lifetime while DialCache's deadline bounds caller wait time.
+The bundled node-redis adapter passes the signal through per-command options, which can remove queued work where supported. Aborting after dispatch does not unsend a command or prove that Redis stopped executing it. GLIDE's current adapter commands have no per-invocation signal, so a read may continue after DialCache has fallen back. Keep client-native connection, retry, queue, and response budgets in place; they bound underlying resource lifetime while DialCache's deadline bounds caller wait time.
 
 Writes, invalidations, async `cacheConfigProvider` calls, and custom serializer methods still need finite application-owned budgets. Do not put mutations behind a bare `Promise.race`: rejecting the outer promise neither removes queued work nor proves whether a dispatched mutation executed.
 
 #### Serialization
 
-The core Redis boundary is the client-agnostic `DialCacheRedisClient` interface. It exchanges serialized values as `string | Buffer` and does not expose client commands or wire encodings. Distinct untracked/tracked read and write Lua sources, the invalidation source, and wire constants are available from `dialcache/redis-protocol`. Custom adapters can throw the root-exported `DialCacheRedisPayloadError`, `DialCacheRedisPayloadEncodingError`, and `DialCacheRedisProtocolError` classes to distinguish malformed payloads, unsupported encodings, and Lua reply-domain violations in logs. DialCache records bounded `cache_read`, `cache_write`, or `invalidation` metrics by failure site.
+The core Redis boundary is the client-agnostic `DialCacheRedisClient` interface. It exchanges serialized values as `string | Buffer` and does not expose client commands or wire encodings. The write and invalidation Lua sources plus wire constants are available from `dialcache/redis-protocol`; deprecated read-script sources remain exported only for compatibility. Custom adapters can throw the root-exported `DialCacheRedisPayloadError`, `DialCacheRedisPayloadEncodingError`, and `DialCacheRedisProtocolError` classes to distinguish malformed payloads, unsupported encodings, and mutation-script reply-domain violations in logs. DialCache records bounded `cache_read`, `cache_write`, or `invalidation` metrics by failure site.
 
 Redis values use a compact binary frame:
 
@@ -423,7 +427,7 @@ byte 10     payload encoding (0 = UTF-8, 1 = raw binary)
 bytes 11... serialized payload
 ```
 
-Redis's Lua `struct` library packs and unpacks the timestamp. Redis TTL is authoritative, so expiry metadata is not duplicated in the frame. `payload` is produced by the operation's serializer, or by `JsonSerializer` by default. Custom serializers can return either `string` or `Buffer`; strings are stored as UTF-8 and Buffers are stored byte-for-byte without base64 expansion. Adapters restore the same representation before calling `serializer.load`.
+The Redis write scripts use Lua's `struct` library to pack the timestamp; adapters decode it with Node's buffer primitives. Redis TTL is authoritative, so expiry metadata is not duplicated in the frame. `payload` is produced by the operation's serializer, or by `JsonSerializer` by default. Custom serializers can return either `string` or `Buffer`; strings are stored as UTF-8 and Buffers are stored byte-for-byte without base64 expansion. Adapters restore the same representation before calling `serializer.load`.
 
 DialCache uses native `JSON.stringify` and `JSON.parse` by default. There is no runtime validation pass, so the default adds no traversal beyond JSON serialization itself. A top-level `undefined` result is supported with an internal sentinel.
 

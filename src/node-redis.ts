@@ -7,12 +7,19 @@ import {
   WRITE_CACHE_SCRIPT,
   WRITE_TRACKED_CACHE_SCRIPT,
 } from "./internal/redis-scripts.js";
-import { decodeRedisPayload, redisPayloadEncoding } from "./internal/redis-payload.js";
+import {
+  decodeRedisFrame,
+  decodeTrackedRedisFrame,
+  redisPayloadEncoding,
+} from "./internal/redis-payload.js";
 import {
   validateRedisScriptInvalidationReply,
   validateRedisScriptWriteReply,
 } from "./internal/redis-script-reply.js";
-import type { DialCacheRedisClient } from "./redis-client.js";
+import {
+  DialCacheRedisPayloadError,
+  type DialCacheRedisClient,
+} from "./redis-client.js";
 
 type BufferReplyOptions = ReturnType<
   typeof commandOptions<{
@@ -46,7 +53,9 @@ function defineDialCacheScript<Args extends Array<unknown>, Reply>(
 }
 
 export type DialCacheNodeRedisScripts = {
+  /** @deprecated The bundled adapter uses native GET. Retained for registration compatibility. */
   readonly dialcacheRead: NodeRedisScript<[valueKey: string], string | null>;
+  /** @deprecated The bundled adapter uses native MGET. Retained for registration compatibility. */
   readonly dialcacheReadTracked: NodeRedisScript<[valueKey: string, watermarkKey: string], string | null>;
   readonly dialcacheWrite: NodeRedisScript<
     [valueKey: string, cacheTtlMs: number, encoding: number, payload: string | Buffer],
@@ -133,13 +142,7 @@ export const dialcacheRedisScripts: DialCacheNodeRedisScripts = {
   }),
 };
 
-interface NodeRedisScriptClient {
-  dialcacheRead(options: BufferReplyOptions, valueKey: string): Promise<Buffer | null>;
-  dialcacheReadTracked(
-    options: BufferReplyOptions,
-    valueKey: string,
-    watermarkKey: string,
-  ): Promise<Buffer | null>;
+interface NodeRedisWriteClient {
   dialcacheWrite(valueKey: string, cacheTtlMs: number, encoding: number, payload: string | Buffer): Promise<number>;
   dialcacheWriteTracked(
     valueKey: string,
@@ -151,6 +154,70 @@ interface NodeRedisScriptClient {
   dialcacheInvalidate(watermarkKey: string, futureBufferMs: number): Promise<number>;
 }
 
+interface NodeRedisStandaloneClient extends NodeRedisWriteClient {
+  get(options: BufferReplyOptions, valueKey: string): Promise<Buffer | null>;
+  sendCommand(
+    args: Array<string>,
+    options: BufferReplyOptions,
+  ): Promise<unknown>;
+}
+
+interface NodeRedisClusterClient extends NodeRedisWriteClient {
+  /** Public node-redis Cluster topology view, used only to distinguish its sendCommand overload. */
+  readonly masters: ReadonlyArray<unknown>;
+  get(options: BufferReplyOptions, valueKey: string): Promise<Buffer | null>;
+  sendCommand(
+    firstKey: string,
+    isReadonly: false,
+    args: Array<string>,
+    options: BufferReplyOptions,
+  ): Promise<unknown>;
+}
+
+type NodeRedisClient = NodeRedisStandaloneClient | NodeRedisClusterClient;
+
+function isNodeRedisClusterClient(client: NodeRedisClient): client is NodeRedisClusterClient {
+  return "masters" in client;
+}
+
+function validateRedisBulkStringReply(reply: unknown): Buffer | null {
+  if (reply === null || Buffer.isBuffer(reply)) {
+    return reply;
+  }
+  throw new DialCacheRedisPayloadError(
+    "Invalid DialCache Redis read reply; expected a bulk string or null",
+  );
+}
+
+function validateRedisMGetReply(reply: unknown): [Buffer | null, Buffer | null] {
+  if (
+    !Array.isArray(reply)
+    || reply.length !== 2
+    || (reply[0] !== null && !Buffer.isBuffer(reply[0]))
+    || (reply[1] !== null && !Buffer.isBuffer(reply[1]))
+  ) {
+    throw new DialCacheRedisPayloadError(
+      "Invalid DialCache Redis tracked read reply; expected two bulk strings or nulls",
+    );
+  }
+  return [reply[0], reply[1]];
+}
+
+async function readTracked(
+  client: NodeRedisClient,
+  options: BufferReplyOptions,
+  valueKey: string,
+  watermarkKey: string,
+): Promise<[Buffer | null, Buffer | null]> {
+  const args = ["MGET", valueKey, watermarkKey];
+  const raw = isNodeRedisClusterClient(client)
+    // A tracked read must observe the primary's latest invalidation watermark,
+    // even when the caller configured node-redis Cluster with useReplicas.
+    ? await client.sendCommand(valueKey, false, args, options)
+    : await client.sendCommand(args, options);
+  return validateRedisMGetReply(raw);
+}
+
 /**
  * Create a resource-free semantic view over a caller-owned node-redis client.
  * Read signals are passed to node-redis so queued commands can be removed when
@@ -158,16 +225,23 @@ interface NodeRedisScriptClient {
  * server stopped executing it. The caller remains responsible for finite
  * native command budgets, draining work, and closing the client.
  */
-export function createNodeRedisDialCacheClient(client: NodeRedisScriptClient): DialCacheRedisClient {
+export function createNodeRedisDialCacheClient(client: NodeRedisClient): DialCacheRedisClient {
   return {
     async read({ valueKey, watermarkKey }, context) {
       const options: BufferReplyOptions = context === undefined
         ? bufferReplyOptions
         : commandOptions({ returnBuffers: true, signal: context.signal });
-      const raw = watermarkKey === undefined
-        ? await client.dialcacheRead(options, valueKey)
-        : await client.dialcacheReadTracked(options, valueKey, watermarkKey);
-      return raw === null ? null : decodeRedisPayload(raw);
+      if (watermarkKey === undefined) {
+        const raw = validateRedisBulkStringReply(await client.get(options, valueKey));
+        return decodeRedisFrame(raw);
+      }
+      const [rawValue, rawWatermark] = await readTracked(
+        client,
+        options,
+        valueKey,
+        watermarkKey,
+      );
+      return decodeTrackedRedisFrame(rawValue, rawWatermark);
     },
     async write(request) {
       const { valueKey, watermarkKey, cacheTtlMs, value } = request;

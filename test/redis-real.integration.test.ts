@@ -154,7 +154,7 @@ function encodeFrame(payload: string | Buffer, encoding: number, createdAtMs = D
   return Buffer.concat([Buffer.from([version]), timestamp, Buffer.from([encoding]), Buffer.from(payload)]);
 }
 
-describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
+describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
   let container: StartedTestContainer | undefined;
   // This connection controls and inspects server state; cache operations use the selected adapter harness.
   let admin: NodeRedisTestClient | undefined;
@@ -769,7 +769,7 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       });
     });
 
-    it("recovers every Lua script after SCRIPT FLUSH", async () => {
+    it("reloads every mutation script after SCRIPT FLUSH", async () => {
       if (client === undefined || admin === undefined) {
         throw new Error("Redis test clients did not start");
       }
@@ -778,7 +778,6 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
 
       await admin.scriptFlush();
       expect(await scriptClient.write({ valueKey, cacheTtlMs: 60_000, value: "untracked" })).toBe(true);
-      await admin.scriptFlush();
       expect(await scriptClient.read({ valueKey })).toBe("untracked");
 
       const trackedValueKey = "script-recovery:{item:tracked}:value";
@@ -792,7 +791,6 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
           value: "tracked",
         }),
       ).toBe(true);
-      await admin.scriptFlush();
       expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toBe("tracked");
       await admin.scriptFlush();
       await expect(
@@ -801,6 +799,7 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
           futureBufferMs: 0,
         }),
       ).resolves.toBeUndefined();
+      expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toBeNull();
     });
 
     it("treats every invalid read frame and watermark state as a miss", async () => {
@@ -833,6 +832,25 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
 
       await admin.set(watermarkKey, "999.5");
       expect(await scriptClient.read({ valueKey, watermarkKey })).toBe("tracked");
+    });
+
+    it("uses native GET and MGET wrong-type semantics", async () => {
+      if (client === undefined || admin === undefined) {
+        throw new Error("Redis test clients did not start");
+      }
+      const scriptClient = client.adapter;
+      const valueKey = "wrong-type:{item:read}:value";
+      const watermarkKey = "wrong-type:{item:read}:watermark";
+
+      await admin.hSet(valueKey, "field", "value");
+      await admin.set(watermarkKey, "0");
+      await expect(scriptClient.read({ valueKey })).rejects.toThrow(/WRONGTYPE/);
+      await expect(scriptClient.read({ valueKey, watermarkKey })).resolves.toBeNull();
+
+      await admin.del([valueKey, watermarkKey]);
+      await admin.set(valueKey, encodeFrame("cached", 0, 1_000));
+      await admin.hSet(watermarkKey, "field", "value");
+      await expect(scriptClient.read({ valueKey, watermarkKey })).resolves.toBeNull();
     });
 
     it("rejects invalid raw script arguments before mutating Redis", async () => {
@@ -960,7 +978,7 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       expect(await admin.pTTL(watermarkKey)).toBeLessThanOrEqual(60_101);
     });
 
-    it("invalidates tracked entries and recovers after SCRIPT FLUSH", async () => {
+    it("keeps native reads working after SCRIPT FLUSH", async () => {
       if (client === undefined || admin === undefined) {
         throw new Error("Redis test clients did not start");
       }

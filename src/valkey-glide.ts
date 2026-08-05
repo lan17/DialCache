@@ -1,8 +1,10 @@
-import { decodeRedisPayload, redisPayloadEncoding } from "./internal/redis-payload.js";
+import {
+  decodeRedisFrame,
+  decodeTrackedRedisFrame,
+  redisPayloadEncoding,
+} from "./internal/redis-payload.js";
 import {
   INVALIDATE_CACHE_SCRIPT,
-  READ_CACHE_SCRIPT,
-  READ_TRACKED_CACHE_SCRIPT,
   WRITE_CACHE_SCRIPT,
   WRITE_TRACKED_CACHE_SCRIPT,
 } from "./internal/redis-scripts.js";
@@ -14,12 +16,36 @@ import { DialCacheRedisPayloadError, type DialCacheRedisClient } from "./redis-c
 
 type ValkeyGlideString = string | Buffer;
 
+interface ValkeyGlideBatch {
+  mget(keys: ValkeyGlideString[]): ValkeyGlideBatch;
+}
+
+interface ValkeyGlideClusterReadClient<TDecoder> {
+  customCommand(
+    args: ValkeyGlideString[],
+    options: {
+      decoder: TDecoder;
+      route: { type: "primarySlotKey"; key: string };
+    },
+  ): Promise<unknown>;
+  invokeScriptWithRoute(...args: unknown[]): Promise<unknown>;
+}
+
 export interface ValkeyGlideScriptHandle {
   /** Release the native GLIDE script registration. */
   release(): void;
 }
 
 export interface ValkeyGlideScriptingClient<TScript, TDecoder> {
+  get(
+    key: ValkeyGlideString,
+    options: { decoder: TDecoder },
+  ): Promise<unknown>;
+  exec(
+    batch: ValkeyGlideBatch,
+    raiseOnError: boolean,
+    options: { decoder: TDecoder },
+  ): Promise<unknown>;
   invokeScript(
     script: TScript,
     options: {
@@ -31,6 +57,8 @@ export interface ValkeyGlideScriptingClient<TScript, TDecoder> {
 }
 
 export interface ValkeyGlideRuntime<TScript extends ValkeyGlideScriptHandle, TDecoder> {
+  /** The Batch constructor exported by the same GLIDE module instance as the client. */
+  readonly Batch: new (isAtomic: boolean) => ValkeyGlideBatch;
   /** The Script constructor exported by the same GLIDE module instance as the client. */
   readonly Script: new (source: string) => TScript;
   /** The Decoder enum exported by the same GLIDE module instance as the client. */
@@ -40,11 +68,15 @@ export interface ValkeyGlideRuntime<TScript extends ValkeyGlideScriptHandle, TDe
 }
 
 interface DialCacheGlideScripts<TScript> {
-  readonly read: TScript;
-  readonly readTracked: TScript;
   readonly write: TScript;
   readonly writeTracked: TScript;
   readonly invalidate: TScript;
+}
+
+function isValkeyGlideClusterClient<TScript, TDecoder>(
+  client: ValkeyGlideScriptingClient<TScript, TDecoder>,
+): client is ValkeyGlideScriptingClient<TScript, TDecoder> & ValkeyGlideClusterReadClient<TDecoder> {
+  return "invokeScriptWithRoute" in client && typeof client.invokeScriptWithRoute === "function";
 }
 
 export interface ValkeyGlideDialCacheClient extends DialCacheRedisClient {
@@ -54,56 +86,88 @@ export interface ValkeyGlideDialCacheClient extends DialCacheRedisClient {
 
 /**
  * Wrap a caller-owned GLIDE connection. The returned adapter owns only its
- * Script handles and preserves the connection's `requestTimeout`. Pass the
- * same GLIDE module namespace used to create the client so native Script
- * handles are registered with that client's runtime. Callers dispose the
- * handles after draining work, then close GLIDE. A request timeout bounds
- * client waiting but is not server-side command cancellation. GLIDE's current
- * script API has no per-invocation signal, so DialCache's core read deadline
- * may return before this adapter's invocation settles.
+ * three mutation Script handles and preserves the connection's
+ * `requestTimeout`. Pass the same GLIDE module namespace used to create the
+ * client so native Batch and Script objects come from that client's runtime.
+ * Callers dispose the handles after draining work, then close GLIDE. A request
+ * timeout bounds client waiting but is not server-side command cancellation.
+ * GLIDE's current command API has no per-invocation signal, so DialCache's core
+ * read deadline may return before this adapter's invocation settles. Tracked
+ * standalone reads use a one-command primary batch, while tracked cluster
+ * reads route MGET explicitly to the slot primary, so replica lag cannot hide
+ * an invalidation watermark. The standalone batch is deliberately non-atomic:
+ * MGET itself is atomic, and MULTI/EXEC would consume caller-owned WATCH state.
  */
 export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScriptHandle, TDecoder>(
   client: ValkeyGlideScriptingClient<TScript, TDecoder>,
   glide: ValkeyGlideRuntime<TScript, TDecoder>,
 ): ValkeyGlideDialCacheClient {
   const scripts: DialCacheGlideScripts<TScript> = {
-    read: new glide.Script(READ_CACHE_SCRIPT),
-    readTracked: new glide.Script(READ_TRACKED_CACHE_SCRIPT),
     write: new glide.Script(WRITE_CACHE_SCRIPT),
     writeTracked: new glide.Script(WRITE_TRACKED_CACHE_SCRIPT),
     invalidate: new glide.Script(INVALIDATE_CACHE_SCRIPT),
   };
   let disposed = false;
-  let activeInvocations = 0;
+  let activeOperations = 0;
+
+  const run = async <T>(operation: () => Promise<T>): Promise<T> => {
+    if (disposed) {
+      throw new Error("Valkey GLIDE DialCache client is disposed");
+    }
+    activeOperations += 1;
+    try {
+      return await operation();
+    } finally {
+      activeOperations -= 1;
+    }
+  };
 
   const invoke = async (
     script: TScript,
     keys: ValkeyGlideString[],
     args: ValkeyGlideString[] = [],
-  ): Promise<unknown> => {
-    if (disposed) {
-      throw new Error("Valkey GLIDE DialCache client is disposed");
+  ): Promise<unknown> => run(
+    () => client.invokeScript(script, { keys, args, decoder: glide.Decoder.Bytes }),
+  );
+
+  const asRedisFrame = (raw: unknown): Buffer | null => {
+    if (raw === null || Buffer.isBuffer(raw)) {
+      return raw;
     }
-    activeInvocations += 1;
-    try {
-      return await client.invokeScript(script, { keys, args, decoder: glide.Decoder.Bytes });
-    } finally {
-      activeInvocations -= 1;
-    }
+    throw new DialCacheRedisPayloadError("Invalid DialCache Redis payload reply");
   };
 
   return {
     async read({ valueKey, watermarkKey }) {
-      const raw = watermarkKey === undefined
-        ? await invoke(scripts.read, [valueKey])
-        : await invoke(scripts.readTracked, [valueKey, watermarkKey]);
-      if (raw === null) {
-        return null;
+      if (watermarkKey === undefined) {
+        const raw = await run(
+          () => client.get(valueKey, { decoder: glide.Decoder.Bytes }),
+        );
+        return decodeRedisFrame(asRedisFrame(raw));
       }
-      if (!Buffer.isBuffer(raw)) {
+
+      const pair = isValkeyGlideClusterClient(client)
+        ? await run(
+            () => client.customCommand(
+              ["MGET", valueKey, watermarkKey],
+              {
+                decoder: glide.Decoder.Bytes,
+                route: { type: "primarySlotKey", key: valueKey },
+              },
+            ),
+          )
+        : await run(async () => {
+            const batch = new glide.Batch(false).mget([valueKey, watermarkKey]);
+            const raw = await client.exec(batch, true, { decoder: glide.Decoder.Bytes });
+            if (!Array.isArray(raw) || raw.length !== 1) {
+              throw new DialCacheRedisPayloadError("Invalid DialCache Redis payload reply");
+            }
+            return raw[0];
+          });
+      if (!Array.isArray(pair) || pair.length !== 2) {
         throw new DialCacheRedisPayloadError("Invalid DialCache Redis payload reply");
       }
-      return decodeRedisPayload(raw);
+      return decodeTrackedRedisFrame(asRedisFrame(pair[0]), asRedisFrame(pair[1]));
     },
     async write(request) {
       const { valueKey, watermarkKey, cacheTtlMs, value } = request;
@@ -129,7 +193,7 @@ export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScri
       if (disposed) {
         return;
       }
-      if (activeInvocations > 0) {
+      if (activeOperations > 0) {
         throw new Error("Cannot dispose Valkey GLIDE DialCache client while operations are in flight");
       }
       disposed = true;

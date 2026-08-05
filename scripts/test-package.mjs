@@ -482,6 +482,7 @@ void missingObservationType;
 const integrationConsumer = `import * as valkeyGlide from "@valkey/valkey-glide";
 import { DialCache } from "dialcache";
 import StatsD from "hot-shots";
+import { createClient as createRedisClient, createCluster as createRedisCluster } from "redis";
 import {
   DatadogDialCacheMetrics,
   createDatadogDialCacheMetrics,
@@ -499,6 +500,7 @@ import {
   type ValkeyGlideDialCacheClient,
   type ValkeyGlideRuntime,
 } from "dialcache/valkey-glide";
+import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "dialcache/node-redis";
 import { Registry, type OpenMetricsContentType } from "prom-client";
 
 const registry = new Registry();
@@ -511,6 +513,13 @@ openMetricsRegistry.setContentType(Registry.OPENMETRICS_CONTENT_TYPE);
 const openMetricsAdapter = new PrometheusDialCacheMetrics({ registry: openMetricsRegistry, prefix: "open_" });
 const registryIsRequired: {} extends Pick<PrometheusMetricsOptions, "registry"> ? false : true = true;
 const glideRedisClient: ValkeyGlideDialCacheClient | undefined = undefined;
+const standaloneNodeRedisClient = createRedisClient({ scripts: dialcacheRedisScripts });
+const clusterNodeRedisClient = createRedisCluster({
+  rootNodes: [{ url: "redis://127.0.0.1:6379" }],
+  scripts: dialcacheRedisScripts,
+});
+const standaloneNodeRedisAdapter = createNodeRedisDialCacheClient(standaloneNodeRedisClient);
+const clusterNodeRedisAdapter = createNodeRedisDialCacheClient(clusterNodeRedisClient);
 const glideRuntime: ValkeyGlideRuntime<valkeyGlide.Script, valkeyGlide.Decoder> = valkeyGlide;
 declare const standaloneGlideClient: valkeyGlide.GlideClient;
 declare const clusterGlideClient: valkeyGlide.GlideClusterClient;
@@ -540,6 +549,8 @@ void classAdapter;
 void openMetricsAdapter;
 void registryIsRequired;
 void glideRedisClient;
+void standaloneNodeRedisAdapter;
+void clusterNodeRedisAdapter;
 void standaloneGlideAdapter;
 void clusterGlideAdapter;
 void datadogClassAdapter;

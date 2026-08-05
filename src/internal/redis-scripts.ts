@@ -54,8 +54,10 @@ const WRITE_FRAME_LUA = String.raw`local frame = string.char(${REDIS_FRAME_VERSI
   .. ARGV[3]
 redis.call("SET", KEYS[1], frame, "PX", cache_ttl_ms)`;
 
+/** @deprecated Bundled adapters use native GET. Retained for custom-adapter compatibility. */
 export const READ_CACHE_SCRIPT = [READ_FRAME_LUA, RETURN_PAYLOAD_LUA].join("\n\n");
 
+/** @deprecated Bundled adapters use native MGET. Retained for custom-adapter compatibility. */
 export const READ_TRACKED_CACHE_SCRIPT = [
   PARSE_WATERMARK_LUA,
   READ_FRAME_LUA,

@@ -24,8 +24,8 @@ const INVALID_WRITE_REPLIES: readonly unknown[] = [
 const INVALID_INVALIDATION_REPLIES: readonly unknown[] = [0, ...INVALID_WRITE_REPLIES];
 
 interface FakeReplies {
-  readonly read?: Buffer | null;
-  readonly readTracked?: Buffer | null;
+  readonly get?: unknown;
+  readonly mGet?: unknown;
   readonly write?: unknown;
   readonly writeTracked?: unknown;
   readonly invalidate?: unknown;
@@ -33,12 +33,30 @@ interface FakeReplies {
 
 function fakeClient(replies: FakeReplies = {}) {
   return {
-    dialcacheRead: vi.fn(async () => Object.hasOwn(replies, "read") ? replies.read : null),
-    dialcacheReadTracked: vi.fn(async () => Object.hasOwn(replies, "readTracked") ? replies.readTracked : null),
+    get: vi.fn(async () => Object.hasOwn(replies, "get") ? replies.get : null),
+    sendCommand: vi.fn(async () => Object.hasOwn(replies, "mGet") ? replies.mGet : [null, null]),
     dialcacheWrite: vi.fn(async () => Object.hasOwn(replies, "write") ? replies.write : 1),
     dialcacheWriteTracked: vi.fn(async () => Object.hasOwn(replies, "writeTracked") ? replies.writeTracked : 1),
     dialcacheInvalidate: vi.fn(async () => Object.hasOwn(replies, "invalidate") ? replies.invalidate : 1),
   };
+}
+
+function fakeCluster(replies: FakeReplies = {}) {
+  return {
+    ...fakeClient(replies),
+    masters: [],
+  };
+}
+
+function encodeFrame(
+  payload: string | Buffer,
+  { createdAtMs = 1, encoding = Buffer.isBuffer(payload) ? 1 : 0 } = {},
+): Buffer {
+  const header = Buffer.alloc(10);
+  header[0] = 1;
+  header.writeBigUInt64BE(BigInt(createdAtMs), 1);
+  header[9] = encoding;
+  return Buffer.concat([header, Buffer.isBuffer(payload) ? payload : Buffer.from(payload)]);
 }
 
 async function expectProtocolError(operation: Promise<unknown>, message: string): Promise<void> {
@@ -53,10 +71,19 @@ async function expectProtocolError(operation: Promise<unknown>, message: string)
 }
 
 describe("node-redis adapter", () => {
-  it("provides the expected arguments for every bundled script", () => {
+  it("provides the expected arguments for every bundled mutation script", () => {
     const binary = Buffer.from([0, 0xff]);
 
-    expect(dialcacheRedisScripts.dialcacheRead.transformArguments("plain:value")).toEqual(["plain:value"]);
+    expect(Object.keys(dialcacheRedisScripts)).toEqual([
+      "dialcacheRead",
+      "dialcacheReadTracked",
+      "dialcacheWrite",
+      "dialcacheWriteTracked",
+      "dialcacheInvalidate",
+    ]);
+    expect(dialcacheRedisScripts.dialcacheRead.transformArguments("plain:value")).toEqual([
+      "plain:value",
+    ]);
     expect(
       dialcacheRedisScripts.dialcacheReadTracked.transformArguments(
         "tracked:{id}:value",
@@ -85,8 +112,8 @@ describe("node-redis adapter", () => {
 
   it("accepts the exact write and invalidation reply domains", async () => {
     const client = fakeClient({
-      read: Buffer.from([0, ...Buffer.from("plain")]),
-      readTracked: Buffer.from([1, 0, 0xff]),
+      get: encodeFrame("plain"),
+      mGet: [encodeFrame(Buffer.from([0, 0xff]), { createdAtMs: 2 }), Buffer.from("1")],
       write: 1,
       writeTracked: 0,
       invalidate: 1,
@@ -125,15 +152,61 @@ describe("node-redis adapter", () => {
       context,
     );
 
-    expect(client.dialcacheRead).toHaveBeenCalledWith(
+    expect(client.get).toHaveBeenCalledWith(
       expect.objectContaining({ returnBuffers: true, signal: controller.signal }),
       "plain:value",
     );
-    expect(client.dialcacheReadTracked).toHaveBeenCalledWith(
+    expect(client.sendCommand).toHaveBeenCalledWith(
+      ["MGET", "tracked:{id}:value", "tracked:{id}:watermark"],
       expect.objectContaining({ returnBuffers: true, signal: controller.signal }),
-      "tracked:{id}:value",
-      "tracked:{id}:watermark",
     );
+  });
+
+  it("forces tracked Cluster MGET reads to the primary", async () => {
+    const client = fakeCluster({
+      mGet: [encodeFrame("tracked", { createdAtMs: 2 }), Buffer.from("1")],
+    });
+    const adapter = createNodeRedisDialCacheClient(client as never);
+    const controller = new AbortController();
+
+    await expect(adapter.read(
+      { valueKey: "tracked:{id}:value", watermarkKey: "tracked:{id}:watermark" },
+      { timeoutMs: 25, signal: controller.signal },
+    )).resolves.toBe("tracked");
+
+    expect(client.sendCommand).toHaveBeenCalledWith(
+      "tracked:{id}:value",
+      false,
+      ["MGET", "tracked:{id}:value", "tracked:{id}:watermark"],
+      expect.objectContaining({ returnBuffers: true, signal: controller.signal }),
+    );
+  });
+
+  it("rejects malformed native read reply shapes", async () => {
+    await expect(
+      createNodeRedisDialCacheClient(fakeClient({ get: "not-bytes" }) as never)
+        .read({ valueKey: "plain:value" }),
+    ).rejects.toMatchObject({
+      name: "DialCacheRedisPayloadError",
+      message: "Invalid DialCache Redis read reply; expected a bulk string or null",
+    });
+
+    const malformedMGetReplies: readonly unknown[] = [
+      null,
+      [null],
+      [null, null, null],
+      ["not-bytes", null],
+      [null, 0],
+    ];
+    for (const reply of malformedMGetReplies) {
+      await expect(
+        createNodeRedisDialCacheClient(fakeClient({ mGet: reply }) as never)
+          .read({ valueKey: "tracked:{id}:value", watermarkKey: "tracked:{id}:watermark" }),
+      ).rejects.toMatchObject({
+        name: "DialCacheRedisPayloadError",
+        message: "Invalid DialCache Redis tracked read reply; expected two bulk strings or nulls",
+      });
+    }
   });
 
   it("rejects every out-of-domain reply returned by a node-redis client", async () => {
@@ -172,6 +245,8 @@ describe("node-redis adapter", () => {
   });
 
   it("validates replies at the public node-redis script transform boundary", () => {
+    expect(dialcacheRedisScripts.dialcacheRead.transformReply(null)).toBeNull();
+    expect(dialcacheRedisScripts.dialcacheReadTracked.transformReply("payload")).toBe("payload");
     expect(dialcacheRedisScripts.dialcacheWrite.transformReply(0)).toBe(0);
     expect(dialcacheRedisScripts.dialcacheWriteTracked.transformReply(1)).toBe(1);
     expect(dialcacheRedisScripts.dialcacheInvalidate.transformReply(1)).toBe(1);
