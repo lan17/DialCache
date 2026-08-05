@@ -148,18 +148,15 @@ export class RedisCache {
   }
 
   /**
-   * Start a measured tracked Redis read for detached shadow work.
+   * Start a measured Redis read for detached shadow work.
    *
    * The bounded result may reject before the semantic client operation settles,
    * so callers must retain shadow capacity until `settled` fulfills.
    */
-  startTrackedPayloadReadForShadow(
+  startPayloadReadForShadow(
     key: DialCacheKey,
     readTimeoutMs: number,
   ): StartedRedisRead {
-    if (!key.trackForInvalidation) {
-      throw new Error("DialCache shadow Redis reads require tracked keys");
-    }
     return this.startMeasuredPayloadRead(
       key,
       readTimeoutMs,
@@ -176,16 +173,13 @@ export class RedisCache {
     return await this.putWithLayer(key, value, ttlSec, CacheLayer.REMOTE);
   }
 
-  /** Populate a definitive detached tracked miss using the caller's resolved policy snapshot. */
+  /** Populate a clean detached Redis miss using the caller's resolved policy snapshot. */
   async putForShadow<T>(
     key: DialCacheKey,
     value: T,
     config: { readonly ttlSec: number },
     shouldWrite: () => boolean,
   ): Promise<boolean | null> {
-    if (!key.trackForInvalidation) {
-      throw new Error("DialCache shadow Redis writes require tracked keys");
-    }
     return await this.putWithLayer(
       key,
       value,
