@@ -458,19 +458,30 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       expect(await admin.get(commandOptions({ returnBuffers: true }), valueKey)).toBeNull();
     });
 
-    it("shadow-reads tracked Redis without serving or repairing a warm hit when the remote ramp is zero", async () => {
+    it.each([
+      { name: "tracked", tracked: true },
+      { name: "untracked", tracked: false },
+    ])("shadow-reads $name Redis without serving or repairing a warm hit when the remote ramp is zero", async ({
+      name,
+      tracked,
+    }) => {
       if (client === undefined || admin === undefined) {
         throw new Error("Redis test clients did not start");
       }
-      const namespace = "real-dark-shadow";
-      const useCase = "RealDarkShadowPayload";
-      const valueKey = `{${namespace}:item_id:dark}#${useCase}:dialcache-frame-v1`;
+      const namespace = `real-dark-shadow-${name}`;
+      const useCase = `RealDarkShadowPayload${name}`;
+      const rawPrefix = `${namespace}:item_id:dark`;
+      const valueKey = tracked
+        ? `{${rawPrefix}}#${useCase}:dialcache-frame-v1`
+        : `${rawPrefix}#${useCase}:dialcache-frame-v1`;
       const watermarkKey = `{${namespace}:item_id:dark}#watermark`;
       const cachedValue = { id: "dark", version: 1 };
       const sourceValue = { id: "dark", version: 2 };
       const storedFrame = encodeFrame(JSON.stringify(cachedValue), 0);
       await admin.set(valueKey, storedFrame, { PX: 60_000 });
-      await admin.set(watermarkKey, "0", { PX: 60_000 });
+      if (tracked) {
+        await admin.set(watermarkKey, "0", { PX: 60_000 });
+      }
 
       const read = vi.fn(client.adapter.read);
       const write = vi.fn(client.adapter.write);
@@ -504,7 +515,7 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
         keyType: "item_id",
         useCase,
         cacheKey: () => "dark",
-        trackForInvalidation: true,
+        trackForInvalidation: tracked,
         defaultConfig: new DialCacheKeyConfig({
           ttlSec: { [CacheLayer.REMOTE]: 60 },
           ramp: { [CacheLayer.REMOTE]: 0 },
@@ -519,7 +530,10 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       expect(source).toHaveBeenCalledOnce();
       expect(read).toHaveBeenCalledTimes(2);
       expect(read.mock.calls.every(([request]) =>
-        request.valueKey === valueKey && request.watermarkKey === watermarkKey
+        request.valueKey === valueKey
+        && (tracked
+          ? request.watermarkKey === watermarkKey
+          : !Object.hasOwn(request, "watermarkKey"))
       )).toBe(true);
       expect(metrics.shadowValidation).toHaveBeenCalledOnce();
       expect(metrics.shadowValidation).toHaveBeenCalledWith({
@@ -577,13 +591,22 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       expect(await admin.get(commandOptions({ returnBuffers: true }), valueKey)).toEqual(storedFrame);
     });
 
-    it("fills a clean tracked shadow miss asynchronously and serves it after Redis ramps up", async () => {
+    it.each([
+      { name: "tracked", tracked: true },
+      { name: "untracked", tracked: false },
+    ])("fills a clean $name shadow miss asynchronously and serves it after Redis ramps up", async ({
+      name,
+      tracked,
+    }) => {
       if (client === undefined || admin === undefined) {
         throw new Error("Redis test clients did not start");
       }
-      const namespace = "real-dark-shadow-fill";
-      const useCase = "RealDarkShadowFill";
-      const valueKey = `{${namespace}:item_id:cold}#${useCase}:dialcache-frame-v1`;
+      const namespace = `real-dark-shadow-fill-${name}`;
+      const useCase = `RealDarkShadowFill${name}`;
+      const rawPrefix = `${namespace}:item_id:cold`;
+      const valueKey = tracked
+        ? `{${rawPrefix}}#${useCase}:dialcache-frame-v1`
+        : `${rawPrefix}#${useCase}:dialcache-frame-v1`;
       const watermarkKey = `{${namespace}:item_id:cold}#watermark`;
       const sourceValue = { id: "cold", version: 1 };
       const writeStarted = deferred<void>();
@@ -631,7 +654,7 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
         keyType: "item_id",
         useCase,
         cacheKey: () => "cold",
-        trackForInvalidation: true,
+        trackForInvalidation: tracked,
       });
 
       const result = await dialcache.enable(async () => await getPayload());
@@ -646,16 +669,23 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       expect(write).toHaveBeenCalledOnce();
       expect(write).toHaveBeenCalledWith({
         valueKey,
-        watermarkKey,
         cacheTtlMs: 60_000,
         value: JSON.stringify(sourceValue),
+        ...(tracked ? { watermarkKey } : {}),
       });
-      expect(await client.adapter.read({ valueKey, watermarkKey })).toBe(JSON.stringify(sourceValue));
-      expect(await admin.get(watermarkKey)).toBe("0");
+      expect(await client.adapter.read({
+        valueKey,
+        ...(tracked ? { watermarkKey } : {}),
+      })).toBe(JSON.stringify(sourceValue));
       expect(await admin.pTTL(valueKey)).toBeGreaterThan(55_000);
       expect(await admin.pTTL(valueKey)).toBeLessThanOrEqual(60_000);
-      expect(await admin.pTTL(watermarkKey)).toBeGreaterThan(115_000);
-      expect(await admin.pTTL(watermarkKey)).toBeLessThanOrEqual(120_000);
+      if (tracked) {
+        expect(await admin.get(watermarkKey)).toBe("0");
+        expect(await admin.pTTL(watermarkKey)).toBeGreaterThan(115_000);
+        expect(await admin.pTTL(watermarkKey)).toBeLessThanOrEqual(120_000);
+      } else {
+        expect(await admin.exists(watermarkKey)).toBe(0);
+      }
       expect(metrics.shadowValidation).toHaveBeenCalledOnce();
       expect(metrics.shadowValidation).toHaveBeenCalledWith({
         cacheNamespace: namespace,
