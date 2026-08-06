@@ -1,8 +1,7 @@
 import {
   decodeRedisFrame,
-  decodeRedisPayload,
   decodeTrackedRedisFrame,
-} from "../src/internal/redis-payload.js";
+} from "../src/redis-protocol.js";
 import {
   DialCacheRedisPayloadEncodingError,
   DialCacheRedisPayloadError,
@@ -36,6 +35,8 @@ describe("Redis frame decoding", () => {
       throw new Error("Expected a binary Redis payload");
     }
     expect(decoded.buffer).toBe(frame.buffer);
+    expect(decoded.byteOffset).toBe(frame.byteOffset + 10);
+    expect(decoded.byteLength).toBe(frame.byteLength - 10);
   });
 
   it("treats missing, short, and unsupported frames as misses", () => {
@@ -45,10 +46,19 @@ describe("Redis frame decoding", () => {
   });
 
   it("rejects unsupported payload encodings after validating the frame", () => {
-    expect(() => decodeRedisPayload(Buffer.alloc(0))).toThrow(DialCacheRedisPayloadError);
     expect(() => decodeRedisFrame(encodeFrame("cached", 2))).toThrow(
       DialCacheRedisPayloadEncodingError,
     );
+  });
+
+  it("rejects non-bulk-string runtime replies at the shared decoder boundary", () => {
+    const invalidReplies: readonly unknown[] = [undefined, "not-bytes", 0, {}, []];
+
+    for (const reply of invalidReplies) {
+      expect(() => decodeRedisFrame(reply)).toThrow(DialCacheRedisPayloadError);
+      expect(() => decodeTrackedRedisFrame(reply, null)).toThrow(DialCacheRedisPayloadError);
+      expect(() => decodeTrackedRedisFrame(null, reply)).toThrow(DialCacheRedisPayloadError);
+    }
   });
 
   it("validates tracked frames against integer and fractional watermarks", () => {
@@ -87,5 +97,49 @@ describe("Redis frame decoding", () => {
     expect(() => decodeTrackedRedisFrame(malformedPayload, Buffer.from("999"))).toThrow(
       DialCacheRedisPayloadEncodingError,
     );
+  });
+
+  it("preserves payload error identity across separately bundled entry points", () => {
+    class SpecializedPayloadError extends DialCacheRedisPayloadError {}
+    class SpecializedEncodingError extends DialCacheRedisPayloadEncodingError {}
+
+    const payloadError = new DialCacheRedisPayloadError("payload");
+    const encodingError = new DialCacheRedisPayloadEncodingError("encoding");
+    const specializedPayloadError = new SpecializedPayloadError("specialized payload");
+    const specializedEncodingError = new SpecializedEncodingError("specialized encoding");
+    const crossBundlePayloadError = Object.defineProperty(
+      new Error("payload"),
+      Symbol.for("dialcache.DialCacheRedisPayloadError"),
+      { value: true },
+    );
+    const crossBundleEncodingError = Object.defineProperty(
+      new Error("encoding"),
+      Symbol.for("dialcache.DialCacheRedisPayloadEncodingError"),
+      { value: true },
+    );
+    const falselyBrandedPayloadError = Object.defineProperty(
+      new Error("payload"),
+      Symbol.for("dialcache.DialCacheRedisPayloadError"),
+      { value: false },
+    );
+    const falselyBrandedEncodingError = Object.defineProperty(
+      new Error("encoding"),
+      Symbol.for("dialcache.DialCacheRedisPayloadEncodingError"),
+      { value: false },
+    );
+
+    expect(payloadError).toBeInstanceOf(DialCacheRedisPayloadError);
+    expect(payloadError).not.toBeInstanceOf(SpecializedPayloadError);
+    expect(specializedPayloadError).toBeInstanceOf(SpecializedPayloadError);
+    expect(specializedPayloadError).toBeInstanceOf(DialCacheRedisPayloadError);
+    expect(crossBundlePayloadError).toBeInstanceOf(DialCacheRedisPayloadError);
+    expect(falselyBrandedPayloadError).not.toBeInstanceOf(DialCacheRedisPayloadError);
+
+    expect(encodingError).toBeInstanceOf(DialCacheRedisPayloadEncodingError);
+    expect(encodingError).not.toBeInstanceOf(SpecializedEncodingError);
+    expect(specializedEncodingError).toBeInstanceOf(SpecializedEncodingError);
+    expect(specializedEncodingError).toBeInstanceOf(DialCacheRedisPayloadEncodingError);
+    expect(crossBundleEncodingError).toBeInstanceOf(DialCacheRedisPayloadEncodingError);
+    expect(falselyBrandedEncodingError).not.toBeInstanceOf(DialCacheRedisPayloadEncodingError);
   });
 });

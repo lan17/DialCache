@@ -6,3 +6,7 @@ export {
   WRITE_CACHE_SCRIPT,
   WRITE_TRACKED_CACHE_SCRIPT,
 } from "./internal/redis-scripts.js";
+export {
+  decodeRedisFrame,
+  decodeTrackedRedisFrame,
+} from "./internal/redis-payload.js";

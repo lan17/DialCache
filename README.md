@@ -32,7 +32,7 @@ pnpm add dialcache
 # Choose a Redis client when using the remote layer:
 pnpm add redis@~4.7.1
 # or
-pnpm add @valkey/valkey-glide
+pnpm add @valkey/valkey-glide@^2.0.0
 # Add a metrics client only when using its adapter:
 pnpm add prom-client@^15.1.3
 # or
@@ -356,7 +356,7 @@ async function shutdown(): Promise<void> {
 }
 ```
 
-`redis.client` is required when Redis is configured and accepts the semantic `DialCacheRedisClient` interface. `redis.readTimeoutMs` is optional and sets the instance default for remote reads; omit it to use 50 ms. Create and connect the underlying client before constructing `DialCache`. Node-redis users should register the supplied mutation scripts and wrap their client with `createNodeRedisDialCacheClient` as shown above; the adapter performs reads with native commands.
+`redis.client` is required when Redis is configured and accepts the semantic `DialCacheRedisClient` interface. `redis.readTimeoutMs` is optional and sets the instance default for remote reads; omit it to use 50 ms. Create and connect the underlying client before constructing `DialCache`. Node-redis users should register the supplied mutation scripts and wrap their client with `createNodeRedisDialCacheClient` as shown above; the adapter performs reads with native commands. The helper requires node-redis's promise API and does not support `legacyMode`, whose callback surface and `.v4` view do not expose the complete native-command-plus-custom-script contract together.
 
 Valkey GLIDE users pass an already-created standalone or cluster client and its
 module namespace to the GLIDE adapter:
@@ -385,10 +385,14 @@ function shutdown(): void {
 }
 ```
 
-Pass the same module namespace that created the client. DialCache uses its
-`Batch` and `Script` constructors plus `Decoder.Bytes` without importing a GLIDE runtime
-itself, so linked workspaces and applications with another installed GLIDE
-version cannot accidentally mix native script handles.
+Pass the same GLIDE 2.x module namespace that created the client. The adapter
+uses that namespace's `GlideClient` and `GlideClusterClient` identities,
+`Batch` and `Script` constructors, and `Decoder.Bytes` without importing a
+GLIDE runtime itself. The helper accepts a direct official client instance and
+fails during construction when the client came from another module instance or
+is hidden behind a forwarding wrapper, because it cannot safely infer that
+wrapper's topology. Custom wrappers can implement `DialCacheRedisClient`
+directly.
 
 The application owns the complete Redis lifecycle. It creates and connects the underlying client and passes the semantic adapter to DialCache. During shutdown, stop starting DialCache-backed work and await every promise returned by a cached function, `getOrLoad()`, or `invalidateRemote()`, including calls still running fallbacks that may later write Redis. A read that crossed DialCache's wait deadline may still be active inside the client, so use client-native telemetry and shutdown controls to drain or terminate that work before disposing adapter-owned resources and closing the connection. DialCache only borrows `redis.client`; it has no close or drain method and never disposes or closes caller resources.
 
@@ -400,9 +404,11 @@ Reads use native `GET` for untracked entries and one atomic `MGET` for each trac
 
 Native commands retain Redis's wrong-type behavior. An untracked `GET` surfaces `WRONGTYPE`; tracked `MGET` represents a wrong-type member as a missing value. A wrong-type tracked value is therefore a clean miss and may be replaced with a valid DialCache frame after the fallback succeeds, while a wrong-type watermark prevents the tracked write from succeeding.
 
-Node-redis forces tracked cluster commands to the slot primary. GLIDE uses an explicit primary route in cluster mode; in standalone mode it sends `MGET` through a one-command non-atomic batch because direct read commands follow the client's replica-read preference. Standalone batches use the primary, and `MGET` itself provides the atomic snapshot without consuming caller-owned `WATCH` state.
+Node-redis forces tracked cluster commands to the slot primary. GLIDE uses an explicit primary route in cluster mode; in standalone mode it sends `MGET` through a one-command non-atomic batch because direct read commands follow the client's replica-read preference. Standalone batches use the primary, and `MGET` itself provides the atomic snapshot without consuming caller-owned `WATCH` state. The GLIDE helper distinguishes those modes from the direct client's runtime identity and rejects ambiguous clients instead of silently choosing a route.
 
 For mutations, node-redis computes each script's SHA, uses `EVALSHA`, and retries with `EVAL` after `NOSCRIPT`. Its cluster client routes scripts by their first key and performs that fallback on the selected shard. The GLIDE adapter uses GLIDE's native `Script` lifecycle and byte decoder; GLIDE routes mutation scripts from their declared keys.
+
+A tracked write rejected by an active future watermark uses `UNLINK` to remove the stale value without synchronously freeing it on Redis's command path. The mutation protocol therefore requires a server that implements `UNLINK` (Redis 4.0 or later, or a compatible Valkey release). Command-restricted Redis ACLs must also allow scripts to invoke `UNLINK`; otherwise that fenced write fails open as a `cache_write` error and the stale value remains until a later successful cleanup or expiry. DialCache's integration matrix covers Redis 6.2 and Valkey 8.
 
 #### Remote read deadlines and async liveness
 
@@ -418,7 +424,7 @@ Writes, invalidations, async `cacheConfigProvider` calls, and custom serializer 
 
 #### Serialization
 
-The core Redis boundary is the client-agnostic `DialCacheRedisClient` interface. It exchanges serialized values as `string | Buffer` and does not expose client commands or wire encodings. The write and invalidation Lua sources plus wire constants are available from `dialcache/redis-protocol`. Custom adapters can throw the root-exported `DialCacheRedisPayloadError`, `DialCacheRedisPayloadEncodingError`, and `DialCacheRedisProtocolError` classes to distinguish malformed payloads, unsupported encodings, and mutation-script reply-domain violations in logs. DialCache records bounded `cache_read`, `cache_write`, or `invalidation` metrics by failure site.
+The core Redis boundary is the client-agnostic `DialCacheRedisClient` interface. It exchanges serialized values as `string | Buffer` and does not expose client commands or wire encodings. The shared `decodeRedisFrame` and `decodeTrackedRedisFrame` helpers, write and invalidation Lua sources, and wire constants are available from `dialcache/redis-protocol`, so custom adapters can reuse the bundled adapters' exact miss and watermark-fencing rules. Custom adapters can throw the root-exported `DialCacheRedisPayloadError`, `DialCacheRedisPayloadEncodingError`, and `DialCacheRedisProtocolError` classes to distinguish malformed replies, unsupported encodings, and mutation-script reply-domain violations in logs. DialCache records bounded `cache_read`, `cache_write`, or `invalidation` metrics by failure site.
 
 Redis values use a compact binary frame:
 
@@ -621,7 +627,7 @@ Invalidation writes a Redis watermark at `{encodedNamespace:encodedKeyType:encod
 
 The internal `:dialcache-frame-v1` suffix identifies values written with DialCache's binary protocol. Watermarks are stored as decimal timestamps.
 
-A cached Redis value whose Redis-created timestamp is older than or equal to the watermark is treated as stale and refreshed through fallback. `invalidateRemote(keyType, id, futureBufferMs)` sets the watermark to the greater of its existing value and Redis's current time plus the buffer. While that future window is active, an invocation that reaches the tracked Redis read treats the covered value as a miss. If its fallback then reaches the tracked Redis write, Redis rejects the write and DialCache also suppresses the corresponding process-local population; the fallback value still returns to its caller. Request-local memoization remains unconditional. A ramped-out invocation without shadow work does not consult the watermark; a selected shadow path for that tracked key does consult it for `C0`, `C1` when needed, and any clean-miss fill, although caller-path request-local/process-local publication remains independent.
+A cached Redis value whose Redis-created timestamp is older than or equal to the watermark is treated as stale and refreshed through fallback. `invalidateRemote(keyType, id, futureBufferMs)` sets the watermark to the greater of its existing value and Redis's current time plus the buffer. While that future window is active, an invocation that reaches the tracked Redis read treats the covered value as a miss. Native `MGET` must transfer an existing stale frame before the Node decoder can reject it, so completed reads can repeatedly pay the full stale-payload transfer during a nonzero buffer window. If a successful fallback then reaches the tracked Redis write while the watermark still fences it, Redis rejects the write, atomically unlinks that logically stale value key, and DialCache suppresses the corresponding process-local population; later reads of that entry avoid retransferring its payload. The fallback value still returns to its caller. A read failure or timeout never reaches that write-side cleanup, so a large stale value can continue to consume network bandwidth and trigger `cache_read_timeout` until another completed read cleans it up or its TTL expires. Request-local memoization remains unconditional. A ramped-out invocation without shadow work does not consult the watermark; a selected shadow path for that tracked key does consult it for `C0`, `C1` when needed, and any clean-miss fill, although caller-path request-local/process-local publication remains independent.
 
 The bundled timestamp protocol assumes that system clocks are synchronized across every Redis node eligible for primary promotion. Redis does not guarantee that `TIME` is monotonic across nodes, and DialCache does not detect or compensate for cross-node clock skew. If this deployment assumption is violated, failover can temporarily suppress tracked cache fills or allow a pre-invalidation value to remain readable until it expires or a later invalidation advances the watermark past its timestamp.
 
@@ -631,7 +637,7 @@ Tracked writes create a baseline watermark and extend its TTL to at least the va
 
 `futureBufferMs` must be a nonnegative safe integer no greater than 31,536,000,000 (a fixed 365-day duration). The default is zero, but zero provides no stale-publication protection once Redis time advances. Every production invalidation should pass a named, application-owned nonzero value based on that application's measured or conservatively bounded timings; there is no universally safe library value.
 
-Size the buffer to cover the maximum expected negative clock skew between promotion-eligible Redis nodes plus the complete interval in which stale data could still reach the Redis write: source visibility or replication lag, the full remaining tail of any fallback that may already have observed the pre-mutation value, `serializer.dump`, Redis client queue and network latency, Lua script execution, the write itself, and a safety margin. Invalidate only after the source mutation commits. Underestimating this interval can allow a delayed stale fallback to repopulate Redis after the watermark window ends. Overestimating it lengthens the tracked Redis miss/write-suppression window described above, increasing fallback load without publishing stale values. A larger buffer does not delay or suppress returning fallback values to callers.
+Size the buffer to cover the maximum expected negative clock skew between promotion-eligible Redis nodes plus the complete interval in which stale data could still reach the Redis write: source visibility or replication lag, the full remaining tail of any fallback that may already have observed the pre-mutation value, `serializer.dump`, Redis client queue and network latency, Lua script execution, the write itself, and a safety margin. Invalidate only after the source mutation commits. Underestimating this interval can allow a delayed stale fallback to repopulate Redis after the watermark window ends. Overestimating it lengthens the tracked Redis miss/write-suppression window described above, increasing fallback load and, until write-side cleanup succeeds, stale-payload transfer and read-timeout risk without publishing stale values. A larger buffer does not delay or suppress returning fallback values to callers.
 
 This is a timing contract rather than a cancellation or acquisition fence: the buffer prevents stale fallback results from passing that tracked Redis write only while the configured window remains active, and it does not force a fallback to read from an authoritative source.
 

@@ -12,6 +12,15 @@ import {
 const REDIS_FRAME_HEADER_BYTES = 9;
 const REDIS_FRAME_MIN_BYTES = REDIS_FRAME_HEADER_BYTES + 1;
 
+function validateRedisBulkStringReply(raw: unknown): Buffer | null {
+  if (raw === null || Buffer.isBuffer(raw)) {
+    return raw;
+  }
+  throw new DialCacheRedisPayloadError(
+    "Invalid DialCache Redis read reply; expected a bulk string or null",
+  );
+}
+
 function isSupportedRedisFrame(raw: Buffer | null): raw is Buffer {
   return raw !== null
     && raw.length >= REDIS_FRAME_MIN_BYTES
@@ -35,11 +44,7 @@ export function redisPayloadEncoding(value: RedisCachePayload): number {
   return Buffer.isBuffer(value) ? REDIS_ENCODING_BINARY : REDIS_ENCODING_UTF8;
 }
 
-export function decodeRedisPayload(raw: Buffer): RedisCachePayload {
-  if (raw.length === 0) {
-    throw new DialCacheRedisPayloadError("Invalid DialCache Redis payload");
-  }
-
+function decodeRedisPayload(raw: Buffer): RedisCachePayload {
   const encoding = raw[0];
   const payload = raw.subarray(1);
   if (encoding === REDIS_ENCODING_UTF8) {
@@ -51,25 +56,39 @@ export function decodeRedisPayload(raw: Buffer): RedisCachePayload {
   throw new DialCacheRedisPayloadEncodingError("Invalid DialCache Redis payload encoding");
 }
 
-export function decodeRedisFrame(raw: Buffer | null): RedisCachePayload | null {
-  return isSupportedRedisFrame(raw)
-    ? decodeRedisPayload(raw.subarray(REDIS_FRAME_HEADER_BYTES))
+/**
+ * Decode an untracked DialCache frame returned as a Redis bulk string.
+ * Missing, short, and unsupported-version frames are cache misses. Invalid
+ * runtime reply types and unsupported payload encodings throw typed errors.
+ */
+export function decodeRedisFrame(raw: unknown): RedisCachePayload | null {
+  const frame = validateRedisBulkStringReply(raw);
+  return isSupportedRedisFrame(frame)
+    ? decodeRedisPayload(frame.subarray(REDIS_FRAME_HEADER_BYTES))
     : null;
 }
 
+/**
+ * Decode a tracked DialCache frame against a watermark from the same atomic,
+ * authoritative snapshot. Missing or malformed state and frames created at or
+ * before the watermark are cache misses. Invalid runtime reply types and
+ * unsupported payload encodings throw typed errors.
+ */
 export function decodeTrackedRedisFrame(
-  raw: Buffer | null,
-  rawWatermark: Buffer | null,
+  raw: unknown,
+  rawWatermark: unknown,
 ): RedisCachePayload | null {
-  if (!isSupportedRedisFrame(raw)) {
+  const frame = validateRedisBulkStringReply(raw);
+  const watermarkFrame = validateRedisBulkStringReply(rawWatermark);
+  if (!isSupportedRedisFrame(frame)) {
     return null;
   }
-  const watermark = parseRedisWatermark(rawWatermark);
+  const watermark = parseRedisWatermark(watermarkFrame);
   if (watermark === null) {
     return null;
   }
-  const createdAtMs = Number(raw.readBigUInt64BE(1));
+  const createdAtMs = Number(frame.readBigUInt64BE(1));
   return createdAtMs <= watermark
     ? null
-    : decodeRedisPayload(raw.subarray(REDIS_FRAME_HEADER_BYTES));
+    : decodeRedisPayload(frame.subarray(REDIS_FRAME_HEADER_BYTES));
 }

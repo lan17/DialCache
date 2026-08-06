@@ -28,7 +28,6 @@ interface ValkeyGlideClusterReadClient<TDecoder> {
       route: { type: "primarySlotKey"; key: string };
     },
   ): Promise<unknown>;
-  invokeScriptWithRoute(...args: unknown[]): Promise<unknown>;
 }
 
 export interface ValkeyGlideScriptHandle {
@@ -56,9 +55,17 @@ export interface ValkeyGlideScriptingClient<TScript, TDecoder> {
   ): Promise<unknown>;
 }
 
+interface ValkeyGlideClientIdentity {
+  readonly [Symbol.hasInstance]: (value: unknown) => boolean;
+}
+
 export interface ValkeyGlideRuntime<TScript extends ValkeyGlideScriptHandle, TDecoder> {
   /** The Batch constructor exported by the same GLIDE module instance as the client. */
   readonly Batch: new (isAtomic: boolean) => ValkeyGlideBatch;
+  /** The standalone client class exported by the same GLIDE module instance as the client. */
+  readonly GlideClient: ValkeyGlideClientIdentity;
+  /** The cluster client class exported by the same GLIDE module instance as the client. */
+  readonly GlideClusterClient: ValkeyGlideClientIdentity;
   /** The Script constructor exported by the same GLIDE module instance as the client. */
   readonly Script: new (source: string) => TScript;
   /** The Decoder enum exported by the same GLIDE module instance as the client. */
@@ -73,13 +80,43 @@ interface DialCacheGlideScripts<TScript> {
   readonly invalidate: TScript;
 }
 
-function isValkeyGlideClusterClient<TScript, TDecoder>(
+function matchesValkeyGlideIdentity(
+  identity: unknown,
+  name: "GlideClient" | "GlideClusterClient",
+  client: unknown,
+): boolean {
+  if (
+    identity === null
+    || (typeof identity !== "object" && typeof identity !== "function")
+    || typeof (identity as ValkeyGlideClientIdentity)[Symbol.hasInstance] !== "function"
+  ) {
+    throw new Error(`Invalid Valkey GLIDE runtime: ${name} must support Symbol.hasInstance`);
+  }
+  return (identity as ValkeyGlideClientIdentity)[Symbol.hasInstance](client);
+}
+
+function classifyValkeyGlideClient<TScript, TDecoder>(
   client: ValkeyGlideScriptingClient<TScript, TDecoder>,
-): client is ValkeyGlideScriptingClient<TScript, TDecoder> & ValkeyGlideClusterReadClient<TDecoder> {
-  return "customCommand" in client
-    && typeof client.customCommand === "function"
-    && "invokeScriptWithRoute" in client
-    && typeof client.invokeScriptWithRoute === "function";
+  glide: ValkeyGlideRuntime<ValkeyGlideScriptHandle, TDecoder>,
+): "standalone" | "cluster" {
+  const isStandalone = matchesValkeyGlideIdentity(glide.GlideClient, "GlideClient", client);
+  const isCluster = matchesValkeyGlideIdentity(
+    glide.GlideClusterClient,
+    "GlideClusterClient",
+    client,
+  );
+  if (isStandalone && isCluster) {
+    throw new Error(
+      "Invalid Valkey GLIDE runtime: client matches both GlideClient and GlideClusterClient",
+    );
+  }
+  if (!isStandalone && !isCluster) {
+    throw new Error(
+      "Valkey GLIDE DialCache requires a direct GlideClient or GlideClusterClient instance "
+      + "from the supplied runtime; wrappers should implement DialCacheRedisClient directly",
+    );
+  }
+  return isCluster ? "cluster" : "standalone";
 }
 
 export interface ValkeyGlideDialCacheClient extends DialCacheRedisClient {
@@ -92,6 +129,8 @@ export interface ValkeyGlideDialCacheClient extends DialCacheRedisClient {
  * three mutation Script handles and preserves the connection's
  * `requestTimeout`. Pass the same GLIDE module namespace used to create the
  * client so native Batch and Script objects come from that client's runtime.
+ * Only direct GlideClient and GlideClusterClient instances are accepted;
+ * wrappers should implement DialCacheRedisClient directly.
  * Callers dispose the handles after draining work, then close GLIDE. A request
  * timeout bounds client waiting but is not server-side command cancellation.
  * GLIDE's current command API has no per-invocation signal, so DialCache's core
@@ -105,6 +144,16 @@ export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScri
   client: ValkeyGlideScriptingClient<TScript, TDecoder>,
   glide: ValkeyGlideRuntime<TScript, TDecoder>,
 ): ValkeyGlideDialCacheClient {
+  if (typeof glide.Batch !== "function") {
+    throw new Error(
+      "Valkey GLIDE DialCache requires @valkey/valkey-glide >=2.0.0 with a Batch constructor",
+    );
+  }
+  const clientKind = classifyValkeyGlideClient(client, glide);
+  const clusterClient = clientKind === "cluster"
+    ? client as ValkeyGlideScriptingClient<TScript, TDecoder>
+      & ValkeyGlideClusterReadClient<TDecoder>
+    : undefined;
   const scripts: DialCacheGlideScripts<TScript> = {
     write: new glide.Script(WRITE_CACHE_SCRIPT),
     writeTracked: new glide.Script(WRITE_TRACKED_CACHE_SCRIPT),
@@ -133,25 +182,18 @@ export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScri
     () => client.invokeScript(script, { keys, args, decoder: glide.Decoder.Bytes }),
   );
 
-  const asRedisFrame = (raw: unknown): Buffer | null => {
-    if (raw === null || Buffer.isBuffer(raw)) {
-      return raw;
-    }
-    throw new DialCacheRedisPayloadError("Invalid DialCache Redis payload reply");
-  };
-
   return {
     async read({ valueKey, watermarkKey }) {
       if (watermarkKey === undefined) {
         const raw = await run(
           () => client.get(valueKey, { decoder: glide.Decoder.Bytes }),
         );
-        return decodeRedisFrame(asRedisFrame(raw));
+        return decodeRedisFrame(raw);
       }
 
-      const pair = isValkeyGlideClusterClient(client)
+      const pair = clusterClient !== undefined
         ? await run(
-            () => client.customCommand(
+            () => clusterClient.customCommand(
               ["MGET", valueKey, watermarkKey],
               {
                 decoder: glide.Decoder.Bytes,
@@ -170,7 +212,7 @@ export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScri
       if (!Array.isArray(pair) || pair.length !== 2) {
         throw new DialCacheRedisPayloadError("Invalid DialCache Redis payload reply");
       }
-      return decodeTrackedRedisFrame(asRedisFrame(pair[0]), asRedisFrame(pair[1]));
+      return decodeTrackedRedisFrame(pair[0], pair[1]);
     },
     async write(request) {
       const { valueKey, watermarkKey, cacheTtlMs, value } = request;

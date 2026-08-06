@@ -25,6 +25,8 @@ const INVALID_INVALIDATION_REPLIES: readonly unknown[] = [0, ...INVALID_WRITE_RE
 const decoderBytes = Symbol("bytes");
 const scriptInstances: MockScript[] = [];
 const batchInstances: MockBatch[] = [];
+const standaloneClients = new WeakSet<object>();
+const clusterClients = new WeakSet<object>();
 
 class MockScript {
   readonly release = vi.fn();
@@ -46,9 +48,22 @@ class MockBatch {
   }
 }
 
+function mockClientIdentity(instances: WeakSet<object>) {
+  return {
+    [Symbol.hasInstance](value: unknown): boolean {
+      if ((typeof value !== "object" || value === null) && typeof value !== "function") {
+        return false;
+      }
+      return instances.has(value);
+    },
+  };
+}
+
 const mockGlide = {
   Batch: MockBatch,
   Decoder: { Bytes: decoderBytes },
+  GlideClient: mockClientIdentity(standaloneClients),
+  GlideClusterClient: mockClientIdentity(clusterClients),
   Script: MockScript,
 };
 
@@ -73,12 +88,14 @@ function createFakeClient(replies: unknown[]) {
 }
 
 function fakeClient(...replies: unknown[]) {
-  return createFakeClient(replies).client;
+  const client = createFakeClient(replies).client;
+  standaloneClients.add(client);
+  return client;
 }
 
 function fakeClusterClient(...replies: unknown[]) {
   const { client, nextReply } = createFakeClient(replies);
-  return {
+  const clusterClient = {
     ...client,
     customCommand: vi.fn(async (
       _args: Array<string | Buffer>,
@@ -87,8 +104,9 @@ function fakeClusterClient(...replies: unknown[]) {
         route: { type: "primarySlotKey"; key: string };
       },
     ) => nextReply()),
-    invokeScriptWithRoute: vi.fn(async () => undefined),
   };
+  clusterClients.add(clusterClient);
+  return clusterClient;
 }
 
 function redisFrame(
@@ -185,23 +203,65 @@ describe("Valkey GLIDE adapter", () => {
     expect(batchInstances).toHaveLength(0);
   });
 
-  it("requires the complete cluster command capability before using cluster routing", async () => {
-    const client = {
-      ...fakeClient([[redisFrame("tracked-standalone"), Buffer.from("0")]]),
-      invokeScriptWithRoute: vi.fn(async () => undefined),
+  it("rejects forwarding wrappers instead of silently treating them as standalone", () => {
+    const directClient = fakeClient();
+    const forwardingWrapper = {
+      exec: directClient.exec,
+      get: directClient.get,
+      invokeScript: directClient.invokeScript,
     };
-    const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
 
-    await expect(
-      adapter.read({
-        valueKey: "standalone:{id}:value",
-        watermarkKey: "standalone:{id}:watermark",
-      }),
-    ).resolves.toBe("tracked-standalone");
+    expect(
+      () => createValkeyGlideDialCacheClient(forwardingWrapper, mockGlide),
+    ).toThrow(
+      "Valkey GLIDE DialCache requires a direct GlideClient or GlideClusterClient instance "
+      + "from the supplied runtime; wrappers should implement DialCacheRedisClient directly",
+    );
+    expect(scriptInstances).toHaveLength(0);
+  });
 
-    expect(client.exec).toHaveBeenCalledOnce();
-    expect(client.invokeScriptWithRoute).not.toHaveBeenCalled();
-    expect(batchInstances).toHaveLength(1);
+  it("rejects a direct client from a different GLIDE module instance", () => {
+    const client = fakeClient();
+    const otherGlide = {
+      ...mockGlide,
+      GlideClient: mockClientIdentity(new WeakSet<object>()),
+      GlideClusterClient: mockClientIdentity(new WeakSet<object>()),
+    };
+
+    expect(
+      () => createValkeyGlideDialCacheClient(client, otherGlide),
+    ).toThrow(
+      "Valkey GLIDE DialCache requires a direct GlideClient or GlideClusterClient instance "
+      + "from the supplied runtime; wrappers should implement DialCacheRedisClient directly",
+    );
+    expect(scriptInstances).toHaveLength(0);
+  });
+
+  it("rejects an ambiguous client identity before allocating scripts", () => {
+    const client = fakeClient();
+    clusterClients.add(client);
+
+    expect(
+      () => createValkeyGlideDialCacheClient(client, mockGlide),
+    ).toThrow(
+      "Invalid Valkey GLIDE runtime: client matches both GlideClient and GlideClusterClient",
+    );
+    expect(scriptInstances).toHaveLength(0);
+  });
+
+  it("requires GLIDE 2.x Batch support before allocating scripts", () => {
+    const client = fakeClient();
+    const glideWithoutBatch = {
+      ...mockGlide,
+      Batch: undefined,
+    } as unknown as typeof mockGlide;
+
+    expect(
+      () => createValkeyGlideDialCacheClient(client, glideWithoutBatch),
+    ).toThrow(
+      "Valkey GLIDE DialCache requires @valkey/valkey-glide >=2.0.0 with a Batch constructor",
+    );
+    expect(scriptInstances).toHaveLength(0);
   });
 
   it("preserves GLIDE invocation options when given a core read context", async () => {

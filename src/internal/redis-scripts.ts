@@ -66,6 +66,9 @@ if raw_watermark then
 end
 
 if watermark >= now_ms then
+  -- A fenced fallback write can remove the stale frame that led to it. Reads that
+  -- fail before reaching this script cannot benefit from this partial mitigation.
+  redis.call("UNLINK", KEYS[1])
   return 0
 end`,
   WRITE_FRAME_LUA,

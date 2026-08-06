@@ -49,8 +49,11 @@ const rootConsumer = `import {
 // @ts-expect-error The unused MissingKeyConfigError class was removed instead of deprecated.
 import { MissingKeyConfigError } from "dialcache";
 import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "dialcache/node-redis";
+import { decodeRedisFrame, decodeTrackedRedisFrame } from "dialcache/redis-protocol";
 // @ts-expect-error Read Lua sources were removed from the mutation-only Redis protocol.
-import { READ_CACHE_SCRIPT, READ_TRACKED_CACHE_SCRIPT } from "dialcache/redis-protocol";
+import { READ_CACHE_SCRIPT } from "dialcache/redis-protocol";
+// @ts-expect-error Tracked read Lua was removed from the mutation-only Redis protocol.
+import { READ_TRACKED_CACHE_SCRIPT } from "dialcache/redis-protocol";
 import {
   DatadogDialCacheMetrics,
   createDatadogDialCacheMetrics,
@@ -138,6 +141,14 @@ const datadogClassAdapter = new DatadogDialCacheMetrics(datadogOptions);
 const missingObservationType: DatadogMetricsOptions = { client: dogStatsDClient };
 const cache = new DialCache({ namespace: "consumer-cache", metrics });
 const redisProtocolError = new DialCacheRedisProtocolError("Invalid DialCache Redis write reply");
+const emptyRedisFrame = Buffer.alloc(10);
+emptyRedisFrame[0] = 1;
+emptyRedisFrame.writeBigUInt64BE(1n, 1);
+const decodedEmptyRedisPayload: string | Buffer | null = decodeRedisFrame(emptyRedisFrame);
+const decodedStaleRedisPayload: string | Buffer | null = decodeTrackedRedisFrame(
+  emptyRedisFrame,
+  Buffer.from("1"),
+);
 const fallbackTimeoutError = new FallbackTimeoutError("Load", 1_000);
 const redisReadTimeoutError = new RedisReadTimeoutError("Load", 100);
 const coalescingState: CoalescingState = cache.getCoalescingState();
@@ -435,6 +446,8 @@ void disabledOverlay;
 void metricErrorKinds;
 void unboundedErrorKind;
 void createNodeRedisDialCacheClient;
+void decodedEmptyRedisPayload;
+void decodedStaleRedisPayload;
 // @ts-expect-error Native reads removed the legacy node-redis registration.
 void dialcacheRedisScripts.dialcacheRead;
 // @ts-expect-error Native tracked reads removed the legacy node-redis registration.
@@ -663,6 +676,33 @@ if (
   || "READ_TRACKED_CACHE_SCRIPT" in redisProtocol
 ) {
   throw new Error("The removed read scripts must not be exported by the packed ESM Redis protocol entry");
+}
+const esmEmptyFrame = Buffer.alloc(10);
+esmEmptyFrame[0] = 1;
+esmEmptyFrame.writeBigUInt64BE(1n, 1);
+if (redisProtocol.decodeRedisFrame(esmEmptyFrame) !== "") {
+  throw new Error("The packed ESM Redis protocol decoder did not preserve an empty UTF-8 payload");
+}
+if (redisProtocol.decodeTrackedRedisFrame(esmEmptyFrame, Buffer.from("1")) !== null) {
+  throw new Error("The packed ESM Redis protocol decoder did not reject a stale tracked frame");
+}
+try {
+  redisProtocol.decodeRedisFrame("not binary");
+  throw new Error("Expected the packed ESM Redis protocol decoder to reject a non-binary reply");
+} catch (error) {
+  if (!(error instanceof root.DialCacheRedisPayloadError)) {
+    throw new Error("The Redis protocol payload error does not match the root ESM export");
+  }
+}
+const esmInvalidEncodingFrame = Buffer.from(esmEmptyFrame);
+esmInvalidEncodingFrame[9] = 2;
+try {
+  redisProtocol.decodeRedisFrame(esmInvalidEncodingFrame);
+  throw new Error("Expected the packed ESM Redis protocol decoder to reject an unsupported encoding");
+} catch (error) {
+  if (!(error instanceof root.DialCacheRedisPayloadEncodingError)) {
+    throw new Error("The Redis protocol encoding error does not match the root ESM export");
+  }
 }
 const esmDisabledOverlay = root.DialCacheKeyConfig.disabled();
 if (
@@ -914,6 +954,33 @@ if (
 ) {
   throw new Error("The removed read scripts must not be exported by the packed CommonJS Redis protocol entry");
 }
+const cjsEmptyFrame = Buffer.alloc(10);
+cjsEmptyFrame[0] = 1;
+cjsEmptyFrame.writeBigUInt64BE(1n, 1);
+if (redisProtocol.decodeRedisFrame(cjsEmptyFrame) !== "") {
+  throw new Error("The packed CommonJS Redis protocol decoder did not preserve an empty UTF-8 payload");
+}
+if (redisProtocol.decodeTrackedRedisFrame(cjsEmptyFrame, Buffer.from("1")) !== null) {
+  throw new Error("The packed CommonJS Redis protocol decoder did not reject a stale tracked frame");
+}
+try {
+  redisProtocol.decodeRedisFrame("not binary");
+  throw new Error("Expected the packed CommonJS Redis protocol decoder to reject a non-binary reply");
+} catch (error) {
+  if (!(error instanceof root.DialCacheRedisPayloadError)) {
+    throw new Error("The Redis protocol payload error does not match the root CommonJS export");
+  }
+}
+const cjsInvalidEncodingFrame = Buffer.from(cjsEmptyFrame);
+cjsInvalidEncodingFrame[9] = 2;
+try {
+  redisProtocol.decodeRedisFrame(cjsInvalidEncodingFrame);
+  throw new Error("Expected the packed CommonJS Redis protocol decoder to reject an unsupported encoding");
+} catch (error) {
+  if (!(error instanceof root.DialCacheRedisPayloadEncodingError)) {
+    throw new Error("The Redis protocol encoding error does not match the root CommonJS export");
+  }
+}
 const cjsDisabledOverlay = root.DialCacheKeyConfig.disabled();
 if (
   cjsDisabledOverlay.requestLocal !== false
@@ -987,7 +1054,7 @@ void (async () => {
       "redis@~4.7.1",
       "typescript@5.9.3",
       "prom-client@^15.1.3",
-      "@valkey/valkey-glide@2.2.10",
+      "@valkey/valkey-glide@2.0.0",
       "dialcache-test-glide@npm:@valkey/valkey-glide@2.4.2",
       "hot-shots@^17.0.0",
     ],
@@ -1016,7 +1083,7 @@ await import("dialcache/node-redis");
 if (appGlide.Script === otherGlide.Script) {
   throw new Error("The package test requires two distinct GLIDE module instances");
 }
-const adapter = glide.createValkeyGlideDialCacheClient({
+const esmFakeGlideClient = {
   invokeScript: async (script, options) => {
     if (!(script instanceof appGlide.Script) || script instanceof otherGlide.Script) {
       throw new Error("The ESM adapter did not use the caller-supplied GLIDE Script constructor");
@@ -1026,7 +1093,13 @@ const adapter = glide.createValkeyGlideDialCacheClient({
     }
     return 2;
   },
-}, appGlide);
+};
+const esmGlideRuntime = {
+  ...appGlide,
+  GlideClient: { [Symbol.hasInstance]: (value) => value === esmFakeGlideClient },
+  GlideClusterClient: { [Symbol.hasInstance]: () => false },
+};
+const adapter = glide.createValkeyGlideDialCacheClient(esmFakeGlideClient, esmGlideRuntime);
 try {
   await adapter.write({ valueKey: "value", cacheTtlMs: 1_000, value: "payload" });
   throw new Error("Expected an invalid GLIDE script reply to fail");
@@ -1056,7 +1129,7 @@ void (async () => {
   if (appGlide.Script === otherGlide.Script) {
     throw new Error("The package test requires two distinct GLIDE module instances");
   }
-  const adapter = glide.createValkeyGlideDialCacheClient({
+  const cjsFakeGlideClient = {
     invokeScript: async (script, options) => {
       if (!(script instanceof appGlide.Script) || script instanceof otherGlide.Script) {
         throw new Error("The CommonJS adapter did not use the caller-supplied GLIDE Script constructor");
@@ -1066,7 +1139,13 @@ void (async () => {
       }
       return 2;
     },
-  }, appGlide);
+  };
+  const cjsGlideRuntime = {
+    ...appGlide,
+    GlideClient: { [Symbol.hasInstance]: (value) => value === cjsFakeGlideClient },
+    GlideClusterClient: { [Symbol.hasInstance]: () => false },
+  };
+  const adapter = glide.createValkeyGlideDialCacheClient(cjsFakeGlideClient, cjsGlideRuntime);
   try {
     await adapter.write({ valueKey: "value", cacheTtlMs: 1_000, value: "payload" });
     throw new Error("Expected an invalid GLIDE script reply to fail");

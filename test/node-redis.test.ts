@@ -171,6 +171,26 @@ describe("node-redis adapter", () => {
     );
   });
 
+  it("does not mistake unrelated standalone metadata for the Cluster topology marker", async () => {
+    const client = {
+      ...fakeClient({
+        mGet: [encodeFrame("tracked", { createdAtMs: 2 }), Buffer.from("1")],
+      }),
+      masters: "application metadata",
+    };
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await expect(adapter.read({
+      valueKey: "tracked:{id}:value",
+      watermarkKey: "tracked:{id}:watermark",
+    })).resolves.toBe("tracked");
+
+    expect(client.sendCommand).toHaveBeenCalledWith(
+      ["MGET", "tracked:{id}:value", "tracked:{id}:watermark"],
+      expect.objectContaining({ returnBuffers: true }),
+    );
+  });
+
   it("rejects malformed native read reply shapes", async () => {
     await expect(
       createNodeRedisDialCacheClient(fakeClient({ get: "not-bytes" }) as never)
@@ -180,20 +200,28 @@ describe("node-redis adapter", () => {
       message: "Invalid DialCache Redis read reply; expected a bulk string or null",
     });
 
-    const malformedMGetReplies: readonly unknown[] = [
+    const malformedMGetEnvelopes: readonly unknown[] = [
       null,
       [null],
       [null, null, null],
-      ["not-bytes", null],
-      [null, 0],
     ];
-    for (const reply of malformedMGetReplies) {
+    for (const reply of malformedMGetEnvelopes) {
       await expect(
         createNodeRedisDialCacheClient(fakeClient({ mGet: reply }) as never)
           .read({ valueKey: "tracked:{id}:value", watermarkKey: "tracked:{id}:watermark" }),
       ).rejects.toMatchObject({
         name: "DialCacheRedisPayloadError",
-        message: "Invalid DialCache Redis tracked read reply; expected two bulk strings or nulls",
+        message: "Invalid DialCache Redis tracked read reply; expected an array with two entries",
+      });
+    }
+
+    for (const reply of [["not-bytes", null], [null, 0]]) {
+      await expect(
+        createNodeRedisDialCacheClient(fakeClient({ mGet: reply }) as never)
+          .read({ valueKey: "tracked:{id}:value", watermarkKey: "tracked:{id}:watermark" }),
+      ).rejects.toMatchObject({
+        name: "DialCacheRedisPayloadError",
+        message: "Invalid DialCache Redis read reply; expected a bulk string or null",
       });
     }
   });

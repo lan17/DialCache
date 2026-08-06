@@ -970,6 +970,80 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       expect(await admin.type(repairValueKey)).toBe("string");
     });
 
+    it("fails open repeatedly when a tracked watermark has the wrong Redis type", async () => {
+      if (client === undefined || admin === undefined) {
+        throw new Error("Redis test clients did not start");
+      }
+      const namespace = "wrong-type-watermark";
+      const useCase = "WrongTypeWatermark";
+      const id = "broken";
+      const valueKey = `{${namespace}:item_id:${id}}#${useCase}:dialcache-frame-v1`;
+      const watermarkKey = `{${namespace}:item_id:${id}}#watermark`;
+      const frame = encodeFrame("cached", 0, 1_000);
+      await admin.set(valueKey, frame, { PX: 60_000 });
+      await admin.hSet(watermarkKey, "field", "value");
+
+      const metrics = {
+        request: vi.fn(),
+        miss: vi.fn(),
+        disabled: vi.fn(),
+        error: vi.fn(),
+        invalidation: vi.fn(),
+        coalesced: vi.fn(),
+        observeGet: vi.fn(),
+        observeFallback: vi.fn(),
+        observeSerialization: vi.fn(),
+        observeSize: vi.fn(),
+      } satisfies DialCacheMetricsAdapter;
+      const dialcache = new DialCache({
+        namespace,
+        redis: { client: client.adapter, readTimeoutMs: 10_000 },
+        logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
+        metrics,
+      });
+      let sourceCalls = 0;
+      const getValue = dialcache.cached(async () => ({ source: "fallback", calls: ++sourceCalls }), {
+        keyType: "item_id",
+        useCase,
+        cacheKey: () => id,
+        trackForInvalidation: true,
+        defaultConfig: remoteOnly,
+      });
+      const labels = {
+        cacheNamespace: namespace,
+        useCase,
+        keyType: "item_id",
+        layer: CacheLayer.REMOTE,
+      } as const;
+
+      await expect(dialcache.enable(async () => await getValue())).resolves.toEqual({
+        source: "fallback",
+        calls: 1,
+      });
+      await expect(dialcache.enable(async () => await getValue())).resolves.toEqual({
+        source: "fallback",
+        calls: 2,
+      });
+
+      expect(sourceCalls).toBe(2);
+      expect(metrics.request).toHaveBeenCalledTimes(2);
+      expect(metrics.miss).toHaveBeenCalledTimes(2);
+      expect(metrics.error).toHaveBeenCalledTimes(2);
+      expect(metrics.error).toHaveBeenNthCalledWith(1, {
+        ...labels,
+        error: "cache_write",
+        inFallback: false,
+      });
+      expect(metrics.error).toHaveBeenNthCalledWith(2, {
+        ...labels,
+        error: "cache_write",
+        inFallback: false,
+      });
+      expect(metrics.error).not.toHaveBeenCalledWith(expect.objectContaining({ error: "cache_read" }));
+      expect(await admin.type(watermarkKey)).toBe("hash");
+      expect(await admin.get(commandOptions({ returnBuffers: true }), valueKey)).toEqual(frame);
+    });
+
     it("rejects invalid raw script arguments before mutating Redis", async () => {
       if (client === undefined || admin === undefined) {
         throw new Error("Redis test clients did not start");
@@ -1378,8 +1452,14 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
 
       await scriptClient.invalidate({ watermarkKey, futureBufferMs: 100 });
       expect(await scriptClient.read({ valueKey, watermarkKey })).toBeNull();
+      const watermarkBeforeBlockedWrite = await admin.get(watermarkKey);
+      const watermarkTtlBeforeBlockedWrite = await admin.pTTL(watermarkKey);
       expect(await scriptClient.write({ ...writeRequest, value: "blocked" })).toBe(false);
-      expect(await scriptClient.read({ valueKey })).toBe("cached");
+      expect(await scriptClient.read({ valueKey })).toBeNull();
+      expect(await admin.get(watermarkKey)).toBe(watermarkBeforeBlockedWrite);
+      const watermarkTtlAfterBlockedWrite = await admin.pTTL(watermarkKey);
+      expect(watermarkTtlAfterBlockedWrite).toBeGreaterThan(watermarkTtlBeforeBlockedWrite - 1_000);
+      expect(watermarkTtlAfterBlockedWrite).toBeLessThanOrEqual(watermarkTtlBeforeBlockedWrite);
       const ttlBeforeRead = await admin.pTTL(watermarkKey);
       await scriptClient.read({ valueKey, watermarkKey });
       expect(await admin.pTTL(watermarkKey)).toBeLessThanOrEqual(ttlBeforeRead);

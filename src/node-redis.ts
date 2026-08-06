@@ -149,27 +149,16 @@ interface NodeRedisClusterClient extends NodeRedisWriteClient {
 type NodeRedisClient = NodeRedisStandaloneClient | NodeRedisClusterClient;
 
 function isNodeRedisClusterClient(client: NodeRedisClient): client is NodeRedisClusterClient {
-  return "masters" in client;
+  return "masters" in client && Array.isArray(client.masters);
 }
 
-function validateRedisBulkStringReply(reply: unknown): Buffer | null {
-  if (reply === null || Buffer.isBuffer(reply)) {
-    return reply;
-  }
-  throw new DialCacheRedisPayloadError(
-    "Invalid DialCache Redis read reply; expected a bulk string or null",
-  );
-}
-
-function validateRedisMGetReply(reply: unknown): [Buffer | null, Buffer | null] {
+function validateRedisMGetReply(reply: unknown): [unknown, unknown] {
   if (
     !Array.isArray(reply)
     || reply.length !== 2
-    || (reply[0] !== null && !Buffer.isBuffer(reply[0]))
-    || (reply[1] !== null && !Buffer.isBuffer(reply[1]))
   ) {
     throw new DialCacheRedisPayloadError(
-      "Invalid DialCache Redis tracked read reply; expected two bulk strings or nulls",
+      "Invalid DialCache Redis tracked read reply; expected an array with two entries",
     );
   }
   return [reply[0], reply[1]];
@@ -180,7 +169,7 @@ async function readTracked(
   options: BufferReplyOptions,
   valueKey: string,
   watermarkKey: string,
-): Promise<[Buffer | null, Buffer | null]> {
+): Promise<[unknown, unknown]> {
   const args = ["MGET", valueKey, watermarkKey];
   const raw = isNodeRedisClusterClient(client)
     // A tracked read must observe the primary's latest invalidation watermark,
@@ -204,8 +193,7 @@ export function createNodeRedisDialCacheClient(client: NodeRedisClient): DialCac
         ? bufferReplyOptions
         : commandOptions({ returnBuffers: true, signal: context.signal });
       if (watermarkKey === undefined) {
-        const raw = validateRedisBulkStringReply(await client.get(options, valueKey));
-        return decodeRedisFrame(raw);
+        return decodeRedisFrame(await client.get(options, valueKey));
       }
       const [rawValue, rawWatermark] = await readTracked(
         client,

@@ -150,11 +150,24 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
       defaultConfig: remoteOnly,
     });
     const second = await recoveryDialcache.enable(async () => await Promise.all(ids.map(recoverValue)));
+    const sizesAfterRecovery = await Promise.all(
+      activeCluster.masters.map(async (master) => {
+        const client = await activeCluster.nodeClient(master);
+        return await client.dbSize();
+      }),
+    );
+    const callsAfterRecovery = calls;
+    const third = await recoveryDialcache.enable(async () => await Promise.all(ids.map(recoverValue)));
 
     expect(first.map(({ id }) => id)).toEqual(ids);
-    expect(calls).toBe(60);
     expect(sizesBeforeFlush.every((size) => size > 0)).toBe(true);
+    expect(
+      sizesAfterRecovery.every((size, index) => size > (sizesBeforeFlush[index] ?? Number.POSITIVE_INFINITY)),
+    ).toBe(true);
     expect(second.map(({ id }) => id)).toEqual(ids);
+    expect(third).toEqual(second);
+    expect(callsAfterRecovery).toBe(60);
+    expect(calls).toBe(callsAfterRecovery);
   });
 
   it("keeps tracked keys colocated and rejects mismatched hash tags", async () => {
