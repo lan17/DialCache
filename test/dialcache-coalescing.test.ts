@@ -521,4 +521,283 @@ describe("DialCache request coalescing", () => {
       { id: "1", calls: 1 },
     ]);
   });
+
+  it("does not coalesce concurrent local misses when coalescing is disabled", async () => {
+    const gate = deferred<void>();
+    const { metrics, coalesced } = spyMetrics();
+    const dialcache = new DialCache({ metrics });
+    let calls = 0;
+    const getUser = dialcache.cached(
+      async (id: string) => {
+        const call = ++calls;
+        await gate.promise;
+        return { id, calls: call };
+      },
+      {
+        keyType: "user_id",
+        useCase: "UncoalescedLocalMiss",
+        cacheKey: (id) => id,
+        defaultConfig: new DialCacheKeyConfig({
+          ttlSec: { [CacheLayer.LOCAL]: 60 },
+          ramp: { [CacheLayer.LOCAL]: 100 },
+          coalesce: false,
+        }),
+      },
+    );
+
+    const inflight = dialcache.enable(async () => await Promise.all([getUser("1"), getUser("1")]));
+    await tick();
+    expect(dialcache.getCoalescingState()).toEqual({
+      process: { activeLeaders: 0, activeFollowers: 0, oldestLeaderAgeMs: null },
+    });
+    gate.resolve();
+    const results = await inflight;
+
+    expect(calls).toBe(2);
+    expect(results).toEqual([
+      { id: "1", calls: 1 },
+      { id: "1", calls: 2 },
+    ]);
+    expect(coalesced).not.toHaveBeenCalled();
+
+    const sequential = await dialcache.enable(async () => await getUser("1"));
+    expect(calls).toBe(2);
+    expect(results).toContainEqual(sequential);
+  });
+
+  it("performs independent Redis reads and writes when coalescing is disabled", async () => {
+    const redisGate = deferred<void>();
+    const fallbackGate = deferred<void>();
+    const redis = new FakeRedis();
+    redis.getGate = redisGate.promise;
+    const { metrics, coalesced } = spyMetrics();
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 }, metrics });
+    let calls = 0;
+    const getUser = dialcache.cached(
+      async (id: string) => {
+        const call = ++calls;
+        await fallbackGate.promise;
+        return { id, calls: call };
+      },
+      {
+        keyType: "user_id",
+        useCase: "UncoalescedRemoteMiss",
+        cacheKey: (id) => id,
+        defaultConfig: new DialCacheKeyConfig({
+          ttlSec: { [CacheLayer.REMOTE]: 60 },
+          ramp: { [CacheLayer.REMOTE]: 100 },
+          coalesce: false,
+        }),
+      },
+    );
+
+    const inflight = dialcache.enable(async () => await Promise.all([getUser("1"), getUser("1")]));
+    await tick();
+    expect(redis.getCalls).toBe(2);
+    redisGate.resolve();
+    await tick();
+    fallbackGate.resolve();
+    const results = await inflight;
+
+    expect(calls).toBe(2);
+    expect(redis.getCalls).toBe(2);
+    expect(redis.setCalls).toBe(2);
+    expect(results).toEqual([
+      { id: "1", calls: 1 },
+      { id: "1", calls: 2 },
+    ]);
+    expect(coalesced).not.toHaveBeenCalled();
+  });
+
+  it("memoizes sequential request-local reads without coalescing concurrent ones when coalescing is disabled", async () => {
+    const gate = deferred<void>();
+    const { metrics, coalesced, request, miss } = spyMetrics();
+    const dialcache = new DialCache({ metrics });
+    let calls = 0;
+    const getUser = dialcache.cached(async (id: string) => {
+      const call = ++calls;
+      await gate.promise;
+      return { id, calls: call };
+    }, {
+      keyType: "user_id",
+      useCase: "UncoalescedRequestLocal",
+      cacheKey: (id) => id,
+      defaultConfig: new DialCacheKeyConfig({ requestLocal: true, coalesce: false }),
+    });
+
+    const results = await dialcache.enable(async () => {
+      const inflight = Promise.all([getUser("1"), getUser("1")]);
+      await tick();
+      gate.resolve();
+      const concurrent = await inflight;
+      const sequential = await getUser("1");
+      return { concurrent, sequential };
+    });
+
+    expect(calls).toBe(2);
+    expect(results.concurrent).toEqual([
+      { id: "1", calls: 1 },
+      { id: "1", calls: 2 },
+    ]);
+    // Settled-value memoization survives: the sequential call reuses one of
+    // the concurrent results instead of executing a third fallback.
+    expect(results.concurrent).toContain(results.sequential);
+    expect(coalesced).not.toHaveBeenCalled();
+    const layerOf = ([labels]: [{ layer: string }]) => labels.layer;
+    expect(request.mock.calls.filter((call) => layerOf(call as never) === "request_local")).toHaveLength(3);
+    expect(miss.mock.calls.filter((call) => layerOf(call as never) === "request_local")).toHaveLength(2);
+  });
+
+  it("disables coalescing through a runtime overlay", async () => {
+    const gate = deferred<void>();
+    const { metrics, coalesced } = spyMetrics();
+    const dialcache = new DialCache({
+      metrics,
+      cacheConfigProvider: async () => new DialCacheKeyConfig({ coalesce: false }),
+    });
+    let calls = 0;
+    const getUser = dialcache.cached(
+      async (id: string) => {
+        const call = ++calls;
+        await gate.promise;
+        return { id, calls: call };
+      },
+      {
+        keyType: "user_id",
+        useCase: "RuntimeUncoalesced",
+        cacheKey: (id) => id,
+        defaultConfig: DialCacheKeyConfig.enabled(60),
+      },
+    );
+
+    const inflight = dialcache.enable(async () => await Promise.all([getUser("1"), getUser("1")]));
+    await tick();
+    gate.resolve();
+    const results = await inflight;
+
+    expect(calls).toBe(2);
+    expect(results).toEqual([
+      { id: "1", calls: 1 },
+      { id: "1", calls: 2 },
+    ]);
+    expect(coalesced).not.toHaveBeenCalled();
+  });
+
+  it("re-enables coalescing that the default config disabled", async () => {
+    const gate = deferred<void>();
+    const { metrics, coalesced } = spyMetrics();
+    const dialcache = new DialCache({
+      metrics,
+      cacheConfigProvider: async () => new DialCacheKeyConfig({ coalesce: true }),
+    });
+    let calls = 0;
+    const getUser = dialcache.cached(
+      async (id: string) => {
+        const call = ++calls;
+        await gate.promise;
+        return { id, calls: call };
+      },
+      {
+        keyType: "user_id",
+        useCase: "RuntimeRecoalesced",
+        cacheKey: (id) => id,
+        defaultConfig: new DialCacheKeyConfig({
+          ttlSec: { [CacheLayer.LOCAL]: 60 },
+          ramp: { [CacheLayer.LOCAL]: 100 },
+          coalesce: false,
+        }),
+      },
+    );
+
+    const inflight = dialcache.enable(async () => await Promise.all([getUser("1"), getUser("1")]));
+    await tick();
+    gate.resolve();
+    const results = await inflight;
+
+    expect(calls).toBe(1);
+    expect(results).toEqual([
+      { id: "1", calls: 1 },
+      { id: "1", calls: 1 },
+    ]);
+    expect(coalesced).toHaveBeenCalledTimes(1);
+    expect(coalesced).toHaveBeenCalledWith({
+      cacheNamespace: "urn",
+      useCase: "RuntimeRecoalesced",
+      keyType: "user_id",
+      scope: "process",
+    });
+  });
+
+  it("coalesces a disabled() baseline ramped up by an overlay that omits coalesce", async () => {
+    const gate = deferred<void>();
+    const { metrics, coalesced } = spyMetrics();
+    const dialcache = new DialCache({
+      metrics,
+      // Sparse ramp-up overlay without a coalesce leaf: the merged config must
+      // still coalesce, guarding the effective default on the provider path.
+      cacheConfigProvider: async () => new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.LOCAL]: 60 },
+        ramp: { [CacheLayer.LOCAL]: 100 },
+      }),
+    });
+    let calls = 0;
+    const getUser = dialcache.cached(
+      async (id: string) => {
+        const call = ++calls;
+        await gate.promise;
+        return { id, calls: call };
+      },
+      {
+        keyType: "user_id",
+        useCase: "RampedUpDisabledBaseline",
+        cacheKey: (id) => id,
+        defaultConfig: DialCacheKeyConfig.disabled(),
+      },
+    );
+
+    const inflight = dialcache.enable(async () => await Promise.all([getUser("1"), getUser("1")]));
+    await tick();
+    gate.resolve();
+    const results = await inflight;
+
+    expect(calls).toBe(1);
+    expect(results).toEqual([
+      { id: "1", calls: 1 },
+      { id: "1", calls: 1 },
+    ]);
+    expect(coalesced).toHaveBeenCalledTimes(1);
+    expect(coalesced).toHaveBeenCalledWith({
+      cacheNamespace: "urn",
+      useCase: "RampedUpDisabledBaseline",
+      keyType: "user_id",
+      scope: "process",
+    });
+  });
+
+  it("fails open uncached when the runtime coalesce value is malformed", async () => {
+    const { metrics, coalesced } = spyMetrics();
+    const logger = { debug: vi.fn(), error: vi.fn(), warn: vi.fn() };
+    const dialcache = new DialCache({
+      metrics,
+      logger,
+      cacheConfigProvider: async () => ({ ttlSec: {}, ramp: {}, coalesce: "yes" }) as unknown as DialCacheKeyConfig,
+    });
+    let calls = 0;
+    const getUser = dialcache.cached(async (id: string) => ({ id, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "MalformedRuntimeCoalesce",
+      cacheKey: (id) => id,
+      defaultConfig: DialCacheKeyConfig.enabled(60),
+    });
+
+    const first = await dialcache.enable(async () => await getUser("1"));
+    const second = await dialcache.enable(async () => await getUser("1"));
+
+    expect(first).toEqual({ id: "1", calls: 1 });
+    expect(second).toEqual({ id: "1", calls: 2 });
+    expect(coalesced).not.toHaveBeenCalled();
+    expect(metrics.disabled).toHaveBeenCalledWith(expect.objectContaining({ reason: "config_error" }));
+    expect(metrics.error).toHaveBeenCalledWith(expect.objectContaining({ error: "config_resolution" }));
+    expect(logger.warn).toHaveBeenCalled();
+  });
 });

@@ -528,6 +528,49 @@ describe("DialCache Redis read deadlines", () => {
     expect(fallback).toHaveBeenCalledTimes(1);
   });
 
+  it("gives each caller its own full read budget when coalescing is disabled", async () => {
+    const readStarted = deferred<void>();
+    const redis = redisClient(async () => {
+      readStarted.resolve();
+      return await new Promise<null>(() => undefined);
+    });
+    const dialcache = new DialCache({ redis: { client: redis.client, readTimeoutMs: 10 } });
+    const fallback = vi.fn(async () => "fallback");
+    const load = dialcache.cached(fallback, {
+      keyType: "id",
+      useCase: "UncoalescedRedisReadBudget",
+      cacheKey: () => "123",
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 100 },
+        coalesce: false,
+      }),
+    });
+
+    const first = dialcache.enable(async () => await load());
+    await readStarted.promise;
+    await vi.advanceTimersByTimeAsync(7);
+    const second = dialcache.enable(async () => await load());
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(redis.read).toHaveBeenCalledTimes(2);
+    expect(dialcache.getCoalescingState().process).toEqual({
+      activeLeaders: 0,
+      activeFollowers: 0,
+      oldestLeaderAgeMs: null,
+    });
+
+    // The first read times out at t=10; the second, started at t=7 with its
+    // own budget, is still waiting until t=17.
+    await vi.advanceTimersByTimeAsync(3);
+    await expect(first).resolves.toBe("fallback");
+    expect(fallback).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(7);
+    await expect(second).resolves.toBe("fallback");
+    expect(fallback).toHaveBeenCalledTimes(2);
+  });
+
   it("shares one read deadline with request-local followers", async () => {
     const readStarted = deferred<void>();
     const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");

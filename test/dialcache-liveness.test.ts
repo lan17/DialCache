@@ -244,6 +244,64 @@ describe("DialCache fallback liveness", () => {
     expect(dialcache.getCoalescingState().process.activeLeaders).toBe(0);
   });
 
+  it("gives each caller an independent fallback deadline when coalescing is disabled", async () => {
+    let nowMs = 0;
+    vi.spyOn(performance, "now").mockImplementation(() => nowMs);
+    const started = deferred<void>();
+    const dialcache = new DialCache();
+    let calls = 0;
+    const load = dialcache.cached(async () => {
+      calls += 1;
+      started.resolve();
+      return await new Promise<string>(() => undefined);
+    }, {
+      keyType: "id",
+      useCase: "IndependentUncoalescedDeadlines",
+      cacheKey: () => "123",
+      fallbackTimeoutMs: 1_000,
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.LOCAL]: 60 },
+        ramp: { [CacheLayer.LOCAL]: 100 },
+        coalesce: false,
+      }),
+    });
+
+    const first = dialcache.enable(async () => await load());
+    const firstOutcome = first.then(() => "resolved", (error: unknown) => error);
+    await started.promise;
+    nowMs = 900;
+    await vi.advanceTimersByTimeAsync(900);
+    const second = dialcache.enable(async () => await load());
+    let secondOutcome: unknown = "pending";
+    void second.then(
+      () => {
+        secondOutcome = "resolved";
+      },
+      (error: unknown) => {
+        secondOutcome = error;
+      },
+    );
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(calls).toBe(2);
+    expect(dialcache.getCoalescingState().process).toEqual({
+      activeLeaders: 0,
+      activeFollowers: 0,
+      oldestLeaderAgeMs: null,
+    });
+
+    nowMs = 1_000;
+    await vi.advanceTimersByTimeAsync(100);
+    const firstError = await firstOutcome;
+    expect(firstError).toBeInstanceOf(FallbackTimeoutError);
+    expect(secondOutcome).toBe("pending");
+
+    nowMs = 1_900;
+    await vi.advanceTimersByTimeAsync(900);
+    expect(secondOutcome).toBeInstanceOf(FallbackTimeoutError);
+    expect(secondOutcome).not.toBe(firstError);
+  });
+
   it("shares one deadline across request-local followers and permits a same-scope retry", async () => {
     const firstStarted = deferred<void>();
     const dialcache = new DialCache();

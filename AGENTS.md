@@ -27,7 +27,8 @@ test/                   # Unit and Redis integration tests
 - Caching is disabled by default and enabled only inside `dialcache.enable(...)`.
 - Disabled calls are true pass-through and must not build keys, resolve config, or coalesce work.
 - Active same-key work is coalesced before the first active cache layer, using
-  request scope for request-local caching and process scope for shared layers.
+  request scope for request-local caching and process scope for shared layers,
+  unless the use case's resolved `coalesce` policy disables it.
 - Cache plumbing fails open; explicit maintenance operations surface mutation failures.
 - Tracked Redis values and invalidation watermarks share a Redis Cluster hash tag.
 - Tracked reads run on primaries so replica lag cannot hide invalidation.

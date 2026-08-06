@@ -260,6 +260,8 @@ cache.cached(async (id: string) => id, {
 });
 
 const requestLocalConfig = new DialCacheKeyConfig({ requestLocal: true });
+const uncoalescedConfig = new DialCacheKeyConfig({ coalesce: false });
+const coalesceFlag: boolean | undefined = uncoalescedConfig.coalesce;
 const structuralConfigProvider: CacheConfigProvider = () => ({
   ttlSec: { [CacheLayer.LOCAL]: 60 },
   ramp: { [CacheLayer.LOCAL]: 100 },
@@ -411,6 +413,8 @@ void inlineDate;
 void missingDateSerializer;
 void missingInlineDateSerializer;
 void requestLocalConfig;
+void uncoalescedConfig;
+void coalesceFlag;
 void structuralConfigProvider;
 void shadowCache;
 void shadowKeyConfig;
@@ -638,6 +642,7 @@ if ("MissingKeyConfigError" in root) {
 const esmDisabledOverlay = root.DialCacheKeyConfig.disabled();
 if (
   esmDisabledOverlay.requestLocal !== false
+  || esmDisabledOverlay.coalesce !== undefined
   || esmDisabledOverlay.shadow?.ramp !== 0
   || esmDisabledOverlay.shadow.logMismatches !== false
   || esmDisabledOverlay.ramp[root.CacheLayer.LOCAL] !== 0
@@ -876,6 +881,7 @@ if ("MissingKeyConfigError" in root) {
 const cjsDisabledOverlay = root.DialCacheKeyConfig.disabled();
 if (
   cjsDisabledOverlay.requestLocal !== false
+  || cjsDisabledOverlay.coalesce !== undefined
   || cjsDisabledOverlay.shadow?.ramp !== 0
   || cjsDisabledOverlay.shadow.logMismatches !== false
   || cjsDisabledOverlay.ramp[root.CacheLayer.LOCAL] !== 0
