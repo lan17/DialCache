@@ -80,6 +80,22 @@ describe("DialCache observability internal compatibility paths", () => {
     }
   });
 
+  it("preserves omitted requestLocal and coalesce through a runtime merge", async () => {
+    // The gates own the effective defaults, so the merge must not materialize
+    // either boolean when both sides omit it.
+    const defaultConfig = new DialCacheKeyConfig({
+      ttlSec: { [CacheLayer.LOCAL]: 60 },
+      ramp: { [CacheLayer.LOCAL]: 100 },
+    });
+    const runtime = new DialCacheKeyConfig({ ramp: { [CacheLayer.LOCAL]: 50 } });
+
+    const merged = await fetchKeyConfig(async () => runtime, key(defaultConfig));
+
+    expect(merged?.requestLocal).toBeUndefined();
+    expect(merged?.coalesce).toBeUndefined();
+    expect(merged?.ramp[CacheLayer.LOCAL]).toBe(50);
+  });
+
   it("keeps LocalCache get/getIfPresent compatibility while exposing disabled reads", async () => {
     // Given a local cache with enabled config and a second key with no config.
     const cache = new LocalCache(async () => null, 10);

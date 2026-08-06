@@ -728,6 +728,52 @@ describe("DialCache request coalescing", () => {
     });
   });
 
+  it("coalesces a disabled() baseline ramped up by an overlay that omits coalesce", async () => {
+    const gate = deferred<void>();
+    const { metrics, coalesced } = spyMetrics();
+    const dialcache = new DialCache({
+      metrics,
+      // Sparse ramp-up overlay without a coalesce leaf: the merged config must
+      // still coalesce, guarding the effective default on the provider path.
+      cacheConfigProvider: async () => new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.LOCAL]: 60 },
+        ramp: { [CacheLayer.LOCAL]: 100 },
+      }),
+    });
+    let calls = 0;
+    const getUser = dialcache.cached(
+      async (id: string) => {
+        const call = ++calls;
+        await gate.promise;
+        return { id, calls: call };
+      },
+      {
+        keyType: "user_id",
+        useCase: "RampedUpDisabledBaseline",
+        cacheKey: (id) => id,
+        defaultConfig: DialCacheKeyConfig.disabled(),
+      },
+    );
+
+    const inflight = dialcache.enable(async () => await Promise.all([getUser("1"), getUser("1")]));
+    await tick();
+    gate.resolve();
+    const results = await inflight;
+
+    expect(calls).toBe(1);
+    expect(results).toEqual([
+      { id: "1", calls: 1 },
+      { id: "1", calls: 1 },
+    ]);
+    expect(coalesced).toHaveBeenCalledTimes(1);
+    expect(coalesced).toHaveBeenCalledWith({
+      cacheNamespace: "urn",
+      useCase: "RampedUpDisabledBaseline",
+      keyType: "user_id",
+      scope: "process",
+    });
+  });
+
   it("fails open uncached when the runtime coalesce value is malformed", async () => {
     const { metrics, coalesced } = spyMetrics();
     const logger = { debug: vi.fn(), error: vi.fn(), warn: vi.fn() };

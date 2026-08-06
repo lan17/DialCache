@@ -588,7 +588,8 @@ export class DialCache {
     shadowValidation: ShadowValidationPlan<T>,
     fallbackMetricLayer: MetricLayer,
   ): Promise<T> {
-    // Unmerged defaults and null config coalesce; only an explicit false opts out.
+    // This predicate is the single home of the default: omission means on in
+    // every config shape (null, unmerged default, merged); only explicit false opts out.
     const coalesce = keyConfig?.coalesce !== false;
     const localLayer = await this.resolveLocalLayerConfig(key, keyConfig);
     if (localLayer.status === "enabled") {
