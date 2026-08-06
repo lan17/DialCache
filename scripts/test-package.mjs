@@ -48,8 +48,9 @@ const rootConsumer = `import {
 } from "dialcache";
 // @ts-expect-error The unused MissingKeyConfigError class was removed instead of deprecated.
 import { MissingKeyConfigError } from "dialcache";
-import { createNodeRedisDialCacheClient } from "dialcache/node-redis";
-import { READ_CACHE_SCRIPT } from "dialcache/redis-protocol";
+import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "dialcache/node-redis";
+// @ts-expect-error Read Lua sources were removed from the mutation-only Redis protocol.
+import { READ_CACHE_SCRIPT, READ_TRACKED_CACHE_SCRIPT } from "dialcache/redis-protocol";
 import {
   DatadogDialCacheMetrics,
   createDatadogDialCacheMetrics,
@@ -434,7 +435,12 @@ void disabledOverlay;
 void metricErrorKinds;
 void unboundedErrorKind;
 void createNodeRedisDialCacheClient;
+// @ts-expect-error Native reads removed the legacy node-redis registration.
+void dialcacheRedisScripts.dialcacheRead;
+// @ts-expect-error Native tracked reads removed the legacy node-redis registration.
+void dialcacheRedisScripts.dialcacheReadTracked;
 void READ_CACHE_SCRIPT;
+void READ_TRACKED_CACHE_SCRIPT;
 void customRedisClient;
 const globalSerializer: Serializer<unknown> = {
   dump: () => "global",
@@ -604,7 +610,7 @@ try {
 const nodeRedis = await import("dialcache/node-redis");
 await import("dialcache/valkey-glide");
 await import("dialcache/datadog");
-await import("dialcache/redis-protocol");
+const redisProtocol = await import("dialcache/redis-protocol");
 const fallbackTimeoutError = new root.FallbackTimeoutError("PackageRuntime", 1000);
 if (!(fallbackTimeoutError instanceof root.DialCacheError) || fallbackTimeoutError.timeoutMs !== 1000) {
   throw new Error("The root ESM fallback-timeout error export is invalid");
@@ -645,6 +651,18 @@ try {
 }
 if ("MissingKeyConfigError" in root) {
   throw new Error("The removed MissingKeyConfigError class must not be exported from the root ESM entry");
+}
+if (
+  "dialcacheRead" in nodeRedis.dialcacheRedisScripts
+  || "dialcacheReadTracked" in nodeRedis.dialcacheRedisScripts
+) {
+  throw new Error("The removed read scripts must not be registered by the packed ESM node-redis entry");
+}
+if (
+  "READ_CACHE_SCRIPT" in redisProtocol
+  || "READ_TRACKED_CACHE_SCRIPT" in redisProtocol
+) {
+  throw new Error("The removed read scripts must not be exported by the packed ESM Redis protocol entry");
 }
 const esmDisabledOverlay = root.DialCacheKeyConfig.disabled();
 if (
@@ -840,7 +858,7 @@ console.log("${shadowPayloadReleaseMarker}");`,
 const nodeRedis = require("dialcache/node-redis");
 require("dialcache/valkey-glide");
 require("dialcache/datadog");
-require("dialcache/redis-protocol");
+const redisProtocol = require("dialcache/redis-protocol");
 const fallbackTimeoutError = new root.FallbackTimeoutError("PackageRuntime", 1000);
 if (!(fallbackTimeoutError instanceof root.DialCacheError) || fallbackTimeoutError.timeoutMs !== 1000) {
   throw new Error("The root CommonJS fallback-timeout error export is invalid");
@@ -883,6 +901,18 @@ try {
 }
 if ("MissingKeyConfigError" in root) {
   throw new Error("The removed MissingKeyConfigError class must not be exported from the root CommonJS entry");
+}
+if (
+  "dialcacheRead" in nodeRedis.dialcacheRedisScripts
+  || "dialcacheReadTracked" in nodeRedis.dialcacheRedisScripts
+) {
+  throw new Error("The removed read scripts must not be registered by the packed CommonJS node-redis entry");
+}
+if (
+  "READ_CACHE_SCRIPT" in redisProtocol
+  || "READ_TRACKED_CACHE_SCRIPT" in redisProtocol
+) {
+  throw new Error("The removed read scripts must not be exported by the packed CommonJS Redis protocol entry");
 }
 const cjsDisabledOverlay = root.DialCacheKeyConfig.disabled();
 if (

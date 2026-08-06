@@ -864,6 +864,66 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       expect(await scriptClient.read({ valueKey, watermarkKey })).toBe("tracked");
     });
 
+    it("records a stale tracked frame as a remote miss without a read error", async () => {
+      if (client === undefined || admin === undefined) {
+        throw new Error("Redis test clients did not start");
+      }
+      const scriptClient = client.adapter;
+
+      const namespace = "stale-miss-metrics";
+      const useCase = "TrackedStaleMissMetrics";
+      const id = "stale";
+      const staleValueKey = `{${namespace}:item_id:${id}}#${useCase}:dialcache-frame-v1`;
+      const staleWatermarkKey = `{${namespace}:item_id:${id}}#watermark`;
+      await admin.set(staleValueKey, encodeFrame("stale", 0, 1_000));
+      await admin.set(staleWatermarkKey, "1000");
+
+      const metrics = {
+        request: vi.fn(),
+        miss: vi.fn(),
+        disabled: vi.fn(),
+        error: vi.fn(),
+        invalidation: vi.fn(),
+        coalesced: vi.fn(),
+        observeGet: vi.fn(),
+        observeFallback: vi.fn(),
+        observeSerialization: vi.fn(),
+        observeSize: vi.fn(),
+      } satisfies DialCacheMetricsAdapter;
+      const dialcache = new DialCache({
+        namespace,
+        redis: { client: scriptClient, readTimeoutMs: 10_000 },
+        metrics,
+      });
+      const fallback = vi.fn(async () => ({ source: "fallback" }));
+      const getValue = dialcache.cached(fallback, {
+        keyType: "item_id",
+        useCase,
+        cacheKey: () => id,
+        trackForInvalidation: true,
+        defaultConfig: remoteOnly,
+      });
+      const labels = {
+        cacheNamespace: namespace,
+        useCase,
+        keyType: "item_id",
+        layer: CacheLayer.REMOTE,
+      } as const;
+
+      await expect(dialcache.enable(async () => await getValue())).resolves.toEqual({ source: "fallback" });
+
+      expect(fallback).toHaveBeenCalledOnce();
+      expect(metrics.request).toHaveBeenCalledOnce();
+      expect(metrics.request).toHaveBeenCalledWith(labels);
+      expect(metrics.miss).toHaveBeenCalledOnce();
+      expect(metrics.miss).toHaveBeenCalledWith(labels);
+      expect(metrics.observeGet).toHaveBeenCalledOnce();
+      expect(metrics.observeGet).toHaveBeenCalledWith(labels, expect.any(Number));
+      expect(metrics.observeFallback).toHaveBeenCalledOnce();
+      expect(metrics.observeFallback).toHaveBeenCalledWith(labels, expect.any(Number));
+      expect(metrics.error).not.toHaveBeenCalled();
+    });
+
     it("uses native wrong-type semantics and repairs tracked value keys", async () => {
       if (client === undefined || admin === undefined) {
         throw new Error("Redis test clients did not start");

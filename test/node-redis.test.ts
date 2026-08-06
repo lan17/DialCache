@@ -75,21 +75,10 @@ describe("node-redis adapter", () => {
     const binary = Buffer.from([0, 0xff]);
 
     expect(Object.keys(dialcacheRedisScripts)).toEqual([
-      "dialcacheRead",
-      "dialcacheReadTracked",
       "dialcacheWrite",
       "dialcacheWriteTracked",
       "dialcacheInvalidate",
     ]);
-    expect(dialcacheRedisScripts.dialcacheRead.transformArguments("plain:value")).toEqual([
-      "plain:value",
-    ]);
-    expect(
-      dialcacheRedisScripts.dialcacheReadTracked.transformArguments(
-        "tracked:{id}:value",
-        "tracked:{id}:watermark",
-      ),
-    ).toEqual(["tracked:{id}:value", "tracked:{id}:watermark"]);
     expect(dialcacheRedisScripts.dialcacheWrite.transformArguments("plain:value", 1_000, 0, "plain")).toEqual([
       "plain:value",
       "1000",
@@ -245,8 +234,6 @@ describe("node-redis adapter", () => {
   });
 
   it("validates replies at the public node-redis script transform boundary", () => {
-    expect(dialcacheRedisScripts.dialcacheRead.transformReply(null)).toBeNull();
-    expect(dialcacheRedisScripts.dialcacheReadTracked.transformReply("payload")).toBe("payload");
     expect(dialcacheRedisScripts.dialcacheWrite.transformReply(0)).toBe(0);
     expect(dialcacheRedisScripts.dialcacheWriteTracked.transformReply(1)).toBe(1);
     expect(dialcacheRedisScripts.dialcacheInvalidate.transformReply(1)).toBe(1);

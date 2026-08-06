@@ -2,8 +2,6 @@ import { commandOptions, defineScript } from "redis";
 
 import {
   INVALIDATE_CACHE_SCRIPT,
-  READ_CACHE_SCRIPT,
-  READ_TRACKED_CACHE_SCRIPT,
   WRITE_CACHE_SCRIPT,
   WRITE_TRACKED_CACHE_SCRIPT,
 } from "./internal/redis-scripts.js";
@@ -29,7 +27,6 @@ type BufferReplyOptions = ReturnType<
 >;
 // Redis bulk strings are binary data; decoding them as UTF-8 would corrupt arbitrary serializer output.
 const bufferReplyOptions: BufferReplyOptions = commandOptions({ returnBuffers: true });
-const readReply = (reply: string | null): string | null => reply;
 const writeReply = (reply: number): number => validateRedisScriptWriteReply(reply);
 const invalidationReply = (reply: number): number => validateRedisScriptInvalidationReply(reply);
 type NodeRedisArgument = string | Buffer;
@@ -53,10 +50,6 @@ function defineDialCacheScript<Args extends Array<unknown>, Reply>(
 }
 
 export type DialCacheNodeRedisScripts = {
-  /** @deprecated The bundled adapter uses native GET. Retained for registration compatibility. */
-  readonly dialcacheRead: NodeRedisScript<[valueKey: string], string | null>;
-  /** @deprecated The bundled adapter uses native MGET. Retained for registration compatibility. */
-  readonly dialcacheReadTracked: NodeRedisScript<[valueKey: string, watermarkKey: string], string | null>;
   readonly dialcacheWrite: NodeRedisScript<
     [valueKey: string, cacheTtlMs: number, encoding: number, payload: string | Buffer],
     number
@@ -78,27 +71,6 @@ export type DialCacheNodeRedisScripts = {
 };
 
 export const dialcacheRedisScripts: DialCacheNodeRedisScripts = {
-  dialcacheRead: defineDialCacheScript({
-    SCRIPT: READ_CACHE_SCRIPT,
-    NUMBER_OF_KEYS: 1,
-    FIRST_KEY_INDEX: 0,
-    IS_READ_ONLY: true,
-    transformArguments(valueKey: string): Array<string> {
-      return [valueKey];
-    },
-    transformReply: readReply,
-  }),
-  dialcacheReadTracked: defineDialCacheScript({
-    SCRIPT: READ_TRACKED_CACHE_SCRIPT,
-    NUMBER_OF_KEYS: 2,
-    FIRST_KEY_INDEX: 0,
-    // Replica lag must not hide a newly-written invalidation watermark.
-    IS_READ_ONLY: false,
-    transformArguments(valueKey: string, watermarkKey: string): Array<string> {
-      return [valueKey, watermarkKey];
-    },
-    transformReply: readReply,
-  }),
   dialcacheWrite: defineDialCacheScript({
     SCRIPT: WRITE_CACHE_SCRIPT,
     NUMBER_OF_KEYS: 1,

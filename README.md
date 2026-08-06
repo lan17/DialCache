@@ -356,7 +356,7 @@ async function shutdown(): Promise<void> {
 }
 ```
 
-`redis.client` is required when Redis is configured and accepts the semantic `DialCacheRedisClient` interface. `redis.readTimeoutMs` is optional and sets the instance default for remote reads; omit it to use 50 ms. Create and connect the underlying client before constructing `DialCache`. Node-redis users should register the supplied scripts and wrap their client with `createNodeRedisDialCacheClient` as shown above. The two deprecated read-script registrations remain for source compatibility but are not used by the adapter.
+`redis.client` is required when Redis is configured and accepts the semantic `DialCacheRedisClient` interface. `redis.readTimeoutMs` is optional and sets the instance default for remote reads; omit it to use 50 ms. Create and connect the underlying client before constructing `DialCache`. Node-redis users should register the supplied mutation scripts and wrap their client with `createNodeRedisDialCacheClient` as shown above; the adapter performs reads with native commands.
 
 Valkey GLIDE users pass an already-created standalone or cluster client and its
 module namespace to the GLIDE adapter:
@@ -418,7 +418,7 @@ Writes, invalidations, async `cacheConfigProvider` calls, and custom serializer 
 
 #### Serialization
 
-The core Redis boundary is the client-agnostic `DialCacheRedisClient` interface. It exchanges serialized values as `string | Buffer` and does not expose client commands or wire encodings. The write and invalidation Lua sources plus wire constants are available from `dialcache/redis-protocol`; deprecated read-script sources remain exported only for compatibility. Custom adapters can throw the root-exported `DialCacheRedisPayloadError`, `DialCacheRedisPayloadEncodingError`, and `DialCacheRedisProtocolError` classes to distinguish malformed payloads, unsupported encodings, and mutation-script reply-domain violations in logs. DialCache records bounded `cache_read`, `cache_write`, or `invalidation` metrics by failure site.
+The core Redis boundary is the client-agnostic `DialCacheRedisClient` interface. It exchanges serialized values as `string | Buffer` and does not expose client commands or wire encodings. The write and invalidation Lua sources plus wire constants are available from `dialcache/redis-protocol`. Custom adapters can throw the root-exported `DialCacheRedisPayloadError`, `DialCacheRedisPayloadEncodingError`, and `DialCacheRedisProtocolError` classes to distinguish malformed payloads, unsupported encodings, and mutation-script reply-domain violations in logs. DialCache records bounded `cache_read`, `cache_write`, or `invalidation` metrics by failure site.
 
 Redis values use a compact binary frame:
 
