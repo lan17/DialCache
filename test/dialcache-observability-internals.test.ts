@@ -13,6 +13,7 @@ describe("DialCache observability internal compatibility paths", () => {
   it("merges every runtime policy leaf independently", async () => {
     const defaultConfig = new DialCacheKeyConfig({
       requestLocal: true,
+      coalesce: false,
       ttlSec: { [CacheLayer.LOCAL]: 60, [CacheLayer.REMOTE]: 120 },
       ramp: { [CacheLayer.LOCAL]: 25, [CacheLayer.REMOTE]: 50 },
       shadow: {
@@ -24,12 +25,14 @@ describe("DialCache observability internal compatibility paths", () => {
       {
         runtime: new DialCacheKeyConfig({
           requestLocal: false,
+          coalesce: true,
           ttlSec: { [CacheLayer.LOCAL]: 30 },
           ramp: { [CacheLayer.REMOTE]: 75 },
           shadow: { ramp: 80 },
         }),
         expected: new DialCacheKeyConfig({
           requestLocal: false,
+          coalesce: true,
           ttlSec: { [CacheLayer.LOCAL]: 30, [CacheLayer.REMOTE]: 120 },
           ramp: { [CacheLayer.LOCAL]: 25, [CacheLayer.REMOTE]: 75 },
           shadow: {
@@ -48,6 +51,7 @@ describe("DialCache observability internal compatibility paths", () => {
         }),
         expected: new DialCacheKeyConfig({
           requestLocal: true,
+          coalesce: false,
           ttlSec: { [CacheLayer.LOCAL]: 60, [CacheLayer.REMOTE]: 90 },
           ramp: { [CacheLayer.LOCAL]: 10, [CacheLayer.REMOTE]: 50 },
           shadow: {
@@ -60,6 +64,7 @@ describe("DialCache observability internal compatibility paths", () => {
         runtime: new DialCacheKeyConfig({ shadow: {} }),
         expected: new DialCacheKeyConfig({
           requestLocal: true,
+          coalesce: false,
           ttlSec: { [CacheLayer.LOCAL]: 60, [CacheLayer.REMOTE]: 120 },
           ramp: { [CacheLayer.LOCAL]: 25, [CacheLayer.REMOTE]: 50 },
           shadow: {

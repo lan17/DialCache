@@ -555,7 +555,7 @@ export class DialCache {
     fallback: () => Promise<T>,
     shadowValidation: ShadowValidationPlan<T>,
   ): Promise<T> {
-    return await this.singleFlightRequestLocal(requestLocalCache.inFlight, key, async () => {
+    const run = async (): Promise<T> => {
       const start = performance.now();
       const result = requestLocalCache.read<T>(key.urn);
       this.metrics?.request(labelsFor(key, REQUEST_LOCAL_CACHE_LAYER));
@@ -574,7 +574,11 @@ export class DialCache {
       );
       requestLocalCache.set(key.urn, value);
       return value;
-    });
+    };
+    if (keyConfig.coalesce === false) {
+      return await run();
+    }
+    return await this.singleFlightRequestLocal(requestLocalCache.inFlight, key, run);
   }
 
   private async getThroughSharedLayers<T>(
@@ -584,17 +588,19 @@ export class DialCache {
     shadowValidation: ShadowValidationPlan<T>,
     fallbackMetricLayer: MetricLayer,
   ): Promise<T> {
+    // Unmerged defaults and null config coalesce; only an explicit false opts out.
+    const coalesce = keyConfig?.coalesce !== false;
     const localLayer = await this.resolveLocalLayerConfig(key, keyConfig);
     if (localLayer.status === "enabled") {
-      return await this.singleFlightProcess(key, async () =>
+      const run = async (): Promise<T> =>
         await this.getThroughActiveLocal(
           key,
           keyConfig,
           localLayer.config,
           fallback,
           shadowValidation,
-        ),
-      );
+        );
+      return coalesce ? await this.singleFlightProcess(key, run) : await run();
     }
 
     const redisCache = this.redisCache;
@@ -620,7 +626,7 @@ export class DialCache {
       return await this.callFallback(labelsFor(key, fallbackLayer), fallback);
     }
 
-    return await this.singleFlightProcess(key, async () => {
+    const run = async (): Promise<T> => {
       const remote = await this.readRemoteWithResolvedConfig<T>(
         redisCache,
         key,
@@ -637,7 +643,8 @@ export class DialCache {
         shadowValidation,
         remoteLayer.config,
       );
-    });
+    };
+    return coalesce ? await this.singleFlightProcess(key, run) : await run();
   }
 
   private async getThroughActiveLocal<T>(
@@ -1384,9 +1391,13 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
   const rampConfig = config.ramp;
   const shadowConfig = config.shadow;
   const requestLocal = config.requestLocal;
+  const coalesce = config.coalesce;
   const remoteReadTimeoutMs = config.remoteReadTimeoutMs;
   if (requestLocal !== undefined && typeof requestLocal !== "boolean") {
     throw new TypeError("DialCache defaultConfig requestLocal must be a boolean");
+  }
+  if (coalesce !== undefined && typeof coalesce !== "boolean") {
+    throw new TypeError("DialCache defaultConfig coalesce must be a boolean");
   }
 
   assertDefaultLayerMap(ttlSecConfig, "ttlSec");
@@ -1397,6 +1408,7 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
     ttlSec: ttlSecConfig,
     ramp: rampConfig,
     ...(requestLocal === undefined ? {} : { requestLocal }),
+    ...(coalesce === undefined ? {} : { coalesce }),
     ...(remoteReadTimeoutMs === undefined ? {} : { remoteReadTimeoutMs }),
     ...(shadowConfig === undefined ? {} : { shadow: shadowConfig }),
   });

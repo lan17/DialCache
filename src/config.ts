@@ -34,6 +34,13 @@ export class DialCacheKeyConfig {
    */
   readonly requestLocal?: boolean;
   /**
+   * Share one in-flight execution across concurrent same-key callers, in both
+   * the request-local and process coalescing scopes. Defaults to true. When
+   * false, each caller performs its own layer reads, its own fallback with an
+   * independent fallback deadline, and its own cache writes.
+   */
+  readonly coalesce?: boolean;
+  /**
    * Maximum time DialCache waits for a remote read before failing open to the
    * source of truth. Overrides the instance default for this use case.
    */
@@ -44,6 +51,7 @@ export class DialCacheKeyConfig {
     ramp?: LayerConfig;
     shadow?: ShadowConfig;
     requestLocal?: boolean;
+    coalesce?: boolean;
     remoteReadTimeoutMs?: number;
   }) {
     if (config === null || typeof config !== "object" || Array.isArray(config)) {
@@ -63,6 +71,12 @@ export class DialCacheKeyConfig {
     }
     if (config.requestLocal !== undefined) {
       this.requestLocal = config.requestLocal;
+    }
+    if (config.coalesce !== undefined && typeof config.coalesce !== "boolean") {
+      throw new TypeError("DialCache coalesce config must be a boolean");
+    }
+    if (config.coalesce !== undefined) {
+      this.coalesce = config.coalesce;
     }
     if (config.remoteReadTimeoutMs !== undefined) {
       assertValidDeadlineMs(config.remoteReadTimeoutMs, "DialCache remoteReadTimeoutMs");

@@ -38,6 +38,12 @@ describe("DialCache runtime config and ramp controls", () => {
     expect(new DialCacheKeyConfig({ requestLocal: false }).requestLocal).toBe(false);
   });
 
+  it("preserves coalesce omission until baseline and runtime config are merged", () => {
+    expect(new DialCacheKeyConfig({}).coalesce).toBeUndefined();
+    expect(new DialCacheKeyConfig({ coalesce: false }).coalesce).toBe(false);
+    expect(new DialCacheKeyConfig({ coalesce: true }).coalesce).toBe(true);
+  });
+
   it("preserves shadow omission and explicit kill-switch values", () => {
     expect(new DialCacheKeyConfig({}).shadow).toBeUndefined();
     expect(new DialCacheKeyConfig({ shadow: {} }).shadow).toEqual({});
@@ -77,6 +83,7 @@ describe("DialCache runtime config and ramp controls", () => {
         ramp: 25,
         logMismatches: true,
       },
+      coalesce: false,
     });
     const observedDefaults: Array<DialCacheKeyConfig | null> = [];
     const dialcache = new DialCache({
@@ -116,6 +123,7 @@ describe("DialCache runtime config and ramp controls", () => {
       ramp: 25,
       logMismatches: true,
     });
+    expect(observedDefaults[0]?.coalesce).toBe(false);
     expect(Object.isFrozen(observedDefaults[0])).toBe(true);
     expect(Object.isFrozen(observedDefaults[0]?.ttlSec)).toBe(true);
     expect(Object.isFrozen(observedDefaults[0]?.ramp)).toBe(true);
@@ -312,6 +320,11 @@ describe("DialCache runtime config and ramp controls", () => {
       "DialCache requestLocal config must be a boolean",
     ],
     [
+      "a non-boolean coalesce value",
+      () => new DialCacheKeyConfig({ coalesce: null as unknown as boolean }),
+      "DialCache coalesce config must be a boolean",
+    ],
+    [
       "a null shadow config",
       () => new DialCacheKeyConfig({ shadow: null as never }),
       "DialCache shadow config must be an object",
@@ -412,6 +425,12 @@ describe("DialCache runtime config and ramp controls", () => {
       TypeError,
       'shadowRamp was replaced by "shadow.ramp"',
     ],
+    [
+      "a null coalesce value",
+      { ttlSec: {}, ramp: {}, coalesce: null } as unknown as DialCacheKeyConfig,
+      TypeError,
+      "coalesce must be a boolean",
+    ],
   ])("rejects a malformed static defaultConfig with $0 at registration", (_name, defaultConfig, ErrorType, message) => {
     const dialcache = new DialCache();
 
@@ -445,6 +464,7 @@ describe("DialCache runtime config and ramp controls", () => {
     ["an array shadow config", { ttlSec: {}, ramp: {}, shadow: [] }],
     ["the removed shadowRamp field", { ttlSec: {}, ramp: {}, shadowRamp: 100 }],
     ["a null requestLocal value", { ttlSec: {}, ramp: {}, requestLocal: null }],
+    ["a null coalesce value", { ttlSec: {}, ramp: {}, coalesce: null }],
   ] as const)("fails open instead of inheriting defaults when the provider returns %s", async (_name, runtimeConfig) => {
     const cacheConfigProvider = vi.fn(async () => runtimeConfig as unknown as DialCacheKeyConfig);
     const dialcache = new DialCache({ cacheConfigProvider });
@@ -473,6 +493,9 @@ describe("DialCache runtime config and ramp controls", () => {
       },
       ramp: { [CacheLayer.LOCAL]: 0, [CacheLayer.REMOTE]: 0 },
     }));
+    // disabled() must not pin coalescing off: a disabled() baseline ramped up
+    // at runtime should coalesce again unless explicitly opted out.
+    expect(DialCacheKeyConfig.disabled().coalesce).toBeUndefined();
   });
 
   it.each([null as unknown as number, 0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1])(

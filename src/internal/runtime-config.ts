@@ -105,6 +105,13 @@ function mergeKeyConfig(
     : defaultRequestLocal !== undefined
       ? defaultRequestLocal
       : false;
+  const defaultCoalesce = defaultConfig?.coalesce;
+  const overlayCoalesce = overlay?.coalesce;
+  const coalesce = overlayCoalesce !== undefined
+    ? overlayCoalesce
+    : defaultCoalesce !== undefined
+      ? defaultCoalesce
+      : true;
   const remoteReadTimeoutMs = overlay?.remoteReadTimeoutMs !== undefined
     ? overlay.remoteReadTimeoutMs
     : defaultConfig?.remoteReadTimeoutMs;
@@ -114,6 +121,7 @@ function mergeKeyConfig(
     ttlSec: mergeLayerConfig(defaultConfig?.ttlSec, overlay?.ttlSec, "ttlSec"),
     ramp: mergeLayerConfig(defaultConfig?.ramp, overlay?.ramp, "ramp"),
     requestLocal,
+    coalesce,
     ...(remoteReadTimeoutMs === undefined ? {} : { remoteReadTimeoutMs }),
     ...(shadow === undefined ? {} : { shadow }),
   });
