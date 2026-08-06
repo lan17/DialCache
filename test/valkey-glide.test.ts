@@ -185,6 +185,25 @@ describe("Valkey GLIDE adapter", () => {
     expect(batchInstances).toHaveLength(0);
   });
 
+  it("requires the complete cluster command capability before using cluster routing", async () => {
+    const client = {
+      ...fakeClient([[redisFrame("tracked-standalone"), Buffer.from("0")]]),
+      invokeScriptWithRoute: vi.fn(async () => undefined),
+    };
+    const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
+
+    await expect(
+      adapter.read({
+        valueKey: "standalone:{id}:value",
+        watermarkKey: "standalone:{id}:watermark",
+      }),
+    ).resolves.toBe("tracked-standalone");
+
+    expect(client.exec).toHaveBeenCalledOnce();
+    expect(client.invokeScriptWithRoute).not.toHaveBeenCalled();
+    expect(batchInstances).toHaveLength(1);
+  });
+
   it("preserves GLIDE invocation options when given a core read context", async () => {
     const client = fakeClient(null);
     const adapter = createValkeyGlideDialCacheClient(client, mockGlide);

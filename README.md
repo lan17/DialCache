@@ -398,6 +398,8 @@ The node-redis adapter owns no additional resources, so the application closes t
 
 Reads use native `GET` for untracked entries and one atomic `MGET` for each tracked value-and-watermark pair. The adapters validate and decode the returned frame in the Node process. Tracked reads are deliberately routed to primaries so a lagging replica cannot hide an invalidation watermark.
 
+Native commands retain Redis's wrong-type behavior. An untracked `GET` surfaces `WRONGTYPE`; tracked `MGET` represents a wrong-type member as a missing value. A wrong-type tracked value is therefore a clean miss and may be replaced with a valid DialCache frame after the fallback succeeds, while a wrong-type watermark prevents the tracked write from succeeding.
+
 Node-redis forces tracked cluster commands to the slot primary. GLIDE uses an explicit primary route in cluster mode; in standalone mode it sends `MGET` through a one-command non-atomic batch because direct read commands follow the client's replica-read preference. Standalone batches use the primary, and `MGET` itself provides the atomic snapshot without consuming caller-owned `WATCH` state.
 
 For mutations, node-redis computes each script's SHA, uses `EVALSHA`, and retries with `EVAL` after `NOSCRIPT`. Its cluster client routes scripts by their first key and performs that fallback on the selected shard. The GLIDE adapter uses GLIDE's native `Script` lifecycle and byte decoder; GLIDE routes mutation scripts from their declared keys.

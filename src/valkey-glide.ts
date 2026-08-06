@@ -76,7 +76,10 @@ interface DialCacheGlideScripts<TScript> {
 function isValkeyGlideClusterClient<TScript, TDecoder>(
   client: ValkeyGlideScriptingClient<TScript, TDecoder>,
 ): client is ValkeyGlideScriptingClient<TScript, TDecoder> & ValkeyGlideClusterReadClient<TDecoder> {
-  return "invokeScriptWithRoute" in client && typeof client.invokeScriptWithRoute === "function";
+  return "customCommand" in client
+    && typeof client.customCommand === "function"
+    && "invokeScriptWithRoute" in client
+    && typeof client.invokeScriptWithRoute === "function";
 }
 
 export interface ValkeyGlideDialCacheClient extends DialCacheRedisClient {

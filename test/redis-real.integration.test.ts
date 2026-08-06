@@ -864,7 +864,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       expect(await scriptClient.read({ valueKey, watermarkKey })).toBe("tracked");
     });
 
-    it("uses native GET and MGET wrong-type semantics", async () => {
+    it("uses native wrong-type semantics and repairs tracked value keys", async () => {
       if (client === undefined || admin === undefined) {
         throw new Error("Redis test clients did not start");
       }
@@ -881,6 +881,33 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       await admin.set(valueKey, encodeFrame("cached", 0, 1_000));
       await admin.hSet(watermarkKey, "field", "value");
       await expect(scriptClient.read({ valueKey, watermarkKey })).resolves.toBeNull();
+
+      const namespace = "wrong-type-repair";
+      const repairValueKey = `{${namespace}:item_id:repair}#WrongTypeRepair:dialcache-frame-v1`;
+      const repairWatermarkKey = `{${namespace}:item_id:repair}#watermark`;
+      await admin.hSet(repairValueKey, "field", "value");
+      await admin.set(repairWatermarkKey, "0");
+
+      let sourceCalls = 0;
+      const dialcache = new DialCache({
+        namespace,
+        redis: { client: scriptClient, readTimeoutMs: 10_000 },
+      });
+      const getValue = dialcache.cached(async (id: string) => ({ id, calls: ++sourceCalls }), {
+        keyType: "item_id",
+        useCase: "WrongTypeRepair",
+        cacheKey: (id) => id,
+        trackForInvalidation: true,
+        defaultConfig: remoteOnly,
+      });
+
+      const repaired = await dialcache.enable(async () => await getValue("repair"));
+      const cached = await dialcache.enable(async () => await getValue("repair"));
+
+      expect(repaired).toEqual({ id: "repair", calls: 1 });
+      expect(cached).toEqual(repaired);
+      expect(sourceCalls).toBe(1);
+      expect(await admin.type(repairValueKey)).toBe("string");
     });
 
     it("rejects invalid raw script arguments before mutating Redis", async () => {
