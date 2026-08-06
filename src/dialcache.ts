@@ -516,9 +516,10 @@ export class DialCache {
    * The watermark fences only invocations that reach the tracked Redis write.
    * A rejected caller-path write also suppresses the corresponding process-local
    * population. Request-local memoization remains unconditional. A ramped-out
-   * invocation without shadow work does not consult the watermark; a selected
-   * shadow path consults it for its tracked read and any clean-miss fill, while
-   * caller-path request-local and process-local publication remains independent.
+   * invocation without shadow work does not consult the watermark. A selected
+   * shadow path for a tracked key consults it for Redis reads and any clean-miss
+   * fill; untracked shadow work does not. Caller-path request-local and
+   * process-local publication remains independent.
    *
    * @param futureBufferMs Nonnegative safe integer no greater than
    * 31,536,000,000 (365 days); defaults to zero for backward compatibility.
@@ -799,10 +800,6 @@ export class DialCache {
     validation: ShadowValidationPlan<T>,
     readTimeoutMs: number,
   ): void {
-    if (!key.trackForInvalidation) {
-      return;
-    }
-
     const shadowConfig: unknown = keyConfig?.shadow;
     if (
       shadowConfig === null
@@ -938,7 +935,7 @@ export class DialCache {
       maybeRelease();
     };
     const readShadowPayload = (): Promise<RedisCachePayload | null> => {
-      const read = redisCache.startTrackedPayloadReadForShadow(key, readTimeoutMs);
+      const read = redisCache.startPayloadReadForShadow(key, readTimeoutMs);
       pendingRedisReads.add(read.settled);
       void read.settled.then(() => {
         pendingRedisReads.delete(read.settled);
