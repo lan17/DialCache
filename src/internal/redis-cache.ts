@@ -60,12 +60,17 @@ interface StartedShadowPayloadRead {
 const defaultSerializer = new JsonSerializer<unknown>();
 const REDIS_FRAME_KEY_SUFFIX = ":dialcache-frame-v1";
 const DEFAULT_REMOTE_READ_TIMEOUT_MS = 50;
-const REDIS_READ_MISS_REASONS: ReadonlySet<RedisReadMissReason> = new Set([
-  "not_found",
-  "frame_unsupported",
-  "watermark_unreadable",
-  "watermark_invalidated",
-]);
+// Derive from RedisReadMissReason, never MissReason: deserialization_failed is
+// core-authoritative and must stay rejectable when a client tries to forge it.
+const REDIS_READ_MISS_REASON_FLAGS = {
+  not_found: true,
+  frame_unsupported: true,
+  watermark_unreadable: true,
+  watermark_invalidated: true,
+} satisfies Readonly<Record<RedisReadMissReason, true>>;
+const REDIS_READ_MISS_REASONS: ReadonlySet<RedisReadMissReason> = new Set(
+  Object.keys(REDIS_READ_MISS_REASON_FLAGS) as RedisReadMissReason[],
+);
 
 /**
  * Reject malformed client read results before they can mislabel reads or leak

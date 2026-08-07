@@ -852,6 +852,12 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
 
       expect(await scriptClient.read({ valueKey })).toEqual({ status: "miss", reason: "not_found" });
 
+      // Frame-before-watermark precedence: an absent frame stays not_found
+      // even when the watermark key holds garbage.
+      await admin.set(watermarkKey, "not-a-watermark");
+      expect(await scriptClient.read({ valueKey, watermarkKey })).toEqual({ status: "miss", reason: "not_found" });
+      await admin.del(watermarkKey);
+
       await admin.set(valueKey, Buffer.alloc(9));
       expect(await scriptClient.read({ valueKey })).toEqual({ status: "miss", reason: "frame_unsupported" });
 

@@ -424,6 +424,7 @@ describe("DialCache Redis TTL layer", () => {
     { shape: "a bare payload", outcome: "raw-payload" },
     { shape: "an unknown status", outcome: { status: "nope" } },
     { shape: "an unbounded miss reason", outcome: { status: "miss", reason: "because" } },
+    { shape: "a core-authoritative miss reason", outcome: { status: "miss", reason: "deserialization_failed" } },
     { shape: "a non-payload hit", outcome: { status: "hit", payload: 42 } },
   ])("fails open when a client read returns $shape instead of a read outcome", async ({ outcome }) => {
     const redisClient: DialCacheRedisClient = {

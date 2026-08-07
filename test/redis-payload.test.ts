@@ -102,6 +102,15 @@ describe("Redis frame decoding", () => {
   it("validates tracked frame and watermark state before payload encoding", () => {
     const malformedPayload = encodeFrame("cached", 2, 1_000);
 
+    // Frame state wins over watermark state even when both are bad.
+    expect(decodeTrackedRedisFrame(null, Buffer.from("not-a-watermark"))).toEqual({
+      status: "miss",
+      reason: "not_found",
+    });
+    expect(decodeTrackedRedisFrame(Buffer.alloc(9), Buffer.from("not-a-watermark"))).toEqual({
+      status: "miss",
+      reason: "frame_unsupported",
+    });
     expect(decodeTrackedRedisFrame(null, Buffer.from("0"))).toEqual({ status: "miss", reason: "not_found" });
     expect(decodeTrackedRedisFrame(Buffer.alloc(9), Buffer.from("0"))).toEqual({
       status: "miss",
