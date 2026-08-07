@@ -1,18 +1,42 @@
 import type { Awaitable } from "./config.js";
 
+const redisPayloadErrorBrand = Symbol.for("dialcache.DialCacheRedisPayloadError");
+const redisPayloadEncodingErrorBrand = Symbol.for("dialcache.DialCacheRedisPayloadEncodingError");
 const redisProtocolErrorBrand = Symbol.for("dialcache.DialCacheRedisProtocolError");
 
 export class DialCacheRedisPayloadError extends Error {
+  static [Symbol.hasInstance](value: unknown): boolean {
+    if (this !== DialCacheRedisPayloadError) {
+      return Function.prototype[Symbol.hasInstance].call(this, value);
+    }
+    return typeof value === "object"
+      && value !== null
+      && Object.getOwnPropertyDescriptor(value, redisPayloadErrorBrand)?.value === true;
+  }
+
   constructor(message: string) {
     super(message);
     this.name = "DialCacheRedisPayloadError";
+    // CJS adapter subpaths are separate bundles; a global symbol preserves root-export instanceof checks.
+    Object.defineProperty(this, redisPayloadErrorBrand, { value: true });
   }
 }
 
 export class DialCacheRedisPayloadEncodingError extends Error {
+  static [Symbol.hasInstance](value: unknown): boolean {
+    if (this !== DialCacheRedisPayloadEncodingError) {
+      return Function.prototype[Symbol.hasInstance].call(this, value);
+    }
+    return typeof value === "object"
+      && value !== null
+      && Object.getOwnPropertyDescriptor(value, redisPayloadEncodingErrorBrand)?.value === true;
+  }
+
   constructor(message: string) {
     super(message);
     this.name = "DialCacheRedisPayloadEncodingError";
+    // CJS adapter subpaths are separate bundles; a global symbol preserves root-export instanceof checks.
+    Object.defineProperty(this, redisPayloadEncodingErrorBrand, { value: true });
   }
 }
 
@@ -94,7 +118,20 @@ export interface RedisInvalidationRequest {
  */
 export interface DialCacheRedisClient {
   /**
-   * Atomically read and validate a value against its watermark when tracked.
+   * Read a DialCache Redis frame and return its decoded serializer payload.
+   * Implementations must use `decodeRedisFrame` / `decodeTrackedRedisFrame`
+   * from `dialcache/redis-protocol`, or preserve their exact behavior.
+   *
+   * Raw values are Redis bulk strings (`Buffer`) or null. A missing value, a
+   * frame shorter than the version/timestamp/encoding header, or an
+   * unsupported frame version is a cache miss. A tracked read also misses
+   * when its watermark is missing, is not a finite unsigned decimal, or is
+   * greater than or equal to the frame's creation time. In other words,
+   * `createdAt <= watermark` is fenced. Unsupported payload encodings and
+   * non-bulk runtime replies are payload protocol errors rather than misses.
+   *
+   * Tracked implementations must read the value and watermark atomically from
+   * one authoritative snapshot; replica lag must not hide an invalidation.
    *
    * A non-null payload is transferred to DialCache. A returned Buffer must
    * remain stable and must not be mutated, pooled, or reused after this method

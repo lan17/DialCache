@@ -33,7 +33,7 @@ async function waitForCluster(container: StartedTestContainer): Promise<void> {
   throw new Error("Redis Cluster did not become ready");
 }
 
-describe("DialCache Lua protocol on Redis Cluster", () => {
+describe("DialCache Redis protocol on Redis Cluster", () => {
   let network: StartedNetwork | undefined;
   let containers: Array<StartedTestContainer> = [];
   let cluster: ReturnType<typeof createTestCluster> | undefined;
@@ -107,7 +107,7 @@ describe("DialCache Lua protocol on Redis Cluster", () => {
     await network?.stop();
   });
 
-  it("routes scripts across slots and reloads them per node", async () => {
+  it("routes cache operations across slots and reloads mutation scripts per node", async () => {
     if (cluster === undefined) {
       throw new Error("Redis Cluster did not start");
     }
@@ -140,7 +140,7 @@ describe("DialCache Lua protocol on Redis Cluster", () => {
       }),
     );
     const recoveryDialcache = new DialCache({
-      namespace: "cluster-cache",
+      namespace: "cluster-cache-recovery",
       redis: { client: scriptClient, readTimeoutMs: 10_000 },
     });
     const recoverValue = recoveryDialcache.cached(async (id: string) => ({ id, calls: ++calls }), {
@@ -150,20 +150,30 @@ describe("DialCache Lua protocol on Redis Cluster", () => {
       defaultConfig: remoteOnly,
     });
     const second = await recoveryDialcache.enable(async () => await Promise.all(ids.map(recoverValue)));
+    const sizesAfterRecovery = await Promise.all(
+      activeCluster.masters.map(async (master) => {
+        const client = await activeCluster.nodeClient(master);
+        return await client.dbSize();
+      }),
+    );
+    const callsAfterRecovery = calls;
+    const third = await recoveryDialcache.enable(async () => await Promise.all(ids.map(recoverValue)));
 
     expect(first.map(({ id }) => id)).toEqual(ids);
-    expect(calls).toBe(30);
     expect(sizesBeforeFlush.every((size) => size > 0)).toBe(true);
-    expect(second).toEqual(first);
+    expect(
+      sizesAfterRecovery.every((size, index) => size > (sizesBeforeFlush[index] ?? Number.POSITIVE_INFINITY)),
+    ).toBe(true);
+    expect(second.map(({ id }) => id)).toEqual(ids);
+    expect(third).toEqual(second);
+    expect(callsAfterRecovery).toBe(60);
+    expect(calls).toBe(callsAfterRecovery);
   });
 
   it("keeps tracked keys colocated and rejects mismatched hash tags", async () => {
     if (cluster === undefined) {
       throw new Error("Redis Cluster did not start");
     }
-    expect(dialcacheRedisScripts.dialcacheRead.IS_READ_ONLY).toBe(true);
-    expect(dialcacheRedisScripts.dialcacheReadTracked.IS_READ_ONLY).toBe(false);
-    expect(dialcacheRedisScripts.dialcacheRead.SHA1).not.toBe(dialcacheRedisScripts.dialcacheReadTracked.SHA1);
     expect(dialcacheRedisScripts.dialcacheWrite.SHA1).not.toBe(dialcacheRedisScripts.dialcacheWriteTracked.SHA1);
     const scriptClient: DialCacheRedisClient = createNodeRedisDialCacheClient(cluster);
     const dialcache = new DialCache({
@@ -187,10 +197,15 @@ describe("DialCache Lua protocol on Redis Cluster", () => {
 
     expect(before).toEqual({ id: "123", version: 1 });
     expect(after).toEqual({ id: "123", version: 2 });
-    await expect(cluster.dialcacheReadTracked("{slot-a}:value", "{slot-b}:watermark")).rejects.toThrow(/CROSSSLOT/);
+    await expect(
+      scriptClient.read({
+        valueKey: "{slot-a}:value",
+        watermarkKey: "{slot-b}:watermark",
+      }),
+    ).rejects.toThrow(/CROSSSLOT/);
   });
 
-  it("round-trips binary payloads through cluster script routing", async () => {
+  it("round-trips binary payloads through cluster routing", async () => {
     if (cluster === undefined) {
       throw new Error("Redis Cluster did not start");
     }

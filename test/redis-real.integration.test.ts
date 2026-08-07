@@ -154,7 +154,7 @@ function encodeFrame(payload: string | Buffer, encoding: number, createdAtMs = D
   return Buffer.concat([Buffer.from([version]), timestamp, Buffer.from([encoding]), Buffer.from(payload)]);
 }
 
-describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
+describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
   let container: StartedTestContainer | undefined;
   // This connection controls and inspects server state; cache operations use the selected adapter harness.
   let admin: NodeRedisTestClient | undefined;
@@ -799,7 +799,7 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       });
     });
 
-    it("recovers every Lua script after SCRIPT FLUSH", async () => {
+    it("reloads every mutation script after SCRIPT FLUSH", async () => {
       if (client === undefined || admin === undefined) {
         throw new Error("Redis test clients did not start");
       }
@@ -808,7 +808,6 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
 
       await admin.scriptFlush();
       expect(await scriptClient.write({ valueKey, cacheTtlMs: 60_000, value: "untracked" })).toBe(true);
-      await admin.scriptFlush();
       expect(await scriptClient.read({ valueKey })).toBe("untracked");
 
       const trackedValueKey = "script-recovery:{item:tracked}:value";
@@ -822,7 +821,6 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
           value: "tracked",
         }),
       ).toBe(true);
-      await admin.scriptFlush();
       expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toBe("tracked");
       await admin.scriptFlush();
       await expect(
@@ -831,6 +829,7 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
           futureBufferMs: 0,
         }),
       ).resolves.toBeUndefined();
+      expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toBeNull();
     });
 
     it("treats every invalid read frame and watermark state as a miss", async () => {
@@ -863,6 +862,186 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
 
       await admin.set(watermarkKey, "999.5");
       expect(await scriptClient.read({ valueKey, watermarkKey })).toBe("tracked");
+    });
+
+    it("records a stale tracked frame as a remote miss without a read error", async () => {
+      if (client === undefined || admin === undefined) {
+        throw new Error("Redis test clients did not start");
+      }
+      const scriptClient = client.adapter;
+
+      const namespace = "stale-miss-metrics";
+      const useCase = "TrackedStaleMissMetrics";
+      const id = "stale";
+      const staleValueKey = `{${namespace}:item_id:${id}}#${useCase}:dialcache-frame-v1`;
+      const staleWatermarkKey = `{${namespace}:item_id:${id}}#watermark`;
+      await admin.set(staleValueKey, encodeFrame("stale", 0, 1_000));
+      await admin.set(staleWatermarkKey, "1000");
+
+      const metrics = {
+        request: vi.fn(),
+        miss: vi.fn(),
+        disabled: vi.fn(),
+        error: vi.fn(),
+        invalidation: vi.fn(),
+        coalesced: vi.fn(),
+        observeGet: vi.fn(),
+        observeFallback: vi.fn(),
+        observeSerialization: vi.fn(),
+        observeSize: vi.fn(),
+      } satisfies DialCacheMetricsAdapter;
+      const dialcache = new DialCache({
+        namespace,
+        redis: { client: scriptClient, readTimeoutMs: 10_000 },
+        metrics,
+      });
+      const fallback = vi.fn(async () => ({ source: "fallback" }));
+      const getValue = dialcache.cached(fallback, {
+        keyType: "item_id",
+        useCase,
+        cacheKey: () => id,
+        trackForInvalidation: true,
+        defaultConfig: remoteOnly,
+      });
+      const labels = {
+        cacheNamespace: namespace,
+        useCase,
+        keyType: "item_id",
+        layer: CacheLayer.REMOTE,
+      } as const;
+
+      await expect(dialcache.enable(async () => await getValue())).resolves.toEqual({ source: "fallback" });
+
+      expect(fallback).toHaveBeenCalledOnce();
+      expect(metrics.request).toHaveBeenCalledOnce();
+      expect(metrics.request).toHaveBeenCalledWith(labels);
+      expect(metrics.miss).toHaveBeenCalledOnce();
+      expect(metrics.miss).toHaveBeenCalledWith(labels);
+      expect(metrics.observeGet).toHaveBeenCalledOnce();
+      expect(metrics.observeGet).toHaveBeenCalledWith(labels, expect.any(Number));
+      expect(metrics.observeFallback).toHaveBeenCalledOnce();
+      expect(metrics.observeFallback).toHaveBeenCalledWith(labels, expect.any(Number));
+      expect(metrics.error).not.toHaveBeenCalled();
+    });
+
+    it("uses native wrong-type semantics and repairs tracked value keys", async () => {
+      if (client === undefined || admin === undefined) {
+        throw new Error("Redis test clients did not start");
+      }
+      const scriptClient = client.adapter;
+      const valueKey = "wrong-type:{item:read}:value";
+      const watermarkKey = "wrong-type:{item:read}:watermark";
+
+      await admin.hSet(valueKey, "field", "value");
+      await admin.set(watermarkKey, "0");
+      await expect(scriptClient.read({ valueKey })).rejects.toThrow(/WRONGTYPE/);
+      await expect(scriptClient.read({ valueKey, watermarkKey })).resolves.toBeNull();
+
+      await admin.del([valueKey, watermarkKey]);
+      await admin.set(valueKey, encodeFrame("cached", 0, 1_000));
+      await admin.hSet(watermarkKey, "field", "value");
+      await expect(scriptClient.read({ valueKey, watermarkKey })).resolves.toBeNull();
+
+      const namespace = "wrong-type-repair";
+      const repairValueKey = `{${namespace}:item_id:repair}#WrongTypeRepair:dialcache-frame-v1`;
+      const repairWatermarkKey = `{${namespace}:item_id:repair}#watermark`;
+      await admin.hSet(repairValueKey, "field", "value");
+      await admin.set(repairWatermarkKey, "0");
+
+      let sourceCalls = 0;
+      const dialcache = new DialCache({
+        namespace,
+        redis: { client: scriptClient, readTimeoutMs: 10_000 },
+      });
+      const getValue = dialcache.cached(async (id: string) => ({ id, calls: ++sourceCalls }), {
+        keyType: "item_id",
+        useCase: "WrongTypeRepair",
+        cacheKey: (id) => id,
+        trackForInvalidation: true,
+        defaultConfig: remoteOnly,
+      });
+
+      const repaired = await dialcache.enable(async () => await getValue("repair"));
+      const cached = await dialcache.enable(async () => await getValue("repair"));
+
+      expect(repaired).toEqual({ id: "repair", calls: 1 });
+      expect(cached).toEqual(repaired);
+      expect(sourceCalls).toBe(1);
+      expect(await admin.type(repairValueKey)).toBe("string");
+    });
+
+    it("fails open repeatedly when a tracked watermark has the wrong Redis type", async () => {
+      if (client === undefined || admin === undefined) {
+        throw new Error("Redis test clients did not start");
+      }
+      const namespace = "wrong-type-watermark";
+      const useCase = "WrongTypeWatermark";
+      const id = "broken";
+      const valueKey = `{${namespace}:item_id:${id}}#${useCase}:dialcache-frame-v1`;
+      const watermarkKey = `{${namespace}:item_id:${id}}#watermark`;
+      const frame = encodeFrame("cached", 0, 1_000);
+      await admin.set(valueKey, frame, { PX: 60_000 });
+      await admin.hSet(watermarkKey, "field", "value");
+
+      const metrics = {
+        request: vi.fn(),
+        miss: vi.fn(),
+        disabled: vi.fn(),
+        error: vi.fn(),
+        invalidation: vi.fn(),
+        coalesced: vi.fn(),
+        observeGet: vi.fn(),
+        observeFallback: vi.fn(),
+        observeSerialization: vi.fn(),
+        observeSize: vi.fn(),
+      } satisfies DialCacheMetricsAdapter;
+      const dialcache = new DialCache({
+        namespace,
+        redis: { client: client.adapter, readTimeoutMs: 10_000 },
+        logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
+        metrics,
+      });
+      let sourceCalls = 0;
+      const getValue = dialcache.cached(async () => ({ source: "fallback", calls: ++sourceCalls }), {
+        keyType: "item_id",
+        useCase,
+        cacheKey: () => id,
+        trackForInvalidation: true,
+        defaultConfig: remoteOnly,
+      });
+      const labels = {
+        cacheNamespace: namespace,
+        useCase,
+        keyType: "item_id",
+        layer: CacheLayer.REMOTE,
+      } as const;
+
+      await expect(dialcache.enable(async () => await getValue())).resolves.toEqual({
+        source: "fallback",
+        calls: 1,
+      });
+      await expect(dialcache.enable(async () => await getValue())).resolves.toEqual({
+        source: "fallback",
+        calls: 2,
+      });
+
+      expect(sourceCalls).toBe(2);
+      expect(metrics.request).toHaveBeenCalledTimes(2);
+      expect(metrics.miss).toHaveBeenCalledTimes(2);
+      expect(metrics.error).toHaveBeenCalledTimes(2);
+      expect(metrics.error).toHaveBeenNthCalledWith(1, {
+        ...labels,
+        error: "cache_write",
+        inFallback: false,
+      });
+      expect(metrics.error).toHaveBeenNthCalledWith(2, {
+        ...labels,
+        error: "cache_write",
+        inFallback: false,
+      });
+      expect(metrics.error).not.toHaveBeenCalledWith(expect.objectContaining({ error: "cache_read" }));
+      expect(await admin.type(watermarkKey)).toBe("hash");
+      expect(await admin.get(commandOptions({ returnBuffers: true }), valueKey)).toEqual(frame);
     });
 
     it("rejects invalid raw script arguments before mutating Redis", async () => {
@@ -990,7 +1169,7 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
       expect(await admin.pTTL(watermarkKey)).toBeLessThanOrEqual(60_101);
     });
 
-    it("invalidates tracked entries and recovers after SCRIPT FLUSH", async () => {
+    it("keeps native reads working after SCRIPT FLUSH", async () => {
       if (client === undefined || admin === undefined) {
         throw new Error("Redis test clients did not start");
       }
@@ -1273,8 +1452,14 @@ describe.each(engines)("DialCache Lua protocol on $name", ({ image }) => {
 
       await scriptClient.invalidate({ watermarkKey, futureBufferMs: 100 });
       expect(await scriptClient.read({ valueKey, watermarkKey })).toBeNull();
+      const watermarkBeforeBlockedWrite = await admin.get(watermarkKey);
+      const watermarkTtlBeforeBlockedWrite = await admin.pTTL(watermarkKey);
       expect(await scriptClient.write({ ...writeRequest, value: "blocked" })).toBe(false);
-      expect(await scriptClient.read({ valueKey })).toBe("cached");
+      expect(await scriptClient.read({ valueKey })).toBeNull();
+      expect(await admin.get(watermarkKey)).toBe(watermarkBeforeBlockedWrite);
+      const watermarkTtlAfterBlockedWrite = await admin.pTTL(watermarkKey);
+      expect(watermarkTtlAfterBlockedWrite).toBeGreaterThan(watermarkTtlBeforeBlockedWrite - 1_000);
+      expect(watermarkTtlAfterBlockedWrite).toBeLessThanOrEqual(watermarkTtlBeforeBlockedWrite);
       const ttlBeforeRead = await admin.pTTL(watermarkKey);
       await scriptClient.read({ valueKey, watermarkKey });
       expect(await admin.pTTL(watermarkKey)).toBeLessThanOrEqual(ttlBeforeRead);

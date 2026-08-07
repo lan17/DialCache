@@ -25,17 +25,6 @@ const CEIL_FINITE_NUMBER_LUA = String.raw`local function ceil_finite_number(raw)
   return math.ceil(value)
 end`;
 
-const READ_FRAME_LUA = String.raw`local value = redis.call("GET", KEYS[1])
-if not value or string.len(value) < 10 then
-  return false
-end
-
-if string.byte(value, 1) ~= ${REDIS_FRAME_VERSION} then
-  return false
-end`;
-
-const RETURN_PAYLOAD_LUA = String.raw`return string.sub(value, 10)`;
-
 const VALIDATE_WRITE_ARGUMENTS_LUA = String.raw`local cache_ttl_ms = ceil_finite_number(ARGV[1])
 local encoding = tonumber(ARGV[2])
 if not cache_ttl_ms or cache_ttl_ms <= 0 or cache_ttl_ms > ${MAX_SUPPORTED_DURATION_MS} then
@@ -53,28 +42,6 @@ const WRITE_FRAME_LUA = String.raw`local frame = string.char(${REDIS_FRAME_VERSI
   .. string.char(encoding)
   .. ARGV[3]
 redis.call("SET", KEYS[1], frame, "PX", cache_ttl_ms)`;
-
-export const READ_CACHE_SCRIPT = [READ_FRAME_LUA, RETURN_PAYLOAD_LUA].join("\n\n");
-
-export const READ_TRACKED_CACHE_SCRIPT = [
-  PARSE_WATERMARK_LUA,
-  READ_FRAME_LUA,
-  String.raw`local raw_watermark = redis.call("GET", KEYS[2])
-if not raw_watermark then
-  return false
-end
-
-local watermark = parse_watermark(raw_watermark)
-if not watermark then
-  return false
-end
-
-local created_at = struct.unpack(">I8", string.sub(value, 2, 9))
-if created_at <= watermark then
-  return false
-end`,
-  RETURN_PAYLOAD_LUA,
-].join("\n\n");
 
 export const WRITE_CACHE_SCRIPT = [
   CEIL_FINITE_NUMBER_LUA,
@@ -99,6 +66,9 @@ if raw_watermark then
 end
 
 if watermark >= now_ms then
+  -- A fenced fallback write can remove the stale frame that led to it. Reads that
+  -- fail before reaching this script cannot benefit from this partial mitigation.
+  redis.call("UNLINK", KEYS[1])
   return 0
 end`,
   WRITE_FRAME_LUA,
