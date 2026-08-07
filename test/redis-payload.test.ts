@@ -25,24 +25,27 @@ function encodeFrame(
 
 describe("Redis frame decoding", () => {
   it("decodes UTF-8 and binary payloads without copying binary data", () => {
-    expect(decodeRedisFrame(encodeFrame("cached"))).toBe("cached");
+    expect(decodeRedisFrame(encodeFrame("cached"))).toEqual({ status: "hit", payload: "cached" });
 
     const frame = encodeFrame(Buffer.from([0, 0xff, 0x80]), 1);
-    const decoded = decodeRedisFrame(frame);
-    expect(decoded).toEqual(Buffer.from([0, 0xff, 0x80]));
-    expect(Buffer.isBuffer(decoded)).toBe(true);
-    if (!Buffer.isBuffer(decoded)) {
+    const outcome = decodeRedisFrame(frame);
+    expect(outcome).toEqual({ status: "hit", payload: Buffer.from([0, 0xff, 0x80]) });
+    if (outcome.status !== "hit" || !Buffer.isBuffer(outcome.payload)) {
       throw new Error("Expected a binary Redis payload");
     }
+    const decoded = outcome.payload;
     expect(decoded.buffer).toBe(frame.buffer);
     expect(decoded.byteOffset).toBe(frame.byteOffset + 10);
     expect(decoded.byteLength).toBe(frame.byteLength - 10);
   });
 
-  it("treats missing, short, and unsupported frames as misses", () => {
-    expect(decodeRedisFrame(null)).toBeNull();
-    expect(decodeRedisFrame(Buffer.alloc(9))).toBeNull();
-    expect(decodeRedisFrame(encodeFrame("cached", 0, 1_000, 2))).toBeNull();
+  it("classifies missing frames apart from short and unsupported frames", () => {
+    expect(decodeRedisFrame(null)).toEqual({ status: "miss", reason: "not_found" });
+    expect(decodeRedisFrame(Buffer.alloc(9))).toEqual({ status: "miss", reason: "frame_unsupported" });
+    expect(decodeRedisFrame(encodeFrame("cached", 0, 1_000, 2))).toEqual({
+      status: "miss",
+      reason: "frame_unsupported",
+    });
   });
 
   it("rejects unsupported payload encodings after validating the frame", () => {
@@ -64,13 +67,19 @@ describe("Redis frame decoding", () => {
   it("validates tracked frames against integer and fractional watermarks", () => {
     const frame = encodeFrame("cached", 0, 1_000);
 
-    expect(decodeTrackedRedisFrame(frame, Buffer.from("999"))).toBe("cached");
-    expect(decodeTrackedRedisFrame(frame, Buffer.from("999.5"))).toBe("cached");
-    expect(decodeTrackedRedisFrame(frame, Buffer.from("1000"))).toBeNull();
-    expect(decodeTrackedRedisFrame(frame, Buffer.from("1000.5"))).toBeNull();
+    expect(decodeTrackedRedisFrame(frame, Buffer.from("999"))).toEqual({ status: "hit", payload: "cached" });
+    expect(decodeTrackedRedisFrame(frame, Buffer.from("999.5"))).toEqual({ status: "hit", payload: "cached" });
+    expect(decodeTrackedRedisFrame(frame, Buffer.from("1000"))).toEqual({
+      status: "miss",
+      reason: "watermark_invalidated",
+    });
+    expect(decodeTrackedRedisFrame(frame, Buffer.from("1000.5"))).toEqual({
+      status: "miss",
+      reason: "watermark_invalidated",
+    });
   });
 
-  it("treats missing, malformed, and non-finite watermarks as misses", () => {
+  it("treats missing, malformed, and non-finite watermarks as unreadable misses", () => {
     const frame = encodeFrame("cached", 0, 1_000);
 
     for (const watermark of [
@@ -83,17 +92,29 @@ describe("Redis frame decoding", () => {
       Buffer.from("1\n"),
       Buffer.from("9".repeat(400)),
     ]) {
-      expect(decodeTrackedRedisFrame(frame, watermark)).toBeNull();
+      expect(decodeTrackedRedisFrame(frame, watermark)).toEqual({
+        status: "miss",
+        reason: "watermark_unreadable",
+      });
     }
   });
 
   it("validates tracked frame and watermark state before payload encoding", () => {
     const malformedPayload = encodeFrame("cached", 2, 1_000);
 
-    expect(decodeTrackedRedisFrame(null, Buffer.from("0"))).toBeNull();
-    expect(decodeTrackedRedisFrame(Buffer.alloc(9), Buffer.from("0"))).toBeNull();
-    expect(decodeTrackedRedisFrame(malformedPayload, null)).toBeNull();
-    expect(decodeTrackedRedisFrame(malformedPayload, Buffer.from("1000"))).toBeNull();
+    expect(decodeTrackedRedisFrame(null, Buffer.from("0"))).toEqual({ status: "miss", reason: "not_found" });
+    expect(decodeTrackedRedisFrame(Buffer.alloc(9), Buffer.from("0"))).toEqual({
+      status: "miss",
+      reason: "frame_unsupported",
+    });
+    expect(decodeTrackedRedisFrame(malformedPayload, null)).toEqual({
+      status: "miss",
+      reason: "watermark_unreadable",
+    });
+    expect(decodeTrackedRedisFrame(malformedPayload, Buffer.from("1000"))).toEqual({
+      status: "miss",
+      reason: "watermark_invalidated",
+    });
     expect(() => decodeTrackedRedisFrame(malformedPayload, Buffer.from("999"))).toThrow(
       DialCacheRedisPayloadEncodingError,
     );

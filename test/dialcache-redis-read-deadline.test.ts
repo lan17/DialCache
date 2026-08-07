@@ -11,10 +11,12 @@ import {
   type CachedOptions,
   type DialCacheMetricsAdapter,
   type DialCacheRedisClient,
-  type RedisCachePayload,
   type RedisConfig,
   type RedisReadContext,
+  type RedisReadOutcome,
 } from "../src/index.js";
+
+const MISS_NOT_FOUND = { status: "miss", reason: "not_found" } as const;
 
 interface Deferred<T> {
   readonly promise: Promise<T>;
@@ -97,7 +99,7 @@ describe("DialCache Redis read deadlines", () => {
         throw new Error("missing read context");
       }
       contexts.push(context);
-      return null;
+      return MISS_NOT_FOUND;
     });
     const libraryDefault = new DialCache({ redis: { client: redis.client } });
     const defaulted = libraryDefault.cached(async () => "defaulted", {
@@ -150,7 +152,7 @@ describe("DialCache Redis read deadlines", () => {
   });
 
   it("accepts an omitted instance default and rejects invalid explicit values", () => {
-    const client = redisClient(async () => null).client;
+    const client = redisClient(async () => MISS_NOT_FOUND).client;
     expect(() => new DialCache({ redis: { client } })).not.toThrow();
 
     const invalidValues: readonly unknown[] = [
@@ -181,7 +183,7 @@ describe("DialCache Redis read deadlines", () => {
   });
 
   it("rejects invalid static use-case overrides before reserving the use-case name", () => {
-    const client = redisClient(async () => null).client;
+    const client = redisClient(async () => MISS_NOT_FOUND).client;
     const invalidValues: readonly unknown[] = [
       null,
       0,
@@ -233,7 +235,7 @@ describe("DialCache Redis read deadlines", () => {
   });
 
   it("fails open before Redis when an explicit runtime timeout is invalid", async () => {
-    const redis = redisClient(async () => null);
+    const redis = redisClient(async () => MISS_NOT_FOUND);
     const error = vi.fn<DialCacheMetricsAdapter["error"]>();
     const metrics = metricsWithError(error);
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -286,7 +288,7 @@ describe("DialCache Redis read deadlines", () => {
         if (settlement === "throw") {
           throw new Error("late synchronous Redis failure");
         }
-        return null;
+        return MISS_NOT_FOUND;
       });
       const error = vi.fn<DialCacheMetricsAdapter["error"]>();
       const metrics = metricsWithError(error);
@@ -327,8 +329,8 @@ describe("DialCache Redis read deadlines", () => {
     const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
     const redis = redisClient(
       vi.fn()
-        .mockResolvedValueOnce(JSON.stringify({ source: "redis" }))
-        .mockResolvedValueOnce(null),
+        .mockResolvedValueOnce({ status: "hit", payload: JSON.stringify({ source: "redis" }) })
+        .mockResolvedValueOnce(MISS_NOT_FOUND),
     );
     const dialcache = new DialCache({ redis: { client: redis.client, readTimeoutMs: 100 } });
     const hit = dialcache.cached(async () => ({ source: "fallback" }), {
@@ -363,7 +365,7 @@ describe("DialCache Redis read deadlines", () => {
       }
       contexts.push(context);
       readStarted.resolve();
-      return await new Promise<null>(() => undefined);
+      return await new Promise<never>(() => undefined);
     });
     const error = vi.fn<DialCacheMetricsAdapter["error"]>();
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -464,7 +466,7 @@ describe("DialCache Redis read deadlines", () => {
           throw new Error("missing read context");
         }
         contexts.push(context);
-        return await new Promise<null>(() => undefined);
+        return await new Promise<never>(() => undefined);
       });
       const dialcache = new DialCache({
         redis: { client: redis.client, readTimeoutMs: 100 },
@@ -503,7 +505,7 @@ describe("DialCache Redis read deadlines", () => {
     const readStarted = deferred<void>();
     const redis = redisClient(async () => {
       readStarted.resolve();
-      return await new Promise<null>(() => undefined);
+      return await new Promise<never>(() => undefined);
     });
     const dialcache = new DialCache({ redis: { client: redis.client, readTimeoutMs: 10 } });
     const fallback = vi.fn(async () => "fallback");
@@ -532,7 +534,7 @@ describe("DialCache Redis read deadlines", () => {
     const readStarted = deferred<void>();
     const redis = redisClient(async () => {
       readStarted.resolve();
-      return await new Promise<null>(() => undefined);
+      return await new Promise<never>(() => undefined);
     });
     const dialcache = new DialCache({ redis: { client: redis.client, readTimeoutMs: 10 } });
     const fallback = vi.fn(async () => "fallback");
@@ -576,7 +578,7 @@ describe("DialCache Redis read deadlines", () => {
     const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
     const redis = redisClient(async () => {
       readStarted.resolve();
-      return await new Promise<null>(() => undefined);
+      return await new Promise<never>(() => undefined);
     });
     const dialcache = new DialCache({ redis: { client: redis.client, readTimeoutMs: 10 } });
     const fallback = vi.fn(async () => "fallback");
@@ -605,13 +607,13 @@ describe("DialCache Redis read deadlines", () => {
   it.each(["fulfillment", "rejection"] as const)(
     "consumes late read %s and lets a later invocation recover",
     async (settlement) => {
-      const firstRead = deferred<RedisCachePayload | null>();
+      const firstRead = deferred<RedisReadOutcome>();
       let readCalls = 0;
       const redis = redisClient(async () => {
         readCalls += 1;
         return readCalls === 1
           ? await firstRead.promise
-          : JSON.stringify({ source: "redis" });
+          : { status: "hit", payload: JSON.stringify({ source: "redis" }) };
       });
       const error = vi.fn<DialCacheMetricsAdapter["error"]>();
       const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -634,7 +636,7 @@ describe("DialCache Redis read deadlines", () => {
       await expect(dialcache.enable(async () => await load())).resolves.toEqual({ source: "redis" });
 
       if (settlement === "fulfillment") {
-        firstRead.resolve(JSON.stringify({ source: "late" }));
+        firstRead.resolve({ status: "hit", payload: JSON.stringify({ source: "late" }) });
       } else {
         firstRead.reject(new Error("late Redis failure"));
       }
@@ -661,7 +663,7 @@ describe("DialCache Redis read deadlines", () => {
           ? async () => {
               throw new Error("Redis unavailable");
             }
-          : async () => await new Promise<null>(() => undefined),
+          : async () => await new Promise<never>(() => undefined),
       );
       const dialcache = new DialCache({
         redis: { client: redis.client, readTimeoutMs: 10 },
@@ -697,7 +699,7 @@ describe("DialCache Redis read deadlines", () => {
 
   it("allocates no read timer for disabled calls, ramped-out Redis, or local hits", async () => {
     const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
-    const redis = redisClient(async () => null);
+    const redis = redisClient(async () => MISS_NOT_FOUND);
     const dialcache = new DialCache({ redis: { client: redis.client, readTimeoutMs: 100 } });
     const disabled = dialcache.cached(async () => "disabled", {
       keyType: "id",

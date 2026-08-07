@@ -2,6 +2,7 @@ import type {
   DialCacheRedisClient,
   RedisCachePayload,
   RedisInvalidationRequest,
+  RedisReadOutcome,
   RedisReadRequest,
   RedisWriteRequest,
 } from "../src/index.js";
@@ -27,7 +28,7 @@ export class FakeRedis implements DialCacheRedisClient {
   failWatermarkGet = false;
   getGate: Promise<void> | null = null;
 
-  async read({ valueKey, watermarkKey }: RedisReadRequest): Promise<RedisCachePayload | null> {
+  async read({ valueKey, watermarkKey }: RedisReadRequest): Promise<RedisReadOutcome> {
     if (watermarkKey === undefined) {
       this.getCalls += 1;
     } else {
@@ -122,10 +123,14 @@ export class FakeRedis implements DialCacheRedisClient {
     }
   }
 
-  private readPayload(valueKey: string, watermarkKey: string | null): RedisCachePayload | null {
+  // Mirrors the real decoders' classification, including frame-before-watermark precedence.
+  private readPayload(valueKey: string, watermarkKey: string | null): RedisReadOutcome {
     const raw = this.readRaw(valueKey);
-    if (raw === null || raw.length < PAYLOAD_OFFSET || raw[0] !== FRAME_VERSION) {
-      return null;
+    if (raw === null) {
+      return { status: "miss", reason: "not_found" };
+    }
+    if (raw.length < PAYLOAD_OFFSET || raw[0] !== FRAME_VERSION) {
+      return { status: "miss", reason: "frame_unsupported" };
     }
 
     if (watermarkKey !== null) {
@@ -133,19 +138,22 @@ export class FakeRedis implements DialCacheRedisClient {
       try {
         watermark = this.readWatermark(watermarkKey);
       } catch {
-        return null;
+        return { status: "miss", reason: "watermark_unreadable" };
       }
-      if (watermark === null || Number(readTimestamp(raw)) <= watermark) {
-        return null;
+      if (watermark === null) {
+        return { status: "miss", reason: "watermark_unreadable" };
+      }
+      if (Number(readTimestamp(raw)) <= watermark) {
+        return { status: "miss", reason: "watermark_invalidated" };
       }
     }
 
     const encoding = raw[ENCODING_OFFSET];
     if (encoding === 0) {
-      return raw.subarray(PAYLOAD_OFFSET).toString("utf8");
+      return { status: "hit", payload: raw.subarray(PAYLOAD_OFFSET).toString("utf8") };
     }
     if (encoding === 1) {
-      return Buffer.from(raw.subarray(PAYLOAD_OFFSET));
+      return { status: "hit", payload: Buffer.from(raw.subarray(PAYLOAD_OFFSET)) };
     }
     throw new DialCacheRedisPayloadEncodingError("Invalid DialCache Redis payload encoding");
   }

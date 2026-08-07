@@ -402,7 +402,7 @@ The node-redis adapter owns no additional resources, so the application closes t
 
 Reads use native `GET` for untracked entries and one atomic `MGET` for each tracked value-and-watermark pair. The adapters validate and decode the returned frame in the Node process. Tracked reads are deliberately routed to primaries so a lagging replica cannot hide an invalidation watermark.
 
-Native commands retain Redis's wrong-type behavior. An untracked `GET` surfaces `WRONGTYPE`; tracked `MGET` represents a wrong-type member as a missing value. A wrong-type tracked value is therefore a clean miss and may be replaced with a valid DialCache frame after the fallback succeeds, while a wrong-type watermark prevents the tracked write from succeeding.
+Native commands retain Redis's wrong-type behavior. An untracked `GET` surfaces `WRONGTYPE`; tracked `MGET` represents a wrong-type member as a missing value. A wrong-type tracked value is therefore a clean `not_found` miss and may be replaced with a valid DialCache frame after the fallback succeeds, while a wrong-type watermark misses as `watermark_unreadable` and prevents the tracked write from succeeding.
 
 Node-redis forces tracked cluster commands to the slot primary. GLIDE uses an explicit primary route in cluster mode; in standalone mode it sends `MGET` through a one-command non-atomic batch because direct read commands follow the client's replica-read preference. Standalone batches use the primary, and `MGET` itself provides the atomic snapshot without consuming caller-owned `WATCH` state. The GLIDE helper distinguishes those modes from the direct client's runtime identity and rejects ambiguous clients instead of silently choosing a route.
 
@@ -424,7 +424,7 @@ Writes, invalidations, async `cacheConfigProvider` calls, and custom serializer 
 
 #### Serialization
 
-The core Redis boundary is the client-agnostic `DialCacheRedisClient` interface. It exchanges serialized values as `string | Buffer` and does not expose client commands or wire encodings. The shared `decodeRedisFrame` and `decodeTrackedRedisFrame` helpers, write and invalidation Lua sources, and wire constants are available from `dialcache/redis-protocol`, so custom adapters can reuse the bundled adapters' exact miss and watermark-fencing rules. Custom adapters can throw the root-exported `DialCacheRedisPayloadError`, `DialCacheRedisPayloadEncodingError`, and `DialCacheRedisProtocolError` classes to distinguish malformed replies, unsupported encodings, and mutation-script reply-domain violations in logs. DialCache records bounded `cache_read`, `cache_write`, or `invalidation` metrics by failure site.
+The core Redis boundary is the client-agnostic `DialCacheRedisClient` interface. It exchanges serialized values as `string | Buffer` and does not expose client commands or wire encodings. `read()` returns a `RedisReadOutcome`: a hit carrying the decoded payload, or a miss carrying a bounded `RedisReadMissReason` (see [Miss reasons](#miss-reasons)). The shared `decodeRedisFrame` and `decodeTrackedRedisFrame` helpers produce that outcome directly; they, the write and invalidation Lua sources, and wire constants are available from `dialcache/redis-protocol`, so custom adapters can reuse the bundled adapters' exact miss-classification and watermark-fencing rules. DialCache validates each read outcome at runtime and treats a malformed one — including a legacy `payload | null` return — as a fail-open `cache_read` error rather than a miss, so miss reasons stay bounded. Custom adapters can throw the root-exported `DialCacheRedisPayloadError`, `DialCacheRedisPayloadEncodingError`, and `DialCacheRedisProtocolError` classes to distinguish malformed replies, unsupported encodings, and mutation-script reply-domain violations in logs. DialCache records bounded `cache_read`, `cache_write`, or `invalidation` metrics by failure site.
 
 Redis values use a compact binary frame:
 
@@ -627,7 +627,7 @@ Invalidation writes a Redis watermark at `{encodedNamespace:encodedKeyType:encod
 
 The internal `:dialcache-frame-v1` suffix identifies values written with DialCache's binary protocol. Watermarks are stored as decimal timestamps.
 
-A cached Redis value whose Redis-created timestamp is older than or equal to the watermark is treated as stale and refreshed through fallback. `invalidateRemote(keyType, id, futureBufferMs)` sets the watermark to the greater of its existing value and Redis's current time plus the buffer. While that future window is active, an invocation that reaches the tracked Redis read treats the covered value as a miss. Native `MGET` must transfer an existing stale frame before the Node decoder can reject it, so completed reads can repeatedly pay the full stale-payload transfer during a nonzero buffer window. If a successful fallback then reaches the tracked Redis write while the watermark still fences it, Redis rejects the write, atomically unlinks that logically stale value key, and DialCache suppresses the corresponding process-local population; later reads of that entry avoid retransferring its payload. The fallback value still returns to its caller. A read failure or timeout never reaches that write-side cleanup, so a large stale value can continue to consume network bandwidth and trigger `cache_read_timeout` until another completed read cleans it up or its TTL expires. Request-local memoization remains unconditional. A ramped-out invocation without shadow work does not consult the watermark; a selected shadow path for that tracked key does consult it for `C0`, `C1` when needed, and any clean-miss fill, although caller-path request-local/process-local publication remains independent.
+A cached Redis value whose Redis-created timestamp is older than or equal to the watermark is treated as stale and refreshed through fallback. Fenced reads are directly observable as `miss` metrics with `reason="watermark_invalidated"`, separating invalidation churn from cold-key `not_found` misses (see [Miss reasons](#miss-reasons)). `invalidateRemote(keyType, id, futureBufferMs)` sets the watermark to the greater of its existing value and Redis's current time plus the buffer. While that future window is active, an invocation that reaches the tracked Redis read treats the covered value as a miss. Native `MGET` must transfer an existing stale frame before the Node decoder can reject it, so completed reads can repeatedly pay the full stale-payload transfer during a nonzero buffer window. If a successful fallback then reaches the tracked Redis write while the watermark still fences it, Redis rejects the write, atomically unlinks that logically stale value key, and DialCache suppresses the corresponding process-local population; later reads of that entry avoid retransferring its payload. The fallback value still returns to its caller. A read failure or timeout never reaches that write-side cleanup, so a large stale value can continue to consume network bandwidth and trigger `cache_read_timeout` until another completed read cleans it up or its TTL expires. Request-local memoization remains unconditional. A ramped-out invocation without shadow work does not consult the watermark; a selected shadow path for that tracked key does consult it for `C0`, `C1` when needed, and any clean-miss fill, although caller-path request-local/process-local publication remains independent.
 
 The bundled timestamp protocol assumes that system clocks are synchronized across every Redis node eligible for primary promotion. Redis does not guarantee that `TIME` is monotonic across nodes, and DialCache does not detect or compensate for cross-node clock skew. If this deployment assumption is violated, failover can temporarily suppress tracked cache fills or allow a pre-invalidation value to remain readable until it expires or a later invalidation advances the watermark past its timestamp.
 
@@ -757,7 +757,7 @@ The Prometheus adapter emits:
 | Metric | Type | Labels | Description |
 | --- | --- | --- | --- |
 | `dialcache_request_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache-layer requests that reached an enabled layer |
-| `dialcache_miss_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache misses |
+| `dialcache_miss_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer`, `reason` | Cache misses classified by a bounded reason (see [Miss reasons](#miss-reasons)) |
 | `dialcache_disabled_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer`, `reason` | Cache skips (`context`, `policy_disabled`, `invalid_ttl`, `invalid_ramp`, `ramped_down`, `config_error`) |
 | `dialcache_error_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer`, `error`, `in_fallback` | Cache/fallback errors classified by a bounded failure site |
 | `dialcache_invalidation_counter` | Counter | `cache_namespace`, `key_type`, `layer` | Invalidation calls for the layers touched |
@@ -815,7 +815,7 @@ The Datadog adapter emits exact increments of `1` for counters and preserves sec
 | Metric | Type | Tags | Description |
 | --- | --- | --- | --- |
 | `dialcache.request.count` | Count | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache-layer requests that reached an enabled layer |
-| `dialcache.miss.count` | Count | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache misses |
+| `dialcache.miss.count` | Count | `cache_namespace`, `use_case`, `key_type`, `layer`, `reason` | Cache misses by bounded reason |
 | `dialcache.disabled.count` | Count | `cache_namespace`, `use_case`, `key_type`, `layer`, `reason` | Cache skips by bounded reason |
 | `dialcache.error.count` | Count | `cache_namespace`, `use_case`, `key_type`, `layer`, `error`, `in_fallback` | Cache/fallback errors by bounded failure site |
 | `dialcache.invalidation.count` | Count | `cache_namespace`, `key_type`, `layer` | Invalidation calls for the layers touched |
@@ -827,6 +827,22 @@ The Datadog adapter emits exact increments of `1` for counters and preserves sec
 | `dialcache.serialization.size` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Serialized Redis payload size in bytes |
 
 Observer throws and rejections from returned promises or thenables are isolated by DialCache's fail-open metrics boundary. Buffered transport failures that are not represented by a returned thenable happen outside that boundary, so configure the DogStatsD client's error handling and shutdown behavior as part of application ownership.
+
+### Miss reasons
+
+The `reason` label on the miss metric separates invalidation-driven misses from cold keys:
+
+| `reason` | Meaning |
+| --- | --- |
+| `not_found` | The key is absent or expired (also a wrong-type value under tracked `MGET`) |
+| `frame_unsupported` | A Redis value exists but is shorter than the frame header or has an unsupported frame version |
+| `watermark_unreadable` | A tracked read's watermark is missing, malformed, or not finite |
+| `watermark_invalidated` | A tracked frame was fenced because its Redis-created timestamp is at or before the watermark |
+| `deserialization_failed` | The Redis payload was read but `serializer.load` failed (paired with an `error="serialization_load"` event) |
+
+`request_local` and `local` layers have no frames or watermarks, so their misses are always `not_found` (an expired process-local entry is indistinguishable from an absent one). Only `remote` and `remote_shadow` reads produce the other reasons, and only tracked keys can produce the watermark reasons. `watermark_invalidated` measures invalidation churn directly: sustained volume during a future-buffer window is the repeated stale-frame transfer cost described in [Targeted invalidation](#targeted-invalidation-and-watermarks). `frame_unsupported` and `watermark_unreadable` should be near zero in steady state; sustained volume indicates external key corruption, protocol mixing, or watermark loss.
+
+These values are defined by the backend-neutral core and are identical for every metrics adapter.
 
 ### Error categories
 

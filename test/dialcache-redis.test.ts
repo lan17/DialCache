@@ -301,12 +301,12 @@ describe("DialCache Redis TTL layer", () => {
     await redis.write({ valueKey, cacheTtlMs: 60_000, value: payload });
 
     const firstRead = await redis.read({ valueKey });
-    if (!Buffer.isBuffer(firstRead)) {
+    if (firstRead.status !== "hit" || !Buffer.isBuffer(firstRead.payload)) {
       throw new Error("Expected a binary Redis payload");
     }
-    firstRead[0] = 0xff;
+    firstRead.payload[0] = 0xff;
 
-    expect(await redis.read({ valueKey })).toEqual(payload);
+    expect(await redis.read({ valueKey })).toEqual({ status: "hit", payload });
   });
 
   it("fails open when Redis serializer dump fails", async () => {
@@ -417,6 +417,58 @@ describe("DialCache Redis TTL layer", () => {
     expect(redis.values.get(badKey)).toBeDefined();
     expect(redis.values.get(nonFiniteKey)).toBeDefined();
     expect(logger.warn).not.toHaveBeenCalledWith("Error getting value from Redis cache", expect.any(Error));
+  });
+
+  it.each([
+    { shape: "null", outcome: null },
+    { shape: "a bare payload", outcome: "raw-payload" },
+    { shape: "an unknown status", outcome: { status: "nope" } },
+    { shape: "an unbounded miss reason", outcome: { status: "miss", reason: "because" } },
+    { shape: "a non-payload hit", outcome: { status: "hit", payload: 42 } },
+  ])("fails open when a client read returns $shape instead of a read outcome", async ({ outcome }) => {
+    const redisClient: DialCacheRedisClient = {
+      read: vi.fn(async () => outcome as never),
+      write: vi.fn(async () => true),
+      invalidate: vi.fn(async () => undefined),
+    };
+    const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const metrics = {
+      request: vi.fn(),
+      miss: vi.fn(),
+      disabled: vi.fn(),
+      error: vi.fn(),
+      invalidation: vi.fn(),
+      observeGet: vi.fn(),
+      observeFallback: vi.fn(),
+      observeSerialization: vi.fn(),
+      observeSize: vi.fn(),
+    };
+    const dialcache = new DialCache({ redis: { client: redisClient, readTimeoutMs: 1_000 }, logger, metrics });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "RedisMalformedReadOutcome",
+      cacheKey: (userId) => userId,
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 100 },
+      }),
+    });
+
+    // A malformed outcome must fail loudly into the fail-open read-error path
+    // instead of being mislabeled as a miss with an unbounded reason.
+    await expect(dialcache.enable(async () => await getUser("123"))).resolves.toEqual({ userId: "123", calls: 1 });
+    expect(metrics.miss).not.toHaveBeenCalled();
+    expect(metrics.error).toHaveBeenCalledWith({
+      cacheNamespace: "urn",
+      useCase: "RedisMalformedReadOutcome",
+      keyType: "user_id",
+      layer: CacheLayer.REMOTE,
+      error: "cache_read",
+      inFallback: false,
+    });
+    expect(redisClient.write).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith("Error getting value from Redis cache", expect.any(Error));
   });
 
   it("records a distinct metric label when a Redis adapter reports invalid payload encoding", async () => {

@@ -7,6 +7,7 @@ import {
   DialCacheKeyConfig,
   type DialCacheRedisClient,
   type Logger,
+  type RedisReadOutcome,
 } from "../src/index.js";
 import { FakeRedis } from "./fake-redis.js";
 
@@ -159,7 +160,7 @@ describe("DialCache logger isolation", () => {
     const logger = throwingLogger();
     const invalidationError = new Error("invalidation failed");
     const redis = {
-      read: vi.fn(async () => null),
+      read: vi.fn(async (): Promise<RedisReadOutcome> => ({ status: "miss", reason: "not_found" })),
       write: vi.fn(async () => true),
       invalidate: vi.fn(async () => {
         throw invalidationError;

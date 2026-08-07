@@ -6,6 +6,7 @@ import {
   DialCache,
   DialCacheKeyConfig,
   type DisabledReason,
+  type MissReason,
   type DialCacheRedisClient,
   type MetricErrorKind,
   type MetricLayer,
@@ -89,6 +90,14 @@ const DISABLED_REASONS: Readonly<Record<DisabledReason, true>> = {
   config_error: true,
 };
 const disabledReasons = Object.keys(DISABLED_REASONS) as DisabledReason[];
+const MISS_REASONS: Readonly<Record<MissReason, true>> = {
+  not_found: true,
+  frame_unsupported: true,
+  watermark_unreadable: true,
+  watermark_invalidated: true,
+  deserialization_failed: true,
+};
+const missReasons = Object.keys(MISS_REASONS) as MissReason[];
 const errorKinds: readonly MetricErrorKind[] = [
   "key_construction",
   "config_resolution",
@@ -131,7 +140,7 @@ describe("Datadog metrics adapter", () => {
     const metrics = new DatadogDialCacheMetrics({ client, observationMetricType: "distribution" });
 
     metrics.request(cacheLabels);
-    metrics.miss(cacheLabels);
+    metrics.miss({ ...cacheLabels, reason: "not_found" });
     metrics.disabled({ ...cacheLabels, reason: "ramped_down" });
     metrics.error({ ...cacheLabels, error: "cache_read", inFallback: true });
     metrics.invalidation({ cacheNamespace: cacheLabels.cacheNamespace, keyType: "user_id", layer: CacheLayer.REMOTE });
@@ -155,7 +164,7 @@ describe("Datadog metrics adapter", () => {
     const baseTags = { cache_namespace: "users", use_case: "LoadUser", key_type: "user_id", layer: "local" };
     expect(client.calls).toEqual([
       { method: "increment", name: "dialcache.request.count", value: 1, tags: baseTags },
-      { method: "increment", name: "dialcache.miss.count", value: 1, tags: baseTags },
+      { method: "increment", name: "dialcache.miss.count", value: 1, tags: { ...baseTags, reason: "not_found" } },
       {
         method: "increment",
         name: "dialcache.disabled.count",
@@ -233,6 +242,9 @@ describe("Datadog metrics adapter", () => {
     for (const reason of disabledReasons) {
       metrics.disabled({ ...cacheLabels, reason });
     }
+    for (const reason of missReasons) {
+      metrics.miss({ ...cacheLabels, reason });
+    }
     for (const error of errorKinds) {
       metrics.error({ ...cacheLabels, error, inFallback: false });
       metrics.error({ ...cacheLabels, error, inFallback: true });
@@ -263,6 +275,11 @@ describe("Datadog metrics adapter", () => {
         .filter(({ name }) => name === "dialcache.disabled.count")
         .map(({ tags }) => tags.reason),
     ).toEqual(disabledReasons);
+    expect(
+      client.calls
+        .filter(({ name }) => name === "dialcache.miss.count")
+        .map(({ tags }) => tags.reason),
+    ).toEqual(missReasons);
     expect(
       client.calls
         .filter(({ name }) => name === "dialcache.error.count")

@@ -7,6 +7,7 @@ import type {
   DisabledMetricLabels,
   ErrorMetricLabels,
   InvalidationMetricLabels,
+  MissMetricLabels,
   SerializationMetricLabels,
   ShadowValidationMetricLabels,
 } from "./metrics.js";
@@ -19,6 +20,7 @@ export interface PrometheusMetricsOptions {
 type PrometheusRegistry = Registry | Registry<OpenMetricsContentType>;
 
 type CounterLabels = "cache_namespace" | "use_case" | "key_type" | "layer";
+type MissLabels = CounterLabels | "reason";
 type DisabledLabels = CounterLabels | "reason";
 type ErrorLabels = CounterLabels | "error" | "in_fallback";
 type SerializationLabels = CounterLabels | "operation";
@@ -57,7 +59,7 @@ const SIZE_BUCKETS = [100, 1_000, 10_000, 100_000, 1_000_000, 10_000_000];
 
 export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
   private readonly requestCounter: Counter<CounterLabels>;
-  private readonly missCounter: Counter<CounterLabels>;
+  private readonly missCounter: Counter<MissLabels>;
   private readonly disabledCounter: Counter<DisabledLabels>;
   private readonly errorCounter: Counter<ErrorLabels>;
   private readonly invalidationCounter: Counter<InvalidationLabels>;
@@ -91,8 +93,8 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
     this.requestCounter.inc(cacheLabels(labels));
   }
 
-  miss(labels: CacheMetricLabels): void {
-    this.missCounter.inc(cacheLabels(labels));
+  miss(labels: MissMetricLabels): void {
+    this.missCounter.inc({ ...cacheLabels(labels), reason: labels.reason });
   }
 
   disabled(labels: DisabledMetricLabels): void {
@@ -175,7 +177,7 @@ function collectorConfigs(prefix: string) {
       type: "counter",
       name: `${prefix}dialcache_miss_counter`,
       help: "DialCache cache misses.",
-      labelNames: ["cache_namespace", "use_case", "key_type", "layer"],
+      labelNames: ["cache_namespace", "use_case", "key_type", "layer", "reason"],
     },
     requestCounter: {
       type: "counter",

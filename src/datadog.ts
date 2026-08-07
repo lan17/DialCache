@@ -5,6 +5,7 @@ import type {
   DisabledMetricLabels,
   ErrorMetricLabels,
   InvalidationMetricLabels,
+  MissMetricLabels,
   SerializationMetricLabels,
   ShadowValidationMetricLabels,
 } from "./metrics.js";
@@ -80,8 +81,8 @@ export class DatadogDialCacheMetrics implements DialCacheMetricsAdapter {
     this.increment(this.metricNames.request, cacheTags(labels));
   }
 
-  miss(labels: CacheMetricLabels): void {
-    this.increment(this.metricNames.miss, cacheTags(labels));
+  miss(labels: MissMetricLabels): void {
+    this.increment(this.metricNames.miss, { ...cacheTags(labels), reason: labels.reason });
   }
 
   disabled(labels: DisabledMetricLabels): void {
