@@ -346,6 +346,7 @@ const compressionOutcomes: Readonly<Record<CompressionOutcome, true>> = {
   compressed: true,
   below_threshold: true,
   not_smaller: true,
+  over_limit: true,
   decompressed: true,
   fallback_raw: true,
 };

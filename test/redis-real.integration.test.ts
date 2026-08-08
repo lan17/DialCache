@@ -12,7 +12,7 @@ import {
   type DialCacheRedisClient,
   type Serializer,
 } from "../src/index.js";
-import { MARKER_ZSTD_UTF8 } from "../src/internal/compression.js";
+import { MARKER_ESCAPED_RAW, MARKER_ZSTD_UTF8 } from "../src/internal/compression.js";
 import {
   INVALIDATE_CACHE_SCRIPT,
   WRITE_CACHE_SCRIPT,
@@ -299,6 +299,52 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       const storedSmall = await admin.get(commandOptions({ returnBuffers: true }), smallKey);
       expect(storedSmall?.[9]).toBe(0);
       expect(storedSmall?.subarray(10).toString("utf8")).toBe(JSON.stringify(firstSmall));
+    });
+
+    it("escapes envelope-colliding binary serializer output on the wire and round-trips it", async () => {
+      if (client === undefined || admin === undefined) {
+        throw new Error("Redis test clients did not start");
+      }
+      interface Row {
+        readonly id: string;
+      }
+      const serializer: Serializer<Row> = {
+        dump: (row) => Buffer.concat([Buffer.from([MARKER_ZSTD_UTF8]), Buffer.from(JSON.stringify(row), "utf8")]),
+        load: (payload) => {
+          if (!Buffer.isBuffer(payload)) {
+            throw new Error("expected binary payload");
+          }
+          return JSON.parse(payload.subarray(1).toString("utf8")) as Row;
+        },
+      };
+      const scriptClient: DialCacheRedisClient = client.adapter;
+      const dialcache = new DialCache({ namespace: "real", redis: { client: scriptClient, readTimeoutMs: 10_000 } });
+      let calls = 0;
+      const getRow = dialcache.cached(
+        async (id: string): Promise<Row> => {
+          calls += 1;
+          return { id };
+        },
+        {
+          keyType: "item_id",
+          useCase: "RealCompressionEscape",
+          cacheKey: (id) => id,
+          defaultConfig: remoteOnly,
+          serializer,
+        },
+      );
+
+      const first = await dialcache.enable(async () => await getRow("esc"));
+      const second = await dialcache.enable(async () => await getRow("esc"));
+      expect(first).toEqual({ id: "esc" });
+      expect(second).toEqual({ id: "esc" });
+      expect(calls).toBe(1);
+
+      const escapeKey = `${new DialCacheKey({ namespace: "real", keyType: "item_id", id: "esc", useCase: "RealCompressionEscape" }).urn}:dialcache-frame-v1`;
+      const stored = await admin.get(commandOptions({ returnBuffers: true }), escapeKey);
+      expect(stored?.[9]).toBe(1);
+      expect(stored?.[10]).toBe(MARKER_ESCAPED_RAW);
+      expect(stored?.[11]).toBe(MARKER_ZSTD_UTF8);
     });
 
     it("stores arbitrary binary payloads without base64 expansion", async () => {

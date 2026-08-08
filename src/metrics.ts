@@ -26,14 +26,17 @@ export type ShadowValidationOutcome =
   | "timeout"
   | "dropped";
 /**
- * Bounded compression outcomes. Writes record compressed, below_threshold, or
- * not_smaller; reads record decompressed or fallback_raw (a marked payload
- * zstd rejected and handed through untouched).
+ * Bounded compression outcomes. Writes record compressed, below_threshold,
+ * not_smaller, or over_limit (serialized form exceeds the decompression cap,
+ * stored raw); reads record decompressed, fallback_raw (a marked payload zstd
+ * rejected and handed through untouched), or over_limit (decompression would
+ * exceed the cap; handed through untouched).
  */
 export type CompressionOutcome =
   | "compressed"
   | "below_threshold"
   | "not_smaller"
+  | "over_limit"
   | "decompressed"
   | "fallback_raw";
 /** Bounded reasons for skipping cache work; policy_disabled means a shared layer has no effective TTL. */
@@ -76,6 +79,10 @@ export interface CompressionMetricLabels extends CacheMetricLabels {
   readonly outcome: CompressionOutcome;
 }
 
+export interface CompressionOperationMetricLabels extends CacheMetricLabels {
+  readonly operation: "compress" | "decompress";
+}
+
 export interface InvalidationMetricLabels {
   readonly cacheNamespace: string;
   readonly keyType: string;
@@ -114,6 +121,8 @@ export interface DialCacheMetricsAdapter {
   observeSize(labels: CacheMetricLabels, bytes: number): void;
   // Optional so existing custom adapters keep compiling without changes.
   observeCompressionRatio?(labels: CacheMetricLabels, ratio: number): void;
+  // Optional so existing custom adapters keep compiling without changes.
+  observeCompression?(labels: CompressionOperationMetricLabels, seconds: number): void;
 }
 
 export function labelsFor(key: DialCacheKey, layer: MetricLayer): CacheMetricLabels {

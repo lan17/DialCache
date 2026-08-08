@@ -122,6 +122,7 @@ const COMPRESSION_OUTCOMES: Readonly<Record<CompressionOutcome, true>> = {
   compressed: true,
   below_threshold: true,
   not_smaller: true,
+  over_limit: true,
   decompressed: true,
   fallback_raw: true,
 };
@@ -162,6 +163,7 @@ describe("Datadog metrics adapter", () => {
     metrics.observeSerialization({ ...cacheLabels, operation: "dump" }, 0.25);
     metrics.observeSize(cacheLabels, 4_096);
     metrics.observeCompressionRatio(cacheLabels, 0.35);
+    metrics.observeCompression({ ...cacheLabels, operation: "compress" }, 0.002);
 
     const baseTags = { cache_namespace: "users", use_case: "LoadUser", key_type: "user_id", layer: "local" };
     expect(client.calls).toEqual([
@@ -213,6 +215,12 @@ describe("Datadog metrics adapter", () => {
       },
       { method: "distribution", name: "dialcache.serialization.size", value: 4_096, tags: baseTags },
       { method: "distribution", name: "dialcache.compression.ratio", value: 0.35, tags: baseTags },
+      {
+        method: "distribution",
+        name: "dialcache.compression.duration",
+        value: 0.002,
+        tags: { ...baseTags, operation: "compress" },
+      },
     ]);
     expect(client.flush).not.toHaveBeenCalled();
     expect(client.close).not.toHaveBeenCalled();
@@ -232,6 +240,7 @@ describe("Datadog metrics adapter", () => {
       metrics.observeSerialization({ ...cacheLabels, operation: "load" }, 0.03);
       metrics.observeSize(cacheLabels, 128);
       metrics.observeCompressionRatio(cacheLabels, 0.04);
+      metrics.observeCompression({ ...cacheLabels, operation: "decompress" }, 0.05);
 
       expect(client.calls.map(({ method, name, value }) => ({ method, name, value }))).toEqual([
         { method: observationMetricType, name: "service.cache.get.duration", value: 0.01 },
@@ -239,6 +248,7 @@ describe("Datadog metrics adapter", () => {
         { method: observationMetricType, name: "service.cache.serialization.duration", value: 0.03 },
         { method: observationMetricType, name: "service.cache.serialization.size", value: 128 },
         { method: observationMetricType, name: "service.cache.compression.ratio", value: 0.04 },
+        { method: observationMetricType, name: "service.cache.compression.duration", value: 0.05 },
       ]);
     });
   }

@@ -7,11 +7,12 @@ import {
   DialCacheKeyConfig,
   type CacheMetricLabels,
   type CompressionMetricLabels,
+  type CompressionOperationMetricLabels,
   type DialCacheMetricsAdapter,
   type SerializationMetricLabels,
   type Serializer,
 } from "../src/index.js";
-import { MARKER_ZSTD_UTF8 } from "../src/internal/compression.js";
+import { MARKER_ESCAPED_RAW, MARKER_ZSTD_UTF8 } from "../src/internal/compression.js";
 import { decodeFrame, encodeFrame, FakeRedis } from "./fake-redis.js";
 
 const keyFor = (id: string, useCase: string): DialCacheKey =>
@@ -31,6 +32,7 @@ class RecordingMetrics implements DialCacheMetricsAdapter {
   readonly compressionCalls: CompressionMetricLabels[] = [];
   readonly ratioCalls: Array<{ readonly labels: CacheMetricLabels; readonly ratio: number }> = [];
   readonly sizeCalls: Array<{ readonly labels: CacheMetricLabels; readonly bytes: number }> = [];
+  readonly durationCalls: CompressionOperationMetricLabels[] = [];
 
   request(): void {}
   miss(): void {}
@@ -51,6 +53,10 @@ class RecordingMetrics implements DialCacheMetricsAdapter {
 
   observeCompressionRatio(labels: CacheMetricLabels, ratio: number): void {
     this.ratioCalls.push({ labels, ratio });
+  }
+
+  observeCompression(labels: CompressionOperationMetricLabels, _seconds: number): void {
+    this.durationCalls.push(labels);
   }
 }
 
@@ -169,14 +175,15 @@ describe("DialCache Redis payload compression", () => {
     });
   });
 
-  it("treats marker-colliding garbage as a miss and repopulates the entry", async () => {
+  it("treats marker-colliding garbage as a miss, records fallback_raw, and repopulates the entry", async () => {
     const redis = new FakeRedis();
     const redisKey = redisKeyFor("123", "CompressionGarbageMiss");
     redis.setRaw(
       redisKey,
       encodeFrame(Buffer.concat([Buffer.from([MARKER_ZSTD_UTF8]), Buffer.from("not zstd at all")]), Date.now(), 1),
     );
-    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
+    const metrics = new RecordingMetrics();
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 }, metrics });
     let calls = 0;
     const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
       keyType: "user_id",
@@ -192,6 +199,9 @@ describe("DialCache Redis payload compression", () => {
       encoding: 0,
       payload: JSON.stringify({ userId: "123", calls: 1 }),
     });
+    expect(metrics.compressionCalls).toContainEqual(
+      expect.objectContaining({ useCase: "CompressionGarbageMiss", outcome: "fallback_raw" }),
+    );
   });
 
   it("round-trips a custom binary serializer whose output starts with the marker byte", async () => {
@@ -225,6 +235,16 @@ describe("DialCache Redis payload compression", () => {
     );
 
     const first = await dialcache.enable(async () => await getRow("123"));
+
+    // The stored payload carries the escape prefix, so decoding is exact
+    // rather than dependent on zstd rejecting the serializer's bytes.
+    const stored = decodeFrame(redis.raw(redisKeyFor("123", "CompressionMarkerCollision"))).payload;
+    if (!Buffer.isBuffer(stored)) {
+      throw new Error("expected a binary stored payload");
+    }
+    expect(stored[0]).toBe(MARKER_ESCAPED_RAW);
+    expect(stored[1]).toBe(MARKER_ZSTD_UTF8);
+
     const reader = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     const readRow = reader.cached(
       async (id: string): Promise<Row> => {
@@ -243,6 +263,62 @@ describe("DialCache Redis payload compression", () => {
 
     expect(first).toEqual({ id: "123" });
     expect(second).toEqual({ id: "123" });
+    expect(calls).toBe(1);
+  });
+
+  it("reads legacy 0x00-leading binary payloads untouched and escapes new writes of them", async () => {
+    interface Tagged {
+      readonly id: string;
+    }
+    // A binary format whose first byte is 0x00, like msgpack's zero or Avro's
+    // zigzag zero. Legacy entries predate escaping and must pass through.
+    const serializer: Serializer<Tagged> = {
+      dump: (row) => Buffer.concat([Buffer.from([0x00]), Buffer.from(JSON.stringify(row), "utf8")]),
+      load: (payload) => {
+        if (!Buffer.isBuffer(payload) || payload[0] !== 0x00) {
+          throw new Error("expected a 0x00-tagged binary payload");
+        }
+        return JSON.parse(payload.subarray(1).toString("utf8")) as Tagged;
+      },
+    };
+    const redis = new FakeRedis();
+    const legacyKey = redisKeyFor("legacy", "CompressionZeroLead");
+    redis.setRaw(
+      legacyKey,
+      encodeFrame(Buffer.concat([Buffer.from([0x00]), Buffer.from(JSON.stringify({ id: "legacy" }), "utf8")]), Date.now(), 1),
+    );
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
+    let calls = 0;
+    const getRow = dialcache.cached(
+      async (id: string): Promise<Tagged> => {
+        calls += 1;
+        return { id };
+      },
+      {
+        keyType: "user_id",
+        useCase: "CompressionZeroLead",
+        cacheKey: (id) => id,
+        defaultConfig: remoteOnly(),
+        serializer,
+      },
+    );
+
+    // Legacy read: byte 1 is '{' (outside the envelope), so nothing is stripped.
+    const legacy = await dialcache.enable(async () => await getRow("legacy"));
+    expect(legacy).toEqual({ id: "legacy" });
+    expect(calls).toBe(0);
+
+    // Fresh write: escaped on the wire, stripped exactly once on read.
+    const fresh = await dialcache.enable(async () => await getRow("fresh"));
+    expect(fresh).toEqual({ id: "fresh" });
+    const stored = decodeFrame(redis.raw(redisKeyFor("fresh", "CompressionZeroLead"))).payload;
+    if (!Buffer.isBuffer(stored)) {
+      throw new Error("expected a binary stored payload");
+    }
+    expect(stored[0]).toBe(MARKER_ESCAPED_RAW);
+    expect(stored[1]).toBe(0x00);
+    const reread = await dialcache.enable(async () => await getRow("fresh"));
+    expect(reread).toEqual({ id: "fresh" });
     expect(calls).toBe(1);
   });
 
@@ -304,6 +380,11 @@ describe("DialCache Redis payload compression", () => {
       expect.objectContaining({ useCase: "CompressionMetricsLarge", layer: CacheLayer.REMOTE, outcome: "compressed" }),
       expect.objectContaining({ useCase: "CompressionMetricsSmall", layer: CacheLayer.REMOTE, outcome: "below_threshold" }),
       expect.objectContaining({ useCase: "CompressionMetricsLarge", layer: CacheLayer.REMOTE, outcome: "decompressed" }),
+    ]);
+
+    expect(metrics.durationCalls).toEqual([
+      expect.objectContaining({ useCase: "CompressionMetricsLarge", operation: "compress" }),
+      expect.objectContaining({ useCase: "CompressionMetricsLarge", operation: "decompress" }),
     ]);
 
     expect(metrics.ratioCalls).toHaveLength(1);

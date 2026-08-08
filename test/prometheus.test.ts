@@ -61,6 +61,7 @@ const COMPRESSION_OUTCOMES: Readonly<Record<CompressionOutcome, true>> = {
   compressed: true,
   below_threshold: true,
   not_smaller: true,
+  over_limit: true,
   decompressed: true,
   fallback_raw: true,
 };
@@ -186,6 +187,8 @@ describe("Prometheus metrics adapter", () => {
     metrics.observeSerialization({ ...labels, operation: "load" }, 0.05);
     metrics.observeSize(labels, 1_000);
     metrics.observeCompressionRatio(labels, 0.4);
+    metrics.observeCompression({ ...labels, operation: "compress" }, 0.002);
+    metrics.observeCompression({ ...labels, operation: "decompress" }, 0.001);
 
     // prom-client declares MetricType as a numeric enum, but this JSON API returns string type names.
     const families = (await registry.getMetricsAsJSON()) as unknown as MetricFamily[];
@@ -202,6 +205,11 @@ describe("Prometheus metrics adapter", () => {
         "schema_dialcache_compression_ratio_histogram",
         ["cache_namespace", "use_case", "key_type", "layer"],
         RATIO_BUCKETS,
+      ),
+      histogramSchema(
+        "schema_dialcache_compression_timer",
+        ["cache_namespace", "use_case", "key_type", "layer", "operation"],
+        TIMER_BUCKETS,
       ),
       counterSchema("schema_dialcache_disabled_counter", ["cache_namespace", "use_case", "key_type", "layer", "reason"]),
       counterSchema("schema_dialcache_error_counter", [

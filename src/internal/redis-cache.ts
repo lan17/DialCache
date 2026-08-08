@@ -16,9 +16,9 @@ import type { RedisCacheGetResult } from "./cache-result.js";
 import {
   compressPayload,
   decompressPayload,
+  escapeRawPayload,
   resolveCompressionConfig,
   type CompressionConfig,
-  type ResolvedCompressionConfig,
 } from "./compression.js";
 import { assertValidDeadlineMs, withMonotonicDeadline } from "./deadline.js";
 import { cacheTtlSecToMs } from "./duration.js";
@@ -65,7 +65,7 @@ const DEFAULT_REMOTE_READ_TIMEOUT_MS = 50;
 export class RedisCache {
   private readonly configProvider: CacheConfigProvider;
   private readonly defaultSerializer: Serializer<unknown>;
-  private readonly compression: ResolvedCompressionConfig;
+  private readonly compression: Required<CompressionConfig> | null;
   private readonly client: DialCacheRedisClient;
   private readonly metrics: DialCacheMetricsAdapter | null;
   readonly readTimeoutMs: number;
@@ -237,14 +237,23 @@ export class RedisCache {
     } finally {
       this.recordMetric((metrics) => metrics.observeSerialization({ ...labelsFor(key, metricLayer), operation: "dump" }, elapsedSeconds(start)));
     }
-    if (this.compression.enabled) {
+    if (this.compression !== null) {
+      const compressStart = performance.now();
       const compression = compressPayload(serialized, this.compression);
       serialized = compression.payload;
       this.recordMetric((metrics) => metrics.compression?.({ ...labelsFor(key, metricLayer), outcome: compression.outcome }));
+      if (compression.outcome === "compressed" || compression.outcome === "not_smaller") {
+        this.recordMetric((metrics) => metrics.observeCompression?.(
+          { ...labelsFor(key, metricLayer), operation: "compress" },
+          elapsedSeconds(compressStart),
+        ));
+      }
       if (compression.outcome === "compressed") {
         this.recordMetric((metrics) =>
           metrics.observeCompressionRatio?.(labelsFor(key, metricLayer), compression.storedBytes / compression.originalBytes));
       }
+    } else {
+      serialized = escapeRawPayload(serialized);
     }
     this.recordMetric((metrics) => metrics.observeSize(labelsFor(key, metricLayer), payloadSize(serialized)));
     if (shouldWrite !== undefined && !shouldWrite()) {
@@ -354,9 +363,14 @@ export class RedisCache {
     payload: RedisCachePayload,
     metricLayer: MetricLayer,
   ): Promise<T> {
+    const decompressStart = performance.now();
     const { payload: decompressed, outcome } = decompressPayload(payload);
     if (outcome !== "passthrough") {
       this.recordMetric((metrics) => metrics.compression?.({ ...labelsFor(key, metricLayer), outcome }));
+      this.recordMetric((metrics) => metrics.observeCompression?.(
+        { ...labelsFor(key, metricLayer), operation: "decompress" },
+        elapsedSeconds(decompressStart),
+      ));
     }
     const start = performance.now();
     try {

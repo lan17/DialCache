@@ -39,8 +39,9 @@ pnpm add prom-client@^15.1.3
 pnpm add hot-shots@^17.0.0
 ```
 
-DialCache requires Node.js 22.15.0 or newer (the first 22.x release with zstd
-support in `node:zlib`). Production deployments should use a
+DialCache requires Node.js with zstd support in `node:zlib`: 22.15.0 or newer
+within the 22.x line, or 23.8.0 and newer (23.0–23.7 lack zstd and are
+excluded). Production deployments should use a
 [currently supported LTS release](https://nodejs.org/en/about/previous-releases).
 
 ## Quick start
@@ -436,7 +437,7 @@ byte 10     payload encoding (0 = UTF-8, 1 = raw binary)
 bytes 11... serialized payload (optionally zstd-compressed; see Compression)
 ```
 
-The Redis write scripts use Lua's `struct` library to pack the timestamp; adapters decode it with Node's buffer primitives. Redis TTL is authoritative, so expiry metadata is not duplicated in the frame. `payload` is produced by the operation's serializer, or by `JsonSerializer` by default. Custom serializers can return either `string` or `Buffer`; strings are stored as UTF-8 and Buffers are stored byte-for-byte without base64 expansion. Adapters restore the same representation before calling `serializer.load`.
+The Redis write scripts use Lua's `struct` library to pack the timestamp; adapters decode it with Node's buffer primitives. Redis TTL is authoritative, so expiry metadata is not duplicated in the frame. `payload` is produced by the operation's serializer, or by `JsonSerializer` by default. Custom serializers can return either `string` or `Buffer`; strings are stored as UTF-8 and Buffers are stored byte-for-byte without base64 expansion, except that binary output beginning with a [compression envelope byte](#compression) (`0x00`–`0x02`) gains a one-byte escape prefix on the wire. Adapters restore the same representation before calling `serializer.load`; the payload region past the frame header is otherwise opaque to adapters, and its envelope is interpreted by the core above them.
 
 DialCache uses native `JSON.stringify` and `JSON.parse` by default. There is no runtime validation pass, so the default adds no traversal beyond JSON serialization itself. A top-level `undefined` result is supported with an internal sentinel.
 
@@ -472,7 +473,9 @@ This guard is deliberately conservative and is not a proof of runtime data. Type
 
 #### Compression
 
-DialCache transparently compresses serialized Redis payloads with zstd (level 3, via `node:zlib`) when they are at least 4096 serialized bytes, and stores the compressed form only when it is actually smaller than the original. Compression sits below the serializer and above the Redis client, so serializers, adapters, and the frame layout are unaffected. A compressed payload is a binary frame payload whose first byte is a marker — `0x01` for a compressed UTF-8 string, `0x02` for compressed binary output, with `0x00` reserved — followed by the zstd frame. Payloads below the threshold are stored byte-identical to earlier DialCache releases.
+DialCache transparently compresses serialized Redis payloads with zstd (level 3, via `node:zlib`) when they are at least 4096 serialized bytes, and stores the compressed form only when it is actually smaller than the original. Compression sits below the serializer and above the Redis client, so serializers, adapters, and the frame layout are unaffected. The first byte of a binary frame payload written by 0.18 or newer is an envelope byte: `0x01` marks a compressed UTF-8 string and `0x02` compressed binary output, each followed by the zstd frame, while `0x00` is an escape prefix for raw binary serializer output whose own first byte is `0x00`–`0x02` (readers strip the prefix and never decompress it; the escape applies even with `compression: false`). Payloads below the threshold are otherwise stored byte-identical to earlier DialCache releases; only binary output beginning with an envelope byte gains the one-byte escape.
+
+Decompressed payloads are capped at 512 MiB, mirrored on the write side by refusing to compress anything larger, so no writable entry is unreadable and a corrupt or hostile entry cannot force a giant synchronous allocation. zstd runs synchronously on the event loop: at level 3 it stays cheaper than the adjacent `JSON.stringify`/`parse` at every size (~2 ms to compress 2 MiB), but cost rises steeply with level — measured ~250 ms for 1 MiB at level 19 and ~1.5 s for 2 MiB at level 22 — so treat high levels as an informed opt-in and watch the compression timer metric.
 
 Compression is on by default and configured per instance next to the serializer:
 
@@ -486,9 +489,11 @@ const dialcache = new DialCache({
 });
 ```
 
-Reads always decompress marked payloads regardless of this setting, so disabling compression never orphans previously written entries. Rolling back to a pre-compression DialCache release degrades compressed entries to refreshable misses through the documented `serialization_load` path rather than errors. A custom serializer whose raw output begins with a marker byte stays correct: zstd rejects the payload during decompression and DialCache hands the untouched original to `serializer.load`.
+Reads always decompress marked payloads regardless of this setting, so disabling compression never orphans previously written entries. The escape prefix makes decoding exact for every entry written by 0.18 or newer, whatever bytes a custom serializer emits. Entries written by older releases have no envelope, which leaves a bounded residual until they expire: a legacy binary payload beginning `0x01`/`0x02` is handed back untouched when zstd rejects it (`fallback_raw`), but one whose remaining bytes parse as a zstd stream is misread, and a legacy payload whose first two bytes are both in `0x00`–`0x02` loses its first byte to the escape strip. If a custom binary serializer can emit such output, bump its use case or key type when upgrading so old entries are simply misses.
 
-Each write records a bounded compression outcome (`compressed`, `below_threshold`, or `not_smaller`) and, when compressed, a compressed-to-original size ratio; reads record `decompressed` or `fallback_raw` (see [Metrics](#metrics)). The size histogram observes stored bytes, so it reflects post-compression sizes.
+Rolling upgrades and rollbacks degrade to misses, not errors, but are visible in metrics: during a mixed-fleet window, pre-0.18 readers fail `serializer.load` on compressed entries, producing a transient `serialization_load` error spike (and shadow `deserialization_error` outcomes) plus refill churn until the fleet converges — expected noise, worth an alerting note. For a zero-noise upgrade with string/JSON serializers, deploy 0.18 with `compression: false` first, then enable it once the fleet converges; binary serializers with envelope-colliding output still write escaped bytes in phase one, so rely on key versioning there instead. Rolling back to a pre-compression release degrades compressed and escaped entries to refreshable misses the same way. On runtimes without `node:zlib` zstd (Node below 22.15), ESM consumers fail at import and enabled compression fails at construction; `compression: false` is the working configuration there.
+
+Each write records a bounded compression outcome (`compressed`, `below_threshold`, `not_smaller`, or `over_limit`) and, when compressed, a compressed-to-original size ratio; reads record `decompressed`, `fallback_raw`, or `over_limit`. Compression and decompression latency is observed separately with an `operation` label (see [Metrics](#metrics)). The size histogram observes stored bytes, so it reflects post-compression sizes.
 
 #### Shadow validation
 
@@ -784,12 +789,13 @@ The Prometheus adapter emits:
 | `dialcache_invalidation_counter` | Counter | `cache_namespace`, `key_type`, `layer` | Invalidation calls for the layers touched |
 | `dialcache_coalesced_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `scope` | Coalesced requests split by `request_local` or `process` scope |
 | `dialcache_shadow_validation_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `outcome` | Sampled Redis shadow-job outcomes |
-| `dialcache_compression_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer`, `outcome` | Payload compression outcomes: writes record `compressed`, `below_threshold`, or `not_smaller`; reads record `decompressed` or `fallback_raw` |
+| `dialcache_compression_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer`, `outcome` | Payload compression outcomes: writes record `compressed`, `below_threshold`, `not_smaller`, or `over_limit`; reads record `decompressed`, `fallback_raw`, or `over_limit` |
 | `dialcache_get_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache get latency in seconds |
 | `dialcache_fallback_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Elapsed time until the underlying function settles or timeout rejection is delivered |
 | `dialcache_serialization_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer`, `operation` | Redis serializer dump/load latency |
 | `dialcache_size_histogram` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Stored Redis payload size in bytes, after compression |
 | `dialcache_compression_ratio_histogram` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Compressed-to-original payload size ratio for compressed writes |
+| `dialcache_compression_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer`, `operation` | Payload compression and decompression latency in seconds |
 
 `policy_disabled` means that a process-local or Redis layer has no effective TTL after runtime overlays are applied. It is an intentional policy outcome, including the default when `defaultConfig` is omitted, rather than a configuration-loading failure.
 
@@ -844,12 +850,13 @@ The Datadog adapter emits exact increments of `1` for counters and preserves sec
 | `dialcache.invalidation.count` | Count | `cache_namespace`, `key_type`, `layer` | Invalidation calls for the layers touched |
 | `dialcache.coalesced.count` | Count | `cache_namespace`, `use_case`, `key_type`, `scope` | Coalesced requests by sharing scope |
 | `dialcache.shadow.count` | Count | `cache_namespace`, `use_case`, `key_type`, `outcome` | Sampled Redis shadow-job outcomes |
-| `dialcache.compression.count` | Count | `cache_namespace`, `use_case`, `key_type`, `layer`, `outcome` | Payload compression outcomes: writes record `compressed`, `below_threshold`, or `not_smaller`; reads record `decompressed` or `fallback_raw` |
+| `dialcache.compression.count` | Count | `cache_namespace`, `use_case`, `key_type`, `layer`, `outcome` | Payload compression outcomes: writes record `compressed`, `below_threshold`, `not_smaller`, or `over_limit`; reads record `decompressed`, `fallback_raw`, or `over_limit` |
 | `dialcache.get.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache get latency in seconds |
 | `dialcache.fallback.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Elapsed time until the underlying function settles or timeout rejection is delivered |
 | `dialcache.serialization.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer`, `operation` | Redis serializer dump/load latency in seconds |
 | `dialcache.serialization.size` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Stored Redis payload size in bytes, after compression |
 | `dialcache.compression.ratio` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Compressed-to-original payload size ratio for compressed writes |
+| `dialcache.compression.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer`, `operation` | Payload compression and decompression latency in seconds |
 
 Observer throws and rejections from returned promises or thenables are isolated by DialCache's fail-open metrics boundary. Buffered transport failures that are not represented by a returned thenable happen outside that boundary, so configure the DogStatsD client's error handling and shutdown behavior as part of application ownership.
 

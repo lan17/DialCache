@@ -4,6 +4,7 @@ import type {
   CacheMetricLabels,
   CoalescedMetricLabels,
   CompressionMetricLabels,
+  CompressionOperationMetricLabels,
   DialCacheMetricsAdapter,
   DisabledMetricLabels,
   ErrorMetricLabels,
@@ -72,6 +73,7 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
   private readonly serializationTimer: Histogram<SerializationLabels>;
   private readonly sizeHistogram: Histogram<CounterLabels>;
   private readonly compressionRatioHistogram: Histogram<CounterLabels>;
+  private readonly compressionTimer: Histogram<SerializationLabels>;
 
   constructor(options: PrometheusMetricsOptions) {
     const registry = options.registry;
@@ -92,6 +94,7 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
     this.serializationTimer = histogram(registry, collectors.serializationTimer);
     this.sizeHistogram = histogram(registry, collectors.sizeHistogram);
     this.compressionRatioHistogram = histogram(registry, collectors.compressionRatioHistogram);
+    this.compressionTimer = histogram(registry, collectors.compressionTimer);
   }
 
   request(labels: CacheMetricLabels): void {
@@ -162,6 +165,10 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
 
   observeCompressionRatio(labels: CacheMetricLabels, ratio: number): void {
     this.compressionRatioHistogram.observe(cacheLabels(labels), ratio);
+  }
+
+  observeCompression(labels: CompressionOperationMetricLabels, seconds: number): void {
+    this.compressionTimer.observe({ ...cacheLabels(labels), operation: labels.operation }, seconds);
   }
 }
 
@@ -262,6 +269,13 @@ function collectorConfigs(prefix: string) {
       help: "Compressed-to-original DialCache payload size ratio for compressed writes.",
       labelNames: ["cache_namespace", "use_case", "key_type", "layer"],
       buckets: RATIO_BUCKETS,
+    },
+    compressionTimer: {
+      type: "histogram",
+      name: `${prefix}dialcache_compression_timer`,
+      help: "DialCache payload compression and decompression latency in seconds.",
+      labelNames: ["cache_namespace", "use_case", "key_type", "layer", "operation"],
+      buckets: TIMER_BUCKETS,
     },
   } as const;
 }

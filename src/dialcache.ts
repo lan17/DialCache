@@ -1541,6 +1541,7 @@ function safeMetrics(metrics: DialCacheMetricsAdapter | null): DialCacheMetricsA
     observeSerialization: (labels, seconds) => callObserver(() => metrics.observeSerialization(labels, seconds)),
     observeSize: (labels, bytes) => callObserver(() => metrics.observeSize(labels, bytes)),
     observeCompressionRatio: (labels, ratio) => callObserver(() => metrics.observeCompressionRatio?.(labels, ratio)),
+    observeCompression: (labels, seconds) => callObserver(() => metrics.observeCompression?.(labels, seconds)),
   };
 }
 

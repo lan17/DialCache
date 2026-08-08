@@ -6,6 +6,7 @@ export type {
   CoalescedMetricLabels,
   CoalescingScope,
   CompressionMetricLabels,
+  CompressionOperationMetricLabels,
   CompressionOutcome,
   DisabledMetricLabels,
   DisabledReason,
