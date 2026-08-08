@@ -43,12 +43,15 @@ jobs:
           fail_ci_if_error: true
       - run: pnpm build
       - run: pnpm test:integration
-      # Prove the exact consumer floor; development and integration stay on Node 24.
+      # Prove the exact consumer floor (first 22.x with node:zlib zstd);
+      # development and integration stay on Node 24.
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          node-version: "22.0.0"
+          node-version: "22.15.0"
           cache: "pnpm"
       - name: Test packed package on the minimum Node.js version
         run: |
           node --version
+          # Prove zstd actually runs at the floor, not just that it imports.
+          node -e "const z=require('node:zlib');const b=z.zstdCompressSync(Buffer.from('dialcache floor smoke'),{params:{[z.constants.ZSTD_c_compressionLevel]:3}});const out=z.zstdDecompressSync(b,{maxOutputLength:1024});if(out.toString('utf8')!=='dialcache floor smoke'){throw new Error('zstd floor smoke failed')}"
           pnpm test:package

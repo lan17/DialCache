@@ -13,6 +13,13 @@ import {
 import type { DialCacheRedisClient, RedisCachePayload } from "../redis-client.js";
 import { JsonSerializer, type Serializer } from "../serializer.js";
 import type { RedisCacheGetResult } from "./cache-result.js";
+import {
+  compressPayload,
+  decompressPayload,
+  escapeRawPayload,
+  resolveCompressionConfig,
+  type CompressionConfig,
+} from "./compression.js";
 import { assertValidDeadlineMs, withMonotonicDeadline } from "./deadline.js";
 import { cacheTtlSecToMs } from "./duration.js";
 import { fetchKeyConfig, resolveLayerConfigResult, type ResolvedLayerConfig } from "./runtime-config.js";
@@ -29,6 +36,13 @@ export interface RedisConfig {
    */
   readonly readTimeoutMs?: number;
   readonly serializer?: Serializer<unknown>;
+  /**
+   * Write-side compression policy for serialized payloads. Enabled by default
+   * with a 4096-byte threshold; pass false to store every payload
+   * uncompressed. Reads always decompress marked payloads regardless of this
+   * setting, so disabling compression never orphans existing entries.
+   */
+  readonly compression?: CompressionConfig | false;
 }
 
 interface RedisCacheOptions {
@@ -51,6 +65,7 @@ const DEFAULT_REMOTE_READ_TIMEOUT_MS = 50;
 export class RedisCache {
   private readonly configProvider: CacheConfigProvider;
   private readonly defaultSerializer: Serializer<unknown>;
+  private readonly compression: Required<CompressionConfig> | null;
   private readonly client: DialCacheRedisClient;
   private readonly metrics: DialCacheMetricsAdapter | null;
   readonly readTimeoutMs: number;
@@ -70,6 +85,7 @@ export class RedisCache {
 
     this.configProvider = options.configProvider;
     this.defaultSerializer = options.redis.serializer ?? defaultSerializer;
+    this.compression = resolveCompressionConfig(options.redis.compression);
     this.metrics = options.metrics;
     this.readTimeoutMs = options.redis.readTimeoutMs === undefined
       ? DEFAULT_REMOTE_READ_TIMEOUT_MS
@@ -221,6 +237,30 @@ export class RedisCache {
     } finally {
       this.recordMetric((metrics) => metrics.observeSerialization({ ...labelsFor(key, metricLayer), operation: "dump" }, elapsedSeconds(start)));
     }
+    if (this.compression !== null) {
+      const compressStart = performance.now();
+      let compression;
+      try {
+        compression = compressPayload(serialized, this.compression);
+      } catch (error) {
+        this.recordError(key, metricLayer, "compression");
+        throw error;
+      }
+      serialized = compression.payload;
+      this.recordMetric((metrics) => metrics.compression?.({ ...labelsFor(key, metricLayer), outcome: compression.outcome }));
+      if (compression.outcome === "compressed" || compression.outcome === "not_smaller") {
+        this.recordMetric((metrics) => metrics.observeCompression?.(
+          { ...labelsFor(key, metricLayer), operation: "compress" },
+          elapsedSeconds(compressStart),
+        ));
+      }
+      if (compression.outcome === "compressed") {
+        this.recordMetric((metrics) =>
+          metrics.observeCompressionRatio?.(labelsFor(key, metricLayer), compression.storedBytes / compression.originalBytes));
+      }
+    } else {
+      serialized = escapeRawPayload(serialized);
+    }
     this.recordMetric((metrics) => metrics.observeSize(labelsFor(key, metricLayer), payloadSize(serialized)));
     if (shouldWrite !== undefined && !shouldWrite()) {
       return null;
@@ -329,9 +369,18 @@ export class RedisCache {
     payload: RedisCachePayload,
     metricLayer: MetricLayer,
   ): Promise<T> {
+    const decompressStart = performance.now();
+    const { payload: decompressed, outcome } = decompressPayload(payload);
+    if (outcome !== "passthrough") {
+      this.recordMetric((metrics) => metrics.compression?.({ ...labelsFor(key, metricLayer), outcome }));
+      this.recordMetric((metrics) => metrics.observeCompression?.(
+        { ...labelsFor(key, metricLayer), operation: "decompress" },
+        elapsedSeconds(decompressStart),
+      ));
+    }
     const start = performance.now();
     try {
-      return await this.serializerFor(key).load(payload) as T;
+      return await this.serializerFor(key).load(decompressed) as T;
     } catch (error) {
       this.recordError(key, metricLayer, "serialization_load");
       throw error;

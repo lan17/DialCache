@@ -1,6 +1,8 @@
 import type {
   CacheMetricLabels,
   CoalescedMetricLabels,
+  CompressionMetricLabels,
+  CompressionOperationMetricLabels,
   DialCacheMetricsAdapter,
   DisabledMetricLabels,
   ErrorMetricLabels,
@@ -46,10 +48,13 @@ const METRIC_SUFFIXES = {
   invalidation: "invalidation.count",
   coalesced: "coalesced.count",
   shadowValidation: "shadow.count",
+  compression: "compression.count",
   get: "get.duration",
   fallback: "fallback.duration",
   serialization: "serialization.duration",
   size: "serialization.size",
+  compressionRatio: "compression.ratio",
+  compressionDuration: "compression.duration",
 } as const;
 
 type MetricName = keyof typeof METRIC_SUFFIXES;
@@ -122,6 +127,10 @@ export class DatadogDialCacheMetrics implements DialCacheMetricsAdapter {
     });
   }
 
+  compression(labels: CompressionMetricLabels): void {
+    this.increment(this.metricNames.compression, { ...cacheTags(labels), outcome: labels.outcome });
+  }
+
   observeGet(labels: CacheMetricLabels, seconds: number): void {
     this.observe(this.metricNames.get, seconds, cacheTags(labels));
   }
@@ -139,6 +148,17 @@ export class DatadogDialCacheMetrics implements DialCacheMetricsAdapter {
 
   observeSize(labels: CacheMetricLabels, bytes: number): void {
     this.observe(this.metricNames.size, bytes, cacheTags(labels));
+  }
+
+  observeCompressionRatio(labels: CacheMetricLabels, ratio: number): void {
+    this.observe(this.metricNames.compressionRatio, ratio, cacheTags(labels));
+  }
+
+  observeCompression(labels: CompressionOperationMetricLabels, seconds: number): void {
+    this.observe(this.metricNames.compressionDuration, seconds, {
+      ...cacheTags(labels),
+      operation: labels.operation,
+    });
   }
 
   private increment(name: string, tags: DatadogTags): void {
