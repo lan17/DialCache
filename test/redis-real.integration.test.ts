@@ -13,6 +13,7 @@ import {
   type Serializer,
 } from "../src/index.js";
 import { MARKER_ESCAPED_RAW, MARKER_ZSTD_UTF8 } from "../src/internal/compression.js";
+import { markerCollidingSerializer, type Row } from "./marker-colliding-serializer.js";
 import {
   INVALIDATE_CACHE_SCRIPT,
   WRITE_CACHE_SCRIPT,
@@ -305,18 +306,6 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       if (client === undefined || admin === undefined) {
         throw new Error("Redis test clients did not start");
       }
-      interface Row {
-        readonly id: string;
-      }
-      const serializer: Serializer<Row> = {
-        dump: (row) => Buffer.concat([Buffer.from([MARKER_ZSTD_UTF8]), Buffer.from(JSON.stringify(row), "utf8")]),
-        load: (payload) => {
-          if (!Buffer.isBuffer(payload)) {
-            throw new Error("expected binary payload");
-          }
-          return JSON.parse(payload.subarray(1).toString("utf8")) as Row;
-        },
-      };
       const scriptClient: DialCacheRedisClient = client.adapter;
       const dialcache = new DialCache({ namespace: "real", redis: { client: scriptClient, readTimeoutMs: 10_000 } });
       let calls = 0;
@@ -330,7 +319,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
           useCase: "RealCompressionEscape",
           cacheKey: (id) => id,
           defaultConfig: remoteOnly,
-          serializer,
+          serializer: markerCollidingSerializer,
         },
       );
 

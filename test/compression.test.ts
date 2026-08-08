@@ -310,6 +310,15 @@ describe("decompressPayload", () => {
     expect(result.payload).toBe(compressed);
 
     expect(decompressPayload(compressed).outcome).toBe("decompressed");
+
+    // The cap is inclusive: a payload decompressing to exactly the limit is
+    // readable, matching the write side's strict greater-than refusal so
+    // nothing writable is unreadable at the boundary.
+    const payload = "dialcache ".repeat(1024);
+    expect(decompressPayload(compressed, Buffer.byteLength(payload))).toEqual({
+      payload,
+      outcome: "decompressed",
+    });
   });
 
   it("never mutates the marked input payload", () => {

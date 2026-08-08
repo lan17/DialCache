@@ -17,6 +17,7 @@ import {
 } from "../src/index.js";
 import { MARKER_ESCAPED_RAW, MARKER_ZSTD_UTF8 } from "../src/internal/compression.js";
 import { decodeFrame, encodeFrame, FakeRedis } from "./fake-redis.js";
+import { markerCollidingSerializer, type Row } from "./marker-colliding-serializer.js";
 
 const keyFor = (id: string, useCase: string): DialCacheKey =>
   new DialCacheKey({ keyType: "user_id", id, useCase });
@@ -179,18 +180,6 @@ describe("DialCache Redis payload compression", () => {
   });
 
   it("escapes colliding binary output even when compression is disabled", async () => {
-    interface Row {
-      readonly id: string;
-    }
-    const serializer: Serializer<Row> = {
-      dump: (row) => Buffer.concat([Buffer.from([MARKER_ZSTD_UTF8]), Buffer.from(JSON.stringify(row), "utf8")]),
-      load: (payload) => {
-        if (!Buffer.isBuffer(payload)) {
-          throw new Error("expected binary payload");
-        }
-        return JSON.parse(payload.subarray(1).toString("utf8")) as Row;
-      },
-    };
     const redis = new FakeRedis();
     const optedOut = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000, compression: false } });
     let calls = 0;
@@ -204,7 +193,7 @@ describe("DialCache Redis payload compression", () => {
         useCase: "CompressionDisabledEscape",
         cacheKey: (id) => id,
         defaultConfig: remoteOnly(),
-        serializer,
+        serializer: markerCollidingSerializer,
       },
     );
 
@@ -255,18 +244,6 @@ describe("DialCache Redis payload compression", () => {
   });
 
   it("round-trips a custom binary serializer whose output starts with the marker byte", async () => {
-    interface Row {
-      readonly id: string;
-    }
-    const serializer: Serializer<Row> = {
-      dump: (row) => Buffer.concat([Buffer.from([MARKER_ZSTD_UTF8]), Buffer.from(JSON.stringify(row), "utf8")]),
-      load: (payload) => {
-        if (!Buffer.isBuffer(payload)) {
-          throw new Error("expected binary payload");
-        }
-        return JSON.parse(payload.subarray(1).toString("utf8")) as Row;
-      },
-    };
     const redis = new FakeRedis();
     const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     let calls = 0;
@@ -280,7 +257,7 @@ describe("DialCache Redis payload compression", () => {
         useCase: "CompressionMarkerCollision",
         cacheKey: (id) => id,
         defaultConfig: remoteOnly(),
-        serializer,
+        serializer: markerCollidingSerializer,
       },
     );
 
@@ -306,7 +283,7 @@ describe("DialCache Redis payload compression", () => {
         useCase: "CompressionMarkerCollision",
         cacheKey: (id) => id,
         defaultConfig: remoteOnly(),
-        serializer,
+        serializer: markerCollidingSerializer,
       },
     );
     const second = await reader.enable(async () => await readRow("123"));
