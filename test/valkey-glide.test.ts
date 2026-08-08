@@ -27,19 +27,10 @@ const INVALID_WRITE_REPLIES: readonly unknown[] = [
 const INVALID_INVALIDATION_REPLIES: readonly unknown[] = [0, 2, ...INVALID_WRITE_REPLIES];
 
 const decoderBytes = Symbol("bytes");
-const scriptInstances: MockScript[] = [];
 const batchInstances: MockBatch[] = [];
 const clusterBatchInstances: MockClusterBatch[] = [];
 const standaloneClients = new WeakSet<object>();
 const clusterClients = new WeakSet<object>();
-
-class MockScript {
-  readonly release = vi.fn();
-
-  constructor(readonly code: string) {
-    scriptInstances.push(this);
-  }
-}
 
 class MockBatch {
   readonly commands: Array<Array<string | Buffer>> = [];
@@ -82,14 +73,7 @@ const mockGlide = {
   Decoder: { Bytes: decoderBytes },
   GlideClient: mockClientIdentity(standaloneClients),
   GlideClusterClient: mockClientIdentity(clusterClients),
-  Script: MockScript,
 };
-
-interface InvokeScriptOptions {
-  keys: Array<string | Buffer>;
-  args: Array<string | Buffer>;
-  decoder: typeof decoderBytes;
-}
 
 function createFakeClient(replies: unknown[]) {
   const nextReply = async (): Promise<unknown> => replies.shift();
@@ -110,7 +94,6 @@ function createFakeClient(replies: unknown[]) {
         route?: { type: "primarySlotKey"; key: string };
       },
     ) => nextReply()),
-    invokeScript: vi.fn(async (_script: MockScript, _options: InvokeScriptOptions) => nextReply()),
   };
   return client;
 }
@@ -153,7 +136,6 @@ async function expectProtocolError(operation: Promise<unknown>, message: string)
 
 describe("Valkey GLIDE adapter", () => {
   beforeEach(() => {
-    scriptInstances.length = 0;
     batchInstances.length = 0;
     clusterBatchInstances.length = 0;
   });
@@ -193,8 +175,7 @@ describe("Valkey GLIDE adapter", () => {
       true,
       { decoder: decoderBytes },
     );
-    expect(client.invokeScript).not.toHaveBeenCalled();
-    expect(scriptInstances).toHaveLength(1);
+    expect(client.customCommand).not.toHaveBeenCalled();
   });
 
   it("routes tracked cluster MGET directly to the slot primary", async () => {
@@ -228,7 +209,6 @@ describe("Valkey GLIDE adapter", () => {
       customCommand: directClient.customCommand,
       exec: directClient.exec,
       get: directClient.get,
-      invokeScript: directClient.invokeScript,
     };
 
     expect(
@@ -237,7 +217,6 @@ describe("Valkey GLIDE adapter", () => {
       "Valkey GLIDE DialCache requires a direct GlideClient or GlideClusterClient instance "
       + "from the supplied runtime; wrappers should implement DialCacheRedisClient directly",
     );
-    expect(scriptInstances).toHaveLength(0);
   });
 
   it("rejects a direct client from a different GLIDE module instance", () => {
@@ -254,7 +233,6 @@ describe("Valkey GLIDE adapter", () => {
       "Valkey GLIDE DialCache requires a direct GlideClient or GlideClusterClient instance "
       + "from the supplied runtime; wrappers should implement DialCacheRedisClient directly",
     );
-    expect(scriptInstances).toHaveLength(0);
   });
 
   it("rejects an ambiguous client identity before allocating scripts", () => {
@@ -266,7 +244,6 @@ describe("Valkey GLIDE adapter", () => {
     ).toThrow(
       "Invalid Valkey GLIDE runtime: client matches both GlideClient and GlideClusterClient",
     );
-    expect(scriptInstances).toHaveLength(0);
   });
 
   it("requires GLIDE 2.x Batch support before allocating scripts", () => {
@@ -287,7 +264,6 @@ describe("Valkey GLIDE adapter", () => {
         "Valkey GLIDE DialCache requires @valkey/valkey-glide >=2.0.0 with Batch and ClusterBatch constructors",
       );
     }
-    expect(scriptInstances).toHaveLength(0);
   });
 
   it("preserves GLIDE invocation options when given a core read context", async () => {
@@ -304,7 +280,6 @@ describe("Valkey GLIDE adapter", () => {
       "plain:value",
       { decoder: decoderBytes },
     );
-    adapter.dispose();
   });
 
   it("writes untracked SETs directly and tracked pairs through a batch", async () => {
@@ -333,7 +308,6 @@ describe("Valkey GLIDE adapter", () => {
       adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 100 }),
     ).resolves.toBeUndefined();
 
-    expect(client.customCommand).toHaveBeenCalledTimes(1);
     const [untrackedSet, untrackedOptions] = client.customCommand.mock.calls[0]
       ?? [[], undefined];
     expect(untrackedSet[0]).toBe("SET");
@@ -375,10 +349,18 @@ describe("Valkey GLIDE adapter", () => {
     expect(client.exec).toHaveBeenCalledTimes(1);
     expect(client.exec).toHaveBeenCalledWith(trackedBatch, false, { decoder: decoderBytes });
 
-    expect(client.invokeScript).toHaveBeenCalledTimes(1);
-    expect(client.invokeScript).toHaveBeenCalledWith(
-      expect.any(MockScript),
-      { keys: ["tracked:{id}:watermark"], args: ["100"], decoder: decoderBytes },
+    // Call 1 is the untracked SET; invalidation dispatches by its source SHA1.
+    expect(client.customCommand).toHaveBeenCalledTimes(2);
+    expect(client.customCommand).toHaveBeenNthCalledWith(
+      2,
+      [
+        "EVALSHA",
+        createHash("sha1").update(INVALIDATE_CACHE_SCRIPT).digest("hex"),
+        "1",
+        "tracked:{id}:watermark",
+        "100",
+      ],
+      { decoder: decoderBytes },
     );
   });
 
@@ -396,11 +378,10 @@ describe("Valkey GLIDE adapter", () => {
     await expect(write).rejects.toBeInstanceOf(DialCacheRedisPlaceholderLostError);
     // Reply 2 is a settled outcome, not a recovery trigger.
     expect(client.customCommand).not.toHaveBeenCalled();
-    adapter.dispose();
   });
 
-  it("routes cluster writes to the slot primary", async () => {
-    const client = fakeClusterClient("OK", ["OK", 1]);
+  it("routes cluster writes and invalidations to the slot primary", async () => {
+    const client = fakeClusterClient("OK", ["OK", 1], 1);
     const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
 
     await expect(
@@ -414,6 +395,9 @@ describe("Valkey GLIDE adapter", () => {
         value: "tracked",
       }),
     ).resolves.toBe(true);
+    await expect(
+      adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 25 }),
+    ).resolves.toBeUndefined();
 
     const [, untrackedOptions] = client.customCommand.mock.calls[0] ?? [[], undefined];
     expect(untrackedOptions).toEqual({
@@ -424,6 +408,11 @@ describe("Valkey GLIDE adapter", () => {
     expect(client.exec).toHaveBeenCalledWith(clusterBatchInstances[0], false, {
       decoder: decoderBytes,
       route: { type: "primarySlotKey", key: "tracked:{id}:value" },
+    });
+    const [, invalidateOptions] = client.customCommand.mock.calls[1] ?? [[], undefined];
+    expect(invalidateOptions).toEqual({
+      decoder: decoderBytes,
+      route: { type: "primarySlotKey", key: "tracked:{id}:watermark" },
     });
   });
 
@@ -490,8 +479,6 @@ describe("Valkey GLIDE adapter", () => {
         ],
         { decoder: decoderBytes },
       );
-      expect(client.invokeScript).not.toHaveBeenCalled();
-      adapter.dispose();
     }
   });
 
@@ -526,7 +513,6 @@ describe("Valkey GLIDE adapter", () => {
     expect(trackedSet?.[4]).toBe("1001");
     expect(stamp?.[5]).toBe("1001");
     expect(Buffer.isBuffer(stamp?.[6])).toBe(true);
-    adapter.dispose();
   });
 
   it("surfaces batched SET and stamp command errors", async () => {
@@ -540,7 +526,6 @@ describe("Valkey GLIDE adapter", () => {
       value: "tracked",
     })).rejects.toBe(setFailure);
     expect(setClient.customCommand).not.toHaveBeenCalled();
-    setAdapter.dispose();
 
     const stampFailure = new Error("ERR invalid DialCache watermark");
     const stampClient = fakeClient([Buffer.from("OK"), stampFailure]);
@@ -552,7 +537,6 @@ describe("Valkey GLIDE adapter", () => {
       value: "tracked",
     })).rejects.toBe(stampFailure);
     expect(stampClient.customCommand).not.toHaveBeenCalled();
-    stampAdapter.dispose();
   });
 
   it("validates write batch envelopes and SET replies", async () => {
@@ -564,7 +548,6 @@ describe("Valkey GLIDE adapter", () => {
       cacheTtlMs: 1_000,
       value: "tracked",
     })).rejects.toBeInstanceOf(DialCacheRedisPayloadError);
-    envelopeAdapter.dispose();
 
     const setReplyClient = fakeClient("QUEUED");
     const setReplyAdapter = createValkeyGlideDialCacheClient(setReplyClient, mockGlide);
@@ -572,7 +555,6 @@ describe("Valkey GLIDE adapter", () => {
       Promise.resolve(setReplyAdapter.write({ valueKey: "plain:value", cacheTtlMs: 1_000, value: "plain" })),
       "Invalid DialCache Redis SET reply; expected OK",
     );
-    setReplyAdapter.dispose();
 
     // A bad SET reply wins over a failing stamp, matching the write contract.
     const combinedClient = fakeClient(["QUEUED", new Error("ERR invalid DialCache watermark")]);
@@ -586,7 +568,6 @@ describe("Valkey GLIDE adapter", () => {
       })),
       "Invalid DialCache Redis SET reply; expected OK",
     );
-    combinedAdapter.dispose();
   });
 
   it("rejects malformed native read and mutation script replies", async () => {
@@ -645,7 +626,6 @@ describe("Valkey GLIDE adapter", () => {
         })),
         writeMessage,
       );
-      tracked.dispose();
     }
 
     for (const reply of INVALID_INVALIDATION_REPLIES) {
@@ -657,103 +637,36 @@ describe("Valkey GLIDE adapter", () => {
         })),
         invalidationMessage,
       );
-      adapter.dispose();
     }
   });
 
-  it("releases every script exactly once and rejects later operations", async () => {
-    const client = fakeClient();
-    const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
-
-    adapter.dispose();
-    adapter.dispose();
-
-    expect(scriptInstances).toHaveLength(1);
-    expect(scriptInstances[0]?.code).toBe(INVALIDATE_CACHE_SCRIPT);
-    for (const script of scriptInstances) {
-      expect(script.release).toHaveBeenCalledTimes(1);
-    }
-    await expect(adapter.read({ valueKey: "disposed" })).rejects.toThrow("Valkey GLIDE DialCache client is disposed");
-    expect(client.get).not.toHaveBeenCalled();
-    expect(client.exec).not.toHaveBeenCalled();
-    expect(client.invokeScript).not.toHaveBeenCalled();
-  });
-
-  it("does not release scripts while a native read is in flight", async () => {
-    let resolveRead: ((value: Buffer) => void) | undefined;
-    const client = fakeClient();
-    client.get.mockImplementationOnce(
-      async () => await new Promise<Buffer>((resolve) => {
-        resolveRead = resolve;
-      }),
+  it("recovers a flushed invalidation script with EVAL by source", async () => {
+    const client = fakeClient(1);
+    client.customCommand.mockRejectedValueOnce(
+      new Error("An error was signalled by the server: - NoScriptError: No matching script."),
     );
     const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
 
-    const read = adapter.read({ valueKey: "in-flight" });
-    expect(() => adapter.dispose()).toThrow(
-      "Cannot dispose Valkey GLIDE DialCache client while operations are in flight",
-    );
-    expect(scriptInstances.every((script) => script.release.mock.calls.length === 0)).toBe(true);
+    await expect(
+      adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 }),
+    ).resolves.toBeUndefined();
 
-    resolveRead?.(redisFrame("done"));
-    await expect(read).resolves.toBe("done");
-    adapter.dispose();
-    expect(scriptInstances.every((script) => script.release.mock.calls.length === 1)).toBe(true);
+    expect(client.customCommand).toHaveBeenNthCalledWith(
+      2,
+      ["EVAL", INVALIDATE_CACHE_SCRIPT, "1", "tracked:{id}:watermark", "50"],
+      { decoder: decoderBytes },
+    );
   });
 
-  it("stays busy across the batch and its NOSCRIPT recovery so dispose cannot race", async () => {
-    const client = fakeClient();
-    let resolveExec: ((value: unknown) => void) | undefined;
-    let resolveFallback: ((value: number) => void) | undefined;
-    client.exec.mockImplementationOnce(
-      async () => await new Promise<unknown>((resolve) => {
-        resolveExec = resolve;
-      }),
-    );
-    client.customCommand.mockImplementationOnce(
-      async () => await new Promise<number>((resolve) => {
-        resolveFallback = resolve;
-      }),
-    );
-    const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
-
-    const write = adapter.write({
-      valueKey: "tracked:{id}:value",
-      watermarkKey: "tracked:{id}:watermark",
-      cacheTtlMs: 1_000,
-      value: "tracked",
-    });
-    expect(() => adapter.dispose()).toThrow(
-      "Cannot dispose Valkey GLIDE DialCache client while operations are in flight",
-    );
-
-    resolveExec?.([Buffer.from("OK"), new Error("NOSCRIPT No matching script. Please use EVAL.")]);
-    await vi.waitFor(() => expect(client.customCommand).toHaveBeenCalledTimes(1));
-    // The EVAL recovery is still pending: the write must stay in flight.
-    expect(() => adapter.dispose()).toThrow(
-      "Cannot dispose Valkey GLIDE DialCache client while operations are in flight",
-    );
-    expect(scriptInstances.every((script) => script.release.mock.calls.length === 0)).toBe(true);
-
-    resolveFallback?.(1);
-    await expect(write).resolves.toBe(true);
-    adapter.dispose();
-    expect(scriptInstances.every((script) => script.release.mock.calls.length === 1)).toBe(true);
-  });
-
-  it("uses Batch, Script, and Decoder from the supplied GLIDE module instance", async () => {
+  it("uses Batch and Decoder from the supplied GLIDE module instance", async () => {
     class OtherBatch {
       mget(): this {
         return this;
       }
     }
-    class OtherScript {
-      readonly release = vi.fn();
-    }
     const otherGlide = {
       Batch: OtherBatch,
       Decoder: { Bytes: Symbol("other-bytes") },
-      Script: OtherScript,
     };
     const client = fakeClient(
       [[redisFrame("tracked"), Buffer.from("0")]],
@@ -776,19 +689,16 @@ describe("Valkey GLIDE adapter", () => {
 
     const [readBatch, , readOptions] = client.exec.mock.calls[0] ?? [];
     const [writeBatch, , writeOptions] = client.exec.mock.calls[1] ?? [];
-    const [script, scriptOptions] = client.invokeScript.mock.calls[0] ?? [];
+    const [, invalidateOptions] = client.customCommand.mock.calls[0] ?? [];
     expect(readBatch).toBeInstanceOf(MockBatch);
     expect(readBatch).not.toBeInstanceOf(otherGlide.Batch);
     expect(writeBatch).toBeInstanceOf(MockBatch);
     expect(writeBatch).not.toBeInstanceOf(otherGlide.Batch);
-    expect(script).toBeInstanceOf(MockScript);
-    expect(script).not.toBeInstanceOf(otherGlide.Script);
     expect(readOptions?.decoder).toBe(mockGlide.Decoder.Bytes);
     expect(readOptions?.decoder).not.toBe(otherGlide.Decoder.Bytes);
     expect(writeOptions?.decoder).toBe(mockGlide.Decoder.Bytes);
     expect(writeOptions?.decoder).not.toBe(otherGlide.Decoder.Bytes);
-    expect(scriptOptions?.decoder).toBe(mockGlide.Decoder.Bytes);
-    expect(scriptOptions?.decoder).not.toBe(otherGlide.Decoder.Bytes);
-    adapter.dispose();
+    expect(invalidateOptions?.decoder).toBe(mockGlide.Decoder.Bytes);
+    expect(invalidateOptions?.decoder).not.toBe(otherGlide.Decoder.Bytes);
   });
 });

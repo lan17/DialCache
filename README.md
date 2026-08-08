@@ -378,27 +378,27 @@ const dialcache = new DialCache({
 });
 
 function shutdown(): void {
-  // After draining request-path calls and invalidations, release scripts before closing GLIDE.
-  // Detached shadow work is best-effort and has no drain handle.
-  redisClient.dispose();
+  // After draining request-path calls and invalidations, close GLIDE; the
+  // adapter is stateless. Detached shadow work is best-effort and has no
+  // drain handle.
   glideClient.close();
 }
 ```
 
 Pass the same GLIDE 2.x module namespace that created the client. The adapter
 uses that namespace's `GlideClient` and `GlideClusterClient` identities,
-`Batch` and `Script` constructors, and `Decoder.Bytes` without importing a
-GLIDE runtime itself. The helper accepts a direct official client instance and
+`Batch` and `ClusterBatch` constructors, and `Decoder.Bytes` without importing
+a GLIDE runtime itself. The helper accepts a direct official client instance and
 fails during construction when the client came from another module instance or
 is hidden behind a forwarding wrapper, because it cannot safely infer that
 wrapper's topology. Custom wrappers can implement `DialCacheRedisClient`
 directly.
 
-The application owns the complete Redis lifecycle. It creates and connects the underlying client and passes the semantic adapter to DialCache. During shutdown, stop starting DialCache-backed work and await every promise returned by a cached function, `getOrLoad()`, or `invalidateRemote()`, including calls still running fallbacks that may later write Redis. A read that crossed DialCache's wait deadline may still be active inside the client, so use client-native telemetry and shutdown controls to drain or terminate that work before disposing adapter-owned resources and closing the connection. DialCache only borrows `redis.client`; it has no close or drain method and never disposes or closes caller resources.
+The application owns the complete Redis lifecycle. It creates and connects the underlying client and passes the semantic adapter to DialCache. During shutdown, stop starting DialCache-backed work and await every promise returned by a cached function, `getOrLoad()`, or `invalidateRemote()`, including calls still running fallbacks that may later write Redis. A read that crossed DialCache's wait deadline may still be active inside the client, so use client-native telemetry and shutdown controls to drain or terminate that work before closing the connection. DialCache only borrows `redis.client`; it has no close or drain method and never disposes or closes caller resources.
 
 Awaiting those public promises does not drain detached shadow work. Shadow scheduling and deadline timers are unreferenced and completion is not guaranteed during shutdown; Redis operations, source reads, serializers, and asynchronous telemetry already started by shadow work remain caller-owned and may still be active. Stop new work before closing their dependencies and accept that an in-flight shadow fill may have been dispatched even if its final outcome is lost during teardown. DialCache does not add a shutdown hook or keep the process alive to deliver best-effort outcomes.
 
-The node-redis adapter owns no additional resources, so the application closes the underlying node-redis client after draining work. The GLIDE adapter owns one native `Script` handle for invalidation, but not the wrapped connection. After outstanding operations finish, call its idempotent `dispose()` before closing GLIDE as shown above; disposal while an adapter operation is in flight throws rather than releasing a live script. On GLIDE 2.0.0, releasing a `Script` handle has been observed to break other live handles for the same script source despite GLIDE's documented reference counting, so adapters sharing one GLIDE module namespace should be disposed together at shutdown, never swapped dispose-after-create.
+Neither adapter owns additional resources: both dispatch their mutation scripts by source SHA1 and hold no native handles, so the application simply closes the underlying client after draining work. Applications that construct their own GLIDE `Script` objects should know that on GLIDE 2.0.0, releasing a handle has been observed to break other live handles for the same script source despite GLIDE's documented reference counting.
 
 Reads use native `GET` for untracked entries and one atomic `MGET` for each tracked value-and-watermark pair. The adapters validate and decode the returned frame in the Node process. Tracked reads are deliberately routed to primaries so a lagging replica cannot hide an invalidation watermark.
 
@@ -408,7 +408,7 @@ Native commands retain Redis's wrong-type behavior. An untracked `GET` surfaces 
 
 Node-redis forces tracked cluster commands to the slot primary. GLIDE uses an explicit primary route in cluster mode; in standalone mode it sends `MGET` through a one-command non-atomic batch because direct read commands follow the client's replica-read preference. Standalone batches use the primary, and `MGET` itself provides the atomic snapshot without consuming caller-owned `WATCH` state. The GLIDE helper distinguishes those modes from the direct client's runtime identity and rejects ambiguous clients instead of silently choosing a route.
 
-For the stamp and invalidation scripts, node-redis computes each script's SHA, uses `EVALSHA`, and retries with `EVAL` after `NOSCRIPT`; its cluster client routes commands by their first key and performs that fallback on the selected shard. That retry likewise extends the unreadable-placeholder gap of a tracked write by one round trip on a cold script cache. The GLIDE adapter batches the tracked write's `SET` with an `EVALSHA` of the stamp script — routing cluster write batches to the slot primary — and recovers from a flushed script cache by re-sending the stamp as `EVAL` with its source, which the server caches under the same SHA1, so the first tracked write against a cold script cache pays one extra round trip. A late stamp stays paired to its own placeholder through the nonce; if the placeholder is gone by then, the write fails rather than publishing. Invalidation uses GLIDE's native `Script` lifecycle directly.
+For the stamp and invalidation scripts, node-redis computes each script's SHA, uses `EVALSHA`, and retries with `EVAL` after `NOSCRIPT`; its cluster client routes commands by their first key and performs that fallback on the selected shard. That retry likewise extends the unreadable-placeholder gap of a tracked write by one round trip on a cold script cache. The GLIDE adapter batches the tracked write's `SET` with an `EVALSHA` of the stamp script — routing cluster write batches to the slot primary — and recovers from a flushed script cache by re-sending the stamp as `EVAL` with its source, which the server caches under the same SHA1, so the first tracked write against a cold script cache pays one extra round trip. A late stamp stays paired to its own placeholder through the nonce; if the placeholder is gone by then, the write fails rather than publishing. Invalidation dispatches the same way on both adapters: `EVALSHA` by the script's source SHA1, recovered with `EVAL`.
 
 A tracked write rejected by an active future watermark uses `UNLINK` to remove the value key — the placeholder it just stored, along with any logically stale frame — without synchronously freeing it on Redis's command path. The mutation protocol therefore requires a server that implements `UNLINK` (Redis 4.0 or later, or a compatible Valkey release). Command-restricted Redis ACLs must also allow the stamp script to invoke `UNLINK`, `GETRANGE`, and `SETRANGE`, and must allow the client to issue `EVAL` — both adapters recover a flushed script cache by re-sending the stamp source, not via `SCRIPT LOAD`; verify those grants before upgrading, because the failure amplitude of a persistent stamp fault changed. A sustained stamp failure (denied command, a proxy rejecting `EVALSHA`) still lands every paired `SET`, so each tracked write replaces the last served value with an unreadable placeholder while also suppressing process-local publication — within one TTL horizon the source absorbs full traffic, where the previous protocol degraded to serving stale values until expiry. DialCache's integration matrix covers Redis 6.2 and Valkey 8.
 

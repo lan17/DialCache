@@ -567,11 +567,15 @@ import {
   createPrometheusDialCacheMetrics,
   type PrometheusMetricsOptions,
 } from "dialcache/prometheus";
+import { type DialCacheRedisClient } from "dialcache";
 import {
   createValkeyGlideDialCacheClient,
-  type ValkeyGlideDialCacheClient,
   type ValkeyGlideRuntime,
 } from "dialcache/valkey-glide";
+// @ts-expect-error The stateless GLIDE adapter removed its dispose wrapper type.
+import { type ValkeyGlideDialCacheClient } from "dialcache/valkey-glide";
+// @ts-expect-error The handle-free GLIDE adapter removed the Script handle type.
+import { type ValkeyGlideScriptHandle } from "dialcache/valkey-glide";
 import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "dialcache/node-redis";
 import { Registry, type OpenMetricsContentType } from "prom-client";
 
@@ -584,7 +588,7 @@ const openMetricsRegistry = new Registry<OpenMetricsContentType>();
 openMetricsRegistry.setContentType(Registry.OPENMETRICS_CONTENT_TYPE);
 const openMetricsAdapter = new PrometheusDialCacheMetrics({ registry: openMetricsRegistry, prefix: "open_" });
 const registryIsRequired: {} extends Pick<PrometheusMetricsOptions, "registry"> ? false : true = true;
-const glideRedisClient: ValkeyGlideDialCacheClient | undefined = undefined;
+const glideRedisClient: DialCacheRedisClient | undefined = undefined;
 const standaloneNodeRedisClient = createRedisClient({ scripts: dialcacheRedisScripts });
 const clusterNodeRedisClient = createRedisCluster({
   rootNodes: [{ url: "redis://127.0.0.1:6379" }],
@@ -592,12 +596,12 @@ const clusterNodeRedisClient = createRedisCluster({
 });
 const standaloneNodeRedisAdapter = createNodeRedisDialCacheClient(standaloneNodeRedisClient);
 const clusterNodeRedisAdapter = createNodeRedisDialCacheClient(clusterNodeRedisClient);
-const glideRuntime: ValkeyGlideRuntime<valkeyGlide.Script, valkeyGlide.Decoder> = valkeyGlide;
+const glideRuntime: ValkeyGlideRuntime<valkeyGlide.Decoder> = valkeyGlide;
 declare const standaloneGlideClient: valkeyGlide.GlideClient;
 declare const clusterGlideClient: valkeyGlide.GlideClusterClient;
-const standaloneGlideAdapter = createValkeyGlideDialCacheClient(standaloneGlideClient, glideRuntime);
-const clusterGlideAdapter = createValkeyGlideDialCacheClient(clusterGlideClient, glideRuntime);
-// @ts-expect-error The caller's GLIDE runtime is required for native Script ownership.
+const standaloneGlideAdapter: DialCacheRedisClient = createValkeyGlideDialCacheClient(standaloneGlideClient, glideRuntime);
+const clusterGlideAdapter: DialCacheRedisClient = createValkeyGlideDialCacheClient(clusterGlideClient, glideRuntime);
+// @ts-expect-error The caller's GLIDE runtime is required for native Batch ownership.
 createValkeyGlideDialCacheClient(standaloneGlideClient);
 const dogStatsD = new StatsD({ mock: true });
 const compatibleDogStatsD: DatadogDogStatsDClient = dogStatsD;
@@ -1300,8 +1304,6 @@ try {
   if (!(error instanceof root.DialCacheRedisProtocolError)) {
     throw new Error("The GLIDE protocol error does not match the root ESM export");
   }
-} finally {
-  adapter.dispose();
 }`,
     ],
     { cwd: workspace },
@@ -1360,8 +1362,6 @@ void (async () => {
     if (!(error instanceof root.DialCacheRedisProtocolError)) {
       throw new Error("The GLIDE protocol error does not match the root CommonJS export");
     }
-  } finally {
-    adapter.dispose();
   }
 })();`,
     ],

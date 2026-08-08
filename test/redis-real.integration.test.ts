@@ -17,10 +17,7 @@ import {
 } from "../src/internal/redis-scripts.js";
 import { encodeTrackedRedisPlaceholder } from "../src/redis-protocol.js";
 import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "../src/node-redis.js";
-import {
-  createValkeyGlideDialCacheClient,
-  type ValkeyGlideDialCacheClient,
-} from "../src/valkey-glide.js";
+import { createValkeyGlideDialCacheClient } from "../src/valkey-glide.js";
 
 const engines = [
   { name: "Redis 6.2", image: "redis:6.2-alpine" },
@@ -81,7 +78,7 @@ function createNodeRedisHarness(client: NodeRedisTestClient): RedisAdapterHarnes
 }
 
 function createValkeyGlideHarness(client: valkeyGlide.GlideClient): RedisAdapterHarness {
-  const adapter: ValkeyGlideDialCacheClient = createValkeyGlideDialCacheClient(client, valkeyGlide);
+  const adapter = createValkeyGlideDialCacheClient(client, valkeyGlide);
   const rawScripts = {
     stamp: new valkeyGlide.Script(WRITE_TRACKED_STAMP_SCRIPT),
     invalidate: new valkeyGlide.Script(INVALIDATE_CACHE_SCRIPT),
@@ -115,7 +112,6 @@ function createValkeyGlideHarness(client: valkeyGlide.GlideClient): RedisAdapter
         ),
     },
     dispose() {
-      adapter.dispose();
       for (const script of Object.values(rawScripts)) {
         script.release();
       }
