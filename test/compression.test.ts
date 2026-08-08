@@ -37,6 +37,14 @@ describe("compression config resolution", () => {
     expect(resolveCompressionConfig(false)).toBeNull();
   });
 
+  it("rejects null and other non-object sentinels instead of silently enabling", () => {
+    for (const config of [null, true, 0, 1, "false"]) {
+      expect(() => resolveCompressionConfig(config as never)).toThrowError(
+        "RedisConfig.compression must be an options object, false, or undefined",
+      );
+    }
+  });
+
   it("passes explicit threshold and level through", () => {
     expect(resolveCompressionConfig({ thresholdBytes: 1, level: 22 })).toEqual({
       thresholdBytes: 1,
@@ -190,7 +198,7 @@ describe("compressPayload", () => {
     const payload = "x".repeat(2048);
     const result = compressPayload(payload, config(64), 1024);
 
-    expect(result.outcome).toBe("over_limit");
+    expect(result.outcome).toBe("write_over_limit");
     expect(result.payload).toBe(payload);
     expect(result.storedBytes).toBe(2048);
   });
@@ -291,14 +299,14 @@ describe("decompressPayload", () => {
     expect(decompressPayload(withTrailer)).toEqual({ payload: body, outcome: "decompressed" });
   });
 
-  it("returns over_limit and the original payload when decompression would exceed the cap", () => {
+  it("returns read_over_limit and the original payload when decompression would exceed the cap", () => {
     const compressed = compressPayload("dialcache ".repeat(1024), config(64)).payload;
     if (!Buffer.isBuffer(compressed)) {
       throw new Error("expected a compressed Buffer");
     }
 
     const result = decompressPayload(compressed, 16);
-    expect(result.outcome).toBe("over_limit");
+    expect(result.outcome).toBe("read_over_limit");
     expect(result.payload).toBe(compressed);
 
     expect(decompressPayload(compressed).outcome).toBe("decompressed");

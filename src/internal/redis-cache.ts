@@ -239,7 +239,13 @@ export class RedisCache {
     }
     if (this.compression !== null) {
       const compressStart = performance.now();
-      const compression = compressPayload(serialized, this.compression);
+      let compression;
+      try {
+        compression = compressPayload(serialized, this.compression);
+      } catch (error) {
+        this.recordError(key, metricLayer, "compression");
+        throw error;
+      }
       serialized = compression.payload;
       this.recordMetric((metrics) => metrics.compression?.({ ...labelsFor(key, metricLayer), outcome: compression.outcome }));
       if (compression.outcome === "compressed" || compression.outcome === "not_smaller") {

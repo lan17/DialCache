@@ -47,8 +47,8 @@ export interface CompressionConfig {
   readonly level?: number;
 }
 
-export type CompressionWriteOutcome = "compressed" | "below_threshold" | "not_smaller" | "over_limit";
-export type CompressionReadOutcome = "passthrough" | "decompressed" | "fallback_raw" | "over_limit";
+export type CompressionWriteOutcome = "compressed" | "below_threshold" | "not_smaller" | "write_over_limit";
+export type CompressionReadOutcome = "passthrough" | "decompressed" | "fallback_raw" | "read_over_limit";
 
 export interface CompressPayloadResult {
   readonly payload: RedisCachePayload;
@@ -72,6 +72,11 @@ export function resolveCompressionConfig(
 ): Required<CompressionConfig> | null {
   if (config === false) {
     return null;
+  }
+  // Reject untyped "off" sentinels loudly: null (or any non-object) would
+  // otherwise fall through to the enabled defaults, silently inverting intent.
+  if (config !== undefined && (config === null || typeof config !== "object")) {
+    throw new TypeError("RedisConfig.compression must be an options object, false, or undefined");
   }
 
   const thresholdBytes = config?.thresholdBytes ?? DEFAULT_COMPRESSION_THRESHOLD_BYTES;
@@ -142,7 +147,7 @@ export function compressPayload(
   // Values the read-side cap would reject must never be stored compressed;
   // stored raw they are subject to Redis's own value limit instead.
   if (originalBytes > maxDecompressedBytes) {
-    return rawResult(payload, "over_limit", originalBytes);
+    return rawResult(payload, "write_over_limit", originalBytes);
   }
 
   const compressed = zstdCompressSync(isBinary ? payload : Buffer.from(payload, "utf8"), {
@@ -199,7 +204,7 @@ export function decompressPayload(
     decompressed = zstdDecompressSync(payload.subarray(1), { maxOutputLength: maxDecompressedBytes });
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
-    return { payload, outcome: code === "ERR_BUFFER_TOO_LARGE" ? "over_limit" : "fallback_raw" };
+    return { payload, outcome: code === "ERR_BUFFER_TOO_LARGE" ? "read_over_limit" : "fallback_raw" };
   }
   return {
     payload: marker === MARKER_ZSTD_UTF8 ? decompressed.toString("utf8") : decompressed,

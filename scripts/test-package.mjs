@@ -28,6 +28,7 @@ const rootConsumer = `import {
   type CoalescingState,
   type CompressionConfig,
   type CompressionMetricLabels,
+  type CompressionOperationMetricLabels,
   type CompressionOutcome,
   type DialCacheConfig,
   type DialCacheKeyInit,
@@ -328,6 +329,7 @@ const metricErrorKinds: Readonly<Record<MetricErrorKind, true>> = {
   cache_write: true,
   serialization_load: true,
   serialization_dump: true,
+  compression: true,
   invalidation: true,
   fallback: true,
   unknown: true,
@@ -346,9 +348,17 @@ const compressionOutcomes: Readonly<Record<CompressionOutcome, true>> = {
   compressed: true,
   below_threshold: true,
   not_smaller: true,
-  over_limit: true,
+  write_over_limit: true,
   decompressed: true,
   fallback_raw: true,
+  read_over_limit: true,
+};
+const compressionOperationMetricLabels: CompressionOperationMetricLabels = {
+  cacheNamespace: "consumer-cache",
+  useCase: "Load",
+  keyType: "id",
+  layer: CacheLayer.REMOTE,
+  operation: "compress",
 };
 // @ts-expect-error Compression outcomes are a bounded metric category.
 const unboundedCompressionOutcome: CompressionOutcome = "inflated";
@@ -476,6 +486,7 @@ void metricErrorKinds;
 void unboundedErrorKind;
 void compressionConfig;
 void compressionMetricLabels;
+void compressionOperationMetricLabels;
 void compressionOutcomes;
 void unboundedCompressionOutcome;
 void redisConfigAcceptsCompressionOptOut;

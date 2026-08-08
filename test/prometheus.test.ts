@@ -45,6 +45,7 @@ const METRIC_ERROR_KINDS: Readonly<Record<MetricErrorKind, true>> = {
   cache_write: true,
   serialization_load: true,
   serialization_dump: true,
+  compression: true,
   invalidation: true,
   fallback: true,
   unknown: true,
@@ -61,9 +62,10 @@ const COMPRESSION_OUTCOMES: Readonly<Record<CompressionOutcome, true>> = {
   compressed: true,
   below_threshold: true,
   not_smaller: true,
-  over_limit: true,
+  write_over_limit: true,
   decompressed: true,
   fallback_raw: true,
+  read_over_limit: true,
 };
 const SHADOW_VALIDATION_OUTCOMES: Readonly<Record<ShadowValidationOutcome, true>> = {
   match: true,

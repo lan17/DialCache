@@ -27,18 +27,20 @@ export type ShadowValidationOutcome =
   | "dropped";
 /**
  * Bounded compression outcomes. Writes record compressed, below_threshold,
- * not_smaller, or over_limit (serialized form exceeds the decompression cap,
- * stored raw); reads record decompressed, fallback_raw (a marked payload zstd
- * rejected and handed through untouched), or over_limit (decompression would
- * exceed the cap; handed through untouched).
+ * not_smaller, or write_over_limit (serialized form exceeds the decompression
+ * cap, stored raw — a capacity signal); reads record decompressed,
+ * fallback_raw (a marked payload zstd rejected and handed through untouched),
+ * or read_over_limit (decompression would exceed the cap; handed through
+ * untouched — a corruption/integrity signal).
  */
 export type CompressionOutcome =
   | "compressed"
   | "below_threshold"
   | "not_smaller"
-  | "over_limit"
+  | "write_over_limit"
   | "decompressed"
-  | "fallback_raw";
+  | "fallback_raw"
+  | "read_over_limit";
 /** Bounded reasons for skipping cache work; policy_disabled means a shared layer has no effective TTL. */
 export type DisabledReason = "context" | "policy_disabled" | "invalid_ttl" | "invalid_ramp" | "ramped_down" | "config_error";
 /** Stable failure sites used instead of backend- or application-defined error names. */
@@ -50,6 +52,7 @@ export type MetricErrorKind =
   | "cache_write"
   | "serialization_load"
   | "serialization_dump"
+  | "compression"
   | "invalidation"
   | "fallback"
   | "unknown";

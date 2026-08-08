@@ -1,3 +1,6 @@
+import { randomBytes } from "node:crypto";
+import { zstdCompressSync } from "node:zlib";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -173,6 +176,53 @@ describe("DialCache Redis payload compression", () => {
       encoding: 0,
       payload: JSON.stringify(largeValue("456")),
     });
+  });
+
+  it("escapes colliding binary output even when compression is disabled", async () => {
+    interface Row {
+      readonly id: string;
+    }
+    const serializer: Serializer<Row> = {
+      dump: (row) => Buffer.concat([Buffer.from([MARKER_ZSTD_UTF8]), Buffer.from(JSON.stringify(row), "utf8")]),
+      load: (payload) => {
+        if (!Buffer.isBuffer(payload)) {
+          throw new Error("expected binary payload");
+        }
+        return JSON.parse(payload.subarray(1).toString("utf8")) as Row;
+      },
+    };
+    const redis = new FakeRedis();
+    const optedOut = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000, compression: false } });
+    let calls = 0;
+    const getRow = optedOut.cached(
+      async (id: string): Promise<Row> => {
+        calls += 1;
+        return { id };
+      },
+      {
+        keyType: "user_id",
+        useCase: "CompressionDisabledEscape",
+        cacheKey: (id) => id,
+        defaultConfig: remoteOnly(),
+        serializer,
+      },
+    );
+
+    const first = await optedOut.enable(async () => await getRow("123"));
+
+    // Reads interpret the envelope unconditionally, so the escape must apply
+    // even with write-side compression disabled.
+    const stored = decodeFrame(redis.raw(redisKeyFor("123", "CompressionDisabledEscape"))).payload;
+    if (!Buffer.isBuffer(stored)) {
+      throw new Error("expected a binary stored payload");
+    }
+    expect(stored[0]).toBe(MARKER_ESCAPED_RAW);
+    expect(stored[1]).toBe(MARKER_ZSTD_UTF8);
+
+    const second = await optedOut.enable(async () => await getRow("123"));
+    expect(first).toEqual({ id: "123" });
+    expect(second).toEqual({ id: "123" });
+    expect(calls).toBe(1);
   });
 
   it("treats marker-colliding garbage as a miss, records fallback_raw, and repopulates the entry", async () => {
@@ -364,8 +414,29 @@ describe("DialCache Redis payload compression", () => {
       defaultConfig: remoteOnly(),
     });
 
+    // Incompressible binary payload with a pinned non-envelope first byte, so
+    // it exercises not_smaller through the cache without escape-size noise.
+    const incompressible = Buffer.concat([Buffer.from([0xff]), zstdCompressSync(randomBytes(8192))]);
+    const rawSerializer: Serializer<Buffer> = {
+      dump: (value) => value,
+      load: (payload) => {
+        if (!Buffer.isBuffer(payload)) {
+          throw new Error("expected binary payload");
+        }
+        return payload;
+      },
+    };
+    const getIncompressible = dialcache.cached(async (_userId: string): Promise<Buffer> => incompressible, {
+      keyType: "user_id",
+      useCase: "CompressionMetricsIncompressible",
+      cacheKey: (userId) => userId,
+      defaultConfig: remoteOnly(),
+      serializer: rawSerializer,
+    });
+
     await dialcache.enable(async () => await getLarge("123"));
     await dialcache.enable(async () => await getSmall("123"));
+    await dialcache.enable(async () => await getIncompressible("123"));
 
     const reader = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 }, metrics });
     const readLarge = reader.cached(async (userId: string) => largeValue(userId), {
@@ -374,16 +445,31 @@ describe("DialCache Redis payload compression", () => {
       cacheKey: (userId) => userId,
       defaultConfig: remoteOnly(),
     });
+    const readSmall = reader.cached(async (userId: string) => ({ userId }), {
+      keyType: "user_id",
+      useCase: "CompressionMetricsSmall",
+      cacheKey: (userId) => userId,
+      defaultConfig: remoteOnly(),
+    });
     await reader.enable(async () => await readLarge("123"));
+    // A passthrough read: the exact assertions below pin that it emits no
+    // compression counter entry and no decompress timer observation.
+    await reader.enable(async () => await readSmall("123"));
 
     expect(metrics.compressionCalls).toEqual([
       expect.objectContaining({ useCase: "CompressionMetricsLarge", layer: CacheLayer.REMOTE, outcome: "compressed" }),
       expect.objectContaining({ useCase: "CompressionMetricsSmall", layer: CacheLayer.REMOTE, outcome: "below_threshold" }),
+      expect.objectContaining({
+        useCase: "CompressionMetricsIncompressible",
+        layer: CacheLayer.REMOTE,
+        outcome: "not_smaller",
+      }),
       expect.objectContaining({ useCase: "CompressionMetricsLarge", layer: CacheLayer.REMOTE, outcome: "decompressed" }),
     ]);
 
     expect(metrics.durationCalls).toEqual([
       expect.objectContaining({ useCase: "CompressionMetricsLarge", operation: "compress" }),
+      expect.objectContaining({ useCase: "CompressionMetricsIncompressible", operation: "compress" }),
       expect.objectContaining({ useCase: "CompressionMetricsLarge", operation: "decompress" }),
     ]);
 

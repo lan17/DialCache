@@ -90,18 +90,20 @@ const DISABLED_REASONS: Readonly<Record<DisabledReason, true>> = {
   config_error: true,
 };
 const disabledReasons = Object.keys(DISABLED_REASONS) as DisabledReason[];
-const errorKinds: readonly MetricErrorKind[] = [
-  "key_construction",
-  "config_resolution",
-  "cache_read",
-  "cache_read_timeout",
-  "cache_write",
-  "serialization_load",
-  "serialization_dump",
-  "invalidation",
-  "fallback",
-  "unknown",
-];
+const ERROR_KINDS: Readonly<Record<MetricErrorKind, true>> = {
+  key_construction: true,
+  config_resolution: true,
+  cache_read: true,
+  cache_read_timeout: true,
+  cache_write: true,
+  serialization_load: true,
+  serialization_dump: true,
+  compression: true,
+  invalidation: true,
+  fallback: true,
+  unknown: true,
+};
+const errorKinds = Object.keys(ERROR_KINDS) as MetricErrorKind[];
 const SHADOW_VALIDATION_OUTCOMES: Readonly<Record<ShadowValidationOutcome, true>> = {
   match: true,
   mismatch: true,
@@ -122,9 +124,10 @@ const COMPRESSION_OUTCOMES: Readonly<Record<CompressionOutcome, true>> = {
   compressed: true,
   below_threshold: true,
   not_smaller: true,
-  over_limit: true,
+  write_over_limit: true,
   decompressed: true,
   fallback_raw: true,
+  read_over_limit: true,
 };
 const compressionOutcomes = Object.keys(COMPRESSION_OUTCOMES) as CompressionOutcome[];
 const metricLayers: readonly MetricLayer[] = [
