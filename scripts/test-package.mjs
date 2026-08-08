@@ -1418,8 +1418,36 @@ try {
   throw new Error("Expected an invalid GLIDE script reply to fail");
 } catch (error) {
   if (!(error instanceof root.DialCacheRedisProtocolError)) {
-    throw new Error("The GLIDE protocol error does not match the root ESM export");
+    throw new Error("The GLIDE protocol error does not match the root ESM export", { cause: error });
   }
+}
+const esmInvalidationDispatches = [];
+const esmFakeInvalidationClient = {
+  customCommand: async (args) => {
+    esmInvalidationDispatches.push(args);
+    if (esmInvalidationDispatches.length === 1) {
+      throw new Error("packed invalidation dispatch rejected");
+    }
+    return 1;
+  },
+};
+const esmInvalidationRuntime = {
+  ...appGlide,
+  GlideClient: { [Symbol.hasInstance]: (value) => value === esmFakeInvalidationClient },
+  GlideClusterClient: { [Symbol.hasInstance]: () => false },
+};
+await glide
+  .createValkeyGlideDialCacheClient(esmFakeInvalidationClient, esmInvalidationRuntime)
+  .invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 });
+if (
+  esmInvalidationDispatches.length !== 2
+  || esmInvalidationDispatches[0][0] !== "EVALSHA"
+  || esmInvalidationDispatches[1][0] !== "EVAL"
+) {
+  throw new Error("The ESM GLIDE invalidation retry did not dispatch EVALSHA then EVAL");
+}
+if (esmInvalidationDispatches[1][1] !== redisProtocol.INVALIDATE_CACHE_SCRIPT) {
+  throw new Error("The ESM GLIDE bundle's embedded invalidation source diverged from the redis-protocol entry");
 }`,
     ],
     { cwd: workspace },
@@ -1479,8 +1507,36 @@ void (async () => {
     throw new Error("Expected an invalid GLIDE script reply to fail");
   } catch (error) {
     if (!(error instanceof root.DialCacheRedisProtocolError)) {
-      throw new Error("The GLIDE protocol error does not match the root CommonJS export");
+      throw new Error("The GLIDE protocol error does not match the root CommonJS export", { cause: error });
     }
+  }
+  const cjsInvalidationDispatches = [];
+  const cjsFakeInvalidationClient = {
+    customCommand: async (args) => {
+      cjsInvalidationDispatches.push(args);
+      if (cjsInvalidationDispatches.length === 1) {
+        throw new Error("packed invalidation dispatch rejected");
+      }
+      return 1;
+    },
+  };
+  const cjsInvalidationRuntime = {
+    ...appGlide,
+    GlideClient: { [Symbol.hasInstance]: (value) => value === cjsFakeInvalidationClient },
+    GlideClusterClient: { [Symbol.hasInstance]: () => false },
+  };
+  await glide
+    .createValkeyGlideDialCacheClient(cjsFakeInvalidationClient, cjsInvalidationRuntime)
+    .invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 });
+  if (
+    cjsInvalidationDispatches.length !== 2
+    || cjsInvalidationDispatches[0][0] !== "EVALSHA"
+    || cjsInvalidationDispatches[1][0] !== "EVAL"
+  ) {
+    throw new Error("The CommonJS GLIDE invalidation retry did not dispatch EVALSHA then EVAL");
+  }
+  if (cjsInvalidationDispatches[1][1] !== redisProtocol.INVALIDATE_CACHE_SCRIPT) {
+    throw new Error("The CommonJS GLIDE bundle's embedded invalidation source diverged from the redis-protocol entry");
   }
 })();`,
     ],

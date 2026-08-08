@@ -10,14 +10,14 @@ DialCache is a TypeScript caching library with explicit request-scoped enablemen
 src/
   index.ts              # Public root entry point (barrel)
   dialcache.ts          # Main DialCache API and cached-function wrapper
-  errors.ts             # Public error classes
+  errors.ts             # Public core error classes (DialCacheError hierarchy)
   config.ts             # Public configuration and rollout types
   context.ts            # AsyncLocalStorage-based enabled context
   key.ts                # Structured cache keys and Redis hash tags
   metrics.ts            # Backend-neutral metrics adapter contract
   prometheus.ts         # Optional Prometheus adapter
   datadog.ts            # Optional Datadog (DogStatsD) adapter
-  redis-client.ts       # Client-independent semantic Redis interface
+  redis-client.ts       # Client-independent semantic Redis interface and its public error classes
   node-redis.ts         # node-redis adapter and script registration
   valkey-glide.ts       # Valkey GLIDE adapter (standalone and cluster)
   redis-protocol.ts     # Public frame codec and Lua protocol exports

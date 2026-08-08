@@ -579,9 +579,11 @@ describe("node-redis adapter", () => {
     expect(client.sendCommand).toHaveBeenCalledTimes(1);
   });
 
-  it("never mutates a flush-shared error instance rejecting both dispatches", async () => {
-    // node-redis rejects every command flushed by one disconnect with a
-    // single shared error object; the adapter must not write to it.
+  it("never writes to the rejection even when one instance rejects both dispatches", async () => {
+    // node-redis flush rejections are shared with every other in-flight
+    // caller and the client's "error" listeners. The same-instance fixture
+    // is a deliberate over-approximation: even if one object surfaced on
+    // both dispatches, the adapter writes nothing to it.
     const client = fakeClient();
     const shared = new Error("socket torn down");
     client.dialcacheInvalidate.mockRejectedValueOnce(shared);

@@ -140,8 +140,7 @@ function classifyValkeyGlideClient<TDecoder>(
  * Recovery differs by script: the stamp is retried only on NOSCRIPT, while
  * invalidation retries any rejection once with EVAL by source. When that
  * retry also fails, the original rejection is attached as the retry error's
- * `cause` unless it already carries one — safe here because GLIDE constructs
- * a fresh error object per rejection.
+ * `cause` unless it already carries one.
  */
 export function createValkeyGlideDialCacheClient<TDecoder>(
   client: ValkeyGlideScriptingClient<TDecoder>,

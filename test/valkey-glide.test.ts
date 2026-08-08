@@ -636,7 +636,8 @@ describe("Valkey GLIDE adapter", () => {
     }
 
     for (const reply of INVALID_INVALIDATION_REPLIES) {
-      const adapter = createValkeyGlideDialCacheClient(fakeClient(reply), mockGlide);
+      const client = fakeClient(reply);
+      const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
       await expectProtocolError(
         Promise.resolve(adapter.invalidate({
           watermarkKey: "tracked:{id}:watermark",
@@ -644,6 +645,8 @@ describe("Valkey GLIDE adapter", () => {
         })),
         invalidationMessage,
       );
+      // A reply-domain violation is deterministic and must never be retried.
+      expect(client.customCommand).toHaveBeenCalledTimes(1);
     }
   });
 
