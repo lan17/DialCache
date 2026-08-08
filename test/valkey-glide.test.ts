@@ -35,7 +35,6 @@ const clusterClients = new WeakSet<object>();
 
 class MockScript {
   readonly release = vi.fn();
-  readonly getHash = vi.fn(() => createHash("sha1").update(this.code).digest("hex"));
 
   constructor(readonly code: string) {
     scriptInstances.push(this);
@@ -195,7 +194,7 @@ describe("Valkey GLIDE adapter", () => {
       { decoder: decoderBytes },
     );
     expect(client.invokeScript).not.toHaveBeenCalled();
-    expect(scriptInstances).toHaveLength(2);
+    expect(scriptInstances).toHaveLength(1);
   });
 
   it("routes tracked cluster MGET directly to the slot primary", async () => {
@@ -395,7 +394,8 @@ describe("Valkey GLIDE adapter", () => {
     });
     await expect(write).rejects.toThrow("DialCache tracked write lost its placeholder before the stamp");
     await expect(write).rejects.toBeInstanceOf(DialCacheRedisPlaceholderLostError);
-    expect(client.invokeScript).not.toHaveBeenCalled();
+    // Reply 2 is a settled outcome, not a recovery trigger.
+    expect(client.customCommand).not.toHaveBeenCalled();
     adapter.dispose();
   });
 
@@ -427,7 +427,7 @@ describe("Valkey GLIDE adapter", () => {
     });
   });
 
-  it("falls back to invokeScript when the batched stamp hits NOSCRIPT", async () => {
+  it("falls back to EVAL by source when the batched stamp hits NOSCRIPT", async () => {
     const noscriptWordings = [
       // Raw server reply wording.
       "NOSCRIPT No matching script. Please use EVAL.",
@@ -447,14 +447,20 @@ describe("Valkey GLIDE adapter", () => {
       })).resolves.toBe(true);
 
       const trackedFrame = batchInstances[0]?.commands[0]?.[2] as Buffer;
-      expect(client.invokeScript).toHaveBeenCalledTimes(1);
-      const [script, options] = client.invokeScript.mock.calls[0] ?? [];
-      expect(script?.code).toBe(WRITE_TRACKED_STAMP_SCRIPT);
-      expect(options).toEqual({
-        keys: ["tracked:{id}:value", "tracked:{id}:watermark"],
-        args: ["2000", trackedFrame.subarray(1, 9)],
-        decoder: decoderBytes,
-      });
+      expect(client.customCommand).toHaveBeenCalledTimes(1);
+      expect(client.customCommand).toHaveBeenCalledWith(
+        [
+          "EVAL",
+          WRITE_TRACKED_STAMP_SCRIPT,
+          "2",
+          "tracked:{id}:value",
+          "tracked:{id}:watermark",
+          "2000",
+          trackedFrame.subarray(1, 9),
+        ],
+        { decoder: decoderBytes },
+      );
+      expect(client.invokeScript).not.toHaveBeenCalled();
       adapter.dispose();
     }
   });
@@ -503,7 +509,7 @@ describe("Valkey GLIDE adapter", () => {
       cacheTtlMs: 1_000,
       value: "tracked",
     })).rejects.toBe(setFailure);
-    expect(setClient.invokeScript).not.toHaveBeenCalled();
+    expect(setClient.customCommand).not.toHaveBeenCalled();
     setAdapter.dispose();
 
     const stampFailure = new Error("ERR invalid DialCache watermark");
@@ -515,7 +521,7 @@ describe("Valkey GLIDE adapter", () => {
       cacheTtlMs: 1_000,
       value: "tracked",
     })).rejects.toBe(stampFailure);
-    expect(stampClient.invokeScript).not.toHaveBeenCalled();
+    expect(stampClient.customCommand).not.toHaveBeenCalled();
     stampAdapter.dispose();
   });
 
@@ -632,7 +638,7 @@ describe("Valkey GLIDE adapter", () => {
     adapter.dispose();
     adapter.dispose();
 
-    expect(scriptInstances).toHaveLength(2);
+    expect(scriptInstances).toHaveLength(1);
     for (const script of scriptInstances) {
       expect(script.release).toHaveBeenCalledTimes(1);
     }
@@ -673,7 +679,7 @@ describe("Valkey GLIDE adapter", () => {
         resolveExec = resolve;
       }),
     );
-    client.invokeScript.mockImplementationOnce(
+    client.customCommand.mockImplementationOnce(
       async () => await new Promise<number>((resolve) => {
         resolveFallback = resolve;
       }),
@@ -691,8 +697,8 @@ describe("Valkey GLIDE adapter", () => {
     );
 
     resolveExec?.([Buffer.from("OK"), new Error("NOSCRIPT No matching script. Please use EVAL.")]);
-    await vi.waitFor(() => expect(client.invokeScript).toHaveBeenCalledTimes(1));
-    // The fallback is still pending: the stamp handle must stay unreleased.
+    await vi.waitFor(() => expect(client.customCommand).toHaveBeenCalledTimes(1));
+    // The EVAL recovery is still pending: the write must stay in flight.
     expect(() => adapter.dispose()).toThrow(
       "Cannot dispose Valkey GLIDE DialCache client while operations are in flight",
     );

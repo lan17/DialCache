@@ -1121,6 +1121,17 @@ try {
     throw new Error("The lost-placeholder error does not match the root CommonJS export");
   }
 }
+// Keep the brand coverage bundler-independent: a hand-branded foreign Error
+// must satisfy the root export's Symbol.hasInstance even if CJS ever shares
+// chunks the way ESM does.
+const cjsBrandedLost = Object.defineProperty(
+  new Error("lost"),
+  Symbol.for("dialcache.DialCacheRedisPlaceholderLostError"),
+  { value: true },
+);
+if (!(cjsBrandedLost instanceof root.DialCacheRedisPlaceholderLostError)) {
+  throw new Error("The CommonJS lost-placeholder brand did not satisfy instanceof");
+}
 const cjsEmptyFrame = Buffer.alloc(10);
 cjsEmptyFrame[0] = 1;
 cjsEmptyFrame.writeBigUInt64BE(1n, 1);
@@ -1261,9 +1272,9 @@ const esmFakeGlideClient = {
     }
     return ["OK", new Error("NOSCRIPT No matching script. Please use EVAL.")];
   },
-  invokeScript: async (script, options) => {
-    if (!(script instanceof appGlide.Script) || script instanceof otherGlide.Script) {
-      throw new Error("The ESM adapter did not use the caller-supplied GLIDE Script constructor");
+  customCommand: async (args, options) => {
+    if (args[0] !== "EVAL") {
+      throw new Error("The ESM adapter's NOSCRIPT recovery must resend the stamp source via EVAL");
     }
     if (options.decoder !== appGlide.Decoder.Bytes) {
       throw new Error("The ESM adapter did not use the caller-supplied GLIDE byte decoder");
@@ -1321,9 +1332,9 @@ void (async () => {
       }
       return ["OK", new Error("NOSCRIPT No matching script. Please use EVAL.")];
     },
-    invokeScript: async (script, options) => {
-      if (!(script instanceof appGlide.Script) || script instanceof otherGlide.Script) {
-        throw new Error("The CommonJS adapter did not use the caller-supplied GLIDE Script constructor");
+    customCommand: async (args, options) => {
+      if (args[0] !== "EVAL") {
+        throw new Error("The CommonJS adapter's NOSCRIPT recovery must resend the stamp source via EVAL");
       }
       if (options.decoder !== appGlide.Decoder.Bytes) {
         throw new Error("The CommonJS adapter did not use the caller-supplied GLIDE byte decoder");

@@ -13,10 +13,3 @@ export {
   resolveTrackedRedisWriteReply,
   validateRedisSetReply,
 } from "./internal/redis-script-reply.js";
-// The classes those helpers throw, so this subpath is self-contained for
-// custom adapters; the shared brand keeps them instanceof-compatible with
-// the root exports.
-export {
-  DialCacheRedisPlaceholderLostError,
-  DialCacheRedisProtocolError,
-} from "./redis-client.js";

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { ceilSupportedCacheTtlMs } from "./internal/duration.js";
 import {
   decodeRedisFrame,
@@ -18,14 +20,17 @@ import { DialCacheRedisPayloadError, type DialCacheRedisClient } from "./redis-c
 
 type ValkeyGlideString = string | Buffer;
 
+// Redis caches EVAL'd sources under sha1(source), so this digest is by
+// definition the one the batched EVALSHA must use and the one the EVAL
+// fallback repopulates.
+const WRITE_TRACKED_STAMP_SHA1 = createHash("sha1").update(WRITE_TRACKED_STAMP_SCRIPT).digest("hex");
+
 interface ValkeyGlideBatch {
   customCommand(args: ValkeyGlideString[]): ValkeyGlideBatch;
   mget(keys: ValkeyGlideString[]): ValkeyGlideBatch;
 }
 
 export interface ValkeyGlideScriptHandle {
-  /** The SHA1 GLIDE registered the script under; used for batched EVALSHA. */
-  getHash(): string;
   /** Release the native GLIDE script registration. */
   release(): void;
 }
@@ -82,7 +87,6 @@ export interface ValkeyGlideRuntime<TScript extends ValkeyGlideScriptHandle, TDe
 }
 
 interface DialCacheGlideScripts<TScript> {
-  readonly writeTrackedStamp: TScript;
   readonly invalidate: TScript;
 }
 
@@ -132,7 +136,7 @@ export interface ValkeyGlideDialCacheClient extends DialCacheRedisClient {
 
 /**
  * Wrap a caller-owned GLIDE connection. The returned adapter owns only its
- * two mutation Script handles and preserves the connection's
+ * invalidation Script handle and preserves the connection's
  * `requestTimeout`. On GLIDE 2.0.0, releasing any Script handle for a source
  * has been observed to break other live handles for that same source despite
  * the documented reference counting, so adapters sharing one GLIDE module
@@ -166,7 +170,6 @@ export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScri
   }
   const isCluster = classifyValkeyGlideClient(client, glide) === "cluster";
   const scripts: DialCacheGlideScripts<TScript> = {
-    writeTrackedStamp: new glide.Script(WRITE_TRACKED_STAMP_SCRIPT),
     invalidate: new glide.Script(INVALIDATE_CACHE_SCRIPT),
   };
   let disposed = false;
@@ -236,14 +239,14 @@ export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScri
 
       const { frame, nonce } = encodeTrackedRedisPlaceholder(value);
       const stampArgs: ValkeyGlideString[] = [String(cacheTtlMs), nonce];
-      // One dispose-guarded operation so the stamp handle cannot be released
-      // between the batch and its NOSCRIPT recovery.
+      // One dispose-guarded operation covering the batch and its NOSCRIPT
+      // recovery, so in-flight accounting spans the whole logical write.
       return await run(async () => {
         const batch = (isCluster ? new glide.ClusterBatch(false) : new glide.Batch(false))
           .customCommand(["SET", valueKey, frame, "PX", String(cacheTtlMs)])
           .customCommand([
             "EVALSHA",
-            scripts.writeTrackedStamp.getHash(),
+            WRITE_TRACKED_STAMP_SHA1,
             "2",
             valueKey,
             watermarkKey,
@@ -268,13 +271,13 @@ export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScri
           // Only NOSCRIPT proves the batched stamp never executed, so only it
           // is retried: after any other error a re-run could find its own
           // frame already promoted and misreport the write as a lost
-          // placeholder. invokeScript reloads the flushed script and re-runs
-          // the stamp; the nonce keeps the late stamp paired to this write.
-          stampReply = await client.invokeScript(scripts.writeTrackedStamp, {
-            keys: [valueKey, watermarkKey],
-            args: stampArgs,
-            decoder: glide.Decoder.Bytes,
-          });
+          // placeholder. EVAL resends the source, the server caches it under
+          // the same SHA1 the batched EVALSHA uses, and the nonce keeps the
+          // late stamp paired to this write.
+          stampReply = await client.customCommand(
+            ["EVAL", WRITE_TRACKED_STAMP_SCRIPT, "2", valueKey, watermarkKey, ...stampArgs],
+            execOptions,
+          );
         }
         return resolveTrackedRedisWriteReply(stampReply);
       });
