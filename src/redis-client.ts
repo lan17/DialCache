@@ -141,24 +141,35 @@ export interface DialCacheRedisClient {
    */
   read(request: RedisReadRequest, context?: RedisReadContext): Awaitable<RedisCachePayload | null>;
   /**
-   * Write a DialCache Redis frame produced by `encodeRedisFrame` from
-   * `dialcache/redis-protocol`, or preserve its exact behavior.
+   * Write a DialCache Redis frame using the `dialcache/redis-protocol`
+   * encoders, or preserve their exact behavior.
    *
    * Untracked writes are one native `SET valueKey frame PX cacheTtlMs` whose
-   * frame carries an informational client-clock `createdAtMs`; untracked
-   * reads never consult it.
+   * frame comes from `encodeRedisFrame` with an informational client-clock
+   * `createdAtMs`; untracked reads never consult it.
    *
    * Tracked writes issue two commands ordered on one connection without a
-   * transaction: a native `SET` of a frame whose `createdAtMs` is zero,
-   * followed by `WRITE_TRACKED_STAMP_SCRIPT`, which fences against the
-   * watermark, patches the placeholder timestamp with server time, and
-   * maintains the watermark's existence and TTL. An all-zeros placeholder is
-   * never readable — tracked reads miss on a missing watermark and fence
-   * `createdAt <= watermark` otherwise — so an interleaved, delayed, or lost
-   * stamp degrades to a miss that expires with the value TTL. Implementations
-   * must not reorder the pair and must surface a SET failure as the write
-   * error even when the stamp settled. False means invalidation blocked the
-   * write.
+   * transaction: a native `SET` of an `encodeTrackedRedisPlaceholder` frame,
+   * followed by `WRITE_TRACKED_STAMP_SCRIPT` with `KEYS = [valueKey,
+   * watermarkKey]` and `ARGV = [cacheTtlMs, nonce]`. `ARGV[1]` must equal the
+   * SET's `PX` — the watermark's lifetime is derived from it — and the nonce
+   * must be the placeholder's. The script fences against the watermark and
+   * unlinks the value (reply 0), promotes exactly the placeholder carrying
+   * its nonce to a served frame with server-time `createdAt` (reply 1), or
+   * reports the placeholder gone (reply 2); it maintains the watermark's
+   * existence and TTL in the non-fenced cases. Placeholders are unreadable on
+   * both read paths, so an interleaved or lost stamp degrades to a miss
+   * bounded by the value TTL — including briefly blanking a previously
+   * readable key the write replaces — while a delayed stamp of its own
+   * placeholder remains subject to the invalidation future buffer, like any
+   * in-flight write.
+   *
+   * Implementations must not reorder the pair, must mint one placeholder per
+   * logical write so client-level retries stay paired with their stamp, must
+   * surface a SET failure as the write error even when the stamp settled, and
+   * must fail the write on reply 2 so split pairs stay observable (a
+   * client-level SET retry that lands after such a failure can still leave
+   * the stamped value readable). False means invalidation blocked the write.
    */
   write(request: RedisWriteRequest): Awaitable<boolean>;
   /**

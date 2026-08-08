@@ -26,7 +26,7 @@ export function cacheTtlSecToMs(ttlSec: number): number {
  * durations upward, so adapters preserve that exact acceptance domain.
  */
 export function ceilSupportedCacheTtlMs(cacheTtlMs: number): number {
-  const ceiled = Math.ceil(cacheTtlMs);
+  const ceiled = typeof cacheTtlMs === "number" ? Math.ceil(cacheTtlMs) : Number.NaN;
   if (!Number.isFinite(ceiled) || ceiled <= 0 || ceiled > MAX_SUPPORTED_DURATION_MS) {
     throw new RangeError(
       `DialCache Redis write cacheTtlMs must be a positive duration no greater than ${MAX_SUPPORTED_DURATION_MS} milliseconds`,

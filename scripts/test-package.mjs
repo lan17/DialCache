@@ -53,7 +53,9 @@ import {
   decodeRedisFrame,
   decodeTrackedRedisFrame,
   encodeRedisFrame,
+  encodeTrackedRedisPlaceholder,
   WRITE_TRACKED_STAMP_SCRIPT,
+  type TrackedRedisPlaceholder,
 } from "dialcache/redis-protocol";
 // @ts-expect-error Read Lua sources were removed from the mutation-only Redis protocol.
 import { READ_CACHE_SCRIPT } from "dialcache/redis-protocol";
@@ -159,11 +161,13 @@ const decodedStaleRedisPayload: string | Buffer | null = decodeTrackedRedisFrame
   Buffer.from("1"),
 );
 const placeholderRedisFrame: Buffer = encodeRedisFrame("pending", 0);
+const trackedRedisPlaceholder: TrackedRedisPlaceholder = encodeTrackedRedisPlaceholder("pending");
 const stampScriptSource: string = WRITE_TRACKED_STAMP_SCRIPT;
 const stampArguments: Array<string | Buffer> = dialcacheRedisScripts.dialcacheWriteTrackedStamp.transformArguments(
   "tracked:{id}:value",
   "tracked:{id}:watermark",
   1_000,
+  trackedRedisPlaceholder.nonce,
 );
 const fallbackTimeoutError = new FallbackTimeoutError("Load", 1_000);
 const redisReadTimeoutError = new RedisReadTimeoutError("Load", 100);
@@ -482,6 +486,7 @@ void READ_TRACKED_CACHE_SCRIPT;
 void WRITE_CACHE_SCRIPT;
 void WRITE_TRACKED_CACHE_SCRIPT;
 void placeholderRedisFrame;
+void trackedRedisPlaceholder;
 void stampScriptSource;
 void stampArguments;
 void customRedisClient;
@@ -685,7 +690,7 @@ try {
   console.log("${fallbackTimeoutMarker}");
 }
 try {
-  nodeRedis.dialcacheRedisScripts.dialcacheWriteTrackedStamp.transformReply(2);
+  nodeRedis.dialcacheRedisScripts.dialcacheWriteTrackedStamp.transformReply(3);
   throw new Error("Expected an invalid node-redis script reply to fail");
 } catch (error) {
   if (!(error instanceof root.DialCacheRedisProtocolError)) {
@@ -727,6 +732,15 @@ if (redisProtocol.decodeRedisFrame(redisProtocol.encodeRedisFrame("value", 1)) !
 }
 if (redisProtocol.decodeTrackedRedisFrame(redisProtocol.encodeRedisFrame("pending", 0), Buffer.from("0")) !== null) {
   throw new Error("The packed ESM Redis protocol encoder did not produce a fenced placeholder frame");
+}
+const esmPlaceholder = redisProtocol.encodeTrackedRedisPlaceholder("pending");
+if (
+  esmPlaceholder.frame[0] !== 0
+  || esmPlaceholder.nonce.byteLength !== 8
+  || redisProtocol.decodeRedisFrame(esmPlaceholder.frame) !== null
+  || redisProtocol.decodeTrackedRedisFrame(esmPlaceholder.frame, Buffer.from("0")) !== null
+) {
+  throw new Error("The packed ESM tracked placeholder must be unreadable until stamped");
 }
 const esmEmptyFrame = Buffer.alloc(10);
 esmEmptyFrame[0] = 1;
@@ -984,7 +998,7 @@ void (async () => {
   }
 })();
 try {
-  nodeRedis.dialcacheRedisScripts.dialcacheWriteTrackedStamp.transformReply(2);
+  nodeRedis.dialcacheRedisScripts.dialcacheWriteTrackedStamp.transformReply(3);
   throw new Error("Expected an invalid node-redis script reply to fail");
 } catch (error) {
   if (!(error instanceof root.DialCacheRedisProtocolError)) {
@@ -1026,6 +1040,15 @@ if (redisProtocol.decodeRedisFrame(redisProtocol.encodeRedisFrame("value", 1)) !
 }
 if (redisProtocol.decodeTrackedRedisFrame(redisProtocol.encodeRedisFrame("pending", 0), Buffer.from("0")) !== null) {
   throw new Error("The packed CommonJS Redis protocol encoder did not produce a fenced placeholder frame");
+}
+const cjsPlaceholder = redisProtocol.encodeTrackedRedisPlaceholder("pending");
+if (
+  cjsPlaceholder.frame[0] !== 0
+  || cjsPlaceholder.nonce.byteLength !== 8
+  || redisProtocol.decodeRedisFrame(cjsPlaceholder.frame) !== null
+  || redisProtocol.decodeTrackedRedisFrame(cjsPlaceholder.frame, Buffer.from("0")) !== null
+) {
+  throw new Error("The packed CommonJS tracked placeholder must be unreadable until stamped");
 }
 const cjsEmptyFrame = Buffer.alloc(10);
 cjsEmptyFrame[0] = 1;
@@ -1174,7 +1197,7 @@ const esmFakeGlideClient = {
     if (options.decoder !== appGlide.Decoder.Bytes) {
       throw new Error("The ESM adapter did not use the caller-supplied GLIDE byte decoder");
     }
-    return 2;
+    return 3;
   },
 };
 const esmGlideRuntime = {
@@ -1234,7 +1257,7 @@ void (async () => {
       if (options.decoder !== appGlide.Decoder.Bytes) {
         throw new Error("The CommonJS adapter did not use the caller-supplied GLIDE byte decoder");
       }
-      return 2;
+      return 3;
     },
   };
   const cjsGlideRuntime = {

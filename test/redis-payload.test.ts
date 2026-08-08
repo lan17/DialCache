@@ -2,6 +2,7 @@ import {
   decodeRedisFrame,
   decodeTrackedRedisFrame,
   encodeRedisFrame,
+  encodeTrackedRedisPlaceholder,
 } from "../src/redis-protocol.js";
 import {
   DialCacheRedisPayloadEncodingError,
@@ -119,13 +120,41 @@ describe("Redis frame decoding", () => {
     expect(decodeRedisFrame(empty)).toBe("");
   });
 
-  it("keeps zero-stamped placeholder frames unreadable on the tracked path", () => {
-    const placeholder = encodeRedisFrame("pending", 0);
+  it("keeps zero-stamped version-1 frames unreadable on the tracked path", () => {
+    const zeroStamped = encodeRedisFrame("pending", 0);
 
-    expect(decodeTrackedRedisFrame(placeholder, null)).toBeNull();
-    expect(decodeTrackedRedisFrame(placeholder, Buffer.from("0"))).toBeNull();
-    expect(decodeTrackedRedisFrame(placeholder, Buffer.from("1"))).toBeNull();
-    expect(decodeRedisFrame(placeholder)).toBe("pending");
+    expect(decodeTrackedRedisFrame(zeroStamped, null)).toBeNull();
+    expect(decodeTrackedRedisFrame(zeroStamped, Buffer.from("0"))).toBeNull();
+    expect(decodeTrackedRedisFrame(zeroStamped, Buffer.from("1"))).toBeNull();
+    expect(decodeRedisFrame(zeroStamped)).toBe("pending");
+  });
+
+  it("encodes tracked placeholders that no read path serves", () => {
+    const { frame, nonce } = encodeTrackedRedisPlaceholder("pending");
+
+    expect(frame[0]).toBe(0);
+    expect(nonce.byteLength).toBe(8);
+    expect(frame.subarray(1, 9)).toEqual(nonce);
+    expect(frame[9]).toBe(0);
+    expect(frame.subarray(10).toString("utf8")).toBe("pending");
+    expect(decodeRedisFrame(frame)).toBeNull();
+    expect(decodeTrackedRedisFrame(frame, null)).toBeNull();
+    expect(decodeTrackedRedisFrame(frame, Buffer.from("0"))).toBeNull();
+    expect(decodeTrackedRedisFrame(frame, Buffer.from("1"))).toBeNull();
+
+    const binary = encodeTrackedRedisPlaceholder(Buffer.from([0, 0xff]));
+    expect(binary.frame[9]).toBe(1);
+    expect(decodeRedisFrame(binary.frame)).toBeNull();
+  });
+
+  it("gates serving on the version byte even for hostile placeholder nonces", () => {
+    // A nonce that would decode as a huge timestamp must never beat the
+    // watermark: version 0 alone keeps the frame a miss on both paths.
+    const hostile = encodeFrame("pending", 0, 1, 0);
+    hostile.fill(0xff, 1, 9);
+
+    expect(decodeRedisFrame(hostile)).toBeNull();
+    expect(decodeTrackedRedisFrame(hostile, Buffer.from("1"))).toBeNull();
   });
 
   it("rejects unencodable createdAt timestamps", () => {

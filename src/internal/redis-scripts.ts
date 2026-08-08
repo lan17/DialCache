@@ -1,6 +1,13 @@
 import { MAX_SUPPORTED_DURATION_MS } from "./duration.js";
+import {
+  REDIS_FRAME_PLACEHOLDER_VERSION,
+  REDIS_FRAME_TIMESTAMP_BYTES,
+  REDIS_FRAME_TIMESTAMP_OFFSET,
+  REDIS_FRAME_VERSION,
+} from "./redis-payload.js";
 
 const WATERMARK_TTL_MARGIN_MS = 60_000;
+const PLACEHOLDER_HEADER_END = REDIS_FRAME_TIMESTAMP_OFFSET + REDIS_FRAME_TIMESTAMP_BYTES - 1;
 
 const PARSE_WATERMARK_LUA = String.raw`local function parse_watermark(raw)
   if not string.match(raw, "^%d+$") and not string.match(raw, "^%d+%.%d+$") then
@@ -24,6 +31,9 @@ end`;
 const VALIDATE_STAMP_ARGUMENTS_LUA = String.raw`local cache_ttl_ms = ceil_finite_number(ARGV[1])
 if not cache_ttl_ms or cache_ttl_ms <= 0 or cache_ttl_ms > ${MAX_SUPPORTED_DURATION_MS} then
   return redis.error_reply("ERR invalid DialCache TTL")
+end
+if string.len(ARGV[2]) ~= ${REDIS_FRAME_TIMESTAMP_BYTES} then
+  return redis.error_reply("ERR invalid DialCache stamp nonce")
 end`;
 
 const REDIS_TIME_LUA = String.raw`local redis_time = redis.call("TIME")
@@ -45,15 +55,21 @@ end
 
 if watermark >= now_ms then
   -- A fenced fallback write removes the placeholder it paired with, along with any
-  -- stale frame that led to it. Reads that fail before reaching this script cannot
-  -- benefit from this partial mitigation.
+  -- stale frame that led to it. The UNLINK stays unconditional: any frame present
+  -- here is already fenced, and removing a foreign in-flight placeholder only
+  -- forces that writer's honest reply-2 failure. Reads that fail before reaching
+  -- this script cannot benefit from this partial mitigation.
   redis.call("UNLINK", KEYS[1])
   return 0
 end`,
-  String.raw`if redis.call("GETRANGE", KEYS[1], 1, 8) == string.rep("\0", 8) then
-  -- Only stamp an all-zeros placeholder: when the paired SET did not land,
-  -- restamping an existing frame could unfence a stale value.
-  redis.call("SETRANGE", KEYS[1], 1, struct.pack(">I8", now_ms))
+  String.raw`local stamped = 1
+if redis.call("GETRANGE", KEYS[1], 0, ${PLACEHOLDER_HEADER_END}) == string.char(${REDIS_FRAME_PLACEHOLDER_VERSION}) .. ARGV[2] then
+  redis.call("SETRANGE", KEYS[1], 0, string.char(${REDIS_FRAME_VERSION}) .. struct.pack(">I8", now_ms))
+else
+  -- The placeholder this stamp paired with is gone: its SET was rejected,
+  -- overwritten, or expired. Promoting any other frame could publish a value
+  -- this write does not own, so leave the key untouched and report 2.
+  stamped = 2
 end`,
   String.raw`local desired_ttl_ms = cache_ttl_ms + ${WATERMARK_TTL_MARGIN_MS}
 if not raw_watermark then
@@ -66,7 +82,7 @@ else
     redis.call("PEXPIRE", KEYS[2], desired_ttl_ms)
   end
 end`,
-  "return 1",
+  "return stamped",
 ].join("\n\n");
 
 export const INVALIDATE_CACHE_SCRIPT = [

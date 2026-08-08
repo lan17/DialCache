@@ -15,6 +15,7 @@ import {
   INVALIDATE_CACHE_SCRIPT,
   WRITE_TRACKED_STAMP_SCRIPT,
 } from "../src/internal/redis-scripts.js";
+import { encodeTrackedRedisPlaceholder } from "../src/redis-protocol.js";
 import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "../src/node-redis.js";
 import {
   createValkeyGlideDialCacheClient,
@@ -56,8 +57,10 @@ const createTestClient = (url: string) => createClient({ url, scripts: dialcache
 type NodeRedisTestClient = ReturnType<typeof createTestClient>;
 
 interface RawRedisScriptClient {
+  /** The SHA1 this adapter's batched or EVALSHA-based stamp dispatch uses. */
+  readonly stampScriptSha1: string;
   /** Invoke only the tracked stamp script, as if its paired placeholder SET was lost. */
-  stamp(valueKey: string, watermarkKey: string, cacheTtlMs: number): Promise<number>;
+  stamp(valueKey: string, watermarkKey: string, cacheTtlMs: number, nonce: Buffer): Promise<number>;
   invalidate(watermarkKey: string, futureBufferMs: number): Promise<number>;
 }
 
@@ -72,6 +75,7 @@ function createNodeRedisHarness(client: NodeRedisTestClient): RedisAdapterHarnes
   return {
     adapter: createNodeRedisDialCacheClient(client),
     raw: {
+      stampScriptSha1: dialcacheRedisScripts.dialcacheWriteTrackedStamp.SHA1,
       stamp: async (...args) => await client.dialcacheWriteTrackedStamp(...args),
       invalidate: async (...args) => await client.dialcacheInvalidate(...args),
     },
@@ -104,8 +108,9 @@ function createValkeyGlideHarness(client: valkeyGlide.GlideClient): RedisAdapter
   return {
     adapter,
     raw: {
-      stamp: async (valueKey, watermarkKey, cacheTtlMs) =>
-        await invoke(rawScripts.stamp, [valueKey, watermarkKey], [String(cacheTtlMs)]),
+      stampScriptSha1: rawScripts.stamp.getHash(),
+      stamp: async (valueKey, watermarkKey, cacheTtlMs, nonce) =>
+        await invoke(rawScripts.stamp, [valueKey, watermarkKey], [String(cacheTtlMs), nonce]),
       invalidate: async (watermarkKey, futureBufferMs) =>
         await invoke(
           rawScripts.invalidate,
@@ -796,6 +801,15 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
         }),
       ).toBe(true);
       expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toBe("tracked");
+      // The recovered write must cache the stamp under the SHA1 the batched
+      // EVALSHA uses, so later writes take the single-round-trip path. The
+      // adapter's own dispatch hash must match node-redis's source SHA1; do
+      // not probe with a throwaway Script here — releasing it would destroy
+      // the shared per-hash GLIDE script container the live handles rely on.
+      expect(client.raw.stampScriptSha1).toBe(dialcacheRedisScripts.dialcacheWriteTrackedStamp.SHA1);
+      expect(
+        await admin.scriptExists(dialcacheRedisScripts.dialcacheWriteTrackedStamp.SHA1),
+      ).toEqual([true]);
       await admin.scriptFlush();
       await expect(
         scriptClient.invalidate({
@@ -1015,11 +1029,10 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       });
       expect(metrics.error).not.toHaveBeenCalledWith(expect.objectContaining({ error: "cache_read" }));
       expect(await admin.type(watermarkKey)).toBe("hash");
-      // The paired SET lands before the stamp fails on the wrong-type watermark, so
-      // the original frame is replaced by an unreadable zero-stamped placeholder.
+      // The paired SET lands before the stamp fails on the wrong-type watermark,
+      // so the original frame is replaced by an unreadable version-0 placeholder.
       const stored = await admin.get(commandOptions({ returnBuffers: true }), valueKey);
-      expect(stored?.[0]).toBe(1);
-      expect(stored?.readBigUInt64BE(1)).toBe(0n);
+      expect(stored?.[0]).toBe(0);
       await expect(client.adapter.read({ valueKey, watermarkKey })).resolves.toBeNull();
     });
 
@@ -1031,21 +1044,28 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       const watermarkKey = "invalid-args:{item:invalid}:watermark";
       const notANumber = "not-a-number" as unknown as number;
 
-      await expect(client.raw.stamp(valueKey, watermarkKey, 0)).rejects.toThrow("invalid DialCache TTL");
-      await expect(client.raw.stamp(valueKey, watermarkKey, notANumber)).rejects.toThrow("invalid DialCache TTL");
-      await expect(client.raw.stamp(valueKey, watermarkKey, Number.NaN)).rejects.toThrow("invalid DialCache TTL");
-      await expect(client.raw.stamp(valueKey, watermarkKey, Number.POSITIVE_INFINITY)).rejects.toThrow(
+      const nonce = Buffer.alloc(8, 1);
+      await expect(client.raw.stamp(valueKey, watermarkKey, 0, nonce)).rejects.toThrow("invalid DialCache TTL");
+      await expect(client.raw.stamp(valueKey, watermarkKey, notANumber, nonce)).rejects.toThrow("invalid DialCache TTL");
+      await expect(client.raw.stamp(valueKey, watermarkKey, Number.NaN, nonce)).rejects.toThrow("invalid DialCache TTL");
+      await expect(client.raw.stamp(valueKey, watermarkKey, Number.POSITIVE_INFINITY, nonce)).rejects.toThrow(
         "invalid DialCache TTL",
       );
-      await expect(client.raw.stamp(valueKey, watermarkKey, Number.NEGATIVE_INFINITY)).rejects.toThrow(
+      await expect(client.raw.stamp(valueKey, watermarkKey, Number.NEGATIVE_INFINITY, nonce)).rejects.toThrow(
         "invalid DialCache TTL",
       );
       await expect(
-        client.raw.stamp(valueKey, watermarkKey, MAX_SUPPORTED_DURATION_MS + 1),
+        client.raw.stamp(valueKey, watermarkKey, MAX_SUPPORTED_DURATION_MS + 1, nonce),
       ).rejects.toThrow("invalid DialCache TTL");
       await expect(
-        client.raw.stamp(valueKey, watermarkKey, Number.MAX_SAFE_INTEGER),
+        client.raw.stamp(valueKey, watermarkKey, Number.MAX_SAFE_INTEGER, nonce),
       ).rejects.toThrow("invalid DialCache TTL");
+      await expect(
+        client.raw.stamp(valueKey, watermarkKey, 1_000, Buffer.alloc(7, 1)),
+      ).rejects.toThrow("invalid DialCache stamp nonce");
+      await expect(
+        client.raw.stamp(valueKey, watermarkKey, 1_000, Buffer.alloc(9, 1)),
+      ).rejects.toThrow("invalid DialCache stamp nonce");
       // The adapters enforce the same TTL domain before issuing any command.
       for (const badTtl of [0, notANumber, Number.NaN, Number.POSITIVE_INFINITY, MAX_SUPPORTED_DURATION_MS + 1]) {
         await expect(
@@ -1228,10 +1248,10 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
           value: "replacement",
         })).rejects.toThrow("invalid DialCache watermark");
         // The paired SET lands before the stamp validates the watermark, so the
-        // tracked path serves nothing and the placeholder stays zero-stamped.
+        // tracked path serves nothing and the placeholder stays unpromoted.
         expect(await scriptClient.read({ valueKey, watermarkKey })).toBeNull();
         const stored = await admin.get(commandOptions({ returnBuffers: true }), valueKey);
-        expect(stored?.readBigUInt64BE(1)).toBe(0n);
+        expect(stored?.[0]).toBe(0);
         await admin.del(valueKey);
       }
     });
@@ -1487,21 +1507,30 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       expect(await scriptClient.read({ valueKey, watermarkKey })).toBe("stale");
     });
 
-    it("never serves an unstamped placeholder and stamps it on demand", async () => {
+    it("never serves an unstamped placeholder and refuses foreign stamps", async () => {
       if (client === undefined || admin === undefined) {
         throw new Error("Redis test clients did not start");
       }
       const valueKey = "placeholder:{item:pending}:value";
       const watermarkKey = "placeholder:{item:pending}:watermark";
-      await admin.set(valueKey, encodeFrame("pending", 0, 0), { PX: 60_000 });
+      const { frame, nonce } = encodeTrackedRedisPlaceholder("pending");
+      await admin.set(valueKey, frame, { PX: 60_000 });
       await admin.set(watermarkKey, "0", { PX: 120_000 });
 
       expect(await client.adapter.read({ valueKey, watermarkKey })).toBeNull();
+      expect(await client.adapter.read({ valueKey })).toBeNull();
 
-      expect(await client.raw.stamp(valueKey, watermarkKey, 2_000)).toBe(1);
+      // A stamp carrying a different write's nonce must not promote this
+      // placeholder: a leftover from a failed write stays unreadable even
+      // after later invalidations pass.
+      expect(await client.raw.stamp(valueKey, watermarkKey, 2_000, Buffer.alloc(8, 0xab))).toBe(2);
+      expect(await client.adapter.read({ valueKey, watermarkKey })).toBeNull();
 
+      // Only the paired nonce promotes it to a served, server-stamped frame.
+      expect(await client.raw.stamp(valueKey, watermarkKey, 2_000, nonce)).toBe(1);
       expect(await client.adapter.read({ valueKey, watermarkKey })).toBe("pending");
       const stored = await admin.get(commandOptions({ returnBuffers: true }), valueKey);
+      expect(stored?.[0]).toBe(1);
       expect(stored?.readBigUInt64BE(1) ?? 0n).toBeGreaterThan(0n);
     });
 
@@ -1516,7 +1545,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       await admin.set(valueKey, encodeFrame("stale", 0, 1_000), { PX: 60_000 });
       await admin.set(watermarkKey, "2000", { PX: 120_000 });
 
-      expect(await client.raw.stamp(valueKey, watermarkKey, 2_000)).toBe(1);
+      expect(await client.raw.stamp(valueKey, watermarkKey, 2_000, Buffer.alloc(8, 1))).toBe(2);
 
       const stored = await admin.get(commandOptions({ returnBuffers: true }), valueKey);
       expect(stored?.readBigUInt64BE(1)).toBe(1_000n);
@@ -1530,7 +1559,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       const valueKey = "stamp-missing:{item:lost}:value";
       const watermarkKey = "stamp-missing:{item:lost}:watermark";
 
-      expect(await client.raw.stamp(valueKey, watermarkKey, 2_000)).toBe(1);
+      expect(await client.raw.stamp(valueKey, watermarkKey, 2_000, Buffer.alloc(8, 2))).toBe(2);
 
       expect(await admin.exists(valueKey)).toBe(0);
       expect(await admin.get(watermarkKey)).toBe("0");

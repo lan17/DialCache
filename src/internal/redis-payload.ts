@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+
 import {
   DialCacheRedisPayloadEncodingError,
   DialCacheRedisPayloadError,
@@ -7,6 +9,10 @@ import {
 export const REDIS_FRAME_VERSION = 1;
 export const REDIS_ENCODING_UTF8 = 0;
 export const REDIS_ENCODING_BINARY = 1;
+/** Version byte of a tracked-write placeholder; no read path serves it. */
+export const REDIS_FRAME_PLACEHOLDER_VERSION = 0;
+export const REDIS_FRAME_TIMESTAMP_OFFSET = 1;
+export const REDIS_FRAME_TIMESTAMP_BYTES = 8;
 
 const REDIS_FRAME_HEADER_BYTES = 9;
 const REDIS_FRAME_MIN_BYTES = REDIS_FRAME_HEADER_BYTES + 1;
@@ -55,22 +61,11 @@ function decodeRedisPayload(raw: Buffer): RedisCachePayload {
   throw new DialCacheRedisPayloadEncodingError("Invalid DialCache Redis payload encoding");
 }
 
-/**
- * Encode a serializer payload into a DialCache Redis frame.
- *
- * Untracked writes stamp an informational client-clock `createdAtMs`;
- * untracked reads never consult it. Tracked writes must pass zero: an
- * all-zeros timestamp is a placeholder that tracked reads can never serve,
- * and `WRITE_TRACKED_STAMP_SCRIPT` patches it with server time.
- */
-export function encodeRedisFrame(payload: RedisCachePayload, createdAtMs: number): Buffer {
-  if (!Number.isSafeInteger(createdAtMs) || createdAtMs < 0) {
-    throw new RangeError("DialCache frame createdAtMs must be a nonnegative safe integer");
-  }
+function encodeFrameBytes(payload: RedisCachePayload, version: number, stampBytes: Buffer): Buffer {
   const payloadBytes = Buffer.isBuffer(payload) ? payload.length : Buffer.byteLength(payload, "utf8");
   const frame = Buffer.allocUnsafe(REDIS_FRAME_MIN_BYTES + payloadBytes);
-  frame[0] = REDIS_FRAME_VERSION;
-  frame.writeBigUInt64BE(BigInt(createdAtMs), 1);
+  frame[0] = version;
+  stampBytes.copy(frame, REDIS_FRAME_TIMESTAMP_OFFSET);
   frame[REDIS_FRAME_HEADER_BYTES] = redisPayloadEncoding(payload);
   if (Buffer.isBuffer(payload)) {
     payload.copy(frame, REDIS_FRAME_MIN_BYTES);
@@ -78,6 +73,48 @@ export function encodeRedisFrame(payload: RedisCachePayload, createdAtMs: number
     frame.write(payload, REDIS_FRAME_MIN_BYTES, "utf8");
   }
   return frame;
+}
+
+/**
+ * Encode a serializer payload into a servable DialCache Redis frame.
+ *
+ * Untracked writes stamp an informational client-clock `createdAtMs`;
+ * untracked reads never consult it. Tracked writes must not use this
+ * directly — they pair `encodeTrackedRedisPlaceholder` with
+ * `WRITE_TRACKED_STAMP_SCRIPT` instead.
+ */
+export function encodeRedisFrame(payload: RedisCachePayload, createdAtMs: number): Buffer {
+  if (!Number.isSafeInteger(createdAtMs) || createdAtMs < 0) {
+    throw new RangeError("DialCache frame createdAtMs must be a nonnegative safe integer");
+  }
+  const timestamp = Buffer.allocUnsafe(REDIS_FRAME_TIMESTAMP_BYTES);
+  timestamp.writeBigUInt64BE(BigInt(createdAtMs));
+  return encodeFrameBytes(payload, REDIS_FRAME_VERSION, timestamp);
+}
+
+export interface TrackedRedisPlaceholder {
+  /** Version-0 frame that no read path serves until the stamp promotes it. */
+  readonly frame: Buffer;
+  /** Per-write identity passed to `WRITE_TRACKED_STAMP_SCRIPT` as its nonce argument. */
+  readonly nonce: Buffer;
+}
+
+/**
+ * Encode the placeholder frame a tracked write pairs with
+ * `WRITE_TRACKED_STAMP_SCRIPT`.
+ *
+ * The frame carries the placeholder version byte, so both read paths treat it
+ * as a miss, and a fresh random nonce where a stamped frame carries its
+ * timestamp. The stamp promotes the frame — patching version and server-time
+ * timestamp — only when the stored header matches this exact nonce, so it can
+ * never publish a placeholder left behind by a different write. Mint one
+ * placeholder per logical write: client-level retries must reuse the same
+ * frame and nonce so a retried SET re-establishes the placeholder its stamp
+ * expects.
+ */
+export function encodeTrackedRedisPlaceholder(payload: RedisCachePayload): TrackedRedisPlaceholder {
+  const nonce = randomBytes(REDIS_FRAME_TIMESTAMP_BYTES);
+  return { frame: encodeFrameBytes(payload, REDIS_FRAME_PLACEHOLDER_VERSION, nonce), nonce };
 }
 
 /**
