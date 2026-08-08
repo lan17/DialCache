@@ -1,33 +1,33 @@
+import { createHash } from "node:crypto";
+
+import { ceilSupportedCacheTtlMs } from "./internal/duration.js";
 import {
   decodeRedisFrame,
   decodeTrackedRedisFrame,
-  redisPayloadEncoding,
+  encodeRedisFrame,
+  encodeTrackedRedisPlaceholder,
 } from "./internal/redis-payload.js";
 import {
   INVALIDATE_CACHE_SCRIPT,
-  WRITE_CACHE_SCRIPT,
-  WRITE_TRACKED_CACHE_SCRIPT,
+  WRITE_TRACKED_STAMP_SCRIPT,
 } from "./internal/redis-scripts.js";
 import {
+  resolveTrackedRedisWriteReply,
   validateRedisScriptInvalidationReply,
-  validateRedisScriptWriteReply,
+  validateRedisSetReply,
 } from "./internal/redis-script-reply.js";
 import { DialCacheRedisPayloadError, type DialCacheRedisClient } from "./redis-client.js";
 
 type ValkeyGlideString = string | Buffer;
 
-interface ValkeyGlideBatch {
-  mget(keys: ValkeyGlideString[]): ValkeyGlideBatch;
-}
+// Redis caches EVAL'd sources under sha1(source), so this digest is by
+// definition the one the batched EVALSHA must use and the one the EVAL
+// fallback repopulates.
+const WRITE_TRACKED_STAMP_SHA1 = createHash("sha1").update(WRITE_TRACKED_STAMP_SCRIPT).digest("hex");
 
-interface ValkeyGlideClusterReadClient<TDecoder> {
-  customCommand(
-    args: ValkeyGlideString[],
-    options: {
-      decoder: TDecoder;
-      route: { type: "primarySlotKey"; key: string };
-    },
-  ): Promise<unknown>;
+interface ValkeyGlideBatch {
+  customCommand(args: ValkeyGlideString[]): ValkeyGlideBatch;
+  mget(keys: ValkeyGlideString[]): ValkeyGlideBatch;
 }
 
 export interface ValkeyGlideScriptHandle {
@@ -36,6 +36,13 @@ export interface ValkeyGlideScriptHandle {
 }
 
 export interface ValkeyGlideScriptingClient<TScript, TDecoder> {
+  customCommand(
+    args: ValkeyGlideString[],
+    options: {
+      decoder: TDecoder;
+      route?: { type: "primarySlotKey"; key: string };
+    },
+  ): Promise<unknown>;
   get(
     key: ValkeyGlideString,
     options: { decoder: TDecoder },
@@ -43,7 +50,10 @@ export interface ValkeyGlideScriptingClient<TScript, TDecoder> {
   exec(
     batch: ValkeyGlideBatch,
     raiseOnError: boolean,
-    options: { decoder: TDecoder },
+    options: {
+      decoder: TDecoder;
+      route?: { type: "primarySlotKey"; key: string };
+    },
   ): Promise<unknown>;
   invokeScript(
     script: TScript,
@@ -62,6 +72,8 @@ interface ValkeyGlideClientIdentity {
 export interface ValkeyGlideRuntime<TScript extends ValkeyGlideScriptHandle, TDecoder> {
   /** The Batch constructor exported by the same GLIDE module instance as the client. */
   readonly Batch: new (isAtomic: boolean) => ValkeyGlideBatch;
+  /** The ClusterBatch constructor exported by the same GLIDE module instance as the client. */
+  readonly ClusterBatch: new (isAtomic: boolean) => ValkeyGlideBatch;
   /** The standalone client class exported by the same GLIDE module instance as the client. */
   readonly GlideClient: ValkeyGlideClientIdentity;
   /** The cluster client class exported by the same GLIDE module instance as the client. */
@@ -72,12 +84,6 @@ export interface ValkeyGlideRuntime<TScript extends ValkeyGlideScriptHandle, TDe
   readonly Decoder: {
     readonly Bytes: TDecoder;
   };
-}
-
-interface DialCacheGlideScripts<TScript> {
-  readonly write: TScript;
-  readonly writeTracked: TScript;
-  readonly invalidate: TScript;
 }
 
 function matchesValkeyGlideIdentity(
@@ -120,45 +126,47 @@ function classifyValkeyGlideClient<TScript, TDecoder>(
 }
 
 export interface ValkeyGlideDialCacheClient extends DialCacheRedisClient {
-  /** Release the adapter-owned GLIDE Script handles. Does not close the wrapped GLIDE client. */
+  /** Release the adapter-owned invalidation Script handle. Does not close the wrapped GLIDE client. */
   dispose(): void;
 }
 
 /**
  * Wrap a caller-owned GLIDE connection. The returned adapter owns only its
- * three mutation Script handles and preserves the connection's
- * `requestTimeout`. Pass the same GLIDE module namespace used to create the
+ * invalidation Script handle and preserves the connection's
+ * `requestTimeout`. On GLIDE 2.0.0, releasing any Script handle for a source
+ * has been observed to break other live handles for that same source despite
+ * the documented reference counting, so adapters sharing one GLIDE module
+ * namespace must be disposed together after draining, never swapped
+ * dispose-after-create. Pass the same GLIDE module namespace used to create the
  * client so native Batch and Script objects come from that client's runtime.
  * Only direct GlideClient and GlideClusterClient instances are accepted;
  * wrappers should implement DialCacheRedisClient directly.
- * Callers dispose the handles after draining work, then close GLIDE. A request
+ * Callers dispose the handle after draining work, then close GLIDE. A request
  * timeout bounds client waiting but is not server-side command cancellation.
  * GLIDE's current command API has no per-invocation signal, so DialCache's core
  * read deadline may return before this adapter's invocation settles. Tracked
  * standalone reads use a one-command primary batch, while tracked cluster
  * reads route MGET explicitly to the slot primary, so replica lag cannot hide
- * an invalidation watermark. The standalone batch is deliberately non-atomic:
- * MGET itself is atomic, and MULTI/EXEC would consume caller-owned WATCH state.
+ * an invalidation watermark. Tracked writes batch a native placeholder SET
+ * with an EVALSHA of the stamp script — cluster write batches route to the
+ * slot primary — and recovers a flushed script cache by re-sending the stamp
+ * as EVAL with its source, which the server caches under the same SHA1, so
+ * the first tracked write against a cold script cache pays one extra round
+ * trip. Batches are deliberately
+ * non-atomic: MGET and SET are atomic themselves, an interleaved stamp is
+ * safe by design, and MULTI/EXEC would consume caller-owned WATCH state.
  */
 export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScriptHandle, TDecoder>(
   client: ValkeyGlideScriptingClient<TScript, TDecoder>,
   glide: ValkeyGlideRuntime<TScript, TDecoder>,
 ): ValkeyGlideDialCacheClient {
-  if (typeof glide.Batch !== "function") {
+  if (typeof glide.Batch !== "function" || typeof glide.ClusterBatch !== "function") {
     throw new Error(
-      "Valkey GLIDE DialCache requires @valkey/valkey-glide >=2.0.0 with a Batch constructor",
+      "Valkey GLIDE DialCache requires @valkey/valkey-glide >=2.0.0 with Batch and ClusterBatch constructors",
     );
   }
-  const clientKind = classifyValkeyGlideClient(client, glide);
-  const clusterClient = clientKind === "cluster"
-    ? client as ValkeyGlideScriptingClient<TScript, TDecoder>
-      & ValkeyGlideClusterReadClient<TDecoder>
-    : undefined;
-  const scripts: DialCacheGlideScripts<TScript> = {
-    write: new glide.Script(WRITE_CACHE_SCRIPT),
-    writeTracked: new glide.Script(WRITE_TRACKED_CACHE_SCRIPT),
-    invalidate: new glide.Script(INVALIDATE_CACHE_SCRIPT),
-  };
+  const isCluster = classifyValkeyGlideClient(client, glide) === "cluster";
+  const invalidateScript: TScript = new glide.Script(INVALIDATE_CACHE_SCRIPT);
   let disposed = false;
   let activeOperations = 0;
 
@@ -174,14 +182,6 @@ export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScri
     }
   };
 
-  const invoke = async (
-    script: TScript,
-    keys: ValkeyGlideString[],
-    args: ValkeyGlideString[] = [],
-  ): Promise<unknown> => run(
-    () => client.invokeScript(script, { keys, args, decoder: glide.Decoder.Bytes }),
-  );
-
   return {
     async read({ valueKey, watermarkKey }) {
       if (watermarkKey === undefined) {
@@ -191,9 +191,9 @@ export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScri
         return decodeRedisFrame(raw);
       }
 
-      const pair = clusterClient !== undefined
+      const pair = isCluster
         ? await run(
-            () => clusterClient.customCommand(
+            () => client.customCommand(
               ["MGET", valueKey, watermarkKey],
               {
                 decoder: glide.Decoder.Bytes,
@@ -215,23 +215,74 @@ export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScri
       return decodeTrackedRedisFrame(pair[0], pair[1]);
     },
     async write(request) {
-      const { valueKey, watermarkKey, cacheTtlMs, value } = request;
-      const encoding = redisPayloadEncoding(value);
-      const raw = watermarkKey === undefined
-        ? await invoke(scripts.write, [valueKey], [String(cacheTtlMs), String(encoding), value])
-        : await invoke(
-            scripts.writeTracked,
-            [valueKey, watermarkKey],
-            [String(cacheTtlMs), String(encoding), value],
+      const { valueKey, watermarkKey, value } = request;
+      const cacheTtlMs = ceilSupportedCacheTtlMs(request.cacheTtlMs);
+      const execOptions: {
+        decoder: TDecoder;
+        route?: { type: "primarySlotKey"; key: string };
+      } = isCluster
+        ? { decoder: glide.Decoder.Bytes, route: { type: "primarySlotKey", key: valueKey } }
+        : { decoder: glide.Decoder.Bytes };
+
+      if (watermarkKey === undefined) {
+        const frame = encodeRedisFrame(value, Date.now());
+        validateRedisSetReply(await run(
+          () => client.customCommand(["SET", valueKey, frame, "PX", String(cacheTtlMs)], execOptions),
+        ));
+        return true;
+      }
+
+      const { frame, nonce } = encodeTrackedRedisPlaceholder(value);
+      const stampArgs: ValkeyGlideString[] = [String(cacheTtlMs), nonce];
+      // One dispose-guarded operation covering the batch and its NOSCRIPT
+      // recovery, so in-flight accounting spans the whole logical write.
+      return await run(async () => {
+        const batch = (isCluster ? new glide.ClusterBatch(false) : new glide.Batch(false))
+          .customCommand(["SET", valueKey, frame, "PX", String(cacheTtlMs)])
+          .customCommand([
+            "EVALSHA",
+            WRITE_TRACKED_STAMP_SHA1,
+            "2",
+            valueKey,
+            watermarkKey,
+            ...stampArgs,
+          ]);
+        const replies = await client.exec(batch, false, execOptions);
+        if (!Array.isArray(replies) || replies.length !== 2) {
+          throw new DialCacheRedisPayloadError("Invalid DialCache Redis write reply");
+        }
+        const [setReply, rawStamp] = replies as [unknown, unknown];
+        // A failed SET is the write outcome even when the stamp settled.
+        if (setReply instanceof Error) {
+          throw setReply;
+        }
+        validateRedisSetReply(setReply);
+        let stampReply: unknown = rawStamp;
+        if (rawStamp instanceof Error) {
+          // GLIDE maps the server's NOSCRIPT reply to its own NoScriptError wording.
+          if (!rawStamp.message.includes("NOSCRIPT") && !rawStamp.message.includes("NoScriptError")) {
+            throw rawStamp;
+          }
+          // Only NOSCRIPT proves the batched stamp never executed, so only it
+          // is retried: after any other error a re-run could find its own
+          // frame already promoted and misreport the write as a lost
+          // placeholder. EVAL resends the source, the server caches it under
+          // the same SHA1 the batched EVALSHA uses, and the nonce keeps the
+          // late stamp paired to this write.
+          stampReply = await client.customCommand(
+            ["EVAL", WRITE_TRACKED_STAMP_SCRIPT, "2", valueKey, watermarkKey, ...stampArgs],
+            execOptions,
           );
-      return validateRedisScriptWriteReply(raw) === 1;
+        }
+        return resolveTrackedRedisWriteReply(stampReply);
+      });
     },
     async invalidate({ watermarkKey, futureBufferMs }) {
-      const raw = await invoke(
-        scripts.invalidate,
-        [watermarkKey],
-        [String(futureBufferMs)],
-      );
+      const raw = await run(() => client.invokeScript(invalidateScript, {
+        keys: [watermarkKey],
+        args: [String(futureBufferMs)],
+        decoder: glide.Decoder.Bytes,
+      }));
       validateRedisScriptInvalidationReply(raw);
     },
     dispose() {
@@ -242,9 +293,7 @@ export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScri
         throw new Error("Cannot dispose Valkey GLIDE DialCache client while operations are in flight");
       }
       disposed = true;
-      for (const script of Object.values(scripts)) {
-        script.release();
-      }
+      invalidateScript.release();
     },
   };
 }

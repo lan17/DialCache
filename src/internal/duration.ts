@@ -20,6 +20,21 @@ export function cacheTtlSecToMs(ttlSec: number): number {
   return ttlSec * 1_000;
 }
 
+/**
+ * Validate and ceil an adapter-level write TTL. Native SET PX requires an
+ * integer, and the Lua write validation this replaces rounded fractional
+ * durations upward, so adapters preserve that exact acceptance domain.
+ */
+export function ceilSupportedCacheTtlMs(cacheTtlMs: number): number {
+  const ceiled = typeof cacheTtlMs === "number" ? Math.ceil(cacheTtlMs) : Number.NaN;
+  if (!Number.isFinite(ceiled) || ceiled <= 0 || ceiled > MAX_SUPPORTED_DURATION_MS) {
+    throw new RangeError(
+      `DialCache Redis write cacheTtlMs must be a positive duration no greater than ${MAX_SUPPORTED_DURATION_MS} milliseconds`,
+    );
+  }
+  return ceiled;
+}
+
 export function assertSupportedFutureBufferMs(futureBufferMs: unknown): asserts futureBufferMs is number {
   if (
     typeof futureBufferMs !== "number"
