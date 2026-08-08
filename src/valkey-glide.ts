@@ -86,10 +86,6 @@ export interface ValkeyGlideRuntime<TScript extends ValkeyGlideScriptHandle, TDe
   };
 }
 
-interface DialCacheGlideScripts<TScript> {
-  readonly invalidate: TScript;
-}
-
 function matchesValkeyGlideIdentity(
   identity: unknown,
   name: "GlideClient" | "GlideClusterClient",
@@ -130,7 +126,7 @@ function classifyValkeyGlideClient<TScript, TDecoder>(
 }
 
 export interface ValkeyGlideDialCacheClient extends DialCacheRedisClient {
-  /** Release the adapter-owned GLIDE Script handles. Does not close the wrapped GLIDE client. */
+  /** Release the adapter-owned invalidation Script handle. Does not close the wrapped GLIDE client. */
   dispose(): void;
 }
 
@@ -145,7 +141,7 @@ export interface ValkeyGlideDialCacheClient extends DialCacheRedisClient {
  * client so native Batch and Script objects come from that client's runtime.
  * Only direct GlideClient and GlideClusterClient instances are accepted;
  * wrappers should implement DialCacheRedisClient directly.
- * Callers dispose the handles after draining work, then close GLIDE. A request
+ * Callers dispose the handle after draining work, then close GLIDE. A request
  * timeout bounds client waiting but is not server-side command cancellation.
  * GLIDE's current command API has no per-invocation signal, so DialCache's core
  * read deadline may return before this adapter's invocation settles. Tracked
@@ -153,9 +149,10 @@ export interface ValkeyGlideDialCacheClient extends DialCacheRedisClient {
  * reads route MGET explicitly to the slot primary, so replica lag cannot hide
  * an invalidation watermark. Tracked writes batch a native placeholder SET
  * with an EVALSHA of the stamp script — cluster write batches route to the
- * slot primary — and a flushed script cache falls back to invokeScript, which
- * reloads and re-runs the stamp, so the first tracked write against a cold
- * script cache pays one extra round trip. Batches are deliberately
+ * slot primary — and recovers a flushed script cache by re-sending the stamp
+ * as EVAL with its source, which the server caches under the same SHA1, so
+ * the first tracked write against a cold script cache pays one extra round
+ * trip. Batches are deliberately
  * non-atomic: MGET and SET are atomic themselves, an interleaved stamp is
  * safe by design, and MULTI/EXEC would consume caller-owned WATCH state.
  */
@@ -169,9 +166,7 @@ export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScri
     );
   }
   const isCluster = classifyValkeyGlideClient(client, glide) === "cluster";
-  const scripts: DialCacheGlideScripts<TScript> = {
-    invalidate: new glide.Script(INVALIDATE_CACHE_SCRIPT),
-  };
+  const invalidateScript: TScript = new glide.Script(INVALIDATE_CACHE_SCRIPT);
   let disposed = false;
   let activeOperations = 0;
 
@@ -283,7 +278,7 @@ export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScri
       });
     },
     async invalidate({ watermarkKey, futureBufferMs }) {
-      const raw = await run(() => client.invokeScript(scripts.invalidate, {
+      const raw = await run(() => client.invokeScript(invalidateScript, {
         keys: [watermarkKey],
         args: [String(futureBufferMs)],
         decoder: glide.Decoder.Bytes,
@@ -298,9 +293,7 @@ export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScri
         throw new Error("Cannot dispose Valkey GLIDE DialCache client while operations are in flight");
       }
       disposed = true;
-      for (const script of Object.values(scripts)) {
-        script.release();
-      }
+      invalidateScript.release();
     },
   };
 }

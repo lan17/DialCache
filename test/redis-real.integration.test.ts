@@ -57,8 +57,6 @@ const createTestClient = (url: string) => createClient({ url, scripts: dialcache
 type NodeRedisTestClient = ReturnType<typeof createTestClient>;
 
 interface RawRedisScriptClient {
-  /** The SHA1 this adapter's batched or EVALSHA-based stamp dispatch uses. */
-  readonly stampScriptSha1: string;
   /** Invoke only the tracked stamp script, as if its paired placeholder SET was lost. */
   stamp(valueKey: string, watermarkKey: string, cacheTtlMs: number, nonce: Buffer): Promise<number>;
   invalidate(watermarkKey: string, futureBufferMs: number): Promise<number>;
@@ -75,7 +73,6 @@ function createNodeRedisHarness(client: NodeRedisTestClient): RedisAdapterHarnes
   return {
     adapter: createNodeRedisDialCacheClient(client),
     raw: {
-      stampScriptSha1: dialcacheRedisScripts.dialcacheWriteTrackedStamp.SHA1,
       stamp: async (...args) => await client.dialcacheWriteTrackedStamp(...args),
       invalidate: async (...args) => await client.dialcacheInvalidate(...args),
     },
@@ -108,7 +105,6 @@ function createValkeyGlideHarness(client: valkeyGlide.GlideClient): RedisAdapter
   return {
     adapter,
     raw: {
-      stampScriptSha1: rawScripts.stamp.getHash(),
       stamp: async (valueKey, watermarkKey, cacheTtlMs, nonce) =>
         await invoke(rawScripts.stamp, [valueKey, watermarkKey], [String(cacheTtlMs), nonce]),
       invalidate: async (watermarkKey, futureBufferMs) =>
@@ -801,13 +797,10 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
         }),
       ).toBe(true);
       expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toBe("tracked");
-      // The recovered write must cache the stamp under the SHA1 the batched
-      // EVALSHA uses, so later writes take the single-round-trip path. The
-      // adapter's own dispatch hash must match node-redis's source SHA1; do
-      // not probe with a throwaway Script here — on GLIDE 2.0.0, releasing a
-      // same-source handle was observed to break the live handles' reloads
-      // despite the documented reference counting.
-      expect(client.raw.stampScriptSha1).toBe(dialcacheRedisScripts.dialcacheWriteTrackedStamp.SHA1);
+      // The recovered write must cache the stamp under sha1(source) — the
+      // digest node-redis registers and the GLIDE batch dispatches — so later
+      // writes take the single-round-trip path. (The unit suites pin each
+      // adapter's dispatched digest to an independently computed sha1.)
       expect(
         await admin.scriptExists(dialcacheRedisScripts.dialcacheWriteTrackedStamp.SHA1),
       ).toEqual([true]);

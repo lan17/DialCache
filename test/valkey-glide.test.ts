@@ -8,7 +8,7 @@ import {
   DialCacheRedisPlaceholderLostError,
   DialCacheRedisProtocolError,
 } from "../src/redis-client.js";
-import { WRITE_TRACKED_STAMP_SCRIPT } from "../src/redis-protocol.js";
+import { INVALIDATE_CACHE_SCRIPT, WRITE_TRACKED_STAMP_SCRIPT } from "../src/redis-protocol.js";
 import { createValkeyGlideDialCacheClient } from "../src/valkey-glide.js";
 
 const INVALID_WRITE_REPLIES: readonly unknown[] = [
@@ -112,17 +112,17 @@ function createFakeClient(replies: unknown[]) {
     ) => nextReply()),
     invokeScript: vi.fn(async (_script: MockScript, _options: InvokeScriptOptions) => nextReply()),
   };
-  return { client, nextReply };
+  return client;
 }
 
 function fakeClient(...replies: unknown[]) {
-  const client = createFakeClient(replies).client;
+  const client = createFakeClient(replies);
   standaloneClients.add(client);
   return client;
 }
 
 function fakeClusterClient(...replies: unknown[]) {
-  const client = createFakeClient(replies).client;
+  const client = createFakeClient(replies);
   clusterClients.add(client);
   return client;
 }
@@ -427,6 +427,36 @@ describe("Valkey GLIDE adapter", () => {
     });
   });
 
+  it("routes the EVAL recovery to the slot primary on cluster", async () => {
+    const noscript = new Error("NOSCRIPT No matching script. Please use EVAL.");
+    const client = fakeClusterClient([Buffer.from("OK"), noscript], 1);
+    const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
+
+    await expect(adapter.write({
+      valueKey: "tracked:{id}:value",
+      watermarkKey: "tracked:{id}:watermark",
+      cacheTtlMs: 2_000,
+      value: "tracked",
+    })).resolves.toBe(true);
+
+    const trackedFrame = clusterBatchInstances[0]?.commands[0]?.[2] as Buffer;
+    expect(client.customCommand).toHaveBeenCalledWith(
+      [
+        "EVAL",
+        WRITE_TRACKED_STAMP_SCRIPT,
+        "2",
+        "tracked:{id}:value",
+        "tracked:{id}:watermark",
+        "2000",
+        trackedFrame.subarray(1, 9),
+      ],
+      {
+        decoder: decoderBytes,
+        route: { type: "primarySlotKey", key: "tracked:{id}:value" },
+      },
+    );
+  });
+
   it("falls back to EVAL by source when the batched stamp hits NOSCRIPT", async () => {
     const noscriptWordings = [
       // Raw server reply wording.
@@ -639,6 +669,7 @@ describe("Valkey GLIDE adapter", () => {
     adapter.dispose();
 
     expect(scriptInstances).toHaveLength(1);
+    expect(scriptInstances[0]?.code).toBe(INVALIDATE_CACHE_SCRIPT);
     for (const script of scriptInstances) {
       expect(script.release).toHaveBeenCalledTimes(1);
     }
