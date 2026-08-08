@@ -165,6 +165,7 @@ describe("Datadog metrics adapter", () => {
     metrics.observeFallback(cacheLabels, 0.5);
     metrics.observeSerialization({ ...cacheLabels, operation: "dump" }, 0.25);
     metrics.observeSize(cacheLabels, 4_096);
+    metrics.observeStoredSize(cacheLabels, 2_048);
     metrics.observeCompressionRatio(cacheLabels, 0.35);
     metrics.observeCompression({ ...cacheLabels, operation: "compress" }, 0.002);
 
@@ -217,6 +218,7 @@ describe("Datadog metrics adapter", () => {
         tags: { ...baseTags, operation: "dump" },
       },
       { method: "distribution", name: "dialcache.serialization.size", value: 4_096, tags: baseTags },
+      { method: "distribution", name: "dialcache.stored.size", value: 2_048, tags: baseTags },
       { method: "distribution", name: "dialcache.compression.ratio", value: 0.35, tags: baseTags },
       {
         method: "distribution",
@@ -242,6 +244,7 @@ describe("Datadog metrics adapter", () => {
       metrics.observeFallback(cacheLabels, 0.02);
       metrics.observeSerialization({ ...cacheLabels, operation: "load" }, 0.03);
       metrics.observeSize(cacheLabels, 128);
+      metrics.observeStoredSize(cacheLabels, 96);
       metrics.observeCompressionRatio(cacheLabels, 0.04);
       metrics.observeCompression({ ...cacheLabels, operation: "decompress" }, 0.05);
 
@@ -250,6 +253,7 @@ describe("Datadog metrics adapter", () => {
         { method: observationMetricType, name: "service.cache.fallback.duration", value: 0.02 },
         { method: observationMetricType, name: "service.cache.serialization.duration", value: 0.03 },
         { method: observationMetricType, name: "service.cache.serialization.size", value: 128 },
+        { method: observationMetricType, name: "service.cache.stored.size", value: 96 },
         { method: observationMetricType, name: "service.cache.compression.ratio", value: 0.04 },
         { method: observationMetricType, name: "service.cache.compression.duration", value: 0.05 },
       ]);

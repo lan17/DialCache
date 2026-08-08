@@ -493,7 +493,7 @@ Reads always decompress marked payloads regardless of this setting, so disabling
 
 Rolling upgrades and rollbacks degrade to misses, not errors, but are visible in metrics: during a mixed-fleet window, readers on releases without payload compression fail `serializer.load` on compressed entries, producing a transient `serialization_load` error spike (and shadow `deserialization_error` outcomes) plus refill churn until the fleet converges — expected noise, worth an alerting note. For a zero-noise upgrade with string/JSON serializers, deploy this release with `compression: false` first, then enable it once the fleet converges; binary serializers with envelope-colliding output still write escaped bytes in phase one, so rely on key versioning there instead. Rolling back to a release without the envelope degrades compressed and escaped entries to refreshable misses the same way, presuming `serializer.load` rejects the foreign bytes — a permissive binary decoder could misread an escaped payload instead, the same caveat as the forward residuals above. On runtimes without `node:zlib` zstd (Node below 22.15, and 23.0–23.7), ESM consumers cannot load the package at all (the import fails), while CommonJS consumers fail at construction when compression is enabled; `compression: false` is the working configuration there for CommonJS only.
 
-Each write records a bounded compression outcome (`compressed`, `below_threshold`, `not_smaller`, or `write_over_limit`) and, when compressed, a compressed-to-original size ratio; reads record `decompressed`, `fallback_raw`, or `read_over_limit` (`write_over_limit` is a capacity signal; `read_over_limit` a corruption/integrity signal). Compression and decompression latency is observed separately with an `operation` label (see [Metrics](#metrics)). The size histogram observes stored bytes, so it reflects post-compression sizes.
+Each write records a bounded compression outcome (`compressed`, `below_threshold`, `not_smaller`, or `write_over_limit`) and, when compressed, a compressed-to-original size ratio; reads record `decompressed`, `fallback_raw`, or `read_over_limit` (`write_over_limit` is a capacity signal; `read_over_limit` a corruption/integrity signal). Compression and decompression latency is observed separately with an `operation` label (see [Metrics](#metrics)). Payload sizes are reported at both stages: the size histogram observes serializer output (pre-compression, the distribution to consult when tuning `thresholdBytes`), and the stored-size histogram observes what was actually written after compression and escaping — the difference between their sums is the bytes compression saved.
 
 #### Shadow validation
 
@@ -793,7 +793,8 @@ The Prometheus adapter emits:
 | `dialcache_get_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache get latency in seconds |
 | `dialcache_fallback_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Elapsed time until the underlying function settles or timeout rejection is delivered |
 | `dialcache_serialization_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer`, `operation` | Redis serializer dump/load latency |
-| `dialcache_size_histogram` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Stored Redis payload size in bytes, after compression |
+| `dialcache_size_histogram` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Serialized Redis payload size in bytes, before compression |
+| `dialcache_stored_size_histogram` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Stored Redis payload size in bytes, after compression and escaping |
 | `dialcache_compression_ratio_histogram` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Compressed-to-original payload size ratio for compressed writes |
 | `dialcache_compression_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer`, `operation` | Payload compression and decompression latency in seconds |
 
@@ -854,7 +855,8 @@ The Datadog adapter emits exact increments of `1` for counters and preserves sec
 | `dialcache.get.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache get latency in seconds |
 | `dialcache.fallback.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Elapsed time until the underlying function settles or timeout rejection is delivered |
 | `dialcache.serialization.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer`, `operation` | Redis serializer dump/load latency in seconds |
-| `dialcache.serialization.size` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Stored Redis payload size in bytes, after compression |
+| `dialcache.serialization.size` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Serialized Redis payload size in bytes, before compression |
+| `dialcache.stored.size` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Stored Redis payload size in bytes, after compression and escaping |
 | `dialcache.compression.ratio` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Compressed-to-original payload size ratio for compressed writes |
 | `dialcache.compression.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer`, `operation` | Payload compression and decompression latency in seconds |
 

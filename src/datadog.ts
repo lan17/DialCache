@@ -53,6 +53,7 @@ const METRIC_SUFFIXES = {
   fallback: "fallback.duration",
   serialization: "serialization.duration",
   size: "serialization.size",
+  storedSize: "stored.size",
   compressionRatio: "compression.ratio",
   compressionDuration: "compression.duration",
 } as const;
@@ -148,6 +149,10 @@ export class DatadogDialCacheMetrics implements DialCacheMetricsAdapter {
 
   observeSize(labels: CacheMetricLabels, bytes: number): void {
     this.observe(this.metricNames.size, bytes, cacheTags(labels));
+  }
+
+  observeStoredSize(labels: CacheMetricLabels, bytes: number): void {
+    this.observe(this.metricNames.storedSize, bytes, cacheTags(labels));
   }
 
   observeCompressionRatio(labels: CacheMetricLabels, ratio: number): void {

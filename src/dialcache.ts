@@ -1540,6 +1540,7 @@ function safeMetrics(metrics: DialCacheMetricsAdapter | null): DialCacheMetricsA
     observeFallback: (labels, seconds) => callObserver(() => metrics.observeFallback(labels, seconds)),
     observeSerialization: (labels, seconds) => callObserver(() => metrics.observeSerialization(labels, seconds)),
     observeSize: (labels, bytes) => callObserver(() => metrics.observeSize(labels, bytes)),
+    observeStoredSize: (labels, bytes) => callObserver(() => metrics.observeStoredSize?.(labels, bytes)),
     observeCompressionRatio: (labels, ratio) => callObserver(() => metrics.observeCompressionRatio?.(labels, ratio)),
     observeCompression: (labels, seconds) => callObserver(() => metrics.observeCompression?.(labels, seconds)),
   };

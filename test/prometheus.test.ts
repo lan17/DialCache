@@ -188,6 +188,7 @@ describe("Prometheus metrics adapter", () => {
     metrics.observeSerialization({ ...labels, operation: "dump" }, 0.05);
     metrics.observeSerialization({ ...labels, operation: "load" }, 0.05);
     metrics.observeSize(labels, 1_000);
+    metrics.observeStoredSize(labels, 750);
     metrics.observeCompressionRatio(labels, 0.4);
     metrics.observeCompression({ ...labels, operation: "compress" }, 0.002);
     metrics.observeCompression({ ...labels, operation: "decompress" }, 0.001);
@@ -237,6 +238,11 @@ describe("Prometheus metrics adapter", () => {
         ["cache_namespace", "use_case", "key_type", "outcome"],
       ),
       histogramSchema("schema_dialcache_size_histogram", ["cache_namespace", "use_case", "key_type", "layer"], SIZE_BUCKETS),
+      histogramSchema(
+        "schema_dialcache_stored_size_histogram",
+        ["cache_namespace", "use_case", "key_type", "layer"],
+        SIZE_BUCKETS,
+      ),
     ]);
 
     const serialization = families.find(({ name }) => name === "schema_dialcache_serialization_timer");

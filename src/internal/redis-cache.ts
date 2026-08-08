@@ -237,6 +237,7 @@ export class RedisCache {
     } finally {
       this.recordMetric((metrics) => metrics.observeSerialization({ ...labelsFor(key, metricLayer), operation: "dump" }, elapsedSeconds(start)));
     }
+    this.recordMetric((metrics) => metrics.observeSize(labelsFor(key, metricLayer), payloadSize(serialized)));
     if (this.compression !== null) {
       const compressStart = performance.now();
       let compression;
@@ -261,7 +262,7 @@ export class RedisCache {
     } else {
       serialized = escapeRawPayload(serialized);
     }
-    this.recordMetric((metrics) => metrics.observeSize(labelsFor(key, metricLayer), payloadSize(serialized)));
+    this.recordMetric((metrics) => metrics.observeStoredSize?.(labelsFor(key, metricLayer), payloadSize(serialized)));
     if (shouldWrite !== undefined && !shouldWrite()) {
       return null;
     }

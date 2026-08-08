@@ -121,7 +121,13 @@ export interface DialCacheMetricsAdapter {
   observeGet(labels: CacheMetricLabels, seconds: number): void;
   observeFallback(labels: CacheMetricLabels, seconds: number): void;
   observeSerialization(labels: SerializationMetricLabels, seconds: number): void;
+  /** Serialized payload size in bytes, before compression or escaping. */
   observeSize(labels: CacheMetricLabels, bytes: number): void;
+  /**
+   * Stored payload size in bytes as written to Redis, after compression and
+   * escaping. Optional so existing custom adapters keep compiling.
+   */
+  observeStoredSize?(labels: CacheMetricLabels, bytes: number): void;
   // Optional so existing custom adapters keep compiling without changes.
   observeCompressionRatio?(labels: CacheMetricLabels, ratio: number): void;
   // Optional so existing custom adapters keep compiling without changes.

@@ -72,6 +72,7 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
   private readonly fallbackTimer: Histogram<CounterLabels>;
   private readonly serializationTimer: Histogram<SerializationLabels>;
   private readonly sizeHistogram: Histogram<CounterLabels>;
+  private readonly storedSizeHistogram: Histogram<CounterLabels>;
   private readonly compressionRatioHistogram: Histogram<CounterLabels>;
   private readonly compressionTimer: Histogram<SerializationLabels>;
 
@@ -93,6 +94,7 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
     this.fallbackTimer = histogram(registry, collectors.fallbackTimer);
     this.serializationTimer = histogram(registry, collectors.serializationTimer);
     this.sizeHistogram = histogram(registry, collectors.sizeHistogram);
+    this.storedSizeHistogram = histogram(registry, collectors.storedSizeHistogram);
     this.compressionRatioHistogram = histogram(registry, collectors.compressionRatioHistogram);
     this.compressionTimer = histogram(registry, collectors.compressionTimer);
   }
@@ -161,6 +163,10 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
 
   observeSize(labels: CacheMetricLabels, bytes: number): void {
     this.sizeHistogram.observe(cacheLabels(labels), bytes);
+  }
+
+  observeStoredSize(labels: CacheMetricLabels, bytes: number): void {
+    this.storedSizeHistogram.observe(cacheLabels(labels), bytes);
   }
 
   observeCompressionRatio(labels: CacheMetricLabels, ratio: number): void {
@@ -259,7 +265,14 @@ function collectorConfigs(prefix: string) {
     sizeHistogram: {
       type: "histogram",
       name: `${prefix}dialcache_size_histogram`,
-      help: "Stored DialCache value sizes in bytes, after compression.",
+      help: "Serialized DialCache value sizes in bytes.",
+      labelNames: ["cache_namespace", "use_case", "key_type", "layer"],
+      buckets: SIZE_BUCKETS,
+    },
+    storedSizeHistogram: {
+      type: "histogram",
+      name: `${prefix}dialcache_stored_size_histogram`,
+      help: "Stored DialCache payload sizes in bytes, after compression and escaping.",
       labelNames: ["cache_namespace", "use_case", "key_type", "layer"],
       buckets: SIZE_BUCKETS,
     },

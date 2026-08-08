@@ -36,6 +36,7 @@ class RecordingMetrics implements DialCacheMetricsAdapter {
   readonly compressionCalls: CompressionMetricLabels[] = [];
   readonly ratioCalls: Array<{ readonly labels: CacheMetricLabels; readonly ratio: number }> = [];
   readonly sizeCalls: Array<{ readonly labels: CacheMetricLabels; readonly bytes: number }> = [];
+  readonly storedSizeCalls: Array<{ readonly labels: CacheMetricLabels; readonly bytes: number }> = [];
   readonly durationCalls: CompressionOperationMetricLabels[] = [];
 
   request(): void {}
@@ -53,6 +54,10 @@ class RecordingMetrics implements DialCacheMetricsAdapter {
 
   observeSize(labels: CacheMetricLabels, bytes: number): void {
     this.sizeCalls.push({ labels, bytes });
+  }
+
+  observeStoredSize(labels: CacheMetricLabels, bytes: number): void {
+    this.storedSizeCalls.push({ labels, bytes });
   }
 
   observeCompressionRatio(labels: CacheMetricLabels, ratio: number): void {
@@ -456,10 +461,24 @@ describe("DialCache Redis payload compression", () => {
     expect(ratio?.ratio).toBeGreaterThan(0);
     expect(ratio?.ratio).toBeLessThan(1);
 
+    // Serialized size (pre-compression) and stored size (what hit Redis) are
+    // reported separately; their difference is the per-write savings.
+    const serializedBytes = Buffer.byteLength(JSON.stringify(largeValue("123")));
     const storedPayload = decodeFrame(redis.raw(redisKeyFor("123", "CompressionMetricsLarge"))).payload;
     const largeSize = metrics.sizeCalls.find(({ labels }) => labels.useCase === "CompressionMetricsLarge");
-    expect(largeSize?.bytes).toBe(Buffer.isBuffer(storedPayload) ? storedPayload.length : -1);
-    expect(largeSize?.bytes).toBeLessThan(Buffer.byteLength(JSON.stringify(largeValue("123"))));
+    expect(largeSize?.bytes).toBe(serializedBytes);
+    const largeStored = metrics.storedSizeCalls.find(({ labels }) => labels.useCase === "CompressionMetricsLarge");
+    expect(largeStored?.bytes).toBe(Buffer.isBuffer(storedPayload) ? storedPayload.length : -1);
+    expect(largeStored?.bytes).toBeLessThan(serializedBytes);
+
+    // Below-threshold writes store the serializer output unchanged, so both
+    // metrics agree; the incompressible fixture (0xFF lead, no escape) does too.
+    const smallSize = metrics.sizeCalls.find(({ labels }) => labels.useCase === "CompressionMetricsSmall");
+    const smallStored = metrics.storedSizeCalls.find(({ labels }) => labels.useCase === "CompressionMetricsSmall");
+    expect(smallStored?.bytes).toBe(smallSize?.bytes);
+    const rawSize = metrics.sizeCalls.find(({ labels }) => labels.useCase === "CompressionMetricsIncompressible");
+    const rawStored = metrics.storedSizeCalls.find(({ labels }) => labels.useCase === "CompressionMetricsIncompressible");
+    expect(rawStored?.bytes).toBe(rawSize?.bytes);
   });
 
   it("rejects invalid compression config at construction", () => {
