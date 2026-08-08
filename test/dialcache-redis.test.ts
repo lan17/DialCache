@@ -421,10 +421,13 @@ describe("DialCache Redis TTL layer", () => {
 
   it.each([
     { shape: "null", outcome: null },
-    { shape: "a bare payload", outcome: "raw-payload" },
+    { shape: "a bare string payload", outcome: "raw-payload" },
+    { shape: "a bare Buffer payload", outcome: Buffer.from([1, 2, 3]) },
+    { shape: "a non-object value", outcome: 42 },
     { shape: "an unknown status", outcome: { status: "nope" } },
     { shape: "an unbounded miss reason", outcome: { status: "miss", reason: "because" } },
     { shape: "a core-authoritative miss reason", outcome: { status: "miss", reason: "deserialization_failed" } },
+    { shape: "a prototype-chain miss reason", outcome: { status: "miss", reason: "toString" } },
     { shape: "a non-payload hit", outcome: { status: "hit", payload: 42 } },
   ])("fails open when a client read returns $shape instead of a read outcome", async ({ outcome }) => {
     const redisClient: DialCacheRedisClient = {
@@ -470,6 +473,100 @@ describe("DialCache Redis TTL layer", () => {
     });
     expect(redisClient.write).not.toHaveBeenCalled();
     expect(logger.warn).toHaveBeenCalledWith("Error getting value from Redis cache", expect.any(Error));
+  });
+
+  it("emits only the validated reason when a client miss changes answers between reads", async () => {
+    // The outcome guard normalizes onto canonical singletons, so an
+    // accessor-backed miss cannot answer one reason at validation and leak an
+    // unbounded label at metric emission.
+    let reasonReads = 0;
+    const flapping = {
+      status: "miss",
+      get reason(): string {
+        reasonReads += 1;
+        return reasonReads === 1 ? "not_found" : "Tenant123Unbounded";
+      },
+    };
+    const redisClient: DialCacheRedisClient = {
+      read: vi.fn(async () => flapping as never),
+      write: vi.fn(async () => true),
+      invalidate: vi.fn(async () => undefined),
+    };
+    const metrics = {
+      request: vi.fn(),
+      miss: vi.fn(),
+      disabled: vi.fn(),
+      error: vi.fn(),
+      invalidation: vi.fn(),
+      observeGet: vi.fn(),
+      observeFallback: vi.fn(),
+      observeSerialization: vi.fn(),
+      observeSize: vi.fn(),
+    };
+    const dialcache = new DialCache({ redis: { client: redisClient, readTimeoutMs: 1_000 }, metrics });
+    const getUser = dialcache.cached(async (userId: string) => ({ userId }), {
+      keyType: "user_id",
+      useCase: "RedisFlappingMissReason",
+      cacheKey: (userId) => userId,
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 100 },
+      }),
+    });
+
+    await expect(dialcache.enable(async () => await getUser("123"))).resolves.toEqual({ userId: "123" });
+    expect(metrics.miss).toHaveBeenCalledTimes(1);
+    expect(metrics.miss).toHaveBeenCalledWith({
+      cacheNamespace: "urn",
+      useCase: "RedisFlappingMissReason",
+      keyType: "user_id",
+      layer: CacheLayer.REMOTE,
+      reason: "not_found",
+    });
+    expect(metrics.error).not.toHaveBeenCalled();
+  });
+
+  it("serves the payload captured at validation when a client hit changes answers between reads", async () => {
+    let payloadReads = 0;
+    const flapping = {
+      status: "hit",
+      get payload(): string {
+        payloadReads += 1;
+        return payloadReads === 1 ? JSON.stringify({ source: "redis" }) : "garbage";
+      },
+    };
+    const redisClient: DialCacheRedisClient = {
+      read: vi.fn(async () => flapping as never),
+      write: vi.fn(async () => true),
+      invalidate: vi.fn(async () => undefined),
+    };
+    const metrics = {
+      request: vi.fn(),
+      miss: vi.fn(),
+      disabled: vi.fn(),
+      error: vi.fn(),
+      invalidation: vi.fn(),
+      observeGet: vi.fn(),
+      observeFallback: vi.fn(),
+      observeSerialization: vi.fn(),
+      observeSize: vi.fn(),
+    };
+    const fallback = vi.fn(async () => ({ source: "fallback" }));
+    const dialcache = new DialCache({ redis: { client: redisClient, readTimeoutMs: 1_000 }, metrics });
+    const getValue = dialcache.cached(fallback, {
+      keyType: "user_id",
+      useCase: "RedisFlappingHitPayload",
+      cacheKey: () => "123",
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 100 },
+      }),
+    });
+
+    await expect(dialcache.enable(async () => await getValue())).resolves.toEqual({ source: "redis" });
+    expect(fallback).not.toHaveBeenCalled();
+    expect(metrics.miss).not.toHaveBeenCalled();
+    expect(payloadReads).toBe(1);
   });
 
   it("records a distinct metric label when a Redis adapter reports invalid payload encoding", async () => {

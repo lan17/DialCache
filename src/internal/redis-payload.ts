@@ -2,6 +2,7 @@ import {
   DialCacheRedisPayloadEncodingError,
   DialCacheRedisPayloadError,
   type RedisCachePayload,
+  type RedisReadMissReason,
   type RedisReadOutcome,
 } from "../redis-client.js";
 import {
@@ -22,10 +23,21 @@ function validateRedisBulkStringReply(raw: unknown): Buffer | null {
   );
 }
 
-const MISS_NOT_FOUND: RedisReadOutcome = Object.freeze({ status: "miss", reason: "not_found" });
-const MISS_FRAME_UNSUPPORTED: RedisReadOutcome = Object.freeze({ status: "miss", reason: "frame_unsupported" });
-const MISS_WATERMARK_UNREADABLE: RedisReadOutcome = Object.freeze({ status: "miss", reason: "watermark_unreadable" });
-const MISS_WATERMARK_INVALIDATED: RedisReadOutcome = Object.freeze({ status: "miss", reason: "watermark_invalidated" });
+/**
+ * Canonical miss outcomes: one shared frozen instance per bounded read-miss
+ * reason. The decoders return these, and the core normalizes every client
+ * miss onto them, so a given reason has exactly one outcome object anywhere
+ * in the library. The Record annotation pins the table to the
+ * RedisReadMissReason vocabulary — never the metrics-level superset, which
+ * would let clients forge the core-owned deserialization_failed reason.
+ */
+export const REDIS_READ_MISS_OUTCOMES: Readonly<Record<RedisReadMissReason, RedisReadOutcome>> =
+  Object.freeze({
+    not_found: Object.freeze({ status: "miss", reason: "not_found" }),
+    frame_unsupported: Object.freeze({ status: "miss", reason: "frame_unsupported" }),
+    watermark_unreadable: Object.freeze({ status: "miss", reason: "watermark_unreadable" }),
+    watermark_invalidated: Object.freeze({ status: "miss", reason: "watermark_invalidated" }),
+  });
 
 function isSupportedRedisFrame(raw: Buffer): boolean {
   return raw.length >= REDIS_FRAME_MIN_BYTES && raw[0] === REDIS_FRAME_VERSION;
@@ -69,10 +81,10 @@ function decodeRedisPayload(raw: Buffer): RedisCachePayload {
 export function decodeRedisFrame(raw: unknown): RedisReadOutcome {
   const frame = validateRedisBulkStringReply(raw);
   if (frame === null) {
-    return MISS_NOT_FOUND;
+    return REDIS_READ_MISS_OUTCOMES.not_found;
   }
   if (!isSupportedRedisFrame(frame)) {
-    return MISS_FRAME_UNSUPPORTED;
+    return REDIS_READ_MISS_OUTCOMES.frame_unsupported;
   }
   return { status: "hit", payload: decodeRedisPayload(frame.subarray(REDIS_FRAME_HEADER_BYTES)) };
 }
@@ -93,17 +105,17 @@ export function decodeTrackedRedisFrame(
   const frame = validateRedisBulkStringReply(raw);
   const watermarkFrame = validateRedisBulkStringReply(rawWatermark);
   if (frame === null) {
-    return MISS_NOT_FOUND;
+    return REDIS_READ_MISS_OUTCOMES.not_found;
   }
   if (!isSupportedRedisFrame(frame)) {
-    return MISS_FRAME_UNSUPPORTED;
+    return REDIS_READ_MISS_OUTCOMES.frame_unsupported;
   }
   const watermark = parseRedisWatermark(watermarkFrame);
   if (watermark === null) {
-    return MISS_WATERMARK_UNREADABLE;
+    return REDIS_READ_MISS_OUTCOMES.watermark_unreadable;
   }
   const createdAtMs = Number(frame.readBigUInt64BE(1));
   return createdAtMs <= watermark
-    ? MISS_WATERMARK_INVALIDATED
+    ? REDIS_READ_MISS_OUTCOMES.watermark_invalidated
     : { status: "hit", payload: decodeRedisPayload(frame.subarray(REDIS_FRAME_HEADER_BYTES)) };
 }

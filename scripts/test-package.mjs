@@ -332,6 +332,8 @@ const missReasons: Readonly<Record<MissReason, true>> = {
 const unboundedMissReason: MissReason = "Tenant123Miss";
 // Redis clients can only produce the decoder subset; deserialization_failed is metrics-level.
 const decoderMissReason: RedisReadMissReason = "watermark_invalidated";
+// @ts-expect-error deserialization_failed is core-owned; clients cannot supply it.
+const forgedDecoderMissReason: RedisReadMissReason = "deserialization_failed";
 const missMetricLabels: MissMetricLabels = {
   cacheNamespace: "consumer-cache",
   useCase: "Load",
@@ -469,6 +471,7 @@ void disabledReasons;
 void legacyMissingConfigReason;
 void missReasons;
 void unboundedMissReason;
+void forgedDecoderMissReason;
 void missMetricLabels;
 void MissingKeyConfigError;
 void disabledOverlay;

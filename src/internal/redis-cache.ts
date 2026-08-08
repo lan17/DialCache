@@ -20,6 +20,7 @@ import {
 import { JsonSerializer, type Serializer } from "../serializer.js";
 import type { RedisCacheGetResult } from "./cache-result.js";
 import { assertValidDeadlineMs, withMonotonicDeadline } from "./deadline.js";
+import { REDIS_READ_MISS_OUTCOMES } from "./redis-payload.js";
 import { cacheTtlSecToMs } from "./duration.js";
 import { fetchKeyConfig, resolveLayerConfigResult, type ResolvedLayerConfig } from "./runtime-config.js";
 
@@ -43,16 +44,9 @@ interface RedisCacheOptions {
   readonly metrics: DialCacheMetricsAdapter | null;
 }
 
-interface StartedRedisRead {
+interface StartedRead<T> {
   /** Result bounded by the effective Redis read deadline. */
-  readonly result: Promise<RedisReadOutcome>;
-  /** Fulfills only after the underlying semantic Redis read settles. */
-  readonly settled: Promise<void>;
-}
-
-interface StartedShadowPayloadRead {
-  /** Result bounded by the effective Redis read deadline. */
-  readonly result: Promise<RedisCachePayload | null>;
+  readonly result: Promise<T>;
   /** Fulfills only after the underlying semantic Redis read settles. */
   readonly settled: Promise<void>;
 }
@@ -60,34 +54,48 @@ interface StartedShadowPayloadRead {
 const defaultSerializer = new JsonSerializer<unknown>();
 const REDIS_FRAME_KEY_SUFFIX = ":dialcache-frame-v1";
 const DEFAULT_REMOTE_READ_TIMEOUT_MS = 50;
-// Derive from RedisReadMissReason, never MissReason: deserialization_failed is
-// core-authoritative and must stay rejectable when a client tries to forge it.
-const REDIS_READ_MISS_REASON_FLAGS = {
-  not_found: true,
-  frame_unsupported: true,
-  watermark_unreadable: true,
-  watermark_invalidated: true,
-} satisfies Readonly<Record<RedisReadMissReason, true>>;
-const REDIS_READ_MISS_REASONS: ReadonlySet<RedisReadMissReason> = new Set(
-  Object.keys(REDIS_READ_MISS_REASON_FLAGS) as RedisReadMissReason[],
-);
 
 /**
- * Reject malformed client read results before they can mislabel reads or leak
- * unbounded metric labels; a stale client still returning `payload | null`
- * fails into the loud cache_read error path instead of silently misbehaving.
+ * Validate a client read result and return its canonical form: misses collapse
+ * onto the shared frozen singletons and hits are recaptured, so everything
+ * downstream — including the bounded metric labels — observes only validated
+ * data even when a client returns accessor-backed or otherwise unstable
+ * objects. Each client-owned property is read exactly once. Rejections (legacy
+ * `payload | null` results, unknown shapes, the forged core-owned
+ * `deserialization_failed` reason) throw with a bounded shape fingerprint and
+ * fail open through the existing cache_read error path.
  */
-function assertRedisReadOutcome(outcome: RedisReadOutcome): RedisReadOutcome {
-  if (typeof outcome === "object" && outcome !== null) {
-    if (outcome.status === "hit" && (typeof outcome.payload === "string" || Buffer.isBuffer(outcome.payload))) {
-      return outcome;
-    }
-    if (outcome.status === "miss" && REDIS_READ_MISS_REASONS.has(outcome.reason)) {
-      return outcome;
-    }
+function normalizeRedisReadOutcome(outcome: RedisReadOutcome): RedisReadOutcome {
+  const result: unknown = outcome;
+  if (result === null || typeof result === "string" || Buffer.isBuffer(result)) {
+    throw invalidReadOutcome("a legacy `payload | null` result; return a RedisReadOutcome");
   }
-  throw new DialCacheRedisPayloadError(
-    'Invalid DialCache Redis read outcome; expected { status: "hit" | "miss" }',
+  if (typeof result !== "object") {
+    throw invalidReadOutcome(`a value of type ${typeof result}`);
+  }
+  const { status, reason, payload } = result as { status?: unknown; reason?: unknown; payload?: unknown };
+  if (status === "hit") {
+    if (typeof payload === "string" || Buffer.isBuffer(payload)) {
+      return { status: "hit", payload };
+    }
+    throw invalidReadOutcome("a hit without a string or Buffer payload");
+  }
+  if (status !== "miss") {
+    throw invalidReadOutcome('a status other than "hit" or "miss"');
+  }
+  if (typeof reason === "string" && Object.hasOwn(REDIS_READ_MISS_OUTCOMES, reason)) {
+    return REDIS_READ_MISS_OUTCOMES[reason as RedisReadMissReason];
+  }
+  throw invalidReadOutcome(
+    reason === "deserialization_failed"
+      ? 'a miss with the core-owned reason "deserialization_failed"'
+      : "a miss without a bounded RedisReadMissReason",
+  );
+}
+
+function invalidReadOutcome(received: string): DialCacheRedisPayloadError {
+  return new DialCacheRedisPayloadError(
+    `Invalid DialCache Redis read outcome; expected { status: "hit" | "miss" } but received ${received}`,
   );
 }
 
@@ -199,7 +207,7 @@ export class RedisCache {
   startPayloadReadForShadow(
     key: DialCacheKey,
     readTimeoutMs: number,
-  ): StartedShadowPayloadRead {
+  ): StartedRead<RedisCachePayload | null> {
     const read = this.startMeasuredPayloadRead(
       key,
       readTimeoutMs,
@@ -316,7 +324,7 @@ export class RedisCache {
     key: DialCacheKey,
     readTimeoutMs: number,
     unrefTimer: boolean,
-  ): StartedRedisRead {
+  ): StartedRead<RedisReadOutcome> {
     const abortController = new AbortController();
     const pending = Promise.resolve().then(() =>
       this.client.read(
@@ -326,7 +334,7 @@ export class RedisCache {
         },
         { timeoutMs: readTimeoutMs, signal: abortController.signal },
       )
-    ).then(assertRedisReadOutcome);
+    ).then(normalizeRedisReadOutcome);
     const result = withMonotonicDeadline({
       timeoutMs: readTimeoutMs,
       operation: () => pending,
@@ -348,7 +356,7 @@ export class RedisCache {
     readTimeoutMs: number,
     metricLayer: MetricLayer,
     unrefTimer: boolean,
-  ): StartedRedisRead {
+  ): StartedRead<RedisReadOutcome> {
     const start = performance.now();
     this.recordMetric((metrics) => metrics.request(labelsFor(key, metricLayer)));
     const read = this.startPayloadRead(key, readTimeoutMs, unrefTimer);
