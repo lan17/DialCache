@@ -17,7 +17,7 @@ Fine-grained TypeScript caching with explicit enabled contexts, request-local me
 - [Keys, ids, and extra dimensions](#keys-ids-and-extra-dimensions)
 - [Runtime config and ramp controls](#runtime-config-and-ramp-controls)
 - [Cache layers](#cache-layers)
-  - [Request-local cache](#request-local-cache) · [Process-local cache](#process-local-cache) · [Redis-backed TTL cache](#redis-backed-ttl-cache) · [Remote read deadlines](#remote-read-deadlines-and-async-liveness) · [Serialization](#serialization) · [Shadow validation](#shadow-validation)
+  - [Request-local cache](#request-local-cache) · [Process-local cache](#process-local-cache) · [Redis-backed TTL cache](#redis-backed-ttl-cache) · [Remote read deadlines](#remote-read-deadlines-and-async-liveness) · [Serialization](#serialization) · [Compression](#compression) · [Shadow validation](#shadow-validation)
 - [Cached-value ownership](#cached-value-ownership)
 - [Targeted invalidation and watermarks](#targeted-invalidation-and-watermarks)
 - [Request coalescing](#request-coalescing)
@@ -39,7 +39,8 @@ pnpm add prom-client@^15.1.3
 pnpm add hot-shots@^17.0.0
 ```
 
-DialCache requires Node.js 22.0.0 or newer. Production deployments should use a
+DialCache requires Node.js 22.15.0 or newer (the first 22.x release with zstd
+support in `node:zlib`). Production deployments should use a
 [currently supported LTS release](https://nodejs.org/en/about/previous-releases).
 
 ## Quick start
@@ -200,7 +201,7 @@ Instance-wide behavior is set through the `DialCache` constructor:
 | `DialCacheConfig` option | Default | Description |
 | --- | --- | --- |
 | `namespace` | `"urn"` | Logical cache namespace and first key component (see [Keys, ids, and extra dimensions](#keys-ids-and-extra-dimensions)). |
-| `redis` | none | `{ client: DialCacheRedisClient, readTimeoutMs?: number }`; enables the Redis layer with a 50 ms default read deadline (see [Redis-backed TTL cache](#redis-backed-ttl-cache)). |
+| `redis` | none | `{ client: DialCacheRedisClient, readTimeoutMs?: number, serializer?: Serializer<unknown>, compression?: CompressionConfig \| false }`; enables the Redis layer with a 50 ms default read deadline, an optional instance-default serializer, and default-on zstd payload compression (see [Redis-backed TTL cache](#redis-backed-ttl-cache), [Serialization](#serialization), and [Compression](#compression)). |
 | `localMaxSize` | `10_000` | Global process-local entry cap; `0` disables process-local storage. Nonnegative safe integer. |
 | `shadowMaxInFlight` | `1` | Maximum scheduled or active shadow jobs per `DialCache` instance, including uncancellable underlying work. Positive safe integer; excess work is dropped without queuing. |
 | `cacheConfigProvider` | none | Resolves runtime config per enabled invocation as a sparse overlay on the function's `defaultConfig`; `null` applies no overrides. |
@@ -432,7 +433,7 @@ Redis values use a compact binary frame:
 byte 1      format version
 bytes 2-9   Redis-created timestamp in milliseconds (uint64, big-endian)
 byte 10     payload encoding (0 = UTF-8, 1 = raw binary)
-bytes 11... serialized payload
+bytes 11... serialized payload (optionally zstd-compressed; see Compression)
 ```
 
 The Redis write scripts use Lua's `struct` library to pack the timestamp; adapters decode it with Node's buffer primitives. Redis TTL is authoritative, so expiry metadata is not duplicated in the frame. `payload` is produced by the operation's serializer, or by `JsonSerializer` by default. Custom serializers can return either `string` or `Buffer`; strings are stored as UTF-8 and Buffers are stored byte-for-byte without base64 expansion. Adapters restore the same representation before calling `serializer.load`.
@@ -468,6 +469,26 @@ const getUpdatedAt = dialcache.cached(
 The compile-time guard rejects known incompatible shapes such as `Date`, `Map`, `Set`, `bigint`, symbols, functions, Buffers, typed arrays, method-bearing class instances, required nested `undefined`, `unknown`, and `any`. It applies to every `cached()` declaration and `getOrLoad()` invocation because active layers are selected at runtime. A global Redis serializer is not parameterized by each returned type, so it cannot discharge this requirement; non-JSON operations must select a typed serializer.
 
 This guard is deliberately conservative and is not a proof of runtime data. TypeScript cannot detect non-finite numbers, cyclic/shared references, runtime getter or `toJSON` behavior, or data-only class instances that look like plain objects. Opaque, generic, or deeply recursive types may also require an explicit serializer. Providing `Serializer<T>` (including an explicitly typed `JsonSerializer<T>`) is a trusted caller assertion; DialCache does not serialize-and-deserialize again to validate it.
+
+#### Compression
+
+DialCache transparently compresses serialized Redis payloads with zstd (level 3, via `node:zlib`) when they are at least 4096 serialized bytes, and stores the compressed form only when it is actually smaller than the original. Compression sits below the serializer and above the Redis client, so serializers, adapters, and the frame layout are unaffected. A compressed payload is a binary frame payload whose first byte is a marker — `0x01` for a compressed UTF-8 string, `0x02` for compressed binary output, with `0x00` reserved — followed by the zstd frame. Payloads below the threshold are stored byte-identical to earlier DialCache releases.
+
+Compression is on by default and configured per instance next to the serializer:
+
+```ts
+const dialcache = new DialCache({
+  redis: {
+    client: redisClient,
+    // Defaults shown; pass compression: false to store every payload uncompressed.
+    compression: { thresholdBytes: 4096, level: 3 },
+  },
+});
+```
+
+Reads always decompress marked payloads regardless of this setting, so disabling compression never orphans previously written entries. Rolling back to a pre-compression DialCache release degrades compressed entries to refreshable misses through the documented `serialization_load` path rather than errors. A custom serializer whose raw output begins with a marker byte stays correct: zstd rejects the payload during decompression and DialCache hands the untouched original to `serializer.load`.
+
+Each write records a bounded compression outcome (`compressed`, `below_threshold`, or `not_smaller`) and, when compressed, a compressed-to-original size ratio; reads record `decompressed` or `fallback_raw` (see [Metrics](#metrics)). The size histogram observes stored bytes, so it reflects post-compression sizes.
 
 #### Shadow validation
 
@@ -763,10 +784,12 @@ The Prometheus adapter emits:
 | `dialcache_invalidation_counter` | Counter | `cache_namespace`, `key_type`, `layer` | Invalidation calls for the layers touched |
 | `dialcache_coalesced_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `scope` | Coalesced requests split by `request_local` or `process` scope |
 | `dialcache_shadow_validation_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `outcome` | Sampled Redis shadow-job outcomes |
+| `dialcache_compression_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer`, `outcome` | Payload compression outcomes: writes record `compressed`, `below_threshold`, or `not_smaller`; reads record `decompressed` or `fallback_raw` |
 | `dialcache_get_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache get latency in seconds |
 | `dialcache_fallback_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Elapsed time until the underlying function settles or timeout rejection is delivered |
 | `dialcache_serialization_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer`, `operation` | Redis serializer dump/load latency |
-| `dialcache_size_histogram` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Serialized Redis payload size in bytes |
+| `dialcache_size_histogram` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Stored Redis payload size in bytes, after compression |
+| `dialcache_compression_ratio_histogram` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Compressed-to-original payload size ratio for compressed writes |
 
 `policy_disabled` means that a process-local or Redis layer has no effective TTL after runtime overlays are applied. It is an intentional policy outcome, including the default when `defaultConfig` is omitted, rather than a configuration-loading failure.
 
@@ -806,7 +829,7 @@ dogStatsD.close();
 
 `hot-shots` is the supported and tested client, but the adapter depends only on the exported `DatadogDogStatsDClient` structural interface. DialCache does not import or install `hot-shots`, create a client, flush buffers, close sockets, or otherwise own the client lifecycle.
 
-`observationMetricType` is required. `"distribution"` is recommended when latency and size percentiles must aggregate across hosts; enable the desired distribution percentiles and aggregations in Datadog. Choose `"histogram"` when host-level histogram aggregation matches your existing Datadog setup. The choice applies uniformly to all four duration/size metrics. Both modes produce Datadog custom metrics. Distribution volume scales with unique tag-value combinations: Datadog counts five baseline aggregations per combination, and enabling percentile aggregations adds five more. Review [Datadog's custom-metrics billing guidance](https://docs.datadoghq.com/account_management/billing/custom_metrics/) before rollout. Do not send both types under the same namespace: when changing types, use a new namespace during migration so one metric identity never mixes histogram and distribution points.
+`observationMetricType` is required. `"distribution"` is recommended when latency and size percentiles must aggregate across hosts; enable the desired distribution percentiles and aggregations in Datadog. Choose `"histogram"` when host-level histogram aggregation matches your existing Datadog setup. The choice applies uniformly to all five duration/size/ratio metrics. Both modes produce Datadog custom metrics. Distribution volume scales with unique tag-value combinations: Datadog counts five baseline aggregations per combination, and enabling percentile aggregations adds five more. Review [Datadog's custom-metrics billing guidance](https://docs.datadoghq.com/account_management/billing/custom_metrics/) before rollout. Do not send both types under the same namespace: when changing types, use a new namespace during migration so one metric identity never mixes histogram and distribution points.
 
 `DatadogMetricsOptions.namespace` is the metric-name namespace and defaults to `dialcache`. It is separate from `DialCacheConfig.namespace`, the logical cache namespace emitted as the `cache_namespace` tag. The Datadog metric namespace must start with a letter and contain only letters, numbers, underscores, and dot-separated non-empty segments. The adapter rejects invalid metric namespaces and final metric names longer than 200 characters rather than relying on client-side normalization. A `hot-shots` `prefix` is applied after the adapter constructs the name, so include that prefix when checking the final length and avoid combining it with the metric namespace accidentally. Client-level `globalTags` are appended by `hot-shots`; the table below lists the tags added by the adapter.
 
@@ -821,10 +844,12 @@ The Datadog adapter emits exact increments of `1` for counters and preserves sec
 | `dialcache.invalidation.count` | Count | `cache_namespace`, `key_type`, `layer` | Invalidation calls for the layers touched |
 | `dialcache.coalesced.count` | Count | `cache_namespace`, `use_case`, `key_type`, `scope` | Coalesced requests by sharing scope |
 | `dialcache.shadow.count` | Count | `cache_namespace`, `use_case`, `key_type`, `outcome` | Sampled Redis shadow-job outcomes |
+| `dialcache.compression.count` | Count | `cache_namespace`, `use_case`, `key_type`, `layer`, `outcome` | Payload compression outcomes: writes record `compressed`, `below_threshold`, or `not_smaller`; reads record `decompressed` or `fallback_raw` |
 | `dialcache.get.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache get latency in seconds |
 | `dialcache.fallback.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Elapsed time until the underlying function settles or timeout rejection is delivered |
 | `dialcache.serialization.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer`, `operation` | Redis serializer dump/load latency in seconds |
-| `dialcache.serialization.size` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Serialized Redis payload size in bytes |
+| `dialcache.serialization.size` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Stored Redis payload size in bytes, after compression |
+| `dialcache.compression.ratio` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Compressed-to-original payload size ratio for compressed writes |
 
 Observer throws and rejections from returned promises or thenables are isolated by DialCache's fail-open metrics boundary. Buffered transport failures that are not represented by a returned thenable happen outside that boundary, so configure the DogStatsD client's error handling and shutdown behavior as part of application ownership.
 

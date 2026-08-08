@@ -25,6 +25,17 @@ export type ShadowValidationOutcome =
   | "confirmation_error"
   | "timeout"
   | "dropped";
+/**
+ * Bounded compression outcomes. Writes record compressed, below_threshold, or
+ * not_smaller; reads record decompressed or fallback_raw (a marked payload
+ * zstd rejected and handed through untouched).
+ */
+export type CompressionOutcome =
+  | "compressed"
+  | "below_threshold"
+  | "not_smaller"
+  | "decompressed"
+  | "fallback_raw";
 /** Bounded reasons for skipping cache work; policy_disabled means a shared layer has no effective TTL. */
 export type DisabledReason = "context" | "policy_disabled" | "invalid_ttl" | "invalid_ramp" | "ramped_down" | "config_error";
 /** Stable failure sites used instead of backend- or application-defined error names. */
@@ -61,6 +72,10 @@ export interface SerializationMetricLabels extends CacheMetricLabels {
   readonly operation: "dump" | "load";
 }
 
+export interface CompressionMetricLabels extends CacheMetricLabels {
+  readonly outcome: CompressionOutcome;
+}
+
 export interface InvalidationMetricLabels {
   readonly cacheNamespace: string;
   readonly keyType: string;
@@ -91,10 +106,14 @@ export interface DialCacheMetricsAdapter {
   coalesced?(labels: CoalescedMetricLabels): void;
   // Optional so existing custom adapters keep compiling without changes.
   shadowValidation?(labels: ShadowValidationMetricLabels): void;
+  // Optional so existing custom adapters keep compiling without changes.
+  compression?(labels: CompressionMetricLabels): void;
   observeGet(labels: CacheMetricLabels, seconds: number): void;
   observeFallback(labels: CacheMetricLabels, seconds: number): void;
   observeSerialization(labels: SerializationMetricLabels, seconds: number): void;
   observeSize(labels: CacheMetricLabels, bytes: number): void;
+  // Optional so existing custom adapters keep compiling without changes.
+  observeCompressionRatio?(labels: CacheMetricLabels, ratio: number): void;
 }
 
 export function labelsFor(key: DialCacheKey, layer: MetricLayer): CacheMetricLabels {

@@ -12,6 +12,7 @@ import {
   CacheLayer,
   DialCache,
   DialCacheKeyConfig,
+  type CompressionOutcome,
   type DisabledReason,
   type MetricErrorKind,
   type ShadowValidationOutcome,
@@ -55,6 +56,13 @@ const DISABLED_REASONS: Readonly<Record<DisabledReason, true>> = {
   invalid_ramp: true,
   ramped_down: true,
   config_error: true,
+};
+const COMPRESSION_OUTCOMES: Readonly<Record<CompressionOutcome, true>> = {
+  compressed: true,
+  below_threshold: true,
+  not_smaller: true,
+  decompressed: true,
+  fallback_raw: true,
 };
 const SHADOW_VALIDATION_OUTCOMES: Readonly<Record<ShadowValidationOutcome, true>> = {
   match: true,
@@ -171,16 +179,30 @@ describe("Prometheus metrics adapter", () => {
       keyType: labels.keyType,
       outcome: "match",
     });
+    metrics.compression({ ...labels, outcome: "compressed" });
     metrics.observeGet(labels, 0.05);
     metrics.observeFallback(labels, 0.05);
     metrics.observeSerialization({ ...labels, operation: "dump" }, 0.05);
     metrics.observeSerialization({ ...labels, operation: "load" }, 0.05);
     metrics.observeSize(labels, 1_000);
+    metrics.observeCompressionRatio(labels, 0.4);
 
     // prom-client declares MetricType as a numeric enum, but this JSON API returns string type names.
     const families = (await registry.getMetricsAsJSON()) as unknown as MetricFamily[];
     expect(families.map(metricSchema).sort((left, right) => left.name.localeCompare(right.name))).toEqual([
       counterSchema("schema_dialcache_coalesced_counter", ["cache_namespace", "use_case", "key_type", "scope"]),
+      counterSchema("schema_dialcache_compression_counter", [
+        "cache_namespace",
+        "use_case",
+        "key_type",
+        "layer",
+        "outcome",
+      ]),
+      histogramSchema(
+        "schema_dialcache_compression_ratio_histogram",
+        ["cache_namespace", "use_case", "key_type", "layer"],
+        RATIO_BUCKETS,
+      ),
       counterSchema("schema_dialcache_disabled_counter", ["cache_namespace", "use_case", "key_type", "layer", "reason"]),
       counterSchema("schema_dialcache_error_counter", [
         "cache_namespace",
@@ -317,6 +339,34 @@ describe("Prometheus metrics adapter", () => {
     expect(family?.values.map(({ labels: emitted }) => Object.keys(emitted))).toEqual(
       outcomes.map(() => ["cache_namespace", "use_case", "key_type", "outcome"]),
     );
+  });
+
+  it("exports every bounded compression outcome without rewriting labels", async () => {
+    const registry = new Registry();
+    const metrics = new PrometheusDialCacheMetrics({ registry, prefix: "compression_" });
+    const labels = {
+      cacheNamespace: "users",
+      useCase: "PrometheusCompressionOutcomes",
+      keyType: "user_id",
+      layer: CacheLayer.REMOTE,
+    } as const;
+    const outcomes = Object.keys(COMPRESSION_OUTCOMES) as CompressionOutcome[];
+
+    for (const outcome of outcomes) {
+      metrics.compression({ ...labels, outcome });
+    }
+
+    for (const outcome of outcomes) {
+      await expect(
+        sumMetric(registry, "compression_dialcache_compression_counter", {
+          cache_namespace: labels.cacheNamespace,
+          use_case: labels.useCase,
+          key_type: labels.keyType,
+          layer: labels.layer,
+          outcome,
+        }),
+      ).resolves.toBe(1);
+    }
   });
 
   it("uses the existing layer label for detached Redis telemetry", async () => {
@@ -579,6 +629,7 @@ describe("Prometheus metrics adapter", () => {
 
 const TIMER_BUCKETS = [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, "+Inf"];
 const SIZE_BUCKETS = [100, 1_000, 10_000, 100_000, 1_000_000, 10_000_000, "+Inf"];
+const RATIO_BUCKETS = [0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 1, "+Inf"];
 
 interface MetricValue {
   readonly metricName?: string;
