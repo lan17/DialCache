@@ -63,7 +63,7 @@ export type RedisCachePayload = string | Buffer;
 
 /** Bounded classification for why a Redis read produced no payload. */
 export type RedisReadMissReason =
-  /** The value key is absent or expired, or a tracked MGET member holds a non-string type. */
+  /** The value key is absent or expired, or a tracked MGET value member holds a non-string type. */
   | "not_found"
   /** The value frame is shorter than its header or has an unsupported version. */
   | "frame_unsupported"

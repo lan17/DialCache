@@ -39,6 +39,20 @@ describe("Redis frame decoding", () => {
     expect(decoded.byteLength).toBe(frame.byteLength - 10);
   });
 
+  it("shares one frozen canonical outcome per miss reason that consumers cannot corrupt", () => {
+    const outcome = decodeRedisFrame(null);
+
+    // The decoders and the core's normalizer alias these singletons, so their
+    // immutability is what keeps one consumer's mutation from corrupting
+    // every later miss (and its bounded metric label) process-wide.
+    expect(decodeRedisFrame(null)).toBe(outcome);
+    expect(Object.isFrozen(outcome)).toBe(true);
+    expect(() => {
+      (outcome as { reason: string }).reason = "corrupted";
+    }).toThrow(TypeError);
+    expect(decodeRedisFrame(null)).toEqual({ status: "miss", reason: "not_found" });
+  });
+
   it("classifies missing frames apart from short and unsupported frames", () => {
     expect(decodeRedisFrame(null)).toEqual({ status: "miss", reason: "not_found" });
     expect(decodeRedisFrame(Buffer.alloc(9))).toEqual({ status: "miss", reason: "frame_unsupported" });
