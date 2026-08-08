@@ -11,6 +11,7 @@ import {
   type CachedOptions,
   type DialCacheMetricsAdapter,
   type DialCacheRedisClient,
+  type RedisReadOutcome,
   type Serializer,
 } from "../src/index.js";
 import { FakeRedis } from "./fake-redis.js";
@@ -538,7 +539,7 @@ describe("DialCache fallback liveness", () => {
   });
 
   it("uses a separate remote-read deadline instead of the fallback deadline", async () => {
-    const readGate = deferred<null>();
+    const readGate = deferred<RedisReadOutcome>();
     const readStarted = deferred<void>();
     const fallback = vi.fn(async () => "value");
     const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
@@ -568,7 +569,7 @@ describe("DialCache fallback liveness", () => {
     expect(vi.getTimerCount()).toBe(1);
     expect(dialcache.getCoalescingState().process.activeLeaders).toBe(1);
 
-    readGate.resolve(null);
+    readGate.resolve({ status: "miss", reason: "not_found" });
     await expect(result).resolves.toBe("value");
     expect(fallback).toHaveBeenCalledTimes(1);
     expect(dialcache.getCoalescingState().process.activeLeaders).toBe(0);
@@ -588,7 +589,7 @@ describe("DialCache fallback liveness", () => {
       },
     };
     const redis: DialCacheRedisClient = {
-      read: async () => "stored",
+      read: async () => ({ status: "hit", payload: "stored" }),
       write: async () => true,
       invalidate: async () => undefined,
     };
@@ -632,7 +633,7 @@ describe("DialCache fallback liveness", () => {
       load: (value) => value.toString(),
     };
     const redis: DialCacheRedisClient = {
-      read: async () => null,
+      read: async () => ({ status: "miss", reason: "not_found" }),
       write: async () => {
         writeStarted.resolve();
         return await writeGate.promise;

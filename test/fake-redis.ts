@@ -2,10 +2,11 @@ import type {
   DialCacheRedisClient,
   RedisCachePayload,
   RedisInvalidationRequest,
+  RedisReadOutcome,
   RedisReadRequest,
   RedisWriteRequest,
 } from "../src/index.js";
-import { DialCacheRedisPayloadEncodingError } from "../src/redis-client.js";
+import { decodeRedisFrame, decodeTrackedRedisFrame } from "../src/redis-protocol.js";
 
 const FRAME_VERSION = 1;
 const ENCODING_OFFSET = 9;
@@ -27,7 +28,7 @@ export class FakeRedis implements DialCacheRedisClient {
   failWatermarkGet = false;
   getGate: Promise<void> | null = null;
 
-  async read({ valueKey, watermarkKey }: RedisReadRequest): Promise<RedisCachePayload | null> {
+  async read({ valueKey, watermarkKey }: RedisReadRequest): Promise<RedisReadOutcome> {
     if (watermarkKey === undefined) {
       this.getCalls += 1;
     } else {
@@ -122,32 +123,15 @@ export class FakeRedis implements DialCacheRedisClient {
     }
   }
 
-  private readPayload(valueKey: string, watermarkKey: string | null): RedisCachePayload | null {
-    const raw = this.readRaw(valueKey);
-    if (raw === null || raw.length < PAYLOAD_OFFSET || raw[0] !== FRAME_VERSION) {
-      return null;
-    }
-
-    if (watermarkKey !== null) {
-      let watermark: number | null;
-      try {
-        watermark = this.readWatermark(watermarkKey);
-      } catch {
-        return null;
-      }
-      if (watermark === null || Number(readTimestamp(raw)) <= watermark) {
-        return null;
-      }
-    }
-
-    const encoding = raw[ENCODING_OFFSET];
-    if (encoding === 0) {
-      return raw.subarray(PAYLOAD_OFFSET).toString("utf8");
-    }
-    if (encoding === 1) {
-      return Buffer.from(raw.subarray(PAYLOAD_OFFSET));
-    }
-    throw new DialCacheRedisPayloadEncodingError("Invalid DialCache Redis payload encoding");
+  // Delegates to the shared decoders so classification can never drift from the
+  // bundled adapters. The frame is copied first so the decoders' zero-copy
+  // payload views never alias this fake's persistent store.
+  private readPayload(valueKey: string, watermarkKey: string | null): RedisReadOutcome {
+    const stored = this.readRaw(valueKey);
+    const frame = stored === null ? null : Buffer.from(stored);
+    return watermarkKey === null
+      ? decodeRedisFrame(frame)
+      : decodeTrackedRedisFrame(frame, this.readRaw(watermarkKey));
   }
 
   private storeFrame(key: string, ttlMs: number, payload: RedisCachePayload): void {

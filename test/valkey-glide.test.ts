@@ -147,11 +147,14 @@ describe("Valkey GLIDE adapter", () => {
     );
     const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
 
-    await expect(adapter.read({ valueKey: "plain:value" })).resolves.toBe("plain");
+    await expect(adapter.read({ valueKey: "plain:value" })).resolves.toEqual({ status: "hit", payload: "plain" });
     await expect(
       adapter.read({ valueKey: "tracked:{id}:value", watermarkKey: "tracked:{id}:watermark" }),
-    ).resolves.toEqual(Buffer.from([0, 0xff]));
-    await expect(adapter.read({ valueKey: "missing:value" })).resolves.toBeNull();
+    ).resolves.toEqual({ status: "hit", payload: Buffer.from([0, 0xff]) });
+    await expect(adapter.read({ valueKey: "missing:value" })).resolves.toEqual({
+      status: "miss",
+      reason: "not_found",
+    });
 
     expect(client.get).toHaveBeenNthCalledWith(
       1,
@@ -190,7 +193,7 @@ describe("Valkey GLIDE adapter", () => {
         valueKey: "cluster:{id}:value",
         watermarkKey: "cluster:{id}:watermark",
       }),
-    ).resolves.toBe("tracked-cluster");
+    ).resolves.toEqual({ status: "hit", payload: "tracked-cluster" });
 
     expect(client.customCommand).toHaveBeenCalledWith(
       ["MGET", "cluster:{id}:value", "cluster:{id}:watermark"],
@@ -427,7 +430,7 @@ describe("Valkey GLIDE adapter", () => {
     expect(scriptInstances.every((script) => script.release.mock.calls.length === 0)).toBe(true);
 
     resolveRead?.(redisFrame("done"));
-    await expect(read).resolves.toBe("done");
+    await expect(read).resolves.toEqual({ status: "hit", payload: "done" });
     adapter.dispose();
     expect(scriptInstances.every((script) => script.release.mock.calls.length === 1)).toBe(true);
   });

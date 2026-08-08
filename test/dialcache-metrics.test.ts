@@ -113,7 +113,7 @@ describe("DialCache observability metrics", () => {
     };
 
     isolatedMetrics.request(labels);
-    isolatedMetrics.miss(labels);
+    isolatedMetrics.miss({ ...labels, reason: "not_found" });
     isolatedMetrics.disabled({ ...labels, reason: "ramped_down" });
     isolatedMetrics.error({ ...labels, error: "cache_read", inFallback: false });
     isolatedMetrics.invalidation({
@@ -232,7 +232,9 @@ describe("DialCache observability metrics", () => {
     expect(first).toEqual({ userId: "123", calls: 1 });
     expect(second).toEqual({ userId: "123", calls: 1 });
     expect(events(metrics, "request", { useCase: "CustomMetricsAdapter", layer: CacheLayer.LOCAL })).toHaveLength(2);
-    expect(events(metrics, "miss", { useCase: "CustomMetricsAdapter", layer: CacheLayer.LOCAL })).toHaveLength(1);
+    expect(
+      events(metrics, "miss", { useCase: "CustomMetricsAdapter", layer: CacheLayer.LOCAL, reason: "not_found" }),
+    ).toHaveLength(1);
     expect(events(metrics, "fallback", { useCase: "CustomMetricsAdapter", layer: CacheLayer.LOCAL })).toHaveLength(1);
     expect(events(metrics, "get", { useCase: "CustomMetricsAdapter", layer: CacheLayer.LOCAL })).toHaveLength(2);
   });
@@ -257,7 +259,9 @@ describe("DialCache observability metrics", () => {
     expect(values[2]).toBe(values[0]);
     expect(calls).toBe(1);
     expect(events(metrics, "request", { useCase: "RequestLocalMetrics", layer: "request_local" })).toHaveLength(2);
-    expect(events(metrics, "miss", { useCase: "RequestLocalMetrics", layer: "request_local" })).toHaveLength(1);
+    expect(
+      events(metrics, "miss", { useCase: "RequestLocalMetrics", layer: "request_local", reason: "not_found" }),
+    ).toHaveLength(1);
     expect(events(metrics, "get", { useCase: "RequestLocalMetrics", layer: "request_local" })).toHaveLength(2);
     expect(events(metrics, "fallback", { useCase: "RequestLocalMetrics", layer: "request_local" })).toHaveLength(1);
     expect(events(metrics, "coalesced", { useCase: "RequestLocalMetrics", scope: "request_local" })).toHaveLength(1);
@@ -589,6 +593,7 @@ describe("DialCache observability metrics", () => {
       events(metrics, "miss", {
         useCase: "SerializationLoadClassification",
         layer: CacheLayer.REMOTE,
+        reason: "deserialization_failed",
       }),
     ).toHaveLength(1);
     expect(JSON.stringify(events(metrics, "error", {}))).not.toMatch(

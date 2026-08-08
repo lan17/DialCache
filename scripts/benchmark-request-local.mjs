@@ -248,7 +248,7 @@ async function benchmarkRedisReadDeadlineCoalescing(fanout) {
       redisReadCalls += 1;
       started.resolve();
       await gate.promise;
-      return JSON.stringify("shared");
+      return { status: "hit", payload: JSON.stringify("shared") };
     },
     async write() {
       return true;
@@ -322,7 +322,7 @@ async function benchmarkSequentialTrackedRedisHits(iterations, { scenario, useCa
     async read({ watermarkKey }) {
       assert.equal(typeof watermarkKey, "string", "the benchmark must exercise tracked Redis reads");
       redisReadCalls += 1;
-      return JSON.stringify("shared");
+      return { status: "hit", payload: JSON.stringify("shared") };
     },
     async write() {
       redisWriteCalls += 1;
@@ -451,7 +451,7 @@ async function benchmarkDarkShadowDetachment() {
   assert.equal(redisReadCalls, 1, "the detached C0 read should have started");
   assert.equal(fallbackCalls, 1, "the caller and shadow validation must share one SoT invocation");
 
-  readGate.resolve(JSON.stringify(cachedValue));
+  readGate.resolve({ status: "hit", payload: JSON.stringify(cachedValue) });
   await nextTurn();
   assert.equal(await outcomeGate.promise, "mismatch");
   assert.equal(redisReadCalls, 2, "only a mismatch candidate should add confirmation C1");
@@ -479,7 +479,7 @@ async function benchmarkDarkShadowFillDetachment() {
     async read({ watermarkKey }) {
       assert.equal(typeof watermarkKey, "string", "dark shadow reads must remain tracked");
       redisReadCalls += 1;
-      return null;
+      return { status: "miss", reason: "not_found" };
     },
     async write({ watermarkKey }) {
       assert.equal(typeof watermarkKey, "string", "dark shadow fills must remain tracked");

@@ -35,10 +35,14 @@ const rootConsumer = `import {
   type InvalidationMetricLabels,
   type MetricErrorKind,
   type MetricLayer,
+  type MissMetricLabels,
+  type MissReason,
   type ProcessCoalescingState,
   type RedisConfig,
   type RedisInvalidationRequest,
   type RedisReadContext,
+  type RedisReadMissReason,
+  type RedisReadOutcome,
   type RedisWriteRequest,
   type Serializer,
   type ShadowComparator,
@@ -144,8 +148,8 @@ const redisProtocolError = new DialCacheRedisProtocolError("Invalid DialCache Re
 const emptyRedisFrame = Buffer.alloc(10);
 emptyRedisFrame[0] = 1;
 emptyRedisFrame.writeBigUInt64BE(1n, 1);
-const decodedEmptyRedisPayload: string | Buffer | null = decodeRedisFrame(emptyRedisFrame);
-const decodedStaleRedisPayload: string | Buffer | null = decodeTrackedRedisFrame(
+const decodedEmptyRedisPayload: RedisReadOutcome = decodeRedisFrame(emptyRedisFrame);
+const decodedStaleRedisPayload: RedisReadOutcome = decodeTrackedRedisFrame(
   emptyRedisFrame,
   Buffer.from("1"),
 );
@@ -317,6 +321,26 @@ const disabledReasons: Readonly<Record<DisabledReason, true>> = {
 };
 // @ts-expect-error Missing configuration now means the documented disabled policy, not a separate reason.
 const legacyMissingConfigReason: DisabledReason = "missing_config";
+const missReasons: Readonly<Record<MissReason, true>> = {
+  not_found: true,
+  frame_unsupported: true,
+  watermark_unreadable: true,
+  watermark_invalidated: true,
+  deserialization_failed: true,
+};
+// @ts-expect-error Miss reasons are a bounded metric vocabulary, not free-form diagnostics.
+const unboundedMissReason: MissReason = "Tenant123Miss";
+// Redis clients can only produce the decoder subset; deserialization_failed is metrics-level.
+const decoderMissReason: RedisReadMissReason = "watermark_invalidated";
+// @ts-expect-error deserialization_failed is core-owned; clients cannot supply it.
+const forgedDecoderMissReason: RedisReadMissReason = "deserialization_failed";
+const missMetricLabels: MissMetricLabels = {
+  cacheNamespace: "consumer-cache",
+  useCase: "Load",
+  keyType: "id",
+  layer: CacheLayer.REMOTE,
+  reason: decoderMissReason,
+};
 const metricErrorKinds: Readonly<Record<MetricErrorKind, true>> = {
   key_construction: true,
   config_resolution: true,
@@ -334,7 +358,7 @@ const unboundedErrorKind: MetricErrorKind = "Tenant123Error";
 
 const customRedisClient: DialCacheRedisClient = {
   // The optional second read argument preserves one-argument custom clients.
-  read: async () => Buffer.from([0, 255]),
+  read: async () => ({ status: "hit", payload: Buffer.from([0, 255]) }),
   write: async ({ value }) => typeof value === "string" || Buffer.isBuffer(value),
   invalidate: async () => undefined,
 };
@@ -445,6 +469,10 @@ void requestLocalCoalescingScope;
 void boundedErrorKind;
 void disabledReasons;
 void legacyMissingConfigReason;
+void missReasons;
+void unboundedMissReason;
+void forgedDecoderMissReason;
+void missMetricLabels;
 void MissingKeyConfigError;
 void disabledOverlay;
 void metricErrorKinds;
@@ -684,11 +712,13 @@ if (
 const esmEmptyFrame = Buffer.alloc(10);
 esmEmptyFrame[0] = 1;
 esmEmptyFrame.writeBigUInt64BE(1n, 1);
-if (redisProtocol.decodeRedisFrame(esmEmptyFrame) !== "") {
+const esmEmptyOutcome = redisProtocol.decodeRedisFrame(esmEmptyFrame);
+if (esmEmptyOutcome.status !== "hit" || esmEmptyOutcome.payload !== "") {
   throw new Error("The packed ESM Redis protocol decoder did not preserve an empty UTF-8 payload");
 }
-if (redisProtocol.decodeTrackedRedisFrame(esmEmptyFrame, Buffer.from("1")) !== null) {
-  throw new Error("The packed ESM Redis protocol decoder did not reject a stale tracked frame");
+const esmStaleOutcome = redisProtocol.decodeTrackedRedisFrame(esmEmptyFrame, Buffer.from("1"));
+if (esmStaleOutcome.status !== "miss" || esmStaleOutcome.reason !== "watermark_invalidated") {
+  throw new Error("The packed ESM Redis protocol decoder did not fence a stale tracked frame");
 }
 try {
   redisProtocol.decodeRedisFrame("not binary");
@@ -819,7 +849,7 @@ console.log("${observerIsolationMarker}");`,
 let payload = Buffer.alloc(4 * 1024 * 1024, 1);
 const payloadReference = new WeakRef(payload);
 const redis = {
-  read: async () => payload,
+  read: async () => ({ status: "hit", payload }),
   write: async () => true,
   invalidate: async () => undefined,
 };
@@ -962,11 +992,13 @@ if (
 const cjsEmptyFrame = Buffer.alloc(10);
 cjsEmptyFrame[0] = 1;
 cjsEmptyFrame.writeBigUInt64BE(1n, 1);
-if (redisProtocol.decodeRedisFrame(cjsEmptyFrame) !== "") {
+const cjsEmptyOutcome = redisProtocol.decodeRedisFrame(cjsEmptyFrame);
+if (cjsEmptyOutcome.status !== "hit" || cjsEmptyOutcome.payload !== "") {
   throw new Error("The packed CommonJS Redis protocol decoder did not preserve an empty UTF-8 payload");
 }
-if (redisProtocol.decodeTrackedRedisFrame(cjsEmptyFrame, Buffer.from("1")) !== null) {
-  throw new Error("The packed CommonJS Redis protocol decoder did not reject a stale tracked frame");
+const cjsStaleOutcome = redisProtocol.decodeTrackedRedisFrame(cjsEmptyFrame, Buffer.from("1"));
+if (cjsStaleOutcome.status !== "miss" || cjsStaleOutcome.reason !== "watermark_invalidated") {
+  throw new Error("The packed CommonJS Redis protocol decoder did not fence a stale tracked frame");
 }
 try {
   redisProtocol.decodeRedisFrame("not binary");

@@ -12,6 +12,8 @@ export type {
   InvalidationMetricLabels,
   MetricErrorKind,
   MetricLayer,
+  MissMetricLabels,
+  MissReason,
   SerializationMetricLabels,
   ShadowValidationMetricLabels,
   ShadowValidationOutcome,
@@ -47,6 +49,8 @@ export type {
   RedisCachePayload,
   RedisInvalidationRequest,
   RedisReadContext,
+  RedisReadMissReason,
+  RedisReadOutcome,
   RedisReadRequest,
   RedisWriteRequest,
 } from "./redis-client.js";
