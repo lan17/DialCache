@@ -702,6 +702,36 @@ describe("Valkey GLIDE adapter", () => {
     expect(second.cause).toBe("socket closed");
   });
 
+  it("passes a non-Error invalidation retry rejection through without decoration", async () => {
+    // The cause attachment must guard on instanceof Error: assigning to a
+    // primitive rejection would throw a TypeError and mask the failure.
+    const client = fakeClient();
+    client.customCommand
+      .mockRejectedValueOnce(new Error("read ECONNRESET"))
+      .mockRejectedValueOnce("socket closed");
+    const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
+
+    await expect(
+      adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 }),
+    ).rejects.toBe("socket closed");
+  });
+
+  it("validates the invalidation retry reply through the shared validator", async () => {
+    // The retry reply has no other guard; a non-1 integer must still fail.
+    const client = fakeClient(0);
+    client.customCommand.mockRejectedValueOnce(new Error("NOPERM evalsha denied"));
+    const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
+
+    await expectProtocolError(
+      Promise.resolve(adapter.invalidate({
+        watermarkKey: "tracked:{id}:watermark",
+        futureBufferMs: 50,
+      })),
+      "Invalid DialCache Redis invalidate reply; expected integer 1",
+    );
+    expect(client.customCommand).toHaveBeenCalledTimes(2);
+  });
+
   it("uses Batch and Decoder from the supplied GLIDE module instance", async () => {
     class OtherBatch {
       mget(): this {

@@ -1322,7 +1322,10 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       version = 2;
       const cached = await dialcache.enable(async () => await getUser("123"));
       await dialcache.invalidateRemote("user_id", "123");
-      await new Promise((resolve) => setTimeout(resolve, 2));
+      // The refill's stamp is fenced unless server time passes the
+      // zero-buffer watermark; the afterScriptFlush read needs that write to
+      // have been published (calls must stay 2).
+      await new Promise((resolve) => setTimeout(resolve, 25));
       const refreshed = await dialcache.enable(async () => await getUser("123"));
       await admin.scriptFlush();
       const afterScriptFlush = await dialcache.enable(async () => await getUser("123"));

@@ -118,8 +118,13 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
         advancedConfiguration: { connectionTimeout: 2_000 },
       });
     } catch (error) {
-      if (process.env.CI !== undefined) {
-        throw error;
+      const ci = process.env.CI;
+      if (ci !== undefined && ci !== "" && ci !== "0" && ci !== "false") {
+        throw new Error(
+          "GLIDE cluster client unavailable on CI, so the only GLIDE cluster coverage would "
+          + "silently skip; commonly the cluster's announced container IPs are not host-routable",
+          { cause: error },
+        );
       }
       console.warn("GLIDE cluster client unavailable; skipping GLIDE cluster assertions", error);
     }
@@ -221,6 +226,8 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
     const before = await dialcache.enable(async () => await getUser("123"));
     version = 2;
     await dialcache.invalidateRemote("user_id", "123");
+    // Small margin is fine here: the assertion is served by the source
+    // fallback whether or not the refill write beats the fence.
     await new Promise((resolve) => setTimeout(resolve, 2));
     const after = await dialcache.enable(async () => await getUser("123"));
 
@@ -286,7 +293,9 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
     expect(await adapter.read({ valueKey, watermarkKey })).toBe("glide");
 
     await adapter.invalidate({ watermarkKey, futureBufferMs: 0 });
-    await new Promise((resolve) => setTimeout(resolve, 2));
+    // The follow-up write's stamp is fenced unless server time passes the
+    // zero-buffer watermark; the read-null below holds at any margin.
+    await new Promise((resolve) => setTimeout(resolve, 25));
     expect(await adapter.read({ valueKey, watermarkKey })).toBeNull();
     expect(
       await adapter.write({ valueKey, watermarkKey, cacheTtlMs: 60_000, value: "glide-2" }),
@@ -330,7 +339,6 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
 
     await flushAllMasters();
     await expect(adapter.invalidate({ watermarkKey, futureBufferMs: 0 })).resolves.toBeUndefined();
-    await new Promise((resolve) => setTimeout(resolve, 2));
     expect(await adapter.read({ valueKey, watermarkKey })).toBeNull();
   });
 });

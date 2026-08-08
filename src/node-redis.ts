@@ -194,11 +194,15 @@ function sendFrameSet(
  * server stopped executing it. Tracked writes enqueue their placeholder SET
  * and stamp script in one synchronous tick, so node-redis pipelines them in
  * order on one connection (per slot node in cluster mode). Invalidation
- * retries any rejected dispatch once by re-sending the script source as
- * EVAL — the script is idempotent, so a duplicate run is harmless — with the
- * original rejection preserved on the surfaced error's `cause`. The caller
- * remains responsible for finite native command budgets, draining work, and
- * closing the client.
+ * retries any dispatch rejection other than a reply-domain violation once by
+ * re-sending the script source as EVAL — the script is idempotent, so a
+ * duplicate run is harmless — and a failed retry surfaces unmodified, with
+ * the original rejection discarded. node-redis has no per-command deadline:
+ * `disableOfflineQueue`, `commandsQueueMaxLength`, and `reconnectStrategy`
+ * bound queueing and dispatch, not the reply wait, so with the offline queue
+ * enabled a retry issued during a disconnect can wait until reconnect. The
+ * caller remains responsible for finite native command budgets, draining
+ * work, and closing the client.
  */
 export function createNodeRedisDialCacheClient(client: NodeRedisClient): DialCacheRedisClient {
   if (
@@ -269,19 +273,17 @@ export function createNodeRedisDialCacheClient(client: NodeRedisClient): DialCac
         if (error instanceof DialCacheRedisProtocolError) {
           throw error;
         }
-        try {
-          raw = await sendKeyedCommand(
-            client,
-            watermarkKey,
-            ["EVAL", INVALIDATE_CACHE_SCRIPT, "1", watermarkKey, String(futureBufferMs)],
-            bufferReplyOptions,
-          );
-        } catch (retryError) {
-          if (retryError instanceof Error && retryError.cause === undefined) {
-            retryError.cause = error;
-          }
-          throw retryError;
-        }
+        // A failed retry surfaces unmodified, discarding this original
+        // rejection: node-redis rejects every command flushed by a single
+        // disconnect with one shared error instance — the same object its
+        // "error" listeners and every other in-flight caller receive — so
+        // the adapter never mutates a rejection it did not construct.
+        raw = await sendKeyedCommand(
+          client,
+          watermarkKey,
+          ["EVAL", INVALIDATE_CACHE_SCRIPT, "1", watermarkKey, String(futureBufferMs)],
+          bufferReplyOptions,
+        );
       }
       validateRedisScriptInvalidationReply(raw);
     },

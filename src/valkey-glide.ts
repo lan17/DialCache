@@ -137,6 +137,11 @@ function classifyValkeyGlideClient<TDecoder>(
  * cluster write batches route to the slot primary. Batches are deliberately
  * non-atomic: MGET and SET are atomic themselves, an interleaved stamp is
  * safe by design, and MULTI/EXEC would consume caller-owned WATCH state.
+ * Recovery differs by script: the stamp is retried only on NOSCRIPT, while
+ * invalidation retries any rejection once with EVAL by source. When that
+ * retry also fails, the original rejection is attached as the retry error's
+ * `cause` unless it already carries one — safe here because GLIDE constructs
+ * a fresh error object per rejection.
  */
 export function createValkeyGlideDialCacheClient<TDecoder>(
   client: ValkeyGlideScriptingClient<TDecoder>,
@@ -257,6 +262,9 @@ export function createValkeyGlideDialCacheClient<TDecoder>(
             options,
           );
         } catch (retryError) {
+          // Mutating the rejection is safe on GLIDE only: it constructs a
+          // fresh error per rejection, so no other caller holds this object
+          // (node-redis shares flush errors and its adapter never mutates).
           if (retryError instanceof Error && retryError.cause === undefined) {
             retryError.cause = error;
           }

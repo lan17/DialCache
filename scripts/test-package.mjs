@@ -726,6 +726,14 @@ const nodeRedis = await import("dialcache/node-redis");
 await import("dialcache/valkey-glide");
 await import("dialcache/datadog");
 const redisProtocol = await import("dialcache/redis-protocol");
+// Each bundle embeds its own copy of the Lua sources; a divergence forks the
+// protocol (different SHA1s) without failing any behavioral test.
+if (
+  nodeRedis.dialcacheRedisScripts.dialcacheWriteTrackedStamp.SCRIPT !== redisProtocol.WRITE_TRACKED_STAMP_SCRIPT
+  || nodeRedis.dialcacheRedisScripts.dialcacheInvalidate.SCRIPT !== redisProtocol.INVALIDATE_CACHE_SCRIPT
+) {
+  throw new Error("The packed ESM node-redis Lua sources diverged from the redis-protocol entry");
+}
 const fallbackTimeoutError = new root.FallbackTimeoutError("PackageRuntime", 1000);
 if (!(fallbackTimeoutError instanceof root.DialCacheError) || fallbackTimeoutError.timeoutMs !== 1000) {
   throw new Error("The root ESM fallback-timeout error export is invalid");
@@ -1090,6 +1098,14 @@ const nodeRedis = require("dialcache/node-redis");
 require("dialcache/valkey-glide");
 require("dialcache/datadog");
 const redisProtocol = require("dialcache/redis-protocol");
+// CommonJS bundles duplicate the Lua sources per entry point; a divergence
+// forks the protocol (different SHA1s) without failing any behavioral test.
+if (
+  nodeRedis.dialcacheRedisScripts.dialcacheWriteTrackedStamp.SCRIPT !== redisProtocol.WRITE_TRACKED_STAMP_SCRIPT
+  || nodeRedis.dialcacheRedisScripts.dialcacheInvalidate.SCRIPT !== redisProtocol.INVALIDATE_CACHE_SCRIPT
+) {
+  throw new Error("The packed CommonJS node-redis Lua sources diverged from the redis-protocol entry");
+}
 const fallbackTimeoutError = new root.FallbackTimeoutError("PackageRuntime", 1000);
 if (!(fallbackTimeoutError instanceof root.DialCacheError) || fallbackTimeoutError.timeoutMs !== 1000) {
   throw new Error("The root CommonJS fallback-timeout error export is invalid");
@@ -1358,7 +1374,7 @@ const appGlide = await import("@valkey/valkey-glide");
 const otherGlide = await import("dialcache-test-glide");
 await import("dialcache/datadog");
 await import("dialcache/prometheus");
-await import("dialcache/redis-protocol");
+const redisProtocol = await import("dialcache/redis-protocol");
 await import("dialcache/node-redis");
 if (appGlide.Script === otherGlide.Script) {
   throw new Error("The package test requires two distinct GLIDE module instances");
@@ -1376,6 +1392,9 @@ const esmFakeGlideClient = {
   customCommand: async (args, options) => {
     if (args[0] !== "EVAL") {
       throw new Error("The ESM adapter's NOSCRIPT recovery must resend the stamp source via EVAL");
+    }
+    if (args[1] !== redisProtocol.WRITE_TRACKED_STAMP_SCRIPT) {
+      throw new Error("The ESM GLIDE bundle's embedded stamp source diverged from the redis-protocol entry");
     }
     if (options.decoder !== appGlide.Decoder.Bytes) {
       throw new Error("The ESM adapter did not use the caller-supplied GLIDE byte decoder");
@@ -1415,7 +1434,7 @@ const appGlide = require("@valkey/valkey-glide");
 const otherGlide = require("dialcache-test-glide");
 require("dialcache/datadog");
 require("dialcache/prometheus");
-require("dialcache/redis-protocol");
+const redisProtocol = require("dialcache/redis-protocol");
 require("dialcache/node-redis");
 void (async () => {
   if (appGlide.Script === otherGlide.Script) {
@@ -1434,6 +1453,9 @@ void (async () => {
     customCommand: async (args, options) => {
       if (args[0] !== "EVAL") {
         throw new Error("The CommonJS adapter's NOSCRIPT recovery must resend the stamp source via EVAL");
+      }
+      if (args[1] !== redisProtocol.WRITE_TRACKED_STAMP_SCRIPT) {
+        throw new Error("The CommonJS GLIDE bundle's embedded stamp source diverged from the redis-protocol entry");
       }
       if (options.decoder !== appGlide.Decoder.Bytes) {
         throw new Error("The CommonJS adapter did not use the caller-supplied GLIDE byte decoder");

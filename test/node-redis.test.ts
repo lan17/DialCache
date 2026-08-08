@@ -529,7 +529,7 @@ describe("node-redis adapter", () => {
 
     expect(client.dialcacheInvalidate).toHaveBeenCalledTimes(1);
     expect(client.sendCommand).toHaveBeenCalledTimes(1);
-    const [args] = client.sendCommand.mock.calls[0] as [Array<unknown>];
+    const [args, options] = client.sendCommand.mock.calls[0] as [Array<unknown>, object];
     expect(args).toEqual([
       "EVAL",
       INVALIDATE_CACHE_SCRIPT,
@@ -537,6 +537,8 @@ describe("node-redis adapter", () => {
       "tracked:{id}:watermark",
       "50",
     ]);
+    expect(options).toMatchObject({ returnBuffers: true });
+    expect(Object.keys(options)).toEqual(["returnBuffers"]);
   });
 
   it("routes the invalidation EVAL retry through the cluster keyed overload", async () => {
@@ -549,17 +551,19 @@ describe("node-redis adapter", () => {
     ).resolves.toBeUndefined();
 
     expect(client.sendCommand).toHaveBeenCalledTimes(1);
-    const [firstKey, isReadonly, args] = client.sendCommand.mock.calls[0] as [
+    const [firstKey, isReadonly, args, options] = client.sendCommand.mock.calls[0] as [
       string,
       boolean,
       Array<unknown>,
+      object,
     ];
     expect(firstKey).toBe("tracked:{id}:watermark");
     expect(isReadonly).toBe(false);
     expect(args[0]).toBe("EVAL");
+    expect(options).toMatchObject({ returnBuffers: true });
   });
 
-  it("surfaces the invalidation retry rejection with the original attached as cause", async () => {
+  it("surfaces the invalidation retry rejection unmodified", async () => {
     const client = fakeClient();
     const original = new Error("NOPERM evalsha denied");
     const retryFailure = new Error("NOPERM eval denied");
@@ -571,22 +575,52 @@ describe("node-redis adapter", () => {
       adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 }),
     ).rejects.toBe(retryFailure);
 
-    expect(retryFailure.cause).toBe(original);
+    expect(retryFailure.cause).toBeUndefined();
     expect(client.sendCommand).toHaveBeenCalledTimes(1);
   });
 
-  it("preserves a pre-existing cause on the invalidation retry rejection", async () => {
+  it("never mutates a flush-shared error instance rejecting both dispatches", async () => {
+    // node-redis rejects every command flushed by one disconnect with a
+    // single shared error object; the adapter must not write to it.
     const client = fakeClient();
-    const retryFailure = new Error("wrapped transport failure", { cause: "socket closed" });
-    client.dialcacheInvalidate.mockRejectedValueOnce(new Error("NOPERM evalsha denied"));
-    client.sendCommand.mockRejectedValueOnce(retryFailure);
+    const shared = new Error("socket torn down");
+    client.dialcacheInvalidate.mockRejectedValueOnce(shared);
+    client.sendCommand.mockRejectedValueOnce(shared);
     const adapter = createNodeRedisDialCacheClient(client as never);
 
     await expect(
       adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 }),
-    ).rejects.toBe(retryFailure);
+    ).rejects.toBe(shared);
 
-    expect(retryFailure.cause).toBe("socket closed");
+    expect(shared.cause).toBeUndefined();
+  });
+
+  it("passes a non-Error invalidation retry rejection through as-is", async () => {
+    const client = fakeClient();
+    client.dialcacheInvalidate.mockRejectedValueOnce(new Error("NOPERM evalsha denied"));
+    client.sendCommand.mockRejectedValueOnce("socket closed");
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await expect(
+      adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 }),
+    ).rejects.toBe("socket closed");
+  });
+
+  it("validates the invalidation retry reply through the shared validator", async () => {
+    // The retry bypasses the registered transformReply, so the trailing
+    // validator is the only guard on this path.
+    const client = fakeClient({ eval: 0 });
+    client.dialcacheInvalidate.mockRejectedValueOnce(new Error("NOPERM evalsha denied"));
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await expectProtocolError(
+      Promise.resolve(adapter.invalidate({
+        watermarkKey: "tracked:{id}:watermark",
+        futureBufferMs: 50,
+      })),
+      "Invalid DialCache Redis invalidate reply; expected integer 1",
+    );
+    expect(client.sendCommand).toHaveBeenCalledTimes(1);
   });
 
   it("does not retry an invalidation reply-domain violation", async () => {
