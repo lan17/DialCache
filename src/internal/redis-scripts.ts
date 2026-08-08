@@ -1,13 +1,12 @@
 import { MAX_SUPPORTED_DURATION_MS } from "./duration.js";
 import {
+  REDIS_FRAME_HEADER_BYTES,
   REDIS_FRAME_PLACEHOLDER_VERSION,
   REDIS_FRAME_TIMESTAMP_BYTES,
-  REDIS_FRAME_TIMESTAMP_OFFSET,
   REDIS_FRAME_VERSION,
 } from "./redis-payload.js";
 
 const WATERMARK_TTL_MARGIN_MS = 60_000;
-const PLACEHOLDER_HEADER_END = REDIS_FRAME_TIMESTAMP_OFFSET + REDIS_FRAME_TIMESTAMP_BYTES - 1;
 
 const PARSE_WATERMARK_LUA = String.raw`local function parse_watermark(raw)
   if not string.match(raw, "^%d+$") and not string.match(raw, "^%d+%.%d+$") then
@@ -63,7 +62,7 @@ if watermark >= now_ms then
   return 0
 end`,
   String.raw`local stamped = 1
-if redis.call("GETRANGE", KEYS[1], 0, ${PLACEHOLDER_HEADER_END}) == string.char(${REDIS_FRAME_PLACEHOLDER_VERSION}) .. ARGV[2] then
+if redis.call("GETRANGE", KEYS[1], 0, ${REDIS_FRAME_HEADER_BYTES - 1}) == string.char(${REDIS_FRAME_PLACEHOLDER_VERSION}) .. ARGV[2] then
   redis.call("SETRANGE", KEYS[1], 0, string.char(${REDIS_FRAME_VERSION}) .. struct.pack(">I8", now_ms))
 else
   -- The placeholder this stamp paired with is gone: its SET was rejected,

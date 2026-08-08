@@ -535,6 +535,35 @@ describe("node-redis adapter", () => {
     expect(falselyBranded).not.toBeInstanceOf(DialCacheRedisProtocolError);
   });
 
+  it("keeps placeholder-lost errors branded and disjoint from protocol errors", () => {
+    class SpecializedPlaceholderLostError extends DialCacheRedisPlaceholderLostError {}
+
+    const baseError = new DialCacheRedisPlaceholderLostError("base");
+    const specializedError = new SpecializedPlaceholderLostError("specialized");
+    const crossBundleError = Object.defineProperty(
+      new Error("lost"),
+      Symbol.for("dialcache.DialCacheRedisPlaceholderLostError"),
+      { value: true },
+    );
+    const falselyBranded = Object.defineProperty(
+      {},
+      Symbol.for("dialcache.DialCacheRedisPlaceholderLostError"),
+      { value: false },
+    );
+
+    expect(baseError).toBeInstanceOf(DialCacheRedisPlaceholderLostError);
+    expect(baseError).not.toBeInstanceOf(SpecializedPlaceholderLostError);
+    expect(specializedError).toBeInstanceOf(SpecializedPlaceholderLostError);
+    expect(specializedError).toBeInstanceOf(DialCacheRedisPlaceholderLostError);
+    expect(crossBundleError).toBeInstanceOf(DialCacheRedisPlaceholderLostError);
+    expect(falselyBranded).not.toBeInstanceOf(DialCacheRedisPlaceholderLostError);
+    // The benign race-loser class must stay disjoint from operational
+    // protocol failures, or filtering one silently swallows the other.
+    expect(baseError).not.toBeInstanceOf(DialCacheRedisProtocolError);
+    expect(new DialCacheRedisProtocolError("operational"))
+      .not.toBeInstanceOf(DialCacheRedisPlaceholderLostError);
+  });
+
   it("surfaces protocol failures through the normal DialCache observability path", async () => {
     const redisClient = createNodeRedisDialCacheClient(fakeClient({ set: 2, invalidate: 0 }) as never);
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };

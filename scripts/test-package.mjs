@@ -781,6 +781,17 @@ try {
     throw new Error("The lost-placeholder error does not match the root ESM export");
   }
 }
+// ESM chunk splitting shares one class instance across entries, so also
+// prove the brand itself: a hand-branded foreign Error must satisfy the
+// root export's Symbol.hasInstance.
+const esmBrandedLost = Object.defineProperty(
+  new Error("lost"),
+  Symbol.for("dialcache.DialCacheRedisPlaceholderLostError"),
+  { value: true },
+);
+if (!(esmBrandedLost instanceof root.DialCacheRedisPlaceholderLostError)) {
+  throw new Error("The ESM lost-placeholder brand did not satisfy instanceof");
+}
 const esmEmptyFrame = Buffer.alloc(10);
 esmEmptyFrame[0] = 1;
 esmEmptyFrame.writeBigUInt64BE(1n, 1);
