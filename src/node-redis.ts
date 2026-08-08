@@ -2,17 +2,18 @@ import { commandOptions, defineScript } from "redis";
 
 import {
   INVALIDATE_CACHE_SCRIPT,
-  WRITE_CACHE_SCRIPT,
-  WRITE_TRACKED_CACHE_SCRIPT,
+  WRITE_TRACKED_STAMP_SCRIPT,
 } from "./internal/redis-scripts.js";
 import {
   decodeRedisFrame,
   decodeTrackedRedisFrame,
-  redisPayloadEncoding,
+  encodeRedisFrame,
 } from "./internal/redis-payload.js";
+import { ceilSupportedCacheTtlMs } from "./internal/duration.js";
 import {
   validateRedisScriptInvalidationReply,
   validateRedisScriptWriteReply,
+  validateRedisSetReply,
 } from "./internal/redis-script-reply.js";
 import {
   DialCacheRedisPayloadError,
@@ -50,18 +51,8 @@ function defineDialCacheScript<Args extends Array<unknown>, Reply>(
 }
 
 export type DialCacheNodeRedisScripts = {
-  readonly dialcacheWrite: NodeRedisScript<
-    [valueKey: string, cacheTtlMs: number, encoding: number, payload: string | Buffer],
-    number
-  >;
-  readonly dialcacheWriteTracked: NodeRedisScript<
-    [
-      valueKey: string,
-      watermarkKey: string,
-      cacheTtlMs: number,
-      encoding: number,
-      payload: string | Buffer,
-    ],
+  readonly dialcacheWriteTrackedStamp: NodeRedisScript<
+    [valueKey: string, watermarkKey: string, cacheTtlMs: number],
     number
   >;
   readonly dialcacheInvalidate: NodeRedisScript<
@@ -71,23 +62,8 @@ export type DialCacheNodeRedisScripts = {
 };
 
 export const dialcacheRedisScripts: DialCacheNodeRedisScripts = {
-  dialcacheWrite: defineDialCacheScript({
-    SCRIPT: WRITE_CACHE_SCRIPT,
-    NUMBER_OF_KEYS: 1,
-    FIRST_KEY_INDEX: 0,
-    IS_READ_ONLY: false,
-    transformArguments(
-      valueKey: string,
-      cacheTtlMs: number,
-      encoding: number,
-      payload: string | Buffer,
-    ): Array<NodeRedisArgument> {
-      return [valueKey, String(cacheTtlMs), String(encoding), payload];
-    },
-    transformReply: writeReply,
-  }),
-  dialcacheWriteTracked: defineDialCacheScript({
-    SCRIPT: WRITE_TRACKED_CACHE_SCRIPT,
+  dialcacheWriteTrackedStamp: defineDialCacheScript({
+    SCRIPT: WRITE_TRACKED_STAMP_SCRIPT,
     NUMBER_OF_KEYS: 2,
     FIRST_KEY_INDEX: 0,
     IS_READ_ONLY: false,
@@ -95,10 +71,8 @@ export const dialcacheRedisScripts: DialCacheNodeRedisScripts = {
       valueKey: string,
       watermarkKey: string,
       cacheTtlMs: number,
-      encoding: number,
-      payload: string | Buffer,
-    ): Array<NodeRedisArgument> {
-      return [valueKey, watermarkKey, String(cacheTtlMs), String(encoding), payload];
+    ): Array<string> {
+      return [valueKey, watermarkKey, String(cacheTtlMs)];
     },
     transformReply: writeReply,
   }),
@@ -115,13 +89,10 @@ export const dialcacheRedisScripts: DialCacheNodeRedisScripts = {
 };
 
 interface NodeRedisWriteClient {
-  dialcacheWrite(valueKey: string, cacheTtlMs: number, encoding: number, payload: string | Buffer): Promise<number>;
-  dialcacheWriteTracked(
+  dialcacheWriteTrackedStamp(
     valueKey: string,
     watermarkKey: string,
     cacheTtlMs: number,
-    encoding: number,
-    payload: string | Buffer,
   ): Promise<number>;
   dialcacheInvalidate(watermarkKey: string, futureBufferMs: number): Promise<number>;
 }
@@ -129,7 +100,7 @@ interface NodeRedisWriteClient {
 interface NodeRedisStandaloneClient extends NodeRedisWriteClient {
   get(options: BufferReplyOptions, valueKey: string): Promise<Buffer | null>;
   sendCommand(
-    args: Array<string>,
+    args: Array<NodeRedisArgument>,
     options: BufferReplyOptions,
   ): Promise<unknown>;
 }
@@ -141,7 +112,7 @@ interface NodeRedisClusterClient extends NodeRedisWriteClient {
   sendCommand(
     firstKey: string,
     isReadonly: false,
-    args: Array<string>,
+    args: Array<NodeRedisArgument>,
     options: BufferReplyOptions,
   ): Promise<unknown>;
 }
@@ -179,12 +150,27 @@ async function readTracked(
   return validateRedisMGetReply(raw);
 }
 
+function sendFrameSet(
+  client: NodeRedisClient,
+  valueKey: string,
+  frame: Buffer,
+  cacheTtlMs: number,
+): Promise<unknown> {
+  const args: Array<NodeRedisArgument> = ["SET", valueKey, frame, "PX", String(cacheTtlMs)];
+  return isNodeRedisClusterClient(client)
+    ? client.sendCommand(valueKey, false, args, bufferReplyOptions)
+    : client.sendCommand(args, bufferReplyOptions);
+}
+
 /**
  * Create a resource-free semantic view over a caller-owned node-redis client.
  * Read signals are passed to node-redis so queued commands can be removed when
  * supported. Aborting after dispatch does not unsend a command or prove the
- * server stopped executing it. The caller remains responsible for finite
- * native command budgets, draining work, and closing the client.
+ * server stopped executing it. Tracked writes enqueue their placeholder SET
+ * and stamp script in one synchronous tick, so node-redis pipelines them in
+ * order on one connection (per slot node in cluster mode). The caller remains
+ * responsible for finite native command budgets, draining work, and closing
+ * the client.
  */
 export function createNodeRedisDialCacheClient(client: NodeRedisClient): DialCacheRedisClient {
   return {
@@ -204,18 +190,29 @@ export function createNodeRedisDialCacheClient(client: NodeRedisClient): DialCac
       return decodeTrackedRedisFrame(rawValue, rawWatermark);
     },
     async write(request) {
-      const { valueKey, watermarkKey, cacheTtlMs, value } = request;
-      const encodingByte = redisPayloadEncoding(value);
-      const result = watermarkKey === undefined
-        ? await client.dialcacheWrite(valueKey, cacheTtlMs, encodingByte, value)
-        : await client.dialcacheWriteTracked(
-            valueKey,
-            watermarkKey,
-            cacheTtlMs,
-            encodingByte,
-            value,
-          );
-      return validateRedisScriptWriteReply(result) === 1;
+      const { valueKey, watermarkKey, value } = request;
+      const cacheTtlMs = ceilSupportedCacheTtlMs(request.cacheTtlMs);
+      if (watermarkKey === undefined) {
+        validateRedisSetReply(
+          await sendFrameSet(client, valueKey, encodeRedisFrame(value, Date.now()), cacheTtlMs),
+        );
+        return true;
+      }
+      // Both commands must enqueue in this synchronous tick so they pipeline
+      // in order; an await between them would allow reordering around them.
+      const setPromise = sendFrameSet(client, valueKey, encodeRedisFrame(value, 0), cacheTtlMs);
+      const stampPromise = client.dialcacheWriteTrackedStamp(valueKey, watermarkKey, cacheTtlMs);
+      const [setResult, stampResult] = await Promise.allSettled([setPromise, stampPromise]);
+      // A failed SET is the write outcome even when the stamp settled: the
+      // stamp may have patched an unrelated frame's placeholder or no-opped.
+      if (setResult.status === "rejected") {
+        throw setResult.reason;
+      }
+      if (stampResult.status === "rejected") {
+        throw stampResult.reason;
+      }
+      validateRedisSetReply(setResult.value);
+      return validateRedisScriptWriteReply(stampResult.value) === 1;
     },
     async invalidate({ watermarkKey, futureBufferMs }) {
       const result = await client.dialcacheInvalidate(watermarkKey, futureBufferMs);

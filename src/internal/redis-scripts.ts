@@ -1,9 +1,5 @@
 import { MAX_SUPPORTED_DURATION_MS } from "./duration.js";
 
-export const REDIS_FRAME_VERSION = 1;
-export const REDIS_ENCODING_UTF8 = 0;
-export const REDIS_ENCODING_BINARY = 1;
-
 const WATERMARK_TTL_MARGIN_MS = 60_000;
 
 const PARSE_WATERMARK_LUA = String.raw`local function parse_watermark(raw)
@@ -25,36 +21,18 @@ const CEIL_FINITE_NUMBER_LUA = String.raw`local function ceil_finite_number(raw)
   return math.ceil(value)
 end`;
 
-const VALIDATE_WRITE_ARGUMENTS_LUA = String.raw`local cache_ttl_ms = ceil_finite_number(ARGV[1])
-local encoding = tonumber(ARGV[2])
+const VALIDATE_STAMP_ARGUMENTS_LUA = String.raw`local cache_ttl_ms = ceil_finite_number(ARGV[1])
 if not cache_ttl_ms or cache_ttl_ms <= 0 or cache_ttl_ms > ${MAX_SUPPORTED_DURATION_MS} then
   return redis.error_reply("ERR invalid DialCache TTL")
-end
-if not encoding or (encoding ~= ${REDIS_ENCODING_UTF8} and encoding ~= ${REDIS_ENCODING_BINARY}) then
-  return redis.error_reply("ERR invalid DialCache payload encoding")
 end`;
 
 const REDIS_TIME_LUA = String.raw`local redis_time = redis.call("TIME")
 local now_ms = tonumber(redis_time[1]) * 1000 + math.floor(tonumber(redis_time[2]) / 1000)`;
 
-const WRITE_FRAME_LUA = String.raw`local frame = string.char(${REDIS_FRAME_VERSION})
-  .. struct.pack(">I8", now_ms)
-  .. string.char(encoding)
-  .. ARGV[3]
-redis.call("SET", KEYS[1], frame, "PX", cache_ttl_ms)`;
-
-export const WRITE_CACHE_SCRIPT = [
-  CEIL_FINITE_NUMBER_LUA,
-  VALIDATE_WRITE_ARGUMENTS_LUA,
-  REDIS_TIME_LUA,
-  WRITE_FRAME_LUA,
-  "return 1",
-].join("\n\n");
-
-export const WRITE_TRACKED_CACHE_SCRIPT = [
+export const WRITE_TRACKED_STAMP_SCRIPT = [
   PARSE_WATERMARK_LUA,
   CEIL_FINITE_NUMBER_LUA,
-  VALIDATE_WRITE_ARGUMENTS_LUA,
+  VALIDATE_STAMP_ARGUMENTS_LUA,
   REDIS_TIME_LUA,
   String.raw`local raw_watermark = redis.call("GET", KEYS[2])
 local watermark = 0
@@ -66,12 +44,17 @@ if raw_watermark then
 end
 
 if watermark >= now_ms then
-  -- A fenced fallback write can remove the stale frame that led to it. Reads that
-  -- fail before reaching this script cannot benefit from this partial mitigation.
+  -- A fenced fallback write removes the placeholder it paired with, along with any
+  -- stale frame that led to it. Reads that fail before reaching this script cannot
+  -- benefit from this partial mitigation.
   redis.call("UNLINK", KEYS[1])
   return 0
 end`,
-  WRITE_FRAME_LUA,
+  String.raw`if redis.call("GETRANGE", KEYS[1], 1, 8) == string.rep("\0", 8) then
+  -- Only stamp an all-zeros placeholder: when the paired SET did not land,
+  -- restamping an existing frame could unfence a stale value.
+  redis.call("SETRANGE", KEYS[1], 1, struct.pack(">I8", now_ms))
+end`,
   String.raw`local desired_ttl_ms = cache_ttl_ms + ${WATERMARK_TTL_MARGIN_MS}
 if not raw_watermark then
   redis.call("SET", KEYS[2], "0", "PX", desired_ttl_ms)

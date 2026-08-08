@@ -1,5 +1,16 @@
 import { DialCacheRedisProtocolError } from "../redis-client.js";
 
+export function validateRedisSetReply(reply: unknown): void {
+  const text = typeof reply === "string"
+    ? reply
+    : Buffer.isBuffer(reply)
+      ? reply.toString("utf8")
+      : null;
+  if (text !== "OK") {
+    throw new DialCacheRedisProtocolError("Invalid DialCache Redis SET reply; expected OK");
+  }
+}
+
 export function validateRedisScriptWriteReply(reply: unknown): 0 | 1 {
   if (reply !== 0 && reply !== 1) {
     throw new DialCacheRedisProtocolError("Invalid DialCache Redis write reply; expected integer 0 or 1");

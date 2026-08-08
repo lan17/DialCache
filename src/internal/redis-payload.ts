@@ -3,11 +3,10 @@ import {
   DialCacheRedisPayloadError,
   type RedisCachePayload,
 } from "../redis-client.js";
-import {
-  REDIS_ENCODING_BINARY,
-  REDIS_ENCODING_UTF8,
-  REDIS_FRAME_VERSION,
-} from "./redis-scripts.js";
+
+export const REDIS_FRAME_VERSION = 1;
+export const REDIS_ENCODING_UTF8 = 0;
+export const REDIS_ENCODING_BINARY = 1;
 
 const REDIS_FRAME_HEADER_BYTES = 9;
 const REDIS_FRAME_MIN_BYTES = REDIS_FRAME_HEADER_BYTES + 1;
@@ -54,6 +53,31 @@ function decodeRedisPayload(raw: Buffer): RedisCachePayload {
     return payload;
   }
   throw new DialCacheRedisPayloadEncodingError("Invalid DialCache Redis payload encoding");
+}
+
+/**
+ * Encode a serializer payload into a DialCache Redis frame.
+ *
+ * Untracked writes stamp an informational client-clock `createdAtMs`;
+ * untracked reads never consult it. Tracked writes must pass zero: an
+ * all-zeros timestamp is a placeholder that tracked reads can never serve,
+ * and `WRITE_TRACKED_STAMP_SCRIPT` patches it with server time.
+ */
+export function encodeRedisFrame(payload: RedisCachePayload, createdAtMs: number): Buffer {
+  if (!Number.isSafeInteger(createdAtMs) || createdAtMs < 0) {
+    throw new RangeError("DialCache frame createdAtMs must be a nonnegative safe integer");
+  }
+  const payloadBytes = Buffer.isBuffer(payload) ? payload.length : Buffer.byteLength(payload, "utf8");
+  const frame = Buffer.allocUnsafe(REDIS_FRAME_MIN_BYTES + payloadBytes);
+  frame[0] = REDIS_FRAME_VERSION;
+  frame.writeBigUInt64BE(BigInt(createdAtMs), 1);
+  frame[REDIS_FRAME_HEADER_BYTES] = redisPayloadEncoding(payload);
+  if (Buffer.isBuffer(payload)) {
+    payload.copy(frame, REDIS_FRAME_MIN_BYTES);
+  } else {
+    frame.write(payload, REDIS_FRAME_MIN_BYTES, "utf8");
+  }
+  return frame;
 }
 
 /**

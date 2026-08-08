@@ -1,6 +1,7 @@
 import {
   decodeRedisFrame,
   decodeTrackedRedisFrame,
+  encodeRedisFrame,
 } from "../src/redis-protocol.js";
 import {
   DialCacheRedisPayloadEncodingError,
@@ -97,6 +98,46 @@ describe("Redis frame decoding", () => {
     expect(() => decodeTrackedRedisFrame(malformedPayload, Buffer.from("999"))).toThrow(
       DialCacheRedisPayloadEncodingError,
     );
+  });
+
+  it("encodes frames that decode back through both read paths", () => {
+    const utf8 = encodeRedisFrame("cachéd ✓", 1_000);
+    expect(utf8[0]).toBe(1);
+    expect(Number(utf8.readBigUInt64BE(1))).toBe(1_000);
+    expect(utf8[9]).toBe(0);
+    expect(decodeRedisFrame(utf8)).toBe("cachéd ✓");
+    expect(decodeTrackedRedisFrame(utf8, Buffer.from("999"))).toBe("cachéd ✓");
+
+    const binaryPayload = Buffer.from([0, 0xff, 0x80]);
+    const binary = encodeRedisFrame(binaryPayload, 2_000);
+    expect(binary[9]).toBe(1);
+    expect(binary).toEqual(encodeFrame(binaryPayload, 1, 2_000));
+    expect(decodeRedisFrame(binary)).toEqual(binaryPayload);
+
+    const empty = encodeRedisFrame("", 1);
+    expect(empty.byteLength).toBe(10);
+    expect(decodeRedisFrame(empty)).toBe("");
+  });
+
+  it("keeps zero-stamped placeholder frames unreadable on the tracked path", () => {
+    const placeholder = encodeRedisFrame("pending", 0);
+
+    expect(decodeTrackedRedisFrame(placeholder, null)).toBeNull();
+    expect(decodeTrackedRedisFrame(placeholder, Buffer.from("0"))).toBeNull();
+    expect(decodeTrackedRedisFrame(placeholder, Buffer.from("1"))).toBeNull();
+    expect(decodeRedisFrame(placeholder)).toBe("pending");
+  });
+
+  it("rejects unencodable createdAt timestamps", () => {
+    for (const createdAtMs of [
+      -1,
+      0.5,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.MAX_SAFE_INTEGER + 1,
+    ]) {
+      expect(() => encodeRedisFrame("value", createdAtMs)).toThrow(RangeError);
+    }
   });
 
   it("preserves payload error identity across separately bundled entry points", () => {

@@ -16,9 +16,9 @@ src/
   prometheus.ts         # Optional Prometheus adapter
   redis-client.ts       # Client-independent semantic Redis interface
   node-redis.ts          # node-redis adapter and script registration
-  redis-protocol.ts      # Public Lua protocol exports
+  redis-protocol.ts      # Public frame codec and Lua protocol exports
   serializer.ts         # Serializer contract and JSON implementation
-  internal/             # Cache layers, runtime config, and Lua scripts
+  internal/             # Cache layers, runtime config, and mutation Lua scripts
 test/                   # Unit and Redis integration tests
 ```
 

@@ -174,7 +174,7 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
     if (cluster === undefined) {
       throw new Error("Redis Cluster did not start");
     }
-    expect(dialcacheRedisScripts.dialcacheWrite.SHA1).not.toBe(dialcacheRedisScripts.dialcacheWriteTracked.SHA1);
+    expect(dialcacheRedisScripts.dialcacheWriteTrackedStamp.SHA1).not.toBe(dialcacheRedisScripts.dialcacheInvalidate.SHA1);
     const scriptClient: DialCacheRedisClient = createNodeRedisDialCacheClient(cluster);
     const dialcache = new DialCache({
       namespace: "cluster-cache",
@@ -201,6 +201,14 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
       scriptClient.read({
         valueKey: "{slot-a}:value",
         watermarkKey: "{slot-b}:watermark",
+      }),
+    ).rejects.toThrow(/CROSSSLOT/);
+    await expect(
+      scriptClient.write({
+        valueKey: "{slot-a}:value",
+        watermarkKey: "{slot-b}:watermark",
+        cacheTtlMs: 60_000,
+        value: "cross",
       }),
     ).rejects.toThrow(/CROSSSLOT/);
   });

@@ -26,17 +26,23 @@ const INVALID_INVALIDATION_REPLIES: readonly unknown[] = [0, ...INVALID_WRITE_RE
 interface FakeReplies {
   readonly get?: unknown;
   readonly mGet?: unknown;
-  readonly write?: unknown;
-  readonly writeTracked?: unknown;
+  readonly set?: unknown;
+  readonly stamp?: unknown;
   readonly invalidate?: unknown;
 }
 
 function fakeClient(replies: FakeReplies = {}) {
   return {
     get: vi.fn(async () => Object.hasOwn(replies, "get") ? replies.get : null),
-    sendCommand: vi.fn(async () => Object.hasOwn(replies, "mGet") ? replies.mGet : [null, null]),
-    dialcacheWrite: vi.fn(async () => Object.hasOwn(replies, "write") ? replies.write : 1),
-    dialcacheWriteTracked: vi.fn(async () => Object.hasOwn(replies, "writeTracked") ? replies.writeTracked : 1),
+    // Serves standalone (args, options) and cluster (firstKey, isReadonly, args, options) shapes.
+    sendCommand: vi.fn(async (...callArgs: unknown[]) => {
+      const args = (Array.isArray(callArgs[0]) ? callArgs[0] : callArgs[2]) as Array<unknown>;
+      if (args[0] === "SET") {
+        return Object.hasOwn(replies, "set") ? replies.set : "OK";
+      }
+      return Object.hasOwn(replies, "mGet") ? replies.mGet : [null, null];
+    }),
+    dialcacheWriteTrackedStamp: vi.fn(async () => Object.hasOwn(replies, "stamp") ? replies.stamp : 1),
     dialcacheInvalidate: vi.fn(async () => Object.hasOwn(replies, "invalidate") ? replies.invalidate : 1),
   };
 }
@@ -72,28 +78,17 @@ async function expectProtocolError(operation: Promise<unknown>, message: string)
 
 describe("node-redis adapter", () => {
   it("provides the expected arguments for every bundled mutation script", () => {
-    const binary = Buffer.from([0, 0xff]);
-
     expect(Object.keys(dialcacheRedisScripts)).toEqual([
-      "dialcacheWrite",
-      "dialcacheWriteTracked",
+      "dialcacheWriteTrackedStamp",
       "dialcacheInvalidate",
     ]);
-    expect(dialcacheRedisScripts.dialcacheWrite.transformArguments("plain:value", 1_000, 0, "plain")).toEqual([
-      "plain:value",
-      "1000",
-      "0",
-      "plain",
-    ]);
     expect(
-      dialcacheRedisScripts.dialcacheWriteTracked.transformArguments(
+      dialcacheRedisScripts.dialcacheWriteTrackedStamp.transformArguments(
         "tracked:{id}:value",
         "tracked:{id}:watermark",
         1_000,
-        1,
-        binary,
       ),
-    ).toEqual(["tracked:{id}:value", "tracked:{id}:watermark", "1000", "1", binary]);
+    ).toEqual(["tracked:{id}:value", "tracked:{id}:watermark", "1000"]);
     expect(
       dialcacheRedisScripts.dialcacheInvalidate.transformArguments("tracked:{id}:watermark", 50),
     ).toEqual(["tracked:{id}:watermark", "50"]);
@@ -103,8 +98,8 @@ describe("node-redis adapter", () => {
     const client = fakeClient({
       get: encodeFrame("plain"),
       mGet: [encodeFrame(Buffer.from([0, 0xff]), { createdAtMs: 2 }), Buffer.from("1")],
-      write: 1,
-      writeTracked: 0,
+      set: "OK",
+      stamp: 0,
       invalidate: 1,
     });
     const adapter = createNodeRedisDialCacheClient(client as never);
@@ -127,6 +122,175 @@ describe("node-redis adapter", () => {
     await expect(
       adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 }),
     ).resolves.toBeUndefined();
+  });
+
+  it("writes untracked frames with one native SET", async () => {
+    const client = fakeClient();
+    const adapter = createNodeRedisDialCacheClient(client as never);
+    const before = Date.now();
+    await expect(
+      adapter.write({ valueKey: "plain:value", cacheTtlMs: 1_000, value: "plain" }),
+    ).resolves.toBe(true);
+    const after = Date.now();
+
+    expect(client.dialcacheWriteTrackedStamp).not.toHaveBeenCalled();
+    expect(client.sendCommand).toHaveBeenCalledTimes(1);
+    const [args, options] = client.sendCommand.mock.calls[0] as [Array<unknown>, unknown];
+    expect(args[0]).toBe("SET");
+    expect(args[1]).toBe("plain:value");
+    expect(args[3]).toBe("PX");
+    expect(args[4]).toBe("1000");
+    const frame = args[2] as Buffer;
+    expect(frame[0]).toBe(1);
+    expect(frame[9]).toBe(0);
+    expect(frame.subarray(10).toString("utf8")).toBe("plain");
+    const createdAtMs = Number(frame.readBigUInt64BE(1));
+    expect(createdAtMs).toBeGreaterThanOrEqual(before);
+    expect(createdAtMs).toBeLessThanOrEqual(after);
+    expect(options).toMatchObject({ returnBuffers: true });
+  });
+
+  it("pairs a zero-stamped placeholder SET with the stamp script in issue order", async () => {
+    const order: string[] = [];
+    const client = fakeClient();
+    client.sendCommand.mockImplementation(async () => {
+      order.push("set");
+      return "OK";
+    });
+    client.dialcacheWriteTrackedStamp.mockImplementation(async () => {
+      order.push("stamp");
+      return 1;
+    });
+    const binary = Buffer.from([0, 0xff]);
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await expect(adapter.write({
+      valueKey: "tracked:{id}:value",
+      watermarkKey: "tracked:{id}:watermark",
+      cacheTtlMs: 2_000,
+      value: binary,
+    })).resolves.toBe(true);
+
+    expect(order).toEqual(["set", "stamp"]);
+    const [args] = client.sendCommand.mock.calls[0] as [Array<unknown>];
+    expect(args[0]).toBe("SET");
+    expect(args[1]).toBe("tracked:{id}:value");
+    expect(args[3]).toBe("PX");
+    expect(args[4]).toBe("2000");
+    const frame = args[2] as Buffer;
+    expect(frame[0]).toBe(1);
+    expect(frame.readBigUInt64BE(1)).toBe(0n);
+    expect(frame[9]).toBe(1);
+    expect(frame.subarray(10)).toEqual(binary);
+    expect(client.dialcacheWriteTrackedStamp).toHaveBeenCalledWith(
+      "tracked:{id}:value",
+      "tracked:{id}:watermark",
+      2_000,
+    );
+  });
+
+  it("routes cluster write SETs by the value key", async () => {
+    const client = fakeCluster();
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await expect(adapter.write({
+      valueKey: "tracked:{id}:value",
+      watermarkKey: "tracked:{id}:watermark",
+      cacheTtlMs: 1_000,
+      value: "tracked",
+    })).resolves.toBe(true);
+
+    const [firstKey, isReadonly, args] = client.sendCommand.mock.calls[0] as [string, boolean, Array<unknown>];
+    expect(firstKey).toBe("tracked:{id}:value");
+    expect(isReadonly).toBe(false);
+    expect(args[0]).toBe("SET");
+    expect(args[1]).toBe("tracked:{id}:value");
+  });
+
+  it("accepts SET replies returned as Buffers and rejects everything else", async () => {
+    await expect(
+      createNodeRedisDialCacheClient(fakeClient({ set: Buffer.from("OK") }) as never)
+        .write({ valueKey: "plain:value", cacheTtlMs: 1_000, value: "plain" }),
+    ).resolves.toBe(true);
+
+    for (const reply of ["QUEUED", null, 1, undefined, Buffer.from("NO")]) {
+      const untracked = createNodeRedisDialCacheClient(fakeClient({ set: reply }) as never);
+      await expectProtocolError(
+        Promise.resolve(untracked.write({ valueKey: "plain:value", cacheTtlMs: 1_000, value: "plain" })),
+        "Invalid DialCache Redis SET reply; expected OK",
+      );
+
+      const tracked = createNodeRedisDialCacheClient(fakeClient({ set: reply }) as never);
+      await expectProtocolError(
+        Promise.resolve(tracked.write({
+          valueKey: "tracked:{id}:value",
+          watermarkKey: "tracked:{id}:watermark",
+          cacheTtlMs: 1_000,
+          value: "tracked",
+        })),
+        "Invalid DialCache Redis SET reply; expected OK",
+      );
+    }
+  });
+
+  it("rejects out-of-range cacheTtlMs before issuing commands and ceils fractional TTLs", async () => {
+    const client = fakeClient();
+    const adapter = createNodeRedisDialCacheClient(client as never);
+    for (const cacheTtlMs of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, 31_536_000_001]) {
+      await expect(
+        adapter.write({ valueKey: "plain:value", cacheTtlMs, value: "plain" }),
+      ).rejects.toThrow(RangeError);
+      await expect(
+        adapter.write({
+          valueKey: "tracked:{id}:value",
+          watermarkKey: "tracked:{id}:watermark",
+          cacheTtlMs,
+          value: "tracked",
+        }),
+      ).rejects.toThrow(RangeError);
+    }
+    expect(client.sendCommand).not.toHaveBeenCalled();
+    expect(client.dialcacheWriteTrackedStamp).not.toHaveBeenCalled();
+
+    await adapter.write({
+      valueKey: "tracked:{id}:value",
+      watermarkKey: "tracked:{id}:watermark",
+      cacheTtlMs: 1_000.1,
+      value: "tracked",
+    });
+    const [args] = client.sendCommand.mock.calls[0] as [Array<unknown>];
+    expect(args[4]).toBe("1001");
+    expect(client.dialcacheWriteTrackedStamp).toHaveBeenCalledWith(
+      "tracked:{id}:value",
+      "tracked:{id}:watermark",
+      1_001,
+    );
+  });
+
+  it("surfaces a SET failure as the write error even when the stamp settled", async () => {
+    const failure = new Error("OOM command not allowed when used memory > 'maxmemory'.");
+    const client = fakeClient();
+    client.sendCommand.mockRejectedValueOnce(failure);
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await expect(adapter.write({
+      valueKey: "tracked:{id}:value",
+      watermarkKey: "tracked:{id}:watermark",
+      cacheTtlMs: 1_000,
+      value: "tracked",
+    })).rejects.toBe(failure);
+    expect(client.dialcacheWriteTrackedStamp).toHaveBeenCalledTimes(1);
+
+    const stampFailure = new Error("ERR invalid DialCache watermark");
+    const stampClient = fakeClient();
+    stampClient.dialcacheWriteTrackedStamp.mockRejectedValueOnce(stampFailure);
+    const stampAdapter = createNodeRedisDialCacheClient(stampClient as never);
+    await expect(stampAdapter.write({
+      valueKey: "tracked:{id}:value",
+      watermarkKey: "tracked:{id}:watermark",
+      cacheTtlMs: 1_000,
+      value: "tracked",
+    })).rejects.toBe(stampFailure);
   });
 
   it("passes the cooperative read signal through node-redis command options", async () => {
@@ -231,13 +395,7 @@ describe("node-redis adapter", () => {
     const invalidationMessage = "Invalid DialCache Redis invalidate reply; expected integer 1";
 
     for (const reply of INVALID_WRITE_REPLIES) {
-      const untracked = createNodeRedisDialCacheClient(fakeClient({ write: reply }) as never);
-      await expectProtocolError(
-        Promise.resolve(untracked.write({ valueKey: "plain:value", cacheTtlMs: 1_000, value: "plain" })),
-        writeMessage,
-      );
-
-      const tracked = createNodeRedisDialCacheClient(fakeClient({ writeTracked: reply }) as never);
+      const tracked = createNodeRedisDialCacheClient(fakeClient({ stamp: reply }) as never);
       await expectProtocolError(
         Promise.resolve(tracked.write({
           valueKey: "tracked:{id}:value",
@@ -262,15 +420,12 @@ describe("node-redis adapter", () => {
   });
 
   it("validates replies at the public node-redis script transform boundary", () => {
-    expect(dialcacheRedisScripts.dialcacheWrite.transformReply(0)).toBe(0);
-    expect(dialcacheRedisScripts.dialcacheWriteTracked.transformReply(1)).toBe(1);
+    expect(dialcacheRedisScripts.dialcacheWriteTrackedStamp.transformReply(0)).toBe(0);
+    expect(dialcacheRedisScripts.dialcacheWriteTrackedStamp.transformReply(1)).toBe(1);
     expect(dialcacheRedisScripts.dialcacheInvalidate.transformReply(1)).toBe(1);
 
     for (const reply of INVALID_WRITE_REPLIES) {
-      expect(() => dialcacheRedisScripts.dialcacheWrite.transformReply(reply as number)).toThrow(
-        DialCacheRedisProtocolError,
-      );
-      expect(() => dialcacheRedisScripts.dialcacheWriteTracked.transformReply(reply as number)).toThrow(
+      expect(() => dialcacheRedisScripts.dialcacheWriteTrackedStamp.transformReply(reply as number)).toThrow(
         DialCacheRedisProtocolError,
       );
     }
@@ -300,7 +455,7 @@ describe("node-redis adapter", () => {
   });
 
   it("surfaces protocol failures through the normal DialCache observability path", async () => {
-    const redisClient = createNodeRedisDialCacheClient(fakeClient({ write: 2, invalidate: 0 }) as never);
+    const redisClient = createNodeRedisDialCacheClient(fakeClient({ set: 2, invalidate: 0 }) as never);
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
     const metrics = {
       request: vi.fn(),
