@@ -11,5 +11,6 @@ export {
 } from "./internal/redis-payload.js";
 export {
   resolveTrackedRedisWriteReply,
+  validateRedisScriptInvalidationReply,
   validateRedisSetReply,
 } from "./internal/redis-script-reply.js";

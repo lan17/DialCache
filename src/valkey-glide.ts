@@ -26,9 +26,10 @@ type ValkeyGlideString = string | Buffer;
 const WRITE_TRACKED_STAMP_SHA1 = createHash("sha1").update(WRITE_TRACKED_STAMP_SCRIPT).digest("hex");
 const INVALIDATE_CACHE_SHA1 = createHash("sha1").update(INVALIDATE_CACHE_SCRIPT).digest("hex");
 
-// GLIDE maps the server's NOSCRIPT reply to its own NoScriptError wording.
+// Matches the server's raw NOSCRIPT reply and GLIDE's mapped NoScriptError
+// wording, case-insensitively so message-format drift cannot blind it.
 function isNoScriptError(error: Error): boolean {
-  return error.message.includes("NOSCRIPT") || error.message.includes("NoScriptError");
+  return error.message.toLowerCase().includes("noscript");
 }
 
 interface ValkeyGlideBatch {
@@ -147,6 +148,14 @@ export function createValkeyGlideDialCacheClient<TDecoder>(
     );
   }
   const isCluster = classifyValkeyGlideClient(client, glide) === "cluster";
+  // Keyed dispatch options: cluster commands pin the slot primary; standalone
+  // commands carry only the byte decoder.
+  const keyedOptions = (key: string): {
+    decoder: TDecoder;
+    route?: { type: "primarySlotKey"; key: string };
+  } => isCluster
+    ? { decoder: glide.Decoder.Bytes, route: { type: "primarySlotKey", key } }
+    : { decoder: glide.Decoder.Bytes };
 
   return {
     async read({ valueKey, watermarkKey }) {
@@ -159,10 +168,7 @@ export function createValkeyGlideDialCacheClient<TDecoder>(
       if (isCluster) {
         pair = await client.customCommand(
           ["MGET", valueKey, watermarkKey],
-          {
-            decoder: glide.Decoder.Bytes,
-            route: { type: "primarySlotKey", key: valueKey },
-          },
+          keyedOptions(valueKey),
         );
       } else {
         const batch = new glide.Batch(false).mget([valueKey, watermarkKey]);
@@ -180,12 +186,7 @@ export function createValkeyGlideDialCacheClient<TDecoder>(
     async write(request) {
       const { valueKey, watermarkKey, value } = request;
       const cacheTtlMs = ceilSupportedCacheTtlMs(request.cacheTtlMs);
-      const execOptions: {
-        decoder: TDecoder;
-        route?: { type: "primarySlotKey"; key: string };
-      } = isCluster
-        ? { decoder: glide.Decoder.Bytes, route: { type: "primarySlotKey", key: valueKey } }
-        : { decoder: glide.Decoder.Bytes };
+      const execOptions = keyedOptions(valueKey);
 
       if (watermarkKey === undefined) {
         const frame = encodeRedisFrame(value, Date.now());
@@ -237,12 +238,7 @@ export function createValkeyGlideDialCacheClient<TDecoder>(
     },
     async invalidate({ watermarkKey, futureBufferMs }) {
       const invalidateArgs: ValkeyGlideString[] = [String(futureBufferMs)];
-      const options: {
-        decoder: TDecoder;
-        route?: { type: "primarySlotKey"; key: string };
-      } = isCluster
-        ? { decoder: glide.Decoder.Bytes, route: { type: "primarySlotKey", key: watermarkKey } }
-        : { decoder: glide.Decoder.Bytes };
+      const options = keyedOptions(watermarkKey);
       let raw: unknown;
       try {
         raw = await client.customCommand(
@@ -250,15 +246,22 @@ export function createValkeyGlideDialCacheClient<TDecoder>(
           options,
         );
       } catch (error) {
-        if (!(error instanceof Error) || !isNoScriptError(error)) {
-          throw error;
+        // Any rejection is retried once with the source: the invalidation
+        // script is idempotent (the watermark only advances and its TTL only
+        // widens), so a duplicate run after an ambiguous failure is harmless,
+        // and EVAL self-heals both a flushed script cache and an
+        // EVALSHA-rejecting proxy without depending on error wording.
+        try {
+          raw = await client.customCommand(
+            ["EVAL", INVALIDATE_CACHE_SCRIPT, "1", watermarkKey, ...invalidateArgs],
+            options,
+          );
+        } catch (retryError) {
+          if (retryError instanceof Error && (retryError as { cause?: unknown }).cause === undefined) {
+            (retryError as { cause?: unknown }).cause = error;
+          }
+          throw retryError;
         }
-        // NOSCRIPT proves the invalidation never executed; EVAL re-sends the
-        // source, which the server caches under the same SHA1 for later calls.
-        raw = await client.customCommand(
-          ["EVAL", INVALIDATE_CACHE_SCRIPT, "1", watermarkKey, ...invalidateArgs],
-          options,
-        );
       }
       validateRedisScriptInvalidationReply(raw);
     },

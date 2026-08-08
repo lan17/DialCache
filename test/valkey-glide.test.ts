@@ -452,6 +452,8 @@ describe("Valkey GLIDE adapter", () => {
       "NOSCRIPT No matching script. Please use EVAL.",
       // GLIDE's mapped RequestError wording.
       "An error was signalled by the server: - NoScriptError: No matching script.",
+      // Case drift must not blind the stamp's recovery either.
+      "noscript no matching script",
     ];
     for (const wording of noscriptWordings) {
       batchInstances.length = 0;
@@ -640,22 +642,44 @@ describe("Valkey GLIDE adapter", () => {
     }
   });
 
-  it("recovers a flushed invalidation script with EVAL by source", async () => {
-    const client = fakeClient(1);
-    client.customCommand.mockRejectedValueOnce(
-      new Error("An error was signalled by the server: - NoScriptError: No matching script."),
-    );
+  it("retries any invalidation rejection once with EVAL by source", async () => {
+    // NOSCRIPT is the common trigger, but the retry deliberately covers every
+    // rejection: the invalidation script is idempotent, and an
+    // EVALSHA-rejecting proxy must self-heal rather than fail every call.
+    for (const wording of [
+      "An error was signalled by the server: - NoScriptError: No matching script.",
+      "NOPERM this user has no permissions to run the 'evalsha' command",
+    ]) {
+      const client = fakeClient(1);
+      client.customCommand.mockRejectedValueOnce(new Error(wording));
+      const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
+
+      await expect(
+        adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 }),
+      ).resolves.toBeUndefined();
+
+      expect(client.customCommand).toHaveBeenNthCalledWith(
+        2,
+        ["EVAL", INVALIDATE_CACHE_SCRIPT, "1", "tracked:{id}:watermark", "50"],
+        { decoder: decoderBytes },
+      );
+    }
+  });
+
+  it("chains the original rejection when the invalidation retry also fails", async () => {
+    const first = new Error("read ECONNRESET");
+    const second = new Error("ERR invalid DialCache future buffer");
+    const client = fakeClient();
+    client.customCommand.mockRejectedValueOnce(first).mockRejectedValueOnce(second);
     const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
 
-    await expect(
-      adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 }),
-    ).resolves.toBeUndefined();
-
-    expect(client.customCommand).toHaveBeenNthCalledWith(
-      2,
-      ["EVAL", INVALIDATE_CACHE_SCRIPT, "1", "tracked:{id}:watermark", "50"],
-      { decoder: decoderBytes },
-    );
+    const invalidation = adapter.invalidate({
+      watermarkKey: "tracked:{id}:watermark",
+      futureBufferMs: 50,
+    });
+    await expect(invalidation).rejects.toBe(second);
+    await expect(invalidation).rejects.toMatchObject({ cause: first });
+    expect(client.customCommand).toHaveBeenCalledTimes(2);
   });
 
   it("uses Batch and Decoder from the supplied GLIDE module instance", async () => {
