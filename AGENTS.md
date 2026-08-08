@@ -18,7 +18,7 @@ src/
   node-redis.ts          # node-redis adapter and script registration
   redis-protocol.ts      # Public frame codec and Lua protocol exports
   serializer.ts         # Serializer contract and JSON implementation
-  internal/             # Cache layers, runtime config, and mutation Lua scripts
+  internal/             # Cache layers, runtime config, payload compression, and mutation Lua scripts
 test/                   # Unit and Redis integration tests
 ```
 

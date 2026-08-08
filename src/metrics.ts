@@ -25,6 +25,22 @@ export type ShadowValidationOutcome =
   | "confirmation_error"
   | "timeout"
   | "dropped";
+/**
+ * Bounded compression outcomes. Writes record compressed, below_threshold,
+ * not_smaller, or write_over_limit (serialized form exceeds the decompression
+ * cap, stored raw — a capacity signal); reads record decompressed,
+ * fallback_raw (a marked payload zstd rejected and handed through untouched),
+ * or read_over_limit (decompression would exceed the cap; handed through
+ * untouched — a corruption/integrity signal).
+ */
+export type CompressionOutcome =
+  | "compressed"
+  | "below_threshold"
+  | "not_smaller"
+  | "write_over_limit"
+  | "decompressed"
+  | "fallback_raw"
+  | "read_over_limit";
 /** Bounded reasons for skipping cache work; policy_disabled means a shared layer has no effective TTL. */
 export type DisabledReason = "context" | "policy_disabled" | "invalid_ttl" | "invalid_ramp" | "ramped_down" | "config_error";
 /** Stable failure sites used instead of backend- or application-defined error names. */
@@ -36,6 +52,7 @@ export type MetricErrorKind =
   | "cache_write"
   | "serialization_load"
   | "serialization_dump"
+  | "compression"
   | "invalidation"
   | "fallback"
   | "unknown";
@@ -59,6 +76,14 @@ export interface ErrorMetricLabels extends CacheMetricLabels {
 
 export interface SerializationMetricLabels extends CacheMetricLabels {
   readonly operation: "dump" | "load";
+}
+
+export interface CompressionMetricLabels extends CacheMetricLabels {
+  readonly outcome: CompressionOutcome;
+}
+
+export interface CompressionOperationMetricLabels extends CacheMetricLabels {
+  readonly operation: "compress" | "decompress";
 }
 
 export interface InvalidationMetricLabels {
@@ -91,10 +116,22 @@ export interface DialCacheMetricsAdapter {
   coalesced?(labels: CoalescedMetricLabels): void;
   // Optional so existing custom adapters keep compiling without changes.
   shadowValidation?(labels: ShadowValidationMetricLabels): void;
+  // Optional so existing custom adapters keep compiling without changes.
+  compression?(labels: CompressionMetricLabels): void;
   observeGet(labels: CacheMetricLabels, seconds: number): void;
   observeFallback(labels: CacheMetricLabels, seconds: number): void;
   observeSerialization(labels: SerializationMetricLabels, seconds: number): void;
+  /** Serialized payload size in bytes, before compression or escaping. */
   observeSize(labels: CacheMetricLabels, bytes: number): void;
+  /**
+   * Stored payload size in bytes as written to Redis, after compression and
+   * escaping. Optional so existing custom adapters keep compiling.
+   */
+  observeStoredSize?(labels: CacheMetricLabels, bytes: number): void;
+  // Optional so existing custom adapters keep compiling without changes.
+  observeCompressionRatio?(labels: CacheMetricLabels, ratio: number): void;
+  // Optional so existing custom adapters keep compiling without changes.
+  observeCompression?(labels: CompressionOperationMetricLabels, seconds: number): void;
 }
 
 export function labelsFor(key: DialCacheKey, layer: MetricLayer): CacheMetricLabels {
