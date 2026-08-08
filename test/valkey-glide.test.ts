@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DialCacheRedisPayloadEncodingError,
   DialCacheRedisPayloadError,
+  DialCacheRedisPlaceholderLostError,
   DialCacheRedisProtocolError,
 } from "../src/redis-client.js";
 import { WRITE_TRACKED_STAMP_SCRIPT } from "../src/redis-protocol.js";
@@ -386,12 +387,14 @@ describe("Valkey GLIDE adapter", () => {
     const client = fakeClient([Buffer.from("OK"), 2]);
     const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
 
-    await expect(adapter.write({
+    const write = adapter.write({
       valueKey: "tracked:{id}:value",
       watermarkKey: "tracked:{id}:watermark",
       cacheTtlMs: 1_000,
       value: "tracked",
-    })).rejects.toThrow("DialCache tracked write lost its placeholder before the stamp");
+    });
+    await expect(write).rejects.toThrow("DialCache tracked write lost its placeholder before the stamp");
+    await expect(write).rejects.toBeInstanceOf(DialCacheRedisPlaceholderLostError);
     expect(client.invokeScript).not.toHaveBeenCalled();
     adapter.dispose();
   });

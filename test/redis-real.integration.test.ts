@@ -804,8 +804,9 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       // The recovered write must cache the stamp under the SHA1 the batched
       // EVALSHA uses, so later writes take the single-round-trip path. The
       // adapter's own dispatch hash must match node-redis's source SHA1; do
-      // not probe with a throwaway Script here — releasing it would destroy
-      // the shared per-hash GLIDE script container the live handles rely on.
+      // not probe with a throwaway Script here — on GLIDE 2.0.0, releasing a
+      // same-source handle was observed to break the live handles' reloads
+      // despite the documented reference counting.
       expect(client.raw.stampScriptSha1).toBe(dialcacheRedisScripts.dialcacheWriteTrackedStamp.SHA1);
       expect(
         await admin.scriptExists(dialcacheRedisScripts.dialcacheWriteTrackedStamp.SHA1),

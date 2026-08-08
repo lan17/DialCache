@@ -4,6 +4,7 @@ import {
   CacheLayer,
   DialCache,
   DialCacheKeyConfig,
+  DialCacheRedisPlaceholderLostError,
   DialCacheRedisProtocolError,
 } from "../src/index.js";
 import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "../src/node-redis.js";
@@ -103,6 +104,21 @@ describe("node-redis adapter", () => {
     expect(
       () => createNodeRedisDialCacheClient({ get: vi.fn(), sendCommand: vi.fn() } as never),
     ).toThrow("requires a client created with scripts: dialcacheRedisScripts");
+    // Partial registration must fail just as loudly as none.
+    expect(
+      () => createNodeRedisDialCacheClient({
+        get: vi.fn(),
+        sendCommand: vi.fn(),
+        dialcacheWriteTrackedStamp: vi.fn(),
+      } as never),
+    ).toThrow(TypeError);
+    expect(
+      () => createNodeRedisDialCacheClient({
+        get: vi.fn(),
+        sendCommand: vi.fn(),
+        dialcacheInvalidate: vi.fn(),
+      } as never),
+    ).toThrow(TypeError);
   });
 
   it("accepts the exact write and invalidation reply domains", async () => {
@@ -203,12 +219,14 @@ describe("node-redis adapter", () => {
 
   it("fails a tracked write whose placeholder was lost before the stamp", async () => {
     const adapter = createNodeRedisDialCacheClient(fakeClient({ stamp: 2 }) as never);
-    await expect(adapter.write({
+    const write = adapter.write({
       valueKey: "tracked:{id}:value",
       watermarkKey: "tracked:{id}:watermark",
       cacheTtlMs: 1_000,
       value: "tracked",
-    })).rejects.toThrow("DialCache tracked write lost its placeholder before the stamp");
+    });
+    await expect(write).rejects.toThrow("DialCache tracked write lost its placeholder before the stamp");
+    await expect(write).rejects.toBeInstanceOf(DialCacheRedisPlaceholderLostError);
   });
 
   it("issues the stamp before the placeholder SET settles", async () => {

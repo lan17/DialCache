@@ -133,7 +133,11 @@ export interface ValkeyGlideDialCacheClient extends DialCacheRedisClient {
 /**
  * Wrap a caller-owned GLIDE connection. The returned adapter owns only its
  * two mutation Script handles and preserves the connection's
- * `requestTimeout`. Pass the same GLIDE module namespace used to create the
+ * `requestTimeout`. On GLIDE 2.0.0, releasing any Script handle for a source
+ * has been observed to break other live handles for that same source despite
+ * the documented reference counting, so adapters sharing one GLIDE module
+ * namespace must be disposed together after draining, never swapped
+ * dispose-after-create. Pass the same GLIDE module namespace used to create the
  * client so native Batch and Script objects come from that client's runtime.
  * Only direct GlideClient and GlideClusterClient instances are accepted;
  * wrappers should implement DialCacheRedisClient directly.
@@ -179,14 +183,6 @@ export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScri
       activeOperations -= 1;
     }
   };
-
-  const invoke = async (
-    script: TScript,
-    keys: ValkeyGlideString[],
-    args: ValkeyGlideString[] = [],
-  ): Promise<unknown> => run(
-    () => client.invokeScript(script, { keys, args, decoder: glide.Decoder.Bytes }),
-  );
 
   return {
     async read({ valueKey, watermarkKey }) {
@@ -284,11 +280,11 @@ export function createValkeyGlideDialCacheClient<TScript extends ValkeyGlideScri
       });
     },
     async invalidate({ watermarkKey, futureBufferMs }) {
-      const raw = await invoke(
-        scripts.invalidate,
-        [watermarkKey],
-        [String(futureBufferMs)],
-      );
+      const raw = await run(() => client.invokeScript(scripts.invalidate, {
+        keys: [watermarkKey],
+        args: [String(futureBufferMs)],
+        decoder: glide.Decoder.Bytes,
+      }));
       validateRedisScriptInvalidationReply(raw);
     },
     dispose() {

@@ -7,8 +7,9 @@ export {
   decodeTrackedRedisFrame,
   encodeRedisFrame,
   encodeTrackedRedisPlaceholder,
-  REDIS_ENCODING_BINARY,
-  REDIS_ENCODING_UTF8,
-  REDIS_FRAME_VERSION,
   type TrackedRedisPlaceholder,
 } from "./internal/redis-payload.js";
+export {
+  resolveTrackedRedisWriteReply,
+  validateRedisSetReply,
+} from "./internal/redis-script-reply.js";

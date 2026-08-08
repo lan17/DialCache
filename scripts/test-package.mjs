@@ -48,15 +48,24 @@ const rootConsumer = `import {
 } from "dialcache";
 // @ts-expect-error The unused MissingKeyConfigError class was removed instead of deprecated.
 import { MissingKeyConfigError } from "dialcache";
+import { DialCacheRedisPlaceholderLostError } from "dialcache";
 import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "dialcache/node-redis";
 import {
   decodeRedisFrame,
   decodeTrackedRedisFrame,
   encodeRedisFrame,
   encodeTrackedRedisPlaceholder,
+  resolveTrackedRedisWriteReply,
+  validateRedisSetReply,
   WRITE_TRACKED_STAMP_SCRIPT,
   type TrackedRedisPlaceholder,
 } from "dialcache/redis-protocol";
+// @ts-expect-error The codec functions replaced the frame-version wire constant.
+import { REDIS_FRAME_VERSION } from "dialcache/redis-protocol";
+// @ts-expect-error The codec functions replaced the UTF-8 encoding wire constant.
+import { REDIS_ENCODING_UTF8 } from "dialcache/redis-protocol";
+// @ts-expect-error The codec functions replaced the binary encoding wire constant.
+import { REDIS_ENCODING_BINARY } from "dialcache/redis-protocol";
 // @ts-expect-error Read Lua sources were removed from the mutation-only Redis protocol.
 import { READ_CACHE_SCRIPT } from "dialcache/redis-protocol";
 // @ts-expect-error Tracked read Lua was removed from the mutation-only Redis protocol.
@@ -162,6 +171,9 @@ const decodedStaleRedisPayload: string | Buffer | null = decodeTrackedRedisFrame
 );
 const placeholderRedisFrame: Buffer = encodeRedisFrame("pending", 0);
 const trackedRedisPlaceholder: TrackedRedisPlaceholder = encodeTrackedRedisPlaceholder("pending");
+const stampReplyResolution: boolean = resolveTrackedRedisWriteReply(1);
+const setReplyValidation: void = validateRedisSetReply("OK");
+const placeholderLostError = new DialCacheRedisPlaceholderLostError("lost");
 const stampScriptSource: string = WRITE_TRACKED_STAMP_SCRIPT;
 const stampArguments: Array<string | Buffer> = dialcacheRedisScripts.dialcacheWriteTrackedStamp.transformArguments(
   "tracked:{id}:value",
@@ -487,6 +499,12 @@ void WRITE_CACHE_SCRIPT;
 void WRITE_TRACKED_CACHE_SCRIPT;
 void placeholderRedisFrame;
 void trackedRedisPlaceholder;
+void stampReplyResolution;
+void setReplyValidation;
+void placeholderLostError;
+void REDIS_FRAME_VERSION;
+void REDIS_ENCODING_UTF8;
+void REDIS_ENCODING_BINARY;
 void stampScriptSource;
 void stampArguments;
 void customRedisClient;
@@ -741,6 +759,27 @@ if (
   || redisProtocol.decodeTrackedRedisFrame(esmPlaceholder.frame, Buffer.from("0")) !== null
 ) {
   throw new Error("The packed ESM tracked placeholder must be unreadable until stamped");
+}
+if (
+  "REDIS_FRAME_VERSION" in redisProtocol
+  || "REDIS_ENCODING_UTF8" in redisProtocol
+  || "REDIS_ENCODING_BINARY" in redisProtocol
+) {
+  throw new Error("The removed wire constants must not be exported by the packed ESM Redis protocol entry");
+}
+if (
+  redisProtocol.resolveTrackedRedisWriteReply(1) !== true
+  || redisProtocol.resolveTrackedRedisWriteReply(0) !== false
+) {
+  throw new Error("The packed ESM stamp reply resolver did not map replies 0 and 1");
+}
+try {
+  redisProtocol.resolveTrackedRedisWriteReply(2);
+  throw new Error("Expected a lost-placeholder stamp reply to fail");
+} catch (error) {
+  if (!(error instanceof root.DialCacheRedisPlaceholderLostError)) {
+    throw new Error("The lost-placeholder error does not match the root ESM export");
+  }
 }
 const esmEmptyFrame = Buffer.alloc(10);
 esmEmptyFrame[0] = 1;
@@ -1049,6 +1088,27 @@ if (
   || redisProtocol.decodeTrackedRedisFrame(cjsPlaceholder.frame, Buffer.from("0")) !== null
 ) {
   throw new Error("The packed CommonJS tracked placeholder must be unreadable until stamped");
+}
+if (
+  "REDIS_FRAME_VERSION" in redisProtocol
+  || "REDIS_ENCODING_UTF8" in redisProtocol
+  || "REDIS_ENCODING_BINARY" in redisProtocol
+) {
+  throw new Error("The removed wire constants must not be exported by the packed CommonJS Redis protocol entry");
+}
+if (
+  redisProtocol.resolveTrackedRedisWriteReply(1) !== true
+  || redisProtocol.resolveTrackedRedisWriteReply(0) !== false
+) {
+  throw new Error("The packed CommonJS stamp reply resolver did not map replies 0 and 1");
+}
+try {
+  redisProtocol.resolveTrackedRedisWriteReply(2);
+  throw new Error("Expected a lost-placeholder stamp reply to fail");
+} catch (error) {
+  if (!(error instanceof root.DialCacheRedisPlaceholderLostError)) {
+    throw new Error("The lost-placeholder error does not match the root CommonJS export");
+  }
 }
 const cjsEmptyFrame = Buffer.alloc(10);
 cjsEmptyFrame[0] = 1;

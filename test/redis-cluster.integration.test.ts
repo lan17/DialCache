@@ -123,6 +123,9 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
       keyType: "item_id",
       useCase: "ClusterSlots",
       cacheKey: (id) => id,
+      // Tracked, so the pre-flush pass loads the stamp script on every master
+      // and the post-flush pass proves a genuine per-node NOSCRIPT reload.
+      trackForInvalidation: true,
       defaultConfig: remoteOnly,
     });
 
@@ -147,6 +150,7 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
       keyType: "item_id",
       useCase: "ClusterSlots",
       cacheKey: (id) => id,
+      trackForInvalidation: true,
       defaultConfig: remoteOnly,
     });
     const second = await recoveryDialcache.enable(async () => await Promise.all(ids.map(recoverValue)));

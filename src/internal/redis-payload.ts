@@ -7,14 +7,14 @@ import {
 } from "../redis-client.js";
 
 export const REDIS_FRAME_VERSION = 1;
-export const REDIS_ENCODING_UTF8 = 0;
-export const REDIS_ENCODING_BINARY = 1;
+const REDIS_ENCODING_UTF8 = 0;
+const REDIS_ENCODING_BINARY = 1;
 /** Version byte of a tracked-write placeholder; no read path serves it. */
 export const REDIS_FRAME_PLACEHOLDER_VERSION = 0;
 export const REDIS_FRAME_TIMESTAMP_OFFSET = 1;
 export const REDIS_FRAME_TIMESTAMP_BYTES = 8;
 
-const REDIS_FRAME_HEADER_BYTES = 9;
+const REDIS_FRAME_HEADER_BYTES = REDIS_FRAME_TIMESTAMP_OFFSET + REDIS_FRAME_TIMESTAMP_BYTES;
 const REDIS_FRAME_MIN_BYTES = REDIS_FRAME_HEADER_BYTES + 1;
 
 function validateRedisBulkStringReply(raw: unknown): Buffer | null {
@@ -148,7 +148,7 @@ export function decodeTrackedRedisFrame(
   if (watermark === null) {
     return null;
   }
-  const createdAtMs = Number(frame.readBigUInt64BE(1));
+  const createdAtMs = Number(frame.readBigUInt64BE(REDIS_FRAME_TIMESTAMP_OFFSET));
   return createdAtMs <= watermark
     ? null
     : decodeRedisPayload(frame.subarray(REDIS_FRAME_HEADER_BYTES));

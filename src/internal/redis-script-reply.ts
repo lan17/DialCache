@@ -1,4 +1,7 @@
-import { DialCacheRedisProtocolError } from "../redis-client.js";
+import {
+  DialCacheRedisPlaceholderLostError,
+  DialCacheRedisProtocolError,
+} from "../redis-client.js";
 
 export function validateRedisSetReply(reply: unknown): void {
   const text = typeof reply === "string"
@@ -26,7 +29,7 @@ export function validateRedisScriptWriteReply(reply: unknown): 0 | 1 | 2 {
 export function resolveTrackedRedisWriteReply(reply: unknown): boolean {
   const stamp = validateRedisScriptWriteReply(reply);
   if (stamp === 2) {
-    throw new Error(
+    throw new DialCacheRedisPlaceholderLostError(
       "DialCache tracked write lost its placeholder before the stamp; the SET was rejected, overwritten, or expired",
     );
   }
