@@ -19,6 +19,7 @@ import {
 } from "./internal/redis-script-reply.js";
 import {
   DialCacheRedisPayloadError,
+  DialCacheRedisProtocolError,
   type DialCacheRedisClient,
 } from "./redis-client.js";
 
@@ -52,6 +53,14 @@ function defineDialCacheScript<Args extends Array<unknown>, Reply>(
   return defineScript(config);
 }
 
+/**
+ * DialCache's client wiring, not a write API: the registered methods return
+ * raw script replies. `dialcacheWriteTrackedStamp` replies `0 | 1 | 2`, and
+ * `2` means the placeholder was lost — not success. Code invoking these
+ * methods directly must map stamp replies through
+ * `resolveTrackedRedisWriteReply` from `dialcache/redis-protocol`, which
+ * throws `DialCacheRedisPlaceholderLostError` on `2`.
+ */
 export type DialCacheNodeRedisScripts = {
   readonly dialcacheWriteTrackedStamp: NodeRedisScript<
     [valueKey: string, watermarkKey: string, cacheTtlMs: number, nonce: Buffer],
@@ -63,6 +72,7 @@ export type DialCacheNodeRedisScripts = {
   >;
 };
 
+/** See {@link DialCacheNodeRedisScripts}: wiring for the adapter, not a direct write API. */
 export const dialcacheRedisScripts: DialCacheNodeRedisScripts = {
   dialcacheWriteTrackedStamp: defineDialCacheScript({
     SCRIPT: WRITE_TRACKED_STAMP_SCRIPT,
@@ -183,9 +193,12 @@ function sendFrameSet(
  * supported. Aborting after dispatch does not unsend a command or prove the
  * server stopped executing it. Tracked writes enqueue their placeholder SET
  * and stamp script in one synchronous tick, so node-redis pipelines them in
- * order on one connection (per slot node in cluster mode). The caller remains
- * responsible for finite native command budgets, draining work, and closing
- * the client.
+ * order on one connection (per slot node in cluster mode). Invalidation
+ * retries any rejected dispatch once by re-sending the script source as
+ * EVAL — the script is idempotent, so a duplicate run is harmless — with the
+ * original rejection preserved on the surfaced error's `cause`. The caller
+ * remains responsible for finite native command budgets, draining work, and
+ * closing the client.
  */
 export function createNodeRedisDialCacheClient(client: NodeRedisClient): DialCacheRedisClient {
   if (
@@ -241,8 +254,36 @@ export function createNodeRedisDialCacheClient(client: NodeRedisClient): DialCac
       return resolveTrackedRedisWriteReply(stampResult.value);
     },
     async invalidate({ watermarkKey, futureBufferMs }) {
-      const result = await client.dialcacheInvalidate(watermarkKey, futureBufferMs);
-      validateRedisScriptInvalidationReply(result);
+      let raw: unknown;
+      try {
+        raw = await client.dialcacheInvalidate(watermarkKey, futureBufferMs);
+      } catch (error) {
+        // The registered transformReply validates inside the returned
+        // promise, so a reply-domain violation surfaces here as a rejection;
+        // it is deterministic and must not be retried. Any other rejection
+        // is retried once with the source: the invalidation script is
+        // idempotent (the watermark only advances and its TTL only widens),
+        // so a duplicate run after an ambiguous failure is harmless, and
+        // EVAL self-heals both a flushed script cache and an
+        // EVALSHA-rejecting proxy without depending on error wording.
+        if (error instanceof DialCacheRedisProtocolError) {
+          throw error;
+        }
+        try {
+          raw = await sendKeyedCommand(
+            client,
+            watermarkKey,
+            ["EVAL", INVALIDATE_CACHE_SCRIPT, "1", watermarkKey, String(futureBufferMs)],
+            bufferReplyOptions,
+          );
+        } catch (retryError) {
+          if (retryError instanceof Error && retryError.cause === undefined) {
+            retryError.cause = error;
+          }
+          throw retryError;
+        }
+      }
+      validateRedisScriptInvalidationReply(raw);
     },
   };
 }

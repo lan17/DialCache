@@ -55,11 +55,13 @@ import { MissingKeyConfigError } from "dialcache";
 import { DialCacheRedisPlaceholderLostError } from "dialcache";
 import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "dialcache/node-redis";
 import {
+  ceilSupportedCacheTtlMs,
   decodeRedisFrame,
   decodeTrackedRedisFrame,
   encodeRedisFrame,
   encodeTrackedRedisPlaceholder,
   resolveTrackedRedisWriteReply,
+  validateRedisScriptInvalidationReply,
   validateRedisSetReply,
   WRITE_TRACKED_STAMP_SCRIPT,
   type TrackedRedisPlaceholder,
@@ -177,6 +179,8 @@ const placeholderRedisFrame: Buffer = encodeRedisFrame("pending", 0);
 const trackedRedisPlaceholder: TrackedRedisPlaceholder = encodeTrackedRedisPlaceholder("pending");
 const stampReplyResolution: boolean = resolveTrackedRedisWriteReply(1);
 const setReplyValidation: void = validateRedisSetReply("OK");
+const invalidationReplyValidation: 1 = validateRedisScriptInvalidationReply(1);
+const ceiledCacheTtlMs: number = ceilSupportedCacheTtlMs(1_000.5);
 const placeholderLostError = new DialCacheRedisPlaceholderLostError("lost");
 const stampScriptSource: string = WRITE_TRACKED_STAMP_SCRIPT;
 const stampArguments: Array<string | Buffer> = dialcacheRedisScripts.dialcacheWriteTrackedStamp.transformArguments(
@@ -826,6 +830,32 @@ try {
     throw new Error("The lost-placeholder error does not match the root ESM export");
   }
 }
+if (redisProtocol.validateRedisScriptInvalidationReply(1) !== 1) {
+  throw new Error("The packed ESM invalidation reply validator must accept reply 1");
+}
+for (const invalidInvalidationReply of [0, 2]) {
+  try {
+    redisProtocol.validateRedisScriptInvalidationReply(invalidInvalidationReply);
+    throw new Error("Expected an out-of-domain invalidation reply to fail");
+  } catch (error) {
+    if (!(error instanceof root.DialCacheRedisProtocolError)) {
+      throw new Error("The invalidation reply error does not match the root ESM export");
+    }
+  }
+}
+if (redisProtocol.ceilSupportedCacheTtlMs(1_000.5) !== 1_001) {
+  throw new Error("The packed ESM TTL guard did not ceil a fractional cacheTtlMs");
+}
+for (const invalidCacheTtlMs of [0, 31_536_000_001]) {
+  try {
+    redisProtocol.ceilSupportedCacheTtlMs(invalidCacheTtlMs);
+    throw new Error("Expected an out-of-domain cacheTtlMs to fail");
+  } catch (error) {
+    if (!(error instanceof RangeError)) {
+      throw new Error("The packed ESM TTL guard must reject out-of-domain durations with RangeError");
+    }
+  }
+}
 // ESM chunk splitting shares one class instance across entries, so also
 // prove the brand itself: a hand-branded foreign Error must satisfy the
 // root export's Symbol.hasInstance.
@@ -1164,6 +1194,32 @@ try {
 } catch (error) {
   if (!(error instanceof root.DialCacheRedisPlaceholderLostError)) {
     throw new Error("The lost-placeholder error does not match the root CommonJS export");
+  }
+}
+if (redisProtocol.validateRedisScriptInvalidationReply(1) !== 1) {
+  throw new Error("The packed CommonJS invalidation reply validator must accept reply 1");
+}
+for (const invalidInvalidationReply of [0, 2]) {
+  try {
+    redisProtocol.validateRedisScriptInvalidationReply(invalidInvalidationReply);
+    throw new Error("Expected an out-of-domain invalidation reply to fail");
+  } catch (error) {
+    if (!(error instanceof root.DialCacheRedisProtocolError)) {
+      throw new Error("The invalidation reply error does not match the root CommonJS export");
+    }
+  }
+}
+if (redisProtocol.ceilSupportedCacheTtlMs(1_000.5) !== 1_001) {
+  throw new Error("The packed CommonJS TTL guard did not ceil a fractional cacheTtlMs");
+}
+for (const invalidCacheTtlMs of [0, 31_536_000_001]) {
+  try {
+    redisProtocol.ceilSupportedCacheTtlMs(invalidCacheTtlMs);
+    throw new Error("Expected an out-of-domain cacheTtlMs to fail");
+  } catch (error) {
+    if (!(error instanceof RangeError)) {
+      throw new Error("The packed CommonJS TTL guard must reject out-of-domain durations with RangeError");
+    }
   }
 }
 // Keep the brand coverage bundler-independent: a hand-branded foreign Error

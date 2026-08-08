@@ -106,7 +106,8 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
     // GLIDE has no nodeAddressMap: it must reach the cluster's announced
     // container IPs directly. Those are host-routable on Linux (CI) but not
     // under Docker Desktop, so probe with a short timeout and let the GLIDE
-    // assertions skip locally instead of failing.
+    // assertions skip locally instead of failing. CI must fail closed: a
+    // silent skip there would drop the only GLIDE cluster coverage.
     try {
       glideCluster = await valkeyGlide.GlideClusterClient.createClient({
         addresses: containers.map((container) => ({
@@ -116,8 +117,11 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
         requestTimeout: 5_000,
         advancedConfiguration: { connectionTimeout: 2_000 },
       });
-    } catch {
-      glideCluster = undefined;
+    } catch (error) {
+      if (process.env.CI !== undefined) {
+        throw error;
+      }
+      console.warn("GLIDE cluster client unavailable; skipping GLIDE cluster assertions", error);
     }
   });
 

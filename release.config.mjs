@@ -10,9 +10,8 @@ export default {
           // A version PR records the selected version without selecting a new
           // release itself. Earlier commits still determine the release type.
           { type: "release", release: false },
-          // Pre-1.0 MVP policy: breaking changes release as minors so their
-          // BREAKING CHANGE footers still drive full release notes without
-          // forcing 1.0.0. Restore "major" here when cutting 1.0.0.
+          // Pre-1.0 policy — see README "Releasing", which owns this table.
+          // Restore "major" here when cutting 1.0.0.
           { breaking: true, release: "minor" },
           { type: "feat", release: "minor" },
           { type: "fix", release: "patch" },

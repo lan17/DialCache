@@ -14,9 +14,11 @@ src/
   key.ts                # Structured cache keys and Redis hash tags
   metrics.ts            # Backend-neutral metrics adapter contract
   prometheus.ts         # Optional Prometheus adapter
+  datadog.ts            # Optional Datadog (DogStatsD) adapter
   redis-client.ts       # Client-independent semantic Redis interface
-  node-redis.ts          # node-redis adapter and script registration
-  redis-protocol.ts      # Public frame codec and Lua protocol exports
+  node-redis.ts         # node-redis adapter and script registration
+  valkey-glide.ts       # Valkey GLIDE adapter (standalone and cluster)
+  redis-protocol.ts     # Public frame codec and Lua protocol exports
   serializer.ts         # Serializer contract and JSON implementation
   internal/             # Cache layers, runtime config, payload compression, and mutation Lua scripts
 test/                   # Unit and Redis integration tests

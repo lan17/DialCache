@@ -147,6 +147,18 @@ describe("Redis frame decoding", () => {
     expect(decodeRedisFrame(binary.frame)).toBeNull();
   });
 
+  it("mints a distinct nonce for every placeholder", () => {
+    // The stamp promotes only the placeholder carrying its own nonce, so
+    // nonce uniqueness is what keeps concurrent same-key writes disjoint.
+    const mints = Array.from({ length: 32 }, () => encodeTrackedRedisPlaceholder("pending"));
+    const nonces = new Set(mints.map(({ nonce }) => nonce.toString("hex")));
+
+    expect(nonces.size).toBe(32);
+    for (const { frame, nonce } of mints) {
+      expect(frame.subarray(1, 9)).toEqual(nonce);
+    }
+  });
+
   it("gates serving on the version byte even for hostile placeholder nonces", () => {
     // A nonce that would decode as a huge timestamp must never beat the
     // watermark: version 0 alone keeps the frame a miss on both paths.

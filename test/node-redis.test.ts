@@ -8,6 +8,7 @@ import {
   DialCacheRedisProtocolError,
 } from "../src/index.js";
 import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "../src/node-redis.js";
+import { INVALIDATE_CACHE_SCRIPT } from "../src/redis-protocol.js";
 
 const INVALID_WRITE_REPLIES: readonly unknown[] = [
   -1,
@@ -28,6 +29,7 @@ interface FakeReplies {
   readonly get?: unknown;
   readonly mGet?: unknown;
   readonly set?: unknown;
+  readonly eval?: unknown;
   readonly stamp?: unknown;
   readonly invalidate?: unknown;
 }
@@ -40,6 +42,9 @@ function fakeClient(replies: FakeReplies = {}) {
       const args = (Array.isArray(callArgs[0]) ? callArgs[0] : callArgs[2]) as Array<unknown>;
       if (args[0] === "SET") {
         return Object.hasOwn(replies, "set") ? replies.set : "OK";
+      }
+      if (args[0] === "EVAL") {
+        return Object.hasOwn(replies, "eval") ? replies.eval : 1;
       }
       return Object.hasOwn(replies, "mGet") ? replies.mGet : [null, null];
     }),
@@ -497,6 +502,111 @@ describe("node-redis adapter", () => {
         invalidationMessage,
       );
     }
+  });
+
+  it("dispatches invalidation once and sends no EVAL when the registered script resolves", async () => {
+    const client = fakeClient();
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await expect(
+      adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 }),
+    ).resolves.toBeUndefined();
+
+    expect(client.dialcacheInvalidate).toHaveBeenCalledTimes(1);
+    expect(client.sendCommand).not.toHaveBeenCalled();
+  });
+
+  it("retries a rejected invalidation dispatch once with EVAL by source", async () => {
+    const client = fakeClient();
+    client.dialcacheInvalidate.mockRejectedValueOnce(
+      new Error("NOPERM this user has no permissions to run the 'evalsha' command"),
+    );
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await expect(
+      adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 }),
+    ).resolves.toBeUndefined();
+
+    expect(client.dialcacheInvalidate).toHaveBeenCalledTimes(1);
+    expect(client.sendCommand).toHaveBeenCalledTimes(1);
+    const [args] = client.sendCommand.mock.calls[0] as [Array<unknown>];
+    expect(args).toEqual([
+      "EVAL",
+      INVALIDATE_CACHE_SCRIPT,
+      "1",
+      "tracked:{id}:watermark",
+      "50",
+    ]);
+  });
+
+  it("routes the invalidation EVAL retry through the cluster keyed overload", async () => {
+    const client = fakeCluster();
+    client.dialcacheInvalidate.mockRejectedValueOnce(new Error("NOPERM evalsha denied"));
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await expect(
+      adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 }),
+    ).resolves.toBeUndefined();
+
+    expect(client.sendCommand).toHaveBeenCalledTimes(1);
+    const [firstKey, isReadonly, args] = client.sendCommand.mock.calls[0] as [
+      string,
+      boolean,
+      Array<unknown>,
+    ];
+    expect(firstKey).toBe("tracked:{id}:watermark");
+    expect(isReadonly).toBe(false);
+    expect(args[0]).toBe("EVAL");
+  });
+
+  it("surfaces the invalidation retry rejection with the original attached as cause", async () => {
+    const client = fakeClient();
+    const original = new Error("NOPERM evalsha denied");
+    const retryFailure = new Error("NOPERM eval denied");
+    client.dialcacheInvalidate.mockRejectedValueOnce(original);
+    client.sendCommand.mockRejectedValueOnce(retryFailure);
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await expect(
+      adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 }),
+    ).rejects.toBe(retryFailure);
+
+    expect(retryFailure.cause).toBe(original);
+    expect(client.sendCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves a pre-existing cause on the invalidation retry rejection", async () => {
+    const client = fakeClient();
+    const retryFailure = new Error("wrapped transport failure", { cause: "socket closed" });
+    client.dialcacheInvalidate.mockRejectedValueOnce(new Error("NOPERM evalsha denied"));
+    client.sendCommand.mockRejectedValueOnce(retryFailure);
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await expect(
+      adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 }),
+    ).rejects.toBe(retryFailure);
+
+    expect(retryFailure.cause).toBe("socket closed");
+  });
+
+  it("does not retry an invalidation reply-domain violation", async () => {
+    // The registered transformReply validates inside the returned promise on
+    // a real client, so a domain violation arrives as a rejection; it is
+    // deterministic and must surface without a second dispatch.
+    const client = fakeClient();
+    client.dialcacheInvalidate.mockRejectedValueOnce(
+      new DialCacheRedisProtocolError("Invalid DialCache Redis invalidate reply; expected integer 1"),
+    );
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await expectProtocolError(
+      Promise.resolve(adapter.invalidate({
+        watermarkKey: "tracked:{id}:watermark",
+        futureBufferMs: 50,
+      })),
+      "Invalid DialCache Redis invalidate reply; expected integer 1",
+    );
+    expect(client.sendCommand).not.toHaveBeenCalled();
   });
 
   it("validates replies at the public node-redis script transform boundary", () => {

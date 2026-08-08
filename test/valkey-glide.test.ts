@@ -76,7 +76,12 @@ const mockGlide = {
 };
 
 function createFakeClient(replies: unknown[]) {
-  const nextReply = async (): Promise<unknown> => replies.shift();
+  const nextReply = async (): Promise<unknown> => {
+    if (replies.length === 0) {
+      throw new Error("fake GLIDE reply queue exhausted; queue every expected dispatch");
+    }
+    return replies.shift();
+  };
   const client = {
     customCommand: vi.fn(async (
       _args: Array<string | Buffer>,
@@ -658,6 +663,7 @@ describe("Valkey GLIDE adapter", () => {
         adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 }),
       ).resolves.toBeUndefined();
 
+      expect(client.customCommand).toHaveBeenCalledTimes(2);
       expect(client.customCommand).toHaveBeenNthCalledWith(
         2,
         ["EVAL", INVALIDATE_CACHE_SCRIPT, "1", "tracked:{id}:watermark", "50"],
@@ -680,6 +686,20 @@ describe("Valkey GLIDE adapter", () => {
     await expect(invalidation).rejects.toBe(second);
     await expect(invalidation).rejects.toMatchObject({ cause: first });
     expect(client.customCommand).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves a pre-existing cause on the invalidation retry rejection", async () => {
+    const first = new Error("read ECONNRESET");
+    const second = new Error("wrapped transport failure", { cause: "socket closed" });
+    const client = fakeClient();
+    client.customCommand.mockRejectedValueOnce(first).mockRejectedValueOnce(second);
+    const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
+
+    await expect(
+      adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 }),
+    ).rejects.toBe(second);
+
+    expect(second.cause).toBe("socket closed");
   });
 
   it("uses Batch and Decoder from the supplied GLIDE module instance", async () => {

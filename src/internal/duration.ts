@@ -21,9 +21,11 @@ export function cacheTtlSecToMs(ttlSec: number): number {
 }
 
 /**
- * Validate and ceil an adapter-level write TTL. Native SET PX requires an
- * integer, and the Lua write validation this replaces rounded fractional
- * durations upward, so adapters preserve that exact acceptance domain.
+ * Validate and ceil an adapter-level write TTL to the protocol's acceptance
+ * domain: fractional milliseconds round up, and the result must be a
+ * positive integer no greater than 365 days. Native SET PX requires an
+ * integer, and the stamp script re-checks the same domain server-side as
+ * defense in depth for adapters that skip this guard.
  */
 export function ceilSupportedCacheTtlMs(cacheTtlMs: number): number {
   const ceiled = typeof cacheTtlMs === "number" ? Math.ceil(cacheTtlMs) : Number.NaN;

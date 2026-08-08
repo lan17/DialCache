@@ -257,8 +257,8 @@ export function createValkeyGlideDialCacheClient<TDecoder>(
             options,
           );
         } catch (retryError) {
-          if (retryError instanceof Error && (retryError as { cause?: unknown }).cause === undefined) {
-            (retryError as { cause?: unknown }).cause = error;
+          if (retryError instanceof Error && retryError.cause === undefined) {
+            retryError.cause = error;
           }
           throw retryError;
         }

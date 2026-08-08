@@ -308,9 +308,22 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       expect(stored?.[10]).toBe(MARKER_ZSTD_UTF8);
 
       await dialcache.invalidateRemote("item_id", "big");
-      await new Promise((resolve) => setTimeout(resolve, 2));
+      // Leave the zero-buffer watermark clearly in the past so the refill's
+      // stamp cannot land inside the fence window and blank the entry.
+      await new Promise((resolve) => setTimeout(resolve, 25));
       const refreshed = await dialcache.enable(async () => await getLarge("big"));
       expect(refreshed).toEqual({ ...first, calls: 2 });
+
+      // The refill must be a published, servable zstd frame: a third read
+      // serves it from Redis without reloading, and the stored bytes carry a
+      // promoted version byte with the envelope intact after the stamp.
+      const third = await dialcache.enable(async () => await getLarge("big"));
+      expect(third).toEqual(refreshed);
+      expect(calls).toBe(2);
+      const restored = await admin.get(commandOptions({ returnBuffers: true }), valueKey);
+      expect(restored?.[0]).toBe(1);
+      expect(restored?.[9]).toBe(1);
+      expect(restored?.[10]).toBe(MARKER_ZSTD_UTF8);
     });
 
     it("escapes envelope-colliding binary serializer output on the wire and round-trips it", async () => {

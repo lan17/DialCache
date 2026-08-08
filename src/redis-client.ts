@@ -177,10 +177,11 @@ export interface DialCacheRedisClient {
    * Tracked writes issue two commands ordered on one connection without a
    * transaction: a native `SET` of an `encodeTrackedRedisPlaceholder` frame,
    * followed by `WRITE_TRACKED_STAMP_SCRIPT` with `KEYS = [valueKey,
-   * watermarkKey]` and `ARGV = [cacheTtlMs, nonce]`. Ceil `cacheTtlMs` to an
-   * integer and pass that same value as both the SET's `PX` and `ARGV[1]` —
-   * `PX` rejects fractions and the watermark's lifetime is derived from
-   * `ARGV[1]` — and the nonce must be the placeholder's. The script fences against the watermark and
+   * watermarkKey]` and `ARGV = [cacheTtlMs, nonce]`. Run `cacheTtlMs` through
+   * `ceilSupportedCacheTtlMs` (exported by `dialcache/redis-protocol`) and
+   * pass the result as both the SET's `PX` and `ARGV[1]` — `PX` rejects
+   * fractions and the watermark's lifetime is derived from `ARGV[1]` — and
+   * the nonce must be the placeholder's. The script fences against the watermark and
    * unlinks the value (reply 0), promotes exactly the placeholder carrying
    * its nonce to a served frame with server-time `createdAt` (reply 1), or
    * reports the placeholder gone (reply 2); it maintains the watermark's
