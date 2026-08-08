@@ -273,6 +273,46 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       expect(storedSmall?.subarray(10).toString("utf8")).toBe(JSON.stringify(firstSmall));
     });
 
+    it("round-trips compressed payloads through tracked writes and invalidation", async () => {
+      if (client === undefined || admin === undefined) {
+        throw new Error("Redis test clients did not start");
+      }
+      // Compression envelopes and the tracked placeholder protocol were built
+      // in separate branches; this pins their combination: a zstd payload
+      // rides an unreadable nonce placeholder, gets promoted by the stamp,
+      // and stays fenceable by the watermark.
+      const scriptClient: DialCacheRedisClient = client.adapter;
+      const namespace = "real-compression-tracked";
+      const dialcache = new DialCache({ namespace, redis: { client: scriptClient, readTimeoutMs: 10_000 } });
+      let calls = 0;
+      const getLarge = dialcache.cached(
+        async (id: string) => ({ id, calls: ++calls, blob: "tracked dialcache payload ".repeat(1_024) }),
+        {
+          keyType: "item_id",
+          useCase: "RealCompressionTracked",
+          cacheKey: (id) => id,
+          trackForInvalidation: true,
+          defaultConfig: remoteOnly,
+        },
+      );
+
+      const first = await dialcache.enable(async () => await getLarge("big"));
+      const second = await dialcache.enable(async () => await getLarge("big"));
+      expect(second).toEqual(first);
+      expect(calls).toBe(1);
+
+      const valueKey = `{${namespace}:item_id:big}#RealCompressionTracked:dialcache-frame-v1`;
+      const stored = await admin.get(commandOptions({ returnBuffers: true }), valueKey);
+      expect(stored?.[0]).toBe(1);
+      expect(stored?.[9]).toBe(1);
+      expect(stored?.[10]).toBe(MARKER_ZSTD_UTF8);
+
+      await dialcache.invalidateRemote("item_id", "big");
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      const refreshed = await dialcache.enable(async () => await getLarge("big"));
+      expect(refreshed).toEqual({ ...first, calls: 2 });
+    });
+
     it("escapes envelope-colliding binary serializer output on the wire and round-trips it", async () => {
       if (client === undefined || admin === undefined) {
         throw new Error("Redis test clients did not start");
