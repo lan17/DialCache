@@ -26,6 +26,10 @@ const rootConsumer = `import {
   type CoalescedMetricLabels,
   type CoalescingScope,
   type CoalescingState,
+  type CompressionConfig,
+  type CompressionMetricLabels,
+  type CompressionOperationMetricLabels,
+  type CompressionOutcome,
   type DialCacheConfig,
   type DialCacheKeyInit,
   type DialCacheMetricsAdapter,
@@ -349,12 +353,39 @@ const metricErrorKinds: Readonly<Record<MetricErrorKind, true>> = {
   cache_write: true,
   serialization_load: true,
   serialization_dump: true,
+  compression: true,
   invalidation: true,
   fallback: true,
   unknown: true,
 };
 // @ts-expect-error Arbitrary exception names are not DialCache metric error categories.
 const unboundedErrorKind: MetricErrorKind = "Tenant123Error";
+const compressionConfig: CompressionConfig = { thresholdBytes: 4096, level: 3 };
+const compressionMetricLabels: CompressionMetricLabels = {
+  cacheNamespace: "consumer-cache",
+  useCase: "Load",
+  keyType: "id",
+  layer: CacheLayer.REMOTE,
+  outcome: "compressed",
+};
+const compressionOutcomes: Readonly<Record<CompressionOutcome, true>> = {
+  compressed: true,
+  below_threshold: true,
+  not_smaller: true,
+  write_over_limit: true,
+  decompressed: true,
+  fallback_raw: true,
+  read_over_limit: true,
+};
+const compressionOperationMetricLabels: CompressionOperationMetricLabels = {
+  cacheNamespace: "consumer-cache",
+  useCase: "Load",
+  keyType: "id",
+  layer: CacheLayer.REMOTE,
+  operation: "compress",
+};
+// @ts-expect-error Compression outcomes are a bounded metric category.
+const unboundedCompressionOutcome: CompressionOutcome = "inflated";
 
 const customRedisClient: DialCacheRedisClient = {
   // The optional second read argument preserves one-argument custom clients.
@@ -368,6 +399,10 @@ const redisClientMethods: Readonly<Record<keyof DialCacheRedisClient, true>> = {
   invalidate: true,
 };
 void redisClientMethods;
+const redisConfigAcceptsCompressionOptOut: RedisConfig = {
+  client: customRedisClient,
+  compression: false,
+};
 const cacheHasNoFlushAll: "flushAll" extends keyof DialCache ? false : true = true;
 const cacheHasNoClose: "close" extends keyof DialCache ? false : true = true;
 const clientHasNoFlushAll: "flushAll" extends keyof DialCacheRedisClient ? false : true = true;
@@ -477,6 +512,12 @@ void MissingKeyConfigError;
 void disabledOverlay;
 void metricErrorKinds;
 void unboundedErrorKind;
+void compressionConfig;
+void compressionMetricLabels;
+void compressionOperationMetricLabels;
+void compressionOutcomes;
+void unboundedCompressionOutcome;
+void redisConfigAcceptsCompressionOptOut;
 void createNodeRedisDialCacheClient;
 void decodedEmptyRedisPayload;
 void decodedStaleRedisPayload;

@@ -3,6 +3,8 @@ import { Counter, Histogram, type OpenMetricsContentType, type Registry } from "
 import type {
   CacheMetricLabels,
   CoalescedMetricLabels,
+  CompressionMetricLabels,
+  CompressionOperationMetricLabels,
   DialCacheMetricsAdapter,
   DisabledMetricLabels,
   ErrorMetricLabels,
@@ -27,6 +29,7 @@ type SerializationLabels = CounterLabels | "operation";
 type InvalidationLabels = "cache_namespace" | "key_type" | "layer";
 type CoalescedLabels = "cache_namespace" | "use_case" | "key_type" | "scope";
 type ShadowValidationLabels = "cache_namespace" | "use_case" | "key_type" | "outcome";
+type CompressionLabels = CounterLabels | "outcome";
 
 interface BaseCollectorConfig<T extends string> {
   readonly name: string;
@@ -56,6 +59,7 @@ interface CollectorShape {
 
 const TIMER_BUCKETS = [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
 const SIZE_BUCKETS = [100, 1_000, 10_000, 100_000, 1_000_000, 10_000_000];
+const RATIO_BUCKETS = [0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 1];
 
 export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
   private readonly requestCounter: Counter<CounterLabels>;
@@ -65,10 +69,14 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
   private readonly invalidationCounter: Counter<InvalidationLabels>;
   private readonly coalescedCounter: Counter<CoalescedLabels>;
   private readonly shadowValidationCounter: Counter<ShadowValidationLabels>;
+  private readonly compressionCounter: Counter<CompressionLabels>;
   private readonly getTimer: Histogram<CounterLabels>;
   private readonly fallbackTimer: Histogram<CounterLabels>;
   private readonly serializationTimer: Histogram<SerializationLabels>;
   private readonly sizeHistogram: Histogram<CounterLabels>;
+  private readonly storedSizeHistogram: Histogram<CounterLabels>;
+  private readonly compressionRatioHistogram: Histogram<CounterLabels>;
+  private readonly compressionTimer: Histogram<SerializationLabels>;
 
   constructor(options: PrometheusMetricsOptions) {
     const registry = options.registry;
@@ -83,10 +91,14 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
     this.invalidationCounter = counter(registry, collectors.invalidationCounter);
     this.coalescedCounter = counter(registry, collectors.coalescedCounter);
     this.shadowValidationCounter = counter(registry, collectors.shadowValidationCounter);
+    this.compressionCounter = counter(registry, collectors.compressionCounter);
     this.getTimer = histogram(registry, collectors.getTimer);
     this.fallbackTimer = histogram(registry, collectors.fallbackTimer);
     this.serializationTimer = histogram(registry, collectors.serializationTimer);
     this.sizeHistogram = histogram(registry, collectors.sizeHistogram);
+    this.storedSizeHistogram = histogram(registry, collectors.storedSizeHistogram);
+    this.compressionRatioHistogram = histogram(registry, collectors.compressionRatioHistogram);
+    this.compressionTimer = histogram(registry, collectors.compressionTimer);
   }
 
   request(labels: CacheMetricLabels): void {
@@ -135,6 +147,10 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
     });
   }
 
+  compression(labels: CompressionMetricLabels): void {
+    this.compressionCounter.inc({ ...cacheLabels(labels), outcome: labels.outcome });
+  }
+
   observeGet(labels: CacheMetricLabels, seconds: number): void {
     this.getTimer.observe(cacheLabels(labels), seconds);
   }
@@ -149,6 +165,18 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
 
   observeSize(labels: CacheMetricLabels, bytes: number): void {
     this.sizeHistogram.observe(cacheLabels(labels), bytes);
+  }
+
+  observeStoredSize(labels: CacheMetricLabels, bytes: number): void {
+    this.storedSizeHistogram.observe(cacheLabels(labels), bytes);
+  }
+
+  observeCompressionRatio(labels: CacheMetricLabels, ratio: number): void {
+    this.compressionRatioHistogram.observe(cacheLabels(labels), ratio);
+  }
+
+  observeCompression(labels: CompressionOperationMetricLabels, seconds: number): void {
+    this.compressionTimer.observe({ ...cacheLabels(labels), operation: labels.operation }, seconds);
   }
 }
 
@@ -209,6 +237,12 @@ function collectorConfigs(prefix: string) {
       help: "Sampled DialCache Redis shadow-validation outcomes.",
       labelNames: ["cache_namespace", "use_case", "key_type", "outcome"],
     },
+    compressionCounter: {
+      type: "counter",
+      name: `${prefix}dialcache_compression_counter`,
+      help: "DialCache Redis payload compression and decompression outcomes.",
+      labelNames: ["cache_namespace", "use_case", "key_type", "layer", "outcome"],
+    },
     getTimer: {
       type: "histogram",
       name: `${prefix}dialcache_get_timer`,
@@ -236,6 +270,27 @@ function collectorConfigs(prefix: string) {
       help: "Serialized DialCache value sizes in bytes.",
       labelNames: ["cache_namespace", "use_case", "key_type", "layer"],
       buckets: SIZE_BUCKETS,
+    },
+    storedSizeHistogram: {
+      type: "histogram",
+      name: `${prefix}dialcache_stored_size_histogram`,
+      help: "Stored DialCache payload sizes in bytes, after compression and escaping.",
+      labelNames: ["cache_namespace", "use_case", "key_type", "layer"],
+      buckets: SIZE_BUCKETS,
+    },
+    compressionRatioHistogram: {
+      type: "histogram",
+      name: `${prefix}dialcache_compression_ratio_histogram`,
+      help: "Compressed-to-original DialCache payload size ratio for compressed writes.",
+      labelNames: ["cache_namespace", "use_case", "key_type", "layer"],
+      buckets: RATIO_BUCKETS,
+    },
+    compressionTimer: {
+      type: "histogram",
+      name: `${prefix}dialcache_compression_timer`,
+      help: "DialCache payload compression and decompression latency in seconds.",
+      labelNames: ["cache_namespace", "use_case", "key_type", "layer", "operation"],
+      buckets: TIMER_BUCKETS,
     },
   } as const;
 }

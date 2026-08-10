@@ -6,11 +6,14 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import {
   CacheLayer,
   DialCache,
+  DialCacheKey,
   DialCacheKeyConfig,
   type DialCacheMetricsAdapter,
   type DialCacheRedisClient,
   type Serializer,
 } from "../src/index.js";
+import { MARKER_ESCAPED_RAW, MARKER_ZSTD_UTF8 } from "../src/internal/compression.js";
+import { markerCollidingSerializer, type Row } from "./marker-colliding-serializer.js";
 import {
   INVALIDATE_CACHE_SCRIPT,
   WRITE_CACHE_SCRIPT,
@@ -251,6 +254,86 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       expect(jsonCalls).toBe(1);
       expect(binaryCalls).toBe(1);
       expect(inlineCalls).toBe(1);
+    });
+
+    it("compresses values above the threshold and stores small values byte-identical", async () => {
+      if (client === undefined || admin === undefined) {
+        throw new Error("Redis test clients did not start");
+      }
+      const scriptClient: DialCacheRedisClient = client.adapter;
+      const dialcache = new DialCache({ namespace: "real", redis: { client: scriptClient, readTimeoutMs: 10_000 } });
+      let largeCalls = 0;
+      const getLarge = dialcache.cached(
+        async (id: string) => ({ id, calls: ++largeCalls, blob: "dialcache payload ".repeat(1_024) }),
+        {
+          keyType: "item_id",
+          useCase: "RealCompressionLarge",
+          cacheKey: (id) => id,
+          defaultConfig: remoteOnly,
+        },
+      );
+      let smallCalls = 0;
+      const getSmall = dialcache.cached(async (id: string) => ({ id, calls: ++smallCalls }), {
+        keyType: "item_id",
+        useCase: "RealCompressionSmall",
+        cacheKey: (id) => id,
+        defaultConfig: remoteOnly,
+      });
+
+      const firstLarge = await dialcache.enable(async () => await getLarge("big"));
+      const secondLarge = await dialcache.enable(async () => await getLarge("big"));
+      const firstSmall = await dialcache.enable(async () => await getSmall("tiny"));
+
+      // The remote-only config forces the second read through Redis, so equality proves decompression.
+      expect(secondLarge).toEqual(firstLarge);
+      expect(largeCalls).toBe(1);
+
+      const largeKey = `${new DialCacheKey({ namespace: "real", keyType: "item_id", id: "big", useCase: "RealCompressionLarge" }).urn}:dialcache-frame-v1`;
+      const storedLarge = await admin.get(commandOptions({ returnBuffers: true }), largeKey);
+      expect(storedLarge).not.toBeNull();
+      expect(storedLarge?.[0]).toBe(1);
+      expect(storedLarge?.[9]).toBe(1);
+      expect(storedLarge?.[10]).toBe(MARKER_ZSTD_UTF8);
+      expect(storedLarge?.length).toBeLessThan(10 + Buffer.byteLength(JSON.stringify(firstLarge)));
+
+      const smallKey = `${new DialCacheKey({ namespace: "real", keyType: "item_id", id: "tiny", useCase: "RealCompressionSmall" }).urn}:dialcache-frame-v1`;
+      const storedSmall = await admin.get(commandOptions({ returnBuffers: true }), smallKey);
+      expect(storedSmall?.[9]).toBe(0);
+      expect(storedSmall?.subarray(10).toString("utf8")).toBe(JSON.stringify(firstSmall));
+    });
+
+    it("escapes envelope-colliding binary serializer output on the wire and round-trips it", async () => {
+      if (client === undefined || admin === undefined) {
+        throw new Error("Redis test clients did not start");
+      }
+      const scriptClient: DialCacheRedisClient = client.adapter;
+      const dialcache = new DialCache({ namespace: "real", redis: { client: scriptClient, readTimeoutMs: 10_000 } });
+      let calls = 0;
+      const getRow = dialcache.cached(
+        async (id: string): Promise<Row> => {
+          calls += 1;
+          return { id };
+        },
+        {
+          keyType: "item_id",
+          useCase: "RealCompressionEscape",
+          cacheKey: (id) => id,
+          defaultConfig: remoteOnly,
+          serializer: markerCollidingSerializer,
+        },
+      );
+
+      const first = await dialcache.enable(async () => await getRow("esc"));
+      const second = await dialcache.enable(async () => await getRow("esc"));
+      expect(first).toEqual({ id: "esc" });
+      expect(second).toEqual({ id: "esc" });
+      expect(calls).toBe(1);
+
+      const escapeKey = `${new DialCacheKey({ namespace: "real", keyType: "item_id", id: "esc", useCase: "RealCompressionEscape" }).urn}:dialcache-frame-v1`;
+      const stored = await admin.get(commandOptions({ returnBuffers: true }), escapeKey);
+      expect(stored?.[9]).toBe(1);
+      expect(stored?.[10]).toBe(MARKER_ESCAPED_RAW);
+      expect(stored?.[11]).toBe(MARKER_ZSTD_UTF8);
     });
 
     it("stores arbitrary binary payloads without base64 expansion", async () => {

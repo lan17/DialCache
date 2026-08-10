@@ -5,6 +5,7 @@ import {
   CacheLayer,
   DialCache,
   DialCacheKeyConfig,
+  type CompressionOutcome,
   type DisabledReason,
   type MissReason,
   type DialCacheRedisClient,
@@ -98,18 +99,20 @@ const MISS_REASONS: Readonly<Record<MissReason, true>> = {
   deserialization_failed: true,
 };
 const missReasons = Object.keys(MISS_REASONS) as MissReason[];
-const errorKinds: readonly MetricErrorKind[] = [
-  "key_construction",
-  "config_resolution",
-  "cache_read",
-  "cache_read_timeout",
-  "cache_write",
-  "serialization_load",
-  "serialization_dump",
-  "invalidation",
-  "fallback",
-  "unknown",
-];
+const ERROR_KINDS: Readonly<Record<MetricErrorKind, true>> = {
+  key_construction: true,
+  config_resolution: true,
+  cache_read: true,
+  cache_read_timeout: true,
+  cache_write: true,
+  serialization_load: true,
+  serialization_dump: true,
+  compression: true,
+  invalidation: true,
+  fallback: true,
+  unknown: true,
+};
+const errorKinds = Object.keys(ERROR_KINDS) as MetricErrorKind[];
 const SHADOW_VALIDATION_OUTCOMES: Readonly<Record<ShadowValidationOutcome, true>> = {
   match: true,
   mismatch: true,
@@ -126,6 +129,16 @@ const SHADOW_VALIDATION_OUTCOMES: Readonly<Record<ShadowValidationOutcome, true>
   dropped: true,
 };
 const shadowValidationOutcomes = Object.keys(SHADOW_VALIDATION_OUTCOMES) as ShadowValidationOutcome[];
+const COMPRESSION_OUTCOMES: Readonly<Record<CompressionOutcome, true>> = {
+  compressed: true,
+  below_threshold: true,
+  not_smaller: true,
+  write_over_limit: true,
+  decompressed: true,
+  fallback_raw: true,
+  read_over_limit: true,
+};
+const compressionOutcomes = Object.keys(COMPRESSION_OUTCOMES) as CompressionOutcome[];
 const metricLayers: readonly MetricLayer[] = [
   CacheLayer.LOCAL,
   CacheLayer.REMOTE,
@@ -156,10 +169,14 @@ describe("Datadog metrics adapter", () => {
       keyType: "user_id",
       outcome: "match",
     });
+    metrics.compression({ ...cacheLabels, outcome: "compressed" });
     metrics.observeGet(cacheLabels, 0.125);
     metrics.observeFallback(cacheLabels, 0.5);
     metrics.observeSerialization({ ...cacheLabels, operation: "dump" }, 0.25);
     metrics.observeSize(cacheLabels, 4_096);
+    metrics.observeStoredSize(cacheLabels, 2_048);
+    metrics.observeCompressionRatio(cacheLabels, 0.35);
+    metrics.observeCompression({ ...cacheLabels, operation: "compress" }, 0.002);
 
     const baseTags = { cache_namespace: "users", use_case: "LoadUser", key_type: "user_id", layer: "local" };
     expect(client.calls).toEqual([
@@ -195,6 +212,12 @@ describe("Datadog metrics adapter", () => {
         value: 1,
         tags: { cache_namespace: "users", use_case: "LoadUser", key_type: "user_id", outcome: "match" },
       },
+      {
+        method: "increment",
+        name: "dialcache.compression.count",
+        value: 1,
+        tags: { ...baseTags, outcome: "compressed" },
+      },
       { method: "distribution", name: "dialcache.get.duration", value: 0.125, tags: baseTags },
       { method: "distribution", name: "dialcache.fallback.duration", value: 0.5, tags: baseTags },
       {
@@ -204,6 +227,14 @@ describe("Datadog metrics adapter", () => {
         tags: { ...baseTags, operation: "dump" },
       },
       { method: "distribution", name: "dialcache.serialization.size", value: 4_096, tags: baseTags },
+      { method: "distribution", name: "dialcache.stored.size", value: 2_048, tags: baseTags },
+      { method: "distribution", name: "dialcache.compression.ratio", value: 0.35, tags: baseTags },
+      {
+        method: "distribution",
+        name: "dialcache.compression.duration",
+        value: 0.002,
+        tags: { ...baseTags, operation: "compress" },
+      },
     ]);
     expect(client.flush).not.toHaveBeenCalled();
     expect(client.close).not.toHaveBeenCalled();
@@ -222,12 +253,18 @@ describe("Datadog metrics adapter", () => {
       metrics.observeFallback(cacheLabels, 0.02);
       metrics.observeSerialization({ ...cacheLabels, operation: "load" }, 0.03);
       metrics.observeSize(cacheLabels, 128);
+      metrics.observeStoredSize(cacheLabels, 96);
+      metrics.observeCompressionRatio(cacheLabels, 0.04);
+      metrics.observeCompression({ ...cacheLabels, operation: "decompress" }, 0.05);
 
       expect(client.calls.map(({ method, name, value }) => ({ method, name, value }))).toEqual([
         { method: observationMetricType, name: "service.cache.get.duration", value: 0.01 },
         { method: observationMetricType, name: "service.cache.fallback.duration", value: 0.02 },
         { method: observationMetricType, name: "service.cache.serialization.duration", value: 0.03 },
         { method: observationMetricType, name: "service.cache.serialization.size", value: 128 },
+        { method: observationMetricType, name: "service.cache.stored.size", value: 96 },
+        { method: observationMetricType, name: "service.cache.compression.ratio", value: 0.04 },
+        { method: observationMetricType, name: "service.cache.compression.duration", value: 0.05 },
       ]);
     });
   }
@@ -268,6 +305,9 @@ describe("Datadog metrics adapter", () => {
         outcome,
       });
     }
+    for (const outcome of compressionOutcomes) {
+      metrics.compression({ ...cacheLabels, outcome });
+    }
 
     expect(client.calls.slice(0, metricLayers.length).map(({ tags }) => tags.layer)).toEqual(metricLayers);
     expect(
@@ -307,6 +347,11 @@ describe("Datadog metrics adapter", () => {
         outcome,
       })),
     );
+    expect(
+      client.calls
+        .filter(({ name }) => name === "dialcache.compression.count")
+        .map(({ tags }) => tags.outcome),
+    ).toEqual(compressionOutcomes);
   });
 
   it("accepts hot-shots directly and emits DogStatsD distribution datagrams", () => {

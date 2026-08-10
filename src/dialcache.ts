@@ -1529,6 +1529,7 @@ function safeMetrics(metrics: DialCacheMetricsAdapter | null): DialCacheMetricsA
     error: (labels) => callObserver(() => metrics.error(labels)),
     invalidation: (labels) => callObserver(() => metrics.invalidation(labels)),
     coalesced: (labels) => callObserver(() => metrics.coalesced?.(labels)),
+    compression: (labels) => callObserver(() => metrics.compression?.(labels)),
     ...(typeof metrics.shadowValidation === "function"
       ? {
           shadowValidation: (labels) =>
@@ -1539,6 +1540,9 @@ function safeMetrics(metrics: DialCacheMetricsAdapter | null): DialCacheMetricsA
     observeFallback: (labels, seconds) => callObserver(() => metrics.observeFallback(labels, seconds)),
     observeSerialization: (labels, seconds) => callObserver(() => metrics.observeSerialization(labels, seconds)),
     observeSize: (labels, bytes) => callObserver(() => metrics.observeSize(labels, bytes)),
+    observeStoredSize: (labels, bytes) => callObserver(() => metrics.observeStoredSize?.(labels, bytes)),
+    observeCompressionRatio: (labels, ratio) => callObserver(() => metrics.observeCompressionRatio?.(labels, ratio)),
+    observeCompression: (labels, seconds) => callObserver(() => metrics.observeCompression?.(labels, seconds)),
   };
 }
 
