@@ -1,5 +1,6 @@
 import type { CacheLayer } from "./config.js";
 import type { DialCacheKey } from "./key.js";
+import type { RedisReadMissReason } from "./redis-client.js";
 
 export const NO_CACHE_LAYER = "noop";
 export const REMOTE_SHADOW_CACHE_LAYER = "remote_shadow";
@@ -43,6 +44,8 @@ export type CompressionOutcome =
   | "read_over_limit";
 /** Bounded reasons for skipping cache work; policy_disabled means a shared layer has no effective TTL. */
 export type DisabledReason = "context" | "policy_disabled" | "invalid_ttl" | "invalid_ramp" | "ramped_down" | "config_error";
+/** Bounded reasons a cache read counted as a miss; local layers always use not_found. */
+export type MissReason = RedisReadMissReason | "deserialization_failed";
 /** Stable failure sites used instead of backend- or application-defined error names. */
 export type MetricErrorKind =
   | "key_construction"
@@ -63,6 +66,10 @@ export interface CacheMetricLabels {
   readonly useCase: string;
   readonly keyType: string;
   readonly layer: MetricLayer;
+}
+
+export interface MissMetricLabels extends CacheMetricLabels {
+  readonly reason: MissReason;
 }
 
 export interface DisabledMetricLabels extends CacheMetricLabels {
@@ -108,7 +115,7 @@ export interface ShadowValidationMetricLabels {
 
 export interface DialCacheMetricsAdapter {
   request(labels: CacheMetricLabels): void;
-  miss(labels: CacheMetricLabels): void;
+  miss(labels: MissMetricLabels): void;
   disabled(labels: DisabledMetricLabels): void;
   error(labels: ErrorMetricLabels): void;
   invalidation(labels: InvalidationMetricLabels): void;

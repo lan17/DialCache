@@ -19,6 +19,7 @@ import {
   type RedisCachePayload,
   type RedisInvalidationRequest,
   type RedisReadContext,
+  type RedisReadOutcome,
   type RedisReadRequest,
   type RedisWriteRequest,
   type SerializationMetricLabels,
@@ -52,7 +53,20 @@ function deferred<T>(): Deferred<T> {
   return { promise, resolve, reject };
 }
 
-type ReadStep = () => RedisCachePayload | null | Promise<RedisCachePayload | null>;
+type ReadStepResult = RedisCachePayload | null | RedisReadOutcome;
+type ReadStep = () => ReadStepResult | Promise<ReadStepResult>;
+
+// Scripted payloads stay terse: null means a not_found miss, a payload means a
+// hit, and an explicit RedisReadOutcome passes through for reason-specific steps.
+function normalizeReadStep(result: ReadStepResult): RedisReadOutcome {
+  if (result === null) {
+    return { status: "miss", reason: "not_found" };
+  }
+  if (typeof result === "string" || Buffer.isBuffer(result)) {
+    return { status: "hit", payload: result };
+  }
+  return result;
+}
 
 class ScriptedRedis implements DialCacheRedisClient {
   readonly requests: RedisReadRequest[] = [];
@@ -62,14 +76,14 @@ class ScriptedRedis implements DialCacheRedisClient {
 
   constructor(private readonly steps: ReadStep[]) {}
 
-  async read(request: RedisReadRequest, context?: RedisReadContext): Promise<RedisCachePayload | null> {
+  async read(request: RedisReadRequest, context?: RedisReadContext): Promise<RedisReadOutcome> {
     this.requests.push(request);
     this.contexts.push(context);
     const step = this.steps.shift();
     if (step === undefined) {
       throw new Error("Unexpected Redis read");
     }
-    return await step();
+    return normalizeReadStep(await step());
   }
 }
 
@@ -1000,6 +1014,37 @@ describe("DialCache Redis shadow confirmation", () => {
       name === "error"
       && labels.layer === REMOTE_SHADOW_CACHE_LAYER
     )).toHaveLength(0);
+  });
+
+  it.each([
+    { name: "fills", wroteRemote: true, expected: "filled" },
+    { name: "reports fill_blocked", wroteRemote: false, expected: "fill_blocked" },
+  ])("$name after a watermark-fenced dark read, keeping fenced misses fill-eligible", async ({
+    wroteRemote,
+    expected,
+  }) => {
+    // A fenced dark read must stay fill-eligible: the tracked write script
+    // re-checks the watermark server-side, so eligibility never changes here.
+    const redis = new ScriptedRedis([() => ({ status: "miss", reason: "watermark_invalidated" })]);
+    redis.write.mockImplementationOnce(async () => wroteRemote);
+    const metrics = new RecordingMetrics();
+    const dialcache = createCache(redis, metrics);
+    const getUser = dialcache.cached(async () => ({ id: "123" }), {
+      ...trackedOptions(`ShadowFencedDarkRead${expected}`, remoteConfig(0)),
+      cacheKey: () => "123",
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ id: "123" });
+    await waitForShadowEvents(metrics, 1);
+
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual([expected]);
+    expect(redis.write).toHaveBeenCalledOnce();
+    expect(redis.write).toHaveBeenCalledWith(expect.objectContaining({ watermarkKey: expect.any(String) }));
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "miss"
+      && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+      && labels.reason === "watermark_invalidated"
+    )).toHaveLength(1);
   });
 
   it("reports a detached serializer dump failure as fill_error with an exact remote_shadow error", async () => {

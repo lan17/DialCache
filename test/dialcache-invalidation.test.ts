@@ -261,7 +261,8 @@ describe("DialCache targeted invalidation watermarks", () => {
   it("treats a tracked value with a missing watermark marker as a miss", async () => {
     const redis = new FakeRedis();
     redis.setRaw(valueKey("MissingWatermark"), encodeFrame({ source: "stale" }));
-    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
+    const metrics = new RecordingMetrics();
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 }, metrics });
     let calls = 0;
     const getUser = dialcache.cached(async (userId: string) => ({ userId, source: `fallback-${++calls}` }), {
       keyType: "user_id",
@@ -277,6 +278,55 @@ describe("DialCache targeted invalidation watermarks", () => {
     expect(first).toEqual({ userId: "123", source: "fallback-1" });
     expect(second).toEqual({ userId: "123", source: "fallback-1" });
     expect(redis.readWatermarkValue(watermarkKey)).toBe(0);
+    expect(metrics.events).toContainEqual({
+      name: "miss",
+      labels: {
+        cacheNamespace: "urn",
+        useCase: "MissingWatermark",
+        keyType: "user_id",
+        layer: CacheLayer.REMOTE,
+        reason: "watermark_unreadable",
+      },
+    });
+  });
+
+  it("classifies remote miss reasons for cold keys and watermark-fenced frames", async () => {
+    const redis = new FakeRedis();
+    const metrics = new RecordingMetrics();
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 }, metrics });
+    let version = 1;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, version }), {
+      keyType: "user_id",
+      useCase: "MissReasonClassification",
+      cacheKey: (userId) => userId,
+      trackForInvalidation: true,
+      defaultConfig: remoteOnly(),
+    });
+    const labels = {
+      cacheNamespace: "urn",
+      useCase: "MissReasonClassification",
+      keyType: "user_id",
+      layer: CacheLayer.REMOTE,
+    };
+    const remoteMisses = () =>
+      metrics.events.filter((event) => event.name === "miss" && event.labels.layer === CacheLayer.REMOTE);
+
+    await expect(dialcache.enable(async () => await getUser("123"))).resolves.toEqual({ userId: "123", version: 1 });
+    expect(remoteMisses()).toEqual([{ name: "miss", labels: { ...labels, reason: "not_found" } }]);
+
+    version = 2;
+    await dialcache.invalidateRemote("user_id", "123");
+    vi.advanceTimersByTime(1);
+
+    await expect(dialcache.enable(async () => await getUser("123"))).resolves.toEqual({ userId: "123", version: 2 });
+    expect(remoteMisses()).toEqual([
+      { name: "miss", labels: { ...labels, reason: "not_found" } },
+      { name: "miss", labels: { ...labels, reason: "watermark_invalidated" } },
+    ]);
+
+    // The fenced read refilled Redis, so the next read hits without a new miss.
+    await expect(dialcache.enable(async () => await getUser("123"))).resolves.toEqual({ userId: "123", version: 2 });
+    expect(remoteMisses()).toHaveLength(2);
   });
 
   it("preserves the furthest watermark across repeated invalidations", async () => {

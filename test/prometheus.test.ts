@@ -15,6 +15,7 @@ import {
   type CompressionOutcome,
   type DisabledReason,
   type MetricErrorKind,
+  type MissReason,
   type ShadowValidationOutcome,
 } from "../src/index.js";
 import { PrometheusDialCacheMetrics, createPrometheusDialCacheMetrics } from "../src/prometheus.js";
@@ -57,6 +58,13 @@ const DISABLED_REASONS: Readonly<Record<DisabledReason, true>> = {
   invalid_ramp: true,
   ramped_down: true,
   config_error: true,
+};
+const MISS_REASONS: Readonly<Record<MissReason, true>> = {
+  not_found: true,
+  frame_unsupported: true,
+  watermark_unreadable: true,
+  watermark_invalidated: true,
+  deserialization_failed: true,
 };
 const COMPRESSION_OUTCOMES: Readonly<Record<CompressionOutcome, true>> = {
   compressed: true,
@@ -166,7 +174,7 @@ describe("Prometheus metrics adapter", () => {
     } as const;
 
     metrics.request(labels);
-    metrics.miss(labels);
+    metrics.miss({ ...labels, reason: "not_found" });
     metrics.disabled({ ...labels, reason: "context" });
     metrics.error({ ...labels, error: "cache_read", inFallback: false });
     metrics.invalidation({ cacheNamespace: labels.cacheNamespace, keyType: labels.keyType, layer: labels.layer });
@@ -226,7 +234,7 @@ describe("Prometheus metrics adapter", () => {
       histogramSchema("schema_dialcache_fallback_timer", ["cache_namespace", "use_case", "key_type", "layer"], TIMER_BUCKETS),
       histogramSchema("schema_dialcache_get_timer", ["cache_namespace", "use_case", "key_type", "layer"], TIMER_BUCKETS),
       counterSchema("schema_dialcache_invalidation_counter", ["cache_namespace", "key_type", "layer"]),
-      counterSchema("schema_dialcache_miss_counter", ["cache_namespace", "use_case", "key_type", "layer"]),
+      counterSchema("schema_dialcache_miss_counter", ["cache_namespace", "use_case", "key_type", "layer", "reason"]),
       counterSchema("schema_dialcache_request_counter", ["cache_namespace", "use_case", "key_type", "layer"]),
       histogramSchema(
         "schema_dialcache_serialization_timer",
@@ -324,6 +332,34 @@ describe("Prometheus metrics adapter", () => {
     }
   });
 
+  it("exports every bounded miss reason without rewriting labels", async () => {
+    const registry = new Registry();
+    const metrics = new PrometheusDialCacheMetrics({ registry, prefix: "miss_reason_" });
+    const labels = {
+      cacheNamespace: "users",
+      useCase: "PrometheusMissReasons",
+      keyType: "user_id",
+      layer: CacheLayer.REMOTE,
+    } as const;
+
+    const missReasons = Object.keys(MISS_REASONS) as MissReason[];
+    for (const reason of missReasons) {
+      metrics.miss({ ...labels, reason });
+    }
+
+    for (const reason of missReasons) {
+      await expect(
+        sumMetric(registry, "miss_reason_dialcache_miss_counter", {
+          cache_namespace: labels.cacheNamespace,
+          use_case: labels.useCase,
+          key_type: labels.keyType,
+          layer: labels.layer,
+          reason,
+        }),
+      ).resolves.toBe(1);
+    }
+  });
+
   it("exports every bounded shadow-validation outcome without adding cache identity or layer labels", async () => {
     const registry = new Registry();
     const metrics = new PrometheusDialCacheMetrics({ registry, prefix: "shadow_" });
@@ -396,7 +432,7 @@ describe("Prometheus metrics adapter", () => {
     } as const;
 
     metrics.request(labels);
-    metrics.miss(labels);
+    metrics.miss({ ...labels, reason: "watermark_invalidated" });
     metrics.observeGet(labels, 0.01);
 
     await expect(

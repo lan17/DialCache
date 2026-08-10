@@ -21,3 +21,4 @@ export {
   decodeRedisFrame,
   decodeTrackedRedisFrame,
 } from "./internal/redis-payload.js";
+export type { RedisReadMissReason, RedisReadOutcome } from "./redis-client.js";

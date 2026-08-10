@@ -214,7 +214,7 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
     const payload = Buffer.from(Array.from({ length: 256 }, (_, index) => index));
 
     expect(await scriptClient.write({ valueKey, cacheTtlMs: 60_000, value: payload })).toBe(true);
-    expect(await scriptClient.read({ valueKey })).toEqual(payload);
+    expect(await scriptClient.read({ valueKey })).toEqual({ status: "hit", payload });
 
     const stored = await cluster.get(commandOptions({ returnBuffers: true }), valueKey);
     expect(stored?.length).toBe(10 + payload.length);
@@ -232,6 +232,9 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
         value: trackedPayload,
       }),
     ).toBe(true);
-    expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toEqual(trackedPayload);
+    expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toEqual({
+      status: "hit",
+      payload: trackedPayload,
+    });
   });
 });

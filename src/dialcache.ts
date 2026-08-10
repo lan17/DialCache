@@ -564,7 +564,7 @@ export class DialCache {
         return result.value;
       }
 
-      this.metrics?.miss(labelsFor(key, REQUEST_LOCAL_CACHE_LAYER));
+      this.metrics?.miss({ ...labelsFor(key, REQUEST_LOCAL_CACHE_LAYER), reason: "not_found" });
       const value = await this.getThroughSharedLayers(
         key,
         keyConfig,
@@ -1183,7 +1183,7 @@ export class DialCache {
       this.metrics?.request(labelsFor(key, CacheLayer.LOCAL));
       this.metrics?.observeGet(labelsFor(key, CacheLayer.LOCAL), elapsedSeconds(start));
       if (result.status === "miss") {
-        this.metrics?.miss(labelsFor(key, CacheLayer.LOCAL));
+        this.metrics?.miss({ ...labelsFor(key, CacheLayer.LOCAL), reason: "not_found" });
       }
       return result;
     } catch (error) {

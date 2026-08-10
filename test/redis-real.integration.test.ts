@@ -354,8 +354,8 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
         const roundTrip = await scriptClient.read({ valueKey });
         const stored = await admin.get(commandOptions({ returnBuffers: true }), valueKey);
 
-        expect(Buffer.isBuffer(roundTrip)).toBe(true);
-        expect(roundTrip).toEqual(payload);
+        expect(roundTrip).toEqual({ status: "hit", payload });
+        expect(roundTrip.status === "hit" && Buffer.isBuffer(roundTrip.payload)).toBe(true);
         expect(stored).not.toBeNull();
         expect(stored?.length).toBe(10 + payload.length);
         expect(stored?.[0]).toBe(1);
@@ -374,7 +374,10 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
           value: trackedPayload,
         }),
       ).toBe(true);
-      expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toEqual(trackedPayload);
+      expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toEqual({
+        status: "hit",
+        payload: trackedPayload,
+      });
     });
 
     it("shadow-validates the deserialized tracked value without repairing a mismatch", async () => {
@@ -759,7 +762,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       expect(await client.adapter.read({
         valueKey,
         ...(tracked ? { watermarkKey } : {}),
-      })).toBe(JSON.stringify(sourceValue));
+      })).toEqual({ status: "hit", payload: JSON.stringify(sourceValue) });
       expect(await admin.pTTL(valueKey)).toBeGreaterThan(55_000);
       expect(await admin.pTTL(valueKey)).toBeLessThanOrEqual(60_000);
       if (tracked) {
@@ -787,6 +790,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
         useCase,
         keyType: "item_id",
         layer: "remote_shadow",
+        reason: "not_found",
       });
       expect(metrics.observeSerialization).toHaveBeenCalledWith({
         cacheNamespace: namespace,
@@ -891,7 +895,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
 
       await admin.scriptFlush();
       expect(await scriptClient.write({ valueKey, cacheTtlMs: 60_000, value: "untracked" })).toBe(true);
-      expect(await scriptClient.read({ valueKey })).toBe("untracked");
+      expect(await scriptClient.read({ valueKey })).toEqual({ status: "hit", payload: "untracked" });
 
       const trackedValueKey = "script-recovery:{item:tracked}:value";
       const watermarkKey = "script-recovery:{item:tracked}:watermark";
@@ -904,7 +908,10 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
           value: "tracked",
         }),
       ).toBe(true);
-      expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toBe("tracked");
+      expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toEqual({
+        status: "hit",
+        payload: "tracked",
+      });
       await admin.scriptFlush();
       await expect(
         scriptClient.invalidate({
@@ -912,10 +919,13 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
           futureBufferMs: 0,
         }),
       ).resolves.toBeUndefined();
-      expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toBeNull();
+      expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toEqual({
+        status: "miss",
+        reason: "watermark_invalidated",
+      });
     });
 
-    it("treats every invalid read frame and watermark state as a miss", async () => {
+    it("classifies every invalid read frame and watermark state with an exact miss reason", async () => {
       if (client === undefined || admin === undefined) {
         throw new Error("Redis test clients did not start");
       }
@@ -923,28 +933,46 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       const valueKey = "read-paths:{item:read}:value";
       const watermarkKey = "read-paths:{item:read}:watermark";
 
-      expect(await scriptClient.read({ valueKey })).toBeNull();
+      expect(await scriptClient.read({ valueKey })).toEqual({ status: "miss", reason: "not_found" });
+
+      // Frame-before-watermark precedence: an absent frame stays not_found
+      // even when the watermark key holds garbage.
+      await admin.set(watermarkKey, "not-a-watermark");
+      expect(await scriptClient.read({ valueKey, watermarkKey })).toEqual({ status: "miss", reason: "not_found" });
+      await admin.del(watermarkKey);
 
       await admin.set(valueKey, Buffer.alloc(9));
-      expect(await scriptClient.read({ valueKey })).toBeNull();
+      expect(await scriptClient.read({ valueKey })).toEqual({ status: "miss", reason: "frame_unsupported" });
 
       await admin.set(valueKey, encodeFrame("wrong-version", 0, 1_000, 2));
-      expect(await scriptClient.read({ valueKey })).toBeNull();
+      expect(await scriptClient.read({ valueKey })).toEqual({ status: "miss", reason: "frame_unsupported" });
 
       await admin.set(valueKey, encodeFrame("tracked", 0, 1_000));
-      expect(await scriptClient.read({ valueKey, watermarkKey })).toBeNull();
+      expect(await scriptClient.read({ valueKey, watermarkKey })).toEqual({
+        status: "miss",
+        reason: "watermark_unreadable",
+      });
 
       await admin.set(watermarkKey, "not-a-watermark");
-      expect(await scriptClient.read({ valueKey, watermarkKey })).toBeNull();
+      expect(await scriptClient.read({ valueKey, watermarkKey })).toEqual({
+        status: "miss",
+        reason: "watermark_unreadable",
+      });
 
       await admin.set(watermarkKey, "9".repeat(400));
-      expect(await scriptClient.read({ valueKey, watermarkKey })).toBeNull();
+      expect(await scriptClient.read({ valueKey, watermarkKey })).toEqual({
+        status: "miss",
+        reason: "watermark_unreadable",
+      });
 
       await admin.set(watermarkKey, "1000");
-      expect(await scriptClient.read({ valueKey, watermarkKey })).toBeNull();
+      expect(await scriptClient.read({ valueKey, watermarkKey })).toEqual({
+        status: "miss",
+        reason: "watermark_invalidated",
+      });
 
       await admin.set(watermarkKey, "999.5");
-      expect(await scriptClient.read({ valueKey, watermarkKey })).toBe("tracked");
+      expect(await scriptClient.read({ valueKey, watermarkKey })).toEqual({ status: "hit", payload: "tracked" });
     });
 
     it("records a stale tracked frame as a remote miss without a read error", async () => {
@@ -999,7 +1027,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       expect(metrics.request).toHaveBeenCalledOnce();
       expect(metrics.request).toHaveBeenCalledWith(labels);
       expect(metrics.miss).toHaveBeenCalledOnce();
-      expect(metrics.miss).toHaveBeenCalledWith(labels);
+      expect(metrics.miss).toHaveBeenCalledWith({ ...labels, reason: "watermark_invalidated" });
       expect(metrics.observeGet).toHaveBeenCalledOnce();
       expect(metrics.observeGet).toHaveBeenCalledWith(labels, expect.any(Number));
       expect(metrics.observeFallback).toHaveBeenCalledOnce();
@@ -1018,12 +1046,18 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       await admin.hSet(valueKey, "field", "value");
       await admin.set(watermarkKey, "0");
       await expect(scriptClient.read({ valueKey })).rejects.toThrow(/WRONGTYPE/);
-      await expect(scriptClient.read({ valueKey, watermarkKey })).resolves.toBeNull();
+      await expect(scriptClient.read({ valueKey, watermarkKey })).resolves.toEqual({
+        status: "miss",
+        reason: "not_found",
+      });
 
       await admin.del([valueKey, watermarkKey]);
       await admin.set(valueKey, encodeFrame("cached", 0, 1_000));
       await admin.hSet(watermarkKey, "field", "value");
-      await expect(scriptClient.read({ valueKey, watermarkKey })).resolves.toBeNull();
+      await expect(scriptClient.read({ valueKey, watermarkKey })).resolves.toEqual({
+        status: "miss",
+        reason: "watermark_unreadable",
+      });
 
       const namespace = "wrong-type-repair";
       const repairValueKey = `{${namespace}:item_id:repair}#WrongTypeRepair:dialcache-frame-v1`;
@@ -1321,7 +1355,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
         await expect(client.raw.writeTracked(valueKey, watermarkKey, 60_000, 0, "replacement")).rejects.toThrow(
           "invalid DialCache watermark",
         );
-        expect(await scriptClient.read({ valueKey })).toBe("original");
+        expect(await scriptClient.read({ valueKey })).toEqual({ status: "hit", payload: "original" });
       }
     });
 
@@ -1472,7 +1506,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       expect(wrote).toBe(true);
       expect(await admin.get(watermarkKey)).toBe("1.75");
       expect(await admin.pTTL(watermarkKey)).toBeGreaterThanOrEqual(61_000);
-      expect(await scriptClient.read({ valueKey, watermarkKey })).toBe("cached");
+      expect(await scriptClient.read({ valueKey, watermarkKey })).toEqual({ status: "hit", payload: "cached" });
     });
 
     it("does not rewrite sufficient or persistent watermarks on tracked writes", async () => {
@@ -1534,11 +1568,14 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       expect(ttlAfterWrite).toBeGreaterThanOrEqual(61_000);
 
       await scriptClient.invalidate({ watermarkKey, futureBufferMs: 100 });
-      expect(await scriptClient.read({ valueKey, watermarkKey })).toBeNull();
+      expect(await scriptClient.read({ valueKey, watermarkKey })).toEqual({
+        status: "miss",
+        reason: "watermark_invalidated",
+      });
       const watermarkBeforeBlockedWrite = await admin.get(watermarkKey);
       const watermarkTtlBeforeBlockedWrite = await admin.pTTL(watermarkKey);
       expect(await scriptClient.write({ ...writeRequest, value: "blocked" })).toBe(false);
-      expect(await scriptClient.read({ valueKey })).toBeNull();
+      expect(await scriptClient.read({ valueKey })).toEqual({ status: "miss", reason: "not_found" });
       expect(await admin.get(watermarkKey)).toBe(watermarkBeforeBlockedWrite);
       const watermarkTtlAfterBlockedWrite = await admin.pTTL(watermarkKey);
       expect(watermarkTtlAfterBlockedWrite).toBeGreaterThan(watermarkTtlBeforeBlockedWrite - 1_000);
@@ -1549,7 +1586,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
 
       await new Promise((resolve) => setTimeout(resolve, 110));
       expect(await scriptClient.write({ ...writeRequest, value: "fresh" })).toBe(true);
-      expect(await scriptClient.read({ valueKey, watermarkKey })).toBe("fresh");
+      expect(await scriptClient.read({ valueKey, watermarkKey })).toEqual({ status: "hit", payload: "fresh" });
     });
 
     it("documents that losing a watermark removes its publication fence", async () => {
@@ -1573,7 +1610,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
 
       expect(await scriptClient.write(staleWrite)).toBe(true);
       expect(await admin.get(watermarkKey)).toBe("0");
-      expect(await scriptClient.read({ valueKey, watermarkKey })).toBe("stale");
+      expect(await scriptClient.read({ valueKey, watermarkKey })).toEqual({ status: "hit", payload: "stale" });
     });
   });
 
@@ -1587,10 +1624,16 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
     const binary = Buffer.from([0, 0xff, 0xc3, 0x28, 0x80]);
 
     await nodeRedis.write({ valueKey: "interop:node-to-glide", cacheTtlMs: 60_000, value: binary });
-    await expect(valkeyGlide.read({ valueKey: "interop:node-to-glide" })).resolves.toEqual(binary);
+    await expect(valkeyGlide.read({ valueKey: "interop:node-to-glide" })).resolves.toEqual({
+      status: "hit",
+      payload: binary,
+    });
 
     await valkeyGlide.write({ valueKey: "interop:glide-to-node", cacheTtlMs: 60_000, value: "hello" });
-    await expect(nodeRedis.read({ valueKey: "interop:glide-to-node" })).resolves.toBe("hello");
+    await expect(nodeRedis.read({ valueKey: "interop:glide-to-node" })).resolves.toEqual({
+      status: "hit",
+      payload: "hello",
+    });
 
     const nodeTrackedValueKey = "interop:{node-tracked}:value";
     const nodeTrackedWatermarkKey = "interop:{node-tracked}:watermark";
@@ -1605,7 +1648,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
         valueKey: nodeTrackedValueKey,
         watermarkKey: nodeTrackedWatermarkKey,
       }),
-    ).resolves.toEqual(binary);
+    ).resolves.toEqual({ status: "hit", payload: binary });
 
     const glideTrackedValueKey = "interop:{glide-tracked}:value";
     const glideTrackedWatermarkKey = "interop:{glide-tracked}:watermark";
@@ -1620,6 +1663,6 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
         valueKey: glideTrackedValueKey,
         watermarkKey: glideTrackedWatermarkKey,
       }),
-    ).resolves.toBe("tracked");
+    ).resolves.toEqual({ status: "hit", payload: "tracked" });
   });
 });

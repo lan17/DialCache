@@ -61,6 +61,22 @@ export class DialCacheRedisProtocolError extends Error {
 /** Serialized cache data, independent of any Redis client or wire framing. */
 export type RedisCachePayload = string | Buffer;
 
+/** Bounded classification for why a Redis read produced no payload. */
+export type RedisReadMissReason =
+  /** The value key is absent or expired, or a tracked MGET value member holds a non-string type. */
+  | "not_found"
+  /** The value frame is shorter than its header or has an unsupported version. */
+  | "frame_unsupported"
+  /** Tracked read whose watermark is missing, malformed, or not finite. */
+  | "watermark_unreadable"
+  /** Tracked read whose frame was created at or before the watermark. */
+  | "watermark_invalidated";
+
+/** Result of decoding one DialCache Redis read from an authoritative snapshot. */
+export type RedisReadOutcome =
+  | { readonly status: "hit"; readonly payload: RedisCachePayload }
+  | { readonly status: "miss"; readonly reason: RedisReadMissReason };
+
 interface RedisValueRequest {
   readonly valueKey: string;
 }
@@ -118,28 +134,31 @@ export interface RedisInvalidationRequest {
  */
 export interface DialCacheRedisClient {
   /**
-   * Read a DialCache Redis frame and return its decoded serializer payload.
+   * Read a DialCache Redis frame and return its decoded read outcome.
    * Implementations must use `decodeRedisFrame` / `decodeTrackedRedisFrame`
    * from `dialcache/redis-protocol`, or preserve their exact behavior.
    *
-   * Raw values are Redis bulk strings (`Buffer`) or null. A missing value, a
-   * frame shorter than the version/timestamp/encoding header, or an
-   * unsupported frame version is a cache miss. A tracked read also misses
-   * when its watermark is missing, is not a finite unsigned decimal, or is
-   * greater than or equal to the frame's creation time. In other words,
-   * `createdAt <= watermark` is fenced. Unsupported payload encodings and
-   * non-bulk runtime replies are payload protocol errors rather than misses.
+   * Raw values are Redis bulk strings (`Buffer`) or null. A miss carries one
+   * bounded `RedisReadMissReason`: a missing value is `not_found`; a frame
+   * shorter than the version/timestamp/encoding header or with an unsupported
+   * frame version is `frame_unsupported`; a tracked read whose watermark is
+   * missing or is not a finite unsigned decimal is `watermark_unreadable`;
+   * and a tracked frame with `createdAt <= watermark` is fenced as
+   * `watermark_invalidated`. Frame state is classified before watermark
+   * state, so a missing frame misses as `not_found` regardless of its
+   * watermark. Unsupported payload encodings and non-bulk runtime replies are
+   * payload protocol errors rather than misses.
    *
    * Tracked implementations must read the value and watermark atomically from
    * one authoritative snapshot; replica lag must not hide an invalidation.
    *
-   * A non-null payload is transferred to DialCache. A returned Buffer must
-   * remain stable and must not be mutated, pooled, or reused after this method
+   * A hit payload is transferred to DialCache. A returned Buffer must remain
+   * stable and must not be mutated, pooled, or reused after this method
    * settles; DialCache may retain it beyond the request for best-effort shadow
    * deserialization. Adapters that recycle response storage must return a
    * dedicated Buffer.
    */
-  read(request: RedisReadRequest, context?: RedisReadContext): Awaitable<RedisCachePayload | null>;
+  read(request: RedisReadRequest, context?: RedisReadContext): Awaitable<RedisReadOutcome>;
   /** Atomically write using server time. False means invalidation blocked the write. */
   write(request: RedisWriteRequest): Awaitable<boolean>;
   /**

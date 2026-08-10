@@ -10,7 +10,13 @@ import {
   type MetricErrorKind,
   type MetricLayer,
 } from "../metrics.js";
-import type { DialCacheRedisClient, RedisCachePayload } from "../redis-client.js";
+import {
+  DialCacheRedisPayloadError,
+  type DialCacheRedisClient,
+  type RedisCachePayload,
+  type RedisReadMissReason,
+  type RedisReadOutcome,
+} from "../redis-client.js";
 import { JsonSerializer, type Serializer } from "../serializer.js";
 import type { RedisCacheGetResult } from "./cache-result.js";
 import {
@@ -21,6 +27,7 @@ import {
   type CompressionConfig,
 } from "./compression.js";
 import { assertValidDeadlineMs, withMonotonicDeadline } from "./deadline.js";
+import { REDIS_READ_MISS_OUTCOMES } from "./redis-payload.js";
 import { cacheTtlSecToMs } from "./duration.js";
 import { fetchKeyConfig, resolveLayerConfigResult, type ResolvedLayerConfig } from "./runtime-config.js";
 
@@ -51,9 +58,9 @@ interface RedisCacheOptions {
   readonly metrics: DialCacheMetricsAdapter | null;
 }
 
-interface StartedRedisRead {
+interface StartedRead<T> {
   /** Result bounded by the effective Redis read deadline. */
-  readonly result: Promise<RedisCachePayload | null>;
+  readonly result: Promise<T>;
   /** Fulfills only after the underlying semantic Redis read settles. */
   readonly settled: Promise<void>;
 }
@@ -61,6 +68,50 @@ interface StartedRedisRead {
 const defaultSerializer = new JsonSerializer<unknown>();
 const REDIS_FRAME_KEY_SUFFIX = ":dialcache-frame-v1";
 const DEFAULT_REMOTE_READ_TIMEOUT_MS = 50;
+
+/**
+ * Validate a client read result and return its canonical form: misses collapse
+ * onto the shared frozen singletons and hits are recaptured, so everything
+ * downstream — including the bounded metric labels — observes only validated
+ * data even when a client returns accessor-backed or otherwise unstable
+ * objects. Each client-owned property is read exactly once. Rejections (legacy
+ * `payload | null` results, unknown shapes, the forged core-owned
+ * `deserialization_failed` reason) throw with a bounded shape fingerprint and
+ * fail open through the existing cache_read error path.
+ */
+function normalizeRedisReadOutcome(outcome: RedisReadOutcome): RedisReadOutcome {
+  const result: unknown = outcome;
+  if (result === null || typeof result === "string" || Buffer.isBuffer(result)) {
+    throw invalidReadOutcome("a legacy `payload | null` result; return a RedisReadOutcome");
+  }
+  if (typeof result !== "object") {
+    throw invalidReadOutcome(`a value of type ${typeof result}`);
+  }
+  const { status, reason, payload } = result as { status?: unknown; reason?: unknown; payload?: unknown };
+  if (status === "hit") {
+    if (typeof payload === "string" || Buffer.isBuffer(payload)) {
+      return { status: "hit", payload };
+    }
+    throw invalidReadOutcome("a hit without a string or Buffer payload");
+  }
+  if (status !== "miss") {
+    throw invalidReadOutcome('a status other than "hit" or "miss"');
+  }
+  if (typeof reason === "string" && Object.hasOwn(REDIS_READ_MISS_OUTCOMES, reason)) {
+    return REDIS_READ_MISS_OUTCOMES[reason as RedisReadMissReason];
+  }
+  throw invalidReadOutcome(
+    reason === "deserialization_failed"
+      ? 'a miss with the core-owned reason "deserialization_failed"'
+      : "a miss without a bounded RedisReadMissReason",
+  );
+}
+
+function invalidReadOutcome(received: string): DialCacheRedisPayloadError {
+  return new DialCacheRedisPayloadError(
+    `Invalid DialCache Redis read outcome; expected { status: "hit" | "miss" } but received ${received}`,
+  );
+}
 
 export class RedisCache {
   private readonly configProvider: CacheConfigProvider;
@@ -126,9 +177,9 @@ export class RedisCache {
     const start = performance.now();
     this.recordMetric((metrics) => metrics.request(labelsFor(key, metricLayer)));
     try {
-      let payload: RedisCachePayload | null;
+      let outcome: RedisReadOutcome;
       try {
-        payload = await this.startPayloadRead(key, readTimeoutMs, false).result;
+        outcome = await this.startPayloadRead(key, readTimeoutMs, false).result;
       } catch (error) {
         this.recordError(
           key,
@@ -137,16 +188,16 @@ export class RedisCache {
         );
         throw error;
       }
-      if (payload === null) {
-        this.recordMetric((metrics) => metrics.miss(labelsFor(key, metricLayer)));
+      if (outcome.status === "miss") {
+        this.recordMetric((metrics) => metrics.miss({ ...labelsFor(key, metricLayer), reason: outcome.reason }));
         return { status: "miss", config: layerConfig };
       }
 
       try {
-        const value = await this.deserializePayload<T>(key, payload, metricLayer);
-        return { status: "hit", value, payload };
+        const value = await this.deserializePayload<T>(key, outcome.payload, metricLayer);
+        return { status: "hit", value, payload: outcome.payload };
       } catch {
-        this.recordMetric((metrics) => metrics.miss(labelsFor(key, metricLayer)));
+        this.recordMetric((metrics) => metrics.miss({ ...labelsFor(key, metricLayer), reason: "deserialization_failed" }));
         return { status: "miss", config: layerConfig };
       }
     } finally {
@@ -172,13 +223,19 @@ export class RedisCache {
   startPayloadReadForShadow(
     key: DialCacheKey,
     readTimeoutMs: number,
-  ): StartedRedisRead {
-    return this.startMeasuredPayloadRead(
+  ): StartedRead<RedisCachePayload | null> {
+    const read = this.startMeasuredPayloadRead(
       key,
       readTimeoutMs,
       REMOTE_SHADOW_CACHE_LAYER,
       true,
     );
+    // Shadow fill and confirmation only need presence; a fenced miss stays
+    // fill-eligible because the tracked write script re-fences server-side.
+    return {
+      result: read.result.then((outcome) => (outcome.status === "hit" ? outcome.payload : null)),
+      settled: read.settled,
+    };
   }
 
   async put<T>(key: DialCacheKey, value: T, config?: { readonly ttlSec: number }): Promise<boolean> {
@@ -308,7 +365,7 @@ export class RedisCache {
     key: DialCacheKey,
     readTimeoutMs: number,
     unrefTimer: boolean,
-  ): StartedRedisRead {
+  ): StartedRead<RedisReadOutcome> {
     const abortController = new AbortController();
     const pending = Promise.resolve().then(() =>
       this.client.read(
@@ -318,7 +375,7 @@ export class RedisCache {
         },
         { timeoutMs: readTimeoutMs, signal: abortController.signal },
       )
-    );
+    ).then(normalizeRedisReadOutcome);
     const result = withMonotonicDeadline({
       timeoutMs: readTimeoutMs,
       operation: () => pending,
@@ -340,16 +397,16 @@ export class RedisCache {
     readTimeoutMs: number,
     metricLayer: MetricLayer,
     unrefTimer: boolean,
-  ): StartedRedisRead {
+  ): StartedRead<RedisReadOutcome> {
     const start = performance.now();
     this.recordMetric((metrics) => metrics.request(labelsFor(key, metricLayer)));
     const read = this.startPayloadRead(key, readTimeoutMs, unrefTimer);
     const result = read.result.then(
-      (payload) => {
-        if (payload === null) {
-          this.recordMetric((metrics) => metrics.miss(labelsFor(key, metricLayer)));
+      (outcome) => {
+        if (outcome.status === "miss") {
+          this.recordMetric((metrics) => metrics.miss({ ...labelsFor(key, metricLayer), reason: outcome.reason }));
         }
-        return payload;
+        return outcome;
       },
       (error: unknown) => {
         this.recordError(
