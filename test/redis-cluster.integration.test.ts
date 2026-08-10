@@ -1,3 +1,4 @@
+import * as valkeyGlide from "@valkey/valkey-glide";
 import { commandOptions, createCluster, type RedisClusterOptions } from "redis";
 import {
   GenericContainer,
@@ -10,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { CacheLayer, DialCache, DialCacheKeyConfig, type DialCacheRedisClient } from "../src/index.js";
 import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "../src/node-redis.js";
+import { createValkeyGlideDialCacheClient } from "../src/valkey-glide.js";
 
 const remoteOnly = new DialCacheKeyConfig({
   ttlSec: { [CacheLayer.REMOTE]: 60 },
@@ -37,6 +39,7 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
   let network: StartedNetwork | undefined;
   let containers: Array<StartedTestContainer> = [];
   let cluster: ReturnType<typeof createTestCluster> | undefined;
+  let glideCluster: valkeyGlide.GlideClusterClient | undefined;
 
   beforeAll(async () => {
     const startedNetwork = await new Network().start();
@@ -99,9 +102,36 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
     });
     cluster.on("error", () => undefined);
     await cluster.connect();
+
+    // GLIDE has no nodeAddressMap: it must reach the cluster's announced
+    // container IPs directly. Those are host-routable on Linux (CI) but not
+    // under Docker Desktop, so probe with a short timeout and let the GLIDE
+    // assertions skip locally instead of failing. CI must fail closed: a
+    // silent skip there would drop the only GLIDE cluster coverage.
+    try {
+      glideCluster = await valkeyGlide.GlideClusterClient.createClient({
+        addresses: containers.map((container) => ({
+          host: container.getIpAddress(networkName),
+          port: 6379,
+        })),
+        requestTimeout: 5_000,
+        advancedConfiguration: { connectionTimeout: 2_000 },
+      });
+    } catch (error) {
+      const ci = process.env.CI;
+      if (ci !== undefined && ci !== "" && ci !== "0" && ci !== "false") {
+        throw new Error(
+          "GLIDE cluster client unavailable on CI, so the only GLIDE cluster coverage would "
+          + "silently skip; commonly the cluster's announced container IPs are not host-routable",
+          { cause: error },
+        );
+      }
+      console.warn("GLIDE cluster client unavailable; skipping GLIDE cluster assertions", error);
+    }
   });
 
   afterAll(async () => {
+    glideCluster?.close();
     await cluster?.quit();
     await Promise.all(containers.map(async (container) => await container.stop()));
     await network?.stop();
@@ -123,6 +153,9 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
       keyType: "item_id",
       useCase: "ClusterSlots",
       cacheKey: (id) => id,
+      // Tracked, so the pre-flush pass loads the stamp script on every master
+      // and the post-flush pass proves a genuine per-node NOSCRIPT reload.
+      trackForInvalidation: true,
       defaultConfig: remoteOnly,
     });
 
@@ -147,6 +180,7 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
       keyType: "item_id",
       useCase: "ClusterSlots",
       cacheKey: (id) => id,
+      trackForInvalidation: true,
       defaultConfig: remoteOnly,
     });
     const second = await recoveryDialcache.enable(async () => await Promise.all(ids.map(recoverValue)));
@@ -174,7 +208,7 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
     if (cluster === undefined) {
       throw new Error("Redis Cluster did not start");
     }
-    expect(dialcacheRedisScripts.dialcacheWrite.SHA1).not.toBe(dialcacheRedisScripts.dialcacheWriteTracked.SHA1);
+    expect(dialcacheRedisScripts.dialcacheWriteTrackedStamp.SHA1).not.toBe(dialcacheRedisScripts.dialcacheInvalidate.SHA1);
     const scriptClient: DialCacheRedisClient = createNodeRedisDialCacheClient(cluster);
     const dialcache = new DialCache({
       namespace: "cluster-cache",
@@ -192,6 +226,8 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
     const before = await dialcache.enable(async () => await getUser("123"));
     version = 2;
     await dialcache.invalidateRemote("user_id", "123");
+    // Small margin is fine here: the assertion is served by the source
+    // fallback whether or not the refill write beats the fence.
     await new Promise((resolve) => setTimeout(resolve, 2));
     const after = await dialcache.enable(async () => await getUser("123"));
 
@@ -201,6 +237,14 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
       scriptClient.read({
         valueKey: "{slot-a}:value",
         watermarkKey: "{slot-b}:watermark",
+      }),
+    ).rejects.toThrow(/CROSSSLOT/);
+    await expect(
+      scriptClient.write({
+        valueKey: "{slot-a}:value",
+        watermarkKey: "{slot-b}:watermark",
+        cacheTtlMs: 60_000,
+        value: "cross",
       }),
     ).rejects.toThrow(/CROSSSLOT/);
   });
@@ -233,5 +277,68 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
       }),
     ).toBe(true);
     expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toEqual(trackedPayload);
+  });
+
+  it("runs GLIDE tracked mutations against the real cluster", async (ctx) => {
+    if (glideCluster === undefined) {
+      return ctx.skip();
+    }
+    const adapter = createValkeyGlideDialCacheClient(glideCluster, valkeyGlide);
+    const valueKey = "glide-cluster:{item:tracked}:value";
+    const watermarkKey = "glide-cluster:{item:tracked}:watermark";
+
+    expect(
+      await adapter.write({ valueKey, watermarkKey, cacheTtlMs: 60_000, value: "glide" }),
+    ).toBe(true);
+    expect(await adapter.read({ valueKey, watermarkKey })).toBe("glide");
+
+    await adapter.invalidate({ watermarkKey, futureBufferMs: 0 });
+    // The follow-up write's stamp is fenced unless server time passes the
+    // zero-buffer watermark; the read-null below holds at any margin.
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(await adapter.read({ valueKey, watermarkKey })).toBeNull();
+    expect(
+      await adapter.write({ valueKey, watermarkKey, cacheTtlMs: 60_000, value: "glide-2" }),
+    ).toBe(true);
+    expect(await adapter.read({ valueKey, watermarkKey })).toBe("glide-2");
+
+    const untrackedKey = "glide-cluster:{item:untracked}:value";
+    expect(await adapter.write({ valueKey: untrackedKey, cacheTtlMs: 60_000, value: "plain" })).toBe(true);
+    expect(await adapter.read({ valueKey: untrackedKey })).toBe("plain");
+
+    await expect(adapter.write({
+      valueKey: "{glide-a}:value",
+      watermarkKey: "{glide-b}:watermark",
+      cacheTtlMs: 60_000,
+      value: "cross",
+    })).rejects.toThrow(/CROSSSLOT/i);
+  });
+
+  it("recovers GLIDE cluster mutations after SCRIPT FLUSH on every master", async (ctx) => {
+    if (glideCluster === undefined || cluster === undefined) {
+      return ctx.skip();
+    }
+    const activeCluster = cluster;
+    const flushAllMasters = async (): Promise<void> => {
+      await Promise.all(
+        activeCluster.masters.map(async (master) => {
+          const nodeClient = await activeCluster.nodeClient(master);
+          await nodeClient.scriptFlush();
+        }),
+      );
+    };
+    const adapter = createValkeyGlideDialCacheClient(glideCluster, valkeyGlide);
+    const valueKey = "glide-flush:{item:tracked}:value";
+    const watermarkKey = "glide-flush:{item:tracked}:watermark";
+
+    await flushAllMasters();
+    expect(
+      await adapter.write({ valueKey, watermarkKey, cacheTtlMs: 60_000, value: "recovered" }),
+    ).toBe(true);
+    expect(await adapter.read({ valueKey, watermarkKey })).toBe("recovered");
+
+    await flushAllMasters();
+    await expect(adapter.invalidate({ watermarkKey, futureBufferMs: 0 })).resolves.toBeUndefined();
+    expect(await adapter.read({ valueKey, watermarkKey })).toBeNull();
   });
 });

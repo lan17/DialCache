@@ -8,17 +8,21 @@ DialCache is a TypeScript caching library with explicit request-scoped enablemen
 
 ```text
 src/
+  index.ts              # Public root entry point (barrel)
   dialcache.ts          # Main DialCache API and cached-function wrapper
+  errors.ts             # Public core error classes (DialCacheError hierarchy)
   config.ts             # Public configuration and rollout types
   context.ts            # AsyncLocalStorage-based enabled context
   key.ts                # Structured cache keys and Redis hash tags
   metrics.ts            # Backend-neutral metrics adapter contract
   prometheus.ts         # Optional Prometheus adapter
-  redis-client.ts       # Client-independent semantic Redis interface
-  node-redis.ts          # node-redis adapter and script registration
-  redis-protocol.ts      # Public Lua protocol exports
+  datadog.ts            # Optional Datadog (DogStatsD) adapter
+  redis-client.ts       # Client-independent semantic Redis interface and its public error classes
+  node-redis.ts         # node-redis adapter and script registration
+  valkey-glide.ts       # Valkey GLIDE adapter (standalone and cluster)
+  redis-protocol.ts     # Public frame codec and Lua protocol exports
   serializer.ts         # Serializer contract and JSON implementation
-  internal/             # Cache layers, runtime config, payload compression, and Lua scripts
+  internal/             # Cache layers, runtime config, payload compression, and mutation Lua scripts
 test/                   # Unit and Redis integration tests
 ```
 
@@ -32,6 +36,10 @@ test/                   # Unit and Redis integration tests
 - Cache plumbing fails open; explicit maintenance operations surface mutation failures.
 - Tracked Redis values and invalidation watermarks share a Redis Cluster hash tag.
 - Tracked reads run on primaries so replica lag cannot hide invalidation.
+- A tracked write's placeholder frame (version byte 0) is unreadable on both
+  read paths until the stamp script promotes it, and the stamp promotes only
+  the placeholder carrying its own per-write nonce.
+- A SET failure is the tracked write's outcome even when the stamp settled.
 - Local entries are process-local and are not synchronously invalidated across instances.
 
 ## Conventions

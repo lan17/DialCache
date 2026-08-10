@@ -42,6 +42,7 @@ export type { DialCacheKeyInit } from "./key.js";
 export {
   DialCacheRedisPayloadEncodingError,
   DialCacheRedisPayloadError,
+  DialCacheRedisPlaceholderLostError,
   DialCacheRedisProtocolError,
 } from "./redis-client.js";
 export type { CompressionConfig } from "./internal/compression.js";
