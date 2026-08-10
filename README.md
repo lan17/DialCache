@@ -902,6 +902,16 @@ pnpm benchmark:request-local
 
 The command builds `dist` before reporting ten scenarios: sequential request-local hits, sequential process-local hits, enabled bounded fallbacks, request-local coalescing fan-out, process coalescing fan-out, remote-read-deadline coalescing fan-out, tracked Redis hits with shadow omitted, tracked Redis hits deterministically outside a partial shadow ramp, a ramped-down warm-hit confirmation, and a ramped-down clean-miss fill. Both shadow scenarios prove that the caller completes before detached Redis work. The benchmark is a maintainer tool and is not included in the published package. It asserts fallback counts, Redis behavior, coalescing state, timer cleanup, returned values, exactly-once SoT reuse, and conditional confirmation/fill without applying a timing threshold. Override its work sizes with `DIALCACHE_BENCH_ITERATIONS` and `DIALCACHE_BENCH_FANOUT`.
 
+### Redis write benchmark
+
+With a Redis reachable at `REDIS_URL` (default `redis://127.0.0.1:6379`, e.g. `docker run --rm -p 6379:6379 redis:6.2`), measure the local build's write path:
+
+```bash
+pnpm benchmark:redis-write
+```
+
+The command builds `dist`, then runs sequential tracked and untracked writes at 100 B, 10 KiB, 100 KiB, and 1 MiB payloads, reporting server-side command cost per write from `INFO commandstats` (the `EVALSHA` entry envelopes the stamp script's internal calls) and client-side p50/p95 latency. Like the cache-path benchmark it is a maintainer tool, is not part of the published package, and asserts no timing thresholds — absolute numbers depend on the machine, engine, and load, so compare runs only within one environment. Scale iteration counts with `DIALCACHE_BENCH_WRITE_SCALE`.
+
 ### Releasing
 
 Publishing starts by manually running the `Release` workflow from current `main`. After the package checks pass, Semantic Release selects the next version from Conventional Commits since the highest stable `vX.Y.Z` tag. While the package is pre-1.0, breaking changes bump minor — their `BREAKING CHANGE:` footers still drive full release notes without forcing 1.0.0 — `feat` bumps minor, and every other normal PR-title type (`fix`, `perf`, `docs`, `style`, `refactor`, `test`, `build`, `chore`, `ci`, and `revert`) bumps patch. The highest required bump wins. Major bumps return when 1.0.0 is cut; `release.config.mjs` implements this table and must change together with this section.
