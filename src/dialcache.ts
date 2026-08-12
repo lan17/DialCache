@@ -516,9 +516,10 @@ export class DialCache {
    * The watermark fences only invocations that reach the tracked Redis write.
    * A rejected caller-path write also suppresses the corresponding process-local
    * population. Request-local memoization remains unconditional. A ramped-out
-   * invocation without shadow work does not consult the watermark; a selected
-   * shadow path consults it for its tracked read and any clean-miss fill, while
-   * caller-path request-local and process-local publication remains independent.
+   * invocation without shadow work does not consult the watermark. A selected
+   * shadow path for a tracked key consults it for Redis reads and any clean-miss
+   * fill; untracked shadow work does not. Caller-path request-local and
+   * process-local publication remains independent.
    *
    * @param futureBufferMs Nonnegative safe integer no greater than
    * 31,536,000,000 (365 days); defaults to zero for backward compatibility.
@@ -554,7 +555,7 @@ export class DialCache {
     fallback: () => Promise<T>,
     shadowValidation: ShadowValidationPlan<T>,
   ): Promise<T> {
-    return await this.singleFlightRequestLocal(requestLocalCache.inFlight, key, async () => {
+    const run = async (): Promise<T> => {
       const start = performance.now();
       const result = requestLocalCache.read<T>(key.urn);
       this.metrics?.request(labelsFor(key, REQUEST_LOCAL_CACHE_LAYER));
@@ -573,7 +574,11 @@ export class DialCache {
       );
       requestLocalCache.set(key.urn, value);
       return value;
-    });
+    };
+    if (keyConfig.coalesce === false) {
+      return await run();
+    }
+    return await this.singleFlightRequestLocal(requestLocalCache.inFlight, key, run);
   }
 
   private async getThroughSharedLayers<T>(
@@ -583,17 +588,20 @@ export class DialCache {
     shadowValidation: ShadowValidationPlan<T>,
     fallbackMetricLayer: MetricLayer,
   ): Promise<T> {
+    // This predicate is the single home of the default: omission means on in
+    // every config shape (null, unmerged default, merged); only explicit false opts out.
+    const coalesce = keyConfig?.coalesce !== false;
     const localLayer = await this.resolveLocalLayerConfig(key, keyConfig);
     if (localLayer.status === "enabled") {
-      return await this.singleFlightProcess(key, async () =>
+      const run = async (): Promise<T> =>
         await this.getThroughActiveLocal(
           key,
           keyConfig,
           localLayer.config,
           fallback,
           shadowValidation,
-        ),
-      );
+        );
+      return coalesce ? await this.singleFlightProcess(key, run) : await run();
     }
 
     const redisCache = this.redisCache;
@@ -619,7 +627,7 @@ export class DialCache {
       return await this.callFallback(labelsFor(key, fallbackLayer), fallback);
     }
 
-    return await this.singleFlightProcess(key, async () => {
+    const run = async (): Promise<T> => {
       const remote = await this.readRemoteWithResolvedConfig<T>(
         redisCache,
         key,
@@ -636,7 +644,8 @@ export class DialCache {
         shadowValidation,
         remoteLayer.config,
       );
-    });
+    };
+    return coalesce ? await this.singleFlightProcess(key, run) : await run();
   }
 
   private async getThroughActiveLocal<T>(
@@ -799,10 +808,6 @@ export class DialCache {
     validation: ShadowValidationPlan<T>,
     readTimeoutMs: number,
   ): void {
-    if (!key.trackForInvalidation) {
-      return;
-    }
-
     const shadowConfig: unknown = keyConfig?.shadow;
     if (
       shadowConfig === null
@@ -938,7 +943,7 @@ export class DialCache {
       maybeRelease();
     };
     const readShadowPayload = (): Promise<RedisCachePayload | null> => {
-      const read = redisCache.startTrackedPayloadReadForShadow(key, readTimeoutMs);
+      const read = redisCache.startPayloadReadForShadow(key, readTimeoutMs);
       pendingRedisReads.add(read.settled);
       void read.settled.then(() => {
         pendingRedisReads.delete(read.settled);
@@ -1387,9 +1392,13 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
   const rampConfig = config.ramp;
   const shadowConfig = config.shadow;
   const requestLocal = config.requestLocal;
+  const coalesce = config.coalesce;
   const remoteReadTimeoutMs = config.remoteReadTimeoutMs;
   if (requestLocal !== undefined && typeof requestLocal !== "boolean") {
     throw new TypeError("DialCache defaultConfig requestLocal must be a boolean");
+  }
+  if (coalesce !== undefined && typeof coalesce !== "boolean") {
+    throw new TypeError("DialCache defaultConfig coalesce must be a boolean");
   }
 
   assertDefaultLayerMap(ttlSecConfig, "ttlSec");
@@ -1400,6 +1409,7 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
     ttlSec: ttlSecConfig,
     ramp: rampConfig,
     ...(requestLocal === undefined ? {} : { requestLocal }),
+    ...(coalesce === undefined ? {} : { coalesce }),
     ...(remoteReadTimeoutMs === undefined ? {} : { remoteReadTimeoutMs }),
     ...(shadowConfig === undefined ? {} : { shadow: shadowConfig }),
   });
@@ -1519,6 +1529,7 @@ function safeMetrics(metrics: DialCacheMetricsAdapter | null): DialCacheMetricsA
     error: (labels) => callObserver(() => metrics.error(labels)),
     invalidation: (labels) => callObserver(() => metrics.invalidation(labels)),
     coalesced: (labels) => callObserver(() => metrics.coalesced?.(labels)),
+    compression: (labels) => callObserver(() => metrics.compression?.(labels)),
     ...(typeof metrics.shadowValidation === "function"
       ? {
           shadowValidation: (labels) =>
@@ -1529,6 +1540,9 @@ function safeMetrics(metrics: DialCacheMetricsAdapter | null): DialCacheMetricsA
     observeFallback: (labels, seconds) => callObserver(() => metrics.observeFallback(labels, seconds)),
     observeSerialization: (labels, seconds) => callObserver(() => metrics.observeSerialization(labels, seconds)),
     observeSize: (labels, bytes) => callObserver(() => metrics.observeSize(labels, bytes)),
+    observeStoredSize: (labels, bytes) => callObserver(() => metrics.observeStoredSize?.(labels, bytes)),
+    observeCompressionRatio: (labels, ratio) => callObserver(() => metrics.observeCompressionRatio?.(labels, ratio)),
+    observeCompression: (labels, seconds) => callObserver(() => metrics.observeCompression?.(labels, seconds)),
   };
 }
 

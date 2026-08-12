@@ -5,6 +5,9 @@ export type {
   CacheMetricLabels,
   CoalescedMetricLabels,
   CoalescingScope,
+  CompressionMetricLabels,
+  CompressionOperationMetricLabels,
+  CompressionOutcome,
   DisabledMetricLabels,
   DisabledReason,
   ErrorMetricLabels,
@@ -39,8 +42,10 @@ export type { DialCacheKeyInit } from "./key.js";
 export {
   DialCacheRedisPayloadEncodingError,
   DialCacheRedisPayloadError,
+  DialCacheRedisPlaceholderLostError,
   DialCacheRedisProtocolError,
 } from "./redis-client.js";
+export type { CompressionConfig } from "./internal/compression.js";
 export type { RedisConfig } from "./internal/redis-cache.js";
 export type {
   DialCacheRedisClient,

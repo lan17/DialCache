@@ -98,13 +98,17 @@ function mergeKeyConfig(
   const overlay = runtimeConfig ?? undefined;
   assertKeyConfig(defaultConfig);
   assertKeyConfig(overlay);
-  const defaultRequestLocal = defaultConfig?.requestLocal;
-  const overlayRequestLocal = overlay?.requestLocal;
-  const requestLocal = overlayRequestLocal !== undefined
-    ? overlayRequestLocal
-    : defaultRequestLocal !== undefined
-      ? defaultRequestLocal
-      : false;
+  // Both booleans merge sparsely: omission survives the merge, and the read
+  // sites own the effective defaults (requestLocal === true, coalesce !== false),
+  // because an unmerged defaultConfig reaches them whenever the provider
+  // returns null. `!== undefined` (not `??`) keeps a malformed null flowing to
+  // the constructor so it still fails resolution as config_error.
+  const requestLocal = overlay?.requestLocal !== undefined
+    ? overlay.requestLocal
+    : defaultConfig?.requestLocal;
+  const coalesce = overlay?.coalesce !== undefined
+    ? overlay.coalesce
+    : defaultConfig?.coalesce;
   const remoteReadTimeoutMs = overlay?.remoteReadTimeoutMs !== undefined
     ? overlay.remoteReadTimeoutMs
     : defaultConfig?.remoteReadTimeoutMs;
@@ -113,7 +117,8 @@ function mergeKeyConfig(
   return new DialCacheKeyConfig({
     ttlSec: mergeLayerConfig(defaultConfig?.ttlSec, overlay?.ttlSec, "ttlSec"),
     ramp: mergeLayerConfig(defaultConfig?.ramp, overlay?.ramp, "ramp"),
-    requestLocal,
+    ...(requestLocal === undefined ? {} : { requestLocal }),
+    ...(coalesce === undefined ? {} : { coalesce }),
     ...(remoteReadTimeoutMs === undefined ? {} : { remoteReadTimeoutMs }),
     ...(shadow === undefined ? {} : { shadow }),
   });

@@ -226,6 +226,11 @@ function expectTrackedReads(
   }
 }
 
+function expectUntrackedReads(redis: ScriptedRedis, count: number): void {
+  expect(redis.requests).toHaveLength(count);
+  expect(redis.requests.every((request) => !Object.hasOwn(request, "watermarkKey"))).toBe(true);
+}
+
 describe("DialCache Redis shadow confirmation", () => {
   it("skips confirmation when the served Redis payload semantically matches SoT", async () => {
     const payload = JSON.stringify({ id: "123", version: 1 });
@@ -916,14 +921,23 @@ describe("DialCache Redis shadow confirmation", () => {
     }
   });
 
-  it("fills a definitive dark Redis miss and attributes the read and write to remote_shadow", async () => {
+  it.each([
+    { name: "tracked", tracked: true },
+    { name: "untracked", tracked: false },
+  ])("fills a clean $name dark Redis miss and attributes the read and write to remote_shadow", async ({
+    name,
+    tracked,
+  }) => {
     const redis = new ScriptedRedis([() => null]);
     const metrics = new RecordingMetrics();
     const source = vi.fn(async () => ({ id: "123" }));
     const dialcache = createCache(redis, metrics);
     const getUser = dialcache.cached(source, {
-      ...trackedOptions("ShadowDarkMissFill", remoteConfig(0)),
+      keyType: "user_id",
+      useCase: `ShadowDarkMissFill${name}`,
       cacheKey: () => "123",
+      trackForInvalidation: tracked,
+      defaultConfig: remoteConfig(0),
     });
 
     await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ id: "123" });
@@ -931,11 +945,17 @@ describe("DialCache Redis shadow confirmation", () => {
 
     expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["filled"]);
     expect(source).toHaveBeenCalledOnce();
+    if (tracked) {
+      expectTrackedReads(redis, 1);
+    } else {
+      expectUntrackedReads(redis, 1);
+    }
     expect(redis.write).toHaveBeenCalledOnce();
     expect(redis.write).toHaveBeenCalledWith(expect.objectContaining({
       cacheTtlMs: 60_000,
-      watermarkKey: expect.any(String),
+      value: JSON.stringify({ id: "123" }),
     }));
+    expect(Object.hasOwn(redis.write.mock.calls[0]?.[0] ?? {}, "watermarkKey")).toBe(tracked);
     expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
       name === "request" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
     )).toHaveLength(1);
@@ -1269,7 +1289,7 @@ describe("DialCache Redis shadow confirmation", () => {
     )).toHaveLength(0);
   });
 
-  it("dark-reads only an otherwise valid tracked remote policy with observable shadowing", async () => {
+  it("dark-reads only an otherwise valid remote policy with observable shadowing", async () => {
     const cases = [
       {
         name: "missing remote policy",
@@ -1278,10 +1298,19 @@ describe("DialCache Redis shadow confirmation", () => {
         config: new DialCacheKeyConfig({ shadow: { ramp: 100 } }),
       },
       {
-        name: "untracked",
+        name: "untracked omitted shadow ramp",
         tracked: false,
         metrics: new RecordingMetrics(),
-        config: remoteConfig(0),
+        config: new DialCacheKeyConfig({
+          ttlSec: { [CacheLayer.REMOTE]: 60 },
+          ramp: { [CacheLayer.REMOTE]: 0 },
+        }),
+      },
+      {
+        name: "untracked zero shadow ramp",
+        tracked: false,
+        metrics: new RecordingMetrics(),
+        config: remoteConfig(0, 0),
       },
       {
         name: "missing shadow hook",
@@ -1308,8 +1337,9 @@ describe("DialCache Redis shadow confirmation", () => {
 
     for (const testCase of cases) {
       const redis = new ScriptedRedis([]);
+      const source = vi.fn(async () => ({ id: testCase.name }));
       const dialcache = createCache(redis, testCase.metrics);
-      const getUser = dialcache.cached(async () => ({ id: testCase.name }), {
+      const getUser = dialcache.cached(source, {
         keyType: "user_id",
         useCase: `ShadowDarkIneligible${testCase.name}`,
         cacheKey: () => "123",
@@ -1319,7 +1349,13 @@ describe("DialCache Redis shadow confirmation", () => {
 
       await dialcache.enable(async () => await getUser());
       await nextImmediate();
+      expect(source, testCase.name).toHaveBeenCalledOnce();
       expect(redis.requests, testCase.name).toHaveLength(0);
+      expect(redis.write, testCase.name).not.toHaveBeenCalled();
+      expect(redis.invalidate, testCase.name).not.toHaveBeenCalled();
+      if (testCase.metrics instanceof RecordingMetrics) {
+        expect(testCase.metrics.shadowEvents, testCase.name).toHaveLength(0);
+      }
     }
   });
 

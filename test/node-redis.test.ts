@@ -4,13 +4,15 @@ import {
   CacheLayer,
   DialCache,
   DialCacheKeyConfig,
+  DialCacheRedisPlaceholderLostError,
   DialCacheRedisProtocolError,
 } from "../src/index.js";
 import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "../src/node-redis.js";
+import { INVALIDATE_CACHE_SCRIPT } from "../src/redis-protocol.js";
 
 const INVALID_WRITE_REPLIES: readonly unknown[] = [
   -1,
-  2,
+  3,
   0.5,
   Number.NaN,
   Number.POSITIVE_INFINITY,
@@ -21,24 +23,52 @@ const INVALID_WRITE_REPLIES: readonly unknown[] = [
   null,
   undefined,
 ];
-const INVALID_INVALIDATION_REPLIES: readonly unknown[] = [0, ...INVALID_WRITE_REPLIES];
+const INVALID_INVALIDATION_REPLIES: readonly unknown[] = [0, 2, ...INVALID_WRITE_REPLIES];
 
 interface FakeReplies {
-  readonly read?: Buffer | null;
-  readonly readTracked?: Buffer | null;
-  readonly write?: unknown;
-  readonly writeTracked?: unknown;
+  readonly get?: unknown;
+  readonly mGet?: unknown;
+  readonly set?: unknown;
+  readonly eval?: unknown;
+  readonly stamp?: unknown;
   readonly invalidate?: unknown;
 }
 
 function fakeClient(replies: FakeReplies = {}) {
   return {
-    dialcacheRead: vi.fn(async () => Object.hasOwn(replies, "read") ? replies.read : null),
-    dialcacheReadTracked: vi.fn(async () => Object.hasOwn(replies, "readTracked") ? replies.readTracked : null),
-    dialcacheWrite: vi.fn(async () => Object.hasOwn(replies, "write") ? replies.write : 1),
-    dialcacheWriteTracked: vi.fn(async () => Object.hasOwn(replies, "writeTracked") ? replies.writeTracked : 1),
+    get: vi.fn(async () => Object.hasOwn(replies, "get") ? replies.get : null),
+    // Serves standalone (args, options) and cluster (firstKey, isReadonly, args, options) shapes.
+    sendCommand: vi.fn(async (...callArgs: unknown[]) => {
+      const args = (Array.isArray(callArgs[0]) ? callArgs[0] : callArgs[2]) as Array<unknown>;
+      if (args[0] === "SET") {
+        return Object.hasOwn(replies, "set") ? replies.set : "OK";
+      }
+      if (args[0] === "EVAL") {
+        return Object.hasOwn(replies, "eval") ? replies.eval : 1;
+      }
+      return Object.hasOwn(replies, "mGet") ? replies.mGet : [null, null];
+    }),
+    dialcacheWriteTrackedStamp: vi.fn(async () => Object.hasOwn(replies, "stamp") ? replies.stamp : 1),
     dialcacheInvalidate: vi.fn(async () => Object.hasOwn(replies, "invalidate") ? replies.invalidate : 1),
   };
+}
+
+function fakeCluster(replies: FakeReplies = {}) {
+  return {
+    ...fakeClient(replies),
+    masters: [],
+  };
+}
+
+function encodeFrame(
+  payload: string | Buffer,
+  { createdAtMs = 1, encoding = Buffer.isBuffer(payload) ? 1 : 0 } = {},
+): Buffer {
+  const header = Buffer.alloc(10);
+  header[0] = 1;
+  header.writeBigUInt64BE(BigInt(createdAtMs), 1);
+  header[9] = encoding;
+  return Buffer.concat([header, Buffer.isBuffer(payload) ? payload : Buffer.from(payload)]);
 }
 
 async function expectProtocolError(operation: Promise<unknown>, message: string): Promise<void> {
@@ -53,42 +83,55 @@ async function expectProtocolError(operation: Promise<unknown>, message: string)
 }
 
 describe("node-redis adapter", () => {
-  it("provides the expected arguments for every bundled script", () => {
-    const binary = Buffer.from([0, 0xff]);
-
-    expect(dialcacheRedisScripts.dialcacheRead.transformArguments("plain:value")).toEqual(["plain:value"]);
-    expect(
-      dialcacheRedisScripts.dialcacheReadTracked.transformArguments(
-        "tracked:{id}:value",
-        "tracked:{id}:watermark",
-      ),
-    ).toEqual(["tracked:{id}:value", "tracked:{id}:watermark"]);
-    expect(dialcacheRedisScripts.dialcacheWrite.transformArguments("plain:value", 1_000, 0, "plain")).toEqual([
-      "plain:value",
-      "1000",
-      "0",
-      "plain",
+  it("provides the expected arguments for every bundled mutation script", () => {
+    const nonce = Buffer.from("01234567");
+    expect(Object.keys(dialcacheRedisScripts)).toEqual([
+      "dialcacheWriteTrackedStamp",
+      "dialcacheInvalidate",
     ]);
     expect(
-      dialcacheRedisScripts.dialcacheWriteTracked.transformArguments(
+      dialcacheRedisScripts.dialcacheWriteTrackedStamp.transformArguments(
         "tracked:{id}:value",
         "tracked:{id}:watermark",
         1_000,
-        1,
-        binary,
+        nonce,
       ),
-    ).toEqual(["tracked:{id}:value", "tracked:{id}:watermark", "1000", "1", binary]);
+    ).toEqual(["tracked:{id}:value", "tracked:{id}:watermark", "1000", nonce]);
     expect(
       dialcacheRedisScripts.dialcacheInvalidate.transformArguments("tracked:{id}:watermark", 50),
     ).toEqual(["tracked:{id}:watermark", "50"]);
   });
 
+  it("rejects clients constructed without the DialCache script registrations", () => {
+    expect(
+      () => createNodeRedisDialCacheClient({ get: vi.fn(), sendCommand: vi.fn() } as never),
+    ).toThrow(TypeError);
+    expect(
+      () => createNodeRedisDialCacheClient({ get: vi.fn(), sendCommand: vi.fn() } as never),
+    ).toThrow("requires a client created with scripts: dialcacheRedisScripts");
+    // Partial registration must fail just as loudly as none.
+    expect(
+      () => createNodeRedisDialCacheClient({
+        get: vi.fn(),
+        sendCommand: vi.fn(),
+        dialcacheWriteTrackedStamp: vi.fn(),
+      } as never),
+    ).toThrow(TypeError);
+    expect(
+      () => createNodeRedisDialCacheClient({
+        get: vi.fn(),
+        sendCommand: vi.fn(),
+        dialcacheInvalidate: vi.fn(),
+      } as never),
+    ).toThrow(TypeError);
+  });
+
   it("accepts the exact write and invalidation reply domains", async () => {
     const client = fakeClient({
-      read: Buffer.from([0, ...Buffer.from("plain")]),
-      readTracked: Buffer.from([1, 0, 0xff]),
-      write: 1,
-      writeTracked: 0,
+      get: encodeFrame("plain"),
+      mGet: [encodeFrame(Buffer.from([0, 0xff]), { createdAtMs: 2 }), Buffer.from("1")],
+      set: "OK",
+      stamp: 0,
       invalidate: 1,
     });
     const adapter = createNodeRedisDialCacheClient(client as never);
@@ -113,6 +156,228 @@ describe("node-redis adapter", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("writes untracked frames with one native SET", async () => {
+    const client = fakeClient();
+    const adapter = createNodeRedisDialCacheClient(client as never);
+    const before = Date.now();
+    await expect(
+      adapter.write({ valueKey: "plain:value", cacheTtlMs: 1_000, value: "plain" }),
+    ).resolves.toBe(true);
+    const after = Date.now();
+
+    expect(client.dialcacheWriteTrackedStamp).not.toHaveBeenCalled();
+    expect(client.sendCommand).toHaveBeenCalledTimes(1);
+    const [args, options] = client.sendCommand.mock.calls[0] as [Array<unknown>, unknown];
+    expect(args[0]).toBe("SET");
+    expect(args[1]).toBe("plain:value");
+    expect(args[3]).toBe("PX");
+    expect(args[4]).toBe("1000");
+    const frame = args[2] as Buffer;
+    expect(frame[0]).toBe(1);
+    expect(frame[9]).toBe(0);
+    expect(frame.subarray(10).toString("utf8")).toBe("plain");
+    const createdAtMs = Number(frame.readBigUInt64BE(1));
+    expect(createdAtMs).toBeGreaterThanOrEqual(before);
+    expect(createdAtMs).toBeLessThanOrEqual(after);
+    expect(options).toMatchObject({ returnBuffers: true });
+  });
+
+  it("pairs a zero-stamped placeholder SET with the stamp script in issue order", async () => {
+    const order: string[] = [];
+    const client = fakeClient();
+    client.sendCommand.mockImplementation(async () => {
+      order.push("set");
+      return "OK";
+    });
+    client.dialcacheWriteTrackedStamp.mockImplementation(async () => {
+      order.push("stamp");
+      return 1;
+    });
+    const binary = Buffer.from([0, 0xff]);
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await expect(adapter.write({
+      valueKey: "tracked:{id}:value",
+      watermarkKey: "tracked:{id}:watermark",
+      cacheTtlMs: 2_000,
+      value: binary,
+    })).resolves.toBe(true);
+
+    expect(order).toEqual(["set", "stamp"]);
+    const [args] = client.sendCommand.mock.calls[0] as [Array<unknown>];
+    expect(args[0]).toBe("SET");
+    expect(args[1]).toBe("tracked:{id}:value");
+    expect(args[3]).toBe("PX");
+    expect(args[4]).toBe("2000");
+    const frame = args[2] as Buffer;
+    expect(frame[0]).toBe(0);
+    expect(frame[9]).toBe(1);
+    expect(frame.subarray(10)).toEqual(binary);
+    // The stamp must carry the exact nonce its paired placeholder was minted with.
+    expect(client.dialcacheWriteTrackedStamp).toHaveBeenCalledWith(
+      "tracked:{id}:value",
+      "tracked:{id}:watermark",
+      2_000,
+      frame.subarray(1, 9),
+    );
+  });
+
+  it("fails a tracked write whose placeholder was lost before the stamp", async () => {
+    const adapter = createNodeRedisDialCacheClient(fakeClient({ stamp: 2 }) as never);
+    const write = adapter.write({
+      valueKey: "tracked:{id}:value",
+      watermarkKey: "tracked:{id}:watermark",
+      cacheTtlMs: 1_000,
+      value: "tracked",
+    });
+    await expect(write).rejects.toThrow("DialCache tracked write lost its placeholder before the stamp");
+    await expect(write).rejects.toBeInstanceOf(DialCacheRedisPlaceholderLostError);
+  });
+
+  it("issues the stamp before the placeholder SET settles", async () => {
+    const client = fakeClient();
+    let resolveSet: ((value: string) => void) | undefined;
+    client.sendCommand.mockImplementationOnce(
+      async () => await new Promise<string>((resolve) => {
+        resolveSet = resolve;
+      }),
+    );
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    const write = adapter.write({
+      valueKey: "tracked:{id}:value",
+      watermarkKey: "tracked:{id}:watermark",
+      cacheTtlMs: 1_000,
+      value: "tracked",
+    });
+    // The stamp must already be issued while the SET is still unsettled: an
+    // await between the pair would leave it uncalled here and hang the write.
+    expect(client.dialcacheWriteTrackedStamp).toHaveBeenCalledTimes(1);
+
+    resolveSet?.("OK");
+    await expect(write).resolves.toBe(true);
+  });
+
+  it("routes cluster write SETs by the value key", async () => {
+    const client = fakeCluster();
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await expect(adapter.write({
+      valueKey: "tracked:{id}:value",
+      watermarkKey: "tracked:{id}:watermark",
+      cacheTtlMs: 1_000,
+      value: "tracked",
+    })).resolves.toBe(true);
+
+    const [firstKey, isReadonly, args] = client.sendCommand.mock.calls[0] as [string, boolean, Array<unknown>];
+    expect(firstKey).toBe("tracked:{id}:value");
+    expect(isReadonly).toBe(false);
+    expect(args[0]).toBe("SET");
+    expect(args[1]).toBe("tracked:{id}:value");
+  });
+
+  it("accepts SET replies returned as Buffers and rejects everything else", async () => {
+    await expect(
+      createNodeRedisDialCacheClient(fakeClient({ set: Buffer.from("OK") }) as never)
+        .write({ valueKey: "plain:value", cacheTtlMs: 1_000, value: "plain" }),
+    ).resolves.toBe(true);
+
+    for (const reply of ["QUEUED", null, 1, undefined, Buffer.from("NO")]) {
+      const untracked = createNodeRedisDialCacheClient(fakeClient({ set: reply }) as never);
+      await expectProtocolError(
+        Promise.resolve(untracked.write({ valueKey: "plain:value", cacheTtlMs: 1_000, value: "plain" })),
+        "Invalid DialCache Redis SET reply; expected OK",
+      );
+
+      const tracked = createNodeRedisDialCacheClient(fakeClient({ set: reply }) as never);
+      await expectProtocolError(
+        Promise.resolve(tracked.write({
+          valueKey: "tracked:{id}:value",
+          watermarkKey: "tracked:{id}:watermark",
+          cacheTtlMs: 1_000,
+          value: "tracked",
+        })),
+        "Invalid DialCache Redis SET reply; expected OK",
+      );
+    }
+  });
+
+  it("rejects out-of-range cacheTtlMs before issuing commands and ceils fractional TTLs", async () => {
+    const client = fakeClient();
+    const adapter = createNodeRedisDialCacheClient(client as never);
+    const invalidTtls = [0, -1, Number.NaN, Number.POSITIVE_INFINITY, 31_536_000_001, "500" as unknown as number];
+    for (const cacheTtlMs of invalidTtls) {
+      await expect(
+        adapter.write({ valueKey: "plain:value", cacheTtlMs, value: "plain" }),
+      ).rejects.toThrow(RangeError);
+      await expect(
+        adapter.write({
+          valueKey: "tracked:{id}:value",
+          watermarkKey: "tracked:{id}:watermark",
+          cacheTtlMs,
+          value: "tracked",
+        }),
+      ).rejects.toThrow(RangeError);
+    }
+    expect(client.sendCommand).not.toHaveBeenCalled();
+    expect(client.dialcacheWriteTrackedStamp).not.toHaveBeenCalled();
+
+    await adapter.write({
+      valueKey: "tracked:{id}:value",
+      watermarkKey: "tracked:{id}:watermark",
+      cacheTtlMs: 1_000.1,
+      value: "tracked",
+    });
+    const [args] = client.sendCommand.mock.calls[0] as [Array<unknown>];
+    expect(args[4]).toBe("1001");
+    expect(client.dialcacheWriteTrackedStamp).toHaveBeenCalledWith(
+      "tracked:{id}:value",
+      "tracked:{id}:watermark",
+      1_001,
+      expect.any(Buffer),
+    );
+  });
+
+  it("surfaces a SET failure as the write error even when the stamp settled", async () => {
+    const failure = new Error("OOM command not allowed when used memory > 'maxmemory'.");
+    const client = fakeClient();
+    client.sendCommand.mockRejectedValueOnce(failure);
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await expect(adapter.write({
+      valueKey: "tracked:{id}:value",
+      watermarkKey: "tracked:{id}:watermark",
+      cacheTtlMs: 1_000,
+      value: "tracked",
+    })).rejects.toBe(failure);
+    expect(client.dialcacheWriteTrackedStamp).toHaveBeenCalledTimes(1);
+
+    const stampFailure = new Error("ERR invalid DialCache watermark");
+    const stampClient = fakeClient();
+    stampClient.dialcacheWriteTrackedStamp.mockRejectedValueOnce(stampFailure);
+    const stampAdapter = createNodeRedisDialCacheClient(stampClient as never);
+    await expect(stampAdapter.write({
+      valueKey: "tracked:{id}:value",
+      watermarkKey: "tracked:{id}:watermark",
+      cacheTtlMs: 1_000,
+      value: "tracked",
+    })).rejects.toBe(stampFailure);
+
+    // A bad SET reply also wins over a failing stamp, matching the contract.
+    const combinedClient = fakeClient({ set: "QUEUED" });
+    combinedClient.dialcacheWriteTrackedStamp.mockRejectedValueOnce(new Error("ERR stamp"));
+    const combinedAdapter = createNodeRedisDialCacheClient(combinedClient as never);
+    await expectProtocolError(
+      Promise.resolve(combinedAdapter.write({
+        valueKey: "tracked:{id}:value",
+        watermarkKey: "tracked:{id}:watermark",
+        cacheTtlMs: 1_000,
+        value: "tracked",
+      })),
+      "Invalid DialCache Redis SET reply; expected OK",
+    );
+  });
+
   it("passes the cooperative read signal through node-redis command options", async () => {
     const client = fakeClient();
     const adapter = createNodeRedisDialCacheClient(client as never);
@@ -125,29 +390,97 @@ describe("node-redis adapter", () => {
       context,
     );
 
-    expect(client.dialcacheRead).toHaveBeenCalledWith(
+    expect(client.get).toHaveBeenCalledWith(
       expect.objectContaining({ returnBuffers: true, signal: controller.signal }),
       "plain:value",
     );
-    expect(client.dialcacheReadTracked).toHaveBeenCalledWith(
+    expect(client.sendCommand).toHaveBeenCalledWith(
+      ["MGET", "tracked:{id}:value", "tracked:{id}:watermark"],
       expect.objectContaining({ returnBuffers: true, signal: controller.signal }),
-      "tracked:{id}:value",
-      "tracked:{id}:watermark",
     );
   });
 
+  it("forces tracked Cluster MGET reads to the primary", async () => {
+    const client = fakeCluster({
+      mGet: [encodeFrame("tracked", { createdAtMs: 2 }), Buffer.from("1")],
+    });
+    const adapter = createNodeRedisDialCacheClient(client as never);
+    const controller = new AbortController();
+
+    await expect(adapter.read(
+      { valueKey: "tracked:{id}:value", watermarkKey: "tracked:{id}:watermark" },
+      { timeoutMs: 25, signal: controller.signal },
+    )).resolves.toBe("tracked");
+
+    expect(client.sendCommand).toHaveBeenCalledWith(
+      "tracked:{id}:value",
+      false,
+      ["MGET", "tracked:{id}:value", "tracked:{id}:watermark"],
+      expect.objectContaining({ returnBuffers: true, signal: controller.signal }),
+    );
+  });
+
+  it("does not mistake unrelated standalone metadata for the Cluster topology marker", async () => {
+    const client = {
+      ...fakeClient({
+        mGet: [encodeFrame("tracked", { createdAtMs: 2 }), Buffer.from("1")],
+      }),
+      masters: "application metadata",
+    };
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await expect(adapter.read({
+      valueKey: "tracked:{id}:value",
+      watermarkKey: "tracked:{id}:watermark",
+    })).resolves.toBe("tracked");
+
+    expect(client.sendCommand).toHaveBeenCalledWith(
+      ["MGET", "tracked:{id}:value", "tracked:{id}:watermark"],
+      expect.objectContaining({ returnBuffers: true }),
+    );
+  });
+
+  it("rejects malformed native read reply shapes", async () => {
+    await expect(
+      createNodeRedisDialCacheClient(fakeClient({ get: "not-bytes" }) as never)
+        .read({ valueKey: "plain:value" }),
+    ).rejects.toMatchObject({
+      name: "DialCacheRedisPayloadError",
+      message: "Invalid DialCache Redis read reply; expected a bulk string or null",
+    });
+
+    const malformedMGetEnvelopes: readonly unknown[] = [
+      null,
+      [null],
+      [null, null, null],
+    ];
+    for (const reply of malformedMGetEnvelopes) {
+      await expect(
+        createNodeRedisDialCacheClient(fakeClient({ mGet: reply }) as never)
+          .read({ valueKey: "tracked:{id}:value", watermarkKey: "tracked:{id}:watermark" }),
+      ).rejects.toMatchObject({
+        name: "DialCacheRedisPayloadError",
+        message: "Invalid DialCache Redis tracked read reply; expected an array with two entries",
+      });
+    }
+
+    for (const reply of [["not-bytes", null], [null, 0]]) {
+      await expect(
+        createNodeRedisDialCacheClient(fakeClient({ mGet: reply }) as never)
+          .read({ valueKey: "tracked:{id}:value", watermarkKey: "tracked:{id}:watermark" }),
+      ).rejects.toMatchObject({
+        name: "DialCacheRedisPayloadError",
+        message: "Invalid DialCache Redis read reply; expected a bulk string or null",
+      });
+    }
+  });
+
   it("rejects every out-of-domain reply returned by a node-redis client", async () => {
-    const writeMessage = "Invalid DialCache Redis write reply; expected integer 0 or 1";
+    const writeMessage = "Invalid DialCache Redis write reply; expected integer 0, 1, or 2";
     const invalidationMessage = "Invalid DialCache Redis invalidate reply; expected integer 1";
 
     for (const reply of INVALID_WRITE_REPLIES) {
-      const untracked = createNodeRedisDialCacheClient(fakeClient({ write: reply }) as never);
-      await expectProtocolError(
-        Promise.resolve(untracked.write({ valueKey: "plain:value", cacheTtlMs: 1_000, value: "plain" })),
-        writeMessage,
-      );
-
-      const tracked = createNodeRedisDialCacheClient(fakeClient({ writeTracked: reply }) as never);
+      const tracked = createNodeRedisDialCacheClient(fakeClient({ stamp: reply }) as never);
       await expectProtocolError(
         Promise.resolve(tracked.write({
           valueKey: "tracked:{id}:value",
@@ -171,16 +504,155 @@ describe("node-redis adapter", () => {
     }
   });
 
+  it("dispatches invalidation once and sends no EVAL when the registered script resolves", async () => {
+    const client = fakeClient();
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await expect(
+      adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 }),
+    ).resolves.toBeUndefined();
+
+    expect(client.dialcacheInvalidate).toHaveBeenCalledTimes(1);
+    expect(client.sendCommand).not.toHaveBeenCalled();
+  });
+
+  it("retries a rejected invalidation dispatch once with EVAL by source", async () => {
+    const client = fakeClient();
+    client.dialcacheInvalidate.mockRejectedValueOnce(
+      new Error("NOPERM this user has no permissions to run the 'evalsha' command"),
+    );
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await expect(
+      adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 }),
+    ).resolves.toBeUndefined();
+
+    expect(client.dialcacheInvalidate).toHaveBeenCalledTimes(1);
+    expect(client.sendCommand).toHaveBeenCalledTimes(1);
+    const [args, options] = client.sendCommand.mock.calls[0] as [Array<unknown>, object];
+    expect(args).toEqual([
+      "EVAL",
+      INVALIDATE_CACHE_SCRIPT,
+      "1",
+      "tracked:{id}:watermark",
+      "50",
+    ]);
+    expect(options).toMatchObject({ returnBuffers: true });
+    expect(Object.keys(options)).toEqual(["returnBuffers"]);
+  });
+
+  it("routes the invalidation EVAL retry through the cluster keyed overload", async () => {
+    const client = fakeCluster();
+    client.dialcacheInvalidate.mockRejectedValueOnce(new Error("NOPERM evalsha denied"));
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await expect(
+      adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 }),
+    ).resolves.toBeUndefined();
+
+    expect(client.sendCommand).toHaveBeenCalledTimes(1);
+    const [firstKey, isReadonly, args, options] = client.sendCommand.mock.calls[0] as [
+      string,
+      boolean,
+      Array<unknown>,
+      object,
+    ];
+    expect(firstKey).toBe("tracked:{id}:watermark");
+    expect(isReadonly).toBe(false);
+    expect(args[0]).toBe("EVAL");
+    expect(options).toMatchObject({ returnBuffers: true });
+  });
+
+  it("surfaces the invalidation retry rejection unmodified", async () => {
+    const client = fakeClient();
+    const original = new Error("NOPERM evalsha denied");
+    const retryFailure = new Error("NOPERM eval denied");
+    client.dialcacheInvalidate.mockRejectedValueOnce(original);
+    client.sendCommand.mockRejectedValueOnce(retryFailure);
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await expect(
+      adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 }),
+    ).rejects.toBe(retryFailure);
+
+    expect(retryFailure.cause).toBeUndefined();
+    expect(client.sendCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it("never writes to the rejection even when one instance rejects both dispatches", async () => {
+    // node-redis flush rejections are shared with every other in-flight
+    // caller and the client's "error" listeners. The same-instance fixture
+    // is a deliberate over-approximation: even if one object surfaced on
+    // both dispatches, the adapter writes nothing to it.
+    const client = fakeClient();
+    const shared = new Error("socket torn down");
+    client.dialcacheInvalidate.mockRejectedValueOnce(shared);
+    client.sendCommand.mockRejectedValueOnce(shared);
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await expect(
+      adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 }),
+    ).rejects.toBe(shared);
+
+    expect(shared.cause).toBeUndefined();
+  });
+
+  it("passes a non-Error invalidation retry rejection through as-is", async () => {
+    const client = fakeClient();
+    client.dialcacheInvalidate.mockRejectedValueOnce(new Error("NOPERM evalsha denied"));
+    client.sendCommand.mockRejectedValueOnce("socket closed");
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await expect(
+      adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 }),
+    ).rejects.toBe("socket closed");
+  });
+
+  it("validates the invalidation retry reply through the shared validator", async () => {
+    // The retry bypasses the registered transformReply, so the trailing
+    // validator is the only guard on this path.
+    const client = fakeClient({ eval: 0 });
+    client.dialcacheInvalidate.mockRejectedValueOnce(new Error("NOPERM evalsha denied"));
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await expectProtocolError(
+      Promise.resolve(adapter.invalidate({
+        watermarkKey: "tracked:{id}:watermark",
+        futureBufferMs: 50,
+      })),
+      "Invalid DialCache Redis invalidate reply; expected integer 1",
+    );
+    expect(client.sendCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry an invalidation reply-domain violation", async () => {
+    // The registered transformReply validates inside the returned promise on
+    // a real client, so a domain violation arrives as a rejection; it is
+    // deterministic and must surface without a second dispatch.
+    const client = fakeClient();
+    client.dialcacheInvalidate.mockRejectedValueOnce(
+      new DialCacheRedisProtocolError("Invalid DialCache Redis invalidate reply; expected integer 1"),
+    );
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await expectProtocolError(
+      Promise.resolve(adapter.invalidate({
+        watermarkKey: "tracked:{id}:watermark",
+        futureBufferMs: 50,
+      })),
+      "Invalid DialCache Redis invalidate reply; expected integer 1",
+    );
+    expect(client.sendCommand).not.toHaveBeenCalled();
+  });
+
   it("validates replies at the public node-redis script transform boundary", () => {
-    expect(dialcacheRedisScripts.dialcacheWrite.transformReply(0)).toBe(0);
-    expect(dialcacheRedisScripts.dialcacheWriteTracked.transformReply(1)).toBe(1);
+    expect(dialcacheRedisScripts.dialcacheWriteTrackedStamp.transformReply(0)).toBe(0);
+    expect(dialcacheRedisScripts.dialcacheWriteTrackedStamp.transformReply(1)).toBe(1);
+    expect(dialcacheRedisScripts.dialcacheWriteTrackedStamp.transformReply(2)).toBe(2);
     expect(dialcacheRedisScripts.dialcacheInvalidate.transformReply(1)).toBe(1);
 
     for (const reply of INVALID_WRITE_REPLIES) {
-      expect(() => dialcacheRedisScripts.dialcacheWrite.transformReply(reply as number)).toThrow(
-        DialCacheRedisProtocolError,
-      );
-      expect(() => dialcacheRedisScripts.dialcacheWriteTracked.transformReply(reply as number)).toThrow(
+      expect(() => dialcacheRedisScripts.dialcacheWriteTrackedStamp.transformReply(reply as number)).toThrow(
         DialCacheRedisProtocolError,
       );
     }
@@ -209,8 +681,37 @@ describe("node-redis adapter", () => {
     expect(falselyBranded).not.toBeInstanceOf(DialCacheRedisProtocolError);
   });
 
+  it("keeps placeholder-lost errors branded and disjoint from protocol errors", () => {
+    class SpecializedPlaceholderLostError extends DialCacheRedisPlaceholderLostError {}
+
+    const baseError = new DialCacheRedisPlaceholderLostError("base");
+    const specializedError = new SpecializedPlaceholderLostError("specialized");
+    const crossBundleError = Object.defineProperty(
+      new Error("lost"),
+      Symbol.for("dialcache.DialCacheRedisPlaceholderLostError"),
+      { value: true },
+    );
+    const falselyBranded = Object.defineProperty(
+      {},
+      Symbol.for("dialcache.DialCacheRedisPlaceholderLostError"),
+      { value: false },
+    );
+
+    expect(baseError).toBeInstanceOf(DialCacheRedisPlaceholderLostError);
+    expect(baseError).not.toBeInstanceOf(SpecializedPlaceholderLostError);
+    expect(specializedError).toBeInstanceOf(SpecializedPlaceholderLostError);
+    expect(specializedError).toBeInstanceOf(DialCacheRedisPlaceholderLostError);
+    expect(crossBundleError).toBeInstanceOf(DialCacheRedisPlaceholderLostError);
+    expect(falselyBranded).not.toBeInstanceOf(DialCacheRedisPlaceholderLostError);
+    // The benign race-loser class must stay disjoint from operational
+    // protocol failures, or filtering one silently swallows the other.
+    expect(baseError).not.toBeInstanceOf(DialCacheRedisProtocolError);
+    expect(new DialCacheRedisProtocolError("operational"))
+      .not.toBeInstanceOf(DialCacheRedisPlaceholderLostError);
+  });
+
   it("surfaces protocol failures through the normal DialCache observability path", async () => {
-    const redisClient = createNodeRedisDialCacheClient(fakeClient({ write: 2, invalidate: 0 }) as never);
+    const redisClient = createNodeRedisDialCacheClient(fakeClient({ set: 2, invalidate: 0 }) as never);
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
     const metrics = {
       request: vi.fn(),

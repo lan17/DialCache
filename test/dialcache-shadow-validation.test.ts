@@ -294,7 +294,7 @@ describe("DialCache Redis shadow validation", () => {
     expect(metrics.shadowEvents[0]?.outcome).toBe("match");
   });
 
-  it("does not validate an untracked Redis hit", async () => {
+  it("validates an untracked Redis hit without consulting a watermark", async () => {
     const redis = new FakeRedis();
     const metrics = new RecordingMetrics();
     const useCase = "ShadowUntracked";
@@ -314,10 +314,13 @@ describe("DialCache Redis shadow validation", () => {
     });
 
     expect(await dialcache.enable(async () => await getUser())).toEqual({ id: "123", source: "cache" });
-    await nextImmediate();
+    await waitForShadowEvents(metrics, 1);
 
-    expect(source).not.toHaveBeenCalled();
-    expect(metrics.shadowEvents).toHaveLength(0);
+    expect(source).toHaveBeenCalledOnce();
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["mismatch"]);
+    expect(redis.getCalls).toBe(2);
+    expect(redis.mGetCalls).toBe(0);
+    expect(redis.setCalls).toBe(0);
   });
 
   it("does not validate a tracked Redis miss", async () => {
