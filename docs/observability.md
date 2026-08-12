@@ -64,10 +64,14 @@ The names below exclude the optional caller-selected prefix:
 | `dialcache_invalidation_counter` | Counter | `cache_namespace`, `key_type`, `layer` | Invalidation calls for the layers touched |
 | `dialcache_coalesced_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `scope` | Coalesced requests split by request-local or process scope |
 | `dialcache_shadow_validation_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `outcome` | Terminal outcomes for sampled Redis shadow jobs |
+| `dialcache_compression_counter` | Counter | `cache_namespace`, `use_case`, `key_type`, `layer`, `outcome` | Bounded Redis payload compression and decompression outcomes |
 | `dialcache_get_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache get latency in seconds |
 | `dialcache_fallback_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Elapsed time until the wrapped fallback settles or timeout rejection is delivered |
 | `dialcache_serialization_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer`, `operation` | Redis serializer dump/load latency in seconds |
-| `dialcache_size_histogram` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Serialized Redis payload size in bytes |
+| `dialcache_size_histogram` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Serialized Redis payload size in bytes, before compression |
+| `dialcache_stored_size_histogram` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Prepared Redis payload size in bytes, after compression and escaping |
+| `dialcache_compression_ratio_histogram` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Compressed-to-original payload size ratio for compressed writes |
+| `dialcache_compression_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer`, `operation` | Compression and decompression latency in seconds |
 
 The disabled reasons are:
 
@@ -93,15 +97,16 @@ The `layer` label is:
 - `request_local`;
 - `local`, meaning process-local;
 - `remote`;
-- `remote_shadow` for Redis reads, fills, serialization, and payload sizes
-  performed by detached shadow jobs; or
+- `remote_shadow` for Redis reads, fills, serialization, compression, and
+  payload sizes performed by detached shadow jobs; or
 - `noop` for disabled-context, key-construction, and config-provider failures
   where no cache layer was reached.
 
 The bounded `scope` label on `dialcache_coalesced_counter` distinguishes
 `request_local` from `process`. `scope="process"` coordinates calls only within
 one `DialCache` instance; separate instances in the same process do not share
-in-flight state.
+in-flight state. A use case with `coalesce: false` emits no coalesced counter;
+each caller instead emits its own request, miss, duration, and error metrics.
 
 ### Shadow outcomes
 
@@ -115,8 +120,8 @@ outcomes through `dialcache.shadow.count`:
 | `mismatch` | They differed, and a confirmation read found the original Redis payload unchanged. |
 | `superseded` | They differed, but the Redis payload changed or disappeared before confirmation. |
 | `filled` | A clean shadow miss was populated successfully. |
-| `fill_blocked` | An invalidation watermark blocked a clean-miss fill. |
-| `fill_error` | Serializing or writing a clean-miss fill failed. |
+| `fill_blocked` | An invalidation watermark blocked a tracked clean-miss fill; compliant untracked writes do not produce it. |
+| `fill_error` | Preparing the payload (serialization or compression) or writing a clean-miss fill failed. |
 | `redis_error` | The initial detached Redis read failed. |
 | `source_error` | The source-of-truth read failed. |
 | `deserialization_error` | The retained Redis payload could not be deserialized for comparison. |
@@ -130,6 +135,61 @@ Redis metrics produced inside the same job use `layer="remote_shadow"`, which
 keeps detached work separate from caller-serving `layer="remote"` telemetry.
 See [Shadow validation](shadow-validation.md) for the read, confirmation, fill,
 and deadline semantics behind these outcomes.
+
+### Compression metrics
+
+Compression telemetry is bounded and uses `layer="remote"` for caller-serving
+work or `layer="remote_shadow"` for detached shadow work.
+
+Write-side outcomes are:
+
+- `compressed`: zstd plus its envelope was smaller and selected for the
+  prepared Redis payload;
+- `below_threshold`: the serialized payload did not reach the configured
+  threshold;
+- `not_smaller`: compression ran, but the marked result was not smaller than
+  the raw stored form; and
+- `write_over_limit`: the serialized value exceeded the 512 MiB decompression
+  ceiling and was kept raw for the attempted write. This is a capacity signal,
+  not an error.
+
+Read-side outcomes are:
+
+- `decompressed`: a marked zstd payload was restored;
+- `fallback_raw`: a marked payload was not valid zstd and was passed unchanged
+  to the serializer; and
+- `read_over_limit`: decompression would exceed the 512 MiB ceiling, so the
+  stored bytes were passed unchanged to the serializer. Treat this as a
+  corruption or integrity signal.
+
+Raw reads do not emit a compression outcome. With `compression: false`, new
+writes are still escaped when necessary but emit no compression outcome; reads
+continue to report marked values because disabling writes does not disable
+decoding.
+
+`dialcache_size_histogram` measures serializer output before compression and is
+the distribution to use when selecting `thresholdBytes`.
+`dialcache_stored_size_histogram` measures the prepared bytes after compression
+or binary-envelope escaping. DialCache records it before the shadow deadline
+gate and before calling the Redis client, so it is not proof that a write was
+dispatched or succeeded. The ratio histogram is emitted when compression
+selects the smaller representation, at the same pre-write stage.
+
+Compression duration is observed when zstd runs and produces either
+`compressed` or `not_smaller`; decompression duration is observed for each
+marked payload that produces a read-side outcome.
+
+A zstd exception while preparing a write records `error="compression"` and
+the cache write fails open. Decompression rejects neither the cache call nor
+the observer path directly: an unreadable payload reaches the configured
+serializer, whose rejection follows the existing refreshable-miss path and
+records `serialization_load`.
+
+zstd work is synchronous on the Node.js event loop. Use the duration, ratio,
+and pre/post-size series together when changing the threshold or level; a good
+space ratio does not make an event-loop stall acceptable. See
+[Redis payload compression](redis.md#compression) for the envelope, limits,
+and mixed-version rollout contract.
 
 ### Confirmed mismatch warnings
 
@@ -165,7 +225,7 @@ import { DialCache } from "dialcache";
 import { createDatadogDialCacheMetrics } from "dialcache/datadog";
 
 const dogStatsD = new StatsD({
-  host: process.env.DD_AGENT_HOST,
+  host: process.env.DD_AGENT_HOST ?? "127.0.0.1",
   globalTags: {
     service: "users-api",
     env: process.env.DD_ENV ?? "development",
@@ -209,8 +269,8 @@ hosts. Enable the desired distribution percentiles and aggregations in
 Datadog.
 
 Choose `"histogram"` when host-level histogram aggregation matches the existing
-Datadog setup. The choice applies uniformly to all four duration and size
-metrics. Both modes produce Datadog custom metrics.
+Datadog setup. The choice applies uniformly to every duration, size, and ratio
+observation emitted by the adapter. Both modes produce Datadog custom metrics.
 
 Distribution volume scales with unique tag-value combinations. Datadog counts
 five baseline aggregations per combination; enabling percentile aggregations
@@ -257,10 +317,14 @@ and bytes without unit conversion:
 | `dialcache.invalidation.count` | Count | `cache_namespace`, `key_type`, `layer` | Invalidation calls for the layers touched |
 | `dialcache.coalesced.count` | Count | `cache_namespace`, `use_case`, `key_type`, `scope` | Coalesced requests by sharing scope |
 | `dialcache.shadow.count` | Count | `cache_namespace`, `use_case`, `key_type`, `outcome` | Terminal outcomes for sampled Redis shadow jobs |
+| `dialcache.compression.count` | Count | `cache_namespace`, `use_case`, `key_type`, `layer`, `outcome` | Bounded Redis payload compression and decompression outcomes |
 | `dialcache.get.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Cache get latency in seconds |
 | `dialcache.fallback.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Elapsed time until the wrapped fallback settles or timeout rejection is delivered |
 | `dialcache.serialization.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer`, `operation` | Redis serializer dump/load latency in seconds |
-| `dialcache.serialization.size` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Serialized Redis payload size in bytes |
+| `dialcache.serialization.size` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Serialized Redis payload size in bytes, before compression |
+| `dialcache.stored.size` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Prepared Redis payload size in bytes, after compression and escaping |
+| `dialcache.compression.ratio` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Compressed-to-original payload size ratio for compressed writes |
+| `dialcache.compression.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer`, `operation` | Compression and decompression latency in seconds |
 
 Client throws and rejected returned thenables are isolated by DialCache's
 fire-and-forget observer boundary. Buffered transport failures that happen
@@ -279,9 +343,10 @@ thrown value's class or `Error.name`:
 | `config_resolution` | Runtime or layer configuration validation or resolution failed |
 | `cache_read` | A process-local read or non-timeout remote read failed |
 | `cache_read_timeout` | A remote read exceeded its effective DialCache deadline |
-| `cache_write` | A process-local or remote cache write failed |
+| `cache_write` | A process-local or remote cache write failed; native tracked writes include the observable lost-placeholder race described below |
 | `serialization_load` | Deserializing a Redis payload failed |
 | `serialization_dump` | Serializing a value for Redis failed |
+| `compression` | zstd compression failed while preparing a Redis write |
 | `invalidation` | Writing an invalidation watermark failed |
 | `fallback` | The source loader failed or exceeded its DialCache deadline |
 | `unknown` | Reserved for a future failure site that cannot be classified otherwise |
@@ -300,6 +365,18 @@ errors rather than misses, and the remote get-duration observation includes
 the wait. Coalesced followers do not multiply the timeout error. Deadline
 details remain out of labels and are available on the logged
 `RedisReadTimeoutError`.
+
+A tracked native write first stores an unreadable placeholder and then stamps
+that exact placeholder through the small mutation script. If another write
+overwrites it, it expires, or a watermark-fenced write removes it before the
+stamp, the adapter raises the root-exported
+`DialCacheRedisPlaceholderLostError`. DialCache records one
+`error="cache_write"`, suppresses publication of that write, and logs a warning.
+
+Same-key write contention can therefore create a benign, self-healing floor of
+these errors around hot-key expiry. Keep the metric bounded, use the error
+class in structured logs or direct adapter calls to distinguish the case, and
+rate-limit the warning sink when that contention is expected.
 
 Raw thrown values, error names, messages, cache ids, arguments, and Redis keys
 are never included in labels. When DialCache logs a cache-plumbing failure, the
@@ -326,17 +403,28 @@ Implement `DialCacheMetricsAdapter` and pass it through
 | `invalidation(labels)` | yes | One explicit remote invalidation call. |
 | `coalesced(labels)` | no | One follower that joined request-local or process-scoped work. |
 | `shadowValidation(labels)` | no | One terminal sampled-shadow outcome. This hook must be implemented for shadow jobs to execute. |
+| `compression(labels)` | no | One bounded compression or decompression outcome. |
 | `observeGet(labels, seconds)` | yes | Cache-read duration in seconds. |
 | `observeFallback(labels, seconds)` | yes | Fallback duration in seconds. |
 | `observeSerialization(labels, seconds)` | yes | Serializer dump/load duration in seconds. |
-| `observeSize(labels, bytes)` | yes | Serialized remote payload size in bytes. |
+| `observeSize(labels, bytes)` | yes | Serialized remote payload size in bytes, before compression. |
+| `observeStoredSize(labels, bytes)` | no | Prepared remote payload size in bytes, after compression and escaping; emitted before client dispatch. |
+| `observeCompressionRatio(labels, ratio)` | no | Compressed-to-original size ratio when compression selects the prepared representation. |
+| `observeCompression(labels, seconds)` | no | Compression or decompression duration with `operation="compress"` or `operation="decompress"`. |
 
 The root package exports `DialCacheMetricsAdapter` and every associated label,
 reason, error-kind, layer, scope, and shadow-outcome type, including
-`ShadowValidationMetricLabels` and `ShadowValidationOutcome`.
+`ShadowValidationMetricLabels`, `ShadowValidationOutcome`,
+`CompressionMetricLabels`, `CompressionOperationMetricLabels`, and
+`CompressionOutcome`.
 `shadowValidation` remains optional so existing custom adapters keep
 compiling, but DialCache does not admit shadow work when the configured
 adapter omits it. The Prometheus and Datadog adapters implement the hook.
+
+The compression hooks are also optional for source compatibility with existing
+custom adapters. They control observation only: omitting them does not disable
+compression or decompression. The Prometheus and Datadog adapters implement
+all four hooks.
 
 Metrics and logger methods are typed `void` and invoked as fire-and-forget
 observers. DialCache also defensively consumes, but never awaits, a thenable

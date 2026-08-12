@@ -96,8 +96,11 @@ it.
 
 ## Read and write behavior
 
-A tracked Redis value whose Redis-created timestamp is older than or equal to
-the watermark is treated as stale and refreshed through fallback.
+A tracked read obtains the value and watermark in one atomic `MGET`. Bundled
+cluster adapters explicitly route it to the slot primary; a standalone
+node-redis client must already target the authoritative endpoint. A readable
+frame whose Redis-stamped creation time is older than or equal to the watermark
+is treated as stale and refreshed through fallback.
 
 `invalidateRemote(keyType, id, futureBufferMs)` sets the watermark to the
 greater of:
@@ -107,12 +110,15 @@ greater of:
 
 While that future window is active:
 
-1. A tracked Redis read treats the covered value as a miss.
+1. A tracked Redis read receives the covered value and watermark, then treats
+   the value as a miss.
 2. The invocation runs its fallback.
-3. If that fallback reaches the tracked Redis write before the window ends,
-   Redis rejects the write.
-4. DialCache also suppresses the corresponding process-local population.
-5. The fallback value still returns to its caller.
+3. DialCache serializes and optionally compresses the fallback value, then a
+   native `SET` writes the complete payload as an unreadable placeholder.
+4. A small stamp script compares Redis time with the watermark. If the window
+   is still active, it unlinks the placeholder and refuses publication.
+5. DialCache suppresses the corresponding process-local population, while the
+   fallback value still returns to its caller.
 
 Request-local memoization remains unconditional. A ramped-out invocation
 without selected shadow work does not consult the watermark and is not fenced
@@ -128,6 +134,27 @@ establish watermark safety. It runs the fallback but skips both the Redis write
 and process-local publication. This differs from a normal tracked miss, which
 can attempt the fenced Redis write. Untracked fallbacks may still populate
 process-local cache, and request-local memoization remains unconditional.
+
+### Invalidated payload transfer and cleanup
+
+The atomic `MGET` transfers the complete Redis frame before the adapter can
+compare its timestamp with the watermark. Large invalidated values can
+therefore consume network bandwidth—and can repeatedly exceed the remote-read
+deadline—even though DialCache will not serve them.
+
+A successful fallback that reaches the tracked stamp while the fence is active
+partially mitigates this: its placeholder `SET` replaces the stale frame and
+the stamp script unlinks the placeholder. Later reads then avoid transferring
+the old payload.
+
+A read error or timeout skips the write entirely, so it cannot perform this
+cleanup. A fallback or write failure can likewise leave cleanup for a later
+successful attempt or the value TTL.
+
+The cleanup is not free. Every fenced write sends and temporarily stores the
+complete serialized, possibly compressed payload before removing it. Include
+that network transfer, Redis allocation, replication or AOF work, and stamp
+round trip when estimating the load created by an oversized future buffer.
 
 ### Shadow reads and fills
 
@@ -211,9 +238,10 @@ value based on measured or conservatively bounded timings. Size it to cover:
 - the full remaining tail of any fallback that may already have observed the
   pre-mutation value;
 - `serializer.dump`;
-- Redis client queue and network latency;
-- Lua script execution;
-- the Redis write itself; and
+- synchronous compression or raw-payload escaping;
+- Redis client queue and network latency for the full placeholder payload;
+- the native placeholder `SET` and the tracked stamp script, including their
+  ordered dispatch and settlement; and
 - a safety margin.
 
 Include the remaining lifetime of any sampled shadow fill based on a source
@@ -236,6 +264,14 @@ callers.
 
 ## Failure behavior and telemetry
 
+The bundled adapters dispatch invalidation with `EVALSHA` and retry a rejected
+dispatch once with the script source through `EVAL`. Because its monotonic
+update only advances the watermark and widens its lifetime, duplicate
+execution after an ambiguous first result is safe. A successful recovery is
+internal to the adapter and produces no DialCache error or retry metric. See
+[Mutation retries and ambiguity](redis.md#mutation-retries-and-ambiguity) for
+adapter-specific error handling.
+
 For a valid buffer, DialCache invokes the configured invalidation metric hook
 with `layer="remote"` before it checks the Redis prerequisite.
 
@@ -245,6 +281,12 @@ invokes the configured error metric hook with `useCase="watermark"`,
 `layer="remote"`, `error="invalidation"`, and `inFallback=false`, then rethrows
 the original error. Logger and metrics callback failures are isolated and
 cannot replace that rejection.
+
+A surfaced mutation failure is ambiguous: Redis may have advanced the
+watermark before the client lost the reply. Do not interpret the rejection as
+proof that nothing executed. Repeating `invalidateRemote()` after the source
+mutation has committed is safe and advances or preserves the fence, but may
+extend the future miss window.
 
 ## In-memory layers remain local
 

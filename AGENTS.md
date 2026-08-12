@@ -44,7 +44,12 @@ test/                   # Unit and Redis integration tests
 - `invalidateRemote()` requires a configured Redis client and rejects when the
   client is absent or the watermark mutation fails.
 - Tracked Redis values and invalidation watermarks share a Redis Cluster hash tag.
-- Tracked reads run on primaries so replica lag cannot hide invalidation.
+- Tracked reads require one authoritative value/watermark snapshot; cluster
+  adapters explicitly route them to primaries so replica lag cannot hide
+  invalidation.
+- Redis payload compression is default-on for writes, while reads always
+  interpret the compression envelope so disabling new compression does not
+  strand existing entries.
 - A tracked write's placeholder frame (version byte 0) is unreadable on both
   read paths until the stamp script promotes it, and the stamp promotes only
   the placeholder carrying its own per-write nonce.

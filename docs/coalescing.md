@@ -2,10 +2,10 @@
 
 [Back to the README](../README.md)
 
-DialCache shares same-key in-flight work within the lifetime of the first active
-cache layer. It applies a finite deadline to each active remote read and a
-separate default deadline once an initially enabled invocation begins its
-fallback loader.
+By default, DialCache shares same-key in-flight work within the lifetime of the
+first active cache layer. A per-use-case policy can disable that sharing. Each
+active remote read has a finite deadline, and a separate default deadline begins
+when an initially enabled invocation starts its fallback loader.
 
 These mechanisms reduce duplicate source work. Their deadlines help flights
 settle, but eventual cleanup still requires finite application-owned budgets
@@ -21,17 +21,18 @@ DialCache has two sharing scopes.
 
 ### Request-local scope
 
-When request-local caching is active, callers with the same key in one outermost
-`enable()` scope share in-flight work before the request-local lookup.
+When request-local caching is active and coalescing is enabled, callers with the
+same key in one outermost `enable()` scope share in-flight work before the
+request-local lookup.
 
 The resolved value is memoized for later sequential calls in that scope. A
 different outer request has a different request-local flight registry.
 
 ### Process scope
 
-When process-local or remote caching is active, same-key callers share work
-within one `DialCache` instance before the first active process-local or remote
-layer.
+When process-local or remote caching is active and coalescing is enabled,
+same-key callers share work within one `DialCache` instance before the first
+active process-local or remote layer.
 
 This is reported as `scope="process"`, but it is instance-scoped:
 
@@ -58,29 +59,85 @@ cache write; followers await that result.
 For a process-local-only miss, followers share the leader's fallback and local
 write. This mitigates a thundering herd on one hot key within the instance.
 
+### Per-use-case opt-out
+
+`DialCacheKeyConfig.coalesce` is a sparse runtime boolean whose effective
+default is `true`. Set it to `false` in a use case's `defaultConfig` or runtime
+overlay to disable both request-local and process-scoped single-flight:
+
+```ts
+import { CacheLayer, DialCacheKeyConfig } from "dialcache";
+
+const getUser = dialcache.cached(
+  (userId: string) => db.fetchUser(userId),
+  {
+    keyType: "user_id",
+    useCase: "GetUserWithoutSingleFlight",
+    cacheKey: (userId) => userId,
+    defaultConfig: new DialCacheKeyConfig({
+      ttlSec: { [CacheLayer.LOCAL]: 60 },
+      coalesce: false,
+    }),
+  },
+);
+```
+
+Concurrent same-key callers then each perform:
+
+- their own active-layer reads with a full independent remote-read budget;
+- their own fallback, error, and fallback deadline when a fallback is needed;
+- their own cache writes after a miss.
+
+Request-local and process-local publication is last-writer-wins. Each Redis
+write keeps its ordinary TTL-based or watermark-fenced semantics. A settled
+request-local value can still serve a later sequential call in the same outer
+scope; the policy disables in-flight sharing, not memoization or cache hits.
+
+Runtime overlays can explicitly change the field in either direction. Omission
+inherits the baseline and ultimately defaults to `true`.
+`DialCacheKeyConfig.disabled()` deliberately leaves `coalesce` unset: with every
+serving layer off there is no flight to share, and a later runtime ramp-up
+coalesces again unless it explicitly opts out.
+
+The public constructor and static `defaultConfig` validation require a boolean
+when the field is present. A malformed runtime value fails config resolution for
+the whole invocation: DialCache warns, records `config_resolution` and
+`config_error`, and executes the fallback uncached without touching Redis.
+
+Use the opt-out when executions with the same value identity must not inherit a
+leader's failure, cancellation behavior, or `FallbackTimeoutError`. It does not
+make an incomplete cache key safe: if an input changes the returned value, put
+it in the key or disable the affected cache layers. Disabling coalescing
+reintroduces thundering-herd exposure, independent Redis load, and write races.
+
+No metric or state surface is added. An opted-out use case emits no
+`coalesced` event, records request, miss, and latency observations once per
+caller rather than once per flight, and does not register process state in
+`getCoalescingState()`.
+
 ## When calls do not coalesce
 
-Coalescing applies only when at least one cache layer is active:
+Coalescing applies only when at least one cache layer is active and the resolved
+`coalesce` policy is not `false`:
 
 - calls that start outside `enable()` are true pass-through;
 - initially enabled calls with every layer disabled are uncached and
-  uncoalesced; and
+  uncoalesced;
+- a use case with `coalesce: false` keeps each caller's cache path independent;
 - process-scoped work is never shared across `DialCache` instances.
 
 An initially enabled all-disabled call still receives the fallback deadline
 described below.
 
-Because coalescing is keyed by the full constructed cache key, concurrent calls
-with the same identity share the leader's execution. Every function argument
-or captured value omitted from the selected or direct key must be safe to share
-this way.
+The full constructed cache key always defines cached-value identity. Include
+locale, auth context, or any other input that can change the returned value,
+regardless of the coalescing policy.
 
-Include locale, auth context, cancellation behavior, or any other input in the
-key when it can change:
-
-- the returned value;
-- whether the underlying function should run independently; or
-- whether two callers may safely share one result.
+When coalescing is enabled, that same key also defines execution identity:
+concurrent calls with the same key share the leader's execution. Include
+cancellation behavior and other execution-only inputs when they must differ by
+key, or use `coalesce: false` when their results remain safe to cache under the
+same value identity but their in-flight work must stay independent.
 
 ### Shadow work does not enable caller coalescing
 
@@ -93,9 +150,12 @@ shadow jobs are deduplicated by admitting one and reporting the others as
 `dropped`; callers do not join or await that job.
 
 A serving Redis hit reached through a process-scoped leader schedules at most
-one shadow job for its coalesced followers. `shadowMaxInFlight` limits scheduled
-or running shadow jobs across the instance, independently of request-local and
-process-scoped flights. See
+one shadow job for its coalesced followers. With `coalesce: false`, each caller
+can attempt to schedule validation, but exact-key shadow deduplication admits at
+most one concurrent job and reports the other attempts as `dropped`.
+
+`shadowMaxInFlight` limits scheduled or running shadow jobs across the
+instance, independently of request-local and process-scoped flights. See
 [Shadow validation and Redis bootstrap](shadow-validation.md) for the full
 admission and lifecycle contract.
 
@@ -142,6 +202,8 @@ The timer starts only when the fallback begins:
 
 - same-key followers share the request-local or process leader's remaining
   budget and receive its `FallbackTimeoutError`;
+- callers with `coalesce: false` start independent fallback timers and receive
+  independent errors;
 - a remote read failure or timeout starts the fallback timer only when the
   source loader begins;
 - enabled pass-through invocations where every layer is disabled have
@@ -178,7 +240,7 @@ shutdown requirements.
 Timing out:
 
 1. rejects the DialCache chain;
-2. clears its tracked flight normally;
+2. clears its coalescing flight normally, when one exists;
 3. ignores a later fallback resolution; and
 4. prevents that invocation from proceeding to serializer, Redis, or local
    publication.
@@ -196,7 +258,8 @@ Timeout failures retain the bounded metrics classification
 details without adding high-cardinality labels.
 
 A shared remote-read timeout emits one `cache_read_timeout` error for the
-leader, not one per follower.
+leader, not one per follower. With coalescing disabled, each caller owns its
+read and can emit its own timeout error.
 
 ### Shadow deadlines are separate
 
@@ -242,6 +305,8 @@ after that point.
 Request-local flights are deliberately excluded because their lifecycle is
 bounded by the outer `enable()` scope. Shadow jobs are also excluded; they use
 their own capacity registry and outcome metrics.
+Use cases with `coalesce: false` never register process flights and therefore do
+not appear in this state.
 `oldestLeaderAgeMs` uses a monotonic clock and is computed when the snapshot is
 requested.
 

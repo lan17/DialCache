@@ -18,9 +18,14 @@ uses Testcontainers and requires a working Docker-compatible container runtime
 for Redis, Valkey, and Redis Cluster.
 
 CI runs development and integration checks on Node.js 24, then switches to the
-declared minimum Node.js 22.0.0 to test the packed package. Keep the consumer
-floor separate from the development runtime so a new dependency or emitted
-syntax cannot silently raise the published requirement.
+exact 22.x consumer floor, Node.js 22.15.0, to prove both the packed package and
+`node:zlib` zstd support. The published engine range is
+`>=22.15.0 <23.0.0 || >=23.8.0`, because Node.js 23.0 through 23.7 do not expose
+the required zstd API.
+
+Keep the consumer floor separate from the development runtime so a dependency,
+emitted syntax, or runtime API cannot silently raise the published
+requirement.
 
 Before changing a compatibility-sensitive surface, identify and extend the
 corresponding packed, unit, and integration assertions:
@@ -32,17 +37,29 @@ corresponding packed, unit, and integration assertions:
 - deterministic serving- and shadow-ramp assignment, whose independent cohorts
   must not reshuffle across releases, plus nested shadow-policy snapshot,
   overlay, validation, and legacy `shadowRamp` rejection;
-- the binary Redis frame, Lua arguments and reply domains, tracked
-  read/write/invalidation semantics, mixed-version serializer behavior, and the
-  ownership and immutability contract for retained string and `Buffer`
-  payloads;
+- `coalesce` omission defaulting to enabled, sparse boolean overlays, explicit
+  opt-out in both request and process scopes, independent deadlines and writes,
+  settled request-local reuse, and malformed-value fail-open behavior;
+- native `GET`/`MGET` reads, native untracked `SET` writes, and the ordered
+  tracked placeholder-`SET` plus stamp-script pair, including exact frame
+  encoders, script reply domains, the root-exported placeholder-loss error,
+  wrong-type behavior, Redis Cluster routing, and removed read/write-script
+  exports;
+- tracked invalidation plus tracked and untracked shadow behavior,
+  mixed-version serializer behavior, and the ownership and immutability
+  contract for retained string and `Buffer` payloads;
+- default-on zstd configuration and validation, binary envelope collisions,
+  decompression caps, raw fallback, mixed-version upgrades and rollbacks,
+  first-party and optional custom-adapter metrics, and the exact Node.js floor;
 - rejection and bounded error telemetry when `invalidateRemote()` is called
   without a configured Redis client;
 - shadow confirmation, clean-miss fill, capacity, deadline, detached work, and
   payload-release behavior, plus default-off confirmed-mismatch logging and its
   byte-capped native-JSON detail fields;
 - exhaustive public unions and packed exports, including `MetricLayer`,
-  `ShadowValidationOutcome`, `ShadowComparator`, and `ShadowConfig`; and
+  `ShadowValidationOutcome`, `ShadowComparator`, `ShadowConfig`,
+  `CompressionConfig`, compression metric types, and Redis protocol error
+  classes; and
 - bounded metrics names, labels, reasons, error categories, scopes, outcomes,
   units, and observer isolation from synchronous throws and rejected thenables.
 
@@ -89,6 +106,38 @@ Override its work sizes with:
 - `DIALCACHE_BENCH_ITERATIONS`; and
 - `DIALCACHE_BENCH_FANOUT`.
 
+## Redis write benchmark
+
+With a Redis server reachable at `REDIS_URL` (default
+`redis://127.0.0.1:6379`), run:
+
+```bash
+corepack pnpm benchmark:redis-write
+```
+
+The command builds `dist`, then measures eight sequential configurations:
+tracked and untracked writes at 100 B, 10 KiB, 100 KiB, and 1 MiB. It reports
+server-side command time per write from `INFO commandstats`, plus client-side
+p50 and p95 latency. For tracked writes, the `EVALSHA` entry envelopes the
+stamp script's internal command cost.
+
+This benchmark is a maintainer diagnostic and is not included in the published
+package. It deliberately has no semantic assertion or timing threshold:
+absolute results depend on the machine, Redis engine, payload, and ambient
+load.
+
+Run it only against a dedicated disposable or development Redis. It writes
+fixed `benchmark:write:*` keys and executes `CONFIG RESETSTAT` before every
+sample, so the client needs that permission and the command erases the
+server's accumulated command statistics. The script calls the semantic
+adapter's `write()` method directly with prebuilt payloads; it measures neither
+serializer nor compression cost.
+
+Compare implementations only with fresh alternating samples in the same
+environment, and preserve correctness coverage in unit, packed-package, and
+live integration tests. Scale every iteration count with
+`DIALCACHE_BENCH_WRITE_SCALE`.
+
 ## Releasing
 
 Publishing starts by manually running the `Release` workflow from current
@@ -97,12 +146,17 @@ Publishing starts by manually running the `Release` workflow from current
 After the package checks pass, Semantic Release selects the next version from
 Conventional Commits since the highest stable `vX.Y.Z` tag:
 
-- breaking changes bump major;
+- while the package is pre-1.0, breaking changes bump minor and retain their
+  `BREAKING CHANGE:` footers for full release notes;
 - `feat` bumps minor; and
 - every other normal PR-title type bumps patch.
 
 Patch types are `fix`, `perf`, `docs`, `style`, `refactor`, `test`, `build`,
 `chore`, `ci`, and `revert`. The highest required bump wins.
+
+Major bumps resume when the project cuts 1.0.0. `release.config.mjs` implements
+this policy; change it and this guide together so the documented release table
+cannot drift from automation.
 
 The workflow opens a `release: <version>` pull request whose only change is the
 matching `package.json` version. `release` is a reserved Conventional Commit

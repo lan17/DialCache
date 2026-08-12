@@ -2,22 +2,23 @@
 
 [Back to the README](../README.md)
 
-Shadow validation lets a service exercise and inspect tracked Redis behavior
-without letting the shadow path choose the caller's result. It is useful for
-validating warm entries against the source of truth and for bootstrapping clean
-misses before increasing the Redis serving ramp.
+Shadow validation lets a service exercise and inspect Redis behavior without
+letting the shadow path choose the caller's result. It is useful for validating
+warm entries against the source of truth and for bootstrapping clean misses
+before increasing the Redis serving ramp.
 
 Shadow mode is an operational rollout tool, not a new serving layer or a
 correctness boundary. It adds source and Redis work, provides best-effort
-evidence through bounded metrics, and relies on the same invalidation,
-serialization, deadline, and client-lifecycle contracts as the remote layer.
+evidence through bounded metrics, and preserves each key's ordinary tracked or
+untracked Redis mode. It relies on the same serialization, deadline, consistency,
+and client-lifecycle contracts as the remote layer.
 
 ## At a glance
 
 | Path reached by the caller | Caller receives | Selected shadow work |
 | --- | --- | --- |
-| Tracked, serving Redis hit | The decoded Redis value | Read the source later, compare it with the retained Redis payload, and confirm a candidate mismatch with one more tracked Redis read. |
-| Valid remote policy, but the key is ramped out of Redis serving | The normal source result | Read Redis later without serving it. Compare a hit, or fill a clean miss from the caller-accepted source result. |
+| Serving Redis hit, tracked or untracked | The decoded Redis value | Compare a later source read with the retained payload, then confirm a mismatch candidate with one same-mode Redis read. |
+| Valid remote policy, but ramped out of Redis serving | The normal source result | Read Redis later without serving it. Compare a hit, or fill a clean miss from the accepted source result. |
 | Serving Redis miss | The normal source result | None. The ordinary request path already performs fallback and fill. |
 | Request-local or process-local hit | The in-memory value | None. Normal traversal never reached Redis. |
 
@@ -27,8 +28,9 @@ served, selected for both, or selected for neither.
 
 ## Configure a shadow cohort
 
-Shadow validation requires a tracked operation, a valid remote TTL, a metrics
-adapter with the optional shadow hook, and a positive `shadow.ramp`:
+Shadow validation requires a valid remote TTL, a metrics adapter with the
+optional shadow hook, and a positive `shadow.ramp`. Invalidation tracking is
+optional and selects the Redis consistency mode rather than shadow eligibility:
 
 ```ts
 import { CacheLayer, DialCache, DialCacheKeyConfig } from "dialcache";
@@ -47,6 +49,7 @@ const getUser = dialcache.cached(
     keyType: "user_id",
     useCase: "GetUser",
     cacheKey: (userId) => userId,
+    // Optional for shadowing; adds watermark fencing to Redis reads and fills.
     trackForInvalidation: true,
     shadowComparator: (cached, source) =>
       cached.id === source.id && cached.version === source.version,
@@ -91,7 +94,6 @@ DialCache schedules shadow work only when all of these conditions hold:
 - the call began inside an enabled DialCache scope;
 - a Redis or Valkey adapter is configured;
 - normal traversal reaches the remote layer;
-- the operation sets `trackForInvalidation: true`;
 - the resolved remote policy has a valid TTL;
 - the effective `shadow.ramp` is positive and selects the exact key;
 - the configured metrics adapter implements `shadowValidation`; and
@@ -100,10 +102,9 @@ DialCache schedules shadow work only when all of these conditions hold:
 A remote serving ramp of `0` is eligible because it preserves a valid remote
 policy while excluding the key from serving.
 
-Missing or invalid remote policy, provider failure, an untracked key, an
-omitted metrics hook, an invalid or zero shadow ramp, cohort exclusion, an
-earlier in-memory hit, or a disabled call does not start a shadow-only Redis
-path.
+Missing or invalid remote policy, provider failure, an omitted metrics hook, an
+invalid or zero shadow ramp, cohort exclusion, an earlier in-memory hit, or a
+disabled call does not start a shadow-only Redis path.
 
 An invalid runtime `shadow.ramp` does not disturb an otherwise valid
 caller-serving Redis hit. DialCache skips shadow work and records a
@@ -121,6 +122,13 @@ DialCache validates this diagnostic leaf only after the metrics-hook,
 exact-key-cohort, and capacity gates; ineligible, cohort-excluded, and
 explicitly dropped work does not report that configuration error.
 
+### Upgrade note for untracked keys
+
+Starting in `v0.15.0`, otherwise eligible untracked keys participate in shadow
+work. A use case that already had a positive effective `shadow.ramp` can
+therefore add source reads, Redis reads and fills, metrics, and opted-in logs.
+Set its shadow ramp to `0` before upgrading if that work is not wanted.
+
 See [Configuration and cache layers](configuration.md) for runtime-overlay
 precedence and policy validation.
 
@@ -128,9 +136,9 @@ precedence and policy validation.
 
 ### Serving Redis hit
 
-The request path performs its normal tracked Redis read and deserialization.
-It returns that cached value without waiting for shadow work and retains the
-exact serialized payload as `C0`.
+The request path performs its normal Redis read and deserialization in the
+key's tracked or untracked mode. It returns that cached value without waiting
+for shadow work and retains the exact serialized payload as `C0`.
 
 On a later unreferenced event-loop turn, the shadow job:
 
@@ -139,9 +147,11 @@ On a later unreferenced event-loop turn, the shadow job:
 3. compares that snapshot with the source value `S`; and
 4. performs a confirmation read only when the values differ.
 
-The additional source call must be safe to run for observation. Process
-coalescing means one serving Redis leader schedules at most one job for its
-coalesced followers.
+The additional source call must be safe to run for observation. With default
+coalescing, one serving Redis leader schedules at most one job for its
+followers. With `coalesce: false`, each caller can attempt scheduling; exact-key
+shadow deduplication admits at most one concurrent job and reports the others
+as `dropped`.
 
 ### Ramped down from Redis serving
 
@@ -150,9 +160,9 @@ ramp is down, the caller runs and awaits the normal source loader. Shadow work
 reuses that same caller-owned promise as `S`; it does not invoke the loader a
 second time.
 
-The detached job reads tracked Redis as `C0`. A hit is compared with `S`. A
-clean miss can be filled from `S` using the invocation's resolved remote TTL
-snapshot.
+The detached job reads Redis as `C0` in the key's existing mode. A hit is
+compared with `S`. A clean miss can be filled from `S` in that same mode using
+the invocation's resolved remote TTL snapshot.
 
 The shadow Redis value never supplies the caller or populates request-local or
 process-local memory. If those in-memory layers are active, only the caller's
@@ -162,20 +172,22 @@ When request-local and process-local caching are off and Redis serving is
 ramped down, caller invocations remain uncached and do not gain process
 coalescing merely because shadowing is enabled. Concurrent same-key callers
 can each run the source; shadow deduplication independently admits one shadow
-job and reports the others as `dropped`.
+job and reports the others as `dropped`. If an in-memory serving layer is
+active, `coalesce: false` likewise keeps each caller's cache path independent.
 
 ## The `C0` / `S` / `C1` algorithm
 
-`C0` is the original tracked Redis payload: either the payload that served the
-caller or the result of the detached ramped-down read. `S` is the successfully
-accepted source value. `C1` is an optional tracked confirmation read.
+`C0` is the original Redis payload: either the payload that served the caller or
+the result of the detached ramped-down read. `S` is the successfully accepted
+source value. `C1` is an optional confirmation read in the same tracked or
+untracked mode as `C0`.
 
 1. Obtain `C0`.
 2. If `C0` is `null`, follow the clean-miss fill path described below.
 3. Otherwise, obtain `S`, deserialize a new snapshot from `C0`, and compare the
    cached and source values.
 4. When they match, emit `match`; no confirmation read is needed.
-5. When they differ, read tracked Redis again as `C1`, bypassing the
+5. When they differ, read Redis again as `C1` in the same mode, bypassing the
    request-local and process-local caches.
 6. If `C1` is missing or its bytes differ from `C0`, emit `superseded`.
 7. If `C1` is byte-identical to `C0`, emit `mismatch`.
@@ -186,32 +198,39 @@ confirmation. DialCache does not deserialize `C1`, compare it with `S`, or
 chase another version.
 
 `mismatch` therefore means that the exact observed Redis payload survived one
-tracked confirmation read after a semantic disagreement. It is not a
-cross-system atomic snapshot or a guarantee that the mismatch still exists.
-`superseded` means only that the original observation could not be confirmed.
+confirmation read after a semantic disagreement. It is not a cross-system
+atomic snapshot or a guarantee that the mismatch still exists. For an
+untracked key, it is also not proof of primary freshness or invalidation
+safety. `superseded` means only that the original observation could not be
+confirmed.
 
 No non-null `C0` is repaired, overwritten, invalidated, or given a refreshed
 TTL. That rule also applies when detached deserialization fails.
 
 ### Clean-miss fill
 
-A clean miss means the tracked semantic Redis read returned `null`. It does
-not include a non-null payload that the serializer cannot load.
+A clean miss means the semantic Redis read returned `null`. It does not include
+a non-null payload that the serializer cannot load.
 
 On the ramped-down path, DialCache can serialize the caller-accepted `S` and
-attempt one ordinary tracked Redis write with the resolved TTL:
+attempt one ordinary Redis write in the key's existing mode with the resolved
+TTL:
 
 - `filled` means the client returned `true` before the shadow deadline;
-- `fill_blocked` means the invalidation watermark returned `false`; and
-- `fill_error` means serialization or the Redis write failed.
+- `fill_blocked` means a tracked invalidation watermark returned `false`; and
+- `fill_error` means preparing the payload (serialization or compression) or
+  writing it to Redis failed.
 
 A source rejection or caller fallback timeout never produces an accepted `S`
 and never starts the fill. Once serialization has finished, DialCache checks
 the whole-job deadline again before dispatching the write.
 
-The `C0` read and fill are not atomic. The fill is a normal tracked overwrite,
-not a compare-and-set or write-if-still-missing operation. Another writer can
+The `C0` read and fill are not atomic. The fill is a normal overwrite, not a
+compare-and-set or write-if-still-missing operation. Another writer can
 populate Redis after `C0` misses and then be overwritten by the shadow fill.
+Tracked writes retain their watermark fence. An untracked fill has no fence and
+uses ordinary TTL-based last-writer-wins publication, so an older accepted
+source value can overwrite a concurrent newer value and remain until expiry.
 
 ## Comparison semantics
 
@@ -374,23 +393,33 @@ off.
 See [Redis and Valkey](redis.md) for the complete custom-client, payload,
 deadline, and connection-lifecycle contracts.
 
-## Invalidation and race boundaries
+## Consistency modes and race boundaries
 
-Shadow mode is limited to invalidation-tracked keys. Both `C0` and `C1` use the
-tracked read protocol, which atomically checks the value timestamp against the
-watermark. Bundled adapters route tracked reads to the primary.
+Shadowing preserves the operation's existing Redis mode:
 
-A clean-miss fill uses the same serializer, Redis-time timestamp, value TTL,
-and watermark-aware tracked write as an ordinary fill. A future watermark can
-reject it as `fill_blocked`. Size `futureBufferMs` to cover the complete source,
-serialization, client queue, network, script, and write interval if stale
-publication protection matters.
+- **Tracked keys:** `C0` and `C1` use the watermark-aware read protocol, which
+  atomically checks the value timestamp against the invalidation watermark.
+  Bundled cluster adapters explicitly route these reads to the primary; a
+  standalone node-redis client must already target the authoritative endpoint.
+  A clean-miss fill uses the ordinary tracked write and can be rejected as
+  `fill_blocked` by a future watermark.
+- **Untracked keys:** `C0` and `C1` use the ordinary one-key read route without a
+  watermark or shadow-specific primary guarantee. A clean-miss fill uses the
+  ordinary TTL write. Compliant untracked writes do not produce
+  `fill_blocked`.
 
-The watermark fences the tracked Redis write; it does not make the earlier
-`C0` read and later fill atomic. It also does not synchronously invalidate
-request-local or process-local entries. Shadow mode never evicts those layers.
+Both modes use the operation's serializer and value TTL. Tracked publication
+receives a Redis-time timestamp from the stamp script; an untracked write uses
+an informational client-clock timestamp that untracked reads never consult.
 
-See [Targeted invalidation](invalidation.md) for the clock, durability,
+Neither mode makes the initial `C0` read and later fill atomic. For tracked
+keys, size `futureBufferMs` to cover the complete source, serialization, client
+queue, network, and write interval when stale-publication protection matters.
+The watermark fences only the tracked Redis write; it does not synchronously
+invalidate request-local or process-local entries. Shadow mode never evicts
+those layers.
+
+See [Targeted invalidation](invalidation.md) for the tracked clock, durability,
 retention, and future-buffer contracts.
 
 ### Command amplification
@@ -398,10 +427,10 @@ retention, and future-buffer contracts.
 | Selected path | Added source work | Added Redis work |
 | --- | --- | --- |
 | Serving Redis hit, semantic match | One observational source read | None beyond the serving read |
-| Serving Redis hit, mismatch candidate | One observational source read | One tracked confirmation read |
-| Ramped-down Redis hit, semantic match | None beyond the caller's source read | One tracked `C0` read |
-| Ramped-down Redis hit, mismatch candidate | None beyond the caller's source read | Tracked `C0` and `C1` reads |
-| Ramped-down clean Redis miss | None beyond the caller's source read | One tracked `C0` read and at most one tracked write |
+| Serving Redis hit, mismatch candidate | One observational source read | One same-mode confirmation read |
+| Ramped-down Redis hit, semantic match | None beyond the caller's source read | One same-mode `C0` read |
+| Ramped-down Redis hit, mismatch candidate | None beyond the caller's source read | Same-mode `C0` and `C1` reads |
+| Ramped-down clean Redis miss | None beyond the caller's source read | One same-mode `C0` read and at most one write |
 | Serving Redis miss | None beyond the ordinary path | None beyond the ordinary read and fill |
 
 Capacity limits bound concurrent jobs, not total work over time. Measure source
@@ -418,8 +447,8 @@ capacity cap, reports one bounded terminal outcome:
 | `mismatch` | They differed and byte-identical `C1` confirmed the original `C0`. |
 | `superseded` | They differed, but `C1` was missing or had different bytes. |
 | `filled` | A clean miss was populated successfully before the deadline. |
-| `fill_blocked` | The invalidation watermark rejected the clean-miss fill. |
-| `fill_error` | Serialization or the clean-miss Redis write failed. |
+| `fill_blocked` | A tracked invalidation watermark rejected the clean-miss fill. |
+| `fill_error` | Preparing the payload (serialization or compression) or writing the clean-miss fill failed. |
 | `redis_error` | The initial detached `C0` read failed or reached its read deadline. |
 | `source_error` | The source loader rejected without being the caller's own DialCache fallback timeout. |
 | `deserialization_error` | The retained non-null `C0` could not be deserialized. |
@@ -459,7 +488,9 @@ Before increasing `shadow.ramp`:
 
 - confirm the source loader is safe to invoke observationally on serving hits;
 - use a valid remote TTL with the serving ramp at `0`;
-- enable tracked invalidation and choose a defensible `futureBufferMs`;
+- choose the Redis consistency mode deliberately: for tracked keys, configure a
+  defensible `futureBufferMs`; for untracked keys, accept TTL-based
+  last-writer-wins fills without invalidation or a primary-read guarantee;
 - verify serializer, comparator, Redis client, source, and telemetry budgets;
 - start with a small per-instance capacity and measure `dropped`;
 - account for the command amplification above; and
@@ -493,8 +524,7 @@ During shutdown:
 3. await request-path cache calls and invalidations;
 4. use source, Redis-client, serializer, and telemetry-native controls to drain
    or terminate their work;
-5. dispose adapter-owned resources; and
-6. close underlying connections.
+5. close underlying connections after their remaining work drains.
 
 Unreferenced shadow scheduling means the process may exit before an outcome is
 delivered. Already-started source reads, serializers, Redis commands, or
