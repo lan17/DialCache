@@ -23,7 +23,7 @@ import {
   type MetricLayer,
   type ShadowValidationOutcome,
 } from "./metrics.js";
-import type { RedisCachePayload } from "./redis-client.js";
+import type { DecodedRedisFrame, RedisCachePayload } from "./redis-client.js";
 import type { Serializer } from "./serializer.js";
 import type { CacheGetResult, RemoteCacheGetResult } from "./internal/cache-result.js";
 import { MAX_TIMER_DELAY_MS, withMonotonicDeadline } from "./internal/deadline.js";
@@ -211,7 +211,7 @@ interface ProcessFlight {
 }
 
 interface ShadowFlight {
-  cachedPayload: RedisCachePayload | null;
+  cachedFrame: DecodedRedisFrame | null;
   abandoned: boolean;
   readonly startedAtMs: number;
 }
@@ -229,7 +229,7 @@ interface ShadowMismatchDetails {
 }
 
 type ShadowValidationStart<Value> =
-  | { readonly kind: "retained"; readonly payload: RedisCachePayload }
+  | { readonly kind: "retained"; readonly frame: DecodedRedisFrame }
   | {
       readonly kind: "redis";
       /** The caller-owned, fallback-deadline-bounded SoT operation. */
@@ -764,7 +764,7 @@ export class DialCache {
         redisCache,
         key,
         keyConfig,
-        { kind: "retained", payload: remote.payload },
+        { kind: "retained", frame: remote.frame },
         shadowValidation,
         keyConfig?.remoteReadTimeoutMs ?? redisCache.readTimeoutMs,
       );
@@ -848,7 +848,7 @@ export class DialCache {
     const logMismatches = this.resolveShadowLogging(key, resolvedShadowConfig);
 
     const flight: ShadowFlight = {
-      cachedPayload: start.kind === "retained" ? start.payload : null,
+      cachedFrame: start.kind === "retained" ? start.frame : null,
       abandoned: false,
       startedAtMs: start.kind === "redis" && start.startedAtMs !== null
         ? start.startedAtMs
@@ -927,7 +927,7 @@ export class DialCache {
         return;
       }
       released = true;
-      flight.cachedPayload = null;
+      flight.cachedFrame = null;
       if (this.shadowFlights.get(key.urn) === flight) {
         this.shadowFlights.delete(key.urn);
       }
@@ -938,11 +938,11 @@ export class DialCache {
       }
     };
     const finishOperation = (): void => {
-      flight.cachedPayload = null;
+      flight.cachedFrame = null;
       operationFinished = true;
       maybeRelease();
     };
-    const readShadowPayload = (): Promise<RedisCachePayload | null> => {
+    const readShadowFrame = (): Promise<DecodedRedisFrame | null> => {
       const read = redisCache.startPayloadReadForShadow(key, readTimeoutMs);
       pendingRedisReads.add(read.settled);
       void read.settled.then(() => {
@@ -957,13 +957,14 @@ export class DialCache {
     const abandonIfExpired = (): boolean => {
       if (!flight.abandoned && performance.now() - deadlineStartedAtMs >= plan.timeoutMs) {
         flight.abandoned = true;
-        flight.cachedPayload = null;
+        flight.cachedFrame = null;
       }
       return flight.abandoned;
     };
     const elapsedBeforeStartMs = Math.max(performance.now() - deadlineStartedAtMs, 0);
     const remainingTimeoutMs = Math.max(plan.timeoutMs - elapsedBeforeStartMs, 0);
     let mismatchDetails: ShadowMismatchDetails | undefined;
+    let validatedValueAgeSeconds: number | undefined;
 
     const validation = withMonotonicDeadline({
       timeoutMs: remainingTimeoutMs,
@@ -971,7 +972,7 @@ export class DialCache {
       timeoutError: () => new Error("DialCache shadow validation timed out"),
       onTimeout: () => {
         flight.abandoned = true;
-        flight.cachedPayload = null;
+        flight.cachedFrame = null;
         signalShadowTimeout();
       },
       operation: async (): Promise<ShadowValidationOutcome> => {
@@ -982,19 +983,19 @@ export class DialCache {
 
           let shadowFillConfig: ResolvedLayerConfig | null = null;
           if (start.kind === "redis") {
-            let payload: RedisCachePayload | null;
+            let frame: DecodedRedisFrame | null;
             try {
-              payload = await readShadowPayload();
+              frame = await readShadowFrame();
             } catch {
               return "redis_error";
             }
             if (abandonIfExpired()) {
               return "timeout";
             }
-            if (payload === null) {
+            if (frame === null) {
               shadowFillConfig = start.remoteConfig;
             } else {
-              flight.cachedPayload = payload;
+              flight.cachedFrame = frame;
             }
           }
 
@@ -1044,14 +1045,14 @@ export class DialCache {
             }
           }
 
-          const retainedPayload = flight.cachedPayload;
-          if (retainedPayload === null) {
+          const retainedFrame = flight.cachedFrame;
+          if (retainedFrame === null) {
             return "timeout";
           }
 
           let cachedValue: T;
           try {
-            cachedValue = await redisCache.deserializeForShadow<T>(key, retainedPayload);
+            cachedValue = await redisCache.deserializeForShadow<T>(key, retainedFrame.payload);
           } catch {
             return "deserialization_error";
           }
@@ -1077,12 +1078,13 @@ export class DialCache {
             return "timeout";
           }
           if (matches) {
+            validatedValueAgeSeconds = shadowValueAgeSeconds(retainedFrame.createdAtMs);
             return "match";
           }
 
-          let confirmationPayload: RedisCachePayload | null;
+          let confirmationFrame: DecodedRedisFrame | null;
           try {
-            confirmationPayload = await readShadowPayload();
+            confirmationFrame = await readShadowFrame();
           } catch {
             return "confirmation_error";
           }
@@ -1090,16 +1092,17 @@ export class DialCache {
             return "timeout";
           }
 
-          const originalPayload = flight.cachedPayload;
-          if (originalPayload === null) {
+          const originalFrame = flight.cachedFrame;
+          if (originalFrame === null) {
             return "timeout";
           }
-          if (confirmationPayload === null || !redisPayloadsEqual(originalPayload, confirmationPayload)) {
+          if (confirmationFrame === null || !redisPayloadsEqual(originalFrame.payload, confirmationFrame.payload)) {
             return "superseded";
           }
           if (logMismatches) {
             mismatchDetails = { cachedValue, sourceValue };
           }
+          validatedValueAgeSeconds = shadowValueAgeSeconds(originalFrame.createdAtMs);
           return "mismatch";
         } finally {
           finishOperation();
@@ -1108,7 +1111,7 @@ export class DialCache {
     });
 
     void validation.then(
-      (outcome) => this.recordShadowValidation(key, outcome, logMismatches, mismatchDetails),
+      (outcome) => this.recordShadowValidation(key, outcome, logMismatches, mismatchDetails, validatedValueAgeSeconds),
       () => this.recordShadowValidation(key, "timeout"),
     );
   }
@@ -1118,6 +1121,7 @@ export class DialCache {
     outcome: ShadowValidationOutcome,
     logMismatches = false,
     mismatchDetails?: ShadowMismatchDetails,
+    valueAgeSeconds?: number,
   ): void {
     const labels = {
       cacheNamespace: key.namespace,
@@ -1126,6 +1130,9 @@ export class DialCache {
       outcome,
     } as const;
     this.metrics?.shadowValidation?.(labels);
+    if (valueAgeSeconds !== undefined) {
+      this.metrics?.observeShadowValueAge?.(labels, valueAgeSeconds);
+    }
     if (outcome !== "mismatch" || !logMismatches) {
       return;
     }
@@ -1536,6 +1543,8 @@ function safeMetrics(metrics: DialCacheMetricsAdapter | null): DialCacheMetricsA
             callObserver(() => metrics.shadowValidation!(labels)),
         }
       : {}),
+    observeShadowValueAge: (labels, seconds) =>
+      callObserver(() => metrics.observeShadowValueAge?.(labels, seconds)),
     observeGet: (labels, seconds) => callObserver(() => metrics.observeGet(labels, seconds)),
     observeFallback: (labels, seconds) => callObserver(() => metrics.observeFallback(labels, seconds)),
     observeSerialization: (labels, seconds) => callObserver(() => metrics.observeSerialization(labels, seconds)),
@@ -1563,6 +1572,13 @@ function resolveShadowComparator<Value>(
   comparator: ShadowComparator<Value> | undefined,
 ): ShadowComparator<Value> {
   return comparator ?? isDeepStrictEqual;
+}
+
+// Frame stamps are epoch-based (Redis server time for tracked writes, writer
+// client clock for untracked), so the age uses the epoch clock and clamps
+// negative cross-clock skew to zero.
+function shadowValueAgeSeconds(createdAtMs: number): number {
+  return Math.max((Date.now() - createdAtMs) / 1000, 0);
 }
 
 function redisPayloadsEqual(left: RedisCachePayload, right: RedisCachePayload): boolean {

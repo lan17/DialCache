@@ -258,7 +258,9 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
     const payload = Buffer.from(Array.from({ length: 256 }, (_, index) => index));
 
     expect(await scriptClient.write({ valueKey, cacheTtlMs: 60_000, value: payload })).toBe(true);
-    expect(await scriptClient.read({ valueKey })).toEqual(payload);
+    const untrackedRead = await scriptClient.read({ valueKey });
+    expect(untrackedRead?.payload).toEqual(payload);
+    expect(untrackedRead?.createdAtMs).toBeGreaterThan(0);
 
     const stored = await cluster.get(commandOptions({ returnBuffers: true }), valueKey);
     expect(stored?.length).toBe(10 + payload.length);
@@ -276,7 +278,9 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
         value: trackedPayload,
       }),
     ).toBe(true);
-    expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toEqual(trackedPayload);
+    const trackedRead = await scriptClient.read({ valueKey: trackedValueKey, watermarkKey });
+    expect(trackedRead?.payload).toEqual(trackedPayload);
+    expect(trackedRead?.createdAtMs).toBeGreaterThan(0);
   });
 
   it("runs GLIDE tracked mutations against the real cluster", async (ctx) => {
@@ -290,7 +294,7 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
     expect(
       await adapter.write({ valueKey, watermarkKey, cacheTtlMs: 60_000, value: "glide" }),
     ).toBe(true);
-    expect(await adapter.read({ valueKey, watermarkKey })).toBe("glide");
+    expect((await adapter.read({ valueKey, watermarkKey }))?.payload).toBe("glide");
 
     await adapter.invalidate({ watermarkKey, futureBufferMs: 0 });
     // The follow-up write's stamp is fenced unless server time passes the
@@ -300,11 +304,11 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
     expect(
       await adapter.write({ valueKey, watermarkKey, cacheTtlMs: 60_000, value: "glide-2" }),
     ).toBe(true);
-    expect(await adapter.read({ valueKey, watermarkKey })).toBe("glide-2");
+    expect((await adapter.read({ valueKey, watermarkKey }))?.payload).toBe("glide-2");
 
     const untrackedKey = "glide-cluster:{item:untracked}:value";
     expect(await adapter.write({ valueKey: untrackedKey, cacheTtlMs: 60_000, value: "plain" })).toBe(true);
-    expect(await adapter.read({ valueKey: untrackedKey })).toBe("plain");
+    expect((await adapter.read({ valueKey: untrackedKey }))?.payload).toBe("plain");
 
     await expect(adapter.write({
       valueKey: "{glide-a}:value",
@@ -335,7 +339,7 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
     expect(
       await adapter.write({ valueKey, watermarkKey, cacheTtlMs: 60_000, value: "recovered" }),
     ).toBe(true);
-    expect(await adapter.read({ valueKey, watermarkKey })).toBe("recovered");
+    expect((await adapter.read({ valueKey, watermarkKey }))?.payload).toBe("recovered");
 
     await flushAllMasters();
     await expect(adapter.invalidate({ watermarkKey, futureBufferMs: 0 })).resolves.toBeUndefined();

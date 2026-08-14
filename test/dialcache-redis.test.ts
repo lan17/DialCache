@@ -301,12 +301,12 @@ describe("DialCache Redis TTL layer", () => {
     await redis.write({ valueKey, cacheTtlMs: 60_000, value: payload });
 
     const firstRead = await redis.read({ valueKey });
-    if (!Buffer.isBuffer(firstRead)) {
+    if (!Buffer.isBuffer(firstRead?.payload)) {
       throw new Error("Expected a binary Redis payload");
     }
-    firstRead[0] = 0xff;
+    firstRead.payload[0] = 0xff;
 
-    expect(await redis.read({ valueKey })).toEqual(payload);
+    expect((await redis.read({ valueKey }))?.payload).toEqual(payload);
   });
 
   it("fails open when Redis serializer dump fails", async () => {

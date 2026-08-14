@@ -64,6 +64,7 @@ import {
   validateRedisScriptInvalidationReply,
   validateRedisSetReply,
   WRITE_TRACKED_STAMP_SCRIPT,
+  type DecodedRedisFrame,
   type TrackedRedisPlaceholder,
 } from "dialcache/redis-protocol";
 // @ts-expect-error The codec functions replaced the frame-version wire constant.
@@ -170,8 +171,8 @@ const redisProtocolError = new DialCacheRedisProtocolError("Invalid DialCache Re
 const emptyRedisFrame = Buffer.alloc(10);
 emptyRedisFrame[0] = 1;
 emptyRedisFrame.writeBigUInt64BE(1n, 1);
-const decodedEmptyRedisPayload: string | Buffer | null = decodeRedisFrame(emptyRedisFrame);
-const decodedStaleRedisPayload: string | Buffer | null = decodeTrackedRedisFrame(
+const decodedEmptyRedisFrame: DecodedRedisFrame | null = decodeRedisFrame(emptyRedisFrame);
+const decodedStaleRedisFrame: DecodedRedisFrame | null = decodeTrackedRedisFrame(
   emptyRedisFrame,
   Buffer.from("1"),
 );
@@ -401,7 +402,7 @@ const unboundedCompressionOutcome: CompressionOutcome = "inflated";
 
 const customRedisClient: DialCacheRedisClient = {
   // The optional second read argument preserves one-argument custom clients.
-  read: async () => Buffer.from([0, 255]),
+  read: async () => ({ payload: Buffer.from([0, 255]), createdAtMs: 1 }),
   write: async ({ value }) => typeof value === "string" || Buffer.isBuffer(value),
   invalidate: async () => undefined,
 };
@@ -527,8 +528,8 @@ void compressionOutcomes;
 void unboundedCompressionOutcome;
 void redisConfigAcceptsCompressionOptOut;
 void createNodeRedisDialCacheClient;
-void decodedEmptyRedisPayload;
-void decodedStaleRedisPayload;
+void decodedEmptyRedisFrame;
+void decodedStaleRedisFrame;
 // @ts-expect-error Native reads removed the legacy node-redis registration.
 void dialcacheRedisScripts.dialcacheRead;
 // @ts-expect-error Native tracked reads removed the legacy node-redis registration.
@@ -802,7 +803,8 @@ if (
 if (typeof redisProtocol.WRITE_TRACKED_STAMP_SCRIPT !== "string") {
   throw new Error("The packed ESM Redis protocol entry must export the tracked stamp script source");
 }
-if (redisProtocol.decodeRedisFrame(redisProtocol.encodeRedisFrame("value", 1)) !== "value") {
+const esmRoundTrip = redisProtocol.decodeRedisFrame(redisProtocol.encodeRedisFrame("value", 1));
+if (esmRoundTrip?.payload !== "value" || esmRoundTrip.createdAtMs !== 1) {
   throw new Error("The packed ESM Redis protocol encoder did not round-trip through the decoder");
 }
 if (redisProtocol.decodeTrackedRedisFrame(redisProtocol.encodeRedisFrame("pending", 0), Buffer.from("0")) !== null) {
@@ -878,7 +880,7 @@ if (!(esmBrandedLost instanceof root.DialCacheRedisPlaceholderLostError)) {
 const esmEmptyFrame = Buffer.alloc(10);
 esmEmptyFrame[0] = 1;
 esmEmptyFrame.writeBigUInt64BE(1n, 1);
-if (redisProtocol.decodeRedisFrame(esmEmptyFrame) !== "") {
+if (redisProtocol.decodeRedisFrame(esmEmptyFrame)?.payload !== "") {
   throw new Error("The packed ESM Redis protocol decoder did not preserve an empty UTF-8 payload");
 }
 if (redisProtocol.decodeTrackedRedisFrame(esmEmptyFrame, Buffer.from("1")) !== null) {
@@ -1013,7 +1015,7 @@ console.log("${observerIsolationMarker}");`,
 let payload = Buffer.alloc(4 * 1024 * 1024, 1);
 const payloadReference = new WeakRef(payload);
 const redis = {
-  read: async () => payload,
+  read: async () => ({ payload, createdAtMs: 1 }),
   write: async () => true,
   invalidate: async () => undefined,
 };
@@ -1176,7 +1178,8 @@ if (
 if (typeof redisProtocol.WRITE_TRACKED_STAMP_SCRIPT !== "string") {
   throw new Error("The packed CommonJS Redis protocol entry must export the tracked stamp script source");
 }
-if (redisProtocol.decodeRedisFrame(redisProtocol.encodeRedisFrame("value", 1)) !== "value") {
+const cjsRoundTrip = redisProtocol.decodeRedisFrame(redisProtocol.encodeRedisFrame("value", 1));
+if (cjsRoundTrip?.payload !== "value" || cjsRoundTrip.createdAtMs !== 1) {
   throw new Error("The packed CommonJS Redis protocol encoder did not round-trip through the decoder");
 }
 if (redisProtocol.decodeTrackedRedisFrame(redisProtocol.encodeRedisFrame("pending", 0), Buffer.from("0")) !== null) {
@@ -1252,7 +1255,7 @@ if (!(cjsBrandedLost instanceof root.DialCacheRedisPlaceholderLostError)) {
 const cjsEmptyFrame = Buffer.alloc(10);
 cjsEmptyFrame[0] = 1;
 cjsEmptyFrame.writeBigUInt64BE(1n, 1);
-if (redisProtocol.decodeRedisFrame(cjsEmptyFrame) !== "") {
+if (redisProtocol.decodeRedisFrame(cjsEmptyFrame)?.payload !== "") {
   throw new Error("The packed CommonJS Redis protocol decoder did not preserve an empty UTF-8 payload");
 }
 if (redisProtocol.decodeTrackedRedisFrame(cjsEmptyFrame, Buffer.from("1")) !== null) {

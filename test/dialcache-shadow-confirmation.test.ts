@@ -10,6 +10,7 @@ import {
   FallbackTimeoutError,
   type CacheMetricLabels,
   type CoalescedMetricLabels,
+  type DecodedRedisFrame,
   type DialCacheConfig,
   type DialCacheMetricsAdapter,
   type DialCacheRedisClient,
@@ -54,22 +55,26 @@ function deferred<T>(): Deferred<T> {
 
 type ReadStep = () => RedisCachePayload | null | Promise<RedisCachePayload | null>;
 
+const SCRIPTED_FRAME_CREATED_AT_MS = 1_700_000_000_000;
+
 class ScriptedRedis implements DialCacheRedisClient {
   readonly requests: RedisReadRequest[] = [];
   readonly contexts: Array<RedisReadContext | undefined> = [];
   readonly write = vi.fn(async (_request: RedisWriteRequest): Promise<boolean> => true);
   readonly invalidate = vi.fn(async (_request: RedisInvalidationRequest): Promise<void> => undefined);
+  frameCreatedAtMs = SCRIPTED_FRAME_CREATED_AT_MS;
 
   constructor(private readonly steps: ReadStep[]) {}
 
-  async read(request: RedisReadRequest, context?: RedisReadContext): Promise<RedisCachePayload | null> {
+  async read(request: RedisReadRequest, context?: RedisReadContext): Promise<DecodedRedisFrame | null> {
     this.requests.push(request);
     this.contexts.push(context);
     const step = this.steps.shift();
     if (step === undefined) {
       throw new Error("Unexpected Redis read");
     }
-    return await step();
+    const payload = await step();
+    return payload === null ? null : { payload, createdAtMs: this.frameCreatedAtMs };
   }
 }
 
@@ -90,9 +95,15 @@ interface OrdinaryMetricEvent {
   readonly labels: Record<string, unknown>;
 }
 
+interface ShadowAgeEvent {
+  readonly labels: ShadowValidationMetricLabels;
+  readonly seconds: number;
+}
+
 class RecordingMetrics implements DialCacheMetricsAdapter {
   readonly ordinaryEvents: OrdinaryMetricEvent[] = [];
   readonly shadowEvents: ShadowValidationMetricLabels[] = [];
+  readonly shadowAgeEvents: ShadowAgeEvent[] = [];
 
   request(labels: CacheMetricLabels): void {
     this.record("request", labels);
@@ -120,6 +131,10 @@ class RecordingMetrics implements DialCacheMetricsAdapter {
 
   shadowValidation(labels: ShadowValidationMetricLabels): void {
     this.shadowEvents.push({ ...labels });
+  }
+
+  observeShadowValueAge(labels: ShadowValidationMetricLabels, seconds: number): void {
+    this.shadowAgeEvents.push({ labels: { ...labels }, seconds });
   }
 
   observeGet(labels: CacheMetricLabels, _seconds: number): void {
@@ -529,9 +544,40 @@ describe("DialCache Redis shadow confirmation", () => {
     await waitForShadowEvents(metrics, 1);
 
     expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["superseded"]);
+    expect(metrics.shadowAgeEvents).toEqual([]);
     expect(serializer.load).toHaveBeenCalledTimes(2);
     expect(serializer.dump).not.toHaveBeenCalled();
     expectTrackedReads(redis, 2);
+  });
+
+  it("records the validated value age only for a confirmed mismatch verdict", async () => {
+    const nowMs = 1_700_000_090_000;
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(nowMs);
+    try {
+      const payload = JSON.stringify({ id: "123", version: 1 });
+      const redis = new ScriptedRedis([() => payload, () => payload]);
+      redis.frameCreatedAtMs = nowMs - 90_000;
+      const metrics = new RecordingMetrics();
+      const dialcache = createCache(redis, metrics);
+      const getUser = dialcache.cached(async () => ({ id: "123", version: 2 }), {
+        ...trackedOptions("ShadowMismatchValueAge", remoteConfig(100)),
+        cacheKey: () => "123",
+      });
+
+      await dialcache.enable(async () => await getUser());
+      await waitForShadowEvents(metrics, 1);
+
+      expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["mismatch"]);
+      expect(metrics.shadowAgeEvents).toHaveLength(1);
+      expect(metrics.shadowAgeEvents[0]?.seconds).toBe(90);
+      expect(metrics.shadowAgeEvents[0]?.labels).toMatchObject({
+        useCase: "ShadowMismatchValueAge",
+        keyType: "user_id",
+        outcome: "mismatch",
+      });
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 
   it("does not log a mismatch candidate when C1 is superseded", async () => {
@@ -944,6 +990,7 @@ describe("DialCache Redis shadow confirmation", () => {
     await waitForShadowEvents(metrics, 1);
 
     expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["filled"]);
+    expect(metrics.shadowAgeEvents).toEqual([]);
     expect(source).toHaveBeenCalledOnce();
     if (tracked) {
       expectTrackedReads(redis, 1);

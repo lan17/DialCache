@@ -136,10 +136,13 @@ describe("node-redis adapter", () => {
     });
     const adapter = createNodeRedisDialCacheClient(client as never);
 
-    await expect(adapter.read({ valueKey: "plain:value" })).resolves.toBe("plain");
+    await expect(adapter.read({ valueKey: "plain:value" })).resolves.toEqual({
+      payload: "plain",
+      createdAtMs: 1,
+    });
     await expect(
       adapter.read({ valueKey: "tracked:{id}:value", watermarkKey: "tracked:{id}:watermark" }),
-    ).resolves.toEqual(Buffer.from([0, 0xff]));
+    ).resolves.toEqual({ payload: Buffer.from([0, 0xff]), createdAtMs: 2 });
     await expect(
       adapter.write({ valueKey: "plain:value", cacheTtlMs: 1_000, value: "plain" }),
     ).resolves.toBe(true);
@@ -410,7 +413,7 @@ describe("node-redis adapter", () => {
     await expect(adapter.read(
       { valueKey: "tracked:{id}:value", watermarkKey: "tracked:{id}:watermark" },
       { timeoutMs: 25, signal: controller.signal },
-    )).resolves.toBe("tracked");
+    )).resolves.toEqual({ payload: "tracked", createdAtMs: 2 });
 
     expect(client.sendCommand).toHaveBeenCalledWith(
       "tracked:{id}:value",
@@ -432,7 +435,7 @@ describe("node-redis adapter", () => {
     await expect(adapter.read({
       valueKey: "tracked:{id}:value",
       watermarkKey: "tracked:{id}:watermark",
-    })).resolves.toBe("tracked");
+    })).resolves.toEqual({ payload: "tracked", createdAtMs: 2 });
 
     expect(client.sendCommand).toHaveBeenCalledWith(
       ["MGET", "tracked:{id}:value", "tracked:{id}:watermark"],

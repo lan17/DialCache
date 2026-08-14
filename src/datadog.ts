@@ -48,6 +48,7 @@ const METRIC_SUFFIXES = {
   invalidation: "invalidation.count",
   coalesced: "coalesced.count",
   shadowValidation: "shadow.count",
+  shadowValueAge: "shadow.value_age",
   compression: "compression.count",
   get: "get.duration",
   fallback: "fallback.duration",
@@ -120,12 +121,11 @@ export class DatadogDialCacheMetrics implements DialCacheMetricsAdapter {
   }
 
   shadowValidation(labels: ShadowValidationMetricLabels): void {
-    return this.increment(this.metricNames.shadowValidation, {
-      cache_namespace: labels.cacheNamespace,
-      use_case: labels.useCase,
-      key_type: labels.keyType,
-      outcome: labels.outcome,
-    });
+    return this.increment(this.metricNames.shadowValidation, shadowValidationTags(labels));
+  }
+
+  observeShadowValueAge(labels: ShadowValidationMetricLabels, seconds: number): void {
+    this.observe(this.metricNames.shadowValueAge, seconds, shadowValidationTags(labels));
   }
 
   compression(labels: CompressionMetricLabels): void {
@@ -181,6 +181,15 @@ function cacheTags(labels: CacheMetricLabels): Record<CacheTag, string> {
     use_case: labels.useCase,
     key_type: labels.keyType,
     layer: labels.layer,
+  };
+}
+
+function shadowValidationTags(labels: ShadowValidationMetricLabels): DatadogTags {
+  return {
+    cache_namespace: labels.cacheNamespace,
+    use_case: labels.useCase,
+    key_type: labels.keyType,
+    outcome: labels.outcome,
   };
 }
 

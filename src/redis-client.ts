@@ -87,6 +87,20 @@ export class DialCacheRedisPlaceholderLostError extends Error {
 /** Serialized cache data, independent of any Redis client or wire framing. */
 export type RedisCachePayload = string | Buffer;
 
+/**
+ * A served Redis frame: the decoded serializer payload plus the creation time
+ * from the frame header. Tracked frames carry Redis server time written by the
+ * stamp script; untracked frames carry the writer's informational client
+ * clock. DialCache consumes `createdAtMs` only for observability (the shadow
+ * value-age observation) — tracked watermark fencing already happened inside
+ * the decoder — so it never affects serving decisions.
+ */
+export interface DecodedRedisFrame {
+  readonly payload: RedisCachePayload;
+  /** Epoch milliseconds copied from the frame header. */
+  readonly createdAtMs: number;
+}
+
 interface RedisValueRequest {
   readonly valueKey: string;
 }
@@ -144,9 +158,10 @@ export interface RedisInvalidationRequest {
  */
 export interface DialCacheRedisClient {
   /**
-   * Read a DialCache Redis frame and return its decoded serializer payload.
-   * Implementations must use `decodeRedisFrame` / `decodeTrackedRedisFrame`
-   * from `dialcache/redis-protocol`, or preserve their exact behavior.
+   * Read a DialCache Redis frame and return its decoded serializer payload
+   * together with the frame header's creation time. Implementations must use
+   * `decodeRedisFrame` / `decodeTrackedRedisFrame` from
+   * `dialcache/redis-protocol`, or preserve their exact behavior.
    *
    * Raw values are Redis bulk strings (`Buffer`) or null. A missing value, a
    * frame shorter than the version/timestamp/encoding header, or an
@@ -159,13 +174,13 @@ export interface DialCacheRedisClient {
    * Tracked implementations must read the value and watermark atomically from
    * one authoritative snapshot; replica lag must not hide an invalidation.
    *
-   * A non-null payload is transferred to DialCache. A returned Buffer must
-   * remain stable and must not be mutated, pooled, or reused after this method
-   * settles; DialCache may retain it beyond the request for best-effort shadow
-   * deserialization. Adapters that recycle response storage must return a
-   * dedicated Buffer.
+   * A non-null frame is transferred to DialCache. A returned Buffer payload
+   * must remain stable and must not be mutated, pooled, or reused after this
+   * method settles; DialCache may retain it beyond the request for
+   * best-effort shadow deserialization. Adapters that recycle response
+   * storage must return a dedicated Buffer.
    */
-  read(request: RedisReadRequest, context?: RedisReadContext): Awaitable<RedisCachePayload | null>;
+  read(request: RedisReadRequest, context?: RedisReadContext): Awaitable<DecodedRedisFrame | null>;
   /**
    * Write a DialCache Redis frame using the `dialcache/redis-protocol`
    * encoders, or preserve their exact behavior.
