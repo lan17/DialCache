@@ -250,7 +250,7 @@ function collectorConfigs(prefix: string) {
     shadowValueAgeHistogram: {
       type: "histogram",
       name: `${prefix}dialcache_shadow_value_age_histogram`,
-      help: "Age in seconds of the validated Redis value at DialCache shadow comparison time.",
+      help: "Age in seconds of the validated Redis value at DialCache shadow verdict time.",
       labelNames: ["cache_namespace", "use_case", "key_type", "outcome"],
       buckets: VALUE_AGE_BUCKETS,
     },

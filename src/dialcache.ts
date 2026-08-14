@@ -1576,9 +1576,15 @@ function resolveShadowComparator<Value>(
 
 // Frame stamps are epoch-based (Redis server time for tracked writes, writer
 // client clock for untracked), so the age uses the epoch clock and clamps
-// negative cross-clock skew to zero.
-function shadowValueAgeSeconds(createdAtMs: number): number {
-  return Math.max((Date.now() - createdAtMs) / 1000, 0);
+// negative cross-clock skew to zero. A custom client that violates the decode
+// contract can hand over a non-finite stamp; recording it would permanently
+// poison backend histogram sums, so the observation is skipped instead.
+function shadowValueAgeSeconds(createdAtMs: number): number | undefined {
+  const ageSeconds = (Date.now() - createdAtMs) / 1000;
+  if (!Number.isFinite(ageSeconds)) {
+    return undefined;
+  }
+  return Math.max(ageSeconds, 0);
 }
 
 function redisPayloadsEqual(left: RedisCachePayload, right: RedisCachePayload): boolean {

@@ -88,12 +88,15 @@ export class DialCacheRedisPlaceholderLostError extends Error {
 export type RedisCachePayload = string | Buffer;
 
 /**
- * A served Redis frame: the decoded serializer payload plus the creation time
- * from the frame header. Tracked frames carry Redis server time written by the
- * stamp script; untracked frames carry the writer's informational client
- * clock. DialCache consumes `createdAtMs` only for observability (the shadow
- * value-age observation) — tracked watermark fencing already happened inside
- * the decoder — so it never affects serving decisions.
+ * A served Redis frame: the payload bytes past the frame header plus the
+ * header's creation time. The payload is the serializer output, possibly
+ * still wrapped in a compression envelope that DialCache core interprets
+ * above the adapter (see the `dialcache/redis-protocol` module doc). Tracked
+ * frames carry Redis server time written by the stamp script; untracked
+ * frames carry the writer's client clock. DialCache consumes `createdAtMs`
+ * only for observability (the shadow value-age observation) — tracked
+ * watermark fencing already happened inside the decoder — so it never
+ * affects serving decisions.
  */
 export interface DecodedRedisFrame {
   readonly payload: RedisCachePayload;
@@ -186,8 +189,11 @@ export interface DialCacheRedisClient {
    * encoders, or preserve their exact behavior.
    *
    * Untracked writes are one native `SET valueKey frame PX cacheTtlMs` whose
-   * frame comes from `encodeRedisFrame` with an informational client-clock
-   * `createdAtMs`; untracked reads never consult it.
+   * frame comes from `encodeRedisFrame` with a client-clock `createdAtMs`.
+   * Untracked reads never consult that stamp for serving or miss decisions,
+   * but they do surface it as the decoded frame's `createdAtMs`, where it
+   * feeds the shadow value-age observation — so untracked writers must stamp
+   * real client time, not a constant.
    *
    * Tracked writes issue two commands ordered on one connection without a
    * transaction: a native `SET` of an `encodeTrackedRedisPlaceholder` frame,

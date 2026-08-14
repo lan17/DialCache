@@ -259,6 +259,18 @@ describe("Prometheus metrics adapter", () => {
       ),
     ]);
 
+    const shadowValueAge = families.find(({ name }) => name === "schema_dialcache_shadow_value_age_histogram");
+    const shadowValueAgeSum = shadowValueAge?.values.find(
+      ({ metricName }) => metricName === "schema_dialcache_shadow_value_age_histogram_sum",
+    );
+    expect(shadowValueAgeSum?.value).toBe(42);
+    expect(shadowValueAgeSum?.labels).toEqual({
+      cache_namespace: labels.cacheNamespace,
+      use_case: labels.useCase,
+      key_type: labels.keyType,
+      outcome: "match",
+    });
+
     const serialization = families.find(({ name }) => name === "schema_dialcache_serialization_timer");
     const serializationLabels = serialization?.values
       .filter(({ metricName }) => metricName === `${serialization.name}_sum`)
@@ -665,6 +677,7 @@ const VALUE_AGE_BUCKETS = [1, 5, 15, 60, 300, 900, 3_600, 10_800, 43_200, 86_400
 interface MetricValue {
   readonly metricName?: string;
   readonly labels: Record<string, string | number>;
+  readonly value?: number;
 }
 
 interface MetricFamily {

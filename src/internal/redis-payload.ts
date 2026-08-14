@@ -79,10 +79,12 @@ function encodeFrameBytes(payload: RedisCachePayload, version: number, stampByte
 /**
  * Encode a serializer payload into a servable DialCache Redis frame.
  *
- * Untracked writes stamp an informational client-clock `createdAtMs`;
- * untracked reads never consult it. Tracked writes must not use this
- * directly — they pair `encodeTrackedRedisPlaceholder` with
- * `WRITE_TRACKED_STAMP_SCRIPT` instead.
+ * Untracked writes stamp a client-clock `createdAtMs`. Untracked reads never
+ * consult the stamp for serving or miss decisions, but they surface it as the
+ * decoded frame's `createdAtMs`, which feeds the shadow value-age
+ * observation — so stamp real client time, not a constant. Tracked writes
+ * must not use this directly — they pair `encodeTrackedRedisPlaceholder`
+ * with `WRITE_TRACKED_STAMP_SCRIPT` instead.
  */
 export function encodeRedisFrame(payload: RedisCachePayload, createdAtMs: number): Buffer {
   if (!Number.isSafeInteger(createdAtMs) || createdAtMs < 0) {

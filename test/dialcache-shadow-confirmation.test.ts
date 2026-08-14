@@ -555,7 +555,16 @@ describe("DialCache Redis shadow confirmation", () => {
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(nowMs);
     try {
       const payload = JSON.stringify({ id: "123", version: 1 });
-      const redis = new ScriptedRedis([() => payload, () => payload]);
+      const redis = new ScriptedRedis([
+        () => payload,
+        () => {
+          // A concurrent writer republished identical bytes with a fresh
+          // stamp; the confirmation still holds and the reported age must
+          // come from the original frame, not this one.
+          redis.frameCreatedAtMs = nowMs - 1_000;
+          return payload;
+        },
+      ]);
       redis.frameCreatedAtMs = nowMs - 90_000;
       const metrics = new RecordingMetrics();
       const dialcache = createCache(redis, metrics);
@@ -578,6 +587,24 @@ describe("DialCache Redis shadow confirmation", () => {
     } finally {
       nowSpy.mockRestore();
     }
+  });
+
+  it("skips the value-age observation when an out-of-contract client stamps a non-finite time", async () => {
+    const payload = JSON.stringify({ id: "123", version: 1 });
+    const redis = new ScriptedRedis([() => payload]);
+    redis.frameCreatedAtMs = Number.NaN;
+    const metrics = new RecordingMetrics();
+    const dialcache = createCache(redis, metrics);
+    const getUser = dialcache.cached(async () => ({ id: "123", version: 1 }), {
+      ...trackedOptions("ShadowValueAgeNonFinite", remoteConfig(100)),
+      cacheKey: () => "123",
+    });
+
+    await dialcache.enable(async () => await getUser());
+    await waitForShadowEvents(metrics, 1);
+
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["match"]);
+    expect(metrics.shadowAgeEvents).toEqual([]);
   });
 
   it("does not log a mismatch candidate when C1 is superseded", async () => {
