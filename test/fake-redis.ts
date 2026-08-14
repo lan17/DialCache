@@ -1,4 +1,5 @@
 import type {
+  DecodedRedisFrame,
   DialCacheRedisClient,
   RedisCachePayload,
   RedisInvalidationRequest,
@@ -27,7 +28,7 @@ export class FakeRedis implements DialCacheRedisClient {
   failWatermarkGet = false;
   getGate: Promise<void> | null = null;
 
-  async read({ valueKey, watermarkKey }: RedisReadRequest): Promise<RedisCachePayload | null> {
+  async read({ valueKey, watermarkKey }: RedisReadRequest): Promise<DecodedRedisFrame | null> {
     if (watermarkKey === undefined) {
       this.getCalls += 1;
     } else {
@@ -122,12 +123,13 @@ export class FakeRedis implements DialCacheRedisClient {
     }
   }
 
-  private readPayload(valueKey: string, watermarkKey: string | null): RedisCachePayload | null {
+  private readPayload(valueKey: string, watermarkKey: string | null): DecodedRedisFrame | null {
     const raw = this.readRaw(valueKey);
     if (raw === null || raw.length < PAYLOAD_OFFSET || raw[0] !== FRAME_VERSION) {
       return null;
     }
 
+    const createdAtMs = Number(readTimestamp(raw));
     if (watermarkKey !== null) {
       let watermark: number | null;
       try {
@@ -135,17 +137,17 @@ export class FakeRedis implements DialCacheRedisClient {
       } catch {
         return null;
       }
-      if (watermark === null || Number(readTimestamp(raw)) <= watermark) {
+      if (watermark === null || createdAtMs <= watermark) {
         return null;
       }
     }
 
     const encoding = raw[ENCODING_OFFSET];
     if (encoding === 0) {
-      return raw.subarray(PAYLOAD_OFFSET).toString("utf8");
+      return { payload: raw.subarray(PAYLOAD_OFFSET).toString("utf8"), createdAtMs };
     }
     if (encoding === 1) {
-      return Buffer.from(raw.subarray(PAYLOAD_OFFSET));
+      return { payload: Buffer.from(raw.subarray(PAYLOAD_OFFSET)), createdAtMs };
     }
     throw new DialCacheRedisPayloadEncodingError("Invalid DialCache Redis payload encoding");
   }

@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import {
   DialCacheRedisPayloadEncodingError,
   DialCacheRedisPayloadError,
+  type DecodedRedisFrame,
   type RedisCachePayload,
 } from "../redis-client.js";
 
@@ -78,10 +79,12 @@ function encodeFrameBytes(payload: RedisCachePayload, version: number, stampByte
 /**
  * Encode a serializer payload into a servable DialCache Redis frame.
  *
- * Untracked writes stamp an informational client-clock `createdAtMs`;
- * untracked reads never consult it. Tracked writes must not use this
- * directly — they pair `encodeTrackedRedisPlaceholder` with
- * `WRITE_TRACKED_STAMP_SCRIPT` instead.
+ * Untracked writes stamp a client-clock `createdAtMs`. Untracked reads never
+ * consult the stamp for serving or miss decisions, but they surface it as the
+ * decoded frame's `createdAtMs`, which feeds the shadow value-age
+ * observation — so stamp real client time, not a constant. Tracked writes
+ * must not use this directly — they pair `encodeTrackedRedisPlaceholder`
+ * with `WRITE_TRACKED_STAMP_SCRIPT` instead.
  */
 export function encodeRedisFrame(payload: RedisCachePayload, createdAtMs: number): Buffer {
   if (!Number.isSafeInteger(createdAtMs) || createdAtMs < 0) {
@@ -118,27 +121,34 @@ export function encodeTrackedRedisPlaceholder(payload: RedisCachePayload): Track
 }
 
 /**
- * Decode an untracked DialCache frame returned as a Redis bulk string.
- * Missing, short, and unsupported-version frames are cache misses. Invalid
- * runtime reply types and unsupported payload encodings throw typed errors.
+ * Decode an untracked DialCache frame returned as a Redis bulk string into
+ * its serializer payload and header creation time (the writer's informational
+ * client clock). Missing, short, and unsupported-version frames are cache
+ * misses. Invalid runtime reply types and unsupported payload encodings throw
+ * typed errors.
  */
-export function decodeRedisFrame(raw: unknown): RedisCachePayload | null {
+export function decodeRedisFrame(raw: unknown): DecodedRedisFrame | null {
   const frame = validateRedisBulkStringReply(raw);
-  return isSupportedRedisFrame(frame)
-    ? decodeRedisPayload(frame.subarray(REDIS_FRAME_HEADER_BYTES))
-    : null;
+  if (!isSupportedRedisFrame(frame)) {
+    return null;
+  }
+  return {
+    payload: decodeRedisPayload(frame.subarray(REDIS_FRAME_HEADER_BYTES)),
+    createdAtMs: readFrameCreatedAtMs(frame),
+  };
 }
 
 /**
  * Decode a tracked DialCache frame against a watermark from the same atomic,
- * authoritative snapshot. Missing or malformed state and frames created at or
- * before the watermark are cache misses. Invalid runtime reply types and
- * unsupported payload encodings throw typed errors.
+ * authoritative snapshot into its serializer payload and header creation time
+ * (Redis server time written by the stamp script). Missing or malformed state
+ * and frames created at or before the watermark are cache misses. Invalid
+ * runtime reply types and unsupported payload encodings throw typed errors.
  */
 export function decodeTrackedRedisFrame(
   raw: unknown,
   rawWatermark: unknown,
-): RedisCachePayload | null {
+): DecodedRedisFrame | null {
   const frame = validateRedisBulkStringReply(raw);
   const watermarkFrame = validateRedisBulkStringReply(rawWatermark);
   if (!isSupportedRedisFrame(frame)) {
@@ -148,8 +158,15 @@ export function decodeTrackedRedisFrame(
   if (watermark === null) {
     return null;
   }
-  const createdAtMs = Number(frame.readBigUInt64BE(REDIS_FRAME_TIMESTAMP_OFFSET));
+  const createdAtMs = readFrameCreatedAtMs(frame);
   return createdAtMs <= watermark
     ? null
-    : decodeRedisPayload(frame.subarray(REDIS_FRAME_HEADER_BYTES));
+    : {
+        payload: decodeRedisPayload(frame.subarray(REDIS_FRAME_HEADER_BYTES)),
+        createdAtMs,
+      };
+}
+
+function readFrameCreatedAtMs(frame: Buffer): number {
+  return Number(frame.readBigUInt64BE(REDIS_FRAME_TIMESTAMP_OFFSET));
 }

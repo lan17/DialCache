@@ -588,7 +588,7 @@ describe("DialCache fallback liveness", () => {
       },
     };
     const redis: DialCacheRedisClient = {
-      read: async () => "stored",
+      read: async () => ({ payload: "stored", createdAtMs: Date.now() }),
       write: async () => true,
       invalidate: async () => undefined,
     };

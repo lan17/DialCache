@@ -160,6 +160,15 @@ describe("Datadog metrics adapter", () => {
       keyType: "user_id",
       outcome: "match",
     });
+    metrics.observeShadowValueAge(
+      {
+        cacheNamespace: cacheLabels.cacheNamespace,
+        useCase: "LoadUser",
+        keyType: "user_id",
+        outcome: "mismatch",
+      },
+      42.5,
+    );
     metrics.compression({ ...cacheLabels, outcome: "compressed" });
     metrics.observeGet(cacheLabels, 0.125);
     metrics.observeFallback(cacheLabels, 0.5);
@@ -202,6 +211,12 @@ describe("Datadog metrics adapter", () => {
         name: "dialcache.shadow.count",
         value: 1,
         tags: { cache_namespace: "users", use_case: "LoadUser", key_type: "user_id", outcome: "match" },
+      },
+      {
+        method: "distribution",
+        name: "dialcache.shadow.value_age",
+        value: 42.5,
+        tags: { cache_namespace: "users", use_case: "LoadUser", key_type: "user_id", outcome: "mismatch" },
       },
       {
         method: "increment",
@@ -247,6 +262,15 @@ describe("Datadog metrics adapter", () => {
       metrics.observeStoredSize(cacheLabels, 96);
       metrics.observeCompressionRatio(cacheLabels, 0.04);
       metrics.observeCompression({ ...cacheLabels, operation: "decompress" }, 0.05);
+      metrics.observeShadowValueAge(
+        {
+          cacheNamespace: cacheLabels.cacheNamespace,
+          useCase: cacheLabels.useCase,
+          keyType: cacheLabels.keyType,
+          outcome: "match",
+        },
+        60,
+      );
 
       expect(client.calls.map(({ method, name, value }) => ({ method, name, value }))).toEqual([
         { method: observationMetricType, name: "service.cache.get.duration", value: 0.01 },
@@ -256,6 +280,7 @@ describe("Datadog metrics adapter", () => {
         { method: observationMetricType, name: "service.cache.stored.size", value: 96 },
         { method: observationMetricType, name: "service.cache.compression.ratio", value: 0.04 },
         { method: observationMetricType, name: "service.cache.compression.duration", value: 0.05 },
+        { method: observationMetricType, name: "service.cache.shadow.value_age", value: 60 },
       ]);
     });
   }

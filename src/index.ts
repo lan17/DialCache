@@ -48,6 +48,7 @@ export {
 export type { CompressionConfig } from "./internal/compression.js";
 export type { RedisConfig } from "./internal/redis-cache.js";
 export type {
+  DecodedRedisFrame,
   DialCacheRedisClient,
   RedisCachePayload,
   RedisInvalidationRequest,

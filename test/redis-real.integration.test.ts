@@ -378,8 +378,9 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
         const roundTrip = await scriptClient.read({ valueKey });
         const stored = await admin.get(commandOptions({ returnBuffers: true }), valueKey);
 
-        expect(Buffer.isBuffer(roundTrip)).toBe(true);
-        expect(roundTrip).toEqual(payload);
+        expect(Buffer.isBuffer(roundTrip?.payload)).toBe(true);
+        expect(roundTrip?.payload).toEqual(payload);
+        expect(roundTrip?.createdAtMs).toBeGreaterThan(0);
         expect(stored).not.toBeNull();
         expect(stored?.length).toBe(10 + payload.length);
         expect(stored?.[0]).toBe(1);
@@ -398,7 +399,9 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
           value: trackedPayload,
         }),
       ).toBe(true);
-      expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toEqual(trackedPayload);
+      const trackedRead = await scriptClient.read({ valueKey: trackedValueKey, watermarkKey });
+      expect(trackedRead?.payload).toEqual(trackedPayload);
+      expect(trackedRead?.createdAtMs).toBeGreaterThan(0);
     });
 
     it("shadow-validates the deserialized tracked value without repairing a mismatch", async () => {
@@ -435,6 +438,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
             mismatched.resolve();
           }
         }),
+        observeShadowValueAge: vi.fn(),
         observeGet: vi.fn(),
         observeFallback: vi.fn(),
         observeSerialization: vi.fn(),
@@ -556,6 +560,19 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
         keyType: "item_id",
         outcome: "superseded",
       });
+      // The stored frame was stamped with createdAtMs=1, so both verdicts see
+      // a huge positive age; superseded outcomes record none.
+      expect(metrics.observeShadowValueAge).toHaveBeenCalledTimes(2);
+      expect(metrics.observeShadowValueAge).toHaveBeenNthCalledWith(
+        1,
+        { cacheNamespace: namespace, useCase, keyType: "item_id", outcome: "match" },
+        expect.any(Number),
+      );
+      expect(metrics.observeShadowValueAge).toHaveBeenNthCalledWith(
+        2,
+        { cacheNamespace: namespace, useCase, keyType: "item_id", outcome: "mismatch" },
+        expect.any(Number),
+      );
       expect(read).toHaveBeenCalledTimes(9);
       expect(read.mock.calls.every(([request]) =>
         request.valueKey === valueKey && request.watermarkKey === watermarkKey
@@ -780,10 +797,10 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
         value: JSON.stringify(sourceValue),
         ...(tracked ? { watermarkKey } : {}),
       });
-      expect(await client.adapter.read({
+      expect((await client.adapter.read({
         valueKey,
         ...(tracked ? { watermarkKey } : {}),
-      })).toBe(JSON.stringify(sourceValue));
+      }))?.payload).toBe(JSON.stringify(sourceValue));
       expect(await admin.pTTL(valueKey)).toBeGreaterThan(55_000);
       expect(await admin.pTTL(valueKey)).toBeLessThanOrEqual(60_000);
       if (tracked) {
@@ -915,7 +932,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
 
       await admin.scriptFlush();
       expect(await scriptClient.write({ valueKey, cacheTtlMs: 60_000, value: "untracked" })).toBe(true);
-      expect(await scriptClient.read({ valueKey })).toBe("untracked");
+      expect((await scriptClient.read({ valueKey }))?.payload).toBe("untracked");
 
       const trackedValueKey = "script-recovery:{item:tracked}:value";
       const watermarkKey = "script-recovery:{item:tracked}:watermark";
@@ -928,7 +945,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
           value: "tracked",
         }),
       ).toBe(true);
-      expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toBe("tracked");
+      expect((await scriptClient.read({ valueKey: trackedValueKey, watermarkKey }))?.payload).toBe("tracked");
       // The recovered write must cache the stamp under sha1(source) — the
       // digest node-redis registers and the GLIDE batch dispatches — so later
       // writes take the single-round-trip path. (The unit suites pin each
@@ -975,7 +992,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       expect(await scriptClient.read({ valueKey, watermarkKey })).toBeNull();
 
       await admin.set(watermarkKey, "999.5");
-      expect(await scriptClient.read({ valueKey, watermarkKey })).toBe("tracked");
+      expect((await scriptClient.read({ valueKey, watermarkKey }))?.payload).toBe("tracked");
     });
 
     it("records a stale tracked frame as a remote miss without a read error", async () => {
@@ -1532,7 +1549,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       expect(wrote).toBe(true);
       expect(await admin.get(watermarkKey)).toBe("1.75");
       expect(await admin.pTTL(watermarkKey)).toBeGreaterThanOrEqual(61_000);
-      expect(await scriptClient.read({ valueKey, watermarkKey })).toBe("cached");
+      expect((await scriptClient.read({ valueKey, watermarkKey }))?.payload).toBe("cached");
     });
 
     it("does not rewrite sufficient or persistent watermarks on tracked writes", async () => {
@@ -1609,7 +1626,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
 
       await new Promise((resolve) => setTimeout(resolve, 110));
       expect(await scriptClient.write({ ...writeRequest, value: "fresh" })).toBe(true);
-      expect(await scriptClient.read({ valueKey, watermarkKey })).toBe("fresh");
+      expect((await scriptClient.read({ valueKey, watermarkKey }))?.payload).toBe("fresh");
     });
 
     it("documents that losing a watermark removes its publication fence", async () => {
@@ -1633,7 +1650,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
 
       expect(await scriptClient.write(staleWrite)).toBe(true);
       expect(await admin.get(watermarkKey)).toBe("0");
-      expect(await scriptClient.read({ valueKey, watermarkKey })).toBe("stale");
+      expect((await scriptClient.read({ valueKey, watermarkKey }))?.payload).toBe("stale");
     });
 
     it("never serves an unstamped placeholder and refuses foreign stamps", async () => {
@@ -1657,7 +1674,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
 
       // Only the paired nonce promotes it to a served, server-stamped frame.
       expect(await client.raw.stamp(valueKey, watermarkKey, 2_000, nonce)).toBe(1);
-      expect(await client.adapter.read({ valueKey, watermarkKey })).toBe("pending");
+      expect((await client.adapter.read({ valueKey, watermarkKey }))?.payload).toBe("pending");
       const stored = await admin.get(commandOptions({ returnBuffers: true }), valueKey);
       expect(stored?.[0]).toBe(1);
       expect(stored?.readBigUInt64BE(1) ?? 0n).toBeGreaterThan(0n);
@@ -1706,10 +1723,10 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
     const binary = Buffer.from([0, 0xff, 0xc3, 0x28, 0x80]);
 
     await nodeRedis.write({ valueKey: "interop:node-to-glide", cacheTtlMs: 60_000, value: binary });
-    await expect(valkeyGlide.read({ valueKey: "interop:node-to-glide" })).resolves.toEqual(binary);
+    expect((await valkeyGlide.read({ valueKey: "interop:node-to-glide" }))?.payload).toEqual(binary);
 
     await valkeyGlide.write({ valueKey: "interop:glide-to-node", cacheTtlMs: 60_000, value: "hello" });
-    await expect(nodeRedis.read({ valueKey: "interop:glide-to-node" })).resolves.toBe("hello");
+    expect((await nodeRedis.read({ valueKey: "interop:glide-to-node" }))?.payload).toBe("hello");
 
     const nodeTrackedValueKey = "interop:{node-tracked}:value";
     const nodeTrackedWatermarkKey = "interop:{node-tracked}:watermark";
@@ -1719,12 +1736,10 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       cacheTtlMs: 60_000,
       value: binary,
     });
-    await expect(
-      valkeyGlide.read({
-        valueKey: nodeTrackedValueKey,
-        watermarkKey: nodeTrackedWatermarkKey,
-      }),
-    ).resolves.toEqual(binary);
+    expect((await valkeyGlide.read({
+      valueKey: nodeTrackedValueKey,
+      watermarkKey: nodeTrackedWatermarkKey,
+    }))?.payload).toEqual(binary);
 
     const glideTrackedValueKey = "interop:{glide-tracked}:value";
     const glideTrackedWatermarkKey = "interop:{glide-tracked}:watermark";
@@ -1734,11 +1749,9 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       cacheTtlMs: 60_000,
       value: "tracked",
     });
-    await expect(
-      nodeRedis.read({
-        valueKey: glideTrackedValueKey,
-        watermarkKey: glideTrackedWatermarkKey,
-      }),
-    ).resolves.toBe("tracked");
+    expect((await nodeRedis.read({
+      valueKey: glideTrackedValueKey,
+      watermarkKey: glideTrackedWatermarkKey,
+    }))?.payload).toBe("tracked");
   });
 });

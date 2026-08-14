@@ -182,6 +182,15 @@ describe("Prometheus metrics adapter", () => {
       keyType: labels.keyType,
       outcome: "match",
     });
+    metrics.observeShadowValueAge(
+      {
+        cacheNamespace: labels.cacheNamespace,
+        useCase: labels.useCase,
+        keyType: labels.keyType,
+        outcome: "match",
+      },
+      42,
+    );
     metrics.compression({ ...labels, outcome: "compressed" });
     metrics.observeGet(labels, 0.05);
     metrics.observeFallback(labels, 0.05);
@@ -237,6 +246,11 @@ describe("Prometheus metrics adapter", () => {
         "schema_dialcache_shadow_validation_counter",
         ["cache_namespace", "use_case", "key_type", "outcome"],
       ),
+      histogramSchema(
+        "schema_dialcache_shadow_value_age_histogram",
+        ["cache_namespace", "use_case", "key_type", "outcome"],
+        VALUE_AGE_BUCKETS,
+      ),
       histogramSchema("schema_dialcache_size_histogram", ["cache_namespace", "use_case", "key_type", "layer"], SIZE_BUCKETS),
       histogramSchema(
         "schema_dialcache_stored_size_histogram",
@@ -244,6 +258,18 @@ describe("Prometheus metrics adapter", () => {
         SIZE_BUCKETS,
       ),
     ]);
+
+    const shadowValueAge = families.find(({ name }) => name === "schema_dialcache_shadow_value_age_histogram");
+    const shadowValueAgeSum = shadowValueAge?.values.find(
+      ({ metricName }) => metricName === "schema_dialcache_shadow_value_age_histogram_sum",
+    );
+    expect(shadowValueAgeSum?.value).toBe(42);
+    expect(shadowValueAgeSum?.labels).toEqual({
+      cache_namespace: labels.cacheNamespace,
+      use_case: labels.useCase,
+      key_type: labels.keyType,
+      outcome: "match",
+    });
 
     const serialization = families.find(({ name }) => name === "schema_dialcache_serialization_timer");
     const serializationLabels = serialization?.values
@@ -646,10 +672,12 @@ describe("Prometheus metrics adapter", () => {
 const TIMER_BUCKETS = [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, "+Inf"];
 const SIZE_BUCKETS = [100, 1_000, 10_000, 100_000, 1_000_000, 10_000_000, "+Inf"];
 const RATIO_BUCKETS = [0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 1, "+Inf"];
+const VALUE_AGE_BUCKETS = [1, 5, 15, 60, 300, 900, 3_600, 10_800, 43_200, 86_400, 259_200, 604_800, "+Inf"];
 
 interface MetricValue {
   readonly metricName?: string;
   readonly labels: Record<string, string | number>;
+  readonly value?: number;
 }
 
 interface MetricFamily {

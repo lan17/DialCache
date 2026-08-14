@@ -10,7 +10,7 @@ import {
   type MetricErrorKind,
   type MetricLayer,
 } from "../metrics.js";
-import type { DialCacheRedisClient, RedisCachePayload } from "../redis-client.js";
+import type { DecodedRedisFrame, DialCacheRedisClient, RedisCachePayload } from "../redis-client.js";
 import { JsonSerializer, type Serializer } from "../serializer.js";
 import type { RedisCacheGetResult } from "./cache-result.js";
 import {
@@ -53,7 +53,7 @@ interface RedisCacheOptions {
 
 interface StartedRedisRead {
   /** Result bounded by the effective Redis read deadline. */
-  readonly result: Promise<RedisCachePayload | null>;
+  readonly result: Promise<DecodedRedisFrame | null>;
   /** Fulfills only after the underlying semantic Redis read settles. */
   readonly settled: Promise<void>;
 }
@@ -126,9 +126,9 @@ export class RedisCache {
     const start = performance.now();
     this.recordMetric((metrics) => metrics.request(labelsFor(key, metricLayer)));
     try {
-      let payload: RedisCachePayload | null;
+      let frame: DecodedRedisFrame | null;
       try {
-        payload = await this.startPayloadRead(key, readTimeoutMs, false).result;
+        frame = await this.startPayloadRead(key, readTimeoutMs, false).result;
       } catch (error) {
         this.recordError(
           key,
@@ -137,14 +137,14 @@ export class RedisCache {
         );
         throw error;
       }
-      if (payload === null) {
+      if (frame === null) {
         this.recordMetric((metrics) => metrics.miss(labelsFor(key, metricLayer)));
         return { status: "miss", config: layerConfig };
       }
 
       try {
-        const value = await this.deserializePayload<T>(key, payload, metricLayer);
-        return { status: "hit", value, payload };
+        const value = await this.deserializePayload<T>(key, frame.payload, metricLayer);
+        return { status: "hit", value, frame };
       } catch {
         this.recordMetric((metrics) => metrics.miss(labelsFor(key, metricLayer)));
         return { status: "miss", config: layerConfig };
@@ -345,11 +345,11 @@ export class RedisCache {
     this.recordMetric((metrics) => metrics.request(labelsFor(key, metricLayer)));
     const read = this.startPayloadRead(key, readTimeoutMs, unrefTimer);
     const result = read.result.then(
-      (payload) => {
-        if (payload === null) {
+      (frame) => {
+        if (frame === null) {
           this.recordMetric((metrics) => metrics.miss(labelsFor(key, metricLayer)));
         }
-        return payload;
+        return frame;
       },
       (error: unknown) => {
         this.recordError(

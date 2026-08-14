@@ -153,10 +153,13 @@ describe("Valkey GLIDE adapter", () => {
     );
     const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
 
-    await expect(adapter.read({ valueKey: "plain:value" })).resolves.toBe("plain");
+    await expect(adapter.read({ valueKey: "plain:value" })).resolves.toEqual({
+      payload: "plain",
+      createdAtMs: 1_000,
+    });
     await expect(
       adapter.read({ valueKey: "tracked:{id}:value", watermarkKey: "tracked:{id}:watermark" }),
-    ).resolves.toEqual(Buffer.from([0, 0xff]));
+    ).resolves.toEqual({ payload: Buffer.from([0, 0xff]), createdAtMs: 1_000 });
     await expect(adapter.read({ valueKey: "missing:value" })).resolves.toBeNull();
 
     expect(client.get).toHaveBeenNthCalledWith(
@@ -195,7 +198,7 @@ describe("Valkey GLIDE adapter", () => {
         valueKey: "cluster:{id}:value",
         watermarkKey: "cluster:{id}:watermark",
       }),
-    ).resolves.toBe("tracked-cluster");
+    ).resolves.toEqual({ payload: "tracked-cluster", createdAtMs: 1_000 });
 
     expect(client.customCommand).toHaveBeenCalledWith(
       ["MGET", "cluster:{id}:value", "cluster:{id}:watermark"],

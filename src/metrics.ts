@@ -116,6 +116,18 @@ export interface DialCacheMetricsAdapter {
   coalesced?(labels: CoalescedMetricLabels): void;
   // Optional so existing custom adapters keep compiling without changes.
   shadowValidation?(labels: ShadowValidationMetricLabels): void;
+  /**
+   * Age in seconds of the validated Redis value at shadow verdict time (for
+   * a mismatch, after the confirming re-read): the observing process's epoch
+   * clock minus the validated frame's `createdAtMs`, clamped at zero.
+   * Emitted only alongside terminal `match` and `mismatch` outcomes; other
+   * outcomes deliver no verdict on a retained value. Tracked frames are
+   * stamped with Redis server time and untracked frames with the writer's
+   * client clock, so the age mixes clocks and is coarse operational
+   * evidence, not a precise measurement. Optional so existing custom
+   * adapters keep compiling without changes.
+   */
+  observeShadowValueAge?(labels: ShadowValidationMetricLabels, seconds: number): void;
   // Optional so existing custom adapters keep compiling without changes.
   compression?(labels: CompressionMetricLabels): void;
   observeGet(labels: CacheMetricLabels, seconds: number): void;

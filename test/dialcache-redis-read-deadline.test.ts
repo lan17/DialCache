@@ -9,9 +9,9 @@ import {
   DialCacheKeyConfig,
   RedisReadTimeoutError,
   type CachedOptions,
+  type DecodedRedisFrame,
   type DialCacheMetricsAdapter,
   type DialCacheRedisClient,
-  type RedisCachePayload,
   type RedisConfig,
   type RedisReadContext,
 } from "../src/index.js";
@@ -327,7 +327,7 @@ describe("DialCache Redis read deadlines", () => {
     const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
     const redis = redisClient(
       vi.fn()
-        .mockResolvedValueOnce(JSON.stringify({ source: "redis" }))
+        .mockResolvedValueOnce({ payload: JSON.stringify({ source: "redis" }), createdAtMs: Date.now() })
         .mockResolvedValueOnce(null),
     );
     const dialcache = new DialCache({ redis: { client: redis.client, readTimeoutMs: 100 } });
@@ -605,13 +605,13 @@ describe("DialCache Redis read deadlines", () => {
   it.each(["fulfillment", "rejection"] as const)(
     "consumes late read %s and lets a later invocation recover",
     async (settlement) => {
-      const firstRead = deferred<RedisCachePayload | null>();
+      const firstRead = deferred<DecodedRedisFrame | null>();
       let readCalls = 0;
       const redis = redisClient(async () => {
         readCalls += 1;
         return readCalls === 1
           ? await firstRead.promise
-          : JSON.stringify({ source: "redis" });
+          : { payload: JSON.stringify({ source: "redis" }), createdAtMs: Date.now() };
       });
       const error = vi.fn<DialCacheMetricsAdapter["error"]>();
       const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -634,7 +634,7 @@ describe("DialCache Redis read deadlines", () => {
       await expect(dialcache.enable(async () => await load())).resolves.toEqual({ source: "redis" });
 
       if (settlement === "fulfillment") {
-        firstRead.resolve(JSON.stringify({ source: "late" }));
+        firstRead.resolve({ payload: JSON.stringify({ source: "late" }), createdAtMs: Date.now() });
       } else {
         firstRead.reject(new Error("late Redis failure"));
       }

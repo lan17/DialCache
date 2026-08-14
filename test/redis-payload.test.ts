@@ -27,18 +27,19 @@ function encodeFrame(
 
 describe("Redis frame decoding", () => {
   it("decodes UTF-8 and binary payloads without copying binary data", () => {
-    expect(decodeRedisFrame(encodeFrame("cached"))).toBe("cached");
+    expect(decodeRedisFrame(encodeFrame("cached"))).toEqual({ payload: "cached", createdAtMs: 1_000 });
 
-    const frame = encodeFrame(Buffer.from([0, 0xff, 0x80]), 1);
+    const frame = encodeFrame(Buffer.from([0, 0xff, 0x80]), 1, 2_000);
     const decoded = decodeRedisFrame(frame);
-    expect(decoded).toEqual(Buffer.from([0, 0xff, 0x80]));
-    expect(Buffer.isBuffer(decoded)).toBe(true);
-    if (!Buffer.isBuffer(decoded)) {
+    expect(decoded).toEqual({ payload: Buffer.from([0, 0xff, 0x80]), createdAtMs: 2_000 });
+    const payload = decoded?.payload;
+    expect(Buffer.isBuffer(payload)).toBe(true);
+    if (!Buffer.isBuffer(payload)) {
       throw new Error("Expected a binary Redis payload");
     }
-    expect(decoded.buffer).toBe(frame.buffer);
-    expect(decoded.byteOffset).toBe(frame.byteOffset + 10);
-    expect(decoded.byteLength).toBe(frame.byteLength - 10);
+    expect(payload.buffer).toBe(frame.buffer);
+    expect(payload.byteOffset).toBe(frame.byteOffset + 10);
+    expect(payload.byteLength).toBe(frame.byteLength - 10);
   });
 
   it("treats missing, short, and unsupported frames as misses", () => {
@@ -65,9 +66,10 @@ describe("Redis frame decoding", () => {
 
   it("validates tracked frames against integer and fractional watermarks", () => {
     const frame = encodeFrame("cached", 0, 1_000);
+    const decoded = { payload: "cached", createdAtMs: 1_000 };
 
-    expect(decodeTrackedRedisFrame(frame, Buffer.from("999"))).toBe("cached");
-    expect(decodeTrackedRedisFrame(frame, Buffer.from("999.5"))).toBe("cached");
+    expect(decodeTrackedRedisFrame(frame, Buffer.from("999"))).toEqual(decoded);
+    expect(decodeTrackedRedisFrame(frame, Buffer.from("999.5"))).toEqual(decoded);
     expect(decodeTrackedRedisFrame(frame, Buffer.from("1000"))).toBeNull();
     expect(decodeTrackedRedisFrame(frame, Buffer.from("1000.5"))).toBeNull();
   });
@@ -106,18 +108,18 @@ describe("Redis frame decoding", () => {
     expect(utf8[0]).toBe(1);
     expect(Number(utf8.readBigUInt64BE(1))).toBe(1_000);
     expect(utf8[9]).toBe(0);
-    expect(decodeRedisFrame(utf8)).toBe("cachéd ✓");
-    expect(decodeTrackedRedisFrame(utf8, Buffer.from("999"))).toBe("cachéd ✓");
+    expect(decodeRedisFrame(utf8)).toEqual({ payload: "cachéd ✓", createdAtMs: 1_000 });
+    expect(decodeTrackedRedisFrame(utf8, Buffer.from("999"))).toEqual({ payload: "cachéd ✓", createdAtMs: 1_000 });
 
     const binaryPayload = Buffer.from([0, 0xff, 0x80]);
     const binary = encodeRedisFrame(binaryPayload, 2_000);
     expect(binary[9]).toBe(1);
     expect(binary).toEqual(encodeFrame(binaryPayload, 1, 2_000));
-    expect(decodeRedisFrame(binary)).toEqual(binaryPayload);
+    expect(decodeRedisFrame(binary)).toEqual({ payload: binaryPayload, createdAtMs: 2_000 });
 
     const empty = encodeRedisFrame("", 1);
     expect(empty.byteLength).toBe(10);
-    expect(decodeRedisFrame(empty)).toBe("");
+    expect(decodeRedisFrame(empty)).toEqual({ payload: "", createdAtMs: 1 });
   });
 
   it("keeps zero-stamped version-1 frames unreadable on the tracked path", () => {
@@ -126,7 +128,7 @@ describe("Redis frame decoding", () => {
     expect(decodeTrackedRedisFrame(zeroStamped, null)).toBeNull();
     expect(decodeTrackedRedisFrame(zeroStamped, Buffer.from("0"))).toBeNull();
     expect(decodeTrackedRedisFrame(zeroStamped, Buffer.from("1"))).toBeNull();
-    expect(decodeRedisFrame(zeroStamped)).toBe("pending");
+    expect(decodeRedisFrame(zeroStamped)).toEqual({ payload: "pending", createdAtMs: 0 });
   });
 
   it("encodes tracked placeholders that no read path serves", () => {
