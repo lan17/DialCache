@@ -1,6 +1,7 @@
 import {
   CacheLayer,
   DialCacheKeyConfig,
+  SHADOW_MISMATCH_LOGGING_LEAVES,
   type CacheConfigProvider,
   type LayerConfig,
   type ShadowConfig,
@@ -170,8 +171,12 @@ function mergeShadowConfig(
     return undefined;
   }
 
-  const ramp = overlay?.ramp !== undefined ? overlay.ramp : defaults?.ramp;
-  const mismatchLogging = mergeMismatchLoggingConfig(defaults?.mismatchLogging, overlay?.mismatchLogging);
+  const overlayRamp = readOwn(overlay, "ramp");
+  const ramp = overlayRamp !== undefined ? overlayRamp : readOwn(defaults, "ramp");
+  const mismatchLogging = mergeMismatchLoggingConfig(
+    readOwn(defaults, "mismatchLogging"),
+    readOwn(overlay, "mismatchLogging"),
+  );
 
   return {
     ...(ramp === undefined ? {} : { ramp }),
@@ -190,15 +195,23 @@ function mergeMismatchLoggingConfig(
     return undefined;
   }
 
-  const merged: { -readonly [Leaf in keyof ShadowMismatchLoggingConfig]: boolean } = {};
-  for (const leaf of ["key", "value", "diff"] as const) {
-    const overlayValue = overlay?.[leaf];
-    const value = overlayValue !== undefined ? overlayValue : defaults?.[leaf];
+  const merged: { -readonly [Leaf in keyof ShadowMismatchLoggingConfig]?: boolean } = {};
+  for (const leaf of SHADOW_MISMATCH_LOGGING_LEAVES) {
+    const overlayValue = readOwn(overlay, leaf);
+    const value = overlayValue !== undefined ? overlayValue : readOwn(defaults, leaf);
     if (value !== undefined) {
       merged[leaf] = value;
     }
   }
   return merged;
+}
+
+// Own-property reads keep runtime shadow config immune to inherited values:
+// prototype-carried leaves must never merge into an own `mismatchLogging`
+// group (its failure direction is payload data reaching logs, unlike a TTL)
+// and the same rule is applied to `ramp` so admission cannot be inherited.
+function readOwn<T extends object, Key extends keyof T>(source: T | undefined, key: Key): T[Key] | undefined {
+  return source !== undefined && Object.hasOwn(source, key) ? source[key] : undefined;
 }
 
 function assertShadowConfig(config: ShadowConfig | undefined): void {

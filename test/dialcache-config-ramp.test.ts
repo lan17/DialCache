@@ -500,6 +500,8 @@ describe("DialCache runtime config and ramp controls", () => {
     ["a null layer map", { ttlSec: null, ramp: {} }],
     ["an array shadow config", { ttlSec: {}, ramp: {}, shadow: [] }],
     ["the removed shadowRamp field", { ttlSec: {}, ramp: {}, shadowRamp: 100 }],
+    ["the removed shadow logMismatches field", { ttlSec: {}, ramp: {}, shadow: { logMismatches: true } }],
+    ["a non-object shadow mismatchLogging group", { ttlSec: {}, ramp: {}, shadow: { mismatchLogging: null } }],
     ["a null requestLocal value", { ttlSec: {}, ramp: {}, requestLocal: null }],
     ["a null coalesce value", { ttlSec: {}, ramp: {}, coalesce: null }],
   ] as const)("fails open instead of inheriting defaults when the provider returns %s", async (_name, runtimeConfig) => {

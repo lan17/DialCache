@@ -80,6 +80,22 @@ describe("DialCache observability internal compatibility paths", () => {
     }
   });
 
+  it("merges only own mismatch logging leaves, ignoring prototype-carried values", async () => {
+    const defaultConfig = new DialCacheKeyConfig({
+      ttlSec: { [CacheLayer.LOCAL]: 60 },
+      ramp: { [CacheLayer.LOCAL]: 100 },
+      shadow: { ramp: 20 },
+    });
+    const runtime = {
+      shadow: { mismatchLogging: Object.create({ value: true }) as { value?: boolean } },
+    } as DialCacheKeyConfig;
+
+    const merged = await fetchKeyConfig(async () => runtime, key(defaultConfig));
+
+    expect(merged?.shadow?.mismatchLogging).toEqual({});
+    expect(Object.hasOwn(merged?.shadow?.mismatchLogging ?? {}, "value")).toBe(false);
+  });
+
   it("preserves omitted requestLocal and coalesce through a runtime merge", async () => {
     // The gates own the effective defaults, so the merge must not materialize
     // either boolean when both sides omit it.

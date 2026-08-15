@@ -41,6 +41,19 @@ export interface ShadowConfig {
   readonly mismatchLogging?: ShadowMismatchLoggingConfig;
 }
 
+// `satisfies Record<keyof …, true>` fails to compile when the interface gains
+// a field this set is missing, so every leaf loop stays exhaustive.
+const SHADOW_MISMATCH_LOGGING_LEAF_SET = {
+  key: true,
+  value: true,
+  diff: true,
+} as const satisfies Record<keyof ShadowMismatchLoggingConfig, true>;
+
+/** Internal: the exhaustive `ShadowMismatchLoggingConfig` field list. */
+export const SHADOW_MISMATCH_LOGGING_LEAVES = Object.keys(
+  SHADOW_MISMATCH_LOGGING_LEAF_SET,
+) as readonly (keyof ShadowMismatchLoggingConfig)[];
+
 export class DialCacheKeyConfig {
   /** Per-layer TTLs in seconds, from 1 through 31,536,000 (365 days). */
   readonly ttlSec: LayerConfig;
@@ -128,11 +141,14 @@ export class DialCacheKeyConfig {
       requestLocal: false,
       shadow: {
         ramp: 0,
+        // `Required` keeps this kill-switch overlay exhaustive: leaves merge
+        // independently, so an omitted leaf would let an inherited `true`
+        // survive disabled().
         mismatchLogging: {
           key: false,
           value: false,
           diff: false,
-        },
+        } satisfies Required<ShadowMismatchLoggingConfig>,
       },
       ramp: {
         [CacheLayer.LOCAL]: 0,
@@ -162,7 +178,9 @@ function cloneShadowConfig(config: ShadowConfig | undefined): ShadowConfig | und
   if (Object.hasOwn(config, "logMismatches")) {
     throw new TypeError('ShadowConfig.logMismatches was replaced by "shadow.mismatchLogging"');
   }
-  const mismatchLogging = config.mismatchLogging;
+  // Own-property read: inherited groups are ignored, like everything the
+  // spread below copies.
+  const mismatchLogging = Object.hasOwn(config, "mismatchLogging") ? config.mismatchLogging : undefined;
   if (mismatchLogging === undefined) {
     return { ...config };
   }
