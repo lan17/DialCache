@@ -64,6 +64,36 @@ describe("shadow mismatch log JSON", () => {
     ]);
   });
 
+  it("reports source-only fields as CREATE entries", () => {
+    expect(JSON.parse(previewShadowLogDiff({ a: 1 }, { a: 1, b: 2 })!)).toEqual([
+      { type: "CREATE", path: ["b"], value: 2 },
+    ]);
+  });
+
+  it("renders nested Date leaves as ISO strings in diff entries", () => {
+    expect(JSON.parse(previewShadowLogDiff(
+      { updatedAt: new Date("2026-07-31T00:00:00.000Z") },
+      { updatedAt: new Date("2026-08-01T00:00:00.000Z") },
+    )!)).toEqual([
+      {
+        type: "CHANGE",
+        path: ["updatedAt"],
+        value: "2026-08-01T00:00:00.000Z",
+        oldValue: "2026-07-31T00:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("reports an element shift as index-wise changes", () => {
+    // Documented noise: array entries compare by index, so a shift reports
+    // every later index instead of one insertion.
+    expect(JSON.parse(previewShadowLogDiff(["a", "b", "c"], ["x", "a", "b"])!)).toEqual([
+      { type: "CHANGE", path: [0], value: "x", oldValue: "a" },
+      { type: "CHANGE", path: [1], value: "a", oldValue: "b" },
+      { type: "CHANGE", path: [2], value: "b", oldValue: "c" },
+    ]);
+  });
+
   it("returns an empty diff for equal inputs", () => {
     expect(previewShadowLogDiff({ id: "123" }, { id: "123" })).toBe("[]");
     expect(previewShadowLogDiff("same", "same")).toBe("[]");
@@ -89,15 +119,15 @@ describe("shadow mismatch log JSON", () => {
     ]);
   });
 
-  it("survives cyclic inputs", () => {
+  it("fails closed to null for cyclic inputs instead of throwing", () => {
     const cached: { id: string; self?: unknown } = { id: "cached" };
     cached.self = cached;
     const source: { id: string; self?: unknown } = { id: "source" };
     source.self = source;
 
-    // The traversal is cycle-safe; JSON rendering of a cyclic leaf still fails
-    // closed to null rather than throwing.
-    expect(() => previewShadowLogDiff(cached, source)).not.toThrow();
+    // The traversal is cycle-safe, but the resulting entries reference the
+    // cyclic structures, so JSON rendering fails closed to null.
+    expect(previewShadowLogDiff(cached, source)).toBeNull();
   });
 
   it("returns null when the diff entries cannot be serialized", () => {

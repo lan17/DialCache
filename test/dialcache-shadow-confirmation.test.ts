@@ -771,6 +771,131 @@ describe("DialCache Redis shadow confirmation", () => {
     expect(warning.diffJson).toBe('{"from":1,"to":2}');
   });
 
+  it("logs a null built-in diff when the projection throws for either side", async () => {
+    const useCase = "ShadowMismatchDiffProjectionThrow";
+    const payload = JSON.stringify({ id: "123", version: 1 });
+    const redis = new ScriptedRedis([() => payload, () => payload]);
+    const metrics = new RecordingMetrics();
+    const warn = vi.fn();
+    const dialcache = createCache(redis, metrics, {
+      logger: { debug: () => undefined, error: () => undefined, warn },
+    });
+    const getUser = dialcache.cached(async () => ({ id: "123", version: 2 }), {
+      ...trackedOptions(useCase, remoteConfig(100, 100, { key: true, diff: true })),
+      cacheKey: () => "123",
+      shadowMismatchLogValue: (value) => {
+        if (value.version === 1) {
+          throw new Error("unprojectable");
+        }
+        return { version: value.version };
+      },
+    });
+
+    await dialcache.enable(async () => await getUser());
+    await waitForShadowEvents(metrics, 1);
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      "DialCache shadow validation mismatch",
+      {
+        cacheNamespace: "urn",
+        useCase,
+        keyType: "user_id",
+        outcome: "mismatch",
+        cacheKey: `{urn:user_id:123}#${useCase}`,
+        diffJson: null,
+      },
+    );
+  });
+
+  it("projects each side once when value and diff logging are both enabled", async () => {
+    const useCase = "ShadowMismatchSharedProjection";
+    const payload = JSON.stringify({ id: "123", version: 1, secret: "cached-secret" });
+    const redis = new ScriptedRedis([() => payload, () => payload]);
+    const metrics = new RecordingMetrics();
+    const warn = vi.fn();
+    const projector = vi.fn(
+      (value: { version: number }) => ({ version: value.version }),
+    );
+    const dialcache = createCache(redis, metrics, {
+      logger: { debug: () => undefined, error: () => undefined, warn },
+    });
+    const getUser = dialcache.cached(
+      async () => ({ id: "123", version: 2, secret: "source-secret" }),
+      {
+        ...trackedOptions(useCase, remoteConfig(100, 100, { value: true, diff: true })),
+        cacheKey: () => "123",
+        shadowMismatchLogValue: projector,
+      },
+    );
+
+    await dialcache.enable(async () => await getUser());
+    await waitForShadowEvents(metrics, 1);
+
+    expect(projector).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledTimes(1);
+    const warning = warn.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(warning.cachedValueJson).toBe('{"version":1}');
+    expect(warning.sourceValueJson).toBe('{"version":2}');
+    expect(JSON.parse(warning.diffJson as string)).toEqual([
+      { type: "CHANGE", path: ["version"], value: 2, oldValue: 1 },
+    ]);
+  });
+
+  it("does not invoke shadowMismatchLogDiff when diff logging is off", async () => {
+    const useCase = "ShadowMismatchDiffHookIdle";
+    const payload = JSON.stringify({ id: "123", version: 1 });
+    const redis = new ScriptedRedis([() => payload, () => payload]);
+    const metrics = new RecordingMetrics();
+    const warn = vi.fn();
+    const logDiff = vi.fn(() => ({}));
+    const dialcache = createCache(redis, metrics, {
+      logger: { debug: () => undefined, error: () => undefined, warn },
+    });
+    const getUser = dialcache.cached(async () => ({ id: "123", version: 2 }), {
+      ...trackedOptions(useCase, remoteConfig(100, 100, { value: true })),
+      cacheKey: () => "123",
+      shadowMismatchLogDiff: logDiff,
+    });
+
+    await dialcache.enable(async () => await getUser());
+    await waitForShadowEvents(metrics, 1);
+
+    expect(logDiff).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledTimes(1);
+    const warning = warn.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(warning).not.toHaveProperty("diffJson");
+    expect(warning.cachedValueJson).toBe('{"id":"123","version":1}');
+  });
+
+  it("does not invoke log hooks or warn for a superseded mismatch candidate", async () => {
+    const useCase = "ShadowSupersededHooksIdle";
+    const payload = JSON.stringify({ id: "123", version: 1 });
+    const confirmation = JSON.stringify({ id: "123", version: 3 });
+    const redis = new ScriptedRedis([() => payload, () => confirmation]);
+    const metrics = new RecordingMetrics();
+    const warn = vi.fn();
+    const projector = vi.fn(() => ({}));
+    const logDiff = vi.fn(() => ({}));
+    const dialcache = createCache(redis, metrics, {
+      logger: { debug: () => undefined, error: () => undefined, warn },
+    });
+    const getUser = dialcache.cached(async () => ({ id: "123", version: 2 }), {
+      ...trackedOptions(useCase, remoteConfig(100, 100, { key: true, value: true, diff: true })),
+      cacheKey: () => "123",
+      shadowMismatchLogValue: projector,
+      shadowMismatchLogDiff: logDiff,
+    });
+
+    await dialcache.enable(async () => await getUser());
+    await waitForShadowEvents(metrics, 1);
+
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["superseded"]);
+    expect(projector).not.toHaveBeenCalled();
+    expect(logDiff).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   it("logs a null diff when shadowMismatchLogDiff throws", async () => {
     const useCase = "ShadowMismatchCustomDiffThrow";
     const payload = JSON.stringify({ id: "123", version: 1 });
