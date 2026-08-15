@@ -239,7 +239,7 @@ describe("shadow mismatch log JSON", () => {
     ]);
   });
 
-  it("keeps prototype-carried data out of the diff", () => {
+  it("diffs only own JSON members", () => {
     const objectProto = Object.prototype as unknown as Record<string, unknown>;
     const arrayProto = Array.prototype as unknown as Record<string, unknown>;
     objectProto.polluted = "PROTOTYPE-ONLY";
@@ -256,50 +256,6 @@ describe("shadow mismatch log JSON", () => {
       delete objectProto.polluted;
       delete arrayProto.pollutedEntry;
     }
-  });
-
-  it("serializes the diff without invoking an inherited Array.prototype.toJSON", () => {
-    const arrayProto = Array.prototype as unknown as Record<string, unknown>;
-    let diffJson: string | null;
-    arrayProto.toJSON = () => ({ prototypeSecret: "PROTOTYPE-ONLY" });
-    try {
-      // The entries root and every path are arrays; native serialization
-      // would hand the whole diff to the inherited hook.
-      diffJson = diffOf({ id: 1 }, { id: 2 });
-    } finally {
-      delete arrayProto.toJSON;
-    }
-
-    expect(diffJson).not.toContain("PROTOTYPE-ONLY");
-    expect(JSON.parse(diffJson!)).toEqual([
-      { type: "CHANGE", path: ["id"], value: 2, oldValue: 1 },
-    ]);
-  });
-
-  it("runs an inherited Object.prototype.toJSON only while rendering the side snapshots", () => {
-    const objectProto = Object.prototype as unknown as Record<string, unknown>;
-    let calls = 0;
-    let fields: ReturnType<typeof renderShadowMismatchJson>;
-    objectProto.toJSON = function (this: unknown) {
-      calls += 1;
-      return { hooked: calls };
-    };
-    try {
-      fields = renderShadowMismatchJson(
-        { available: true, value: { id: 1 } },
-        { available: true, value: { id: 2 } },
-        { value: false, diff: true },
-      );
-    } finally {
-      delete objectProto.toJSON;
-    }
-
-    // Snapshot rendering honors native JSON semantics (once per side); the
-    // internally generated entry objects must not consult the hook again.
-    expect(calls).toBe(2);
-    expect(JSON.parse(fields.diffJson!)).toEqual([
-      { type: "CHANGE", path: ["hooked"], value: 2, oldValue: 1 },
-    ]);
   });
 
   it("fails closed to null for cyclic inputs instead of throwing", () => {

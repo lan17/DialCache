@@ -7,6 +7,9 @@ const UTF8_ENCODER = new TextEncoder();
 const UTF8_DECODER = new TextDecoder("utf-8", { fatal: true });
 const TRUNCATION_MARKER_BYTES = UTF8_ENCODER.encode(SHADOW_LOG_TRUNCATION_MARKER);
 
+type JsonObject = { [key: string]: JsonValue };
+type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject;
+
 /** One loggable side of a confirmed mismatch; unavailable when its projection failed. */
 export interface ShadowLoggableSide {
   readonly available: boolean;
@@ -22,18 +25,18 @@ export interface ShadowMismatchLogFields {
 export interface ShadowLogDifferenceCreate {
   readonly type: "CREATE";
   readonly path: readonly (string | number)[];
-  readonly value: unknown;
+  readonly value: JsonValue;
 }
 export interface ShadowLogDifferenceRemove {
   readonly type: "REMOVE";
   readonly path: readonly (string | number)[];
-  readonly oldValue: unknown;
+  readonly oldValue: JsonValue;
 }
 export interface ShadowLogDifferenceChange {
   readonly type: "CHANGE";
   readonly path: readonly (string | number)[];
-  readonly value: unknown;
-  readonly oldValue: unknown;
+  readonly value: JsonValue;
+  readonly oldValue: JsonValue;
 }
 export type ShadowLogDifference =
   | ShadowLogDifferenceCreate
@@ -120,73 +123,53 @@ function builtInDiffJson(cachedJson: string | null, sourceJson: string | null): 
     return "[]";
   }
   try {
-    const cached: unknown = JSON.parse(cachedJson);
-    const source: unknown = JSON.parse(sourceJson);
+    // Both strings came from successful native JSON rendering above, so this
+    // is the single boundary from arbitrary loggable values to the closed JSON
+    // domain consumed by the built-in differ.
+    const cached = JSON.parse(cachedJson) as JsonValue;
+    const source = JSON.parse(sourceJson) as JsonValue;
     const entries: ShadowLogDifference[] = [];
     appendJsonDifferences(cached, source, [], entries);
-    return clampJson(serializeJsonTree(entries), SHADOW_LOG_DIFF_MAX_BYTES);
+    return previewShadowLogJson(entries, SHADOW_LOG_DIFF_MAX_BYTES);
   } catch {
     return null;
   }
 }
 
-// Serializes the internally generated diff tree without handing any container
-// to native JSON.stringify, so inherited `toJSON` hooks (for example a legacy
-// or polluted `Array.prototype.toJSON`) can never replace or reshape the
-// entries. `toJSON` runs only while rendering user data into the two side
-// snapshots. The domain here is closed: entry objects and path arrays are
-// built above, and every other member is JSON.parse output, so only null,
-// booleans, finite numbers, strings, arrays, and plain objects appear.
-function serializeJsonTree(value: unknown): string {
-  if (value === null || typeof value !== "object") {
-    // Primitives never consult toJSON; JSON.stringify only handles escaping.
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) {
-    return `[${value.map((member) => serializeJsonTree(member)).join(",")}]`;
-  }
-  const object = value as Record<string, unknown>;
-  const members = Object.keys(object).map(
-    (name) => `${JSON.stringify(name)}:${serializeJsonTree(object[name])}`,
-  );
-  return `{${members.join(",")}}`;
-}
-
 // Structural difference between two parsed-JSON values. Only own enumerable
-// keys and array indices are visited: the inputs are JSON.parse output, and
-// prototype-carried data must never reach the log. Same-kind containers
-// recurse (arrays index-wise, so an element shift reports every later
-// index); any other pair is one CHANGE entry at its path.
+// keys and array indices are visited, matching JSON object and array semantics.
+// Same-kind containers recurse (arrays index-wise, so an element shift reports
+// every later index); any other pair is one CHANGE entry at its path.
 function appendJsonDifferences(
-  cached: unknown,
-  source: unknown,
+  cached: JsonValue,
+  source: JsonValue,
   path: readonly (string | number)[],
   out: ShadowLogDifference[],
 ): void {
   if (Array.isArray(cached) && Array.isArray(source)) {
     const shared = Math.min(cached.length, source.length);
     for (let index = 0; index < shared; index += 1) {
-      appendJsonDifferences(cached[index], source[index], [...path, index], out);
+      appendJsonDifferences(cached[index]!, source[index]!, [...path, index], out);
     }
     for (let index = shared; index < cached.length; index += 1) {
-      out.push({ type: "REMOVE", path: [...path, index], oldValue: cached[index] });
+      out.push({ type: "REMOVE", path: [...path, index], oldValue: cached[index]! });
     }
     for (let index = shared; index < source.length; index += 1) {
-      out.push({ type: "CREATE", path: [...path, index], value: source[index] });
+      out.push({ type: "CREATE", path: [...path, index], value: source[index]! });
     }
     return;
   }
   if (isJsonObject(cached) && isJsonObject(source)) {
     for (const name of Object.keys(cached)) {
       if (Object.hasOwn(source, name)) {
-        appendJsonDifferences(cached[name], source[name], [...path, name], out);
+        appendJsonDifferences(cached[name]!, source[name]!, [...path, name], out);
       } else {
-        out.push({ type: "REMOVE", path: [...path, name], oldValue: cached[name] });
+        out.push({ type: "REMOVE", path: [...path, name], oldValue: cached[name]! });
       }
     }
     for (const name of Object.keys(source)) {
       if (!Object.hasOwn(cached, name)) {
-        out.push({ type: "CREATE", path: [...path, name], value: source[name] });
+        out.push({ type: "CREATE", path: [...path, name], value: source[name]! });
       }
     }
     return;
@@ -196,7 +179,7 @@ function appendJsonDifferences(
   }
 }
 
-function isJsonObject(value: unknown): value is Record<string, unknown> {
+function isJsonObject(value: JsonValue): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
