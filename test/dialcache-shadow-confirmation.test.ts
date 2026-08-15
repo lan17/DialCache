@@ -362,6 +362,7 @@ describe("DialCache Redis shadow confirmation", () => {
         useCase: "ShadowMismatchJson",
         keyType: "user_id",
         outcome: "mismatch",
+        cachedValueAgeSeconds: expect.any(Number),
         cacheKey: "{private-namespace:user_id:private-id}?tenant=private-tenant#ShadowMismatchJson",
         cachedValueJson: '{"id":"private-id","version":1}',
         sourceValueJson: '{"id":"private-id","version":2}',
@@ -413,6 +414,7 @@ describe("DialCache Redis shadow confirmation", () => {
         useCase: "ShadowMismatchRampedDownJson",
         keyType: "user_id",
         outcome: "mismatch",
+        cachedValueAgeSeconds: expect.any(Number),
         cacheKey: "{urn:user_id:123}?locale=en-US#ShadowMismatchRampedDownJson",
         cachedValueJson: '{"id":"123","version":1}',
         sourceValueJson: '{"id":"123","version":2}',
@@ -468,6 +470,7 @@ describe("DialCache Redis shadow confirmation", () => {
           useCase: "ShadowMismatchJsonFailure",
           keyType: "user_id",
           outcome: "mismatch",
+          cachedValueAgeSeconds: expect.any(Number),
           cacheKey: null,
           cachedValueJson: null,
           sourceValueJson: null,
@@ -548,6 +551,7 @@ describe("DialCache Redis shadow confirmation", () => {
         useCase,
         keyType: "user_id",
         outcome: "mismatch",
+        cachedValueAgeSeconds: expect.any(Number),
         cacheKey: `{urn:user_id:123}#${useCase}`,
       },
     );
@@ -578,6 +582,7 @@ describe("DialCache Redis shadow confirmation", () => {
         useCase,
         keyType: "user_id",
         outcome: "mismatch",
+        cachedValueAgeSeconds: expect.any(Number),
         cachedValueJson: '{"id":"123","version":1}',
         sourceValueJson: '{"id":"123","version":2}',
       },
@@ -613,6 +618,7 @@ describe("DialCache Redis shadow confirmation", () => {
         useCase,
         keyType: "user_id",
         outcome: "mismatch",
+        cachedValueAgeSeconds: expect.any(Number),
         cacheKey: `{urn:user_id:123}#${useCase}`,
         cachedValueJson: '{"version":1}',
         sourceValueJson: '{"version":2}',
@@ -651,6 +657,7 @@ describe("DialCache Redis shadow confirmation", () => {
         useCase,
         keyType: "user_id",
         outcome: "mismatch",
+        cachedValueAgeSeconds: expect.any(Number),
         cachedValueJson: null,
         sourceValueJson: '{"version":2}',
       },
@@ -805,6 +812,7 @@ describe("DialCache Redis shadow confirmation", () => {
         useCase,
         keyType: "user_id",
         outcome: "mismatch",
+        cachedValueAgeSeconds: expect.any(Number),
         cacheKey: `{urn:user_id:123}#${useCase}`,
         diffJson: null,
       },
@@ -978,6 +986,7 @@ describe("DialCache Redis shadow confirmation", () => {
         useCase,
         keyType: "user_id",
         outcome: "mismatch",
+        cachedValueAgeSeconds: expect.any(Number),
         cacheKey: `{urn:user_id:123}#${useCase}`,
       },
     );
@@ -1011,6 +1020,7 @@ describe("DialCache Redis shadow confirmation", () => {
         useCase,
         keyType: "user_id",
         outcome: "mismatch",
+        cachedValueAgeSeconds: expect.any(Number),
         cacheKey: `{urn:user_id:123}#${useCase}`,
         diffJson: null,
       },
@@ -1066,9 +1076,12 @@ describe("DialCache Redis shadow confirmation", () => {
       ]);
       redis.frameCreatedAtMs = nowMs - 90_000;
       const metrics = new RecordingMetrics();
-      const dialcache = createCache(redis, metrics);
+      const warn = vi.fn();
+      const dialcache = createCache(redis, metrics, {
+        logger: { debug: () => undefined, error: () => undefined, warn },
+      });
       const getUser = dialcache.cached(async () => ({ id: "123", version: 2 }), {
-        ...trackedOptions("ShadowMismatchValueAge", remoteConfig(100)),
+        ...trackedOptions("ShadowMismatchValueAge", remoteConfig(100, 100, { key: true })),
         cacheKey: () => "123",
       });
 
@@ -1083,6 +1096,9 @@ describe("DialCache Redis shadow confirmation", () => {
         keyType: "user_id",
         outcome: "mismatch",
       });
+      // The warning carries the exact age the metric observed.
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]?.[1]).toMatchObject({ cachedValueAgeSeconds: 90 });
     } finally {
       nowSpy.mockRestore();
     }
@@ -2102,6 +2118,7 @@ describe("DialCache Redis shadow confirmation", () => {
         useCase,
         keyType: "user_id",
         outcome: "mismatch",
+        cachedValueAgeSeconds: expect.any(Number),
         cacheKey: `{urn:user_id:123}#${useCase}`,
       },
     );

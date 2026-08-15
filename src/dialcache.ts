@@ -1219,6 +1219,10 @@ export class DialCache {
       useCase: key.useCase,
       keyType: key.keyType,
       outcome: "mismatch",
+      // The same coarse mixed-clock age observeShadowValueAge records for
+      // this verdict: how long the stale value had been readable when
+      // validation caught it. Metadata-tier, so it rides on every warning.
+      ...(valueAgeSeconds === undefined ? {} : { cachedValueAgeSeconds: valueAgeSeconds }),
       ...(logPlan.key ? { cacheKey: previewShadowLogKey(key.urn) } : {}),
       ...mismatchLogDetails,
     });
