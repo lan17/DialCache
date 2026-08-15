@@ -5,10 +5,17 @@ import {
   SHADOW_LOG_KEY_MAX_BYTES,
   SHADOW_LOG_TRUNCATION_MARKER,
   SHADOW_LOG_VALUE_MAX_BYTES,
-  previewShadowLogDiff,
   previewShadowLogJson,
   previewShadowLogKey,
+  renderShadowMismatchJson,
 } from "../src/internal/shadow-log-json.js";
+
+const diffOf = (cached: unknown, source: unknown): string | null =>
+  renderShadowMismatchJson(
+    { available: true, value: cached },
+    { available: true, value: source },
+    { value: false, diff: true },
+  ).diffJson ?? null;
 
 describe("shadow mismatch log JSON", () => {
   it("uses native JSON for the values supplied to the comparator", () => {
@@ -62,7 +69,7 @@ describe("shadow mismatch log JSON", () => {
   });
 
   it("diffs plain objects and arrays from the cached side to the source side", () => {
-    const diffJson = previewShadowLogDiff(
+    const diffJson = diffOf(
       { id: "123", version: 1, tags: ["a", "b"] },
       { id: "123", version: 2, tags: ["a"] },
     );
@@ -74,7 +81,7 @@ describe("shadow mismatch log JSON", () => {
   });
 
   it("reports source-only fields as CREATE entries", () => {
-    expect(JSON.parse(previewShadowLogDiff({ a: 1 }, { a: 1, b: 2 })!)).toEqual([
+    expect(JSON.parse(diffOf({ a: 1 }, { a: 1, b: 2 })!)).toEqual([
       { type: "CREATE", path: ["b"], value: 2 },
     ]);
   });
@@ -93,8 +100,8 @@ describe("shadow mismatch log JSON", () => {
     // Runtime shape: the cached side is deserialized JSON, the source is live.
     const cached = { user: { id: 1 } };
 
-    expect(previewShadowLogDiff(cached, { user: new User(1, "SECRET-TOKEN") })).toBe("[]");
-    const changed = previewShadowLogDiff(cached, { user: new User(2, "SECRET-TOKEN") });
+    expect(diffOf(cached, { user: new User(1, "SECRET-TOKEN") })).toBe("[]");
+    const changed = diffOf(cached, { user: new User(2, "SECRET-TOKEN") });
     expect(changed).not.toContain("SECRET-TOKEN");
     expect(JSON.parse(changed!)).toEqual([
       { type: "CHANGE", path: ["user", "id"], value: 2, oldValue: 1 },
@@ -104,7 +111,7 @@ describe("shadow mismatch log JSON", () => {
   it("does not emit phantom entries for serializer-normalized fields", () => {
     // Runtime shape: the cached Date arrived as its ISO string; the live
     // source still holds a Date for the same instant.
-    const diffJson = previewShadowLogDiff(
+    const diffJson = diffOf(
       { updatedAt: "2026-07-31T00:00:00.000Z", n: 1 },
       { updatedAt: new Date("2026-07-31T00:00:00.000Z"), n: 2 },
     );
@@ -115,7 +122,7 @@ describe("shadow mismatch log JSON", () => {
   });
 
   it("renders nested Date leaves as ISO strings in diff entries", () => {
-    expect(JSON.parse(previewShadowLogDiff(
+    expect(JSON.parse(diffOf(
       { updatedAt: new Date("2026-07-31T00:00:00.000Z") },
       { updatedAt: new Date("2026-08-01T00:00:00.000Z") },
     )!)).toEqual([
@@ -131,7 +138,7 @@ describe("shadow mismatch log JSON", () => {
   it("reports an element shift as index-wise changes", () => {
     // Documented noise: array entries compare by index, so a shift reports
     // every later index instead of one insertion.
-    expect(JSON.parse(previewShadowLogDiff(["a", "b", "c"], ["x", "a", "b"])!)).toEqual([
+    expect(JSON.parse(diffOf(["a", "b", "c"], ["x", "a", "b"])!)).toEqual([
       { type: "CHANGE", path: [0], value: "x", oldValue: "a" },
       { type: "CHANGE", path: [1], value: "a", oldValue: "b" },
       { type: "CHANGE", path: [2], value: "b", oldValue: "c" },
@@ -139,21 +146,21 @@ describe("shadow mismatch log JSON", () => {
   });
 
   it("returns an empty diff for identical loggable forms", () => {
-    expect(previewShadowLogDiff({ id: "123" }, { id: "123" })).toBe("[]");
-    expect(previewShadowLogDiff("same", "same")).toBe("[]");
+    expect(diffOf({ id: "123" }, { id: "123" })).toBe("[]");
+    expect(diffOf("same", "same")).toBe("[]");
     // A Map renders as {} on both sides; the emptiness matches what value
     // logging would show for the same inputs.
-    expect(previewShadowLogDiff({ m: {} }, { m: new Map([["k", 1]]) })).toBe("[]");
+    expect(diffOf({ m: {} }, { m: new Map([["k", 1]]) })).toBe("[]");
   });
 
   it("collapses non-container and mixed-kind roots to one root-level change entry", () => {
-    expect(JSON.parse(previewShadowLogDiff("cached", "source")!)).toEqual([
+    expect(JSON.parse(diffOf("cached", "source")!)).toEqual([
       { type: "CHANGE", path: [], value: "source", oldValue: "cached" },
     ]);
-    expect(JSON.parse(previewShadowLogDiff({ id: "123" }, null)!)).toEqual([
+    expect(JSON.parse(diffOf({ id: "123" }, null)!)).toEqual([
       { type: "CHANGE", path: [], value: null, oldValue: { id: "123" } },
     ]);
-    expect(JSON.parse(previewShadowLogDiff(
+    expect(JSON.parse(diffOf(
       new Date("2026-07-31T00:00:00.000Z"),
       new Date("2026-08-01T00:00:00.000Z"),
     )!)).toEqual([
@@ -164,12 +171,91 @@ describe("shadow mismatch log JSON", () => {
         oldValue: "2026-07-31T00:00:00.000Z",
       },
     ]);
-    expect(JSON.parse(previewShadowLogDiff({ a: 1, b: 2 }, [1, 2])!)).toEqual([
+    expect(JSON.parse(diffOf({ a: 1, b: 2 }, [1, 2])!)).toEqual([
       { type: "CHANGE", path: [], value: [1, 2], oldValue: { a: 1, b: 2 } },
     ]);
-    expect(JSON.parse(previewShadowLogDiff({}, [])!)).toEqual([
+    expect(JSON.parse(diffOf({}, [])!)).toEqual([
       { type: "CHANGE", path: [], value: [], oldValue: {} },
     ]);
+  });
+
+  it("reports nested kind mismatches at their path", () => {
+    expect(JSON.parse(diffOf({ data: { a: 1 } }, { data: [1] })!)).toEqual([
+      { type: "CHANGE", path: ["data"], value: [1], oldValue: { a: 1 } },
+    ]);
+  });
+
+  it("fails the diff closed when either side has no JSON rendering", () => {
+    expect(diffOf(undefined, null)).toBeNull();
+    expect(diffOf(null, undefined)).toBeNull();
+    expect(diffOf(undefined, undefined)).toBeNull();
+    expect(diffOf(undefined, { a: 1 })).toBeNull();
+  });
+
+  it("renders null value fields and a null diff for an unavailable side", () => {
+    expect(renderShadowMismatchJson(
+      { available: false },
+      { available: true, value: { id: "123" } },
+      { value: true, diff: true },
+    )).toEqual({
+      cachedValueJson: null,
+      sourceValueJson: '{"id":"123"}',
+      diffJson: null,
+    });
+  });
+
+  it("runs toJSON once per side and derives value and diff from the same snapshot", () => {
+    const makeSide = (id: number) => {
+      let calls = 0;
+      return {
+        calls: () => calls,
+        value: {
+          user: {
+            toJSON(): { id: number; calls: number } {
+              calls += 1;
+              return { id, calls };
+            },
+          },
+        },
+      };
+    };
+    const cached = makeSide(1);
+    const source = makeSide(2);
+
+    const fields = renderShadowMismatchJson(
+      { available: true, value: cached.value },
+      { available: true, value: source.value },
+      { value: true, diff: true },
+    );
+
+    // A second stringify per side would render calls: 2 somewhere; both
+    // outputs must come from the single calls: 1 snapshot.
+    expect(cached.calls()).toBe(1);
+    expect(source.calls()).toBe(1);
+    expect(fields.cachedValueJson).toBe('{"user":{"id":1,"calls":1}}');
+    expect(fields.sourceValueJson).toBe('{"user":{"id":2,"calls":1}}');
+    expect(JSON.parse(fields.diffJson!)).toEqual([
+      { type: "CHANGE", path: ["user", "id"], value: 2, oldValue: 1 },
+    ]);
+  });
+
+  it("keeps prototype-carried data out of the diff", () => {
+    const objectProto = Object.prototype as unknown as Record<string, unknown>;
+    const arrayProto = Array.prototype as unknown as Record<string, unknown>;
+    objectProto.polluted = "PROTOTYPE-ONLY";
+    arrayProto.pollutedEntry = "PROTOTYPE-ONLY";
+    try {
+      const diffJson = diffOf({ a: 1, list: ["x"] }, { a: 2, list: ["x"] });
+
+      expect(diffJson).not.toContain("PROTOTYPE-ONLY");
+      expect(diffJson).not.toContain("polluted");
+      expect(JSON.parse(diffJson!)).toEqual([
+        { type: "CHANGE", path: ["a"], value: 2, oldValue: 1 },
+      ]);
+    } finally {
+      delete objectProto.polluted;
+      delete arrayProto.pollutedEntry;
+    }
   });
 
   it("fails closed to null for cyclic inputs instead of throwing", () => {
@@ -179,15 +265,15 @@ describe("shadow mismatch log JSON", () => {
     source.self = source;
 
     // The loggable-form rendering throws on cycles before any diffing.
-    expect(previewShadowLogDiff(cached, source)).toBeNull();
+    expect(diffOf(cached, source)).toBeNull();
   });
 
   it("returns null when the diff entries cannot be serialized", () => {
-    expect(previewShadowLogDiff({ n: 1n }, { n: 2n })).toBeNull();
+    expect(diffOf({ n: 1n }, { n: 2n })).toBeNull();
   });
 
   it("byte-clamps the diff", () => {
-    const diffJson = previewShadowLogDiff(
+    const diffJson = diffOf(
       { text: "a".repeat(SHADOW_LOG_DIFF_MAX_BYTES) },
       { text: "b".repeat(SHADOW_LOG_DIFF_MAX_BYTES) },
     );

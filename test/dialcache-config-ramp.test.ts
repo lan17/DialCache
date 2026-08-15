@@ -72,6 +72,17 @@ describe("DialCache runtime config and ramp controls", () => {
     })).toThrow('ShadowConfig.logMismatches was replaced by "shadow.mismatchLogging"');
   });
 
+  it("ignores a prototype-inherited shadow group at the constructor boundary", () => {
+    const config = new DialCacheKeyConfig(Object.create({
+      shadow: {
+        ramp: 100,
+        mismatchLogging: { value: true, diff: true },
+      },
+    }) as ConstructorParameters<typeof DialCacheKeyConfig>[0]);
+
+    expect(config.shadow).toBeUndefined();
+  });
+
   it("rejects a non-object shadow mismatchLogging group", () => {
     for (const mismatchLogging of [null, 5, "keys", [true]]) {
       expect(() => new DialCacheKeyConfig({
@@ -435,6 +446,12 @@ describe("DialCache runtime config and ramp controls", () => {
       new DialCacheKeyConfig({ shadow: { mismatchLogging: { value: null as unknown as boolean } } }),
       TypeError,
       "shadow.mismatchLogging.value must be a boolean",
+    ],
+    [
+      "unknown shadow mismatch logging field",
+      new DialCacheKeyConfig({ shadow: { mismatchLogging: { vaule: true } as never } }),
+      TypeError,
+      'shadow.mismatchLogging has unknown field "vaule"',
     ],
     [
       "removed shadow logMismatches",

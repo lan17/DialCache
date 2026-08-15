@@ -45,9 +45,10 @@ import {
 } from "./internal/runtime-config.js";
 import {
   SHADOW_LOG_DIFF_MAX_BYTES,
-  previewShadowLogDiff,
   previewShadowLogJson,
   previewShadowLogKey,
+  renderShadowMismatchJson,
+  type ShadowMismatchLogFields,
 } from "./internal/shadow-log-json.js";
 
 type CacheKeyArgs = Record<string, string | number | boolean | bigint | null | undefined>;
@@ -255,13 +256,6 @@ const SHADOW_LOG_PLAN_OFF: ShadowLogPlan = { key: false, value: false, diff: fal
 
 function shadowLogPlanActive(plan: ShadowLogPlan): boolean {
   return Object.values(plan).some(Boolean);
-}
-
-/** Pre-rendered bounded JSON strings; raw compared values are not retained. */
-interface ShadowMismatchLogDetails {
-  readonly cachedValueJson?: string | null;
-  readonly sourceValueJson?: string | null;
-  readonly diffJson?: string | null;
 }
 
 type ShadowValidationStart<Value> =
@@ -929,6 +923,15 @@ export class DialCache {
       return SHADOW_LOG_PLAN_OFF;
     }
     const group = configured as Record<string, unknown>;
+    for (const name of Object.keys(group)) {
+      if (!(SHADOW_MISMATCH_LOGGING_LEAVES as readonly string[]).includes(name)) {
+        // Fail the whole group closed: a typo'd runtime override must not
+        // silently inherit enabled leaves whose failure direction is payload
+        // data reaching logs. One error, logging off, cache untouched.
+        this.recordError(key, CacheLayer.REMOTE, "config_resolution");
+        return SHADOW_LOG_PLAN_OFF;
+      }
+    }
     let sawInvalidLeaf = false;
     const resolveLeaf = (name: keyof ShadowMismatchLoggingConfig): boolean => {
       const leaf = Object.hasOwn(group, name) ? group[name] : undefined;
@@ -1031,7 +1034,7 @@ export class DialCache {
     };
     const elapsedBeforeStartMs = Math.max(performance.now() - deadlineStartedAtMs, 0);
     const remainingTimeoutMs = Math.max(plan.timeoutMs - elapsedBeforeStartMs, 0);
-    let mismatchLogDetails: ShadowMismatchLogDetails | undefined;
+    let mismatchLogDetails: ShadowMismatchLogFields | undefined;
     let validatedValueAgeSeconds: number | undefined;
 
     const validation = withMonotonicDeadline({
@@ -1190,7 +1193,7 @@ export class DialCache {
     key: DialCacheKey,
     outcome: ShadowValidationOutcome,
     logPlan: ShadowLogPlan = SHADOW_LOG_PLAN_OFF,
-    mismatchLogDetails?: ShadowMismatchLogDetails,
+    mismatchLogDetails?: ShadowMismatchLogFields,
     valueAgeSeconds?: number,
   ): void {
     const labels = {
@@ -1454,7 +1457,9 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
   }
   const ttlSecConfig = config.ttlSec;
   const rampConfig = config.ramp;
-  const shadowConfig = config.shadow;
+  // Own-property read, mirroring the constructor: an inherited shadow group
+  // must not activate log-content policy.
+  const shadowConfig = Object.hasOwn(config, "shadow") ? config.shadow : undefined;
   const requestLocal = config.requestLocal;
   const coalesce = config.coalesce;
   const remoteReadTimeoutMs = config.remoteReadTimeoutMs;
@@ -1517,6 +1522,13 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
         const configured = mismatchLogging[leaf];
         if (configured !== undefined && typeof configured !== "boolean") {
           throw new TypeError(`DialCache defaultConfig shadow.mismatchLogging.${leaf} must be a boolean`);
+        }
+      }
+      // Defaults are the strict tier: a typo'd field fails at registration
+      // instead of silently inheriting or disabling logging at runtime.
+      for (const name of Object.keys(mismatchLogging)) {
+        if (!(SHADOW_MISMATCH_LOGGING_LEAVES as readonly string[]).includes(name)) {
+          throw new TypeError(`DialCache defaultConfig shadow.mismatchLogging has unknown field "${name}"`);
         }
       }
     }
@@ -1648,13 +1660,13 @@ function renderShadowMismatchLog<Value>(
   plan: ShadowValidationPlan<Value>,
   cachedValue: Value,
   sourceValue: Value,
-): ShadowMismatchLogDetails {
+): ShadowMismatchLogFields {
   let cachedLoggable: unknown = cachedValue;
   let sourceLoggable: unknown = sourceValue;
   let cachedLoggableOk = true;
   let sourceLoggableOk = true;
-  const needsProjection = plan.logValue !== undefined
-    && (logPlan.value || (logPlan.diff && plan.logDiff === undefined));
+  const includeBuiltInDiff = logPlan.diff && plan.logDiff === undefined;
+  const needsProjection = plan.logValue !== undefined && (logPlan.value || includeBuiltInDiff);
   if (needsProjection && plan.logValue !== undefined) {
     try {
       cachedLoggable = plan.logValue(cachedValue);
@@ -1668,30 +1680,23 @@ function renderShadowMismatchLog<Value>(
     }
   }
 
-  let diffJson: string | null | undefined;
-  if (logPlan.diff) {
-    if (plan.logDiff !== undefined) {
-      try {
-        diffJson = previewShadowLogJson(plan.logDiff(cachedValue, sourceValue), SHADOW_LOG_DIFF_MAX_BYTES);
-      } catch {
-        diffJson = null;
-      }
-    } else {
-      diffJson = cachedLoggableOk && sourceLoggableOk
-        ? previewShadowLogDiff(cachedLoggable, sourceLoggable)
-        : null;
+  const rendered: ShadowMismatchLogFields = logPlan.value || includeBuiltInDiff
+    ? renderShadowMismatchJson(
+        { available: cachedLoggableOk, value: cachedLoggable },
+        { available: sourceLoggableOk, value: sourceLoggable },
+        { value: logPlan.value, diff: includeBuiltInDiff },
+      )
+    : {};
+  if (logPlan.diff && plan.logDiff !== undefined) {
+    let diffJson: string | null;
+    try {
+      diffJson = previewShadowLogJson(plan.logDiff(cachedValue, sourceValue), SHADOW_LOG_DIFF_MAX_BYTES);
+    } catch {
+      diffJson = null;
     }
+    return { ...rendered, diffJson };
   }
-
-  return {
-    ...(logPlan.value
-      ? {
-          cachedValueJson: cachedLoggableOk ? previewShadowLogJson(cachedLoggable) : null,
-          sourceValueJson: sourceLoggableOk ? previewShadowLogJson(sourceLoggable) : null,
-        }
-      : {}),
-    ...(diffJson === undefined ? {} : { diffJson }),
-  };
+  return rendered;
 }
 
 // Frame stamps are epoch-based (Redis server time for tracked writes, writer

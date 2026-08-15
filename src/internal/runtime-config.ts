@@ -114,7 +114,10 @@ function mergeKeyConfig(
   const remoteReadTimeoutMs = overlay?.remoteReadTimeoutMs !== undefined
     ? overlay.remoteReadTimeoutMs
     : defaultConfig?.remoteReadTimeoutMs;
-  const shadow = mergeShadowConfig(defaultConfig?.shadow, overlay?.shadow);
+  const shadow = mergeShadowConfig(
+    readOwn(defaultConfig ?? undefined, "shadow"),
+    readOwn(overlay, "shadow"),
+  );
 
   return new DialCacheKeyConfig({
     ttlSec: mergeLayerConfig(defaultConfig?.ttlSec, overlay?.ttlSec, "ttlSec"),
@@ -195,7 +198,25 @@ function mergeMismatchLoggingConfig(
     return undefined;
   }
 
-  const merged: { -readonly [Leaf in keyof ShadowMismatchLoggingConfig]?: boolean } = {};
+  // Unknown own keys survive the merge so admission can fail the whole group
+  // closed and record a config_resolution error. Rebuilding from known leaves
+  // alone would silently drop a typo'd override (e.g. `vaule: false`) while
+  // the inherited enabled leaves kept logging payload data.
+  const merged: Record<string, unknown> = {};
+  for (const source of [defaults, overlay]) {
+    if (source === undefined) {
+      continue;
+    }
+    for (const name of Object.keys(source)) {
+      if ((SHADOW_MISMATCH_LOGGING_LEAVES as readonly string[]).includes(name)) {
+        continue;
+      }
+      const value = (source as Record<string, unknown>)[name];
+      if (value !== undefined) {
+        merged[name] = value;
+      }
+    }
+  }
   for (const leaf of SHADOW_MISMATCH_LOGGING_LEAVES) {
     const overlayValue = readOwn(overlay, leaf);
     const value = overlayValue !== undefined ? overlayValue : readOwn(defaults, leaf);
@@ -203,7 +224,7 @@ function mergeMismatchLoggingConfig(
       merged[leaf] = value;
     }
   }
-  return merged;
+  return merged as ShadowMismatchLoggingConfig;
 }
 
 // Own-property reads keep runtime shadow config immune to inherited values:

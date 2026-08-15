@@ -2028,6 +2028,41 @@ describe("DialCache Redis shadow confirmation", () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
+  it("fails the whole logging group closed when a runtime override carries an unknown field", async () => {
+    const useCase = "ShadowUnknownLoggingLeaf";
+    const payload = JSON.stringify({ id: "123", version: 1 });
+    const redis = new ScriptedRedis([() => payload, () => payload]);
+    const metrics = new RecordingMetrics();
+    const warn = vi.fn();
+    const dialcache = createCache(redis, metrics, {
+      // The emergency-shutoff typo: the operator meant `value: false`. The
+      // inherited `value: true` must not survive it silently.
+      cacheConfigProvider: async () => new DialCacheKeyConfig({
+        shadow: { mismatchLogging: { vaule: false } as never },
+      }),
+      logger: {
+        debug: () => undefined,
+        error: () => undefined,
+        warn,
+      },
+    });
+    const getUser = dialcache.cached(async () => ({ id: "123", version: 2 }), {
+      ...trackedOptions(useCase, remoteConfig(100, 100, { key: true, value: true })),
+      cacheKey: () => "123",
+    });
+
+    expect(await dialcache.enable(async () => await getUser())).toEqual({ id: "123", version: 1 });
+    await waitForShadowEvents(metrics, 1);
+
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["mismatch"]);
+    expect(metrics.ordinaryEvents.filter(({ name: metricName, labels }) =>
+      metricName === "error"
+      && labels.layer === CacheLayer.REMOTE
+      && labels.error === "config_resolution"
+    )).toHaveLength(1);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   it("resolves an invalid mismatch logging leaf to off without suppressing valid leaves", async () => {
     const useCase = "ShadowInvalidLoggingLeaf";
     const cachedValue = { id: "123", version: 1 };

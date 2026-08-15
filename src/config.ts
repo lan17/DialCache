@@ -94,7 +94,10 @@ export class DialCacheKeyConfig {
     }
     this.ttlSec = cloneLayerConfig(config.ttlSec, "ttlSec");
     this.ramp = cloneLayerConfig(config.ramp, "ramp");
-    const shadow = cloneShadowConfig(config.shadow);
+    // Own-property read: `shadow` carries the log-content controls, so a
+    // prototype-inherited group must not activate policy (its leaves would
+    // all be own properties and pass every later gate).
+    const shadow = cloneShadowConfig(Object.hasOwn(config, "shadow") ? config.shadow : undefined);
     if (shadow !== undefined) {
       this.shadow = shadow;
     }

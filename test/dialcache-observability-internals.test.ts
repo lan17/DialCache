@@ -96,6 +96,32 @@ describe("DialCache observability internal compatibility paths", () => {
     expect(Object.hasOwn(merged?.shadow?.mismatchLogging ?? {}, "value")).toBe(false);
   });
 
+  it("ignores a prototype-inherited shadow group in a runtime overlay", async () => {
+    const defaultConfig = new DialCacheKeyConfig({
+      ttlSec: { [CacheLayer.REMOTE]: 60 },
+      ramp: { [CacheLayer.REMOTE]: 100 },
+      shadow: {
+        ramp: 20,
+        mismatchLogging: { key: true },
+      },
+    });
+    // A provider result whose shadow policy lives on the prototype: every leaf
+    // inside it is an own property, so only the group boundary can reject it.
+    const overlay = Object.create({
+      shadow: {
+        ramp: 100,
+        mismatchLogging: { value: true, diff: true },
+      },
+    }) as DialCacheKeyConfig;
+
+    const merged = await fetchKeyConfig(async () => overlay, key(defaultConfig));
+
+    expect(merged?.shadow).toEqual({
+      ramp: 20,
+      mismatchLogging: { key: true },
+    });
+  });
+
   it("preserves omitted requestLocal and coalesce through a runtime merge", async () => {
     // The gates own the effective defaults, so the merge must not materialize
     // either boolean when both sides omit it.
