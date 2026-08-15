@@ -124,10 +124,32 @@ function builtInDiffJson(cachedJson: string | null, sourceJson: string | null): 
     const source: unknown = JSON.parse(sourceJson);
     const entries: ShadowLogDifference[] = [];
     appendJsonDifferences(cached, source, [], entries);
-    return previewShadowLogJson(entries, SHADOW_LOG_DIFF_MAX_BYTES);
+    return clampJson(serializeJsonTree(entries), SHADOW_LOG_DIFF_MAX_BYTES);
   } catch {
     return null;
   }
+}
+
+// Serializes the internally generated diff tree without handing any container
+// to native JSON.stringify, so inherited `toJSON` hooks (for example a legacy
+// or polluted `Array.prototype.toJSON`) can never replace or reshape the
+// entries. `toJSON` runs only while rendering user data into the two side
+// snapshots. The domain here is closed: entry objects and path arrays are
+// built above, and every other member is JSON.parse output, so only null,
+// booleans, finite numbers, strings, arrays, and plain objects appear.
+function serializeJsonTree(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    // Primitives never consult toJSON; JSON.stringify only handles escaping.
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((member) => serializeJsonTree(member)).join(",")}]`;
+  }
+  const object = value as Record<string, unknown>;
+  const members = Object.keys(object).map(
+    (name) => `${JSON.stringify(name)}:${serializeJsonTree(object[name])}`,
+  );
+  return `{${members.join(",")}}`;
 }
 
 // Structural difference between two parsed-JSON values. Only own enumerable
