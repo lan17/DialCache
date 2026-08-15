@@ -4,6 +4,7 @@ import {
   type CacheConfigProvider,
   type LayerConfig,
   type ShadowConfig,
+  type ShadowMismatchLoggingConfig,
 } from "../config.js";
 import type { DialCacheKey } from "../key.js";
 import type { DisabledReason } from "../metrics.js";
@@ -170,18 +171,47 @@ function mergeShadowConfig(
   }
 
   const ramp = overlay?.ramp !== undefined ? overlay.ramp : defaults?.ramp;
-  const logMismatches = overlay?.logMismatches !== undefined
-    ? overlay.logMismatches
-    : defaults?.logMismatches;
+  const mismatchLogging = mergeMismatchLoggingConfig(defaults?.mismatchLogging, overlay?.mismatchLogging);
 
   return {
     ...(ramp === undefined ? {} : { ramp }),
-    ...(logMismatches === undefined ? {} : { logMismatches }),
+    ...(mismatchLogging === undefined ? {} : { mismatchLogging }),
   };
+}
+
+function mergeMismatchLoggingConfig(
+  defaults: ShadowMismatchLoggingConfig | undefined,
+  overlay: ShadowMismatchLoggingConfig | undefined,
+): ShadowMismatchLoggingConfig | undefined {
+  assertMismatchLoggingConfig(defaults);
+  assertMismatchLoggingConfig(overlay);
+
+  if (defaults === undefined && overlay === undefined) {
+    return undefined;
+  }
+
+  const merged: { -readonly [Leaf in keyof ShadowMismatchLoggingConfig]: boolean } = {};
+  for (const leaf of ["key", "value", "diff"] as const) {
+    const overlayValue = overlay?.[leaf];
+    const value = overlayValue !== undefined ? overlayValue : defaults?.[leaf];
+    if (value !== undefined) {
+      merged[leaf] = value;
+    }
+  }
+  return merged;
 }
 
 function assertShadowConfig(config: ShadowConfig | undefined): void {
   if (config !== undefined && (config === null || typeof config !== "object" || Array.isArray(config))) {
     throw new TypeError("DialCache shadow config must be an object");
+  }
+  if (config !== undefined && Object.hasOwn(config, "logMismatches")) {
+    throw new TypeError('ShadowConfig.logMismatches was replaced by "shadow.mismatchLogging"');
+  }
+}
+
+function assertMismatchLoggingConfig(config: ShadowMismatchLoggingConfig | undefined): void {
+  if (config !== undefined && (config === null || typeof config !== "object" || Array.isArray(config))) {
+    throw new TypeError("DialCache shadow mismatchLogging config must be an object");
   }
 }

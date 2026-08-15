@@ -47,6 +47,7 @@ const rootConsumer = `import {
   type Serializer,
   type ShadowComparator,
   type ShadowConfig,
+  type ShadowMismatchLoggingConfig,
   type ShadowValidationMetricLabels,
   type ShadowValidationOutcome,
 } from "dialcache";
@@ -147,9 +148,14 @@ const shadowCacheConfig: DialCacheConfig = {
   shadowMaxInFlight: 2,
 };
 const shadowCache = new DialCache(shadowCacheConfig);
+const shadowMismatchLoggingConfig: ShadowMismatchLoggingConfig = {
+  key: true,
+  value: true,
+  diff: true,
+};
 const shadowConfig: ShadowConfig = {
   ramp: 50,
-  logMismatches: true,
+  mismatchLogging: shadowMismatchLoggingConfig,
 };
 const shadowKeyConfig = new DialCacheKeyConfig({ shadow: shadowConfig });
 const dogStatsDClient: DatadogDogStatsDClient = {
@@ -203,6 +209,11 @@ const load = cache.cached(async (id: string) => id, {
   cacheKey: (id) => id,
   fallbackTimeoutMs: 1_000,
   shadowComparator: stringShadowComparator,
+  shadowMismatchLogValue: (value) => value.length,
+  shadowMismatchLogDiff: (cachedValue, sourceValue) => ({
+    cachedLength: cachedValue.length,
+    sourceLength: sourceValue.length,
+  }),
   defaultConfig: new DialCacheKeyConfig({
     ttlSec: { [CacheLayer.LOCAL]: 60, [CacheLayer.REMOTE]: 60 },
     ramp: { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 100 },
@@ -909,7 +920,9 @@ if (
   esmDisabledOverlay.requestLocal !== false
   || esmDisabledOverlay.coalesce !== undefined
   || esmDisabledOverlay.shadow?.ramp !== 0
-  || esmDisabledOverlay.shadow.logMismatches !== false
+  || esmDisabledOverlay.shadow.mismatchLogging?.key !== false
+  || esmDisabledOverlay.shadow.mismatchLogging.value !== false
+  || esmDisabledOverlay.shadow.mismatchLogging.diff !== false
   || esmDisabledOverlay.ramp[root.CacheLayer.LOCAL] !== 0
   || esmDisabledOverlay.ramp[root.CacheLayer.REMOTE] !== 0
 ) {
@@ -1284,7 +1297,9 @@ if (
   cjsDisabledOverlay.requestLocal !== false
   || cjsDisabledOverlay.coalesce !== undefined
   || cjsDisabledOverlay.shadow?.ramp !== 0
-  || cjsDisabledOverlay.shadow.logMismatches !== false
+  || cjsDisabledOverlay.shadow.mismatchLogging?.key !== false
+  || cjsDisabledOverlay.shadow.mismatchLogging.value !== false
+  || cjsDisabledOverlay.shadow.mismatchLogging.diff !== false
   || cjsDisabledOverlay.ramp[root.CacheLayer.LOCAL] !== 0
   || cjsDisabledOverlay.ramp[root.CacheLayer.REMOTE] !== 0
 ) {

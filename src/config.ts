@@ -11,15 +11,34 @@ export enum CacheLayer {
 export type Awaitable<T> = T | Promise<T>;
 export type LayerConfig = Partial<Record<CacheLayer, number>>;
 
+/**
+ * Content controls for the one warning emitted per confirmed shadow mismatch.
+ * Every field defaults to false; the warning is emitted only when at least one
+ * field is true. Fields merge independently at runtime, like cache-layer leaves.
+ */
+export interface ShadowMismatchLoggingConfig {
+  /** Include the logical cache key (the DialCache URN, byte-capped). */
+  readonly key?: boolean;
+  /**
+   * Include bounded native-JSON strings for the compared values. Values pass
+   * through the use case's `shadowMismatchLogValue` projection when one is
+   * defined and are logged raw otherwise.
+   */
+  readonly value?: boolean;
+  /**
+   * Include a bounded JSON diff of the compared values: the use case's
+   * `shadowMismatchLogDiff` result when defined, and otherwise a structural
+   * diff of the same loggable forms `value` uses.
+   */
+  readonly diff?: boolean;
+}
+
 /** Per-use-case runtime policy for detached Redis shadow work. */
 export interface ShadowConfig {
   /** Independent stable cohort percentage. Omitted and zero disable shadow work. */
   readonly ramp?: number;
-  /**
-   * Emit one warning with the logical key and bounded native-JSON strings for
-   * the compared values for each confirmed mismatch. Defaults to false.
-   */
-  readonly logMismatches?: boolean;
+  /** Confirmed-mismatch warning content. Omitted, empty, and all-false disable the warning. */
+  readonly mismatchLogging?: ShadowMismatchLoggingConfig;
 }
 
 export class DialCacheKeyConfig {
@@ -109,7 +128,11 @@ export class DialCacheKeyConfig {
       requestLocal: false,
       shadow: {
         ramp: 0,
-        logMismatches: false,
+        mismatchLogging: {
+          key: false,
+          value: false,
+          diff: false,
+        },
       },
       ramp: {
         [CacheLayer.LOCAL]: 0,
@@ -136,7 +159,17 @@ function cloneShadowConfig(config: ShadowConfig | undefined): ShadowConfig | und
   if (config === null || typeof config !== "object" || Array.isArray(config)) {
     throw new TypeError("DialCache shadow config must be an object");
   }
-  return { ...config };
+  if (Object.hasOwn(config, "logMismatches")) {
+    throw new TypeError('ShadowConfig.logMismatches was replaced by "shadow.mismatchLogging"');
+  }
+  const mismatchLogging = config.mismatchLogging;
+  if (mismatchLogging === undefined) {
+    return { ...config };
+  }
+  if (mismatchLogging === null || typeof mismatchLogging !== "object" || Array.isArray(mismatchLogging)) {
+    throw new TypeError("DialCache shadow mismatchLogging config must be an object");
+  }
+  return { ...config, mismatchLogging: { ...mismatchLogging } };
 }
 
 /**

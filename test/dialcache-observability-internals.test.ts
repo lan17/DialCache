@@ -18,7 +18,7 @@ describe("DialCache observability internal compatibility paths", () => {
       ramp: { [CacheLayer.LOCAL]: 25, [CacheLayer.REMOTE]: 50 },
       shadow: {
         ramp: 20,
-        logMismatches: true,
+        mismatchLogging: { key: true, value: true },
       },
     });
     const cases = [
@@ -37,7 +37,7 @@ describe("DialCache observability internal compatibility paths", () => {
           ramp: { [CacheLayer.LOCAL]: 25, [CacheLayer.REMOTE]: 75 },
           shadow: {
             ramp: 80,
-            logMismatches: true,
+            mismatchLogging: { key: true, value: true },
           },
         }),
       },
@@ -46,7 +46,7 @@ describe("DialCache observability internal compatibility paths", () => {
           ttlSec: { [CacheLayer.REMOTE]: 90 },
           ramp: { [CacheLayer.LOCAL]: 10 },
           shadow: {
-            logMismatches: false,
+            mismatchLogging: { value: false, diff: true },
           },
         }),
         expected: new DialCacheKeyConfig({
@@ -56,7 +56,7 @@ describe("DialCache observability internal compatibility paths", () => {
           ramp: { [CacheLayer.LOCAL]: 10, [CacheLayer.REMOTE]: 50 },
           shadow: {
             ramp: 20,
-            logMismatches: false,
+            mismatchLogging: { key: true, value: false, diff: true },
           },
         }),
       },
@@ -69,7 +69,7 @@ describe("DialCache observability internal compatibility paths", () => {
           ramp: { [CacheLayer.LOCAL]: 25, [CacheLayer.REMOTE]: 50 },
           shadow: {
             ramp: 20,
-            logMismatches: true,
+            mismatchLogging: { key: true, value: true },
           },
         }),
       },

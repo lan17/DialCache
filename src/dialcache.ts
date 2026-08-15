@@ -41,7 +41,11 @@ import {
   type LayerConfigResolution,
   type ResolvedLayerConfig,
 } from "./internal/runtime-config.js";
-import { shadowMismatchLogDetails } from "./internal/shadow-log-json.js";
+import {
+  previewShadowLogDiff,
+  previewShadowLogJson,
+  previewShadowLogKey,
+} from "./internal/shadow-log-json.js";
 
 type CacheKeyArgs = Record<string, string | number | boolean | bigint | null | undefined>;
 type Id = string | number | bigint;
@@ -126,6 +130,22 @@ interface CacheOperationOptionsBase<Value> {
    * This is stable use-case behavior, not runtime rollout configuration.
    */
   readonly shadowComparator?: ShadowComparator<Value>;
+  /**
+   * Projects a compared value into its loggable form for mismatch warnings.
+   * Feeds `mismatchLogging.value` output and the built-in structural diff;
+   * without it, opted-in warnings log the raw native-JSON forms. Runs once per
+   * side after terminal mismatch confirmation, inside detached shadow work.
+   * Must be synchronous, deterministic, side-effect-free, non-mutating, and
+   * bounded; inputs are borrowed snapshots. A throw logs `null` for that side.
+   */
+  readonly shadowMismatchLogValue?: (value: Value) => unknown;
+  /**
+   * Replaces the built-in structural diff for mismatch warnings that enable
+   * `mismatchLogging.diff`. Receives the raw compared values, not the
+   * `shadowMismatchLogValue` projections. Same execution constraints as
+   * `shadowMismatchLogValue`; a throw logs a `null` diff.
+   */
+  readonly shadowMismatchLogDiff?: (cachedValue: Value, sourceValue: Value) => unknown;
   /**
    * Monotonic deadline applied once an initially enabled invocation starts its
    * fallback, in milliseconds. Must be at most 2,147,483,647. Defaults to 60
@@ -221,11 +241,24 @@ interface ShadowValidationPlan<Value> {
   readonly comparator: ShadowComparator<Value>;
   readonly timeoutMs: number;
   readonly didCallerFallbackTimeout: () => boolean;
+  readonly logValue?: (value: Value) => unknown;
+  readonly logDiff?: (cachedValue: Value, sourceValue: Value) => unknown;
 }
 
-interface ShadowMismatchDetails {
-  readonly cachedValue: unknown;
-  readonly sourceValue: unknown;
+/** Resolved runtime content controls for one admitted shadow job's warning. */
+interface ShadowLogPlan {
+  readonly key: boolean;
+  readonly value: boolean;
+  readonly diff: boolean;
+}
+
+const SHADOW_LOG_PLAN_OFF: ShadowLogPlan = { key: false, value: false, diff: false };
+
+/** Pre-rendered bounded JSON strings; raw compared values are not retained. */
+interface ShadowMismatchLogDetails {
+  readonly cachedValueJson?: string | null;
+  readonly sourceValueJson?: string | null;
+  readonly diffJson?: string | null;
 }
 
 type ShadowValidationStart<Value> =
@@ -422,6 +455,12 @@ export class DialCache {
       comparator: shadowComparator,
       timeoutMs: fallbackTimeoutMs ?? DEFAULT_FALLBACK_TIMEOUT_MS,
       didCallerFallbackTimeout: () => callerFallbackTimedOut,
+      ...(options.shadowMismatchLogValue === undefined
+        ? {}
+        : { logValue: options.shadowMismatchLogValue }),
+      ...(options.shadowMismatchLogDiff === undefined
+        ? {}
+        : { logDiff: options.shadowMismatchLogDiff }),
     };
 
     let key: DialCacheKey;
@@ -845,7 +884,7 @@ export class DialCache {
       this.recordShadowValidation(key, "dropped");
       return;
     }
-    const logMismatches = this.resolveShadowLogging(key, resolvedShadowConfig);
+    const logPlan = this.resolveShadowLogging(key, resolvedShadowConfig);
 
     const flight: ShadowFlight = {
       cachedFrame: start.kind === "retained" ? start.frame : null,
@@ -865,23 +904,43 @@ export class DialCache {
       runStart,
       validation,
       readTimeoutMs,
-      logMismatches,
+      logPlan,
     );
   }
 
   private resolveShadowLogging(
     key: DialCacheKey,
     shadowConfig: Record<string, unknown>,
-  ): boolean {
-    const configuredLogMismatches = shadowConfig.logMismatches;
-    if (configuredLogMismatches === undefined) {
-      return false;
+  ): ShadowLogPlan {
+    const configured = shadowConfig.mismatchLogging;
+    if (configured === undefined) {
+      return SHADOW_LOG_PLAN_OFF;
     }
-    if (typeof configuredLogMismatches !== "boolean") {
+    if (configured === null || typeof configured !== "object" || Array.isArray(configured)) {
       this.recordError(key, CacheLayer.REMOTE, "config_resolution");
-      return false;
+      return SHADOW_LOG_PLAN_OFF;
     }
-    return configuredLogMismatches;
+    const group = configured as Record<string, unknown>;
+    let sawInvalidLeaf = false;
+    const resolveLeaf = (leaf: unknown): boolean => {
+      if (leaf === undefined) {
+        return false;
+      }
+      if (typeof leaf !== "boolean") {
+        sawInvalidLeaf = true;
+        return false;
+      }
+      return leaf;
+    };
+    const plan: ShadowLogPlan = {
+      key: resolveLeaf(group.key),
+      value: resolveLeaf(group.value),
+      diff: resolveLeaf(group.diff),
+    };
+    if (sawInvalidLeaf) {
+      this.recordError(key, CacheLayer.REMOTE, "config_resolution");
+    }
+    return plan;
   }
 
   private deferShadowValidation<T>(
@@ -891,7 +950,7 @@ export class DialCache {
     start: ShadowValidationRunStart<T>,
     validation: ShadowValidationPlan<T>,
     readTimeoutMs: number,
-    logMismatches: boolean,
+    logPlan: ShadowLogPlan,
   ): void {
     setImmediate(() => {
       this.runShadowValidation(
@@ -901,7 +960,7 @@ export class DialCache {
         start,
         validation,
         readTimeoutMs,
-        logMismatches,
+        logPlan,
       );
     }).unref();
   }
@@ -913,7 +972,7 @@ export class DialCache {
     start: ShadowValidationRunStart<T>,
     plan: ShadowValidationPlan<T>,
     readTimeoutMs: number,
-    logMismatches: boolean,
+    logPlan: ShadowLogPlan,
   ): void {
     const pendingRedisReads = new Set<Promise<void>>();
     let operationFinished = false;
@@ -963,7 +1022,7 @@ export class DialCache {
     };
     const elapsedBeforeStartMs = Math.max(performance.now() - deadlineStartedAtMs, 0);
     const remainingTimeoutMs = Math.max(plan.timeoutMs - elapsedBeforeStartMs, 0);
-    let mismatchDetails: ShadowMismatchDetails | undefined;
+    let mismatchLogDetails: ShadowMismatchLogDetails | undefined;
     let validatedValueAgeSeconds: number | undefined;
 
     const validation = withMonotonicDeadline({
@@ -1099,8 +1158,12 @@ export class DialCache {
           if (confirmationFrame === null || !redisPayloadsEqual(originalFrame.payload, confirmationFrame.payload)) {
             return "superseded";
           }
-          if (logMismatches) {
-            mismatchDetails = { cachedValue, sourceValue };
+          if (logPlan.value || logPlan.diff) {
+            try {
+              mismatchLogDetails = renderShadowMismatchLog(logPlan, plan, cachedValue, sourceValue);
+            } catch {
+              // Log rendering is best-effort and must not affect the outcome.
+            }
           }
           validatedValueAgeSeconds = shadowValueAgeSeconds(originalFrame.createdAtMs);
           return "mismatch";
@@ -1111,7 +1174,7 @@ export class DialCache {
     });
 
     void validation.then(
-      (outcome) => this.recordShadowValidation(key, outcome, logMismatches, mismatchDetails, validatedValueAgeSeconds),
+      (outcome) => this.recordShadowValidation(key, outcome, logPlan, mismatchLogDetails, validatedValueAgeSeconds),
       () => this.recordShadowValidation(key, "timeout"),
     );
   }
@@ -1119,8 +1182,8 @@ export class DialCache {
   private recordShadowValidation(
     key: DialCacheKey,
     outcome: ShadowValidationOutcome,
-    logMismatches = false,
-    mismatchDetails?: ShadowMismatchDetails,
+    logPlan: ShadowLogPlan = SHADOW_LOG_PLAN_OFF,
+    mismatchLogDetails?: ShadowMismatchLogDetails,
     valueAgeSeconds?: number,
   ): void {
     const labels = {
@@ -1133,7 +1196,7 @@ export class DialCache {
     if (valueAgeSeconds !== undefined) {
       this.metrics?.observeShadowValueAge?.(labels, valueAgeSeconds);
     }
-    if (outcome !== "mismatch" || !logMismatches) {
+    if (outcome !== "mismatch" || !(logPlan.key || logPlan.value || logPlan.diff)) {
       return;
     }
 
@@ -1143,23 +1206,15 @@ export class DialCache {
       keyType: key.keyType,
       outcome: "mismatch",
     } as const;
-    if (mismatchDetails !== undefined) {
-      try {
-        this.logger.warn(
-          "DialCache shadow validation mismatch",
-          {
-            ...warning,
-            ...shadowMismatchLogDetails(
-              key.urn,
-              mismatchDetails.cachedValue,
-              mismatchDetails.sourceValue,
-            ),
-          },
-        );
-        return;
-      } catch {
-        // JSON detail construction is best-effort; preserve the metadata warning.
-      }
+    try {
+      this.logger.warn("DialCache shadow validation mismatch", {
+        ...warning,
+        ...(logPlan.key ? { cacheKey: previewShadowLogKey(key.urn) } : {}),
+        ...mismatchLogDetails,
+      });
+      return;
+    } catch {
+      // Warning detail construction is best-effort; preserve the metadata warning.
     }
     this.logger.warn("DialCache shadow validation mismatch", warning);
   }
@@ -1454,14 +1509,23 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
         throw new RangeError("DialCache defaultConfig shadow.ramp must be between 0 and 100");
       }
     }
-    if (snapshot.shadow.logMismatches !== undefined && typeof snapshot.shadow.logMismatches !== "boolean") {
-      throw new TypeError("DialCache defaultConfig shadow.logMismatches must be a boolean");
+    const mismatchLogging = snapshot.shadow.mismatchLogging;
+    if (mismatchLogging !== undefined) {
+      for (const leaf of ["key", "value", "diff"] as const) {
+        const configured = mismatchLogging[leaf];
+        if (configured !== undefined && typeof configured !== "boolean") {
+          throw new TypeError(`DialCache defaultConfig shadow.mismatchLogging.${leaf} must be a boolean`);
+        }
+      }
     }
   }
 
   Object.freeze(snapshot.ttlSec);
   Object.freeze(snapshot.ramp);
   if (snapshot.shadow !== undefined) {
+    if (snapshot.shadow.mismatchLogging !== undefined) {
+      Object.freeze(snapshot.shadow.mismatchLogging);
+    }
     Object.freeze(snapshot.shadow);
   }
   return Object.freeze(snapshot);
@@ -1572,6 +1636,60 @@ function resolveShadowComparator<Value>(
   comparator: ShadowComparator<Value> | undefined,
 ): ShadowComparator<Value> {
   return comparator ?? isDeepStrictEqual;
+}
+
+// Runs only after terminal mismatch confirmation, inside detached shadow work.
+// Every hook invocation and JSON step fails closed to a `null` field so a bad
+// projection can never surface raw values or affect the recorded outcome.
+function renderShadowMismatchLog<Value>(
+  logPlan: ShadowLogPlan,
+  plan: ShadowValidationPlan<Value>,
+  cachedValue: Value,
+  sourceValue: Value,
+): ShadowMismatchLogDetails {
+  let cachedLoggable: unknown = cachedValue;
+  let sourceLoggable: unknown = sourceValue;
+  let cachedLoggableOk = true;
+  let sourceLoggableOk = true;
+  const needsProjection = plan.logValue !== undefined
+    && (logPlan.value || (logPlan.diff && plan.logDiff === undefined));
+  if (needsProjection && plan.logValue !== undefined) {
+    try {
+      cachedLoggable = plan.logValue(cachedValue);
+    } catch {
+      cachedLoggableOk = false;
+    }
+    try {
+      sourceLoggable = plan.logValue(sourceValue);
+    } catch {
+      sourceLoggableOk = false;
+    }
+  }
+
+  let diffJson: string | null | undefined;
+  if (logPlan.diff) {
+    if (plan.logDiff !== undefined) {
+      try {
+        diffJson = previewShadowLogJson(plan.logDiff(cachedValue, sourceValue));
+      } catch {
+        diffJson = null;
+      }
+    } else {
+      diffJson = cachedLoggableOk && sourceLoggableOk
+        ? previewShadowLogDiff(cachedLoggable, sourceLoggable)
+        : null;
+    }
+  }
+
+  return {
+    ...(logPlan.value
+      ? {
+          cachedValueJson: cachedLoggableOk ? previewShadowLogJson(cachedLoggable) : null,
+          sourceValueJson: sourceLoggableOk ? previewShadowLogJson(sourceLoggable) : null,
+        }
+      : {}),
+    ...(diffJson === undefined ? {} : { diffJson }),
+  };
 }
 
 // Frame stamps are epoch-based (Redis server time for tracked writes, writer

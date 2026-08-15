@@ -487,7 +487,7 @@ describe("DialCache Redis shadow validation", () => {
       error,
     }, {
       cacheConfigProvider: async () => new DialCacheKeyConfig({
-        shadow: { logMismatches: "yes" as never },
+        shadow: { mismatchLogging: { value: "yes" as never } },
       }),
       logger: {
         debug: () => undefined,
@@ -502,7 +502,7 @@ describe("DialCache Redis shadow validation", () => {
         ramp: { [CacheLayer.REMOTE]: 100 },
         shadow: {
           ramp: 100,
-          logMismatches: true,
+          mismatchLogging: { key: true, value: true },
         },
       }),
       cacheKey: () => "123",
@@ -538,7 +538,7 @@ describe("DialCache Redis shadow validation", () => {
     const source = vi.fn(async (id: string) => ({ id }));
     const dialcache = createShadowCache(redis, metrics, {
       cacheConfigProvider: async () => new DialCacheKeyConfig({
-        shadow: { logMismatches: "yes" as never },
+        shadow: { mismatchLogging: { value: "yes" as never } },
       }),
     });
     const getUser = dialcache.cached(source, {
@@ -1063,7 +1063,7 @@ describe("DialCache Redis shadow validation", () => {
       shadowMaxInFlight: 1,
       cacheConfigProvider: async (key) => key.id === "b"
         ? new DialCacheKeyConfig({
-            shadow: { logMismatches: "yes" as never },
+            shadow: { mismatchLogging: { value: "yes" as never } },
           })
         : null,
     });
