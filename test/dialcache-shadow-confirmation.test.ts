@@ -665,6 +665,44 @@ describe("DialCache Redis shadow confirmation", () => {
     expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["mismatch"]);
   });
 
+  it("fails rejected shadowMismatchLogValue promises closed without an unhandled rejection", async () => {
+    const useCase = "ShadowMismatchAsyncProjection";
+    const payload = JSON.stringify({ id: "123", version: 1 });
+    const redis = new ScriptedRedis([() => payload, () => payload]);
+    const metrics = new RecordingMetrics();
+    const warn = vi.fn();
+    const projector = vi.fn(async () => {
+      throw new Error("async projection unavailable");
+    });
+    const dialcache = createCache(redis, metrics, {
+      logger: { debug: () => undefined, error: () => undefined, warn },
+    });
+    const getUser = dialcache.cached(async () => ({ id: "123", version: 2 }), {
+      ...trackedOptions(useCase, remoteConfig(100, 100, { value: true, diff: true })),
+      cacheKey: () => "123",
+      shadowMismatchLogValue: projector,
+    });
+
+    await dialcache.enable(async () => await getUser());
+    await waitForShadowEvents(metrics, 1);
+    await nextImmediate();
+
+    expect(projector).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledWith(
+      "DialCache shadow validation mismatch",
+      {
+        cacheNamespace: "urn",
+        useCase,
+        keyType: "user_id",
+        outcome: "mismatch",
+        cachedValueAgeSeconds: expect.any(Number),
+        cachedValueJson: null,
+        sourceValueJson: null,
+        diffJson: null,
+      },
+    );
+  });
+
   it("logs a structural diff of the raw values when no hooks are defined", async () => {
     const useCase = "ShadowMismatchBuiltInDiff";
     const payload = JSON.stringify({ id: "123", version: 1, tags: ["a", "b"] });
@@ -1026,6 +1064,43 @@ describe("DialCache Redis shadow confirmation", () => {
       },
     );
     expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["mismatch"]);
+  });
+
+  it("fails a rejected shadowMismatchLogDiff promise closed without an unhandled rejection", async () => {
+    const useCase = "ShadowMismatchAsyncCustomDiff";
+    const payload = JSON.stringify({ id: "123", version: 1 });
+    const redis = new ScriptedRedis([() => payload, () => payload]);
+    const metrics = new RecordingMetrics();
+    const warn = vi.fn();
+    const logDiff = vi.fn(async () => {
+      throw new Error("async diff unavailable");
+    });
+    const dialcache = createCache(redis, metrics, {
+      logger: { debug: () => undefined, error: () => undefined, warn },
+    });
+    const getUser = dialcache.cached(async () => ({ id: "123", version: 2 }), {
+      ...trackedOptions(useCase, remoteConfig(100, 100, { key: true, diff: true })),
+      cacheKey: () => "123",
+      shadowMismatchLogDiff: logDiff,
+    });
+
+    await dialcache.enable(async () => await getUser());
+    await waitForShadowEvents(metrics, 1);
+    await nextImmediate();
+
+    expect(logDiff).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith(
+      "DialCache shadow validation mismatch",
+      {
+        cacheNamespace: "urn",
+        useCase,
+        keyType: "user_id",
+        outcome: "mismatch",
+        cachedValueAgeSeconds: expect.any(Number),
+        cacheKey: `{urn:user_id:123}#${useCase}`,
+        diffJson: null,
+      },
+    );
   });
 
   it.each([
@@ -2044,17 +2119,20 @@ describe("DialCache Redis shadow confirmation", () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
-  it("fails the whole logging group closed when a runtime override carries an unknown field", async () => {
-    const useCase = "ShadowUnknownLoggingLeaf";
+  it.each([
+    ["false", false],
+    ["undefined", undefined],
+  ] as const)("fails the whole logging group closed when an unknown field is $0", async (suffix, value) => {
+    const useCase = `ShadowUnknownLoggingLeaf${suffix}`;
     const payload = JSON.stringify({ id: "123", version: 1 });
     const redis = new ScriptedRedis([() => payload, () => payload]);
     const metrics = new RecordingMetrics();
     const warn = vi.fn();
     const dialcache = createCache(redis, metrics, {
-      // The emergency-shutoff typo: the operator meant `value: false`. The
-      // inherited `value: true` must not survive it silently.
+      // Presence alone makes this a closed-schema violation. Even undefined
+      // must survive the merge so inherited logging cannot remain enabled.
       cacheConfigProvider: async () => new DialCacheKeyConfig({
-        shadow: { mismatchLogging: { vaule: false } as never },
+        shadow: { mismatchLogging: { vaule: value } as never },
       }),
       logger: {
         debug: () => undefined,

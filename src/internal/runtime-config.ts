@@ -211,10 +211,9 @@ function mergeMismatchLoggingConfig(
       if ((SHADOW_MISMATCH_LOGGING_LEAVES as readonly string[]).includes(name)) {
         continue;
       }
-      const value = (source as Record<string, unknown>)[name];
-      if (value !== undefined) {
-        merged[name] = value;
-      }
+      // Presence, not value, makes this field unknown. Preserve even an
+      // explicit `undefined` so admission can reject the closed schema.
+      merged[name] = (source as Record<string, unknown>)[name];
     }
   }
   for (const leaf of SHADOW_MISMATCH_LOGGING_LEAVES) {

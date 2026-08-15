@@ -48,6 +48,7 @@ import {
   previewShadowLogJson,
   previewShadowLogKey,
   renderShadowMismatchJson,
+  type ShadowLoggableSide,
   type ShadowMismatchLogFields,
 } from "./internal/shadow-log-json.js";
 
@@ -140,14 +141,16 @@ interface CacheOperationOptionsBase<Value> {
    * without it, opted-in warnings log the raw native-JSON forms. Runs once per
    * side after terminal mismatch confirmation, inside detached shadow work.
    * Must be synchronous, deterministic, side-effect-free, non-mutating, and
-   * bounded; inputs are borrowed snapshots. A throw logs `null` for that side.
+   * bounded; inputs are borrowed snapshots. A throw or returned promise-like
+   * value logs `null` for that side.
    */
   readonly shadowMismatchLogValue?: (value: Value) => unknown;
   /**
    * Replaces the built-in structural diff for mismatch warnings that enable
    * `mismatchLogging.diff`. Receives the raw compared values, not the
    * `shadowMismatchLogValue` projections. Same execution constraints as
-   * `shadowMismatchLogValue`; a throw logs a `null` diff.
+   * `shadowMismatchLogValue`; a throw or returned promise-like value logs a
+   * `null` diff.
    */
   readonly shadowMismatchLogDiff?: (cachedValue: Value, sourceValue: Value) => unknown;
   /**
@@ -1665,42 +1668,56 @@ function renderShadowMismatchLog<Value>(
   cachedValue: Value,
   sourceValue: Value,
 ): ShadowMismatchLogFields {
-  let cachedLoggable: unknown = cachedValue;
-  let sourceLoggable: unknown = sourceValue;
-  let cachedLoggableOk = true;
-  let sourceLoggableOk = true;
   const includeBuiltInDiff = logPlan.diff && plan.logDiff === undefined;
-  const needsProjection = plan.logValue !== undefined && (logPlan.value || includeBuiltInDiff);
-  if (needsProjection && plan.logValue !== undefined) {
-    try {
-      cachedLoggable = plan.logValue(cachedValue);
-    } catch {
-      cachedLoggableOk = false;
-    }
-    try {
-      sourceLoggable = plan.logValue(sourceValue);
-    } catch {
-      sourceLoggableOk = false;
-    }
-  }
+  const logValue = plan.logValue;
+  const needsProjection = logValue !== undefined && (logPlan.value || includeBuiltInDiff);
+  const cachedLoggable: ShadowLoggableSide = needsProjection
+    ? runShadowLogHook(() => logValue(cachedValue))
+    : { available: true, value: cachedValue };
+  const sourceLoggable: ShadowLoggableSide = needsProjection
+    ? runShadowLogHook(() => logValue(sourceValue))
+    : { available: true, value: sourceValue };
 
   const rendered: ShadowMismatchLogFields = logPlan.value || includeBuiltInDiff
     ? renderShadowMismatchJson(
-        { available: cachedLoggableOk, value: cachedLoggable },
-        { available: sourceLoggableOk, value: sourceLoggable },
+        cachedLoggable,
+        sourceLoggable,
         { value: logPlan.value, diff: includeBuiltInDiff },
       )
     : {};
-  if (logPlan.diff && plan.logDiff !== undefined) {
-    let diffJson: string | null;
-    try {
-      diffJson = previewShadowLogJson(plan.logDiff(cachedValue, sourceValue), SHADOW_LOG_DIFF_MAX_BYTES);
-    } catch {
-      diffJson = null;
-    }
-    return { ...rendered, diffJson };
+  const logDiff = plan.logDiff;
+  if (logPlan.diff && logDiff !== undefined) {
+    const diff = runShadowLogHook(() => logDiff(cachedValue, sourceValue));
+    return {
+      ...rendered,
+      diffJson: diff.available
+        ? previewShadowLogJson(diff.value, SHADOW_LOG_DIFF_MAX_BYTES)
+        : null,
+    };
   }
   return rendered;
+}
+
+function runShadowLogHook(hook: () => unknown): ShadowLoggableSide {
+  try {
+    const value = hook();
+    if (isThenable(value)) {
+      // The hook contract is synchronous, but its `unknown` return type also
+      // accepts async functions. Ignore their output and consume rejection;
+      // awaiting here would silently turn this into a second async contract.
+      void Promise.resolve(value).catch(() => undefined);
+      return { available: false };
+    }
+    return { available: true, value };
+  } catch {
+    return { available: false };
+  }
+}
+
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return value !== null
+    && (typeof value === "object" || typeof value === "function")
+    && typeof (value as { readonly then?: unknown }).then === "function";
 }
 
 // Frame stamps are epoch-based (Redis server time for tracked writes, writer

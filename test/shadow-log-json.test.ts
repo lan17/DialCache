@@ -18,7 +18,7 @@ const diffOf = (cached: unknown, source: unknown): string | null =>
   ).diffJson ?? null;
 
 describe("shadow mismatch log JSON", () => {
-  it("uses native JSON for the values supplied to the comparator", () => {
+  it("uses native JSON for log previews", () => {
     expect(previewShadowLogJson({
       id: "123",
       updatedAt: new Date("2026-07-31T00:00:00.000Z"),
@@ -268,7 +268,7 @@ describe("shadow mismatch log JSON", () => {
     expect(diffOf(cached, source)).toBeNull();
   });
 
-  it("returns null when the diff entries cannot be serialized", () => {
+  it("fails the diff closed for bigint inputs", () => {
     expect(diffOf({ n: 1n }, { n: 2n })).toBeNull();
   });
 
