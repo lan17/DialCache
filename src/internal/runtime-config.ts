@@ -2,6 +2,7 @@ import {
   CacheLayer,
   DialCacheKeyConfig,
   SHADOW_MISMATCH_LOGGING_LEAVES,
+  hasUnknownKeyConfigFields,
   type CacheConfigProvider,
   type LayerConfig,
   type ShadowConfig,
@@ -39,11 +40,15 @@ interface ResolveLayerConfigOptions {
 export async function fetchKeyConfig(
   configProvider: CacheConfigProvider,
   key: DialCacheKey,
+  onUnknownFields?: () => void,
 ): Promise<DialCacheKeyConfig | null> {
   const defaultConfig = key.defaultConfig;
   const runtimeConfig = (await configProvider(key)) as DialCacheKeyConfig | null | undefined;
   if (runtimeConfig === null || runtimeConfig === undefined) {
     return defaultConfig;
+  }
+  if (hasUnknownKeyConfigFields(runtimeConfig)) {
+    onUnknownFields?.();
   }
   return mergeKeyConfig(defaultConfig, runtimeConfig);
 }
@@ -133,9 +138,6 @@ function assertKeyConfig(config: DialCacheKeyConfig | null | undefined): void {
   if (config !== null && config !== undefined && (typeof config !== "object" || Array.isArray(config))) {
     throw new TypeError("DialCache key config must be an object");
   }
-  if (config !== null && config !== undefined && Object.hasOwn(config, "shadowRamp")) {
-    throw new TypeError('DialCacheKeyConfig.shadowRamp was replaced by "shadow.ramp"');
-  }
 }
 
 function mergeLayerConfig(
@@ -198,24 +200,7 @@ function mergeMismatchLoggingConfig(
     return undefined;
   }
 
-  // Unknown own keys survive the merge so admission can fail the whole group
-  // closed and record a config_resolution error. Rebuilding from known leaves
-  // alone would silently drop a typo'd override (e.g. `vaule: false`) while
-  // the inherited enabled leaves kept logging payload data.
   const merged: Record<string, unknown> = {};
-  for (const source of [defaults, overlay]) {
-    if (source === undefined) {
-      continue;
-    }
-    for (const name of Object.keys(source)) {
-      if ((SHADOW_MISMATCH_LOGGING_LEAVES as readonly string[]).includes(name)) {
-        continue;
-      }
-      // Presence, not value, makes this field unknown. Preserve even an
-      // explicit `undefined` so admission can reject the closed schema.
-      merged[name] = (source as Record<string, unknown>)[name];
-    }
-  }
   for (const leaf of SHADOW_MISMATCH_LOGGING_LEAVES) {
     const overlayValue = readOwn(overlay, leaf);
     const value = overlayValue !== undefined ? overlayValue : readOwn(defaults, leaf);
@@ -237,9 +222,6 @@ function readOwn<T extends object, Key extends keyof T>(source: T | undefined, k
 function assertShadowConfig(config: ShadowConfig | undefined): void {
   if (config !== undefined && (config === null || typeof config !== "object" || Array.isArray(config))) {
     throw new TypeError("DialCache shadow config must be an object");
-  }
-  if (config !== undefined && Object.hasOwn(config, "logMismatches")) {
-    throw new TypeError('ShadowConfig.logMismatches was replaced by "shadow.mismatchLogging"');
   }
 }
 

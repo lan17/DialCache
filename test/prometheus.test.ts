@@ -40,6 +40,7 @@ const CONFIGURED_TIMER_BUCKETS = [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.
 const METRIC_ERROR_KINDS: Readonly<Record<MetricErrorKind, true>> = {
   key_construction: true,
   config_resolution: true,
+  config_unknown_field: true,
   cache_read: true,
   cache_read_timeout: true,
   cache_write: true,

@@ -5,6 +5,7 @@ import {
   CacheLayer,
   DialCacheKeyConfig,
   SHADOW_MISMATCH_LOGGING_LEAVES,
+  hasUnknownKeyConfigFields,
   type Awaitable,
   type CacheConfigProvider,
   type DialCacheConfig,
@@ -380,10 +381,14 @@ export class DialCache {
    * values are shared by reference and must be treated as immutable.
    */
   cached<Fn extends AnyFn>(fn: Fn, options: CachedOptions<Fn>): CachedFn<Fn> {
+    const hasUnknownDefaultFields = hasUnknownKeyConfigFields(options.defaultConfig);
     const defaultConfig = snapshotDefaultConfig(options.defaultConfig);
     const fallbackTimeoutMs = resolveFallbackTimeoutMs(options.fallbackTimeoutMs);
     const shadowComparator = resolveShadowComparator(options.shadowComparator);
     this.registerUseCase(options.useCase);
+    if (hasUnknownDefaultFields) {
+      this.recordUnknownConfigFields(options);
+    }
 
     return (...args: Parameters<Fn>): Promise<CachedValue<Fn>> =>
       this.executeCacheOperation(
@@ -405,10 +410,14 @@ export class DialCache {
    * shared by reference and must be treated as immutable.
    */
   getOrLoad<Value>(load: () => Awaitable<Value>, options: GetOrLoadOptions<Value>): Promise<Value> {
+    const hasUnknownDefaultFields = hasUnknownKeyConfigFields(options.defaultConfig);
     const defaultConfig = snapshotDefaultConfig(options.defaultConfig);
     const fallbackTimeoutMs = resolveFallbackTimeoutMs(options.fallbackTimeoutMs);
     const shadowComparator = resolveShadowComparator(options.shadowComparator);
     this.assertUseCaseIsNotReserved(options.useCase);
+    if (hasUnknownDefaultFields) {
+      this.recordUnknownConfigFields(options);
+    }
 
     return this.executeCacheOperation(
       load,
@@ -478,7 +487,11 @@ export class DialCache {
 
     let keyConfig: DialCacheKeyConfig | null;
     try {
-      keyConfig = await fetchKeyConfig(this.configProvider, key);
+      keyConfig = await fetchKeyConfig(
+        this.configProvider,
+        key,
+        () => this.recordError(key, NO_CACHE_LAYER, "config_unknown_field"),
+      );
     } catch (error) {
       // Provider failure: fail open and run uncached, mirroring the per-layer config_error path.
       this.logger.warn("Could not resolve DialCache key config", error);
@@ -926,15 +939,6 @@ export class DialCache {
       return SHADOW_LOG_PLAN_OFF;
     }
     const group = configured as Record<string, unknown>;
-    for (const name of Object.keys(group)) {
-      if (!(SHADOW_MISMATCH_LOGGING_LEAVES as readonly string[]).includes(name)) {
-        // Fail the whole group closed: a typo'd runtime override must not
-        // silently inherit enabled leaves whose failure direction is payload
-        // data reaching logs. One error, logging off, cache untouched.
-        this.recordError(key, CacheLayer.REMOTE, "config_resolution");
-        return SHADOW_LOG_PLAN_OFF;
-      }
-    }
     let sawInvalidLeaf = false;
     const resolveLeaf = (name: keyof ShadowMismatchLoggingConfig): boolean => {
       const leaf = Object.hasOwn(group, name) ? group[name] : undefined;
@@ -1327,6 +1331,17 @@ export class DialCache {
     this.metrics?.error({ ...labelsFor(key, layer), error: kind, inFallback: false });
   }
 
+  private recordUnknownConfigFields(options: { readonly useCase: string; readonly keyType: string }): void {
+    this.metrics?.error({
+      cacheNamespace: this.namespace,
+      useCase: options.useCase,
+      keyType: options.keyType,
+      layer: NO_CACHE_LAYER,
+      error: "config_unknown_field",
+      inFallback: false,
+    });
+  }
+
   /**
    * Invalid runtime TTL/ramp leaves can only come from provider results, since
    * static defaults are validated before the operation executes. Count them as
@@ -1459,9 +1474,6 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
   if (typeof config !== "object" || Array.isArray(config)) {
     throw new TypeError("DialCache defaultConfig must be an object");
   }
-  if (Object.hasOwn(config, "shadowRamp")) {
-    throw new TypeError('DialCacheKeyConfig.shadowRamp was replaced by "shadow.ramp"');
-  }
   const ttlSecConfig = config.ttlSec;
   const rampConfig = config.ramp;
   // Own-property read, mirroring the constructor: an inherited shadow group
@@ -1529,13 +1541,6 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
         const configured = mismatchLogging[leaf];
         if (configured !== undefined && typeof configured !== "boolean") {
           throw new TypeError(`DialCache defaultConfig shadow.mismatchLogging.${leaf} must be a boolean`);
-        }
-      }
-      // Defaults are the strict tier: a typo'd field fails at registration
-      // instead of silently inheriting or disabling logging at runtime.
-      for (const name of Object.keys(mismatchLogging)) {
-        if (!(SHADOW_MISMATCH_LOGGING_LEAVES as readonly string[]).includes(name)) {
-          throw new TypeError(`DialCache defaultConfig shadow.mismatchLogging has unknown field "${name}"`);
         }
       }
     }

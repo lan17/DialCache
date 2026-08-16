@@ -41,6 +41,15 @@ export interface ShadowConfig {
   readonly mismatchLogging?: ShadowMismatchLoggingConfig;
 }
 
+interface DialCacheKeyConfigInput {
+  readonly ttlSec?: LayerConfig;
+  readonly ramp?: LayerConfig;
+  readonly shadow?: ShadowConfig;
+  readonly requestLocal?: boolean;
+  readonly coalesce?: boolean;
+  readonly remoteReadTimeoutMs?: number;
+}
+
 // `satisfies Record<keyof …, true>` fails to compile when the interface gains
 // a field this set is missing, so every leaf loop stays exhaustive.
 const SHADOW_MISMATCH_LOGGING_LEAF_SET = {
@@ -53,6 +62,58 @@ const SHADOW_MISMATCH_LOGGING_LEAF_SET = {
 export const SHADOW_MISMATCH_LOGGING_LEAVES = Object.keys(
   SHADOW_MISMATCH_LOGGING_LEAF_SET,
 ) as readonly (keyof ShadowMismatchLoggingConfig)[];
+
+const KEY_CONFIG_FIELD_SET = {
+  ttlSec: true,
+  ramp: true,
+  shadow: true,
+  requestLocal: true,
+  coalesce: true,
+  remoteReadTimeoutMs: true,
+} as const satisfies Record<keyof DialCacheKeyConfigInput, true>;
+const KEY_CONFIG_FIELDS = Object.keys(KEY_CONFIG_FIELD_SET);
+const SHADOW_CONFIG_FIELD_SET = {
+  ramp: true,
+  mismatchLogging: true,
+} as const satisfies Record<keyof ShadowConfig, true>;
+const SHADOW_CONFIG_FIELDS = Object.keys(SHADOW_CONFIG_FIELD_SET);
+const UNKNOWN_KEY_CONFIG_FIELDS = Symbol("DialCacheKeyConfig.unknownFields");
+
+interface UnknownFieldMarkedConfig {
+  readonly [UNKNOWN_KEY_CONFIG_FIELDS]?: true;
+}
+
+/** Internal: reports unknown own string fields without exposing their names. */
+export function hasUnknownKeyConfigFields(config: unknown): boolean {
+  if (!isConfigObject(config)) {
+    return false;
+  }
+  if (
+    Object.hasOwn(config, UNKNOWN_KEY_CONFIG_FIELDS)
+    && (config as UnknownFieldMarkedConfig)[UNKNOWN_KEY_CONFIG_FIELDS] === true
+  ) {
+    return true;
+  }
+  if (hasUnknownOwnFields(config, KEY_CONFIG_FIELDS)) {
+    return true;
+  }
+
+  const ttlSec = readOwnUnknown(config, "ttlSec");
+  const ramp = readOwnUnknown(config, "ramp");
+  const shadow = readOwnUnknown(config, "shadow");
+  if (
+    hasUnknownOwnFields(ttlSec, Object.values(CacheLayer))
+    || hasUnknownOwnFields(ramp, Object.values(CacheLayer))
+    || hasUnknownOwnFields(shadow, SHADOW_CONFIG_FIELDS)
+  ) {
+    return true;
+  }
+
+  const mismatchLogging = isConfigObject(shadow)
+    ? readOwnUnknown(shadow, "mismatchLogging")
+    : undefined;
+  return hasUnknownOwnFields(mismatchLogging, SHADOW_MISMATCH_LOGGING_LEAVES);
+}
 
 export class DialCacheKeyConfig {
   /** Per-layer TTLs in seconds, from 1 through 31,536,000 (365 days). */
@@ -78,20 +139,11 @@ export class DialCacheKeyConfig {
    */
   readonly remoteReadTimeoutMs?: number;
 
-  constructor(config: {
-    ttlSec?: LayerConfig;
-    ramp?: LayerConfig;
-    shadow?: ShadowConfig;
-    requestLocal?: boolean;
-    coalesce?: boolean;
-    remoteReadTimeoutMs?: number;
-  }) {
+  constructor(config: DialCacheKeyConfigInput) {
     if (config === null || typeof config !== "object" || Array.isArray(config)) {
       throw new TypeError("DialCache key config must be an object");
     }
-    if (Object.hasOwn(config, "shadowRamp")) {
-      throw new TypeError('DialCacheKeyConfig.shadowRamp was replaced by "shadow.ramp"');
-    }
+    const hasUnknownFields = hasUnknownKeyConfigFields(config);
     this.ttlSec = cloneLayerConfig(config.ttlSec, "ttlSec");
     this.ramp = cloneLayerConfig(config.ramp, "ramp");
     // Own-property read: `shadow` carries the log-content controls, so a
@@ -116,6 +168,9 @@ export class DialCacheKeyConfig {
     if (config.remoteReadTimeoutMs !== undefined) {
       assertValidDeadlineMs(config.remoteReadTimeoutMs, "DialCache remoteReadTimeoutMs");
       this.remoteReadTimeoutMs = config.remoteReadTimeoutMs;
+    }
+    if (hasUnknownFields) {
+      Object.defineProperty(this, UNKNOWN_KEY_CONFIG_FIELDS, { value: true });
     }
   }
 
@@ -168,7 +223,14 @@ function cloneLayerConfig(config: LayerConfig | undefined, name: "ttlSec" | "ram
   if (config === null || typeof config !== "object" || Array.isArray(config)) {
     throw new TypeError(`DialCache ${name} config must be a layer map`);
   }
-  return { ...config };
+  const clone: LayerConfig = {};
+  for (const layer of Object.values(CacheLayer)) {
+    const value = Object.hasOwn(config, layer) ? config[layer] : undefined;
+    if (value !== undefined) {
+      clone[layer] = value;
+    }
+  }
+  return clone;
 }
 
 function cloneShadowConfig(config: ShadowConfig | undefined): ShadowConfig | undefined {
@@ -178,19 +240,37 @@ function cloneShadowConfig(config: ShadowConfig | undefined): ShadowConfig | und
   if (config === null || typeof config !== "object" || Array.isArray(config)) {
     throw new TypeError("DialCache shadow config must be an object");
   }
-  if (Object.hasOwn(config, "logMismatches")) {
-    throw new TypeError('ShadowConfig.logMismatches was replaced by "shadow.mismatchLogging"');
-  }
-  // Own-property read: inherited groups are ignored, like everything the
-  // spread below copies.
+  const ramp = Object.hasOwn(config, "ramp") ? config.ramp : undefined;
   const mismatchLogging = Object.hasOwn(config, "mismatchLogging") ? config.mismatchLogging : undefined;
   if (mismatchLogging === undefined) {
-    return { ...config };
+    return ramp === undefined ? {} : { ramp };
   }
   if (mismatchLogging === null || typeof mismatchLogging !== "object" || Array.isArray(mismatchLogging)) {
     throw new TypeError("DialCache shadow mismatchLogging config must be an object");
   }
-  return { ...config, mismatchLogging: { ...mismatchLogging } };
+  const clonedLogging: Record<string, unknown> = {};
+  for (const leaf of SHADOW_MISMATCH_LOGGING_LEAVES) {
+    if (Object.hasOwn(mismatchLogging, leaf)) {
+      clonedLogging[leaf] = mismatchLogging[leaf];
+    }
+  }
+  return {
+    ...(ramp === undefined ? {} : { ramp }),
+    mismatchLogging: clonedLogging as ShadowMismatchLoggingConfig,
+  };
+}
+
+function isConfigObject(value: unknown): value is Record<PropertyKey, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function hasUnknownOwnFields(value: unknown, knownFields: readonly string[]): boolean {
+  return isConfigObject(value)
+    && Object.keys(value).some((name) => !knownFields.includes(name));
+}
+
+function readOwnUnknown(source: Record<PropertyKey, unknown>, key: string): unknown {
+  return Object.hasOwn(source, key) ? source[key] : undefined;
 }
 
 /**

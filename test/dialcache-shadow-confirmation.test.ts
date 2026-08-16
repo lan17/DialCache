@@ -2122,15 +2122,13 @@ describe("DialCache Redis shadow confirmation", () => {
   it.each([
     ["false", false],
     ["undefined", undefined],
-  ] as const)("fails the whole logging group closed when an unknown field is $0", async (suffix, value) => {
+  ] as const)("ignores an unknown logging field set to $0 while preserving known fields", async (suffix, value) => {
     const useCase = `ShadowUnknownLoggingLeaf${suffix}`;
     const payload = JSON.stringify({ id: "123", version: 1 });
     const redis = new ScriptedRedis([() => payload, () => payload]);
     const metrics = new RecordingMetrics();
     const warn = vi.fn();
     const dialcache = createCache(redis, metrics, {
-      // Presence alone makes this a closed-schema violation. Even undefined
-      // must survive the merge so inherited logging cannot remain enabled.
       cacheConfigProvider: async () => new DialCacheKeyConfig({
         shadow: { mismatchLogging: { vaule: value } as never },
       }),
@@ -2151,10 +2149,22 @@ describe("DialCache Redis shadow confirmation", () => {
     expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["mismatch"]);
     expect(metrics.ordinaryEvents.filter(({ name: metricName, labels }) =>
       metricName === "error"
-      && labels.layer === CacheLayer.REMOTE
-      && labels.error === "config_resolution"
+      && labels.layer === "noop"
+      && labels.error === "config_unknown_field"
     )).toHaveLength(1);
-    expect(warn).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      "DialCache shadow validation mismatch",
+      {
+        cacheNamespace: "urn",
+        useCase,
+        keyType: "user_id",
+        outcome: "mismatch",
+        cachedValueAgeSeconds: expect.any(Number),
+        cacheKey: `{urn:user_id:123}#${useCase}`,
+        cachedValueJson: '{"id":"123","version":1}',
+        sourceValueJson: '{"id":"123","version":2}',
+      },
+    );
   });
 
   it("resolves an invalid mismatch logging leaf to off without suppressing valid leaves", async () => {

@@ -80,6 +80,74 @@ const remoteOnly = () =>
 const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("DialCache observability metrics", () => {
+  it("reports one bounded error while ignoring unknown static config fields", async () => {
+    const metrics = new RecordingMetrics();
+    const defaultConfig = new DialCacheKeyConfig({
+      ttlSec: { [CacheLayer.LOCAL]: 60, future: 1 } as never,
+      ramp: { [CacheLayer.LOCAL]: 100 },
+      shadow: {
+        logMismatches: true,
+        mismatchLogging: { key: true, vaule: false },
+      },
+      shadowRamp: 100,
+      futureTopLevel: true,
+    } as never);
+    const dialcache = new DialCache({ metrics });
+    let calls = 0;
+    const getUser = dialcache.cached(async (id: string) => ({ id, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "UnknownStaticConfigFields",
+      cacheKey: (id) => id,
+      defaultConfig,
+    });
+
+    await dialcache.enable(async () => await getUser("123"));
+    await dialcache.enable(async () => await getUser("123"));
+
+    const warnings = events(metrics, "error", {
+      useCase: "UnknownStaticConfigFields",
+      layer: "noop",
+      error: "config_unknown_field",
+      inFallback: false,
+    });
+    expect(warnings).toHaveLength(1);
+    expect(calls).toBe(1);
+    expect(JSON.stringify(warnings)).not.toMatch(/future|logMismatches|shadowRamp|vaule/);
+  });
+
+  it("reports once per runtime config while applying its known fields", async () => {
+    const metrics = new RecordingMetrics();
+    const cacheConfigProvider = vi.fn(async () => ({
+      ttlSec: { [CacheLayer.LOCAL]: 60, future: 1 },
+      ramp: { [CacheLayer.LOCAL]: 100, future: 50 },
+      shadow: {
+        logMismatches: true,
+        future: true,
+        mismatchLogging: { vaule: false },
+      },
+      future: true,
+    }) as unknown as DialCacheKeyConfig);
+    const dialcache = new DialCache({ metrics, cacheConfigProvider });
+    let calls = 0;
+    const getUser = dialcache.cached(async (id: string) => ({ id, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "UnknownRuntimeConfigFields",
+      cacheKey: (id) => id,
+    });
+
+    await dialcache.enable(async () => await getUser("123"));
+    await dialcache.enable(async () => await getUser("123"));
+
+    expect(cacheConfigProvider).toHaveBeenCalledTimes(2);
+    expect(calls).toBe(1);
+    expect(events(metrics, "error", {
+      useCase: "UnknownRuntimeConfigFields",
+      layer: "noop",
+      error: "config_unknown_field",
+      inFallback: false,
+    })).toHaveLength(2);
+  });
+
   it("consumes rejecting thenables returned by every metrics method without awaiting them", async () => {
     const then = vi.fn((
       _onFulfilled: ((value: unknown) => unknown) | null | undefined,
