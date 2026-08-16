@@ -50,28 +50,87 @@ describe("DialCache runtime config and ramp controls", () => {
     expect(new DialCacheKeyConfig({
       shadow: {
         ramp: 0,
-        logMismatches: false,
+        mismatchLogging: {
+          key: false,
+          value: false,
+          diff: false,
+        },
       },
     }).shadow).toEqual({
       ramp: 0,
-      logMismatches: false,
+      mismatchLogging: {
+        key: false,
+        value: false,
+        diff: false,
+      },
     });
+  });
+
+  it("ignores unknown own fields while preserving every known config field", () => {
+    const config = new DialCacheKeyConfig({
+      ttlSec: { [CacheLayer.LOCAL]: 60, edge: 120 } as never,
+      ramp: { [CacheLayer.LOCAL]: 100, edge: 50 } as never,
+      shadow: {
+        ramp: 25,
+        logMismatches: true,
+        futureShadowField: true,
+        mismatchLogging: { key: true, vaule: false },
+      },
+      requestLocal: true,
+      futureTopLevelField: true,
+    } as never);
+
+    expect(config.ttlSec).toEqual({ [CacheLayer.LOCAL]: 60 });
+    expect(config.ramp).toEqual({ [CacheLayer.LOCAL]: 100 });
+    expect(config.shadow).toEqual({
+      ramp: 25,
+      mismatchLogging: { key: true },
+    });
+    expect(config.requestLocal).toBe(true);
+    expect(Object.keys(config)).not.toContain("futureTopLevelField");
+  });
+
+  it("ignores a prototype-inherited shadow group at the constructor boundary", () => {
+    const config = new DialCacheKeyConfig(Object.create({
+      shadow: {
+        ramp: 100,
+        mismatchLogging: { value: true, diff: true },
+      },
+    }) as ConstructorParameters<typeof DialCacheKeyConfig>[0]);
+
+    expect(config.shadow).toBeUndefined();
+  });
+
+  it("rejects a non-object shadow mismatchLogging group", () => {
+    for (const mismatchLogging of [null, 5, "keys", [true]]) {
+      expect(() => new DialCacheKeyConfig({
+        shadow: { mismatchLogging } as never,
+      })).toThrow("DialCache shadow mismatchLogging config must be an object");
+    }
   });
 
   it("clones the supplied shadow policy", () => {
     const suppliedShadow = {
       ramp: 25,
-      logMismatches: true,
+      mismatchLogging: {
+        key: true,
+        value: true,
+      },
     };
     const config = new DialCacheKeyConfig({ shadow: suppliedShadow });
 
     suppliedShadow.ramp = 0;
-    suppliedShadow.logMismatches = false;
+    suppliedShadow.mismatchLogging.key = false;
+    suppliedShadow.mismatchLogging.value = false;
 
     expect(config.shadow).not.toBe(suppliedShadow);
+    expect(config.shadow?.mismatchLogging).not.toBe(suppliedShadow.mismatchLogging);
     expect(config.shadow).toEqual({
       ramp: 25,
-      logMismatches: true,
+      mismatchLogging: {
+        key: true,
+        value: true,
+      },
     });
   });
 
@@ -81,7 +140,7 @@ describe("DialCache runtime config and ramp controls", () => {
       ramp: { [CacheLayer.LOCAL]: 100 },
       shadow: {
         ramp: 25,
-        logMismatches: true,
+        mismatchLogging: { key: true, value: true },
       },
       coalesce: false,
     });
@@ -105,10 +164,10 @@ describe("DialCache runtime config and ramp controls", () => {
     suppliedDefault.ramp[CacheLayer.LOCAL] = 0;
     const mutableShadow = suppliedDefault.shadow as {
       ramp?: number;
-      logMismatches?: boolean;
+      mismatchLogging?: { key?: boolean; value?: boolean };
     };
     mutableShadow.ramp = 0;
-    mutableShadow.logMismatches = false;
+    mutableShadow.mismatchLogging = { key: false, value: false };
     const first = await dialcache.enable(async () => await getUser("123"));
     const second = await dialcache.enable(async () => await getUser("123"));
 
@@ -121,13 +180,14 @@ describe("DialCache runtime config and ramp controls", () => {
     expect(observedDefaults[0]?.ramp[CacheLayer.LOCAL]).toBe(100);
     expect(observedDefaults[0]?.shadow).toEqual({
       ramp: 25,
-      logMismatches: true,
+      mismatchLogging: { key: true, value: true },
     });
     expect(observedDefaults[0]?.coalesce).toBe(false);
     expect(Object.isFrozen(observedDefaults[0])).toBe(true);
     expect(Object.isFrozen(observedDefaults[0]?.ttlSec)).toBe(true);
     expect(Object.isFrozen(observedDefaults[0]?.ramp)).toBe(true);
     expect(Object.isFrozen(observedDefaults[0]?.shadow)).toBe(true);
+    expect(Object.isFrozen(observedDefaults[0]?.shadow?.mismatchLogging)).toBe(true);
   });
 
   it("enables request-local caching without TTL or ramp policy", async () => {
@@ -334,11 +394,6 @@ describe("DialCache runtime config and ramp controls", () => {
       () => new DialCacheKeyConfig({ shadow: [] as never }),
       "DialCache shadow config must be an object",
     ],
-    [
-      "the removed shadowRamp field",
-      () => new DialCacheKeyConfig({ shadowRamp: 100 } as never),
-      'DialCacheKeyConfig.shadowRamp was replaced by "shadow.ramp"',
-    ],
   ])("rejects $0 in the public config constructor", (_name, construct, message) => {
     expect(construct).toThrow(message);
   });
@@ -400,10 +455,10 @@ describe("DialCache runtime config and ramp controls", () => {
       "must be a number",
     ],
     [
-      "wrong-type shadow mismatch logging flag",
-      new DialCacheKeyConfig({ shadow: { logMismatches: null as unknown as boolean } }),
+      "wrong-type shadow mismatch logging leaf",
+      new DialCacheKeyConfig({ shadow: { mismatchLogging: { value: null as unknown as boolean } } }),
       TypeError,
-      "must be a boolean",
+      "shadow.mismatchLogging.value must be a boolean",
     ],
     ["primitive config", 42 as unknown as DialCacheKeyConfig, TypeError, "must be an object"],
     ["array config", [] as unknown as DialCacheKeyConfig, TypeError, "must be an object"],
@@ -418,12 +473,6 @@ describe("DialCache runtime config and ramp controls", () => {
       { ttlSec: {}, ramp: {}, shadow: [] } as unknown as DialCacheKeyConfig,
       TypeError,
       "shadow must be an object",
-    ],
-    [
-      "removed shadowRamp",
-      { ttlSec: {}, ramp: {}, shadowRamp: 100 } as unknown as DialCacheKeyConfig,
-      TypeError,
-      'shadowRamp was replaced by "shadow.ramp"',
     ],
     [
       "a null coalesce value",
@@ -462,7 +511,7 @@ describe("DialCache runtime config and ramp controls", () => {
     ["an array", []],
     ["a null layer map", { ttlSec: null, ramp: {} }],
     ["an array shadow config", { ttlSec: {}, ramp: {}, shadow: [] }],
-    ["the removed shadowRamp field", { ttlSec: {}, ramp: {}, shadowRamp: 100 }],
+    ["a non-object shadow mismatchLogging group", { ttlSec: {}, ramp: {}, shadow: { mismatchLogging: null } }],
     ["a null requestLocal value", { ttlSec: {}, ramp: {}, requestLocal: null }],
     ["a null coalesce value", { ttlSec: {}, ramp: {}, coalesce: null }],
   ] as const)("fails open instead of inheriting defaults when the provider returns %s", async (_name, runtimeConfig) => {
@@ -489,7 +538,11 @@ describe("DialCache runtime config and ramp controls", () => {
       requestLocal: false,
       shadow: {
         ramp: 0,
-        logMismatches: false,
+        mismatchLogging: {
+          key: false,
+          value: false,
+          diff: false,
+        },
       },
       ramp: { [CacheLayer.LOCAL]: 0, [CacheLayer.REMOTE]: 0 },
     }));

@@ -1,5 +1,12 @@
 export { CacheLayer, DialCacheKeyConfig } from "./config.js";
-export type { CacheConfigProvider, DialCacheConfig, LayerConfig, Logger, ShadowConfig } from "./config.js";
+export type {
+  CacheConfigProvider,
+  DialCacheConfig,
+  LayerConfig,
+  Logger,
+  ShadowConfig,
+  ShadowMismatchLoggingConfig,
+} from "./config.js";
 export { DialCacheContext } from "./context.js";
 export type {
   CacheMetricLabels,

@@ -43,10 +43,11 @@ export type CompressionOutcome =
   | "read_over_limit";
 /** Bounded reasons for skipping cache work; policy_disabled means a shared layer has no effective TTL. */
 export type DisabledReason = "context" | "policy_disabled" | "invalid_ttl" | "invalid_ramp" | "ramped_down" | "config_error";
-/** Stable failure sites used instead of backend- or application-defined error names. */
+/** Stable operational categories used instead of backend- or application-defined error names. */
 export type MetricErrorKind =
   | "key_construction"
   | "config_resolution"
+  | "config_unknown_field"
   | "cache_read"
   | "cache_read_timeout"
   | "cache_write"

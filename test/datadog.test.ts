@@ -93,6 +93,7 @@ const disabledReasons = Object.keys(DISABLED_REASONS) as DisabledReason[];
 const ERROR_KINDS: Readonly<Record<MetricErrorKind, true>> = {
   key_construction: true,
   config_resolution: true,
+  config_unknown_field: true,
   cache_read: true,
   cache_read_timeout: true,
   cache_write: true,

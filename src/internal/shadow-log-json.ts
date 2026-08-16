@@ -1,40 +1,186 @@
 export const SHADOW_LOG_KEY_MAX_BYTES = 2 * 1024;
 export const SHADOW_LOG_VALUE_MAX_BYTES = 8 * 1024;
+export const SHADOW_LOG_DIFF_MAX_BYTES = 8 * 1024;
 export const SHADOW_LOG_TRUNCATION_MARKER = "...[truncated]";
 
 const UTF8_ENCODER = new TextEncoder();
 const UTF8_DECODER = new TextDecoder("utf-8", { fatal: true });
 const TRUNCATION_MARKER_BYTES = UTF8_ENCODER.encode(SHADOW_LOG_TRUNCATION_MARKER);
 
-export interface ShadowMismatchLogDetails {
-  readonly cacheKey: string;
-  readonly cachedValueJson: string | null;
-  readonly sourceValueJson: string | null;
+type JsonObject = { [key: string]: JsonValue };
+type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject;
+
+/** One loggable side of a confirmed mismatch; unavailable when its projection failed. */
+export interface ShadowLoggableSide {
+  readonly available: boolean;
+  readonly value?: unknown;
 }
 
-export function previewShadowLogKey(value: string): string {
-  return clampUtf8(value, SHADOW_LOG_KEY_MAX_BYTES);
+export interface ShadowMismatchLogFields {
+  readonly cachedValueJson?: string | null;
+  readonly sourceValueJson?: string | null;
+  readonly diffJson?: string | null;
 }
 
-export function previewShadowLogJson(value: unknown): string | null {
+export interface ShadowLogDifferenceCreate {
+  readonly type: "CREATE";
+  readonly path: readonly (string | number)[];
+  readonly value: JsonValue;
+}
+export interface ShadowLogDifferenceRemove {
+  readonly type: "REMOVE";
+  readonly path: readonly (string | number)[];
+  readonly oldValue: JsonValue;
+}
+export interface ShadowLogDifferenceChange {
+  readonly type: "CHANGE";
+  readonly path: readonly (string | number)[];
+  readonly value: JsonValue;
+  readonly oldValue: JsonValue;
+}
+export type ShadowLogDifference =
+  | ShadowLogDifferenceCreate
+  | ShadowLogDifferenceRemove
+  | ShadowLogDifferenceChange;
+
+export function previewShadowLogKey(value: string): string | null {
   try {
-    const json = JSON.stringify(value);
-    return json === undefined ? null : clampUtf8(json, SHADOW_LOG_VALUE_MAX_BYTES);
+    return clampUtf8(value, SHADOW_LOG_KEY_MAX_BYTES);
   } catch {
     return null;
   }
 }
 
-export function shadowMismatchLogDetails(
-  cacheKey: string,
-  cachedValue: unknown,
-  sourceValue: unknown,
-): ShadowMismatchLogDetails {
+export function previewShadowLogJson(
+  value: unknown,
+  maxBytes: number = SHADOW_LOG_VALUE_MAX_BYTES,
+): string | null {
+  try {
+    const json = JSON.stringify(value);
+    return json === undefined ? null : clampUtf8(json, maxBytes);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Renders both loggable sides to native JSON exactly once and derives every
+ * requested built-in warning field from those two snapshots, so `toJSON`
+ * hooks run once per side and the diff provably compares the same forms that
+ * value logging shows. An unavailable or unrenderable side yields `null` for
+ * its value field and a `null` diff; equal snapshots yield `"[]"`.
+ */
+export function renderShadowMismatchJson(
+  cached: ShadowLoggableSide,
+  source: ShadowLoggableSide,
+  include: { readonly value: boolean; readonly diff: boolean },
+): ShadowMismatchLogFields {
+  const cachedJson = renderLoggableJson(cached);
+  const sourceJson = renderLoggableJson(source);
   return {
-    cacheKey: previewShadowLogKey(cacheKey),
-    cachedValueJson: previewShadowLogJson(cachedValue),
-    sourceValueJson: previewShadowLogJson(sourceValue),
+    ...(include.value
+      ? {
+          cachedValueJson: cachedJson === null ? null : clampJson(cachedJson, SHADOW_LOG_VALUE_MAX_BYTES),
+          sourceValueJson: sourceJson === null ? null : clampJson(sourceJson, SHADOW_LOG_VALUE_MAX_BYTES),
+        }
+      : {}),
+    ...(include.diff ? { diffJson: builtInDiffJson(cachedJson, sourceJson) } : {}),
   };
+}
+
+function renderLoggableJson(side: ShadowLoggableSide): string | null {
+  if (!side.available) {
+    return null;
+  }
+  try {
+    const json = JSON.stringify(side.value);
+    return json === undefined ? null : json;
+  } catch {
+    return null;
+  }
+}
+
+function clampJson(json: string, maxBytes: number): string | null {
+  try {
+    return clampUtf8(json, maxBytes);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Bounded JSON of the differences between the two rendered snapshots,
+ * oriented from the cached side to the source side: `oldValue` is cached,
+ * `value` is source. A side without a JSON rendering fails the diff closed to
+ * `null` — the diff never attests anything about inputs value logging cannot
+ * show. Identical snapshots yield `[]`.
+ */
+function builtInDiffJson(cachedJson: string | null, sourceJson: string | null): string | null {
+  if (cachedJson === null || sourceJson === null) {
+    return null;
+  }
+  if (cachedJson === sourceJson) {
+    return "[]";
+  }
+  try {
+    // Both strings came from successful native JSON rendering above, so this
+    // is the single boundary from arbitrary loggable values to the closed JSON
+    // domain consumed by the built-in differ.
+    const cached = JSON.parse(cachedJson) as JsonValue;
+    const source = JSON.parse(sourceJson) as JsonValue;
+    const entries: ShadowLogDifference[] = [];
+    appendJsonDifferences(cached, source, [], entries);
+    return previewShadowLogJson(entries, SHADOW_LOG_DIFF_MAX_BYTES);
+  } catch {
+    return null;
+  }
+}
+
+// Structural difference between two parsed-JSON values. Only own enumerable
+// keys and array indices are visited, matching JSON object and array semantics.
+// Same-kind containers recurse (arrays index-wise, so an element shift reports
+// every later index); any other pair is one CHANGE entry at its path.
+function appendJsonDifferences(
+  cached: JsonValue,
+  source: JsonValue,
+  path: readonly (string | number)[],
+  out: ShadowLogDifference[],
+): void {
+  if (Array.isArray(cached) && Array.isArray(source)) {
+    const shared = Math.min(cached.length, source.length);
+    for (let index = 0; index < shared; index += 1) {
+      appendJsonDifferences(cached[index]!, source[index]!, [...path, index], out);
+    }
+    for (let index = shared; index < cached.length; index += 1) {
+      out.push({ type: "REMOVE", path: [...path, index], oldValue: cached[index]! });
+    }
+    for (let index = shared; index < source.length; index += 1) {
+      out.push({ type: "CREATE", path: [...path, index], value: source[index]! });
+    }
+    return;
+  }
+  if (isJsonObject(cached) && isJsonObject(source)) {
+    for (const name of Object.keys(cached)) {
+      if (Object.hasOwn(source, name)) {
+        appendJsonDifferences(cached[name]!, source[name]!, [...path, name], out);
+      } else {
+        out.push({ type: "REMOVE", path: [...path, name], oldValue: cached[name]! });
+      }
+    }
+    for (const name of Object.keys(source)) {
+      if (!Object.hasOwn(cached, name)) {
+        out.push({ type: "CREATE", path: [...path, name], value: source[name]! });
+      }
+    }
+    return;
+  }
+  if (cached !== source) {
+    out.push({ type: "CHANGE", path, value: source, oldValue: cached });
+  }
+}
+
+function isJsonObject(value: JsonValue): value is JsonObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function clampUtf8(value: string, maxBytes: number): string {

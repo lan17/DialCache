@@ -1,9 +1,12 @@
 import {
   CacheLayer,
   DialCacheKeyConfig,
+  SHADOW_MISMATCH_LOGGING_LEAVES,
+  hasUnknownKeyConfigFields,
   type CacheConfigProvider,
   type LayerConfig,
   type ShadowConfig,
+  type ShadowMismatchLoggingConfig,
 } from "../config.js";
 import type { DialCacheKey } from "../key.js";
 import type { DisabledReason } from "../metrics.js";
@@ -37,11 +40,15 @@ interface ResolveLayerConfigOptions {
 export async function fetchKeyConfig(
   configProvider: CacheConfigProvider,
   key: DialCacheKey,
+  onUnknownFields?: () => void,
 ): Promise<DialCacheKeyConfig | null> {
   const defaultConfig = key.defaultConfig;
   const runtimeConfig = (await configProvider(key)) as DialCacheKeyConfig | null | undefined;
   if (runtimeConfig === null || runtimeConfig === undefined) {
     return defaultConfig;
+  }
+  if (hasUnknownKeyConfigFields(runtimeConfig)) {
+    onUnknownFields?.();
   }
   return mergeKeyConfig(defaultConfig, runtimeConfig);
 }
@@ -112,7 +119,10 @@ function mergeKeyConfig(
   const remoteReadTimeoutMs = overlay?.remoteReadTimeoutMs !== undefined
     ? overlay.remoteReadTimeoutMs
     : defaultConfig?.remoteReadTimeoutMs;
-  const shadow = mergeShadowConfig(defaultConfig?.shadow, overlay?.shadow);
+  const shadow = mergeShadowConfig(
+    readOwn(defaultConfig ?? undefined, "shadow"),
+    readOwn(overlay, "shadow"),
+  );
 
   return new DialCacheKeyConfig({
     ttlSec: mergeLayerConfig(defaultConfig?.ttlSec, overlay?.ttlSec, "ttlSec"),
@@ -127,9 +137,6 @@ function mergeKeyConfig(
 function assertKeyConfig(config: DialCacheKeyConfig | null | undefined): void {
   if (config !== null && config !== undefined && (typeof config !== "object" || Array.isArray(config))) {
     throw new TypeError("DialCache key config must be an object");
-  }
-  if (config !== null && config !== undefined && Object.hasOwn(config, "shadowRamp")) {
-    throw new TypeError('DialCacheKeyConfig.shadowRamp was replaced by "shadow.ramp"');
   }
 }
 
@@ -169,19 +176,57 @@ function mergeShadowConfig(
     return undefined;
   }
 
-  const ramp = overlay?.ramp !== undefined ? overlay.ramp : defaults?.ramp;
-  const logMismatches = overlay?.logMismatches !== undefined
-    ? overlay.logMismatches
-    : defaults?.logMismatches;
+  const overlayRamp = readOwn(overlay, "ramp");
+  const ramp = overlayRamp !== undefined ? overlayRamp : readOwn(defaults, "ramp");
+  const mismatchLogging = mergeMismatchLoggingConfig(
+    readOwn(defaults, "mismatchLogging"),
+    readOwn(overlay, "mismatchLogging"),
+  );
 
   return {
     ...(ramp === undefined ? {} : { ramp }),
-    ...(logMismatches === undefined ? {} : { logMismatches }),
+    ...(mismatchLogging === undefined ? {} : { mismatchLogging }),
   };
+}
+
+function mergeMismatchLoggingConfig(
+  defaults: ShadowMismatchLoggingConfig | undefined,
+  overlay: ShadowMismatchLoggingConfig | undefined,
+): ShadowMismatchLoggingConfig | undefined {
+  assertMismatchLoggingConfig(defaults);
+  assertMismatchLoggingConfig(overlay);
+
+  if (defaults === undefined && overlay === undefined) {
+    return undefined;
+  }
+
+  const merged: Record<string, unknown> = {};
+  for (const leaf of SHADOW_MISMATCH_LOGGING_LEAVES) {
+    const overlayValue = readOwn(overlay, leaf);
+    const value = overlayValue !== undefined ? overlayValue : readOwn(defaults, leaf);
+    if (value !== undefined) {
+      merged[leaf] = value;
+    }
+  }
+  return merged as ShadowMismatchLoggingConfig;
+}
+
+// Own-property reads keep runtime shadow config immune to inherited values:
+// prototype-carried leaves must never merge into an own `mismatchLogging`
+// group (its failure direction is payload data reaching logs, unlike a TTL)
+// and the same rule is applied to `ramp` so admission cannot be inherited.
+function readOwn<T extends object, Key extends keyof T>(source: T | undefined, key: Key): T[Key] | undefined {
+  return source !== undefined && Object.hasOwn(source, key) ? source[key] : undefined;
 }
 
 function assertShadowConfig(config: ShadowConfig | undefined): void {
   if (config !== undefined && (config === null || typeof config !== "object" || Array.isArray(config))) {
     throw new TypeError("DialCache shadow config must be an object");
+  }
+}
+
+function assertMismatchLoggingConfig(config: ShadowMismatchLoggingConfig | undefined): void {
+  if (config !== undefined && (config === null || typeof config !== "object" || Array.isArray(config))) {
+    throw new TypeError("DialCache shadow mismatchLogging config must be an object");
   }
 }

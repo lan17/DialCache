@@ -18,7 +18,7 @@ describe("DialCache observability internal compatibility paths", () => {
       ramp: { [CacheLayer.LOCAL]: 25, [CacheLayer.REMOTE]: 50 },
       shadow: {
         ramp: 20,
-        logMismatches: true,
+        mismatchLogging: { key: true, value: true },
       },
     });
     const cases = [
@@ -37,7 +37,7 @@ describe("DialCache observability internal compatibility paths", () => {
           ramp: { [CacheLayer.LOCAL]: 25, [CacheLayer.REMOTE]: 75 },
           shadow: {
             ramp: 80,
-            logMismatches: true,
+            mismatchLogging: { key: true, value: true },
           },
         }),
       },
@@ -46,7 +46,7 @@ describe("DialCache observability internal compatibility paths", () => {
           ttlSec: { [CacheLayer.REMOTE]: 90 },
           ramp: { [CacheLayer.LOCAL]: 10 },
           shadow: {
-            logMismatches: false,
+            mismatchLogging: { value: false, diff: true },
           },
         }),
         expected: new DialCacheKeyConfig({
@@ -56,7 +56,7 @@ describe("DialCache observability internal compatibility paths", () => {
           ramp: { [CacheLayer.LOCAL]: 10, [CacheLayer.REMOTE]: 50 },
           shadow: {
             ramp: 20,
-            logMismatches: false,
+            mismatchLogging: { key: true, value: false, diff: true },
           },
         }),
       },
@@ -69,7 +69,7 @@ describe("DialCache observability internal compatibility paths", () => {
           ramp: { [CacheLayer.LOCAL]: 25, [CacheLayer.REMOTE]: 50 },
           shadow: {
             ramp: 20,
-            logMismatches: true,
+            mismatchLogging: { key: true, value: true },
           },
         }),
       },
@@ -78,6 +78,48 @@ describe("DialCache observability internal compatibility paths", () => {
     for (const { runtime, expected } of cases) {
       await expect(fetchKeyConfig(async () => runtime, key(defaultConfig))).resolves.toEqual(expected);
     }
+  });
+
+  it("merges only own mismatch logging leaves, ignoring prototype-carried values", async () => {
+    const defaultConfig = new DialCacheKeyConfig({
+      ttlSec: { [CacheLayer.LOCAL]: 60 },
+      ramp: { [CacheLayer.LOCAL]: 100 },
+      shadow: { ramp: 20 },
+    });
+    const runtime = {
+      shadow: { mismatchLogging: Object.create({ value: true }) as { value?: boolean } },
+    } as DialCacheKeyConfig;
+
+    const merged = await fetchKeyConfig(async () => runtime, key(defaultConfig));
+
+    expect(merged?.shadow?.mismatchLogging).toEqual({});
+    expect(Object.hasOwn(merged?.shadow?.mismatchLogging ?? {}, "value")).toBe(false);
+  });
+
+  it("ignores a prototype-inherited shadow group in a runtime overlay", async () => {
+    const defaultConfig = new DialCacheKeyConfig({
+      ttlSec: { [CacheLayer.REMOTE]: 60 },
+      ramp: { [CacheLayer.REMOTE]: 100 },
+      shadow: {
+        ramp: 20,
+        mismatchLogging: { key: true },
+      },
+    });
+    // A provider result whose shadow policy lives on the prototype: every leaf
+    // inside it is an own property, so only the group boundary can reject it.
+    const overlay = Object.create({
+      shadow: {
+        ramp: 100,
+        mismatchLogging: { value: true, diff: true },
+      },
+    }) as DialCacheKeyConfig;
+
+    const merged = await fetchKeyConfig(async () => overlay, key(defaultConfig));
+
+    expect(merged?.shadow).toEqual({
+      ramp: 20,
+      mismatchLogging: { key: true },
+    });
   });
 
   it("preserves omitted requestLocal and coalesce through a runtime merge", async () => {
