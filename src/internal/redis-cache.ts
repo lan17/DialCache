@@ -1,6 +1,6 @@
 import { performance } from "node:perf_hooks";
 
-import { CacheLayer, type CacheConfigProvider, type DialCacheKeyConfig } from "../config.js";
+import { CacheLayer } from "../config.js";
 import { RedisReadTimeoutError } from "../errors.js";
 import { invalidationPrefix, redisClusterHashTag, type DialCacheKey } from "../key.js";
 import {
@@ -9,10 +9,11 @@ import {
   type DialCacheMetricsAdapter,
   type MetricErrorKind,
   type MetricLayer,
+  type StaleRecoveryOutcome,
 } from "../metrics.js";
 import type { DecodedRedisFrame, DialCacheRedisClient, RedisCachePayload } from "../redis-client.js";
 import { JsonSerializer, type Serializer } from "../serializer.js";
-import type { RedisCacheGetResult } from "./cache-result.js";
+import type { RedisCacheGetResult, RedisCacheMissReason } from "./cache-result.js";
 import {
   compressPayload,
   decompressPayload,
@@ -22,7 +23,7 @@ import {
 } from "./compression.js";
 import { assertValidDeadlineMs, withMonotonicDeadline } from "./deadline.js";
 import { cacheTtlSecToMs, MAX_TRACKED_REDIS_VALUE_TTL_MS } from "./duration.js";
-import { fetchKeyConfig, resolveLayerConfigResult, type ResolvedLayerConfig } from "./runtime-config.js";
+import type { ResolvedRemoteLayerConfig } from "./runtime-config.js";
 
 export interface RedisConfig {
   /**
@@ -46,7 +47,6 @@ export interface RedisConfig {
 }
 
 interface RedisCacheOptions {
-  readonly configProvider: CacheConfigProvider;
   readonly redis: RedisConfig;
   readonly metrics: DialCacheMetricsAdapter | null;
 }
@@ -60,12 +60,23 @@ interface StartedRedisRead {
 
 export type FutureFramePolicy = "reject" | "retain";
 
+type RedisStaleRecoveryResult<T> =
+  | { readonly status: "hit"; readonly value: T }
+  | { readonly status: "miss" };
+
+type RedisValueReadResult<T> =
+  | { readonly status: "hit"; readonly value: T; readonly frame: DecodedRedisFrame }
+  | { readonly status: "miss"; readonly reason: RedisCacheMissReason };
+
 const defaultSerializer = new JsonSerializer<unknown>();
 const REDIS_FRAME_KEY_SUFFIX = ":dialcache-frame-v1";
 const DEFAULT_REMOTE_READ_TIMEOUT_MS = 50;
+const staleRecoveryOutcomeForMiss = {
+  cache_miss: "miss",
+  deserialization_error: "deserialization_error",
+} as const satisfies Readonly<Record<RedisCacheMissReason, StaleRecoveryOutcome>>;
 
 export class RedisCache {
-  private readonly configProvider: CacheConfigProvider;
   private readonly defaultSerializer: Serializer<unknown>;
   private readonly compression: Required<CompressionConfig> | null;
   private readonly client: DialCacheRedisClient;
@@ -85,7 +96,6 @@ export class RedisCache {
       throw new TypeError("RedisConfig.watermarkTtlSec was removed; watermark lifetime is derived by DialCache");
     }
 
-    this.configProvider = options.configProvider;
     this.defaultSerializer = options.redis.serializer ?? defaultSerializer;
     this.compression = resolveCompressionConfig(options.redis.compression);
     this.metrics = options.metrics;
@@ -101,36 +111,72 @@ export class RedisCache {
     this.client = options.redis.client;
   }
 
-  async get<T>(key: DialCacheKey): Promise<T | undefined> {
-    const result = await this.getResult<T>(key);
-    return result.status === "hit" ? result.value : undefined;
-  }
-
-  async getResult<T>(key: DialCacheKey, keyConfig?: DialCacheKeyConfig | null): Promise<RedisCacheGetResult<T>> {
-    const layerConfig = await this.resolveRemoteLayerConfig(key, keyConfig);
-    if (layerConfig.status === "disabled") {
-      return layerConfig;
-    }
-
-    return await this.getWithResolvedConfig(
-      key,
-      layerConfig.config,
-      keyConfig?.remoteReadTimeoutMs ?? this.readTimeoutMs,
-    );
-  }
-
   async getWithResolvedConfig<T>(
     key: DialCacheKey,
-    layerConfig: ResolvedLayerConfig,
+    layerConfig: ResolvedRemoteLayerConfig,
     readTimeoutMs = this.readTimeoutMs,
   ): Promise<RedisCacheGetResult<T>> {
+    const result = await this.readValueWithinAge<T>(
+      key,
+      cacheTtlSecToMs(layerConfig.ttlSec),
+      readTimeoutMs,
+    );
+    if (result.status === "hit") {
+      return result;
+    }
+    return {
+      status: "miss",
+      config: layerConfig,
+      reason: result.reason,
+    };
+  }
+
+  /**
+   * Reread a definitive normal miss after the source rejects, using the
+   * configured absolute recovery age. Failures are classified here and
+   * contained by the caller so they cannot replace the source rejection.
+   */
+  async recoverWithinAge<T>(
+    key: DialCacheKey,
+    maxAgeSec: number,
+    readTimeoutMs: number,
+  ): Promise<RedisStaleRecoveryResult<T>> {
+    let result: RedisValueReadResult<T>;
+    try {
+      result = await this.readValueWithinAge<T>(key, cacheTtlSecToMs(maxAgeSec), readTimeoutMs);
+    } catch (error) {
+      this.recordStaleRecovery(
+        key,
+        error instanceof RedisReadTimeoutError ? "read_timeout" : "read_error",
+      );
+      throw error;
+    }
+    if (result.status === "hit") {
+      this.recordStaleRecovery(key, "served");
+      return { status: "hit", value: result.value };
+    }
+    this.recordStaleRecovery(key, staleRecoveryOutcomeForMiss[result.reason]);
+    return { status: "miss" };
+  }
+
+  private async readValueWithinAge<T>(
+    key: DialCacheKey,
+    maxAgeMs: number,
+    readTimeoutMs: number,
+  ): Promise<RedisValueReadResult<T>> {
     const metricLayer = CacheLayer.REMOTE;
     const start = performance.now();
     this.recordMetric((metrics) => metrics.request(labelsFor(key, metricLayer)));
     try {
       let frame: DecodedRedisFrame | null;
       try {
-        frame = await this.startPayloadRead(key, readTimeoutMs, metricLayer, false).result;
+        frame = await this.startPayloadRead(
+          key,
+          maxAgeMs,
+          readTimeoutMs,
+          metricLayer,
+          false,
+        ).result;
       } catch (error) {
         this.recordError(
           key,
@@ -141,7 +187,7 @@ export class RedisCache {
       }
       if (frame === null) {
         this.recordMetric((metrics) => metrics.miss(labelsFor(key, metricLayer)));
-        return { status: "miss", config: layerConfig };
+        return { status: "miss", reason: "cache_miss" };
       }
 
       try {
@@ -149,7 +195,7 @@ export class RedisCache {
         return { status: "hit", value, frame };
       } catch {
         this.recordMetric((metrics) => metrics.miss(labelsFor(key, metricLayer)));
-        return { status: "miss", config: layerConfig };
+        return { status: "miss", reason: "deserialization_error" };
       }
     } finally {
       // Preserve the established caller-serving boundary: Redis read plus load.
@@ -173,11 +219,13 @@ export class RedisCache {
    */
   startPayloadReadForShadow(
     key: DialCacheKey,
+    maxAgeSec: number | null,
     readTimeoutMs: number,
     futureFramePolicy: FutureFramePolicy,
   ): StartedRedisRead {
     return this.startMeasuredPayloadRead(
       key,
+      maxAgeSec === null ? null : cacheTtlSecToMs(maxAgeSec),
       readTimeoutMs,
       REMOTE_SHADOW_CACHE_LAYER,
       true,
@@ -185,25 +233,21 @@ export class RedisCache {
     );
   }
 
-  async put<T>(key: DialCacheKey, value: T, config?: { readonly ttlSec: number }): Promise<void> {
-    const ttlSec = config?.ttlSec ?? await this.resolveRemoteTtlSec(key);
-    if (ttlSec === null) {
-      return;
-    }
-    await this.putWithLayer(key, value, ttlSec, CacheLayer.REMOTE);
+  async put<T>(key: DialCacheKey, value: T, config: ResolvedRemoteLayerConfig): Promise<void> {
+    await this.putWithLayer(key, value, retentionTtlSecFor(config), CacheLayer.REMOTE);
   }
 
   /** Populate a detached Redis miss using the caller's resolved policy snapshot. */
   async putForShadow<T>(
     key: DialCacheKey,
     value: T,
-    config: { readonly ttlSec: number },
+    config: ResolvedRemoteLayerConfig,
     shouldWrite: () => boolean,
   ): Promise<void> {
     await this.putWithLayer(
       key,
       value,
-      config.ttlSec,
+      retentionTtlSecFor(config),
       REMOTE_SHADOW_CACHE_LAYER,
       shouldWrite,
     );
@@ -297,6 +341,7 @@ export class RedisCache {
 
   private startPayloadRead(
     key: DialCacheKey,
+    maxAgeMs: number | null,
     readTimeoutMs: number,
     metricLayer: MetricLayer,
     unrefTimer: boolean,
@@ -320,7 +365,7 @@ export class RedisCache {
       unrefTimer,
     });
     const result = bounded.then((frame) =>
-      this.validateTrackedFrame(key, frame, metricLayer, futureFramePolicy));
+      this.validateFrameAge(key, frame, maxAgeMs, metricLayer, futureFramePolicy));
     return {
       result,
       settled: pending.then(
@@ -332,6 +377,7 @@ export class RedisCache {
 
   private startMeasuredPayloadRead(
     key: DialCacheKey,
+    maxAgeMs: number | null,
     readTimeoutMs: number,
     metricLayer: MetricLayer,
     unrefTimer: boolean,
@@ -339,7 +385,14 @@ export class RedisCache {
   ): StartedRedisRead {
     const start = performance.now();
     this.recordMetric((metrics) => metrics.request(labelsFor(key, metricLayer)));
-    const read = this.startPayloadRead(key, readTimeoutMs, metricLayer, unrefTimer, futureFramePolicy);
+    const read = this.startPayloadRead(
+      key,
+      maxAgeMs,
+      readTimeoutMs,
+      metricLayer,
+      unrefTimer,
+      futureFramePolicy,
+    );
     const result = read.result.then(
       (frame) => {
         if (frame === null) {
@@ -361,14 +414,15 @@ export class RedisCache {
     return { result, settled: read.settled };
   }
 
-  private validateTrackedFrame(
+  private validateFrameAge(
     key: DialCacheKey,
     frame: DecodedRedisFrame | null,
+    maxAgeMs: number | null,
     metricLayer: MetricLayer,
     futureFramePolicy: FutureFramePolicy,
   ): DecodedRedisFrame | null {
-    if (frame === null || !key.trackForInvalidation) {
-      return frame;
+    if (frame === null) {
+      return null;
     }
     if (!Number.isSafeInteger(frame.createdAtMs) || frame.createdAtMs < 0) {
       return null;
@@ -385,7 +439,7 @@ export class RedisCache {
       }
       return futureFramePolicy === "reject" ? null : frame;
     }
-    return frame;
+    return maxAgeMs === null || readerNowMs - frame.createdAtMs < maxAgeMs ? frame : null;
   }
 
   private async deserializePayload<T>(
@@ -420,20 +474,6 @@ export class RedisCache {
     return key.serializer ?? this.defaultSerializer;
   }
 
-  private async resolveRemoteLayerConfig(key: DialCacheKey, keyConfig?: DialCacheKeyConfig | null) {
-    const config = keyConfig === undefined ? await fetchKeyConfig(this.configProvider, key) : keyConfig;
-    return resolveLayerConfigResult({
-      config,
-      key,
-      layer: CacheLayer.REMOTE,
-    });
-  }
-
-  private async resolveRemoteTtlSec(key: DialCacheKey): Promise<number | null> {
-    const layerConfig = await this.resolveRemoteLayerConfig(key);
-    return layerConfig.status === "enabled" ? layerConfig.config.ttlSec : null;
-  }
-
   private recordMetric(record: (metrics: DialCacheMetricsAdapter) => void): void {
     if (this.metrics === null) {
       return;
@@ -448,6 +488,19 @@ export class RedisCache {
   private recordError(key: DialCacheKey, layer: MetricLayer, kind: MetricErrorKind): void {
     this.recordMetric((metrics) => metrics.error({ ...labelsFor(key, layer), error: kind, inFallback: false }));
   }
+
+  private recordStaleRecovery(key: DialCacheKey, outcome: StaleRecoveryOutcome): void {
+    this.recordMetric((metrics) => metrics.staleRecovery?.({
+      cacheNamespace: key.namespace,
+      useCase: key.useCase,
+      keyType: key.keyType,
+      outcome,
+    }));
+  }
+}
+
+function retentionTtlSecFor(config: ResolvedRemoteLayerConfig): number {
+  return config.staleOnErrorMaxAgeSec ?? config.ttlSec;
 }
 
 function payloadSize(payload: string | Buffer): number {

@@ -225,10 +225,12 @@ describe("DialCache Redis TTL layer", () => {
     expect(metrics.miss).toHaveBeenCalledOnce();
   });
 
-  it("serves a future-dated untracked frame without consulting the reader clock", async () => {
+  it("rejects a future-dated untracked frame using the reader clock", async () => {
+    const nowMs = 1_700_000_000_000;
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(nowMs);
     const cachedValue = { source: "redis" };
     const redis: DialCacheRedisClient = {
-      read: vi.fn(async () => ({ payload: JSON.stringify(cachedValue), createdAtMs: Number.MAX_SAFE_INTEGER })),
+      read: vi.fn(async () => ({ payload: JSON.stringify(cachedValue), createdAtMs: nowMs + 1_250 })),
       write: vi.fn(async () => undefined),
       invalidate: vi.fn(async () => undefined),
     };
@@ -250,18 +252,21 @@ describe("DialCache Redis TTL layer", () => {
       }),
       serializer,
     });
-    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => {
-      throw new Error("untracked reads must not consult the reader clock");
-    });
+    await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ source: "fallback" });
 
-    await expect(dialcache.enable(async () => await getUser())).resolves.toEqual(cachedValue);
-
-    expect(nowSpy).not.toHaveBeenCalled();
-    expect(serializer.load).toHaveBeenCalledOnce();
-    expect(serializer.dump).not.toHaveBeenCalled();
-    expect(fallback).not.toHaveBeenCalled();
-    expect(observeFutureTimestampOffset).not.toHaveBeenCalled();
-    expect(metrics.miss).not.toHaveBeenCalled();
+    expect(nowSpy).toHaveBeenCalledOnce();
+    expect(serializer.load).not.toHaveBeenCalled();
+    expect(fallback).toHaveBeenCalledOnce();
+    expect(observeFutureTimestampOffset).toHaveBeenCalledWith(
+      {
+        cacheNamespace: "urn",
+        useCase: "RedisUntrackedFutureFrame",
+        keyType: "user_id",
+        layer: CacheLayer.REMOTE,
+      },
+      1.25,
+    );
+    expect(metrics.miss).toHaveBeenCalledOnce();
   });
 
   it.each([

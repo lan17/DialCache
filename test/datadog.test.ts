@@ -11,6 +11,7 @@ import {
   type MetricErrorKind,
   type MetricLayer,
   type ShadowValidationOutcome,
+  type StaleRecoveryOutcome,
 } from "../src/index.js";
 import {
   NO_CACHE_LAYER,
@@ -120,6 +121,14 @@ const SHADOW_VALIDATION_OUTCOMES: Readonly<Record<ShadowValidationOutcome, true>
   dropped: true,
 };
 const shadowValidationOutcomes = Object.keys(SHADOW_VALIDATION_OUTCOMES) as ShadowValidationOutcome[];
+const STALE_RECOVERY_OUTCOMES: Readonly<Record<StaleRecoveryOutcome, true>> = {
+  served: true,
+  miss: true,
+  read_error: true,
+  read_timeout: true,
+  deserialization_error: true,
+};
+const staleRecoveryOutcomes = Object.keys(STALE_RECOVERY_OUTCOMES) as StaleRecoveryOutcome[];
 const COMPRESSION_OUTCOMES: Readonly<Record<CompressionOutcome, true>> = {
   compressed: true,
   below_threshold: true,
@@ -159,6 +168,12 @@ describe("Datadog metrics adapter", () => {
       useCase: "LoadUser",
       keyType: "user_id",
       outcome: "match",
+    });
+    metrics.staleRecovery({
+      cacheNamespace: cacheLabels.cacheNamespace,
+      useCase: "LoadUser",
+      keyType: "user_id",
+      outcome: "served",
     });
     metrics.observeShadowValueAge(
       {
@@ -212,6 +227,12 @@ describe("Datadog metrics adapter", () => {
         name: "dialcache.shadow.count",
         value: 1,
         tags: { cache_namespace: "users", use_case: "LoadUser", key_type: "user_id", outcome: "match" },
+      },
+      {
+        method: "increment",
+        name: "dialcache.stale_recovery.count",
+        value: 1,
+        tags: { cache_namespace: "users", use_case: "LoadUser", key_type: "user_id", outcome: "served" },
       },
       {
         method: "distribution",
@@ -327,6 +348,14 @@ describe("Datadog metrics adapter", () => {
         outcome,
       });
     }
+    for (const outcome of staleRecoveryOutcomes) {
+      metrics.staleRecovery({
+        cacheNamespace: cacheLabels.cacheNamespace,
+        useCase: cacheLabels.useCase,
+        keyType: cacheLabels.keyType,
+        outcome,
+      });
+    }
     for (const outcome of compressionOutcomes) {
       metrics.compression({ ...cacheLabels, outcome });
     }
@@ -358,6 +387,18 @@ describe("Datadog metrics adapter", () => {
         .map(({ tags }) => tags),
     ).toEqual(
       shadowValidationOutcomes.map((outcome) => ({
+        cache_namespace: cacheLabels.cacheNamespace,
+        use_case: cacheLabels.useCase,
+        key_type: cacheLabels.keyType,
+        outcome,
+      })),
+    );
+    expect(
+      client.calls
+        .filter(({ name }) => name === "dialcache.stale_recovery.count")
+        .map(({ tags }) => tags),
+    ).toEqual(
+      staleRecoveryOutcomes.map((outcome) => ({
         cache_namespace: cacheLabels.cacheNamespace,
         use_case: cacheLabels.useCase,
         key_type: cacheLabels.keyType,

@@ -41,6 +41,14 @@ export class DialCacheKeyConfig {
    */
   readonly coalesce?: boolean;
   /**
+   * Absolute Redis-frame age in seconds through which a retained value may be
+   * returned after the source of truth rejects. Omission disables recovery by
+   * default and inherits in runtime overlays; zero explicitly disables an
+   * inherited policy. A positive value requires a smaller positive remote TTL
+   * and may not exceed 31,536,000 seconds (365 days).
+   */
+  readonly staleOnErrorMaxAgeSec?: number;
+  /**
    * Maximum time DialCache waits for a remote read before failing open to the
    * source of truth. Overrides the instance default for this use case.
    */
@@ -52,6 +60,7 @@ export class DialCacheKeyConfig {
     shadow?: ShadowConfig;
     requestLocal?: boolean;
     coalesce?: boolean;
+    staleOnErrorMaxAgeSec?: number;
     remoteReadTimeoutMs?: number;
   }) {
     if (config === null || typeof config !== "object" || Array.isArray(config)) {
@@ -78,6 +87,11 @@ export class DialCacheKeyConfig {
     if (config.coalesce !== undefined) {
       this.coalesce = config.coalesce;
     }
+    // Like ttlSec/ramp leaves, validation is deferred to static-default capture
+    // or runtime resolution so malformed runtime policy can fail open narrowly.
+    if (config.staleOnErrorMaxAgeSec !== undefined) {
+      this.staleOnErrorMaxAgeSec = config.staleOnErrorMaxAgeSec;
+    }
     if (config.remoteReadTimeoutMs !== undefined) {
       assertValidDeadlineMs(config.remoteReadTimeoutMs, "DialCache remoteReadTimeoutMs");
       this.remoteReadTimeoutMs = config.remoteReadTimeoutMs;
@@ -98,15 +112,16 @@ export class DialCacheKeyConfig {
   }
 
   /**
-   * The explicit cache-invocation kill switch: request-local caching and
-   * shadow work off, with both shared layers ramped to 0. As a provider
-   * overlay it disables every inherited path instead of relying on field
-   * omission. It does not cancel admitted work or disable explicit
+   * The explicit cache-invocation kill switch: request-local caching, stale
+   * recovery, and shadow work off, with both shared layers ramped to 0. As a
+   * provider overlay it disables every inherited path instead of relying on
+   * field omission. It does not cancel admitted work or disable explicit
    * maintenance operations.
    */
   static disabled(): DialCacheKeyConfig {
     return new DialCacheKeyConfig({
       requestLocal: false,
+      staleOnErrorMaxAgeSec: 0,
       shadow: {
         ramp: 0,
         logMismatches: false,

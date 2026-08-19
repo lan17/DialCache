@@ -37,9 +37,10 @@ import { deterministicShadowRampSample } from "./internal/ramp.js";
 import { RedisCache, type FutureFramePolicy } from "./internal/redis-cache.js";
 import {
   fetchKeyConfig,
-  resolveLayerConfigResult,
+  resolveRemoteLayerConfigResult,
   type LayerConfigResolution,
   type ResolvedLayerConfig,
+  type ResolvedRemoteLayerConfig,
 } from "./internal/runtime-config.js";
 import { shadowMismatchLogDetails } from "./internal/shadow-log-json.js";
 
@@ -235,7 +236,7 @@ type ShadowValidationStart<Value> =
       /** The caller-owned, fallback-deadline-bounded SoT operation. */
       readonly source: Promise<Value>;
       /** Valid remote policy retained even though its serving ramp excluded this key. */
-      readonly remoteConfig: ResolvedLayerConfig;
+      readonly remoteConfig: ResolvedRemoteLayerConfig;
       /** Includes synchronous SoT work that ran before shadow admission. */
       readonly startedAtMs: number | null;
     };
@@ -245,7 +246,7 @@ type ShadowValidationRunStart<Value> =
   | {
       readonly kind: "redis";
       readonly source: Promise<Value>;
-      readonly remoteConfig: ResolvedLayerConfig;
+      readonly remoteConfig: ResolvedRemoteLayerConfig;
     };
 
 const DEFAULT_LOCAL_MAX_SIZE = 10_000;
@@ -298,12 +299,11 @@ export class DialCache {
     this.logger = safeLogger(config.logger ?? defaultLogger);
     this.metrics = safeMetrics(config.metrics ?? null);
     this.shadowMaxInFlight = shadowMaxInFlight;
-    this.localCache = new LocalCache(this.configProvider, localMaxSize);
+    this.localCache = new LocalCache(localMaxSize);
     this.redisCache =
       config.redis === undefined
         ? null
         : new RedisCache({
-            configProvider: this.configProvider,
             redis: config.redis,
             metrics: this.metrics,
           });
@@ -645,7 +645,6 @@ export class DialCache {
         remote,
         fallback,
         shadowValidation,
-        remoteLayer.config,
       );
     };
     return coalesce ? await this.singleFlightProcess(key, run) : await run();
@@ -707,7 +706,6 @@ export class DialCache {
       remote,
       fallback,
       shadowValidation,
-      remoteLayer.config,
     );
   }
 
@@ -724,7 +722,7 @@ export class DialCache {
     key: DialCacheKey,
     keyConfig: DialCacheKeyConfig | null,
     local: CacheGetResult<T> | null,
-    remoteConfig: ResolvedLayerConfig,
+    remoteConfig: ResolvedRemoteLayerConfig,
     fallbackLabels: CacheMetricLabels,
     fallback: () => Promise<T>,
     shadowValidation: ShadowValidationPlan<T>,
@@ -757,7 +755,6 @@ export class DialCache {
     remote: RemoteCacheGetResult<T>,
     fallback: () => Promise<T>,
     shadowValidation: ShadowValidationPlan<T>,
-    resolvedRemoteConfig?: ResolvedLayerConfig,
   ): Promise<T> {
     if (remote.status === "hit") {
       if (local.status === "miss") {
@@ -782,17 +779,40 @@ export class DialCache {
       return value;
     }
 
-    const remoteErrored = remote.status === "disabled" && remote.reason === "config_error";
-    const remoteWriteConfig = remote.status === "miss" ? remote.config : remoteErrored ? resolvedRemoteConfig : undefined;
-    const fallbackLayer = remote.status === "miss" || remoteErrored ? CacheLayer.REMOTE : CacheLayer.LOCAL;
-    const value = await this.callFallback(labelsFor(key, fallbackLayer), fallback);
-    const skipCacheWrite = (remote.status === "miss" || remote.status === "disabled") && remote.skipCacheWrite === true;
+    const remoteConfigErrored = remote.status === "disabled" && remote.reason === "config_error";
+    const remoteWriteConfig = remote.status === "miss" ? remote.config : undefined;
+    const fallbackLayer = remote.status === "miss" || remoteConfigErrored ? CacheLayer.REMOTE : CacheLayer.LOCAL;
+    let value: T;
+    try {
+      value = await this.callFallback(labelsFor(key, fallbackLayer), fallback);
+    } catch (fallbackError) {
+      if (
+        remote.status === "miss"
+        && remote.reason === "cache_miss"
+        && remote.config.staleOnErrorMaxAgeSec !== null
+      ) {
+        try {
+          const recovered = await redisCache.recoverWithinAge<T>(
+            key,
+            remote.config.staleOnErrorMaxAgeSec,
+            keyConfig?.remoteReadTimeoutMs ?? redisCache.readTimeoutMs,
+          );
+          if (recovered.status === "hit") {
+            return recovered.value;
+          }
+        } catch (recoveryError) {
+          // Recovery is subordinate to the source rejection and must never replace it.
+          this.logger.warn("Error getting value from Redis cache during stale recovery", recoveryError);
+        }
+      }
+      throw fallbackError;
+    }
     // A tracked fallback was not validated against a watermark after the source
     // call. If this invocation reached the Redis write path, let a later
     // authoritative Redis hit populate local regardless of write success.
-    const suppressLocalWrite = skipCacheWrite
+    const suppressLocalWrite = (remote.status === "disabled" && remote.skipCacheWrite === true)
       || (remoteWriteConfig !== undefined && key.trackForInvalidation);
-    if (!skipCacheWrite && remoteWriteConfig !== undefined) {
+    if (remoteWriteConfig !== undefined) {
       try {
         await redisCache.put(key, value, remoteWriteConfig);
       } catch (error) {
@@ -947,8 +967,16 @@ export class DialCache {
       operationFinished = true;
       maybeRelease();
     };
-    const readShadowFrame = (futureFramePolicy: FutureFramePolicy): Promise<DecodedRedisFrame | null> => {
-      const read = redisCache.startPayloadReadForShadow(key, readTimeoutMs, futureFramePolicy);
+    const readShadowFrame = (
+      maxAgeSec: number | null,
+      futureFramePolicy: FutureFramePolicy,
+    ): Promise<DecodedRedisFrame | null> => {
+      const read = redisCache.startPayloadReadForShadow(
+        key,
+        maxAgeSec,
+        readTimeoutMs,
+        futureFramePolicy,
+      );
       pendingRedisReads.add(read.settled);
       void read.settled.then(() => {
         pendingRedisReads.delete(read.settled);
@@ -986,11 +1014,11 @@ export class DialCache {
             return "timeout";
           }
 
-          let shadowFillConfig: ResolvedLayerConfig | null = null;
+          let shadowFillConfig: ResolvedRemoteLayerConfig | null = null;
           if (start.kind === "redis") {
             let frame: DecodedRedisFrame | null;
             try {
-              frame = await readShadowFrame("reject");
+              frame = await readShadowFrame(start.remoteConfig.ttlSec, "reject");
             } catch {
               return "redis_error";
             }
@@ -1089,7 +1117,7 @@ export class DialCache {
 
           let confirmationFrame: DecodedRedisFrame | null;
           try {
-            confirmationFrame = await readShadowFrame("retain");
+            confirmationFrame = await readShadowFrame(null, "retain");
           } catch {
             return "confirmation_error";
           }
@@ -1208,11 +1236,13 @@ export class DialCache {
 
   private async resolveRemoteLayerConfig(key: DialCacheKey, keyConfig: DialCacheKeyConfig | null) {
     try {
-      const result = resolveLayerConfigResult({
+      const result = resolveRemoteLayerConfigResult({
         config: keyConfig,
         key,
-        layer: CacheLayer.REMOTE,
       });
+      if (result.staleOnErrorConfigError === true) {
+        this.recordError(key, CacheLayer.REMOTE, "config_resolution");
+      }
       if (result.status === "disabled") {
         this.metrics?.disabled({ ...labelsFor(key, CacheLayer.REMOTE), reason: result.reason });
         this.recordInvalidLeaf(key, CacheLayer.REMOTE, result.reason);
@@ -1229,20 +1259,20 @@ export class DialCache {
   private async readRemoteWithResolvedConfig<T>(
     redisCache: RedisCache,
     key: DialCacheKey,
-    layerConfig: ResolvedLayerConfig,
+    layerConfig: ResolvedRemoteLayerConfig,
     readTimeoutMs: number,
   ): Promise<RemoteCacheGetResult<T>> {
     try {
       return await redisCache.getWithResolvedConfig<T>(key, layerConfig, readTimeoutMs);
     } catch (error) {
       this.logger.warn("Error getting value from Redis cache", error);
-      return { status: "error", operation: "read" };
+      return { status: "error" };
     }
   }
 
-  private async putLocalFailOpen<T>(key: DialCacheKey, value: T, config?: { readonly ttlSec: number }): Promise<void> {
+  private async putLocalFailOpen<T>(key: DialCacheKey, value: T, config: { readonly ttlSec: number }): Promise<void> {
     try {
-      await this.localCache.put(key, value, config);
+      this.localCache.put(key, value, config);
     } catch (error) {
       this.logger.warn("Error putting value in local cache", error);
       this.recordError(key, CacheLayer.LOCAL, "cache_write");
@@ -1405,6 +1435,7 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
   const shadowConfig = config.shadow;
   const requestLocal = config.requestLocal;
   const coalesce = config.coalesce;
+  const staleOnErrorMaxAgeSec = config.staleOnErrorMaxAgeSec;
   const remoteReadTimeoutMs = config.remoteReadTimeoutMs;
   if (requestLocal !== undefined && typeof requestLocal !== "boolean") {
     throw new TypeError("DialCache defaultConfig requestLocal must be a boolean");
@@ -1422,6 +1453,7 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
     ramp: rampConfig,
     ...(requestLocal === undefined ? {} : { requestLocal }),
     ...(coalesce === undefined ? {} : { coalesce }),
+    ...(staleOnErrorMaxAgeSec === undefined ? {} : { staleOnErrorMaxAgeSec }),
     ...(remoteReadTimeoutMs === undefined ? {} : { remoteReadTimeoutMs }),
     ...(shadowConfig === undefined ? {} : { shadow: shadowConfig }),
   });
@@ -1446,6 +1478,31 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
       }
       if (!Number.isFinite(ramp) || ramp < 0 || ramp > 100) {
         throw new RangeError(`DialCache defaultConfig ramp.${layer} must be between 0 and 100`);
+      }
+    }
+  }
+
+  if (snapshot.staleOnErrorMaxAgeSec !== undefined) {
+    const maxAgeSec = snapshot.staleOnErrorMaxAgeSec;
+    if (typeof maxAgeSec !== "number") {
+      throw new TypeError("DialCache defaultConfig staleOnErrorMaxAgeSec must be a number");
+    }
+    if (maxAgeSec !== 0 && !isSupportedCacheTtlSec(maxAgeSec)) {
+      throw new RangeError(
+        `DialCache defaultConfig staleOnErrorMaxAgeSec must be a nonnegative safe integer no greater than ${MAX_CACHE_TTL_SEC}`,
+      );
+    }
+    if (maxAgeSec > 0) {
+      const remoteTtlSec = snapshot.ttlSec[CacheLayer.REMOTE];
+      if (remoteTtlSec === undefined) {
+        throw new RangeError(
+          "DialCache defaultConfig staleOnErrorMaxAgeSec requires ttlSec.remote",
+        );
+      }
+      if (maxAgeSec <= remoteTtlSec) {
+        throw new RangeError(
+          "DialCache defaultConfig staleOnErrorMaxAgeSec must be greater than ttlSec.remote",
+        );
       }
     }
   }
@@ -1548,6 +1605,7 @@ function safeMetrics(metrics: DialCacheMetricsAdapter | null): DialCacheMetricsA
             callObserver(() => metrics.shadowValidation!(labels)),
         }
       : {}),
+    staleRecovery: (labels) => callObserver(() => metrics.staleRecovery?.(labels)),
     observeShadowValueAge: (labels, seconds) =>
       callObserver(() => metrics.observeShadowValueAge?.(labels, seconds)),
     observeFutureTimestampOffset: (labels, seconds) =>
@@ -1582,11 +1640,11 @@ function resolveShadowComparator<Value>(
 }
 
 // Frame stamps and the observation both use application-process epoch clocks.
-// Core rejects tracked frames that are future-dated when read, but the reader
-// clock can step backward before a detached shadow verdict, so clamp that age
-// to zero. A custom client that violates the decode contract can hand over a
-// non-finite stamp; recording it would permanently poison backend histogram
-// sums, so the observation is skipped instead.
+// Core rejects future frames before they can serve, but a confirmation read
+// may retain one solely for payload supersession comparison. Clamp that
+// diagnostic age to zero. A custom client that violates the decode contract
+// can hand over a non-finite stamp; recording it would permanently poison
+// backend histogram sums, so the observation is skipped instead.
 function shadowValueAgeSeconds(createdAtMs: number): number | undefined {
   const ageSeconds = (Date.now() - createdAtMs) / 1000;
   if (!Number.isFinite(ageSeconds)) {

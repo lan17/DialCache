@@ -24,6 +24,13 @@ export type ShadowValidationOutcome =
   | "confirmation_error"
   | "timeout"
   | "dropped";
+/** Bounded terminal outcomes for an attempted stale-on-error Redis recovery. */
+export type StaleRecoveryOutcome =
+  | "served"
+  | "miss"
+  | "read_error"
+  | "read_timeout"
+  | "deserialization_error";
 /**
  * Bounded compression outcomes. Writes record compressed, below_threshold,
  * not_smaller, or write_over_limit (serialized form exceeds the decompression
@@ -106,6 +113,13 @@ export interface ShadowValidationMetricLabels {
   readonly outcome: ShadowValidationOutcome;
 }
 
+export interface StaleRecoveryMetricLabels {
+  readonly cacheNamespace: string;
+  readonly useCase: string;
+  readonly keyType: string;
+  readonly outcome: StaleRecoveryOutcome;
+}
+
 export interface DialCacheMetricsAdapter {
   request(labels: CacheMetricLabels): void;
   miss(labels: CacheMetricLabels): void;
@@ -128,13 +142,15 @@ export interface DialCacheMetricsAdapter {
    */
   observeShadowValueAge?(labels: ShadowValidationMetricLabels, seconds: number): void;
   /**
-   * Positive offset in seconds when a decoded tracked Redis frame is dated
-   * after the observing process's epoch clock. Serving and initial shadow reads
-   * fail closed as misses; a shadow confirmation retains the frame solely for
+   * Positive offset in seconds when a decoded Redis frame is dated after the
+   * observing process's epoch clock. Serving and initial shadow reads fail
+   * closed as misses; a shadow confirmation retains the frame solely for
    * payload comparison. This is a workload-shaped diagnostic, not proof of
    * clock skew. Optional so existing custom adapters keep compiling.
    */
   observeFutureTimestampOffset?(labels: CacheMetricLabels, seconds: number): void;
+  // Optional so existing custom adapters keep compiling without changes.
+  staleRecovery?(labels: StaleRecoveryMetricLabels): void;
   // Optional so existing custom adapters keep compiling without changes.
   compression?(labels: CompressionMetricLabels): void;
   observeGet(labels: CacheMetricLabels, seconds: number): void;

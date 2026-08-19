@@ -117,6 +117,8 @@ const rootConsumer = `import {
   type ShadowConfig,
   type ShadowValidationMetricLabels,
   type ShadowValidationOutcome,
+  type StaleRecoveryMetricLabels,
+  type StaleRecoveryOutcome,
 } from "dialcache";
 // @ts-expect-error The unused MissingKeyConfigError class was removed instead of deprecated.
 import { MissingKeyConfigError } from "dialcache";
@@ -198,6 +200,13 @@ const shadowMetrics: DialCacheMetricsAdapter = {
     void outcome;
   },
 };
+const staleMetrics: DialCacheMetricsAdapter = {
+  ...metrics,
+  staleRecovery: (labels: StaleRecoveryMetricLabels) => {
+    const outcome: StaleRecoveryOutcome = labels.outcome;
+    void outcome;
+  },
+};
 const shadowOutcomes: Readonly<Record<ShadowValidationOutcome, true>> = {
   match: true,
   mismatch: true,
@@ -213,6 +222,21 @@ const shadowOutcomes: Readonly<Record<ShadowValidationOutcome, true>> = {
   dropped: true,
 };
 void shadowOutcomes;
+const staleRecoveryOutcomes: Readonly<Record<StaleRecoveryOutcome, true>> = {
+  served: true,
+  miss: true,
+  read_error: true,
+  read_timeout: true,
+  deserialization_error: true,
+};
+const staleRecoveryLabels: StaleRecoveryMetricLabels = {
+  cacheNamespace: "consumer-cache",
+  useCase: "Load",
+  keyType: "id",
+  outcome: "served",
+};
+void staleRecoveryOutcomes;
+void staleRecoveryLabels;
 const metricLayers: Readonly<Record<MetricLayer, true>> = {
   [CacheLayer.LOCAL]: true,
   [CacheLayer.REMOTE]: true,
@@ -232,6 +256,11 @@ const shadowConfig: ShadowConfig = {
   logMismatches: true,
 };
 const shadowKeyConfig = new DialCacheKeyConfig({ shadow: shadowConfig });
+const staleKeyConfig = new DialCacheKeyConfig({
+  ttlSec: { [CacheLayer.REMOTE]: 60 },
+  staleOnErrorMaxAgeSec: 300,
+});
+const staleRecoveryMaxAgeSec: number | undefined = staleKeyConfig.staleOnErrorMaxAgeSec;
 const dogStatsDClient: DatadogDogStatsDClient = {
   increment: () => undefined,
   histogram: () => undefined,
@@ -580,6 +609,9 @@ void coalesceFlag;
 void structuralConfigProvider;
 void shadowCache;
 void shadowKeyConfig;
+void staleMetrics;
+void staleKeyConfig;
+void staleRecoveryMaxAgeSec;
 void requestLocalCoalescingLabels;
 void cacheMetricLabels;
 void invalidationMetricLabels;
@@ -947,6 +979,7 @@ const esmDisabledOverlay = root.DialCacheKeyConfig.disabled();
 if (
   esmDisabledOverlay.requestLocal !== false
   || esmDisabledOverlay.coalesce !== undefined
+  || esmDisabledOverlay.staleOnErrorMaxAgeSec !== 0
   || esmDisabledOverlay.shadow?.ramp !== 0
   || esmDisabledOverlay.shadow.logMismatches !== false
   || esmDisabledOverlay.ramp[root.CacheLayer.LOCAL] !== 0
@@ -988,6 +1021,42 @@ const inlineSecond = await overlayCache.enable(() =>
 );
 if (inlineCalls !== 1 || inlineSecond !== inlineFirst) {
   throw new Error("The packed ESM runtime did not execute getOrLoad through the cache chain");
+}
+let ancientTimestampReadCalls = 0;
+let ancientTimestampFallbackCalls = 0;
+const ancientTimestampCache = new root.DialCache({
+  redis: {
+    client: {
+      read: async () => {
+        ancientTimestampReadCalls += 1;
+        return {
+          payload: JSON.stringify({ source: "cached" }),
+          createdAtMs: 1,
+        };
+      },
+      write: async () => undefined,
+      invalidate: async () => undefined,
+    },
+  },
+});
+const ancientTimestampLoad = ancientTimestampCache.cached(async () => {
+  ancientTimestampFallbackCalls += 1;
+  return { source: "fallback" };
+}, {
+  keyType: "id",
+  useCase: "PackedAncientUntrackedTimestamp",
+  cacheKey: () => "123",
+  defaultConfig: new root.DialCacheKeyConfig({
+    ttlSec: { [root.CacheLayer.REMOTE]: 60 },
+  }),
+});
+const ancientTimestampValue = await ancientTimestampCache.enable(() => ancientTimestampLoad());
+if (
+  ancientTimestampReadCalls !== 1
+  || ancientTimestampFallbackCalls !== 1
+  || ancientTimestampValue.source !== "fallback"
+) {
+  throw new Error("The packed ESM runtime did not reject an ancient untracked frame timestamp");
 }`,
     ],
     { cwd: workspace },
@@ -1057,7 +1126,7 @@ console.log("${observerIsolationMarker}");`,
 let payload = Buffer.alloc(4 * 1024 * 1024, 1);
 const payloadReference = new WeakRef(payload);
 const redis = {
-  read: async () => ({ payload, createdAtMs: 1 }),
+  read: async () => ({ payload, createdAtMs: Date.now() }),
   write: async () => undefined,
   invalidate: async () => undefined,
 };
@@ -1284,6 +1353,7 @@ const cjsDisabledOverlay = root.DialCacheKeyConfig.disabled();
 if (
   cjsDisabledOverlay.requestLocal !== false
   || cjsDisabledOverlay.coalesce !== undefined
+  || cjsDisabledOverlay.staleOnErrorMaxAgeSec !== 0
   || cjsDisabledOverlay.shadow?.ramp !== 0
   || cjsDisabledOverlay.shadow.logMismatches !== false
   || cjsDisabledOverlay.ramp[root.CacheLayer.LOCAL] !== 0
