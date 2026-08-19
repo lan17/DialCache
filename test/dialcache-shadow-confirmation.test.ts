@@ -25,6 +25,7 @@ import {
   type SerializationMetricLabels,
   type Serializer,
   type ShadowValidationMetricLabels,
+  type StaleRecoveryMetricLabels,
 } from "../src/index.js";
 import {
   deterministicRampSample,
@@ -55,14 +56,14 @@ function deferred<T>(): Deferred<T> {
 
 type ReadStep = () => RedisCachePayload | null | Promise<RedisCachePayload | null>;
 
-const SCRIPTED_FRAME_CREATED_AT_MS = 1_700_000_000_000;
-
 class ScriptedRedis implements DialCacheRedisClient {
+  readonly enforcesMaxAge = true;
   readonly requests: RedisReadRequest[] = [];
   readonly contexts: Array<RedisReadContext | undefined> = [];
   readonly write = vi.fn(async (_request: RedisWriteRequest): Promise<boolean> => true);
   readonly invalidate = vi.fn(async (_request: RedisInvalidationRequest): Promise<void> => undefined);
-  frameCreatedAtMs = SCRIPTED_FRAME_CREATED_AT_MS;
+  frameCreatedAtMs = Date.now();
+  bypassMaxAge = false;
 
   constructor(private readonly steps: ReadStep[]) {}
 
@@ -74,7 +75,13 @@ class ScriptedRedis implements DialCacheRedisClient {
       throw new Error("Unexpected Redis read");
     }
     const payload = await step();
-    return payload === null ? null : { payload, createdAtMs: this.frameCreatedAtMs };
+    if (payload === null) {
+      return null;
+    }
+    if (!this.bypassMaxAge && Date.now() - this.frameCreatedAtMs >= request.maxAgeMs) {
+      return null;
+    }
+    return { payload, createdAtMs: this.frameCreatedAtMs };
   }
 }
 
@@ -104,6 +111,7 @@ class RecordingMetrics implements DialCacheMetricsAdapter {
   readonly ordinaryEvents: OrdinaryMetricEvent[] = [];
   readonly shadowEvents: ShadowValidationMetricLabels[] = [];
   readonly shadowAgeEvents: ShadowAgeEvent[] = [];
+  readonly staleRecoveryEvents: StaleRecoveryMetricLabels[] = [];
 
   request(labels: CacheMetricLabels): void {
     this.record("request", labels);
@@ -135,6 +143,10 @@ class RecordingMetrics implements DialCacheMetricsAdapter {
 
   observeShadowValueAge(labels: ShadowValidationMetricLabels, seconds: number): void {
     this.shadowAgeEvents.push({ labels: { ...labels }, seconds });
+  }
+
+  staleRecovery(labels: StaleRecoveryMetricLabels): void {
+    this.staleRecoveryEvents.push({ ...labels });
   }
 
   observeGet(labels: CacheMetricLabels, _seconds: number): void {
@@ -232,10 +244,13 @@ async function waitForShadowEvents(metrics: RecordingMetrics, count: number): Pr
 function expectTrackedReads(
   redis: ScriptedRedis,
   count: number,
-  options: { readonly singleWatermark?: boolean } = { singleWatermark: true },
+  options: { readonly singleWatermark?: boolean; readonly maxAgeMs?: number } = { singleWatermark: true },
 ): void {
   expect(redis.requests).toHaveLength(count);
   expect(redis.requests.every(({ watermarkKey }) => typeof watermarkKey === "string")).toBe(true);
+  if (options.maxAgeMs !== undefined) {
+    expect(redis.requests.every(({ maxAgeMs }) => maxAgeMs === options.maxAgeMs)).toBe(true);
+  }
   if (options.singleWatermark !== false) {
     expect(new Set(redis.requests.map(({ watermarkKey }) => watermarkKey)).size).toBe(1);
   }
@@ -565,7 +580,7 @@ describe("DialCache Redis shadow confirmation", () => {
           return payload;
         },
       ]);
-      redis.frameCreatedAtMs = nowMs - 90_000;
+      redis.frameCreatedAtMs = nowMs - 30_000;
       const metrics = new RecordingMetrics();
       const dialcache = createCache(redis, metrics);
       const getUser = dialcache.cached(async () => ({ id: "123", version: 2 }), {
@@ -578,7 +593,7 @@ describe("DialCache Redis shadow confirmation", () => {
 
       expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["mismatch"]);
       expect(metrics.shadowAgeEvents).toHaveLength(1);
-      expect(metrics.shadowAgeEvents[0]?.seconds).toBe(90);
+      expect(metrics.shadowAgeEvents[0]?.seconds).toBe(30);
       expect(metrics.shadowAgeEvents[0]?.labels).toMatchObject({
         useCase: "ShadowMismatchValueAge",
         keyType: "user_id",
@@ -593,6 +608,8 @@ describe("DialCache Redis shadow confirmation", () => {
     const payload = JSON.stringify({ id: "123", version: 1 });
     const redis = new ScriptedRedis([() => payload]);
     redis.frameCreatedAtMs = Number.NaN;
+    // Deliberately violate the adapter contract to verify core metric isolation.
+    redis.bypassMaxAge = true;
     const metrics = new RecordingMetrics();
     const dialcache = createCache(redis, metrics);
     const getUser = dialcache.cached(async () => ({ id: "123", version: 1 }), {
@@ -860,6 +877,53 @@ describe("DialCache Redis shadow confirmation", () => {
     expectTrackedReads(redis, 1);
   });
 
+  it("never serves retained stale data when remote serving is ramped down", async () => {
+    const stalePayload = JSON.stringify({ id: "123", source: "stale-cache" });
+    const redis = new ScriptedRedis([() => stalePayload]);
+    redis.frameCreatedAtMs = Date.now() - 120_000;
+    const metrics = new RecordingMetrics();
+    const sourceError = Object.freeze({ code: "SOURCE_UNAVAILABLE" });
+    const source = vi.fn(async () => {
+      throw sourceError;
+    });
+    const dialcache = createCache(redis, metrics);
+    const getUser = dialcache.cached(source, {
+      ...trackedOptions("ShadowDarkRetainedStale", new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 0 },
+        staleOnErrorMaxAgeSec: 3_600,
+        shadow: { ramp: 100 },
+      })),
+      cacheKey: () => "123",
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).rejects.toBe(sourceError);
+    await waitForShadowEvents(metrics, 1);
+
+    expect(source).toHaveBeenCalledOnce();
+    expectTrackedReads(redis, 1, { maxAgeMs: 60_000 });
+    expect(metrics.staleRecoveryEvents).toHaveLength(0);
+    expect(redis.write).not.toHaveBeenCalled();
+    expect(redis.invalidate).not.toHaveBeenCalled();
+    expect(metrics.shadowEvents).toEqual([{
+      cacheNamespace: "urn",
+      useCase: "ShadowDarkRetainedStale",
+      keyType: "user_id",
+      outcome: "source_error",
+    }]);
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "request" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+    )).toHaveLength(1);
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "get" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+    )).toHaveLength(1);
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "disabled"
+      && labels.layer === CacheLayer.REMOTE
+      && labels.reason === "ramped_down"
+    )).toHaveLength(1);
+  });
+
   it("does not misclassify a source-propagated FallbackTimeoutError as its own timeout", async () => {
     const redis = new ScriptedRedis([() => JSON.stringify({ id: "123", source: "cache" })]);
     const metrics = new RecordingMetrics();
@@ -997,7 +1061,7 @@ describe("DialCache Redis shadow confirmation", () => {
   it.each([
     { name: "tracked", tracked: true },
     { name: "untracked", tracked: false },
-  ])("fills a clean $name dark Redis miss and attributes the read and write to remote_shadow", async ({
+  ])("retains a clean $name dark Redis miss through M and attributes the work to remote_shadow", async ({
     name,
     tracked,
   }) => {
@@ -1010,7 +1074,12 @@ describe("DialCache Redis shadow confirmation", () => {
       useCase: `ShadowDarkMissFill${name}`,
       cacheKey: () => "123",
       trackForInvalidation: tracked,
-      defaultConfig: remoteConfig(0),
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 0 },
+        staleOnErrorMaxAgeSec: 3_600,
+        shadow: { ramp: 100 },
+      }),
     });
 
     await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ id: "123" });
@@ -1026,7 +1095,7 @@ describe("DialCache Redis shadow confirmation", () => {
     }
     expect(redis.write).toHaveBeenCalledOnce();
     expect(redis.write).toHaveBeenCalledWith(expect.objectContaining({
-      cacheTtlMs: 60_000,
+      cacheTtlMs: 3_600_000,
       value: JSON.stringify({ id: "123" }),
     }));
     expect(Object.hasOwn(redis.write.mock.calls[0]?.[0] ?? {}, "watermarkKey")).toBe(tracked);

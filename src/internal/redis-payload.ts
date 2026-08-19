@@ -6,11 +6,12 @@ import {
   type DecodedRedisFrame,
   type RedisCachePayload,
 } from "../redis-client.js";
+import { MAX_SUPPORTED_DURATION_MS } from "./duration.js";
 
 export const REDIS_FRAME_VERSION = 1;
 const REDIS_ENCODING_UTF8 = 0;
 const REDIS_ENCODING_BINARY = 1;
-/** Version byte of a tracked-write placeholder; no read path serves it. */
+/** Version byte of a write placeholder; no read path serves it. */
 export const REDIS_FRAME_PLACEHOLDER_VERSION = 0;
 const REDIS_FRAME_TIMESTAMP_OFFSET = 1;
 export const REDIS_FRAME_TIMESTAMP_BYTES = 8;
@@ -79,12 +80,10 @@ function encodeFrameBytes(payload: RedisCachePayload, version: number, stampByte
 /**
  * Encode a serializer payload into a servable DialCache Redis frame.
  *
- * Untracked writes stamp a client-clock `createdAtMs`. Untracked reads never
- * consult the stamp for serving or miss decisions, but they surface it as the
- * decoded frame's `createdAtMs`, which feeds the shadow value-age
- * observation — so stamp real client time, not a constant. Tracked writes
- * must not use this directly — they pair `encodeTrackedRedisPlaceholder`
- * with `WRITE_TRACKED_STAMP_SCRIPT` instead.
+ * This fully stamped encoder is available for protocol tooling. Bundled
+ * adapters do not use it for writes: they pair
+ * `encodeTrackedRedisPlaceholder` with the appropriate server-time stamp
+ * script so logical age never depends on the writer's wall clock.
  */
 export function encodeRedisFrame(payload: RedisCachePayload, createdAtMs: number): Buffer {
   if (!Number.isSafeInteger(createdAtMs) || createdAtMs < 0) {
@@ -98,13 +97,14 @@ export function encodeRedisFrame(payload: RedisCachePayload, createdAtMs: number
 export interface TrackedRedisPlaceholder {
   /** Version-0 frame that no read path serves until the stamp promotes it. */
   readonly frame: Buffer;
-  /** Per-write identity passed to `WRITE_TRACKED_STAMP_SCRIPT` as its nonce argument. */
+  /** Per-write identity passed to the selected stamp script as its nonce argument. */
   readonly nonce: Buffer;
 }
 
 /**
- * Encode the placeholder frame a tracked write pairs with
- * `WRITE_TRACKED_STAMP_SCRIPT`.
+ * Encode the placeholder frame a write pairs with its tracked or untracked
+ * server-time stamp script. The historical public name is retained because
+ * tracked writes introduced this wire shape.
  *
  * The frame carries the placeholder version byte, so both read paths treat it
  * as a miss, and a fresh random nonce where a stamped frame carries its
@@ -121,20 +121,23 @@ export function encodeTrackedRedisPlaceholder(payload: RedisCachePayload): Track
 }
 
 /**
- * Decode an untracked DialCache frame returned as a Redis bulk string into
- * its serializer payload and header creation time (the writer's informational
- * client clock). Missing, short, and unsupported-version frames are cache
- * misses. Invalid runtime reply types and unsupported payload encodings throw
- * typed errors.
+ * Decode an untracked DialCache frame returned as a Redis bulk string into its
+ * serializer payload and Redis-server creation time. Missing, short,
+ * unsupported-version, and unsafe-timestamp frames are cache misses. Invalid
+ * runtime reply types and unsupported payload encodings throw typed errors.
  */
 export function decodeRedisFrame(raw: unknown): DecodedRedisFrame | null {
   const frame = validateRedisBulkStringReply(raw);
   if (!isSupportedRedisFrame(frame)) {
     return null;
   }
+  const createdAtMs = readFrameCreatedAtMs(frame);
+  if (createdAtMs === null) {
+    return null;
+  }
   return {
     payload: decodeRedisPayload(frame.subarray(REDIS_FRAME_HEADER_BYTES)),
-    createdAtMs: readFrameCreatedAtMs(frame),
+    createdAtMs,
   };
 }
 
@@ -159,7 +162,7 @@ export function decodeTrackedRedisFrame(
     return null;
   }
   const createdAtMs = readFrameCreatedAtMs(frame);
-  return createdAtMs <= watermark
+  return createdAtMs === null || createdAtMs <= watermark
     ? null
     : {
         payload: decodeRedisPayload(frame.subarray(REDIS_FRAME_HEADER_BYTES)),
@@ -167,6 +170,69 @@ export function decodeTrackedRedisFrame(
       };
 }
 
-function readFrameCreatedAtMs(frame: Buffer): number {
-  return Number(frame.readBigUInt64BE(REDIS_FRAME_TIMESTAMP_OFFSET));
+/**
+ * Decode the native Redis `TIME` reply into epoch milliseconds. With binary
+ * replies enabled, Redis returns two bulk strings: whole seconds and the
+ * microsecond offset within that second. Any malformed or unsafe value is a
+ * payload protocol error rather than an imprecise clock reading.
+ */
+export function decodeRedisServerTime(raw: unknown): number {
+  if (!Array.isArray(raw) || raw.length !== 2) {
+    throw invalidRedisTimeReply();
+  }
+  const [rawSeconds, rawMicroseconds] = raw;
+  if (!Buffer.isBuffer(rawSeconds) || !Buffer.isBuffer(rawMicroseconds)) {
+    throw invalidRedisTimeReply();
+  }
+  const secondsText = rawSeconds.toString("utf8");
+  const microsecondsText = rawMicroseconds.toString("utf8");
+  if (!/^[0-9]+$/.test(secondsText) || !/^[0-9]+$/.test(microsecondsText)) {
+    throw invalidRedisTimeReply();
+  }
+
+  const seconds = BigInt(secondsText);
+  const microseconds = BigInt(microsecondsText);
+  if (microseconds > 999_999n) {
+    throw invalidRedisTimeReply();
+  }
+  const serverNowMs = seconds * 1_000n + microseconds / 1_000n;
+  if (serverNowMs > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw invalidRedisTimeReply();
+  }
+  return Number(serverNowMs);
+}
+
+/** Validate the semantic read age before an adapter dispatches any commands. */
+export function assertValidRedisMaxAgeMs(maxAgeMs: number): void {
+  if (
+    !Number.isSafeInteger(maxAgeMs)
+    || maxAgeMs <= 0
+    || maxAgeMs > MAX_SUPPORTED_DURATION_MS
+  ) {
+    throw new RangeError(
+      `DialCache Redis maxAgeMs must be a positive safe integer no greater than ${MAX_SUPPORTED_DURATION_MS}`,
+    );
+  }
+}
+
+/** Return whether a decoded frame is strictly younger than the requested age. */
+export function isRedisFrameWithinMaxAge(
+  frame: DecodedRedisFrame,
+  serverNowMs: number,
+  maxAgeMs: number,
+): boolean {
+  assertValidRedisMaxAgeMs(maxAgeMs);
+  const ageMs = serverNowMs - frame.createdAtMs;
+  return ageMs >= 0 && ageMs < maxAgeMs;
+}
+
+function invalidRedisTimeReply(): DialCacheRedisPayloadError {
+  return new DialCacheRedisPayloadError(
+    "Invalid DialCache Redis TIME reply; expected two unsigned decimal bulk strings",
+  );
+}
+
+function readFrameCreatedAtMs(frame: Buffer): number | null {
+  const createdAtMs = frame.readBigUInt64BE(REDIS_FRAME_TIMESTAMP_OFFSET);
+  return createdAtMs <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(createdAtMs) : null;
 }

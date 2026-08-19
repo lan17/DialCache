@@ -1,8 +1,11 @@
 import {
+  assertValidRedisMaxAgeMs,
+  decodeRedisServerTime,
   decodeRedisFrame,
   decodeTrackedRedisFrame,
   encodeRedisFrame,
   encodeTrackedRedisPlaceholder,
+  isRedisFrameWithinMaxAge,
 } from "../src/redis-protocol.js";
 import {
   DialCacheRedisPayloadEncodingError,
@@ -26,6 +29,71 @@ function encodeFrame(
 }
 
 describe("Redis frame decoding", () => {
+  it("decodes Redis TIME exactly to millisecond precision", () => {
+    expect(decodeRedisServerTime([Buffer.from("0"), Buffer.from("0")])).toBe(0);
+    expect(decodeRedisServerTime([Buffer.from("1723456789"), Buffer.from("123999")]))
+      .toBe(1_723_456_789_123);
+    expect(decodeRedisServerTime([Buffer.from("1"), Buffer.from("999999")])).toBe(1_999);
+  });
+
+  it("rejects malformed, out-of-range, and unsafe Redis TIME replies", () => {
+    const malformed: readonly unknown[] = [
+      null,
+      [],
+      [Buffer.from("1")],
+      [Buffer.from("1"), Buffer.from("0"), Buffer.from("0")],
+      ["1", Buffer.from("0")],
+      [Buffer.from("1"), "0"],
+      [Buffer.from(""), Buffer.from("0")],
+      [Buffer.from("-1"), Buffer.from("0")],
+      [Buffer.from("1.0"), Buffer.from("0")],
+      [Buffer.from("1"), Buffer.from("1000000")],
+      [Buffer.from("9007199254741"), Buffer.from("0")],
+    ];
+
+    for (const raw of malformed) {
+      expect(() => decodeRedisServerTime(raw)).toThrow(DialCacheRedisPayloadError);
+      expect(() => decodeRedisServerTime(raw)).toThrow(
+        "Invalid DialCache Redis TIME reply; expected two unsigned decimal bulk strings",
+      );
+    }
+  });
+
+  it("uses a strict maximum-age boundary against Redis server time", () => {
+    const frame = decodeRedisFrame(encodeFrame("cached", 0, 1_000));
+    if (frame === null) {
+      throw new Error("Expected a decoded frame");
+    }
+
+    expect(isRedisFrameWithinMaxAge(frame, 1_099, 100)).toBe(true);
+    expect(isRedisFrameWithinMaxAge(frame, 1_100, 100)).toBe(false);
+    expect(isRedisFrameWithinMaxAge(frame, 1_101, 100)).toBe(false);
+    // A valid GET/MGET-then-TIME pair cannot observe a future server-stamped
+    // frame, so reject legacy client-clock and corrupt future stamps.
+    expect(isRedisFrameWithinMaxAge(frame, 999, 100)).toBe(false);
+  });
+
+  it("rejects invalid maximum ages even before a frame can be served", () => {
+    expect(() => assertValidRedisMaxAgeMs(1)).not.toThrow();
+    expect(() => assertValidRedisMaxAgeMs(31_536_000_000)).not.toThrow();
+
+    for (const maxAgeMs of [
+      0,
+      -1,
+      0.5,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      31_536_000_001,
+      "100" as unknown as number,
+    ]) {
+      expect(() => assertValidRedisMaxAgeMs(maxAgeMs)).toThrow(
+        new RangeError(
+          "DialCache Redis maxAgeMs must be a positive safe integer no greater than 31536000000",
+        ),
+      );
+    }
+  });
+
   it("decodes UTF-8 and binary payloads without copying binary data", () => {
     expect(decodeRedisFrame(encodeFrame("cached"))).toEqual({ payload: "cached", createdAtMs: 1_000 });
 
@@ -42,10 +110,15 @@ describe("Redis frame decoding", () => {
     expect(payload.byteLength).toBe(frame.byteLength - 10);
   });
 
-  it("treats missing, short, and unsupported frames as misses", () => {
+  it("treats missing, short, unsupported, and unsafe-timestamp frames as misses", () => {
     expect(decodeRedisFrame(null)).toBeNull();
     expect(decodeRedisFrame(Buffer.alloc(9))).toBeNull();
     expect(decodeRedisFrame(encodeFrame("cached", 0, 1_000, 2))).toBeNull();
+
+    const unsafeTimestamp = encodeFrame("cached");
+    unsafeTimestamp.writeBigUInt64BE(BigInt(Number.MAX_SAFE_INTEGER) + 1n, 1);
+    expect(decodeRedisFrame(unsafeTimestamp)).toBeNull();
+    expect(decodeTrackedRedisFrame(unsafeTimestamp, Buffer.from("0"))).toBeNull();
   });
 
   it("rejects unsupported payload encodings after validating the frame", () => {

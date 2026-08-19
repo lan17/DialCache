@@ -38,6 +38,20 @@ end`;
 const REDIS_TIME_LUA = String.raw`local redis_time = redis.call("TIME")
 local now_ms = tonumber(redis_time[1]) * 1000 + math.floor(tonumber(redis_time[2]) / 1000)`;
 
+export const WRITE_UNTRACKED_STAMP_SCRIPT = [
+  String.raw`if string.len(ARGV[1]) ~= ${REDIS_FRAME_TIMESTAMP_BYTES} then
+  return redis.error_reply("ERR invalid DialCache stamp nonce")
+end`,
+  REDIS_TIME_LUA,
+  String.raw`if redis.call("GETRANGE", KEYS[1], 0, ${REDIS_FRAME_HEADER_BYTES - 1}) == string.char(${REDIS_FRAME_PLACEHOLDER_VERSION}) .. ARGV[1] then
+  redis.call("SETRANGE", KEYS[1], 0, string.char(${REDIS_FRAME_VERSION}) .. struct.pack(">I8", now_ms))
+  return 1
+end
+
+-- Never promote a frame or placeholder this stamp does not own.
+return 2`,
+].join("\n\n");
+
 export const WRITE_TRACKED_STAMP_SCRIPT = [
   PARSE_WATERMARK_LUA,
   CEIL_FINITE_NUMBER_LUA,

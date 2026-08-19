@@ -65,6 +65,7 @@ function redisClient(read: DialCacheRedisClient["read"]): {
   const write = vi.fn<DialCacheRedisClient["write"]>(async () => true);
   return {
     client: {
+      enforcesMaxAge: true,
       read: readMock,
       write,
       invalidate: async () => undefined,
@@ -178,6 +179,20 @@ describe("DialCache Redis read deadlines", () => {
     expect(
       () => new DialCache({ redis: { client, readTimeoutMs: 2_147_483_647 } }),
     ).not.toThrow();
+  });
+
+  it("rejects legacy semantic clients that do not attest max-age enforcement", () => {
+    const legacyClient = {
+      read: async () => null,
+      write: async () => true,
+      invalidate: async () => undefined,
+    };
+
+    expect(
+      () => new DialCache({
+        redis: { client: legacyClient as unknown as DialCacheRedisClient },
+      }),
+    ).toThrow(new TypeError("DialCache Redis client must declare enforcesMaxAge: true"));
   });
 
   it("rejects invalid static use-case overrides before reserving the use-case name", () => {

@@ -17,6 +17,7 @@ const remoteOnly = new DialCacheKeyConfig({
   ttlSec: { [CacheLayer.REMOTE]: 60 },
   ramp: { [CacheLayer.REMOTE]: 100 },
 });
+const PROTOCOL_READ_MAX_AGE_MS = 60_000;
 
 const createTestCluster = (options: RedisClusterOptions) =>
   createCluster({
@@ -237,6 +238,7 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
       scriptClient.read({
         valueKey: "{slot-a}:value",
         watermarkKey: "{slot-b}:watermark",
+        maxAgeMs: PROTOCOL_READ_MAX_AGE_MS,
       }),
     ).rejects.toThrow(/CROSSSLOT/);
     await expect(
@@ -258,7 +260,7 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
     const payload = Buffer.from(Array.from({ length: 256 }, (_, index) => index));
 
     expect(await scriptClient.write({ valueKey, cacheTtlMs: 60_000, value: payload })).toBe(true);
-    const untrackedRead = await scriptClient.read({ valueKey });
+    const untrackedRead = await scriptClient.read({ valueKey, maxAgeMs: PROTOCOL_READ_MAX_AGE_MS });
     expect(untrackedRead?.payload).toEqual(payload);
     expect(untrackedRead?.createdAtMs).toBeGreaterThan(0);
 
@@ -278,7 +280,11 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
         value: trackedPayload,
       }),
     ).toBe(true);
-    const trackedRead = await scriptClient.read({ valueKey: trackedValueKey, watermarkKey });
+    const trackedRead = await scriptClient.read({
+      valueKey: trackedValueKey,
+      watermarkKey,
+      maxAgeMs: PROTOCOL_READ_MAX_AGE_MS,
+    });
     expect(trackedRead?.payload).toEqual(trackedPayload);
     expect(trackedRead?.createdAtMs).toBeGreaterThan(0);
   });
@@ -294,21 +300,24 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
     expect(
       await adapter.write({ valueKey, watermarkKey, cacheTtlMs: 60_000, value: "glide" }),
     ).toBe(true);
-    expect((await adapter.read({ valueKey, watermarkKey }))?.payload).toBe("glide");
+    expect((await adapter.read({ valueKey, watermarkKey, maxAgeMs: PROTOCOL_READ_MAX_AGE_MS }))?.payload).toBe("glide");
 
     await adapter.invalidate({ watermarkKey, futureBufferMs: 0 });
     // The follow-up write's stamp is fenced unless server time passes the
     // zero-buffer watermark; the read-null below holds at any margin.
     await new Promise((resolve) => setTimeout(resolve, 25));
-    expect(await adapter.read({ valueKey, watermarkKey })).toBeNull();
+    expect(await adapter.read({ valueKey, watermarkKey, maxAgeMs: PROTOCOL_READ_MAX_AGE_MS })).toBeNull();
     expect(
       await adapter.write({ valueKey, watermarkKey, cacheTtlMs: 60_000, value: "glide-2" }),
     ).toBe(true);
-    expect((await adapter.read({ valueKey, watermarkKey }))?.payload).toBe("glide-2");
+    expect((await adapter.read({ valueKey, watermarkKey, maxAgeMs: PROTOCOL_READ_MAX_AGE_MS }))?.payload).toBe("glide-2");
 
     const untrackedKey = "glide-cluster:{item:untracked}:value";
     expect(await adapter.write({ valueKey: untrackedKey, cacheTtlMs: 60_000, value: "plain" })).toBe(true);
-    expect((await adapter.read({ valueKey: untrackedKey }))?.payload).toBe("plain");
+    expect((await adapter.read({
+      valueKey: untrackedKey,
+      maxAgeMs: PROTOCOL_READ_MAX_AGE_MS,
+    }))?.payload).toBe("plain");
 
     await expect(adapter.write({
       valueKey: "{glide-a}:value",
@@ -339,10 +348,10 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
     expect(
       await adapter.write({ valueKey, watermarkKey, cacheTtlMs: 60_000, value: "recovered" }),
     ).toBe(true);
-    expect((await adapter.read({ valueKey, watermarkKey }))?.payload).toBe("recovered");
+    expect((await adapter.read({ valueKey, watermarkKey, maxAgeMs: PROTOCOL_READ_MAX_AGE_MS }))?.payload).toBe("recovered");
 
     await flushAllMasters();
     await expect(adapter.invalidate({ watermarkKey, futureBufferMs: 0 })).resolves.toBeUndefined();
-    expect(await adapter.read({ valueKey, watermarkKey })).toBeNull();
+    expect(await adapter.read({ valueKey, watermarkKey, maxAgeMs: PROTOCOL_READ_MAX_AGE_MS })).toBeNull();
   });
 });

@@ -300,13 +300,13 @@ describe("DialCache Redis TTL layer", () => {
     const payload = Buffer.from([0, 1, 2, 0xff]);
     await redis.write({ valueKey, cacheTtlMs: 60_000, value: payload });
 
-    const firstRead = await redis.read({ valueKey });
+    const firstRead = await redis.read({ valueKey, maxAgeMs: 60_000 });
     if (!Buffer.isBuffer(firstRead?.payload)) {
       throw new Error("Expected a binary Redis payload");
     }
     firstRead.payload[0] = 0xff;
 
-    expect((await redis.read({ valueKey }))?.payload).toEqual(payload);
+    expect((await redis.read({ valueKey, maxAgeMs: 60_000 }))?.payload).toEqual(payload);
   });
 
   it("fails open when Redis serializer dump fails", async () => {
@@ -421,6 +421,7 @@ describe("DialCache Redis TTL layer", () => {
 
   it("records a distinct metric label when a Redis adapter reports invalid payload encoding", async () => {
     const redisClient: DialCacheRedisClient = {
+      enforcesMaxAge: true,
       read: vi.fn(async () => {
         throw new DialCacheRedisPayloadEncodingError("Invalid DialCache Redis payload encoding");
       }),

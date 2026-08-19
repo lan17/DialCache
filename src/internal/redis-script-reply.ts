@@ -36,6 +36,26 @@ export function resolveTrackedRedisWriteReply(reply: unknown): boolean {
   return stamp === 1;
 }
 
+/**
+ * Resolve the untracked stamp's narrower reply domain: 1 is promoted and 2
+ * means the paired placeholder disappeared. Untracked writes have no
+ * invalidation-fenced false outcome, so every other reply is a protocol
+ * violation.
+ */
+export function resolveUntrackedRedisWriteReply(reply: unknown): true {
+  if (reply === 1) {
+    return true;
+  }
+  if (reply === 2) {
+    throw new DialCacheRedisPlaceholderLostError(
+      "DialCache untracked write lost its placeholder before the stamp; the SET was rejected, overwritten, or expired",
+    );
+  }
+  throw new DialCacheRedisProtocolError(
+    "Invalid DialCache Redis untracked write reply; expected integer 1 or 2",
+  );
+}
+
 export function validateRedisScriptInvalidationReply(reply: unknown): 1 {
   if (reply !== 1) {
     throw new DialCacheRedisProtocolError("Invalid DialCache Redis invalidate reply; expected integer 1");

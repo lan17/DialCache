@@ -12,6 +12,7 @@ const FRAME_VERSION = 1;
 const ENCODING_OFFSET = 9;
 const PAYLOAD_OFFSET = 10;
 const WATERMARK_TTL_MARGIN_MS = 60_000;
+const MAX_SUPPORTED_DURATION_MS = 365 * 24 * 60 * 60 * 1_000;
 
 interface StoredValue {
   value: Buffer;
@@ -19,6 +20,7 @@ interface StoredValue {
 }
 
 export class FakeRedis implements DialCacheRedisClient {
+  readonly enforcesMaxAge = true as const;
   readonly values = new Map<string, StoredValue>();
   getCalls = 0;
   mGetCalls = 0;
@@ -28,7 +30,8 @@ export class FakeRedis implements DialCacheRedisClient {
   failWatermarkGet = false;
   getGate: Promise<void> | null = null;
 
-  async read({ valueKey, watermarkKey }: RedisReadRequest): Promise<DecodedRedisFrame | null> {
+  async read({ valueKey, watermarkKey, maxAgeMs }: RedisReadRequest): Promise<DecodedRedisFrame | null> {
+    assertValidMaxAgeMs(maxAgeMs);
     if (watermarkKey === undefined) {
       this.getCalls += 1;
     } else {
@@ -36,7 +39,7 @@ export class FakeRedis implements DialCacheRedisClient {
     }
     await this.waitForRead();
     this.throwIfReadFails(watermarkKey !== undefined);
-    return this.readPayload(valueKey, watermarkKey ?? null);
+    return this.readPayload(valueKey, watermarkKey ?? null, maxAgeMs);
   }
 
   async write({
@@ -123,13 +126,21 @@ export class FakeRedis implements DialCacheRedisClient {
     }
   }
 
-  private readPayload(valueKey: string, watermarkKey: string | null): DecodedRedisFrame | null {
+  private readPayload(
+    valueKey: string,
+    watermarkKey: string | null,
+    maxAgeMs: number,
+  ): DecodedRedisFrame | null {
     const raw = this.readRaw(valueKey);
     if (raw === null || raw.length < PAYLOAD_OFFSET || raw[0] !== FRAME_VERSION) {
       return null;
     }
 
     const createdAtMs = Number(readTimestamp(raw));
+    const ageMs = Date.now() - createdAtMs;
+    if (ageMs < 0 || ageMs >= maxAgeMs) {
+      return null;
+    }
     if (watermarkKey !== null) {
       let watermark: number | null;
       try {
@@ -204,6 +215,17 @@ export class FakeRedis implements DialCacheRedisClient {
       return -2;
     }
     return Math.max(entry.expiresAtMs - Date.now(), 0);
+  }
+}
+
+function assertValidMaxAgeMs(maxAgeMs: unknown): asserts maxAgeMs is number {
+  if (
+    typeof maxAgeMs !== "number"
+    || !Number.isSafeInteger(maxAgeMs)
+    || maxAgeMs <= 0
+    || maxAgeMs > MAX_SUPPORTED_DURATION_MS
+  ) {
+    throw new RangeError("Invalid DialCache Redis maxAgeMs");
   }
 }
 
