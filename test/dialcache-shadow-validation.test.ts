@@ -321,7 +321,7 @@ describe("DialCache Redis shadow validation", () => {
         id: "123",
         useCase,
         payload: JSON.stringify({ id: "123", version: 1 }),
-        createdAtMs: nowMs - 120_000,
+        createdAtMs: nowMs - 50_000,
       });
       const dialcache = createShadowCache(redis, metrics);
       const getUser = dialcache.cached(async () => ({ id: "123", version: 2 }), {
@@ -334,14 +334,14 @@ describe("DialCache Redis shadow validation", () => {
 
       expect(metrics.shadowEvents[0]?.outcome).toBe("mismatch");
       expect(metrics.shadowAgeEvents).toHaveLength(1);
-      expect(metrics.shadowAgeEvents[0]?.seconds).toBe(120);
+      expect(metrics.shadowAgeEvents[0]?.seconds).toBe(50);
       expect(metrics.shadowAgeEvents[0]?.labels).toMatchObject({ useCase, outcome: "mismatch" });
     } finally {
       nowSpy.mockRestore();
     }
   });
 
-  it("clamps a future-stamped frame to a zero value age instead of a negative one", async () => {
+  it("rejects a future-stamped frame as a logical miss instead of reporting a negative age", async () => {
     const nowMs = 1_700_000_000_000;
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(nowMs);
     try {
@@ -356,17 +356,19 @@ describe("DialCache Redis shadow validation", () => {
         createdAtMs: nowMs + 60_000,
       });
       const dialcache = createShadowCache(redis, metrics);
-      const getUser = dialcache.cached(async () => cachedValue, {
+      const source = vi.fn(async () => cachedValue);
+      const getUser = dialcache.cached(source, {
         ...trackedRemoteDefaults(useCase),
         cacheKey: () => "123",
       });
 
       expect(await dialcache.enable(async () => await getUser())).toEqual(cachedValue);
-      await waitForShadowEvents(metrics, 1);
+      await nextImmediate();
 
-      expect(metrics.shadowEvents[0]?.outcome).toBe("match");
-      expect(metrics.shadowAgeEvents).toHaveLength(1);
-      expect(metrics.shadowAgeEvents[0]?.seconds).toBe(0);
+      expect(source).toHaveBeenCalledOnce();
+      expect(metrics.shadowEvents).toHaveLength(0);
+      expect(metrics.shadowAgeEvents).toHaveLength(0);
+      expect(redis.setCalls).toBe(1);
     } finally {
       nowSpy.mockRestore();
     }

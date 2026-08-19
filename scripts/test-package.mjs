@@ -43,27 +43,35 @@ const rootConsumer = `import {
   type RedisConfig,
   type RedisInvalidationRequest,
   type RedisReadContext,
+  type RedisReadRequest,
   type RedisWriteRequest,
   type Serializer,
   type ShadowComparator,
   type ShadowConfig,
   type ShadowValidationMetricLabels,
   type ShadowValidationOutcome,
+  type StaleRecoveryMetricLabels,
+  type StaleRecoveryOutcome,
 } from "dialcache";
 // @ts-expect-error The unused MissingKeyConfigError class was removed instead of deprecated.
 import { MissingKeyConfigError } from "dialcache";
 import { DialCacheRedisPlaceholderLostError } from "dialcache";
 import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "dialcache/node-redis";
 import {
+  assertValidRedisMaxAgeMs,
   ceilSupportedCacheTtlMs,
   decodeRedisFrame,
+  decodeRedisServerTime,
   decodeTrackedRedisFrame,
   encodeRedisFrame,
   encodeTrackedRedisPlaceholder,
+  isRedisFrameWithinMaxAge,
+  resolveUntrackedRedisWriteReply,
   resolveTrackedRedisWriteReply,
   validateRedisScriptInvalidationReply,
   validateRedisSetReply,
   WRITE_TRACKED_STAMP_SCRIPT,
+  WRITE_UNTRACKED_STAMP_SCRIPT,
   type DecodedRedisFrame,
   type TrackedRedisPlaceholder,
 } from "dialcache/redis-protocol";
@@ -77,7 +85,7 @@ import { REDIS_ENCODING_BINARY } from "dialcache/redis-protocol";
 import { READ_CACHE_SCRIPT } from "dialcache/redis-protocol";
 // @ts-expect-error Tracked read Lua was removed from the mutation-only Redis protocol.
 import { READ_TRACKED_CACHE_SCRIPT } from "dialcache/redis-protocol";
-// @ts-expect-error The untracked write Lua was replaced by a native client-framed SET.
+// @ts-expect-error The monolithic untracked write Lua was replaced by native SET plus a stamp script.
 import { WRITE_CACHE_SCRIPT } from "dialcache/redis-protocol";
 // @ts-expect-error The tracked write Lua was replaced by a native SET plus the stamp script.
 import { WRITE_TRACKED_CACHE_SCRIPT } from "dialcache/redis-protocol";
@@ -117,6 +125,13 @@ const shadowMetrics: DialCacheMetricsAdapter = {
     void outcome;
   },
 };
+const staleMetrics: DialCacheMetricsAdapter = {
+  ...metrics,
+  staleRecovery: (labels: StaleRecoveryMetricLabels) => {
+    const outcome: StaleRecoveryOutcome = labels.outcome;
+    void outcome;
+  },
+};
 const shadowOutcomes: Readonly<Record<ShadowValidationOutcome, true>> = {
   match: true,
   mismatch: true,
@@ -133,6 +148,21 @@ const shadowOutcomes: Readonly<Record<ShadowValidationOutcome, true>> = {
   dropped: true,
 };
 void shadowOutcomes;
+const staleRecoveryOutcomes: Readonly<Record<StaleRecoveryOutcome, true>> = {
+  served: true,
+  miss: true,
+  read_error: true,
+  read_timeout: true,
+  deserialization_error: true,
+};
+const staleRecoveryLabels: StaleRecoveryMetricLabels = {
+  cacheNamespace: "consumer-cache",
+  useCase: "Load",
+  keyType: "id",
+  outcome: "served",
+};
+void staleRecoveryOutcomes;
+void staleRecoveryLabels;
 const metricLayers: Readonly<Record<MetricLayer, true>> = {
   [CacheLayer.LOCAL]: true,
   [CacheLayer.REMOTE]: true,
@@ -152,6 +182,11 @@ const shadowConfig: ShadowConfig = {
   logMismatches: true,
 };
 const shadowKeyConfig = new DialCacheKeyConfig({ shadow: shadowConfig });
+const staleKeyConfig = new DialCacheKeyConfig({
+  ttlSec: { [CacheLayer.REMOTE]: 60 },
+  staleOnErrorMaxAgeSec: 300,
+});
+const staleRecoveryMaxAgeSec: number | undefined = staleKeyConfig.staleOnErrorMaxAgeSec;
 const dogStatsDClient: DatadogDogStatsDClient = {
   increment: () => undefined,
   histogram: () => undefined,
@@ -176,14 +211,29 @@ const decodedStaleRedisFrame: DecodedRedisFrame | null = decodeTrackedRedisFrame
   emptyRedisFrame,
   Buffer.from("1"),
 );
+const decodedRedisServerTimeMs: number = decodeRedisServerTime([
+  Buffer.from("1"),
+  Buffer.from("500000"),
+]);
+assertValidRedisMaxAgeMs(1_500);
+const frameWithinMaxAge: boolean = decodedEmptyRedisFrame === null
+  ? false
+  : isRedisFrameWithinMaxAge(decodedEmptyRedisFrame, 1_500, 1_500);
 const placeholderRedisFrame: Buffer = encodeRedisFrame("pending", 0);
 const trackedRedisPlaceholder: TrackedRedisPlaceholder = encodeTrackedRedisPlaceholder("pending");
 const stampReplyResolution: boolean = resolveTrackedRedisWriteReply(1);
+const untrackedStampReplyResolution: true = resolveUntrackedRedisWriteReply(1);
 const setReplyValidation: void = validateRedisSetReply("OK");
 const invalidationReplyValidation: 1 = validateRedisScriptInvalidationReply(1);
 const ceiledCacheTtlMs: number = ceilSupportedCacheTtlMs(1_000.5);
 const placeholderLostError = new DialCacheRedisPlaceholderLostError("lost");
 const stampScriptSource: string = WRITE_TRACKED_STAMP_SCRIPT;
+const untrackedStampScriptSource: string = WRITE_UNTRACKED_STAMP_SCRIPT;
+const untrackedStampArguments: Array<string | Buffer> =
+  dialcacheRedisScripts.dialcacheWriteUntrackedStamp.transformArguments(
+    "untracked:{id}:value",
+    trackedRedisPlaceholder.nonce,
+  );
 const stampArguments: Array<string | Buffer> = dialcacheRedisScripts.dialcacheWriteTrackedStamp.transformArguments(
   "tracked:{id}:value",
   "tracked:{id}:watermark",
@@ -401,12 +451,24 @@ const compressionOperationMetricLabels: CompressionOperationMetricLabels = {
 const unboundedCompressionOutcome: CompressionOutcome = "inflated";
 
 const customRedisClient: DialCacheRedisClient = {
-  // The optional second read argument preserves one-argument custom clients.
-  read: async () => ({ payload: Buffer.from([0, 255]), createdAtMs: 1 }),
+  enforcesMaxAge: true,
+  read: async ({ maxAgeMs }) => {
+    const createdAtMs = Date.now();
+    return Date.now() - createdAtMs < maxAgeMs
+      ? { payload: Buffer.from([0, 255]), createdAtMs }
+      : null;
+  },
   write: async ({ value }) => typeof value === "string" || Buffer.isBuffer(value),
   invalidate: async () => undefined,
 };
+const redisReadRequest: RedisReadRequest = {
+  valueKey: "untracked:{id}:value",
+  maxAgeMs: 1_000,
+};
+// @ts-expect-error Semantic reads must always supply a logical maximum age.
+const legacyRedisReadRequest: RedisReadRequest = { valueKey: "untracked:{id}:value" };
 const redisClientMethods: Readonly<Record<keyof DialCacheRedisClient, true>> = {
+  enforcesMaxAge: true,
   read: true,
   write: true,
   invalidate: true,
@@ -502,6 +564,9 @@ void coalesceFlag;
 void structuralConfigProvider;
 void shadowCache;
 void shadowKeyConfig;
+void staleMetrics;
+void staleKeyConfig;
+void staleRecoveryMaxAgeSec;
 void requestLocalCoalescingLabels;
 void cacheMetricLabels;
 void invalidationMetricLabels;
@@ -530,15 +595,18 @@ void redisConfigAcceptsCompressionOptOut;
 void createNodeRedisDialCacheClient;
 void decodedEmptyRedisFrame;
 void decodedStaleRedisFrame;
+void decodedRedisServerTimeMs;
+void frameWithinMaxAge;
 // @ts-expect-error Native reads removed the legacy node-redis registration.
 void dialcacheRedisScripts.dialcacheRead;
 // @ts-expect-error Native tracked reads removed the legacy node-redis registration.
 void dialcacheRedisScripts.dialcacheReadTracked;
-// @ts-expect-error Native SET writes removed the legacy node-redis registration.
+// @ts-expect-error Native placeholder SET plus stamp removed the legacy registration.
 void dialcacheRedisScripts.dialcacheWrite;
 // @ts-expect-error The stamp protocol removed the legacy tracked-write registration.
 void dialcacheRedisScripts.dialcacheWriteTracked;
 void dialcacheRedisScripts.dialcacheWriteTrackedStamp;
+void dialcacheRedisScripts.dialcacheWriteUntrackedStamp;
 void READ_CACHE_SCRIPT;
 void READ_TRACKED_CACHE_SCRIPT;
 void WRITE_CACHE_SCRIPT;
@@ -546,14 +614,19 @@ void WRITE_TRACKED_CACHE_SCRIPT;
 void placeholderRedisFrame;
 void trackedRedisPlaceholder;
 void stampReplyResolution;
+void untrackedStampReplyResolution;
 void setReplyValidation;
 void placeholderLostError;
 void REDIS_FRAME_VERSION;
 void REDIS_ENCODING_UTF8;
 void REDIS_ENCODING_BINARY;
 void stampScriptSource;
+void untrackedStampScriptSource;
+void untrackedStampArguments;
 void stampArguments;
 void customRedisClient;
+void redisReadRequest;
+void legacyRedisReadRequest;
 const globalSerializer: Serializer<unknown> = {
   dump: () => "global",
   load: () => ({ source: "global" }),
@@ -730,7 +803,8 @@ const redisProtocol = await import("dialcache/redis-protocol");
 // Each bundle embeds its own copy of the Lua sources; a divergence forks the
 // protocol (different SHA1s) without failing any behavioral test.
 if (
-  nodeRedis.dialcacheRedisScripts.dialcacheWriteTrackedStamp.SCRIPT !== redisProtocol.WRITE_TRACKED_STAMP_SCRIPT
+  nodeRedis.dialcacheRedisScripts.dialcacheWriteUntrackedStamp.SCRIPT !== redisProtocol.WRITE_UNTRACKED_STAMP_SCRIPT
+  || nodeRedis.dialcacheRedisScripts.dialcacheWriteTrackedStamp.SCRIPT !== redisProtocol.WRITE_TRACKED_STAMP_SCRIPT
   || nodeRedis.dialcacheRedisScripts.dialcacheInvalidate.SCRIPT !== redisProtocol.INVALIDATE_CACHE_SCRIPT
 ) {
   throw new Error("The packed ESM node-redis Lua sources diverged from the redis-protocol entry");
@@ -773,6 +847,14 @@ try {
     throw new Error("The node-redis protocol error does not match the root ESM export");
   }
 }
+try {
+  nodeRedis.dialcacheRedisScripts.dialcacheWriteUntrackedStamp.transformReply(0);
+  throw new Error("Expected an invalid untracked node-redis script reply to fail");
+} catch (error) {
+  if (!(error instanceof root.DialCacheRedisProtocolError)) {
+    throw new Error("The untracked node-redis protocol error does not match the root ESM export");
+  }
+}
 if ("MissingKeyConfigError" in root) {
   throw new Error("The removed MissingKeyConfigError class must not be exported from the root ESM entry");
 }
@@ -800,12 +882,24 @@ if (
 ) {
   throw new Error("The removed write scripts must not be exported by the packed ESM Redis protocol entry");
 }
-if (typeof redisProtocol.WRITE_TRACKED_STAMP_SCRIPT !== "string") {
-  throw new Error("The packed ESM Redis protocol entry must export the tracked stamp script source");
+if (
+  typeof redisProtocol.WRITE_UNTRACKED_STAMP_SCRIPT !== "string"
+  || typeof redisProtocol.WRITE_TRACKED_STAMP_SCRIPT !== "string"
+) {
+  throw new Error("The packed ESM Redis protocol entry must export both stamp script sources");
 }
 const esmRoundTrip = redisProtocol.decodeRedisFrame(redisProtocol.encodeRedisFrame("value", 1));
 if (esmRoundTrip?.payload !== "value" || esmRoundTrip.createdAtMs !== 1) {
   throw new Error("The packed ESM Redis protocol encoder did not round-trip through the decoder");
+}
+const esmServerNowMs = redisProtocol.decodeRedisServerTime([Buffer.from("1"), Buffer.from("500000")]);
+redisProtocol.assertValidRedisMaxAgeMs(1_500);
+if (
+  esmServerNowMs !== 1500
+  || !redisProtocol.isRedisFrameWithinMaxAge(esmRoundTrip, esmServerNowMs, 1500)
+  || redisProtocol.isRedisFrameWithinMaxAge(esmRoundTrip, esmServerNowMs, 1499)
+) {
+  throw new Error("The packed ESM Redis logical-age helpers did not enforce the exact boundary");
 }
 if (redisProtocol.decodeTrackedRedisFrame(redisProtocol.encodeRedisFrame("pending", 0), Buffer.from("0")) !== null) {
   throw new Error("The packed ESM Redis protocol encoder did not produce a fenced placeholder frame");
@@ -831,6 +925,17 @@ if (
   || redisProtocol.resolveTrackedRedisWriteReply(0) !== false
 ) {
   throw new Error("The packed ESM stamp reply resolver did not map replies 0 and 1");
+}
+if (redisProtocol.resolveUntrackedRedisWriteReply(1) !== true) {
+  throw new Error("The packed ESM untracked stamp reply resolver did not accept reply 1");
+}
+try {
+  redisProtocol.resolveUntrackedRedisWriteReply(2);
+  throw new Error("Expected an untracked lost-placeholder stamp reply to fail");
+} catch (error) {
+  if (!(error instanceof root.DialCacheRedisPlaceholderLostError)) {
+    throw new Error("The untracked lost-placeholder error does not match the root ESM export");
+  }
 }
 try {
   redisProtocol.resolveTrackedRedisWriteReply(2);
@@ -908,6 +1013,7 @@ const esmDisabledOverlay = root.DialCacheKeyConfig.disabled();
 if (
   esmDisabledOverlay.requestLocal !== false
   || esmDisabledOverlay.coalesce !== undefined
+  || esmDisabledOverlay.staleOnErrorMaxAgeSec !== 0
   || esmDisabledOverlay.shadow?.ramp !== 0
   || esmDisabledOverlay.shadow.logMismatches !== false
   || esmDisabledOverlay.ramp[root.CacheLayer.LOCAL] !== 0
@@ -1015,7 +1121,11 @@ console.log("${observerIsolationMarker}");`,
 let payload = Buffer.alloc(4 * 1024 * 1024, 1);
 const payloadReference = new WeakRef(payload);
 const redis = {
-  read: async () => ({ payload, createdAtMs: 1 }),
+  enforcesMaxAge: true,
+  read: async ({ maxAgeMs }) => {
+    const createdAtMs = Date.now();
+    return Date.now() - createdAtMs < maxAgeMs ? { payload, createdAtMs } : null;
+  },
   write: async () => true,
   invalidate: async () => undefined,
 };
@@ -1103,7 +1213,8 @@ const redisProtocol = require("dialcache/redis-protocol");
 // CommonJS bundles duplicate the Lua sources per entry point; a divergence
 // forks the protocol (different SHA1s) without failing any behavioral test.
 if (
-  nodeRedis.dialcacheRedisScripts.dialcacheWriteTrackedStamp.SCRIPT !== redisProtocol.WRITE_TRACKED_STAMP_SCRIPT
+  nodeRedis.dialcacheRedisScripts.dialcacheWriteUntrackedStamp.SCRIPT !== redisProtocol.WRITE_UNTRACKED_STAMP_SCRIPT
+  || nodeRedis.dialcacheRedisScripts.dialcacheWriteTrackedStamp.SCRIPT !== redisProtocol.WRITE_TRACKED_STAMP_SCRIPT
   || nodeRedis.dialcacheRedisScripts.dialcacheInvalidate.SCRIPT !== redisProtocol.INVALIDATE_CACHE_SCRIPT
 ) {
   throw new Error("The packed CommonJS node-redis Lua sources diverged from the redis-protocol entry");
@@ -1148,6 +1259,14 @@ try {
     throw new Error("The node-redis protocol error does not match the root CommonJS export");
   }
 }
+try {
+  nodeRedis.dialcacheRedisScripts.dialcacheWriteUntrackedStamp.transformReply(0);
+  throw new Error("Expected an invalid untracked node-redis script reply to fail");
+} catch (error) {
+  if (!(error instanceof root.DialCacheRedisProtocolError)) {
+    throw new Error("The untracked node-redis protocol error does not match the root CommonJS export");
+  }
+}
 if ("MissingKeyConfigError" in root) {
   throw new Error("The removed MissingKeyConfigError class must not be exported from the root CommonJS entry");
 }
@@ -1175,12 +1294,24 @@ if (
 ) {
   throw new Error("The removed write scripts must not be exported by the packed CommonJS Redis protocol entry");
 }
-if (typeof redisProtocol.WRITE_TRACKED_STAMP_SCRIPT !== "string") {
-  throw new Error("The packed CommonJS Redis protocol entry must export the tracked stamp script source");
+if (
+  typeof redisProtocol.WRITE_UNTRACKED_STAMP_SCRIPT !== "string"
+  || typeof redisProtocol.WRITE_TRACKED_STAMP_SCRIPT !== "string"
+) {
+  throw new Error("The packed CommonJS Redis protocol entry must export both stamp script sources");
 }
 const cjsRoundTrip = redisProtocol.decodeRedisFrame(redisProtocol.encodeRedisFrame("value", 1));
 if (cjsRoundTrip?.payload !== "value" || cjsRoundTrip.createdAtMs !== 1) {
   throw new Error("The packed CommonJS Redis protocol encoder did not round-trip through the decoder");
+}
+const cjsServerNowMs = redisProtocol.decodeRedisServerTime([Buffer.from("1"), Buffer.from("500000")]);
+redisProtocol.assertValidRedisMaxAgeMs(1_500);
+if (
+  cjsServerNowMs !== 1500
+  || !redisProtocol.isRedisFrameWithinMaxAge(cjsRoundTrip, cjsServerNowMs, 1500)
+  || redisProtocol.isRedisFrameWithinMaxAge(cjsRoundTrip, cjsServerNowMs, 1499)
+) {
+  throw new Error("The packed CommonJS Redis logical-age helpers did not enforce the exact boundary");
 }
 if (redisProtocol.decodeTrackedRedisFrame(redisProtocol.encodeRedisFrame("pending", 0), Buffer.from("0")) !== null) {
   throw new Error("The packed CommonJS Redis protocol encoder did not produce a fenced placeholder frame");
@@ -1206,6 +1337,17 @@ if (
   || redisProtocol.resolveTrackedRedisWriteReply(0) !== false
 ) {
   throw new Error("The packed CommonJS stamp reply resolver did not map replies 0 and 1");
+}
+if (redisProtocol.resolveUntrackedRedisWriteReply(1) !== true) {
+  throw new Error("The packed CommonJS untracked stamp reply resolver did not accept reply 1");
+}
+try {
+  redisProtocol.resolveUntrackedRedisWriteReply(2);
+  throw new Error("Expected an untracked lost-placeholder stamp reply to fail");
+} catch (error) {
+  if (!(error instanceof root.DialCacheRedisPlaceholderLostError)) {
+    throw new Error("The untracked lost-placeholder error does not match the root CommonJS export");
+  }
 }
 try {
   redisProtocol.resolveTrackedRedisWriteReply(2);
@@ -1283,6 +1425,7 @@ const cjsDisabledOverlay = root.DialCacheKeyConfig.disabled();
 if (
   cjsDisabledOverlay.requestLocal !== false
   || cjsDisabledOverlay.coalesce !== undefined
+  || cjsDisabledOverlay.staleOnErrorMaxAgeSec !== 0
   || cjsDisabledOverlay.shadow?.ramp !== 0
   || cjsDisabledOverlay.shadow.logMismatches !== false
   || cjsDisabledOverlay.ramp[root.CacheLayer.LOCAL] !== 0

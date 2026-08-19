@@ -3,7 +3,11 @@ import { describe, expect, it } from "vitest";
 import { CacheLayer, DialCacheKey, DialCacheKeyConfig } from "../src/index.js";
 import { LocalCache } from "../src/internal/local-cache.js";
 import { RedisCache } from "../src/internal/redis-cache.js";
-import { fetchKeyConfig, resolveLayerConfig } from "../src/internal/runtime-config.js";
+import {
+  fetchKeyConfig,
+  resolveLayerConfig,
+  resolveRemoteLayerConfigResult,
+} from "../src/internal/runtime-config.js";
 import { encodeFrame, FakeRedis } from "./fake-redis.js";
 
 const key = (defaultConfig: DialCacheKeyConfig | null = DialCacheKeyConfig.enabled(60)) =>
@@ -20,6 +24,7 @@ describe("DialCache observability internal compatibility paths", () => {
         ramp: 20,
         logMismatches: true,
       },
+      staleOnErrorMaxAgeSec: 3_600,
     });
     const cases = [
       {
@@ -39,6 +44,7 @@ describe("DialCache observability internal compatibility paths", () => {
             ramp: 80,
             logMismatches: true,
           },
+          staleOnErrorMaxAgeSec: 3_600,
         }),
       },
       {
@@ -48,6 +54,7 @@ describe("DialCache observability internal compatibility paths", () => {
           shadow: {
             logMismatches: false,
           },
+          staleOnErrorMaxAgeSec: 0,
         }),
         expected: new DialCacheKeyConfig({
           requestLocal: true,
@@ -58,10 +65,11 @@ describe("DialCache observability internal compatibility paths", () => {
             ramp: 20,
             logMismatches: false,
           },
+          staleOnErrorMaxAgeSec: 0,
         }),
       },
       {
-        runtime: new DialCacheKeyConfig({ shadow: {} }),
+        runtime: new DialCacheKeyConfig({ shadow: {}, staleOnErrorMaxAgeSec: 7_200 }),
         expected: new DialCacheKeyConfig({
           requestLocal: true,
           coalesce: false,
@@ -71,6 +79,7 @@ describe("DialCache observability internal compatibility paths", () => {
             ramp: 20,
             logMismatches: true,
           },
+          staleOnErrorMaxAgeSec: 7_200,
         }),
       },
     ];
@@ -163,5 +172,49 @@ describe("DialCache observability internal compatibility paths", () => {
     // Then absent policy stays disabled and an omitted ramp defaults to 100%.
     expect(noConfig).toBeNull();
     expect(noRamp).toEqual({ ttlSec: 60, ramp: 100 });
+  });
+
+  it("keeps invalid stale-on-error policy diagnostic-only in remote resolution", () => {
+    const remoteKey = key();
+
+    expect(resolveRemoteLayerConfigResult({
+      config: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        staleOnErrorMaxAgeSec: 3_600,
+      }),
+      key: remoteKey,
+    })).toEqual({
+      status: "enabled",
+      config: { ttlSec: 60, ramp: 100, staleOnErrorMaxAgeSec: 3_600 },
+    });
+    expect(resolveRemoteLayerConfigResult({
+      config: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        staleOnErrorMaxAgeSec: 60,
+      }),
+      key: remoteKey,
+    })).toEqual({
+      status: "enabled",
+      config: { ttlSec: 60, ramp: 100, staleOnErrorMaxAgeSec: null },
+      staleOnErrorConfigError: true,
+    });
+    expect(resolveRemoteLayerConfigResult({
+      config: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        staleOnErrorMaxAgeSec: 0,
+      }),
+      key: remoteKey,
+    })).toEqual({
+      status: "enabled",
+      config: { ttlSec: 60, ramp: 100, staleOnErrorMaxAgeSec: null },
+    });
+    expect(resolveRemoteLayerConfigResult({
+      config: new DialCacheKeyConfig({ staleOnErrorMaxAgeSec: 3_600 }),
+      key: remoteKey,
+    })).toEqual({
+      status: "disabled",
+      reason: "policy_disabled",
+      staleOnErrorConfigError: true,
+    });
   });
 });

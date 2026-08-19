@@ -8,7 +8,10 @@ import {
   DialCacheRedisProtocolError,
 } from "../src/index.js";
 import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "../src/node-redis.js";
-import { INVALIDATE_CACHE_SCRIPT } from "../src/redis-protocol.js";
+import {
+  INVALIDATE_CACHE_SCRIPT,
+  WRITE_UNTRACKED_STAMP_SCRIPT,
+} from "../src/redis-protocol.js";
 
 const INVALID_WRITE_REPLIES: readonly unknown[] = [
   -1,
@@ -29,7 +32,9 @@ interface FakeReplies {
   readonly get?: unknown;
   readonly mGet?: unknown;
   readonly set?: unknown;
+  readonly time?: unknown;
   readonly eval?: unknown;
+  readonly untrackedStamp?: unknown;
   readonly stamp?: unknown;
   readonly invalidate?: unknown;
 }
@@ -43,11 +48,22 @@ function fakeClient(replies: FakeReplies = {}) {
       if (args[0] === "SET") {
         return Object.hasOwn(replies, "set") ? replies.set : "OK";
       }
+      if (args[0] === "TIME") {
+        return Object.hasOwn(replies, "time")
+          ? replies.time
+          : [Buffer.from("1"), Buffer.from("0")];
+      }
       if (args[0] === "EVAL") {
         return Object.hasOwn(replies, "eval") ? replies.eval : 1;
       }
-      return Object.hasOwn(replies, "mGet") ? replies.mGet : [null, null];
+      if (args[0] === "MGET") {
+        return Object.hasOwn(replies, "mGet") ? replies.mGet : [null, null];
+      }
+      return Object.hasOwn(replies, "get") ? replies.get : null;
     }),
+    dialcacheWriteUntrackedStamp: vi.fn(
+      async () => Object.hasOwn(replies, "untrackedStamp") ? replies.untrackedStamp : 1,
+    ),
     dialcacheWriteTrackedStamp: vi.fn(async () => Object.hasOwn(replies, "stamp") ? replies.stamp : 1),
     dialcacheInvalidate: vi.fn(async () => Object.hasOwn(replies, "invalidate") ? replies.invalidate : 1),
   };
@@ -86,9 +102,23 @@ describe("node-redis adapter", () => {
   it("provides the expected arguments for every bundled mutation script", () => {
     const nonce = Buffer.from("01234567");
     expect(Object.keys(dialcacheRedisScripts)).toEqual([
+      "dialcacheWriteUntrackedStamp",
       "dialcacheWriteTrackedStamp",
       "dialcacheInvalidate",
     ]);
+    expect(
+      dialcacheRedisScripts.dialcacheWriteUntrackedStamp.transformArguments(
+        "plain:value",
+        nonce,
+      ),
+    ).toEqual(["plain:value", nonce]);
+    expect(dialcacheRedisScripts.dialcacheWriteUntrackedStamp.SCRIPT)
+      .toBe(WRITE_UNTRACKED_STAMP_SCRIPT);
+    expect(dialcacheRedisScripts.dialcacheWriteUntrackedStamp.NUMBER_OF_KEYS).toBe(1);
+    expect(WRITE_UNTRACKED_STAMP_SCRIPT).toContain('redis.call("TIME")');
+    expect(WRITE_UNTRACKED_STAMP_SCRIPT).toContain('redis.call("SETRANGE", KEYS[1]');
+    expect(WRITE_UNTRACKED_STAMP_SCRIPT).not.toContain("ARGV[2]");
+    expect(WRITE_UNTRACKED_STAMP_SCRIPT).not.toContain('"PX"');
     expect(
       dialcacheRedisScripts.dialcacheWriteTrackedStamp.transformArguments(
         "tracked:{id}:value",
@@ -114,6 +144,7 @@ describe("node-redis adapter", () => {
       () => createNodeRedisDialCacheClient({
         get: vi.fn(),
         sendCommand: vi.fn(),
+        dialcacheWriteUntrackedStamp: vi.fn(),
         dialcacheWriteTrackedStamp: vi.fn(),
       } as never),
     ).toThrow(TypeError);
@@ -121,6 +152,15 @@ describe("node-redis adapter", () => {
       () => createNodeRedisDialCacheClient({
         get: vi.fn(),
         sendCommand: vi.fn(),
+        dialcacheWriteUntrackedStamp: vi.fn(),
+        dialcacheInvalidate: vi.fn(),
+      } as never),
+    ).toThrow(TypeError);
+    expect(
+      () => createNodeRedisDialCacheClient({
+        get: vi.fn(),
+        sendCommand: vi.fn(),
+        dialcacheWriteTrackedStamp: vi.fn(),
         dialcacheInvalidate: vi.fn(),
       } as never),
     ).toThrow(TypeError);
@@ -136,12 +176,17 @@ describe("node-redis adapter", () => {
     });
     const adapter = createNodeRedisDialCacheClient(client as never);
 
-    await expect(adapter.read({ valueKey: "plain:value" })).resolves.toEqual({
+    expect(adapter.enforcesMaxAge).toBe(true);
+    await expect(adapter.read({ valueKey: "plain:value", maxAgeMs: 10_000 })).resolves.toEqual({
       payload: "plain",
       createdAtMs: 1,
     });
     await expect(
-      adapter.read({ valueKey: "tracked:{id}:value", watermarkKey: "tracked:{id}:watermark" }),
+      adapter.read({
+        valueKey: "tracked:{id}:value",
+        watermarkKey: "tracked:{id}:watermark",
+        maxAgeMs: 10_000,
+      }),
     ).resolves.toEqual({ payload: Buffer.from([0, 0xff]), createdAtMs: 2 });
     await expect(
       adapter.write({ valueKey: "plain:value", cacheTtlMs: 1_000, value: "plain" }),
@@ -159,16 +204,15 @@ describe("node-redis adapter", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("writes untracked frames with one native SET", async () => {
+  it("pairs an untracked placeholder SET with its server-time stamp", async () => {
     const client = fakeClient();
     const adapter = createNodeRedisDialCacheClient(client as never);
-    const before = Date.now();
     await expect(
       adapter.write({ valueKey: "plain:value", cacheTtlMs: 1_000, value: "plain" }),
     ).resolves.toBe(true);
-    const after = Date.now();
 
     expect(client.dialcacheWriteTrackedStamp).not.toHaveBeenCalled();
+    expect(client.dialcacheWriteUntrackedStamp).toHaveBeenCalledTimes(1);
     expect(client.sendCommand).toHaveBeenCalledTimes(1);
     const [args, options] = client.sendCommand.mock.calls[0] as [Array<unknown>, unknown];
     expect(args[0]).toBe("SET");
@@ -176,12 +220,13 @@ describe("node-redis adapter", () => {
     expect(args[3]).toBe("PX");
     expect(args[4]).toBe("1000");
     const frame = args[2] as Buffer;
-    expect(frame[0]).toBe(1);
+    expect(frame[0]).toBe(0);
     expect(frame[9]).toBe(0);
     expect(frame.subarray(10).toString("utf8")).toBe("plain");
-    const createdAtMs = Number(frame.readBigUInt64BE(1));
-    expect(createdAtMs).toBeGreaterThanOrEqual(before);
-    expect(createdAtMs).toBeLessThanOrEqual(after);
+    expect(client.dialcacheWriteUntrackedStamp).toHaveBeenCalledWith(
+      "plain:value",
+      frame.subarray(1, 9),
+    );
     expect(options).toMatchObject({ returnBuffers: true });
   });
 
@@ -234,6 +279,19 @@ describe("node-redis adapter", () => {
       value: "tracked",
     });
     await expect(write).rejects.toThrow("DialCache tracked write lost its placeholder before the stamp");
+    await expect(write).rejects.toBeInstanceOf(DialCacheRedisPlaceholderLostError);
+  });
+
+  it("fails an untracked write whose placeholder was lost before the stamp", async () => {
+    const adapter = createNodeRedisDialCacheClient(fakeClient({ untrackedStamp: 2 }) as never);
+    const write = adapter.write({
+      valueKey: "plain:value",
+      cacheTtlMs: 1_000,
+      value: "plain",
+    });
+    await expect(write).rejects.toThrow(
+      "DialCache untracked write lost its placeholder before the stamp",
+    );
     await expect(write).rejects.toBeInstanceOf(DialCacheRedisPlaceholderLostError);
   });
 
@@ -323,6 +381,7 @@ describe("node-redis adapter", () => {
       ).rejects.toThrow(RangeError);
     }
     expect(client.sendCommand).not.toHaveBeenCalled();
+    expect(client.dialcacheWriteUntrackedStamp).not.toHaveBeenCalled();
     expect(client.dialcacheWriteTrackedStamp).not.toHaveBeenCalled();
 
     await adapter.write({
@@ -355,6 +414,17 @@ describe("node-redis adapter", () => {
     })).rejects.toBe(failure);
     expect(client.dialcacheWriteTrackedStamp).toHaveBeenCalledTimes(1);
 
+    const untrackedFailure = new Error("ERR untracked SET failed");
+    const untrackedClient = fakeClient();
+    untrackedClient.sendCommand.mockRejectedValueOnce(untrackedFailure);
+    const untrackedAdapter = createNodeRedisDialCacheClient(untrackedClient as never);
+    await expect(untrackedAdapter.write({
+      valueKey: "plain:value",
+      cacheTtlMs: 1_000,
+      value: "plain",
+    })).rejects.toBe(untrackedFailure);
+    expect(untrackedClient.dialcacheWriteUntrackedStamp).toHaveBeenCalledTimes(1);
+
     const stampFailure = new Error("ERR invalid DialCache watermark");
     const stampClient = fakeClient();
     stampClient.dialcacheWriteTrackedStamp.mockRejectedValueOnce(stampFailure);
@@ -379,6 +449,18 @@ describe("node-redis adapter", () => {
       })),
       "Invalid DialCache Redis SET reply; expected OK",
     );
+
+    const untrackedCombinedClient = fakeClient({ set: "QUEUED" });
+    untrackedCombinedClient.dialcacheWriteUntrackedStamp.mockRejectedValueOnce(new Error("ERR stamp"));
+    const untrackedCombinedAdapter = createNodeRedisDialCacheClient(untrackedCombinedClient as never);
+    await expectProtocolError(
+      Promise.resolve(untrackedCombinedAdapter.write({
+        valueKey: "plain:value",
+        cacheTtlMs: 1_000,
+        value: "plain",
+      })),
+      "Invalid DialCache Redis SET reply; expected OK",
+    );
   });
 
   it("passes the cooperative read signal through node-redis command options", async () => {
@@ -387,15 +469,24 @@ describe("node-redis adapter", () => {
     const controller = new AbortController();
     const context = { timeoutMs: 25, signal: controller.signal } as const;
 
-    await adapter.read({ valueKey: "plain:value" }, context);
+    await adapter.read({ valueKey: "plain:value", maxAgeMs: 10_000 }, context);
     await adapter.read(
-      { valueKey: "tracked:{id}:value", watermarkKey: "tracked:{id}:watermark" },
+      {
+        valueKey: "tracked:{id}:value",
+        watermarkKey: "tracked:{id}:watermark",
+        maxAgeMs: 10_000,
+      },
       context,
     );
 
-    expect(client.get).toHaveBeenCalledWith(
+    expect(client.get).not.toHaveBeenCalled();
+    expect(client.sendCommand).toHaveBeenCalledWith(
+      ["GET", "plain:value"],
       expect.objectContaining({ returnBuffers: true, signal: controller.signal }),
-      "plain:value",
+    );
+    expect(client.sendCommand).toHaveBeenCalledWith(
+      ["TIME"],
+      expect.objectContaining({ returnBuffers: true, signal: controller.signal }),
     );
     expect(client.sendCommand).toHaveBeenCalledWith(
       ["MGET", "tracked:{id}:value", "tracked:{id}:watermark"],
@@ -403,7 +494,89 @@ describe("node-redis adapter", () => {
     );
   });
 
-  it("forces tracked Cluster MGET reads to the primary", async () => {
+  it("enforces the exact maximum age using the paired Redis TIME", async () => {
+    const withinBoundary = createNodeRedisDialCacheClient(fakeClient({
+      get: encodeFrame("plain", { createdAtMs: 1_000 }),
+      time: [Buffer.from("1"), Buffer.from("999999")],
+    }) as never);
+    await expect(withinBoundary.read({
+      valueKey: "plain:value",
+      maxAgeMs: 1_000,
+    })).resolves.toEqual({ payload: "plain", createdAtMs: 1_000 });
+
+    const atBoundary = createNodeRedisDialCacheClient(fakeClient({
+      get: encodeFrame("plain", { createdAtMs: 1_000 }),
+      time: [Buffer.from("2"), Buffer.from("0")],
+    }) as never);
+    await expect(atBoundary.read({
+      valueKey: "plain:value",
+      maxAgeMs: 1_000,
+    })).resolves.toBeNull();
+
+    const futureTimestamp = createNodeRedisDialCacheClient(fakeClient({
+      get: encodeFrame("plain", { createdAtMs: 1_001 }),
+      time: [Buffer.from("1"), Buffer.from("0")],
+    }) as never);
+    await expect(futureTimestamp.read({
+      valueKey: "plain:value",
+      maxAgeMs: 1_000,
+    })).resolves.toBeNull();
+  });
+
+  it("rejects invalid maximum ages before dispatch, including on a missing key", async () => {
+    const client = fakeClient();
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    for (const maxAgeMs of [
+      0,
+      -1,
+      0.5,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      31_536_000_001,
+      "100" as unknown as number,
+    ]) {
+      await expect(adapter.read({ valueKey: "missing:value", maxAgeMs })).rejects.toEqual(
+        new RangeError(
+          "DialCache Redis maxAgeMs must be a positive safe integer no greater than 31536000000",
+        ),
+      );
+    }
+    expect(client.sendCommand).not.toHaveBeenCalled();
+    expect(client.get).not.toHaveBeenCalled();
+  });
+
+  it("enqueues each native read before TIME and validates every paired TIME reply", async () => {
+    const order: string[] = [];
+    const client = fakeClient();
+    client.sendCommand.mockImplementation(async (...callArgs: unknown[]) => {
+      const args = (Array.isArray(callArgs[0]) ? callArgs[0] : callArgs[2]) as Array<unknown>;
+      order.push(String(args[0]));
+      if (args[0] === "TIME") {
+        return [Buffer.from("1"), Buffer.from("0")];
+      }
+      return args[0] === "MGET" ? [null, null] : null;
+    });
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await adapter.read({ valueKey: "plain:value", maxAgeMs: 1_000 });
+    await adapter.read({
+      valueKey: "tracked:{id}:value",
+      watermarkKey: "tracked:{id}:watermark",
+      maxAgeMs: 1_000,
+    });
+    expect(order).toEqual(["GET", "TIME", "MGET", "TIME"]);
+
+    await expect(
+      createNodeRedisDialCacheClient(fakeClient({ time: [Buffer.from("1")] }) as never)
+        .read({ valueKey: "missing:value", maxAgeMs: 1_000 }),
+    ).rejects.toMatchObject({
+      name: "DialCacheRedisPayloadError",
+      message: "Invalid DialCache Redis TIME reply; expected two unsigned decimal bulk strings",
+    });
+  });
+
+  it("routes native reads and their TIME commands to the same Cluster primaries", async () => {
     const client = fakeCluster({
       mGet: [encodeFrame("tracked", { createdAtMs: 2 }), Buffer.from("1")],
     });
@@ -411,14 +584,40 @@ describe("node-redis adapter", () => {
     const controller = new AbortController();
 
     await expect(adapter.read(
-      { valueKey: "tracked:{id}:value", watermarkKey: "tracked:{id}:watermark" },
+      {
+        valueKey: "tracked:{id}:value",
+        watermarkKey: "tracked:{id}:watermark",
+        maxAgeMs: 10_000,
+      },
       { timeoutMs: 25, signal: controller.signal },
     )).resolves.toEqual({ payload: "tracked", createdAtMs: 2 });
+    await expect(adapter.read({
+      valueKey: "plain:value",
+      maxAgeMs: 10_000,
+    })).resolves.toBeNull();
 
     expect(client.sendCommand).toHaveBeenCalledWith(
       "tracked:{id}:value",
       false,
       ["MGET", "tracked:{id}:value", "tracked:{id}:watermark"],
+      expect.objectContaining({ returnBuffers: true, signal: controller.signal }),
+    );
+    expect(client.sendCommand).toHaveBeenCalledWith(
+      "plain:value",
+      false,
+      ["GET", "plain:value"],
+      expect.objectContaining({ returnBuffers: true }),
+    );
+    expect(client.sendCommand).toHaveBeenCalledWith(
+      "plain:value",
+      false,
+      ["TIME"],
+      expect.objectContaining({ returnBuffers: true }),
+    );
+    expect(client.sendCommand).toHaveBeenCalledWith(
+      "tracked:{id}:value",
+      false,
+      ["TIME"],
       expect.objectContaining({ returnBuffers: true, signal: controller.signal }),
     );
   });
@@ -435,10 +634,15 @@ describe("node-redis adapter", () => {
     await expect(adapter.read({
       valueKey: "tracked:{id}:value",
       watermarkKey: "tracked:{id}:watermark",
+      maxAgeMs: 10_000,
     })).resolves.toEqual({ payload: "tracked", createdAtMs: 2 });
 
     expect(client.sendCommand).toHaveBeenCalledWith(
       ["MGET", "tracked:{id}:value", "tracked:{id}:watermark"],
+      expect.objectContaining({ returnBuffers: true }),
+    );
+    expect(client.sendCommand).toHaveBeenCalledWith(
+      ["TIME"],
       expect.objectContaining({ returnBuffers: true }),
     );
   });
@@ -446,7 +650,7 @@ describe("node-redis adapter", () => {
   it("rejects malformed native read reply shapes", async () => {
     await expect(
       createNodeRedisDialCacheClient(fakeClient({ get: "not-bytes" }) as never)
-        .read({ valueKey: "plain:value" }),
+        .read({ valueKey: "plain:value", maxAgeMs: 10_000 }),
     ).rejects.toMatchObject({
       name: "DialCacheRedisPayloadError",
       message: "Invalid DialCache Redis read reply; expected a bulk string or null",
@@ -460,7 +664,11 @@ describe("node-redis adapter", () => {
     for (const reply of malformedMGetEnvelopes) {
       await expect(
         createNodeRedisDialCacheClient(fakeClient({ mGet: reply }) as never)
-          .read({ valueKey: "tracked:{id}:value", watermarkKey: "tracked:{id}:watermark" }),
+          .read({
+            valueKey: "tracked:{id}:value",
+            watermarkKey: "tracked:{id}:watermark",
+            maxAgeMs: 10_000,
+          }),
       ).rejects.toMatchObject({
         name: "DialCacheRedisPayloadError",
         message: "Invalid DialCache Redis tracked read reply; expected an array with two entries",
@@ -470,7 +678,11 @@ describe("node-redis adapter", () => {
     for (const reply of [["not-bytes", null], [null, 0]]) {
       await expect(
         createNodeRedisDialCacheClient(fakeClient({ mGet: reply }) as never)
-          .read({ valueKey: "tracked:{id}:value", watermarkKey: "tracked:{id}:watermark" }),
+          .read({
+            valueKey: "tracked:{id}:value",
+            watermarkKey: "tracked:{id}:watermark",
+            maxAgeMs: 10_000,
+          }),
       ).rejects.toMatchObject({
         name: "DialCacheRedisPayloadError",
         message: "Invalid DialCache Redis read reply; expected a bulk string or null",
@@ -480,7 +692,20 @@ describe("node-redis adapter", () => {
 
   it("rejects every out-of-domain reply returned by a node-redis client", async () => {
     const writeMessage = "Invalid DialCache Redis write reply; expected integer 0, 1, or 2";
+    const untrackedWriteMessage = "Invalid DialCache Redis untracked write reply; expected integer 1 or 2";
     const invalidationMessage = "Invalid DialCache Redis invalidate reply; expected integer 1";
+
+    for (const reply of [0, ...INVALID_WRITE_REPLIES]) {
+      const untracked = createNodeRedisDialCacheClient(fakeClient({ untrackedStamp: reply }) as never);
+      await expectProtocolError(
+        Promise.resolve(untracked.write({
+          valueKey: "plain:value",
+          cacheTtlMs: 1_000,
+          value: "plain",
+        })),
+        untrackedWriteMessage,
+      );
+    }
 
     for (const reply of INVALID_WRITE_REPLIES) {
       const tracked = createNodeRedisDialCacheClient(fakeClient({ stamp: reply }) as never);
@@ -649,11 +874,18 @@ describe("node-redis adapter", () => {
   });
 
   it("validates replies at the public node-redis script transform boundary", () => {
+    expect(dialcacheRedisScripts.dialcacheWriteUntrackedStamp.transformReply(1)).toBe(1);
+    expect(dialcacheRedisScripts.dialcacheWriteUntrackedStamp.transformReply(2)).toBe(2);
     expect(dialcacheRedisScripts.dialcacheWriteTrackedStamp.transformReply(0)).toBe(0);
     expect(dialcacheRedisScripts.dialcacheWriteTrackedStamp.transformReply(1)).toBe(1);
     expect(dialcacheRedisScripts.dialcacheWriteTrackedStamp.transformReply(2)).toBe(2);
     expect(dialcacheRedisScripts.dialcacheInvalidate.transformReply(1)).toBe(1);
 
+    for (const reply of [0, ...INVALID_WRITE_REPLIES]) {
+      expect(() => dialcacheRedisScripts.dialcacheWriteUntrackedStamp.transformReply(reply as number)).toThrow(
+        DialCacheRedisProtocolError,
+      );
+    }
     for (const reply of INVALID_WRITE_REPLIES) {
       expect(() => dialcacheRedisScripts.dialcacheWriteTrackedStamp.transformReply(reply as number)).toThrow(
         DialCacheRedisProtocolError,

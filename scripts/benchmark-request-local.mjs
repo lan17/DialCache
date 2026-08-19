@@ -244,11 +244,12 @@ async function benchmarkRedisReadDeadlineCoalescing(fanout) {
   const originalSetTimeout = globalThis.setTimeout;
   const originalClearTimeout = globalThis.clearTimeout;
   const redisClient = {
-    async read() {
+    enforcesMaxAge: true,
+    async read({ maxAgeMs }) {
       redisReadCalls += 1;
       started.resolve();
       await gate.promise;
-      return JSON.stringify("shared");
+      return freshFrame(JSON.stringify("shared"), maxAgeMs);
     },
     async write() {
       return true;
@@ -319,10 +320,11 @@ async function benchmarkSequentialTrackedRedisHits(iterations, { scenario, useCa
   let redisWriteCalls = 0;
   let redisInvalidationCalls = 0;
   const redisClient = {
-    async read({ watermarkKey }) {
+    enforcesMaxAge: true,
+    async read({ watermarkKey, maxAgeMs }) {
       assert.equal(typeof watermarkKey, "string", "the benchmark must exercise tracked Redis reads");
       redisReadCalls += 1;
-      return JSON.stringify("shared");
+      return freshFrame(JSON.stringify("shared"), maxAgeMs);
     },
     async write() {
       redisWriteCalls += 1;
@@ -392,10 +394,11 @@ async function benchmarkDarkShadowDetachment() {
   const cachedValue = { source: "redis" };
   const sourceValue = { source: "truth" };
   const redisClient = {
-    async read({ watermarkKey }) {
+    enforcesMaxAge: true,
+    async read({ watermarkKey, maxAgeMs }) {
       assert.equal(typeof watermarkKey, "string", "dark shadow reads must remain tracked");
       redisReadCalls += 1;
-      return await readGate.promise;
+      return freshFrame(await readGate.promise, maxAgeMs);
     },
     async write() {
       redisWriteCalls += 1;
@@ -476,8 +479,10 @@ async function benchmarkDarkShadowFillDetachment() {
   let redisWriteCalls = 0;
   const sourceValue = { source: "truth" };
   const redisClient = {
-    async read({ watermarkKey }) {
+    enforcesMaxAge: true,
+    async read({ watermarkKey, maxAgeMs }) {
       assert.equal(typeof watermarkKey, "string", "dark shadow reads must remain tracked");
+      assert(Number.isSafeInteger(maxAgeMs) && maxAgeMs > 0, "reads must request a positive max age");
       redisReadCalls += 1;
       return null;
     },
@@ -556,6 +561,12 @@ function deferred() {
     resolve = resolvePromise;
   });
   return { promise, resolve };
+}
+
+function freshFrame(payload, maxAgeMs) {
+  assert(Number.isSafeInteger(maxAgeMs) && maxAgeMs > 0, "reads must request a positive max age");
+  const createdAtMs = Date.now();
+  return Date.now() - createdAtMs < maxAgeMs ? { payload, createdAtMs } : null;
 }
 
 function readPositiveInteger(name, fallback) {

@@ -25,6 +25,13 @@ export type ShadowValidationOutcome =
   | "confirmation_error"
   | "timeout"
   | "dropped";
+/** Bounded terminal outcomes for an attempted stale-on-error Redis recovery. */
+export type StaleRecoveryOutcome =
+  | "served"
+  | "miss"
+  | "read_error"
+  | "read_timeout"
+  | "deserialization_error";
 /**
  * Bounded compression outcomes. Writes record compressed, below_threshold,
  * not_smaller, or write_over_limit (serialized form exceeds the decompression
@@ -106,6 +113,13 @@ export interface ShadowValidationMetricLabels {
   readonly outcome: ShadowValidationOutcome;
 }
 
+export interface StaleRecoveryMetricLabels {
+  readonly cacheNamespace: string;
+  readonly useCase: string;
+  readonly keyType: string;
+  readonly outcome: StaleRecoveryOutcome;
+}
+
 export interface DialCacheMetricsAdapter {
   request(labels: CacheMetricLabels): void;
   miss(labels: CacheMetricLabels): void;
@@ -121,13 +135,15 @@ export interface DialCacheMetricsAdapter {
    * a mismatch, after the confirming re-read): the observing process's epoch
    * clock minus the validated frame's `createdAtMs`, clamped at zero.
    * Emitted only alongside terminal `match` and `mismatch` outcomes; other
-   * outcomes deliver no verdict on a retained value. Tracked frames are
-   * stamped with Redis server time and untracked frames with the writer's
-   * client clock, so the age mixes clocks and is coarse operational
-   * evidence, not a precise measurement. Optional so existing custom
-   * adapters keep compiling without changes.
+   * outcomes deliver no verdict on a retained value. Bundled adapters stamp
+   * both tracked and untracked frames with Redis server time. The observing
+   * process still computes this metric with its own clock, so the value is
+   * coarse operational evidence rather than a precise measurement. Optional
+   * so existing custom adapters keep compiling without changes.
    */
   observeShadowValueAge?(labels: ShadowValidationMetricLabels, seconds: number): void;
+  // Optional so existing custom adapters keep compiling without changes.
+  staleRecovery?(labels: StaleRecoveryMetricLabels): void;
   // Optional so existing custom adapters keep compiling without changes.
   compression?(labels: CompressionMetricLabels): void;
   observeGet(labels: CacheMetricLabels, seconds: number): void;

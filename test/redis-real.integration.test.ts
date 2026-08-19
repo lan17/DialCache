@@ -33,6 +33,7 @@ const adapterKinds = [
 ] as const;
 type AdapterKind = (typeof adapterKinds)[number]["kind"];
 const MAX_SUPPORTED_DURATION_MS = 31_536_000_000;
+const PROTOCOL_READ_MAX_AGE_MS = 60_000;
 const WATERMARK_TTL_MARGIN_MS = 60_000;
 
 interface Deferred<T> {
@@ -227,6 +228,147 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       expect(inlineCalls).toBe(1);
     });
 
+    it("enforces Redis-server logical age for untracked and tracked reads", async () => {
+      if (client === undefined || admin === undefined) {
+        throw new Error("Redis test clients did not start");
+      }
+      const serverNowMs = (await admin.time()).getTime();
+      const untrackedFreshKey = "read-age:{item:untracked-fresh}:value";
+      const untrackedExpiredKey = "read-age:{item:untracked-expired}:value";
+      const trackedFreshKey = "read-age:{item:tracked-fresh}:value";
+      const trackedFreshWatermarkKey = "read-age:{item:tracked-fresh}:watermark";
+      const trackedExpiredKey = "read-age:{item:tracked-expired}:value";
+      const trackedExpiredWatermarkKey = "read-age:{item:tracked-expired}:watermark";
+
+      await admin.set(untrackedFreshKey, encodeFrame("untracked-fresh", 0, serverNowMs), { PX: 60_000 });
+      await admin.set(untrackedExpiredKey, encodeFrame("untracked-expired", 0, serverNowMs - 5_000), {
+        PX: 60_000,
+      });
+      await admin.set(trackedFreshKey, encodeFrame("tracked-fresh", 0, serverNowMs), { PX: 60_000 });
+      await admin.set(trackedFreshWatermarkKey, "0", { PX: 60_000 });
+      await admin.set(trackedExpiredKey, encodeFrame("tracked-expired", 0, serverNowMs - 5_000), {
+        PX: 60_000,
+      });
+      await admin.set(trackedExpiredWatermarkKey, "0", { PX: 60_000 });
+
+      expect((await client.adapter.read({
+        valueKey: untrackedFreshKey,
+        maxAgeMs: PROTOCOL_READ_MAX_AGE_MS,
+      }))?.payload).toBe("untracked-fresh");
+      expect(await client.adapter.read({ valueKey: untrackedExpiredKey, maxAgeMs: 1_000 })).toBeNull();
+      expect((await client.adapter.read({
+        valueKey: trackedFreshKey,
+        watermarkKey: trackedFreshWatermarkKey,
+        maxAgeMs: PROTOCOL_READ_MAX_AGE_MS,
+      }))?.payload).toBe("tracked-fresh");
+      expect(await client.adapter.read({
+        valueKey: trackedExpiredKey,
+        watermarkKey: trackedExpiredWatermarkKey,
+        maxAgeMs: 1_000,
+      })).toBeNull();
+    });
+
+    it("stamps untracked writes with Redis server time even when the application clock is skewed", async () => {
+      if (client === undefined || admin === undefined) {
+        throw new Error("Redis test clients did not start");
+      }
+      const valueKey = "server-stamp:{item:untracked}:value";
+      const serverBeforeMs = (await admin.time()).getTime();
+      const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1);
+      try {
+        await expect(client.adapter.write({
+          valueKey,
+          cacheTtlMs: 60_000,
+          value: "server-stamped",
+        })).resolves.toBe(true);
+      } finally {
+        nowSpy.mockRestore();
+      }
+      const serverAfterMs = (await admin.time()).getTime();
+      const stored = await admin.get(commandOptions({ returnBuffers: true }), valueKey);
+      expect(stored).not.toBeNull();
+      const createdAtMs = Number(stored?.readBigUInt64BE(1));
+
+      expect(createdAtMs).toBeGreaterThanOrEqual(serverBeforeMs);
+      expect(createdAtMs).toBeLessThanOrEqual(serverAfterMs);
+      expect((await client.adapter.read({ valueKey, maxAgeMs: PROTOCOL_READ_MAX_AGE_MS }))?.payload).toBe(
+        "server-stamped",
+      );
+    });
+
+    it.each([false, true])(
+      "retains a logically stale value and recovers it after source rejection (tracked=%s)",
+      async (trackForInvalidation) => {
+        if (client === undefined || admin === undefined) {
+          throw new Error("Redis test clients did not start");
+        }
+        const namespace = `real-stale-${kind}-${trackForInvalidation ? "tracked" : "untracked"}`;
+        const useCase = "RealStaleOnError";
+        const id = "123";
+        const key = new DialCacheKey({ namespace, keyType: "item_id", id, useCase, trackForInvalidation });
+        const valueKey = `${key.urn}:dialcache-frame-v1`;
+        const sourceValue = { id, version: 1 };
+        const sourceError = Object.freeze({ code: "SOURCE_UNAVAILABLE" });
+        let sourceCalls = 0;
+        const source = vi.fn(async (): Promise<typeof sourceValue> => {
+          if (++sourceCalls === 1) {
+            return sourceValue;
+          }
+          throw sourceError;
+        });
+        const staleRecovery = vi.fn();
+        const metrics = {
+          request: vi.fn(),
+          miss: vi.fn(),
+          disabled: vi.fn(),
+          error: vi.fn(),
+          invalidation: vi.fn(),
+          staleRecovery,
+          observeGet: vi.fn(),
+          observeFallback: vi.fn(),
+          observeSerialization: vi.fn(),
+          observeSize: vi.fn(),
+        } satisfies DialCacheMetricsAdapter;
+        const dialcache = new DialCache({
+          namespace,
+          redis: { client: client.adapter, readTimeoutMs: 10_000 },
+          metrics,
+        });
+        const getItem = dialcache.cached(source, {
+          keyType: "item_id",
+          useCase,
+          cacheKey: () => id,
+          trackForInvalidation,
+          defaultConfig: new DialCacheKeyConfig({
+            ttlSec: { [CacheLayer.REMOTE]: 1 },
+            ramp: { [CacheLayer.REMOTE]: 100 },
+            staleOnErrorMaxAgeSec: 60,
+          }),
+        });
+
+        await expect(dialcache.enable(async () => await getItem())).resolves.toBe(sourceValue);
+        expect(await admin.pTTL(valueKey)).toBeGreaterThan(55_000);
+
+        const redisNowMs = (await admin.time()).getTime();
+        await admin.set(valueKey, encodeFrame(JSON.stringify(sourceValue), 0, redisNowMs - 2_000), {
+          PX: 60_000,
+        });
+        const ttlBeforeRecovery = await admin.pTTL(valueKey);
+
+        await expect(dialcache.enable(async () => await getItem())).resolves.toEqual(sourceValue);
+
+        expect(source).toHaveBeenCalledTimes(2);
+        expect(staleRecovery).toHaveBeenCalledOnce();
+        expect(staleRecovery).toHaveBeenCalledWith({
+          cacheNamespace: namespace,
+          useCase,
+          keyType: "item_id",
+          outcome: "served",
+        });
+        expect(await admin.pTTL(valueKey)).toBeLessThanOrEqual(ttlBeforeRecovery);
+      },
+    );
+
     it("compresses values above the threshold and stores small values byte-identical", async () => {
       if (client === undefined || admin === undefined) {
         throw new Error("Redis test clients did not start");
@@ -375,7 +517,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
         const valueKey = `binary-raw:{item:${index}}:value`;
         expect(await scriptClient.write({ valueKey, cacheTtlMs: 60_000, value: payload })).toBe(true);
 
-        const roundTrip = await scriptClient.read({ valueKey });
+        const roundTrip = await scriptClient.read({ valueKey, maxAgeMs: PROTOCOL_READ_MAX_AGE_MS });
         const stored = await admin.get(commandOptions({ returnBuffers: true }), valueKey);
 
         expect(Buffer.isBuffer(roundTrip?.payload)).toBe(true);
@@ -399,7 +541,11 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
           value: trackedPayload,
         }),
       ).toBe(true);
-      const trackedRead = await scriptClient.read({ valueKey: trackedValueKey, watermarkKey });
+      const trackedRead = await scriptClient.read({
+        valueKey: trackedValueKey,
+        watermarkKey,
+        maxAgeMs: PROTOCOL_READ_MAX_AGE_MS,
+      });
       expect(trackedRead?.payload).toEqual(trackedPayload);
       expect(trackedRead?.createdAtMs).toBeGreaterThan(0);
     });
@@ -799,6 +945,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       });
       expect((await client.adapter.read({
         valueKey,
+        maxAgeMs: PROTOCOL_READ_MAX_AGE_MS,
         ...(tracked ? { watermarkKey } : {}),
       }))?.payload).toBe(JSON.stringify(sourceValue));
       expect(await admin.pTTL(valueKey)).toBeGreaterThan(55_000);
@@ -932,7 +1079,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
 
       await admin.scriptFlush();
       expect(await scriptClient.write({ valueKey, cacheTtlMs: 60_000, value: "untracked" })).toBe(true);
-      expect((await scriptClient.read({ valueKey }))?.payload).toBe("untracked");
+      expect((await scriptClient.read({ valueKey, maxAgeMs: PROTOCOL_READ_MAX_AGE_MS }))?.payload).toBe("untracked");
 
       const trackedValueKey = "script-recovery:{item:tracked}:value";
       const watermarkKey = "script-recovery:{item:tracked}:watermark";
@@ -945,7 +1092,11 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
           value: "tracked",
         }),
       ).toBe(true);
-      expect((await scriptClient.read({ valueKey: trackedValueKey, watermarkKey }))?.payload).toBe("tracked");
+      expect((await scriptClient.read({
+        valueKey: trackedValueKey,
+        watermarkKey,
+        maxAgeMs: PROTOCOL_READ_MAX_AGE_MS,
+      }))?.payload).toBe("tracked");
       // The recovered write must cache the stamp under sha1(source) — the
       // digest node-redis registers and the GLIDE batch dispatches — so later
       // writes take the single-round-trip path. (The unit suites pin each
@@ -960,7 +1111,11 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
           futureBufferMs: 0,
         }),
       ).resolves.toBeUndefined();
-      expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toBeNull();
+      expect(await scriptClient.read({
+        valueKey: trackedValueKey,
+        watermarkKey,
+        maxAgeMs: PROTOCOL_READ_MAX_AGE_MS,
+      })).toBeNull();
     });
 
     it("treats every invalid read frame and watermark state as a miss", async () => {
@@ -970,29 +1125,34 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       const scriptClient = client.adapter;
       const valueKey = "read-paths:{item:read}:value";
       const watermarkKey = "read-paths:{item:read}:watermark";
+      const createdAtMs = (await admin.time()).getTime();
 
-      expect(await scriptClient.read({ valueKey })).toBeNull();
+      expect(await scriptClient.read({ valueKey, maxAgeMs: PROTOCOL_READ_MAX_AGE_MS })).toBeNull();
 
       await admin.set(valueKey, Buffer.alloc(9));
-      expect(await scriptClient.read({ valueKey })).toBeNull();
+      expect(await scriptClient.read({ valueKey, maxAgeMs: PROTOCOL_READ_MAX_AGE_MS })).toBeNull();
 
       await admin.set(valueKey, encodeFrame("wrong-version", 0, 1_000, 2));
-      expect(await scriptClient.read({ valueKey })).toBeNull();
+      expect(await scriptClient.read({ valueKey, maxAgeMs: PROTOCOL_READ_MAX_AGE_MS })).toBeNull();
 
-      await admin.set(valueKey, encodeFrame("tracked", 0, 1_000));
-      expect(await scriptClient.read({ valueKey, watermarkKey })).toBeNull();
+      await admin.set(valueKey, encodeFrame("tracked", 0, createdAtMs));
+      expect(await scriptClient.read({ valueKey, watermarkKey, maxAgeMs: PROTOCOL_READ_MAX_AGE_MS })).toBeNull();
 
       await admin.set(watermarkKey, "not-a-watermark");
-      expect(await scriptClient.read({ valueKey, watermarkKey })).toBeNull();
+      expect(await scriptClient.read({ valueKey, watermarkKey, maxAgeMs: PROTOCOL_READ_MAX_AGE_MS })).toBeNull();
 
       await admin.set(watermarkKey, "9".repeat(400));
-      expect(await scriptClient.read({ valueKey, watermarkKey })).toBeNull();
+      expect(await scriptClient.read({ valueKey, watermarkKey, maxAgeMs: PROTOCOL_READ_MAX_AGE_MS })).toBeNull();
 
-      await admin.set(watermarkKey, "1000");
-      expect(await scriptClient.read({ valueKey, watermarkKey })).toBeNull();
+      await admin.set(watermarkKey, String(createdAtMs));
+      expect(await scriptClient.read({ valueKey, watermarkKey, maxAgeMs: PROTOCOL_READ_MAX_AGE_MS })).toBeNull();
 
-      await admin.set(watermarkKey, "999.5");
-      expect((await scriptClient.read({ valueKey, watermarkKey }))?.payload).toBe("tracked");
+      await admin.set(watermarkKey, String(createdAtMs - 0.5));
+      expect((await scriptClient.read({
+        valueKey,
+        watermarkKey,
+        maxAgeMs: PROTOCOL_READ_MAX_AGE_MS,
+      }))?.payload).toBe("tracked");
     });
 
     it("records a stale tracked frame as a remote miss without a read error", async () => {
@@ -1065,13 +1225,21 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
 
       await admin.hSet(valueKey, "field", "value");
       await admin.set(watermarkKey, "0");
-      await expect(scriptClient.read({ valueKey })).rejects.toThrow(/WRONGTYPE/);
-      await expect(scriptClient.read({ valueKey, watermarkKey })).resolves.toBeNull();
+      await expect(scriptClient.read({ valueKey, maxAgeMs: PROTOCOL_READ_MAX_AGE_MS })).rejects.toThrow(/WRONGTYPE/);
+      await expect(scriptClient.read({
+        valueKey,
+        watermarkKey,
+        maxAgeMs: PROTOCOL_READ_MAX_AGE_MS,
+      })).resolves.toBeNull();
 
       await admin.del([valueKey, watermarkKey]);
       await admin.set(valueKey, encodeFrame("cached", 0, 1_000));
       await admin.hSet(watermarkKey, "field", "value");
-      await expect(scriptClient.read({ valueKey, watermarkKey })).resolves.toBeNull();
+      await expect(scriptClient.read({
+        valueKey,
+        watermarkKey,
+        maxAgeMs: PROTOCOL_READ_MAX_AGE_MS,
+      })).resolves.toBeNull();
 
       const namespace = "wrong-type-repair";
       const repairValueKey = `{${namespace}:item_id:repair}#WrongTypeRepair:dialcache-frame-v1`;
@@ -1176,7 +1344,11 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       // so the original frame is replaced by an unreadable version-0 placeholder.
       const stored = await admin.get(commandOptions({ returnBuffers: true }), valueKey);
       expect(stored?.[0]).toBe(0);
-      await expect(client.adapter.read({ valueKey, watermarkKey })).resolves.toBeNull();
+      await expect(client.adapter.read({
+        valueKey,
+        watermarkKey,
+        maxAgeMs: PROTOCOL_READ_MAX_AGE_MS,
+      })).resolves.toBeNull();
     });
 
     it("rejects invalid raw script arguments before mutating Redis", async () => {
@@ -1395,7 +1567,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
         })).rejects.toThrow("invalid DialCache watermark");
         // The paired SET lands before the stamp validates the watermark, so the
         // tracked path serves nothing and the placeholder stays unpromoted.
-        expect(await scriptClient.read({ valueKey, watermarkKey })).toBeNull();
+        expect(await scriptClient.read({ valueKey, watermarkKey, maxAgeMs: PROTOCOL_READ_MAX_AGE_MS })).toBeNull();
         const stored = await admin.get(commandOptions({ returnBuffers: true }), valueKey);
         expect(stored?.[0]).toBe(0);
         await admin.del(valueKey);
@@ -1549,7 +1721,11 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       expect(wrote).toBe(true);
       expect(await admin.get(watermarkKey)).toBe("1.75");
       expect(await admin.pTTL(watermarkKey)).toBeGreaterThanOrEqual(61_000);
-      expect((await scriptClient.read({ valueKey, watermarkKey }))?.payload).toBe("cached");
+      expect((await scriptClient.read({
+        valueKey,
+        watermarkKey,
+        maxAgeMs: PROTOCOL_READ_MAX_AGE_MS,
+      }))?.payload).toBe("cached");
     });
 
     it("does not rewrite sufficient or persistent watermarks on tracked writes", async () => {
@@ -1611,22 +1787,26 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       expect(ttlAfterWrite).toBeGreaterThanOrEqual(61_000);
 
       await scriptClient.invalidate({ watermarkKey, futureBufferMs: 100 });
-      expect(await scriptClient.read({ valueKey, watermarkKey })).toBeNull();
+      expect(await scriptClient.read({ valueKey, watermarkKey, maxAgeMs: PROTOCOL_READ_MAX_AGE_MS })).toBeNull();
       const watermarkBeforeBlockedWrite = await admin.get(watermarkKey);
       const watermarkTtlBeforeBlockedWrite = await admin.pTTL(watermarkKey);
       expect(await scriptClient.write({ ...writeRequest, value: "blocked" })).toBe(false);
-      expect(await scriptClient.read({ valueKey })).toBeNull();
+      expect(await scriptClient.read({ valueKey, maxAgeMs: PROTOCOL_READ_MAX_AGE_MS })).toBeNull();
       expect(await admin.get(watermarkKey)).toBe(watermarkBeforeBlockedWrite);
       const watermarkTtlAfterBlockedWrite = await admin.pTTL(watermarkKey);
       expect(watermarkTtlAfterBlockedWrite).toBeGreaterThan(watermarkTtlBeforeBlockedWrite - 1_000);
       expect(watermarkTtlAfterBlockedWrite).toBeLessThanOrEqual(watermarkTtlBeforeBlockedWrite);
       const ttlBeforeRead = await admin.pTTL(watermarkKey);
-      await scriptClient.read({ valueKey, watermarkKey });
+      await scriptClient.read({ valueKey, watermarkKey, maxAgeMs: PROTOCOL_READ_MAX_AGE_MS });
       expect(await admin.pTTL(watermarkKey)).toBeLessThanOrEqual(ttlBeforeRead);
 
       await new Promise((resolve) => setTimeout(resolve, 110));
       expect(await scriptClient.write({ ...writeRequest, value: "fresh" })).toBe(true);
-      expect((await scriptClient.read({ valueKey, watermarkKey }))?.payload).toBe("fresh");
+      expect((await scriptClient.read({
+        valueKey,
+        watermarkKey,
+        maxAgeMs: PROTOCOL_READ_MAX_AGE_MS,
+      }))?.payload).toBe("fresh");
     });
 
     it("documents that losing a watermark removes its publication fence", async () => {
@@ -1650,7 +1830,11 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
 
       expect(await scriptClient.write(staleWrite)).toBe(true);
       expect(await admin.get(watermarkKey)).toBe("0");
-      expect((await scriptClient.read({ valueKey, watermarkKey }))?.payload).toBe("stale");
+      expect((await scriptClient.read({
+        valueKey,
+        watermarkKey,
+        maxAgeMs: PROTOCOL_READ_MAX_AGE_MS,
+      }))?.payload).toBe("stale");
     });
 
     it("never serves an unstamped placeholder and refuses foreign stamps", async () => {
@@ -1663,18 +1847,22 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       await admin.set(valueKey, frame, { PX: 60_000 });
       await admin.set(watermarkKey, "0", { PX: 120_000 });
 
-      expect(await client.adapter.read({ valueKey, watermarkKey })).toBeNull();
-      expect(await client.adapter.read({ valueKey })).toBeNull();
+      expect(await client.adapter.read({ valueKey, watermarkKey, maxAgeMs: PROTOCOL_READ_MAX_AGE_MS })).toBeNull();
+      expect(await client.adapter.read({ valueKey, maxAgeMs: PROTOCOL_READ_MAX_AGE_MS })).toBeNull();
 
       // A stamp carrying a different write's nonce must not promote this
       // placeholder: a leftover from a failed write stays unreadable even
       // after later invalidations pass.
       expect(await client.raw.stamp(valueKey, watermarkKey, 2_000, Buffer.alloc(8, 0xab))).toBe(2);
-      expect(await client.adapter.read({ valueKey, watermarkKey })).toBeNull();
+      expect(await client.adapter.read({ valueKey, watermarkKey, maxAgeMs: PROTOCOL_READ_MAX_AGE_MS })).toBeNull();
 
       // Only the paired nonce promotes it to a served, server-stamped frame.
       expect(await client.raw.stamp(valueKey, watermarkKey, 2_000, nonce)).toBe(1);
-      expect((await client.adapter.read({ valueKey, watermarkKey }))?.payload).toBe("pending");
+      expect((await client.adapter.read({
+        valueKey,
+        watermarkKey,
+        maxAgeMs: PROTOCOL_READ_MAX_AGE_MS,
+      }))?.payload).toBe("pending");
       const stored = await admin.get(commandOptions({ returnBuffers: true }), valueKey);
       expect(stored?.[0]).toBe(1);
       expect(stored?.readBigUInt64BE(1) ?? 0n).toBeGreaterThan(0n);
@@ -1695,7 +1883,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
 
       const stored = await admin.get(commandOptions({ returnBuffers: true }), valueKey);
       expect(stored?.readBigUInt64BE(1)).toBe(1_000n);
-      expect(await client.adapter.read({ valueKey, watermarkKey })).toBeNull();
+      expect(await client.adapter.read({ valueKey, watermarkKey, maxAgeMs: PROTOCOL_READ_MAX_AGE_MS })).toBeNull();
     });
 
     it("does not create a value key when stamping after a lost SET", async () => {
@@ -1723,10 +1911,16 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
     const binary = Buffer.from([0, 0xff, 0xc3, 0x28, 0x80]);
 
     await nodeRedis.write({ valueKey: "interop:node-to-glide", cacheTtlMs: 60_000, value: binary });
-    expect((await valkeyGlide.read({ valueKey: "interop:node-to-glide" }))?.payload).toEqual(binary);
+    expect((await valkeyGlide.read({
+      valueKey: "interop:node-to-glide",
+      maxAgeMs: PROTOCOL_READ_MAX_AGE_MS,
+    }))?.payload).toEqual(binary);
 
     await valkeyGlide.write({ valueKey: "interop:glide-to-node", cacheTtlMs: 60_000, value: "hello" });
-    expect((await nodeRedis.read({ valueKey: "interop:glide-to-node" }))?.payload).toBe("hello");
+    expect((await nodeRedis.read({
+      valueKey: "interop:glide-to-node",
+      maxAgeMs: PROTOCOL_READ_MAX_AGE_MS,
+    }))?.payload).toBe("hello");
 
     const nodeTrackedValueKey = "interop:{node-tracked}:value";
     const nodeTrackedWatermarkKey = "interop:{node-tracked}:watermark";
@@ -1739,6 +1933,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
     expect((await valkeyGlide.read({
       valueKey: nodeTrackedValueKey,
       watermarkKey: nodeTrackedWatermarkKey,
+      maxAgeMs: PROTOCOL_READ_MAX_AGE_MS,
     }))?.payload).toEqual(binary);
 
     const glideTrackedValueKey = "interop:{glide-tracked}:value";
@@ -1752,6 +1947,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
     expect((await nodeRedis.read({
       valueKey: glideTrackedValueKey,
       watermarkKey: glideTrackedWatermarkKey,
+      maxAgeMs: PROTOCOL_READ_MAX_AGE_MS,
     }))?.payload).toBe("tracked");
   });
 });

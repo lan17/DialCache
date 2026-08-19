@@ -60,11 +60,13 @@ export class DialCacheRedisProtocolError extends Error {
 }
 
 /**
- * A tracked write's stamp found no placeholder carrying its nonce: the paired
+ * A write's stamp found no placeholder carrying its nonce: the paired
  * SET was rejected, overwritten by a concurrent writer, expired, or removed
- * by a fenced write. The value was not published, and DialCache suppresses the
- * corresponding process-local publication. Same-key write contention produces
- * a benign floor of these, concentrated on hot keys at TTL expiry.
+ * by a fenced write. The value was not published. For tracked writes,
+ * DialCache also suppresses the corresponding process-local publication;
+ * untracked writes retain their existing fail-open local-fill behavior.
+ * Same-key write contention produces a benign floor of these, concentrated on
+ * hot keys at TTL expiry.
  */
 export class DialCacheRedisPlaceholderLostError extends Error {
   static [Symbol.hasInstance](value: unknown): boolean {
@@ -91,12 +93,11 @@ export type RedisCachePayload = string | Buffer;
  * A served Redis frame: the payload bytes past the frame header plus the
  * header's creation time. The payload is the serializer output, possibly
  * still wrapped in a compression envelope that DialCache core interprets
- * above the adapter (see the `dialcache/redis-protocol` module doc). Tracked
- * frames carry Redis server time written by the stamp script; untracked
- * frames carry the writer's client clock. DialCache consumes `createdAtMs`
- * only for observability (the shadow value-age observation) — tracked
- * watermark fencing already happened inside the decoder — so it never
- * affects serving decisions.
+ * above the adapter (see the `dialcache/redis-protocol` module doc). Frames
+ * carry Redis server time written by the stamp scripts. Adapters use
+ * `createdAtMs` to enforce the requested logical maximum age, and DialCache
+ * also consumes it for the shadow value-age observation. Tracked watermark
+ * fencing already happened inside the decoder.
  */
 export interface DecodedRedisFrame {
   readonly payload: RedisCachePayload;
@@ -108,11 +109,16 @@ interface RedisValueRequest {
   readonly valueKey: string;
 }
 
-interface TrackedRedisValueRequest extends RedisValueRequest {
+interface RedisReadBase extends RedisValueRequest {
+  /** Positive integer no greater than 31,536,000,000 (365 days). */
+  readonly maxAgeMs: number;
+}
+
+interface TrackedRedisValueRequest extends RedisReadBase {
   readonly watermarkKey: string;
 }
 
-interface UntrackedRedisValueRequest extends RedisValueRequest {
+interface UntrackedRedisValueRequest extends RedisReadBase {
   readonly watermarkKey?: never;
 }
 
@@ -133,8 +139,8 @@ interface RedisWriteBase extends RedisValueRequest {
   readonly value: RedisCachePayload;
 }
 
-type TrackedRedisWriteRequest = RedisWriteBase & TrackedRedisValueRequest;
-type UntrackedRedisWriteRequest = RedisWriteBase & UntrackedRedisValueRequest;
+type TrackedRedisWriteRequest = RedisWriteBase & { readonly watermarkKey: string };
+type UntrackedRedisWriteRequest = RedisWriteBase & { readonly watermarkKey?: never };
 
 export type RedisWriteRequest = TrackedRedisWriteRequest | UntrackedRedisWriteRequest;
 
@@ -161,10 +167,19 @@ export interface RedisInvalidationRequest {
  */
 export interface DialCacheRedisClient {
   /**
-   * Read a DialCache Redis frame and return its decoded serializer payload
-   * together with the frame header's creation time. Implementations must use
-   * `decodeRedisFrame` / `decodeTrackedRedisFrame` from
-   * `dialcache/redis-protocol`, or preserve their exact behavior.
+   * Safety capability marker. Custom clients must explicitly attest that every
+   * read enforces `RedisReadRequest.maxAgeMs` using Redis server time.
+   * DialCache also checks this marker at runtime for JavaScript clients.
+   */
+  readonly enforcesMaxAge: true;
+  /**
+   * Read a DialCache Redis frame whose Redis-server age is strictly less than
+   * `maxAgeMs`, returning its decoded serializer payload together with the
+   * frame header's creation time. Implementations must validate the request
+   * with `assertValidRedisMaxAgeMs` before dispatch and use
+   * `decodeRedisFrame` / `decodeTrackedRedisFrame`, `decodeRedisServerTime`,
+   * and `isRedisFrameWithinMaxAge` from `dialcache/redis-protocol`, or preserve
+   * their exact behavior.
    *
    * Raw values are Redis bulk strings (`Buffer`) or null. A missing value, a
    * frame shorter than the version/timestamp/encoding header, or an
@@ -174,8 +189,9 @@ export interface DialCacheRedisClient {
    * `createdAt <= watermark` is fenced. Unsupported payload encodings and
    * non-bulk runtime replies are payload protocol errors rather than misses.
    *
-   * Tracked implementations must read the value and watermark atomically from
-   * one authoritative snapshot; replica lag must not hide an invalidation.
+   * Implementations must compare against Redis server time. Tracked
+   * implementations must read the value and watermark atomically from one
+   * authoritative snapshot; replica lag must not hide an invalidation.
    *
    * A non-null frame is transferred to DialCache. A returned Buffer payload
    * must remain stable and must not be mutated, pooled, or reused after this
@@ -188,12 +204,12 @@ export interface DialCacheRedisClient {
    * Write a DialCache Redis frame using the `dialcache/redis-protocol`
    * encoders, or preserve their exact behavior.
    *
-   * Untracked writes are one native `SET valueKey frame PX cacheTtlMs` whose
-   * frame comes from `encodeRedisFrame` with a client-clock `createdAtMs`.
-   * Untracked reads never consult that stamp for serving or miss decisions,
-   * but they do surface it as the decoded frame's `createdAtMs`, where it
-   * feeds the shadow value-age observation — so untracked writers must stamp
-   * real client time, not a constant.
+   * Untracked writes issue two commands ordered on one connection without a
+   * transaction: a native `SET` of an `encodeTrackedRedisPlaceholder` frame,
+   * followed by `WRITE_UNTRACKED_STAMP_SCRIPT` with `KEYS = [valueKey]` and
+   * `ARGV = [nonce]`. The script promotes exactly that placeholder to a
+   * served frame with Redis-server `createdAt` (reply 1), or reports the
+   * placeholder gone (reply 2).
    *
    * Tracked writes issue two commands ordered on one connection without a
    * transaction: a native `SET` of an `encodeTrackedRedisPlaceholder` frame,
@@ -213,7 +229,7 @@ export interface DialCacheRedisClient {
    * placeholder remains subject to the invalidation future buffer, like any
    * in-flight write.
    *
-   * Implementations must not reorder the pair, must mint one placeholder per
+   * Implementations must not reorder either pair, must mint one placeholder per
    * logical write so client-level retries stay paired with their stamp, and
    * must surface a SET failure as the write error even when the stamp settled
    * (in that case the stamp may have promoted the landed SET, leaving the

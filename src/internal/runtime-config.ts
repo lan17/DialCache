@@ -15,23 +15,41 @@ export interface ResolvedLayerConfig {
   readonly ramp: number;
 }
 
-export type LayerConfigResolution =
-  | { readonly status: "enabled"; readonly config: ResolvedLayerConfig }
+/** Remote-only policy resolved against the same invocation snapshot as its TTL. */
+export interface ResolvedRemoteLayerConfig extends ResolvedLayerConfig {
+  readonly staleOnErrorMaxAgeSec: number | null;
+}
+
+export type LayerConfigResolution<Config extends ResolvedLayerConfig = ResolvedLayerConfig> =
+  | { readonly status: "enabled"; readonly config: Config }
   | {
       readonly status: "disabled";
       readonly reason: "ramped_down";
       /** Valid policy retained even though its ramp excluded this key. */
-      readonly config: ResolvedLayerConfig;
+      readonly config: Config;
     }
   | {
       readonly status: "disabled";
       readonly reason: Exclude<DisabledReason, "ramped_down">;
     };
 
+/**
+ * A malformed optional stale policy is diagnostic-only: the valid remote layer
+ * remains available with recovery disabled.
+ */
+export type RemoteLayerConfigResolution = LayerConfigResolution<ResolvedRemoteLayerConfig> & {
+  readonly staleOnErrorConfigError?: true;
+};
+
 interface ResolveLayerConfigOptions {
   readonly config: DialCacheKeyConfig | null;
   readonly key: DialCacheKey;
   readonly layer: CacheLayer;
+}
+
+interface ResolveRemoteLayerConfigOptions {
+  readonly config: DialCacheKeyConfig | null;
+  readonly key: DialCacheKey;
 }
 
 export async function fetchKeyConfig(
@@ -91,6 +109,48 @@ export function resolveLayerConfigResult(options: ResolveLayerConfigOptions): La
     : { status: "disabled", reason: "ramped_down", config: { ttlSec, ramp } };
 }
 
+export function resolveRemoteLayerConfigResult(
+  options: ResolveRemoteLayerConfigOptions,
+): RemoteLayerConfigResolution {
+  const resolution = resolveLayerConfigResult({
+    ...options,
+    layer: CacheLayer.REMOTE,
+  });
+  const configuredMaxAge: unknown = options.config?.staleOnErrorMaxAgeSec;
+  if (!("config" in resolution)) {
+    if (
+      resolution.reason === "policy_disabled"
+      && configuredMaxAge !== undefined
+      && configuredMaxAge !== 0
+    ) {
+      return { ...resolution, staleOnErrorConfigError: true };
+    }
+    return resolution;
+  }
+
+  if (configuredMaxAge === undefined || configuredMaxAge === 0) {
+    return {
+      ...resolution,
+      config: { ...resolution.config, staleOnErrorMaxAgeSec: null },
+    };
+  }
+  if (
+    !isSupportedCacheTtlSec(configuredMaxAge)
+    || configuredMaxAge <= resolution.config.ttlSec
+  ) {
+    return {
+      ...resolution,
+      config: { ...resolution.config, staleOnErrorMaxAgeSec: null },
+      staleOnErrorConfigError: true,
+    };
+  }
+
+  return {
+    ...resolution,
+    config: { ...resolution.config, staleOnErrorMaxAgeSec: configuredMaxAge },
+  };
+}
+
 function mergeKeyConfig(
   defaultConfig: DialCacheKeyConfig | null,
   runtimeConfig: DialCacheKeyConfig | null | undefined,
@@ -112,6 +172,9 @@ function mergeKeyConfig(
   const remoteReadTimeoutMs = overlay?.remoteReadTimeoutMs !== undefined
     ? overlay.remoteReadTimeoutMs
     : defaultConfig?.remoteReadTimeoutMs;
+  const staleOnErrorMaxAgeSec = overlay?.staleOnErrorMaxAgeSec !== undefined
+    ? overlay.staleOnErrorMaxAgeSec
+    : defaultConfig?.staleOnErrorMaxAgeSec;
   const shadow = mergeShadowConfig(defaultConfig?.shadow, overlay?.shadow);
 
   return new DialCacheKeyConfig({
@@ -119,6 +182,7 @@ function mergeKeyConfig(
     ramp: mergeLayerConfig(defaultConfig?.ramp, overlay?.ramp, "ramp"),
     ...(requestLocal === undefined ? {} : { requestLocal }),
     ...(coalesce === undefined ? {} : { coalesce }),
+    ...(staleOnErrorMaxAgeSec === undefined ? {} : { staleOnErrorMaxAgeSec }),
     ...(remoteReadTimeoutMs === undefined ? {} : { remoteReadTimeoutMs }),
     ...(shadow === undefined ? {} : { shadow }),
   });
