@@ -191,6 +191,7 @@ describe("Prometheus metrics adapter", () => {
       },
       42,
     );
+    metrics.observeFutureTimestampOffset(labels, 0.007);
     metrics.compression({ ...labels, outcome: "compressed" });
     metrics.observeGet(labels, 0.05);
     metrics.observeFallback(labels, 0.05);
@@ -233,6 +234,11 @@ describe("Prometheus metrics adapter", () => {
         "in_fallback",
       ]),
       histogramSchema("schema_dialcache_fallback_timer", ["cache_namespace", "use_case", "key_type", "layer"], TIMER_BUCKETS),
+      histogramSchema(
+        "schema_dialcache_future_timestamp_offset_histogram",
+        ["cache_namespace", "use_case", "key_type", "layer"],
+        TIMER_BUCKETS,
+      ),
       histogramSchema("schema_dialcache_get_timer", ["cache_namespace", "use_case", "key_type", "layer"], TIMER_BUCKETS),
       counterSchema("schema_dialcache_invalidation_counter", ["cache_namespace", "key_type", "layer"]),
       counterSchema("schema_dialcache_miss_counter", ["cache_namespace", "use_case", "key_type", "layer"]),
@@ -269,6 +275,20 @@ describe("Prometheus metrics adapter", () => {
       use_case: labels.useCase,
       key_type: labels.keyType,
       outcome: "match",
+    });
+
+    const futureTimestampOffset = families.find(
+      ({ name }) => name === "schema_dialcache_future_timestamp_offset_histogram",
+    );
+    const futureTimestampOffsetSum = futureTimestampOffset?.values.find(
+      ({ metricName }) => metricName === "schema_dialcache_future_timestamp_offset_histogram_sum",
+    );
+    expect(futureTimestampOffsetSum?.value).toBe(0.007);
+    expect(futureTimestampOffsetSum?.labels).toEqual({
+      cache_namespace: labels.cacheNamespace,
+      use_case: labels.useCase,
+      key_type: labels.keyType,
+      layer: labels.layer,
     });
 
     const serialization = families.find(({ name }) => name === "schema_dialcache_serialization_timer");

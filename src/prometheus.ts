@@ -70,6 +70,7 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
   private readonly coalescedCounter: Counter<CoalescedLabels>;
   private readonly shadowValidationCounter: Counter<ShadowValidationLabels>;
   private readonly shadowValueAgeHistogram: Histogram<ShadowValidationLabels>;
+  private readonly futureTimestampOffsetHistogram: Histogram<CounterLabels>;
   private readonly compressionCounter: Counter<CompressionLabels>;
   private readonly getTimer: Histogram<CounterLabels>;
   private readonly fallbackTimer: Histogram<CounterLabels>;
@@ -93,6 +94,7 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
     this.coalescedCounter = counter(registry, collectors.coalescedCounter);
     this.shadowValidationCounter = counter(registry, collectors.shadowValidationCounter);
     this.shadowValueAgeHistogram = histogram(registry, collectors.shadowValueAgeHistogram);
+    this.futureTimestampOffsetHistogram = histogram(registry, collectors.futureTimestampOffsetHistogram);
     this.compressionCounter = counter(registry, collectors.compressionCounter);
     this.getTimer = histogram(registry, collectors.getTimer);
     this.fallbackTimer = histogram(registry, collectors.fallbackTimer);
@@ -146,6 +148,10 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
 
   observeShadowValueAge(labels: ShadowValidationMetricLabels, seconds: number): void {
     this.shadowValueAgeHistogram.observe(shadowValidationLabels(labels), seconds);
+  }
+
+  observeFutureTimestampOffset(labels: CacheMetricLabels, seconds: number): void {
+    this.futureTimestampOffsetHistogram.observe(cacheLabels(labels), seconds);
   }
 
   compression(labels: CompressionMetricLabels): void {
@@ -253,6 +259,13 @@ function collectorConfigs(prefix: string) {
       help: "Age in seconds of the validated Redis value at DialCache shadow verdict time.",
       labelNames: ["cache_namespace", "use_case", "key_type", "outcome"],
       buckets: VALUE_AGE_BUCKETS,
+    },
+    futureTimestampOffsetHistogram: {
+      type: "histogram",
+      name: `${prefix}dialcache_future_timestamp_offset_histogram`,
+      help: "Positive offset in seconds of Redis frames dated after the observing DialCache process clock.",
+      labelNames: ["cache_namespace", "use_case", "key_type", "layer"],
+      buckets: TIMER_BUCKETS,
     },
     compressionCounter: {
       type: "counter",

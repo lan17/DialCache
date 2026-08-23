@@ -5,6 +5,7 @@ import {
   WRITE_TRACKED_STAMP_SCRIPT,
 } from "./internal/redis-scripts.js";
 import {
+  assertValidRedisTimestampMs,
   decodeRedisFrame,
   decodeTrackedRedisFrame,
   encodeRedisFrame,
@@ -63,11 +64,17 @@ function defineDialCacheScript<Args extends Array<unknown>, Reply>(
  */
 export type DialCacheNodeRedisScripts = {
   readonly dialcacheWriteTrackedStamp: NodeRedisScript<
-    [valueKey: string, watermarkKey: string, cacheTtlMs: number, nonce: Buffer],
+    [
+      valueKey: string,
+      watermarkKey: string,
+      cacheTtlMs: number,
+      nonce: Buffer,
+      createdAtMs: number,
+    ],
     number
   >;
   readonly dialcacheInvalidate: NodeRedisScript<
-    [watermarkKey: string, futureBufferMs: number],
+    [watermarkKey: string, futureBufferMs: number, invalidatedAtMs: number],
     number
   >;
 };
@@ -84,8 +91,9 @@ export const dialcacheRedisScripts: DialCacheNodeRedisScripts = {
       watermarkKey: string,
       cacheTtlMs: number,
       nonce: Buffer,
+      createdAtMs: number,
     ): Array<NodeRedisArgument> {
-      return [valueKey, watermarkKey, String(cacheTtlMs), nonce];
+      return [valueKey, watermarkKey, String(cacheTtlMs), nonce, String(createdAtMs)];
     },
     transformReply: writeReply,
   }),
@@ -94,8 +102,12 @@ export const dialcacheRedisScripts: DialCacheNodeRedisScripts = {
     NUMBER_OF_KEYS: 1,
     FIRST_KEY_INDEX: 0,
     IS_READ_ONLY: false,
-    transformArguments(watermarkKey: string, futureBufferMs: number): Array<string> {
-      return [watermarkKey, String(futureBufferMs)];
+    transformArguments(
+      watermarkKey: string,
+      futureBufferMs: number,
+      invalidatedAtMs: number,
+    ): Array<string> {
+      return [watermarkKey, String(futureBufferMs), String(invalidatedAtMs)];
     },
     transformReply: invalidationReply,
   }),
@@ -107,8 +119,13 @@ interface NodeRedisWriteClient {
     watermarkKey: string,
     cacheTtlMs: number,
     nonce: Buffer,
+    createdAtMs: number,
   ): Promise<number>;
-  dialcacheInvalidate(watermarkKey: string, futureBufferMs: number): Promise<number>;
+  dialcacheInvalidate(
+    watermarkKey: string,
+    futureBufferMs: number,
+    invalidatedAtMs: number,
+  ): Promise<number>;
 }
 
 interface NodeRedisStandaloneClient extends NodeRedisWriteClient {
@@ -239,13 +256,21 @@ export function createNodeRedisDialCacheClient(client: NodeRedisClient): DialCac
         return true;
       }
       const { frame, nonce } = encodeTrackedRedisPlaceholder(value);
+      const createdAtMs = Date.now();
+      assertValidRedisTimestampMs(createdAtMs);
       // Both commands must enqueue in this synchronous tick so they pipeline
       // in order; an await between them would allow reordering around them.
       const setPromise = sendFrameSet(client, valueKey, frame, cacheTtlMs);
       // Observe the SET unconditionally so a synchronous throw before
       // allSettled cannot leave its rejection unhandled.
       setPromise.catch(() => undefined);
-      const stampPromise = client.dialcacheWriteTrackedStamp(valueKey, watermarkKey, cacheTtlMs, nonce);
+      const stampPromise = client.dialcacheWriteTrackedStamp(
+        valueKey,
+        watermarkKey,
+        cacheTtlMs,
+        nonce,
+        createdAtMs,
+      );
       const [setResult, stampResult] = await Promise.allSettled([setPromise, stampPromise]);
       // A failed SET is the write outcome even when the stamp settled.
       if (setResult.status === "rejected") {
@@ -258,9 +283,11 @@ export function createNodeRedisDialCacheClient(client: NodeRedisClient): DialCac
       return resolveTrackedRedisWriteReply(stampResult.value);
     },
     async invalidate({ watermarkKey, futureBufferMs }) {
+      const invalidatedAtMs = Date.now();
+      assertValidRedisTimestampMs(invalidatedAtMs);
       let raw: unknown;
       try {
-        raw = await client.dialcacheInvalidate(watermarkKey, futureBufferMs);
+        raw = await client.dialcacheInvalidate(watermarkKey, futureBufferMs, invalidatedAtMs);
       } catch (error) {
         // The registered transformReply validates inside the returned
         // promise, so a reply-domain violation surfaces here as a rejection;
@@ -281,7 +308,14 @@ export function createNodeRedisDialCacheClient(client: NodeRedisClient): DialCac
         raw = await sendKeyedCommand(
           client,
           watermarkKey,
-          ["EVAL", INVALIDATE_CACHE_SCRIPT, "1", watermarkKey, String(futureBufferMs)],
+          [
+            "EVAL",
+            INVALIDATE_CACHE_SCRIPT,
+            "1",
+            watermarkKey,
+            String(futureBufferMs),
+            String(invalidatedAtMs),
+          ],
           bufferReplyOptions,
         );
       }

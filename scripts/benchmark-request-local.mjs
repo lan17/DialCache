@@ -248,7 +248,7 @@ async function benchmarkRedisReadDeadlineCoalescing(fanout) {
       redisReadCalls += 1;
       started.resolve();
       await gate.promise;
-      return JSON.stringify("shared");
+      return { payload: JSON.stringify("shared"), createdAtMs: Date.now() };
     },
     async write() {
       return true;
@@ -318,11 +318,12 @@ async function benchmarkSequentialTrackedRedisHits(iterations, { scenario, useCa
   let redisReadCalls = 0;
   let redisWriteCalls = 0;
   let redisInvalidationCalls = 0;
+  const frame = { payload: JSON.stringify("shared"), createdAtMs: Date.now() };
   const redisClient = {
     async read({ watermarkKey }) {
       assert.equal(typeof watermarkKey, "string", "the benchmark must exercise tracked Redis reads");
       redisReadCalls += 1;
-      return JSON.stringify("shared");
+      return frame;
     },
     async write() {
       redisWriteCalls += 1;
@@ -451,7 +452,7 @@ async function benchmarkDarkShadowDetachment() {
   assert.equal(redisReadCalls, 1, "the detached C0 read should have started");
   assert.equal(fallbackCalls, 1, "the caller and shadow validation must share one SoT invocation");
 
-  readGate.resolve(JSON.stringify(cachedValue));
+  readGate.resolve({ payload: JSON.stringify(cachedValue), createdAtMs: Date.now() });
   await nextTurn();
   assert.equal(await outcomeGate.promise, "mismatch");
   assert.equal(redisReadCalls, 2, "only a mismatch candidate should add confirmation C1");

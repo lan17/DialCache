@@ -1,14 +1,16 @@
 // Maintainer benchmark for the Redis write path. Measures the local build's
 // tracked and untracked writes against a live Redis and reports server-side
 // command cost per write (INFO commandstats; the EVALSHA entry envelopes
-// script-internal calls) alongside client-side latency percentiles. It
-// asserts nothing and applies no timing thresholds: absolute numbers are
-// machine-, engine-, and load-dependent, so compare runs only against the
-// same environment.
+// script-internal calls) alongside client-side latency percentiles. It asserts
+// the steady-state top-level SET/script shape and that no write invokes TIME,
+// but applies no timing thresholds: absolute numbers are machine-, engine-,
+// and load-dependent, so compare runs only against the same idle Redis.
 //
 // Requires a reachable Redis, e.g.: docker run --rm -p 6379:6379 redis:6.2
 // Usage: pnpm benchmark:redis-write            (REDIS_URL to override)
 // DIALCACHE_BENCH_WRITE_SCALE scales iteration counts (default 1).
+import assert from "node:assert/strict";
+
 import { createClient } from "redis";
 
 import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "../dist/node-redis.js";
@@ -82,6 +84,16 @@ for (const mode of ["tracked", "untracked"]) {
     // and the EVAL recovery). Script-internal calls surface in commandstats
     // too, but the EVALSHA entry already envelopes their execution time.
     const stats = await commandStats(client);
+    const setCalls = stats.set?.calls ?? 0;
+    const scriptCalls = (stats.evalsha?.calls ?? 0) + (stats.eval?.calls ?? 0);
+    const timeCalls = stats.time?.calls ?? 0;
+    assert.equal(setCalls, iterations, `${mode} writes must issue one top-level SET each`);
+    assert.equal(
+      scriptCalls,
+      mode === "tracked" ? iterations : 0,
+      `${mode} writes dispatched an unexpected number of stamp scripts`,
+    );
+    assert.equal(timeCalls, 0, `${mode} writes must not invoke Redis TIME`);
     const serverUsec = (stats.set?.usec ?? 0)
       + (stats.evalsha?.usec ?? 0)
       + (stats.eval?.usec ?? 0);
@@ -90,6 +102,9 @@ for (const mode of ["tracked", "untracked"]) {
       mode,
       size: size.name,
       writes: iterations,
+      setCallsPerWrite: setCalls / iterations,
+      scriptCallsPerWrite: scriptCalls / iterations,
+      timeCallsPerWrite: timeCalls / iterations,
       serverUsecPerWrite: serverUsec / iterations,
       clientP50Usec: percentile(latenciesUsec, 50),
       clientP95Usec: percentile(latenciesUsec, 95),
@@ -99,14 +114,18 @@ for (const mode of ["tracked", "untracked"]) {
 await client.quit();
 
 console.log(`Redis write benchmark — ${REDIS_URL}`);
-console.log("mode       size      writes   server µs/write   client p50 µs   client p95 µs");
+console.log("mode       size      writes   SET/op   script/op   TIME/op   server µs/write   client p50 µs   client p95 µs");
 for (const row of rows) {
   console.log(
     row.mode.padEnd(10)
     + row.size.padEnd(10)
     + String(row.writes).padEnd(9)
+    + row.setCallsPerWrite.toFixed(1).padEnd(9)
+    + row.scriptCallsPerWrite.toFixed(1).padEnd(12)
+    + row.timeCallsPerWrite.toFixed(1).padEnd(10)
     + row.serverUsecPerWrite.toFixed(1).padEnd(18)
     + row.clientP50Usec.toFixed(0).padEnd(16)
     + row.clientP95Usec.toFixed(0),
   );
 }
+console.log("Command-shape assertions passed; elapsed times are informational and have no pass/fail threshold.");

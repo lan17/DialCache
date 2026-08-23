@@ -79,20 +79,30 @@ function encodeFrameBytes(payload: RedisCachePayload, version: number, stampByte
 /**
  * Encode a serializer payload into a servable DialCache Redis frame.
  *
- * Untracked writes stamp a client-clock `createdAtMs`. Untracked reads never
- * consult the stamp for serving or miss decisions, but they surface it as the
- * decoded frame's `createdAtMs`, which feeds the shadow value-age
- * observation — so stamp real client time, not a constant. Tracked writes
- * must not use this directly — they pair `encodeTrackedRedisPlaceholder`
- * with `WRITE_TRACKED_STAMP_SCRIPT` instead.
+ * Untracked writes stamp a client-clock `createdAtMs`. Core rejects decoded
+ * frames dated after the reader's clock and uses the timestamp for shadow
+ * value-age observations, so stamp real client time, not a constant. Tracked
+ * writes must not use this directly — they pair
+ * `encodeTrackedRedisPlaceholder` with `WRITE_TRACKED_STAMP_SCRIPT` instead.
  */
 export function encodeRedisFrame(payload: RedisCachePayload, createdAtMs: number): Buffer {
-  if (!Number.isSafeInteger(createdAtMs) || createdAtMs < 0) {
+  if (!isValidRedisTimestampMs(createdAtMs)) {
     throw new RangeError("DialCache frame createdAtMs must be a nonnegative safe integer");
   }
   const timestamp = Buffer.allocUnsafe(REDIS_FRAME_TIMESTAMP_BYTES);
   timestamp.writeBigUInt64BE(BigInt(createdAtMs));
   return encodeFrameBytes(payload, REDIS_FRAME_VERSION, timestamp);
+}
+
+/** Validate an application-clock epoch timestamp before mutation dispatch. */
+export function assertValidRedisTimestampMs(timestampMs: number): void {
+  if (!isValidRedisTimestampMs(timestampMs)) {
+    throw new RangeError("DialCache Redis timestamp must be a nonnegative safe integer");
+  }
+}
+
+function isValidRedisTimestampMs(timestampMs: number): boolean {
+  return Number.isSafeInteger(timestampMs) && timestampMs >= 0;
 }
 
 export interface TrackedRedisPlaceholder {
@@ -108,12 +118,12 @@ export interface TrackedRedisPlaceholder {
  *
  * The frame carries the placeholder version byte, so both read paths treat it
  * as a miss, and a fresh random nonce where a stamped frame carries its
- * timestamp. The stamp promotes the frame — patching version and server-time
- * timestamp — only when the stored header matches this exact nonce, so it can
- * never publish a placeholder left behind by a different write. Mint one
- * placeholder per logical write: client-level retries must reuse the same
- * frame and nonce so a retried SET re-establishes the placeholder its stamp
- * expects.
+ * timestamp. The stamp promotes the frame — patching version and the supplied
+ * application timestamp — only when the stored header matches this exact
+ * nonce, so it can never publish a placeholder left behind by a different
+ * write. Mint one placeholder per logical write: client-level retries must
+ * reuse the same frame and nonce so a retried SET re-establishes the
+ * placeholder its stamp expects.
  */
 export function encodeTrackedRedisPlaceholder(payload: RedisCachePayload): TrackedRedisPlaceholder {
   const nonce = randomBytes(REDIS_FRAME_TIMESTAMP_BYTES);
@@ -122,8 +132,8 @@ export function encodeTrackedRedisPlaceholder(payload: RedisCachePayload): Track
 
 /**
  * Decode an untracked DialCache frame returned as a Redis bulk string into
- * its serializer payload and header creation time (the writer's informational
- * client clock). Missing, short, and unsupported-version frames are cache
+ * its serializer payload and header creation time (the writer's application
+ * clock). Missing, short, and unsupported-version frames are cache
  * misses. Invalid runtime reply types and unsupported payload encodings throw
  * typed errors.
  */
@@ -141,7 +151,7 @@ export function decodeRedisFrame(raw: unknown): DecodedRedisFrame | null {
 /**
  * Decode a tracked DialCache frame against a watermark from the same atomic,
  * authoritative snapshot into its serializer payload and header creation time
- * (Redis server time written by the stamp script). Missing or malformed state
+ * (application time supplied to the stamp script). Missing or malformed state
  * and frames created at or before the watermark are cache misses. Invalid
  * runtime reply types and unsupported payload encodings throw typed errors.
  */

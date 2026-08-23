@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import { ceilSupportedCacheTtlMs } from "./internal/duration.js";
 import {
+  assertValidRedisTimestampMs,
   decodeRedisFrame,
   decodeTrackedRedisFrame,
   encodeRedisFrame,
@@ -201,7 +202,9 @@ export function createValkeyGlideDialCacheClient<TDecoder>(
       }
 
       const { frame, nonce } = encodeTrackedRedisPlaceholder(value);
-      const stampArgs: ValkeyGlideString[] = [String(cacheTtlMs), nonce];
+      const createdAtMs = Date.now();
+      assertValidRedisTimestampMs(createdAtMs);
+      const stampArgs: ValkeyGlideString[] = [String(cacheTtlMs), nonce, String(createdAtMs)];
       const batch = (isCluster ? new glide.ClusterBatch(false) : new glide.Batch(false))
         .customCommand(["SET", valueKey, frame, "PX", String(cacheTtlMs)])
         .customCommand([
@@ -241,7 +244,12 @@ export function createValkeyGlideDialCacheClient<TDecoder>(
       return resolveTrackedRedisWriteReply(stampReply);
     },
     async invalidate({ watermarkKey, futureBufferMs }) {
-      const invalidateArgs: ValkeyGlideString[] = [String(futureBufferMs)];
+      const invalidatedAtMs = Date.now();
+      assertValidRedisTimestampMs(invalidatedAtMs);
+      const invalidateArgs: ValkeyGlideString[] = [
+        String(futureBufferMs),
+        String(invalidatedAtMs),
+      ];
       const options = keyedOptions(watermarkKey);
       let raw: unknown;
       try {

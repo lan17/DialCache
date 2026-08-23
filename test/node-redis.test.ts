@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   CacheLayer,
@@ -8,7 +8,7 @@ import {
   DialCacheRedisProtocolError,
 } from "../src/index.js";
 import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "../src/node-redis.js";
-import { INVALIDATE_CACHE_SCRIPT } from "../src/redis-protocol.js";
+import { INVALIDATE_CACHE_SCRIPT, WRITE_TRACKED_STAMP_SCRIPT } from "../src/redis-protocol.js";
 
 const INVALID_WRITE_REPLIES: readonly unknown[] = [
   -1,
@@ -83,6 +83,10 @@ async function expectProtocolError(operation: Promise<unknown>, message: string)
 }
 
 describe("node-redis adapter", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("provides the expected arguments for every bundled mutation script", () => {
     const nonce = Buffer.from("01234567");
     expect(Object.keys(dialcacheRedisScripts)).toEqual([
@@ -95,11 +99,18 @@ describe("node-redis adapter", () => {
         "tracked:{id}:watermark",
         1_000,
         nonce,
+        1_234,
       ),
-    ).toEqual(["tracked:{id}:value", "tracked:{id}:watermark", "1000", nonce]);
+    ).toEqual(["tracked:{id}:value", "tracked:{id}:watermark", "1000", nonce, "1234"]);
     expect(
-      dialcacheRedisScripts.dialcacheInvalidate.transformArguments("tracked:{id}:watermark", 50),
-    ).toEqual(["tracked:{id}:watermark", "50"]);
+      dialcacheRedisScripts.dialcacheInvalidate.transformArguments(
+        "tracked:{id}:watermark",
+        50,
+        1_234,
+      ),
+    ).toEqual(["tracked:{id}:watermark", "50", "1234"]);
+    expect(WRITE_TRACKED_STAMP_SCRIPT).not.toMatch(/redis\.call\(["']TIME["']\)/);
+    expect(INVALIDATE_CACHE_SCRIPT).not.toMatch(/redis\.call\(["']TIME["']\)/);
   });
 
   it("rejects clients constructed without the DialCache script registrations", () => {
@@ -160,13 +171,12 @@ describe("node-redis adapter", () => {
   });
 
   it("writes untracked frames with one native SET", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_234);
     const client = fakeClient();
     const adapter = createNodeRedisDialCacheClient(client as never);
-    const before = Date.now();
     await expect(
       adapter.write({ valueKey: "plain:value", cacheTtlMs: 1_000, value: "plain" }),
     ).resolves.toBe(true);
-    const after = Date.now();
 
     expect(client.dialcacheWriteTrackedStamp).not.toHaveBeenCalled();
     expect(client.sendCommand).toHaveBeenCalledTimes(1);
@@ -179,13 +189,12 @@ describe("node-redis adapter", () => {
     expect(frame[0]).toBe(1);
     expect(frame[9]).toBe(0);
     expect(frame.subarray(10).toString("utf8")).toBe("plain");
-    const createdAtMs = Number(frame.readBigUInt64BE(1));
-    expect(createdAtMs).toBeGreaterThanOrEqual(before);
-    expect(createdAtMs).toBeLessThanOrEqual(after);
+    expect(Number(frame.readBigUInt64BE(1))).toBe(1_234);
     expect(options).toMatchObject({ returnBuffers: true });
   });
 
   it("pairs a zero-stamped placeholder SET with the stamp script in issue order", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_234);
     const order: string[] = [];
     const client = fakeClient();
     client.sendCommand.mockImplementation(async () => {
@@ -222,7 +231,9 @@ describe("node-redis adapter", () => {
       "tracked:{id}:watermark",
       2_000,
       frame.subarray(1, 9),
+      1_234,
     );
+    expect(now).toHaveBeenCalledTimes(1);
   });
 
   it("fails a tracked write whose placeholder was lost before the stamp", async () => {
@@ -338,7 +349,42 @@ describe("node-redis adapter", () => {
       "tracked:{id}:watermark",
       1_001,
       expect.any(Buffer),
+      expect.any(Number),
     );
+  });
+
+  it("rejects invalid application timestamps before dispatching mutations", async () => {
+    const now = vi.spyOn(Date, "now");
+    const client = fakeClient();
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    for (const timestampMs of [
+      -1,
+      1.5,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.MAX_SAFE_INTEGER + 1,
+    ]) {
+      now.mockReturnValue(timestampMs);
+      await expect(
+        adapter.write({ valueKey: "plain:value", cacheTtlMs: 1_000, value: "plain" }),
+      ).rejects.toThrow(RangeError);
+      await expect(
+        adapter.write({
+          valueKey: "tracked:{id}:value",
+          watermarkKey: "tracked:{id}:watermark",
+          cacheTtlMs: 1_000,
+          value: "tracked",
+        }),
+      ).rejects.toThrow(RangeError);
+      await expect(
+        adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 }),
+      ).rejects.toThrow(RangeError);
+    }
+
+    expect(client.sendCommand).not.toHaveBeenCalled();
+    expect(client.dialcacheWriteTrackedStamp).not.toHaveBeenCalled();
+    expect(client.dialcacheInvalidate).not.toHaveBeenCalled();
   });
 
   it("surfaces a SET failure as the write error even when the stamp settled", async () => {
@@ -508,6 +554,7 @@ describe("node-redis adapter", () => {
   });
 
   it("dispatches invalidation once and sends no EVAL when the registered script resolves", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_234);
     const client = fakeClient();
     const adapter = createNodeRedisDialCacheClient(client as never);
 
@@ -516,10 +563,17 @@ describe("node-redis adapter", () => {
     ).resolves.toBeUndefined();
 
     expect(client.dialcacheInvalidate).toHaveBeenCalledTimes(1);
+    expect(client.dialcacheInvalidate).toHaveBeenCalledWith(
+      "tracked:{id}:watermark",
+      50,
+      1_234,
+    );
+    expect(now).toHaveBeenCalledTimes(1);
     expect(client.sendCommand).not.toHaveBeenCalled();
   });
 
   it("retries a rejected invalidation dispatch once with EVAL by source", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_234);
     const client = fakeClient();
     client.dialcacheInvalidate.mockRejectedValueOnce(
       new Error("NOPERM this user has no permissions to run the 'evalsha' command"),
@@ -531,6 +585,11 @@ describe("node-redis adapter", () => {
     ).resolves.toBeUndefined();
 
     expect(client.dialcacheInvalidate).toHaveBeenCalledTimes(1);
+    expect(client.dialcacheInvalidate).toHaveBeenCalledWith(
+      "tracked:{id}:watermark",
+      50,
+      1_234,
+    );
     expect(client.sendCommand).toHaveBeenCalledTimes(1);
     const [args, options] = client.sendCommand.mock.calls[0] as [Array<unknown>, object];
     expect(args).toEqual([
@@ -539,7 +598,9 @@ describe("node-redis adapter", () => {
       "1",
       "tracked:{id}:watermark",
       "50",
+      "1234",
     ]);
+    expect(now).toHaveBeenCalledTimes(1);
     expect(options).toMatchObject({ returnBuffers: true });
     expect(Object.keys(options)).toEqual(["returnBuffers"]);
   });

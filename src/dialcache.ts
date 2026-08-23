@@ -489,16 +489,17 @@ export class DialCache {
    * Call it only after the source mutation commits.
    *
    * `futureBufferMs` is an application-owned safety window. When using the
-   * bundled timestamp protocol, every Redis node eligible for primary promotion
-   * must have a synchronized system clock. Size the window to cover the maximum
-   * expected negative clock skew plus source visibility lag and the full
-   * remaining lifetime of fallback work that may already have observed stale
-   * data, including serializer dump, Redis client queue and network latency,
-   * script execution, the write itself, and a safety margin. DialCache does not
-   * detect or compensate for cross-node clock skew. Violating this assumption
-   * can suppress tracked cache fills or leave a pre-invalidation value readable
-   * until it expires or a later invalidation advances the watermark past its
-   * timestamp.
+   * bundled timestamp protocol, every application process that can write or
+   * invalidate must have bounded wall-clock skew. Size the window to cover the
+   * maximum writer-clock lead over the invalidator, source visibility lag, and
+   * the full remaining lifetime of fallback work that may already have observed
+   * stale data, including serializer dump, Redis client queue and network
+   * latency, script execution, the write itself, and a safety margin. DialCache
+   * rejects a frame dated after a reader's clock and can observe that offset,
+   * but does not calibrate or compensate for cross-process clock skew. Violating
+   * this assumption can suppress tracked cache fills or leave a
+   * pre-invalidation value readable until it expires or a later invalidation
+   * advances the watermark past its timestamp.
    *
    * Watermarks are invalidation state and must not be evicted or lost during
    * their derived TTL. A missing watermark makes tracked reads miss, but a
@@ -507,8 +508,8 @@ export class DialCache {
    * on that fence, and choose persistence and failover guarantees accordingly;
    * DialCache does not issue `WAIT` or provide strong consistency across
    * failover.
-   * There is no universally safe library value. A zero buffer provides no
-   * stale-publication protection once Redis time advances; an undersized buffer
+   * There is no universally safe library value. A zero buffer only fences
+   * writes stamped no later than the invalidation sample; an undersized buffer
    * may allow stale data to repopulate Redis. An oversized buffer temporarily
    * converts more tracked Redis reads into misses and rejects their tracked
    * writes, but does not delay or suppress returning fallback values.
@@ -1545,6 +1546,8 @@ function safeMetrics(metrics: DialCacheMetricsAdapter | null): DialCacheMetricsA
       : {}),
     observeShadowValueAge: (labels, seconds) =>
       callObserver(() => metrics.observeShadowValueAge?.(labels, seconds)),
+    observeFutureTimestampOffset: (labels, seconds) =>
+      callObserver(() => metrics.observeFutureTimestampOffset?.(labels, seconds)),
     observeGet: (labels, seconds) => callObserver(() => metrics.observeGet(labels, seconds)),
     observeFallback: (labels, seconds) => callObserver(() => metrics.observeFallback(labels, seconds)),
     observeSerialization: (labels, seconds) => callObserver(() => metrics.observeSerialization(labels, seconds)),
@@ -1574,11 +1577,12 @@ function resolveShadowComparator<Value>(
   return comparator ?? isDeepStrictEqual;
 }
 
-// Frame stamps are epoch-based (Redis server time for tracked writes, writer
-// client clock for untracked), so the age uses the epoch clock and clamps
-// negative cross-clock skew to zero. A custom client that violates the decode
-// contract can hand over a non-finite stamp; recording it would permanently
-// poison backend histogram sums, so the observation is skipped instead.
+// Frame stamps and the observation both use application-process epoch clocks.
+// Core rejects frames that are future-dated when read, but the reader clock can
+// step backward before a detached shadow verdict, so clamp that age to zero. A
+// custom client that violates the decode contract can hand over a non-finite
+// stamp; recording it would permanently poison backend histogram sums, so the
+// observation is skipped instead.
 function shadowValueAgeSeconds(createdAtMs: number): number | undefined {
   const ageSeconds = (Date.now() - createdAtMs) / 1000;
   if (!Number.isFinite(ageSeconds)) {

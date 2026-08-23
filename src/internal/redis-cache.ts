@@ -128,7 +128,7 @@ export class RedisCache {
     try {
       let frame: DecodedRedisFrame | null;
       try {
-        frame = await this.startPayloadRead(key, readTimeoutMs, false).result;
+        frame = await this.startPayloadRead(key, readTimeoutMs, metricLayer, false).result;
       } catch (error) {
         this.recordError(
           key,
@@ -307,6 +307,7 @@ export class RedisCache {
   private startPayloadRead(
     key: DialCacheKey,
     readTimeoutMs: number,
+    metricLayer: MetricLayer,
     unrefTimer: boolean,
   ): StartedRedisRead {
     const abortController = new AbortController();
@@ -319,13 +320,14 @@ export class RedisCache {
         { timeoutMs: readTimeoutMs, signal: abortController.signal },
       )
     );
-    const result = withMonotonicDeadline({
+    const bounded = withMonotonicDeadline({
       timeoutMs: readTimeoutMs,
       operation: () => pending,
       onTimeout: () => abortController.abort(),
       timeoutError: () => new RedisReadTimeoutError(key.useCase, readTimeoutMs),
       unrefTimer,
     });
+    const result = bounded.then((frame) => this.rejectFutureFrame(key, frame, metricLayer));
     return {
       result,
       settled: pending.then(
@@ -343,7 +345,7 @@ export class RedisCache {
   ): StartedRedisRead {
     const start = performance.now();
     this.recordMetric((metrics) => metrics.request(labelsFor(key, metricLayer)));
-    const read = this.startPayloadRead(key, readTimeoutMs, unrefTimer);
+    const read = this.startPayloadRead(key, readTimeoutMs, metricLayer, unrefTimer);
     const result = read.result.then(
       (frame) => {
         if (frame === null) {
@@ -363,6 +365,26 @@ export class RedisCache {
       this.recordMetric((metrics) => metrics.observeGet(labelsFor(key, metricLayer), elapsedSeconds(start)));
     });
     return { result, settled: read.settled };
+  }
+
+  private rejectFutureFrame(
+    key: DialCacheKey,
+    frame: DecodedRedisFrame | null,
+    metricLayer: MetricLayer,
+  ): DecodedRedisFrame | null {
+    if (frame === null) {
+      return null;
+    }
+
+    const readerNowMs = Date.now();
+    if (frame.createdAtMs > readerNowMs) {
+      this.recordMetric((metrics) => metrics.observeFutureTimestampOffset?.(
+        labelsFor(key, metricLayer),
+        (frame.createdAtMs - readerNowMs) / 1_000,
+      ));
+      return null;
+    }
+    return frame;
   }
 
   private async deserializePayload<T>(

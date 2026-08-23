@@ -112,6 +112,12 @@ const metrics: DialCacheMetricsAdapter = {
 };
 const shadowMetrics: DialCacheMetricsAdapter = {
   ...metrics,
+  observeFutureTimestampOffset: (labels: CacheMetricLabels, seconds: number) => {
+    const cacheNamespace: string = labels.cacheNamespace;
+    const offsetSeconds: number = seconds;
+    void cacheNamespace;
+    void offsetSeconds;
+  },
   shadowValidation: (labels: ShadowValidationMetricLabels) => {
     const outcome: ShadowValidationOutcome = labels.outcome;
     void outcome;
@@ -189,6 +195,12 @@ const stampArguments: Array<string | Buffer> = dialcacheRedisScripts.dialcacheWr
   "tracked:{id}:watermark",
   1_000,
   trackedRedisPlaceholder.nonce,
+  1_234,
+);
+const invalidationArguments: Array<string | Buffer> = dialcacheRedisScripts.dialcacheInvalidate.transformArguments(
+  "tracked:{id}:watermark",
+  50,
+  1_234,
 );
 const fallbackTimeoutError = new FallbackTimeoutError("Load", 1_000);
 const redisReadTimeoutError = new RedisReadTimeoutError("Load", 100);
@@ -423,7 +435,13 @@ type TrackedRedisWriteRequest = Extract<RedisWriteRequest, { readonly watermarkK
 const trackedWriteHasNoWatermarkTtlFloor: "watermarkTtlFloorMs" extends keyof TrackedRedisWriteRequest
   ? false
   : true = true;
+const trackedWriteHasNoCreatedAt: "createdAtMs" extends keyof TrackedRedisWriteRequest
+  ? false
+  : true = true;
 const invalidationHasNoWatermarkTtlFloor: "watermarkTtlFloorMs" extends keyof RedisInvalidationRequest
+  ? false
+  : true = true;
+const invalidationHasNoInvalidatedAt: "invalidatedAtMs" extends keyof RedisInvalidationRequest
   ? false
   : true = true;
 const legacyTrackedWriteRequest: RedisWriteRequest = {
@@ -553,6 +571,7 @@ void REDIS_ENCODING_UTF8;
 void REDIS_ENCODING_BINARY;
 void stampScriptSource;
 void stampArguments;
+void invalidationArguments;
 void customRedisClient;
 const globalSerializer: Serializer<unknown> = {
   dump: () => "global",
@@ -569,7 +588,9 @@ void cacheHasNoFlushAll;
 void cacheHasNoClose;
 void clientHasNoFlushAll;
 void trackedWriteHasNoWatermarkTtlFloor;
+void trackedWriteHasNoCreatedAt;
 void invalidationHasNoWatermarkTtlFloor;
+void invalidationHasNoInvalidatedAt;
 void legacyTrackedWriteRequest;
 void legacyInvalidationRequest;
 void configHasNoMetricsRegistry;
@@ -1379,6 +1400,7 @@ await import("dialcache/datadog");
 await import("dialcache/prometheus");
 const redisProtocol = await import("dialcache/redis-protocol");
 await import("dialcache/node-redis");
+const esmCreatedAtMs = 1700000000123;
 if (appGlide.Script === otherGlide.Script) {
   throw new Error("The package test requires two distinct GLIDE module instances");
 }
@@ -1399,6 +1421,9 @@ const esmFakeGlideClient = {
     if (args[1] !== redisProtocol.WRITE_TRACKED_STAMP_SCRIPT) {
       throw new Error("The ESM GLIDE bundle's embedded stamp source diverged from the redis-protocol entry");
     }
+    if (args.at(-1) !== String(esmCreatedAtMs)) {
+      throw new Error("The ESM GLIDE stamp recovery did not preserve its client timestamp");
+    }
     if (options.decoder !== appGlide.Decoder.Bytes) {
       throw new Error("The ESM adapter did not use the caller-supplied GLIDE byte decoder");
     }
@@ -1411,20 +1436,27 @@ const esmGlideRuntime = {
   GlideClusterClient: { [Symbol.hasInstance]: () => false },
 };
 const adapter = glide.createValkeyGlideDialCacheClient(esmFakeGlideClient, esmGlideRuntime);
+const esmNativeDateNow = Date.now;
+Date.now = () => esmCreatedAtMs;
 try {
-  await adapter.write({
-    valueKey: "tracked:{id}:value",
-    watermarkKey: "tracked:{id}:watermark",
-    cacheTtlMs: 1_000,
-    value: "payload",
-  });
-  throw new Error("Expected an invalid GLIDE script reply to fail");
-} catch (error) {
-  if (!(error instanceof root.DialCacheRedisProtocolError)) {
-    throw new Error("The GLIDE protocol error does not match the root ESM export", { cause: error });
+  try {
+    await adapter.write({
+      valueKey: "tracked:{id}:value",
+      watermarkKey: "tracked:{id}:watermark",
+      cacheTtlMs: 1_000,
+      value: "payload",
+    });
+    throw new Error("Expected an invalid GLIDE script reply to fail");
+  } catch (error) {
+    if (!(error instanceof root.DialCacheRedisProtocolError)) {
+      throw new Error("The GLIDE protocol error does not match the root ESM export", { cause: error });
+    }
   }
+} finally {
+  Date.now = esmNativeDateNow;
 }
 const esmInvalidationDispatches = [];
+const esmInvalidatedAtMs = 1700000000456;
 const esmFakeInvalidationClient = {
   customCommand: async (args) => {
     esmInvalidationDispatches.push(args);
@@ -1439,15 +1471,22 @@ const esmInvalidationRuntime = {
   GlideClient: { [Symbol.hasInstance]: (value) => value === esmFakeInvalidationClient },
   GlideClusterClient: { [Symbol.hasInstance]: () => false },
 };
-await glide
-  .createValkeyGlideDialCacheClient(esmFakeInvalidationClient, esmInvalidationRuntime)
-  .invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 });
+Date.now = () => esmInvalidatedAtMs;
+try {
+  await glide
+    .createValkeyGlideDialCacheClient(esmFakeInvalidationClient, esmInvalidationRuntime)
+    .invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 });
+} finally {
+  Date.now = esmNativeDateNow;
+}
 if (
   esmInvalidationDispatches.length !== 2
   || esmInvalidationDispatches[0][0] !== "EVALSHA"
   || esmInvalidationDispatches[1][0] !== "EVAL"
+  || esmInvalidationDispatches[0].at(-1) !== String(esmInvalidatedAtMs)
+  || esmInvalidationDispatches[1].at(-1) !== String(esmInvalidatedAtMs)
 ) {
-  throw new Error("The ESM GLIDE invalidation retry did not dispatch EVALSHA then EVAL");
+  throw new Error("The ESM GLIDE invalidation retry did not preserve its EVALSHA-to-EVAL timestamp");
 }
 if (esmInvalidationDispatches[1][1] !== redisProtocol.INVALIDATE_CACHE_SCRIPT) {
   throw new Error("The ESM GLIDE bundle's embedded invalidation source diverged from the redis-protocol entry");
@@ -1468,6 +1507,7 @@ require("dialcache/prometheus");
 const redisProtocol = require("dialcache/redis-protocol");
 require("dialcache/node-redis");
 void (async () => {
+  const cjsCreatedAtMs = 1700000000123;
   if (appGlide.Script === otherGlide.Script) {
     throw new Error("The package test requires two distinct GLIDE module instances");
   }
@@ -1488,6 +1528,9 @@ void (async () => {
       if (args[1] !== redisProtocol.WRITE_TRACKED_STAMP_SCRIPT) {
         throw new Error("The CommonJS GLIDE bundle's embedded stamp source diverged from the redis-protocol entry");
       }
+      if (args.at(-1) !== String(cjsCreatedAtMs)) {
+        throw new Error("The CommonJS GLIDE stamp recovery did not preserve its client timestamp");
+      }
       if (options.decoder !== appGlide.Decoder.Bytes) {
         throw new Error("The CommonJS adapter did not use the caller-supplied GLIDE byte decoder");
       }
@@ -1500,20 +1543,27 @@ void (async () => {
     GlideClusterClient: { [Symbol.hasInstance]: () => false },
   };
   const adapter = glide.createValkeyGlideDialCacheClient(cjsFakeGlideClient, cjsGlideRuntime);
+  const cjsNativeDateNow = Date.now;
+  Date.now = () => cjsCreatedAtMs;
   try {
-    await adapter.write({
-      valueKey: "tracked:{id}:value",
-      watermarkKey: "tracked:{id}:watermark",
-      cacheTtlMs: 1_000,
-      value: "payload",
-    });
-    throw new Error("Expected an invalid GLIDE script reply to fail");
-  } catch (error) {
-    if (!(error instanceof root.DialCacheRedisProtocolError)) {
-      throw new Error("The GLIDE protocol error does not match the root CommonJS export", { cause: error });
+    try {
+      await adapter.write({
+        valueKey: "tracked:{id}:value",
+        watermarkKey: "tracked:{id}:watermark",
+        cacheTtlMs: 1_000,
+        value: "payload",
+      });
+      throw new Error("Expected an invalid GLIDE script reply to fail");
+    } catch (error) {
+      if (!(error instanceof root.DialCacheRedisProtocolError)) {
+        throw new Error("The GLIDE protocol error does not match the root CommonJS export", { cause: error });
+      }
     }
+  } finally {
+    Date.now = cjsNativeDateNow;
   }
   const cjsInvalidationDispatches = [];
+  const cjsInvalidatedAtMs = 1700000000456;
   const cjsFakeInvalidationClient = {
     customCommand: async (args) => {
       cjsInvalidationDispatches.push(args);
@@ -1528,15 +1578,22 @@ void (async () => {
     GlideClient: { [Symbol.hasInstance]: (value) => value === cjsFakeInvalidationClient },
     GlideClusterClient: { [Symbol.hasInstance]: () => false },
   };
-  await glide
-    .createValkeyGlideDialCacheClient(cjsFakeInvalidationClient, cjsInvalidationRuntime)
-    .invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 });
+  Date.now = () => cjsInvalidatedAtMs;
+  try {
+    await glide
+      .createValkeyGlideDialCacheClient(cjsFakeInvalidationClient, cjsInvalidationRuntime)
+      .invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 });
+  } finally {
+    Date.now = cjsNativeDateNow;
+  }
   if (
     cjsInvalidationDispatches.length !== 2
     || cjsInvalidationDispatches[0][0] !== "EVALSHA"
     || cjsInvalidationDispatches[1][0] !== "EVAL"
+    || cjsInvalidationDispatches[0].at(-1) !== String(cjsInvalidatedAtMs)
+    || cjsInvalidationDispatches[1].at(-1) !== String(cjsInvalidatedAtMs)
   ) {
-    throw new Error("The CommonJS GLIDE invalidation retry did not dispatch EVALSHA then EVAL");
+    throw new Error("The CommonJS GLIDE invalidation retry did not preserve its EVALSHA-to-EVAL timestamp");
   }
   if (cjsInvalidationDispatches[1][1] !== redisProtocol.INVALIDATE_CACHE_SCRIPT) {
     throw new Error("The CommonJS GLIDE bundle's embedded invalidation source diverged from the redis-protocol entry");

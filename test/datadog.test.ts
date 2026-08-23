@@ -169,6 +169,7 @@ describe("Datadog metrics adapter", () => {
       },
       42.5,
     );
+    metrics.observeFutureTimestampOffset(cacheLabels, 0.007);
     metrics.compression({ ...cacheLabels, outcome: "compressed" });
     metrics.observeGet(cacheLabels, 0.125);
     metrics.observeFallback(cacheLabels, 0.5);
@@ -217,6 +218,12 @@ describe("Datadog metrics adapter", () => {
         name: "dialcache.shadow.value_age",
         value: 42.5,
         tags: { cache_namespace: "users", use_case: "LoadUser", key_type: "user_id", outcome: "mismatch" },
+      },
+      {
+        method: "distribution",
+        name: "dialcache.future_timestamp_offset",
+        value: 0.007,
+        tags: baseTags,
       },
       {
         method: "increment",
@@ -271,6 +278,7 @@ describe("Datadog metrics adapter", () => {
         },
         60,
       );
+      metrics.observeFutureTimestampOffset(cacheLabels, 0.006);
 
       expect(client.calls.map(({ method, name, value }) => ({ method, name, value }))).toEqual([
         { method: observationMetricType, name: "service.cache.get.duration", value: 0.01 },
@@ -281,6 +289,7 @@ describe("Datadog metrics adapter", () => {
         { method: observationMetricType, name: "service.cache.compression.ratio", value: 0.04 },
         { method: observationMetricType, name: "service.cache.compression.duration", value: 0.05 },
         { method: observationMetricType, name: "service.cache.shadow.value_age", value: 60 },
+        { method: observationMetricType, name: "service.cache.future_timestamp_offset", value: 0.006 },
       ]);
     });
   }
@@ -575,15 +584,15 @@ describe("Datadog metrics adapter", () => {
 
   it("enforces Datadog's 200-character final metric-name limit", () => {
     const client = new RecordingDogStatsDClient();
-    const longestValidNamespace = "a".repeat(177);
-    const tooLongNamespace = "a".repeat(178);
+    const longestValidNamespace = "a".repeat(176);
+    const tooLongNamespace = "a".repeat(177);
     const metrics = new DatadogDialCacheMetrics({
       client,
       namespace: longestValidNamespace,
       observationMetricType: "distribution",
     });
 
-    metrics.observeSerialization({ ...cacheLabels, operation: "dump" }, 1);
+    metrics.observeFutureTimestampOffset(cacheLabels, 1);
 
     expect(client.calls[0]?.name).toHaveLength(200);
     expect(

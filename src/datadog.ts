@@ -49,6 +49,7 @@ const METRIC_SUFFIXES = {
   coalesced: "coalesced.count",
   shadowValidation: "shadow.count",
   shadowValueAge: "shadow.value_age",
+  futureTimestampOffset: "future_timestamp_offset",
   compression: "compression.count",
   get: "get.duration",
   fallback: "fallback.duration",
@@ -126,6 +127,10 @@ export class DatadogDialCacheMetrics implements DialCacheMetricsAdapter {
 
   observeShadowValueAge(labels: ShadowValidationMetricLabels, seconds: number): void {
     this.observe(this.metricNames.shadowValueAge, seconds, shadowValidationTags(labels));
+  }
+
+  observeFutureTimestampOffset(labels: CacheMetricLabels, seconds: number): void {
+    this.observe(this.metricNames.futureTimestampOffset, seconds, cacheTags(labels));
   }
 
   compression(labels: CompressionMetricLabels): void {

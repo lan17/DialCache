@@ -121,13 +121,19 @@ export interface DialCacheMetricsAdapter {
    * a mismatch, after the confirming re-read): the observing process's epoch
    * clock minus the validated frame's `createdAtMs`, clamped at zero.
    * Emitted only alongside terminal `match` and `mismatch` outcomes; other
-   * outcomes deliver no verdict on a retained value. Tracked frames are
-   * stamped with Redis server time and untracked frames with the writer's
-   * client clock, so the age mixes clocks and is coarse operational
-   * evidence, not a precise measurement. Optional so existing custom
-   * adapters keep compiling without changes.
+   * outcomes deliver no verdict on a retained value. Frames are stamped with
+   * the writer application's epoch clock, so cross-process skew still makes
+   * this coarse operational evidence rather than a precise measurement.
+   * Optional so existing custom adapters keep compiling without changes.
    */
   observeShadowValueAge?(labels: ShadowValidationMetricLabels, seconds: number): void;
+  /**
+   * Positive offset in seconds when a decoded Redis frame is dated after the
+   * observing process's epoch clock. Such frames fail closed as cache misses.
+   * This is a workload-shaped diagnostic, not proof of clock skew. Optional
+   * so existing custom adapters keep compiling without changes.
+   */
+  observeFutureTimestampOffset?(labels: CacheMetricLabels, seconds: number): void;
   // Optional so existing custom adapters keep compiling without changes.
   compression?(labels: CompressionMetricLabels): void;
   observeGet(labels: CacheMetricLabels, seconds: number): void;

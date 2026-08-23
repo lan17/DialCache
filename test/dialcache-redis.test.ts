@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   CacheLayer,
@@ -6,6 +6,7 @@ import {
   DialCacheKey,
   DialCacheKeyConfig,
   DialCacheRedisPayloadEncodingError,
+  type DialCacheMetricsAdapter,
   type DialCacheRedisClient,
   type RedisConfig,
   type Serializer,
@@ -17,9 +18,31 @@ const keyFor = (id: string, useCase: string, trackForInvalidation = false): Dial
 const redisKeyFor = (id: string, useCase: string, trackForInvalidation = false): string =>
   `${keyFor(id, useCase, trackForInvalidation).urn}:dialcache-frame-v1`;
 
+function metricsWithFutureTimestampObserver(
+  observeFutureTimestampOffset: NonNullable<DialCacheMetricsAdapter["observeFutureTimestampOffset"]>,
+): DialCacheMetricsAdapter {
+  return {
+    request: vi.fn(),
+    miss: vi.fn(),
+    disabled: vi.fn(),
+    error: vi.fn(),
+    invalidation: vi.fn(),
+    observeFutureTimestampOffset,
+    observeGet: vi.fn(),
+    observeFallback: vi.fn(),
+    observeSerialization: vi.fn(),
+    observeSize: vi.fn(),
+  };
+}
+
 describe("DialCache Redis TTL layer", () => {
   beforeEach(() => {
     vi.useRealTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it("reads local miss from Redis and populates the local layer", async () => {
@@ -148,6 +171,146 @@ describe("DialCache Redis TTL layer", () => {
       payload: JSON.stringify({ userId: "123", calls: 1 }),
     });
   });
+
+  it.each([
+    { name: "tracked", tracked: true },
+    { name: "untracked", tracked: false },
+  ])("rejects a future-dated $name frame before deserialization and observes one exact offset", async ({ tracked }) => {
+    const nowMs = 1_700_000_000_000;
+    vi.spyOn(Date, "now").mockReturnValue(nowMs);
+    const redis = new FakeRedis();
+    const useCase = tracked ? "RedisTrackedFutureFrame" : "RedisUntrackedFutureFrame";
+    const key = keyFor("123", useCase, tracked);
+    redis.setRaw(
+      `${key.urn}:dialcache-frame-v1`,
+      encodeFrame(JSON.stringify({ source: "redis" }), nowMs + 1_250),
+    );
+    if (tracked) {
+      redis.setRaw(`${key.prefix}#watermark`, "0");
+    }
+    const observeFutureTimestampOffset = vi.fn();
+    const metrics = metricsWithFutureTimestampObserver(observeFutureTimestampOffset);
+    const serializer: Serializer<{ readonly source: string }> = {
+      dump: vi.fn((value) => JSON.stringify(value)),
+      load: vi.fn(() => {
+        throw new Error("future frames must not be deserialized");
+      }),
+    };
+    const fallback = vi.fn(async () => ({ source: "fallback" }));
+    const dialcache = new DialCache({
+      redis: { client: redis, readTimeoutMs: 1_000 },
+      metrics,
+    });
+    const getUser = dialcache.cached(fallback, {
+      keyType: "user_id",
+      useCase,
+      cacheKey: () => "123",
+      trackForInvalidation: tracked,
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 100 },
+      }),
+      serializer,
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ source: "fallback" });
+
+    expect(serializer.load).not.toHaveBeenCalled();
+    expect(fallback).toHaveBeenCalledOnce();
+    expect(observeFutureTimestampOffset).toHaveBeenCalledOnce();
+    expect(observeFutureTimestampOffset).toHaveBeenCalledWith(
+      {
+        cacheNamespace: "urn",
+        useCase,
+        keyType: "user_id",
+        layer: CacheLayer.REMOTE,
+      },
+      1.25,
+    );
+    expect(metrics.miss).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a frame stamped exactly at the reader clock eligible", async () => {
+    const nowMs = 1_700_000_000_000;
+    vi.spyOn(Date, "now").mockReturnValue(nowMs);
+    const redis = new FakeRedis();
+    const useCase = "RedisEqualTimestampFrame";
+    const key = keyFor("123", useCase, true);
+    const cachedValue = { source: "redis" };
+    redis.setRaw(`${key.urn}:dialcache-frame-v1`, encodeFrame(JSON.stringify(cachedValue), nowMs));
+    redis.setRaw(`${key.prefix}#watermark`, "0");
+    const observeFutureTimestampOffset = vi.fn();
+    const metrics = metricsWithFutureTimestampObserver(observeFutureTimestampOffset);
+    const serializer: Serializer<typeof cachedValue> = {
+      dump: vi.fn((value) => JSON.stringify(value)),
+      load: vi.fn((value) => JSON.parse(Buffer.isBuffer(value) ? value.toString("utf8") : value)),
+    };
+    const fallback = vi.fn(async () => ({ source: "fallback" }));
+    const dialcache = new DialCache({
+      redis: { client: redis, readTimeoutMs: 1_000 },
+      metrics,
+    });
+    const getUser = dialcache.cached(fallback, {
+      keyType: "user_id",
+      useCase,
+      cacheKey: () => "123",
+      trackForInvalidation: true,
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 100 },
+      }),
+      serializer,
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).resolves.toEqual(cachedValue);
+
+    expect(serializer.load).toHaveBeenCalledOnce();
+    expect(serializer.dump).not.toHaveBeenCalled();
+    expect(fallback).not.toHaveBeenCalled();
+    expect(observeFutureTimestampOffset).not.toHaveBeenCalled();
+    expect(metrics.miss).not.toHaveBeenCalled();
+  });
+
+  it.each(["throw", "reject"] as const)(
+    "fails open when the future-timestamp observer returns a %s failure",
+    async (failure) => {
+      const nowMs = 1_700_000_000_000;
+      vi.spyOn(Date, "now").mockReturnValue(nowMs);
+      const redis = new FakeRedis();
+      const useCase = `RedisFutureTimestampObserver${failure}`;
+      redis.setRaw(
+        redisKeyFor("123", useCase),
+        encodeFrame(JSON.stringify({ source: "redis" }), nowMs + 1),
+      );
+      const observerFailure = new Error("metrics transport failed");
+      const observeFutureTimestampOffset = failure === "throw"
+        ? vi.fn(() => {
+            throw observerFailure;
+          })
+        : vi.fn(() => Promise.reject(observerFailure));
+      const metrics = metricsWithFutureTimestampObserver(observeFutureTimestampOffset);
+      const fallback = vi.fn(async () => ({ source: "fallback" }));
+      const dialcache = new DialCache({
+        redis: { client: redis, readTimeoutMs: 1_000 },
+        metrics,
+      });
+      const getUser = dialcache.cached(fallback, {
+        keyType: "user_id",
+        useCase,
+        cacheKey: () => "123",
+        defaultConfig: new DialCacheKeyConfig({
+          ttlSec: { [CacheLayer.REMOTE]: 60 },
+          ramp: { [CacheLayer.REMOTE]: 100 },
+        }),
+      });
+
+      await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ source: "fallback" });
+      await Promise.resolve();
+
+      expect(observeFutureTimestampOffset).toHaveBeenCalledOnce();
+      expect(fallback).toHaveBeenCalledOnce();
+    },
+  );
 
   it.each(["dialcache:", undefined])("rejects the removed Redis keyPrefix option value %s for untyped callers", (keyPrefix) => {
     const legacyRedisConfig = { client: new FakeRedis(), keyPrefix } as unknown as RedisConfig;

@@ -96,6 +96,7 @@ describe("DialCache observability metrics", () => {
       invalidation: vi.fn(() => thenable),
       coalesced: vi.fn(() => thenable),
       shadowValidation: vi.fn(() => thenable),
+      observeFutureTimestampOffset: vi.fn(() => thenable),
       observeGet: vi.fn(() => thenable),
       observeFallback: vi.fn(() => thenable),
       observeSerialization: vi.fn(() => thenable),
@@ -133,6 +134,7 @@ describe("DialCache observability metrics", () => {
       keyType: "user_id",
       outcome: "match",
     } satisfies ShadowValidationMetricLabels);
+    isolatedMetrics.observeFutureTimestampOffset?.(labels, 0.001);
     isolatedMetrics.observeGet(labels, 0);
     isolatedMetrics.observeFallback(labels, 0);
     isolatedMetrics.observeSerialization({ ...labels, operation: "dump" }, 0);
@@ -140,7 +142,7 @@ describe("DialCache observability metrics", () => {
 
     expect(then).not.toHaveBeenCalled();
     await tick();
-    expect(then).toHaveBeenCalledTimes(11);
+    expect(then).toHaveBeenCalledTimes(12);
   });
 
   it("includes the configured cache namespace on every metric path", async () => {

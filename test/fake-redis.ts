@@ -45,25 +45,27 @@ export class FakeRedis implements DialCacheRedisClient {
     cacheTtlMs,
     value,
   }: RedisWriteRequest): Promise<boolean> {
+    const createdAtMs = Date.now();
     this.setCalls += 1;
     this.throwIfWriteFails();
     if (watermarkKey !== undefined) {
       const watermark = this.readWatermark(watermarkKey) ?? 0;
-      if (watermark >= Date.now()) {
+      if (watermark >= createdAtMs) {
         return false;
       }
-      this.storeFrame(valueKey, cacheTtlMs, value);
+      this.storeFrame(valueKey, cacheTtlMs, value, createdAtMs);
       const currentTtlMs = this.remainingTtlMs(watermarkKey);
       const desiredTtlMs = Math.max(currentTtlMs, cacheTtlMs + WATERMARK_TTL_MARGIN_MS);
       this.storeWatermark(watermarkKey, watermark, desiredTtlMs);
       return true;
     }
 
-    this.storeFrame(valueKey, cacheTtlMs, value);
+    this.storeFrame(valueKey, cacheTtlMs, value, createdAtMs);
     return true;
   }
 
   async invalidate({ watermarkKey, futureBufferMs }: RedisInvalidationRequest): Promise<void> {
+    const invalidatedAtMs = Date.now();
     this.setCalls += 1;
     this.throwIfWriteFails();
     let current = 0;
@@ -72,12 +74,12 @@ export class FakeRedis implements DialCacheRedisClient {
     } catch {
       current = 0;
     }
-    const watermark = Math.max(current, Date.now() + futureBufferMs);
+    const watermark = Math.max(current, invalidatedAtMs + futureBufferMs);
     const currentTtlMs = this.remainingTtlMs(watermarkKey);
     const desiredTtlMs = Math.max(
       currentTtlMs,
       futureBufferMs + WATERMARK_TTL_MARGIN_MS,
-      watermark - Date.now() + WATERMARK_TTL_MARGIN_MS,
+      watermark - invalidatedAtMs + WATERMARK_TTL_MARGIN_MS,
     );
     this.storeWatermark(watermarkKey, watermark, desiredTtlMs);
   }
@@ -152,9 +154,14 @@ export class FakeRedis implements DialCacheRedisClient {
     throw new DialCacheRedisPayloadEncodingError("Invalid DialCache Redis payload encoding");
   }
 
-  private storeFrame(key: string, ttlMs: number, payload: RedisCachePayload): void {
+  private storeFrame(
+    key: string,
+    ttlMs: number,
+    payload: RedisCachePayload,
+    createdAtMs: number,
+  ): void {
     const timestamp = Buffer.alloc(8);
-    timestamp.writeBigUInt64BE(BigInt(Date.now()));
+    timestamp.writeBigUInt64BE(BigInt(createdAtMs));
     this.values.set(key, {
       value: Buffer.concat([
         Buffer.from([FRAME_VERSION]),

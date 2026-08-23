@@ -7,7 +7,10 @@
  * decode a frame into its payload bytes and header creation time, resolve
  * and validate mutation replies, guard the write-TTL acceptance domain, and
  * carry the tracked stamp and invalidation Lua sources the bundled adapters
- * dispatch. The
+ * dispatch. The stamp script accepts `[cacheTtlMs, nonce, createdAtMs]`; the
+ * invalidation script accepts `[futureBufferMs, invalidatedAtMs]`. Both
+ * timestamps are nonnegative safe-integer application-clock samples that must
+ * remain stable through one logical dispatch and its recovery. The
  * payload region past the header is opaque at this layer: entries written by
  * DialCache releases with payload compression may begin with a compression
  * envelope byte (0x00 escape, 0x01/0x02 zstd; see the README Compression

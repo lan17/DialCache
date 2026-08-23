@@ -7,7 +7,7 @@ import {
   type StartedTestContainer,
   Wait,
 } from "testcontainers";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { CacheLayer, DialCache, DialCacheKeyConfig, type DialCacheRedisClient } from "../src/index.js";
 import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "../src/node-redis.js";
@@ -270,17 +270,23 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
     const trackedValueKey = "binary-cluster:{item:tracked}:value";
     const watermarkKey = "binary-cluster:{item:tracked}:watermark";
     const trackedPayload = Buffer.from([0, 0xff, 0xc3, 0x28, 0x80]);
-    expect(
-      await scriptClient.write({
-        valueKey: trackedValueKey,
-        watermarkKey,
-        cacheTtlMs: 60_000,
-        value: trackedPayload,
-      }),
-    ).toBe(true);
+    const trackedCreatedAtMs = 1_700_000_000_123;
+    const now = vi.spyOn(Date, "now").mockReturnValue(trackedCreatedAtMs);
+    try {
+      expect(
+        await scriptClient.write({
+          valueKey: trackedValueKey,
+          watermarkKey,
+          cacheTtlMs: 60_000,
+          value: trackedPayload,
+        }),
+      ).toBe(true);
+    } finally {
+      now.mockRestore();
+    }
     const trackedRead = await scriptClient.read({ valueKey: trackedValueKey, watermarkKey });
     expect(trackedRead?.payload).toEqual(trackedPayload);
-    expect(trackedRead?.createdAtMs).toBeGreaterThan(0);
+    expect(trackedRead?.createdAtMs).toBe(trackedCreatedAtMs);
   });
 
   it("runs GLIDE tracked mutations against the real cluster", async (ctx) => {
@@ -291,14 +297,24 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
     const valueKey = "glide-cluster:{item:tracked}:value";
     const watermarkKey = "glide-cluster:{item:tracked}:watermark";
 
-    expect(
-      await adapter.write({ valueKey, watermarkKey, cacheTtlMs: 60_000, value: "glide" }),
-    ).toBe(true);
-    expect((await adapter.read({ valueKey, watermarkKey }))?.payload).toBe("glide");
+    const createdAtMs = 1_700_000_000_456;
+    const now = vi.spyOn(Date, "now").mockReturnValue(createdAtMs);
+    try {
+      expect(
+        await adapter.write({ valueKey, watermarkKey, cacheTtlMs: 60_000, value: "glide" }),
+      ).toBe(true);
+    } finally {
+      now.mockRestore();
+    }
+    expect(await adapter.read({ valueKey, watermarkKey })).toMatchObject({
+      payload: "glide",
+      createdAtMs,
+    });
 
     await adapter.invalidate({ watermarkKey, futureBufferMs: 0 });
-    // The follow-up write's stamp is fenced unless server time passes the
-    // zero-buffer watermark; the read-null below holds at any margin.
+    // The follow-up write's stamp is fenced unless the application clock
+    // advances past the zero-buffer watermark; the read-null below holds at
+    // any margin.
     await new Promise((resolve) => setTimeout(resolve, 25));
     expect(await adapter.read({ valueKey, watermarkKey })).toBeNull();
     expect(
