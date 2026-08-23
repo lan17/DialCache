@@ -810,7 +810,7 @@ The Prometheus adapter emits:
 | `dialcache_compression_ratio_histogram` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Compressed-to-original payload size ratio for compressed writes |
 | `dialcache_compression_timer` | Histogram | `cache_namespace`, `use_case`, `key_type`, `layer`, `operation` | Payload compression and decompression latency in seconds |
 
-The future-timestamp histogram reuses the latency buckets from 1 ms through 10 seconds; its `+Inf`, `_count`, and `_sum` series retain larger events. It records one positive offset after a watermark-accepted frame is decoded and before it is rejected, not a duplicate counter, warning log, or error category. The same future frame can be observed repeatedly. Alert against the deployment's allocated skew budget, not every millisecond-level sample.
+The future-timestamp histogram reuses the latency buckets from 1 ms through 10 seconds; its `+Inf`, `_count`, and `_sum` series retain larger events. It records one positive offset after a Redis frame is decoded and before that strict-future frame is rejected, not a duplicate counter, warning log, or error category. The same future frame can be observed repeatedly. Alert against the deployment's allocated skew budget, not every millisecond-level sample.
 
 `policy_disabled` means that a process-local or Redis layer has no effective TTL after runtime overlays are applied. It is an intentional policy outcome, including the default when `defaultConfig` is omitted, rather than a configuration-loading failure.
 
