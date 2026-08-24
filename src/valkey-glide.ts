@@ -54,8 +54,6 @@ interface ValkeyGlideClientIdentity {
 export interface ValkeyGlideRuntime<TDecoder> {
   /** The Batch constructor exported by the same GLIDE module instance as the client. */
   readonly Batch: new (isAtomic: boolean) => ValkeyGlideBatch;
-  /** The ClusterBatch constructor exported by the same GLIDE module instance as the client. */
-  readonly ClusterBatch: new (isAtomic: boolean) => ValkeyGlideBatch;
   /** The standalone client class exported by the same GLIDE module instance as the client. */
   readonly GlideClient: ValkeyGlideClientIdentity;
   /** The cluster client class exported by the same GLIDE module instance as the client. */
@@ -129,9 +127,9 @@ export function createValkeyGlideDialCacheClient<TDecoder>(
   client: ValkeyGlideScriptingClient<TDecoder>,
   glide: ValkeyGlideRuntime<TDecoder>,
 ): DialCacheRedisClient {
-  if (typeof glide.Batch !== "function" || typeof glide.ClusterBatch !== "function") {
+  if (typeof glide.Batch !== "function") {
     throw new Error(
-      "Valkey GLIDE DialCache requires @valkey/valkey-glide >=2.0.0 with Batch and ClusterBatch constructors",
+      "Valkey GLIDE DialCache requires @valkey/valkey-glide >=2.0.0 with a Batch constructor",
     );
   }
   const isCluster = classifyValkeyGlideClient(client, glide) === "cluster";

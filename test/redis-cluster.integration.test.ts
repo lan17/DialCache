@@ -10,7 +10,7 @@ import {
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { CacheLayer, DialCache, DialCacheKeyConfig, type DialCacheRedisClient } from "../src/index.js";
-import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "../src/node-redis.js";
+import { createNodeRedisDialCacheClient } from "../src/node-redis.js";
 import { createValkeyGlideDialCacheClient } from "../src/valkey-glide.js";
 
 const remoteOnly = new DialCacheKeyConfig({
@@ -18,11 +18,7 @@ const remoteOnly = new DialCacheKeyConfig({
   ramp: { [CacheLayer.REMOTE]: 100 },
 });
 
-const createTestCluster = (options: RedisClusterOptions) =>
-  createCluster({
-    ...options,
-    scripts: dialcacheRedisScripts,
-  });
+const createTestCluster = (options: RedisClusterOptions) => createCluster(options);
 
 async function waitForCluster(container: StartedTestContainer): Promise<void> {
   for (let attempt = 0; attempt < 50; attempt += 1) {

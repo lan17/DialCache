@@ -28,7 +28,6 @@ const INVALID_INVALIDATION_REPLIES: readonly unknown[] = [
 
 const decoderBytes = Symbol("bytes");
 const batchInstances: MockBatch[] = [];
-const clusterBatchInstances: MockClusterBatch[] = [];
 const standaloneClients = new WeakSet<object>();
 const clusterClients = new WeakSet<object>();
 
@@ -41,13 +40,6 @@ class MockBatch {
 
   constructor(readonly isAtomic: boolean) {
     batchInstances.push(this);
-  }
-}
-
-class MockClusterBatch extends MockBatch {
-  constructor(isAtomic: boolean) {
-    super(isAtomic);
-    clusterBatchInstances.push(this);
   }
 }
 
@@ -64,7 +56,6 @@ function mockClientIdentity(instances: WeakSet<object>) {
 
 const mockGlide = {
   Batch: MockBatch,
-  ClusterBatch: MockClusterBatch,
   Decoder: { Bytes: decoderBytes },
   GlideClient: mockClientIdentity(standaloneClients),
   GlideClusterClient: mockClientIdentity(clusterClients),
@@ -137,7 +128,6 @@ async function expectProtocolError(operation: Promise<unknown>, message: string)
 describe("Valkey GLIDE adapter", () => {
   beforeEach(() => {
     batchInstances.length = 0;
-    clusterBatchInstances.length = 0;
   });
 
   afterEach(() => {
@@ -242,7 +232,7 @@ describe("Valkey GLIDE adapter", () => {
     );
   });
 
-  it("rejects an ambiguous client identity before allocating scripts", () => {
+  it("rejects an ambiguous client identity", () => {
     const client = fakeClient();
     clusterClients.add(client);
 
@@ -253,24 +243,18 @@ describe("Valkey GLIDE adapter", () => {
     );
   });
 
-  it("requires GLIDE 2.x Batch support before allocating scripts", () => {
+  it("requires GLIDE 2.x Batch support", () => {
     const client = fakeClient();
     const glideWithoutBatch = {
       ...mockGlide,
       Batch: undefined,
     } as unknown as typeof mockGlide;
-    const glideWithoutClusterBatch = {
-      ...mockGlide,
-      ClusterBatch: undefined,
-    } as unknown as typeof mockGlide;
 
-    for (const runtime of [glideWithoutBatch, glideWithoutClusterBatch]) {
-      expect(
-        () => createValkeyGlideDialCacheClient(client, runtime),
-      ).toThrow(
-        "Valkey GLIDE DialCache requires @valkey/valkey-glide >=2.0.0 with Batch and ClusterBatch constructors",
-      );
-    }
+    expect(
+      () => createValkeyGlideDialCacheClient(client, glideWithoutBatch),
+    ).toThrow(
+      "Valkey GLIDE DialCache requires @valkey/valkey-glide >=2.0.0 with a Batch constructor",
+    );
   });
 
   it("preserves GLIDE invocation options when given a core read context", async () => {
@@ -384,7 +368,7 @@ describe("Valkey GLIDE adapter", () => {
       decoder: decoderBytes,
       route: { type: "primarySlotKey", key: "tracked:{id}:value" },
     });
-    expect(clusterBatchInstances).toHaveLength(0);
+    expect(batchInstances).toHaveLength(0);
     expect(client.exec).not.toHaveBeenCalled();
     const [, invalidateOptions] = client.customCommand.mock.calls[2] ?? [[], undefined];
     expect(invalidateOptions).toEqual({

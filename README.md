@@ -82,7 +82,7 @@ request-local cache -> process-local cache -> Redis cache -> fallback function
 - Results from the lower chain are memoized request-locally when that layer is enabled.
 - Process-local hits return immediately.
 - Process-local misses try Redis and populate the process-local cache on a Redis hit.
-- Redis misses call the fallback and attempt to populate Redis and, when active, the process-local cache. Tracked invalidation may suppress both publications.
+- Redis misses call the fallback and attempt to write one complete Redis frame. An active untracked process-local layer may publish that fallback result directly; a tracked caller-path miss skips direct process-local publication until a later validated Redis hit can warm it.
 - Selected Redis keys can execute non-serving [shadow work](#shadow-validation) that validates hits and fills clean misses, even before Redis is allowed to serve callers.
 - Redis read failures and timeouts are logged, counted in metrics, and fail open without attempting a second Redis operation. Redis write failures also fail open. `invalidateRemote` requires a configured Redis client; missing configuration and Redis failures are logged, counted, and rethrown so callers do not assume invalidation succeeded.
 - Cache-key construction and config-provider failures also fail open and run the fallback uncached.
@@ -326,16 +326,15 @@ The limit counts entries rather than estimating JavaScript object memory. Recent
 
 ### Redis-backed TTL cache
 
-The Redis layer supports standalone Redis, Valkey, and Redis Cluster. Register DialCache's bundled node-redis scripts when creating the client, then pass that client to DialCache:
+The Redis layer supports standalone Redis, Valkey, and Redis Cluster. Connect the underlying client, then wrap it with the bundled adapter:
 
 ```ts
 import { createClient } from "redis";
 import { DialCache } from "dialcache";
-import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "dialcache/node-redis";
+import { createNodeRedisDialCacheClient } from "dialcache/node-redis";
 
 const redisClient = createClient({
   url: process.env.REDIS_URL,
-  scripts: dialcacheRedisScripts,
   disableOfflineQueue: true,
   commandsQueueMaxLength: 1_000,
   socket: { connectTimeout: 2_000 },
@@ -358,7 +357,7 @@ async function shutdown(): Promise<void> {
 }
 ```
 
-`redis.client` is required when Redis is configured and accepts the semantic `DialCacheRedisClient` interface. `redis.readTimeoutMs` is optional and sets the instance default for remote reads; omit it to use 50 ms. Create and connect the underlying client before constructing `DialCache`. Node-redis users should register the supplied invalidation script and wrap their client with `createNodeRedisDialCacheClient` as shown above; reads and writes use native commands. The registered `dialcacheInvalidate` method is DialCache wiring, not a general write API. The helper requires node-redis's promise API and does not support `legacyMode`, whose callback surface and `.v4` view do not expose the required native-command and custom-script contract together.
+`redis.client` is required when Redis is configured and accepts the semantic `DialCacheRedisClient` interface. `redis.readTimeoutMs` is optional and sets the instance default for remote reads; omit it to use 50 ms. Create and connect the underlying client before constructing `DialCache`. Node-redis users wrap that connected client with `createNodeRedisDialCacheClient` as shown above; the adapter issues native reads and writes and manages invalidation's `EVALSHA`/`EVAL` dispatch internally. The helper requires node-redis's promise API and does not support `legacyMode`, whose callback surface is incompatible with the required promise-based binary-command contract.
 
 Valkey GLIDE users pass an already-created standalone or cluster client and its
 module namespace to the GLIDE adapter:
@@ -389,8 +388,9 @@ function shutdown(): void {
 
 Pass the same GLIDE 2.x module namespace that created the client. The adapter
 uses that namespace's `GlideClient` and `GlideClusterClient` identities,
-`Batch` and `ClusterBatch` constructors, and `Decoder.Bytes` without importing
-a GLIDE runtime itself. The helper accepts a direct official client instance and
+the standalone `Batch` constructor, and `Decoder.Bytes` without importing a
+GLIDE runtime itself. Cluster reads route `MGET` directly and do not require
+`ClusterBatch`. The helper accepts a direct official client instance and
 fails during construction when the client came from another module instance or
 is hidden behind a forwarding wrapper, because it cannot safely infer that
 wrapper's topology. Custom wrappers can implement `DialCacheRedisClient`
@@ -441,7 +441,9 @@ byte 10     payload encoding (0 = UTF-8, 1 = raw binary)
 bytes 11... serialized payload (optionally zstd-compressed; see Compression)
 ```
 
-Adapters build complete frames in the Node process with `encodeRedisFrame` and decode them with Node buffer primitives. The version-1 value envelope, Redis value keys, and decimal watermark encoding are unchanged; existing complete values need no migration. Version-0 placeholders from the removed stamp protocol remain misses, so deployments must externally gate the new protocol and drain old writers and in-flight values rather than run the two write protocols concurrently. Redis physical TTL remains authoritative for normal expiry; the frame timestamp supports future-frame rejection and shadow value-age observability. `payload` is produced by the operation's serializer, or by `JsonSerializer` by default. Custom serializers can return either `string` or `Buffer`. Payloads stored raw keep their exact serialized bytes: strings are stored as UTF-8 and Buffers byte-for-byte without base64 expansion, except that binary output beginning with a [compression envelope byte](#compression) (`0x00`–`0x02`) gains a one-byte escape prefix on the wire. Payloads at or above the compression threshold may instead be stored as a zstd envelope (see [Compression](#compression)), so wire bytes for large values are not the serializer's output. Adapters return the frame payload as-is; the envelope — including restoring a compressed string's representation before `serializer.load` — is interpreted by the core above them.
+Adapters build complete frames in the Node process with `encodeRedisFrame` and decode them with Node buffer primitives. The version-1 value-envelope format, Redis value-key derivation, and decimal watermark encoding are unchanged. That wire compatibility does not make old tracked state safe to carry across the protocol cutover: old watermark lifetimes were derived for the old write protocol.
+
+Redis physical TTL remains authoritative for normal expiry; the frame timestamp supports future-frame rejection and shadow value-age observability. `payload` is produced by the operation's serializer, or by `JsonSerializer` by default. Custom serializers can return either `string` or `Buffer`. Payloads stored raw keep their exact serialized bytes: strings are stored as UTF-8 and Buffers byte-for-byte without base64 expansion, except that binary output beginning with a [compression envelope byte](#compression) (`0x00`–`0x02`) gains a one-byte escape prefix on the wire. Payloads at or above the compression threshold may instead be stored as a zstd envelope (see [Compression](#compression)), so wire bytes for large values are not the serializer's output. Adapters return the frame payload as-is; the envelope — including restoring a compressed string's representation before `serializer.load` — is interpreted by the core above them.
 
 DialCache uses native `JSON.stringify` and `JSON.parse` by default. There is no runtime validation pass, so the default adds no traversal beyond JSON serialization itself. A top-level `undefined` result is supported with an internal sentinel.
 
@@ -474,6 +476,12 @@ const getUpdatedAt = dialcache.cached(
 The compile-time guard rejects known incompatible shapes such as `Date`, `Map`, `Set`, `bigint`, symbols, functions, Buffers, typed arrays, method-bearing class instances, required nested `undefined`, `unknown`, and `any`. It applies to every `cached()` declaration and `getOrLoad()` invocation because active layers are selected at runtime. A global Redis serializer is not parameterized by each returned type, so it cannot discharge this requirement; non-JSON operations must select a typed serializer.
 
 This guard is deliberately conservative and is not a proof of runtime data. TypeScript cannot detect non-finite numbers, cyclic/shared references, runtime getter or `toJSON` behavior, or data-only class instances that look like plain objects. Opaque, generic, or deeply recursive types may also require an explicit serializer. Providing `Serializer<T>` (including an explicitly typed `JsonSerializer<T>`) is a trusted caller assertion; DialCache does not serialize-and-deserialize again to validate it.
+
+#### Protocol cutover
+
+The old and new tracked-write protocols must not coexist. Before enabling this release for a namespace, stop and drain every old writer and invalidator plus in-flight fallbacks, shadow work, Redis client queues, and other operations that can still write tracked state. Then purge every tracked value — complete or placeholder — and every watermark in the affected namespace. A full namespace flush is the simplest option when the Redis deployment is dedicated; untracked complete values may be retained.
+
+Alternatively, keep all traffic disabled until every old tracked value and watermark has expired naturally. That is safe only when the maximum remaining lifetime of both classes is bounded, no watermark is persistent, and the wait covers the old release's maximum value TTL and future-buffer-derived watermark TTL. This library intentionally does not implement the external deployment gate.
 
 #### Compression
 
@@ -521,7 +529,7 @@ const getUser = dialcache.cached(
     keyType: "user_id",
     useCase: "GetUser",
     cacheKey: (userId) => userId,
-    // Optional for shadowing; adds watermark fencing to Redis reads and fills.
+    // Optional: make Redis reads watermark-aware; writes remain complete-frame SETs.
     trackForInvalidation: true,
     // Optional: override strict deep equality with use-case semantics.
     shadowComparator: (cached, source) =>
@@ -541,7 +549,7 @@ const getUser = dialcache.cached(
 );
 ```
 
-Shadow work is eligible only when a valid remote TTL/policy exists, its effective `shadow.ramp` selects the exact cache key, a configured metrics adapter implements `shadowValidation`, and capacity is available. Tracked and untracked Redis keys are both eligible; each keeps its existing read and write mode. Logging is supplemental to the metric; enabling `logMismatches` does not activate shadow work without the metrics hook. The bundled Prometheus and Datadog adapters implement that hook. There are two paths:
+Shadow work is eligible only when a valid remote TTL/policy exists, its effective `shadow.ramp` selects the exact cache key, a configured metrics adapter implements `shadowValidation`, and capacity is available. Tracked and untracked Redis keys are both eligible; each keeps its existing read mode and uses the common complete-frame write path. Logging is supplemental to the metric; enabling `logMismatches` does not activate shadow work without the metrics hook. The bundled Prometheus and Datadog adapters implement that hook. There are two paths:
 
 - When remote serving is enabled and produces a Redis hit, DialCache retains the exact serialized payload that supplied the caller as `C0`.
 - When the remote policy is valid but disabled specifically by `ramped_down`, DialCache starts a detached Redis read for `C0` using the key's existing tracked or untracked mode. Its result can be validated or used to decide whether a clean miss may be filled, but can never supply the caller or populate an in-memory layer.
@@ -598,7 +606,7 @@ Detached Redis reads, serializer loads/dumps, payload sizes, and read/write erro
 
 The command amplification is bounded: a selected served hit adds one SoT read and adds `C1` only for a semantic mismatch candidate; a selected ramped-down hit adds detached `C0`, reuses the caller's existing SoT read, and likewise adds `C1` only for a candidate; a selected ramped-down miss adds detached `C0` and at most one fill in the key's existing mode. `superseded` means only that the original observation could not be confirmed. `mismatch` means the exact `C0` payload survived another Redis read after the SoT disagreement; it is not a cross-system atomic snapshot or a guarantee that the mismatch persists. For an untracked key it is also not proof of primary freshness or invalidation safety.
 
-The initial `C0` read and later fill are not atomic. The fill is a normal overwrite, not a compare-and-set or write-if-still-missing operation: another writer can populate Redis after the clean miss and be overwritten by the shadow fill. For tracked keys, the next atomic value-and-watermark read still rejects a frame whose client timestamp is at or before the watermark, so size `futureBufferMs` to cover the complete SoT, serialization, client queue, network, write interval, and fleet clock-skew budget when stale-publication protection matters. An untracked shadow fill has no such fence and retains the ordinary TTL-based last-writer-wins contract; because it is detached, an older accepted source value may be written after a concurrent source mutation and remain until expiry. Shadow mode never repairs a non-null `C0`, refreshes its TTL, invalidates, evicts local state, or changes the value returned to the caller.
+The initial `C0` read and later fill are not atomic. The fill is a normal overwrite, not a compare-and-set or write-if-still-missing operation: another writer can populate Redis after the clean miss and be overwritten by the shadow fill. For tracked keys, the next atomic value-and-watermark read still rejects a frame whose client timestamp is at or before the watermark, so size `futureBufferMs` to cover the complete SoT, serialization, client queue, network, write interval, and fleet clock-skew budget when stale-serving protection matters. An untracked shadow fill has no such read fence and retains the ordinary TTL-based last-writer-wins contract; because it is detached, an older accepted source value may be written after a concurrent source mutation and remain until expiry. Shadow mode never repairs a non-null `C0`, refreshes its TTL, invalidates, evicts local state, or changes the value returned to the caller.
 
 A served-hit sample invokes the wrapped function or inline loader as an additional source read, so that loader must be safe to call for observation. A ramped-down sample reuses the caller's ordinary invocation and does not add another SoT call.
 
@@ -663,17 +671,19 @@ A cached Redis value whose writer-provided `createdAtMs` is older than or equal 
 
 All serving timestamps come from application-process epoch clocks; DialCache does not call Redis `TIME`, estimate an offset, or compensate for skew. Participating application nodes therefore need external clock synchronization and monitoring. Healthy managed node pools commonly stay close, but Kubernetes does not guarantee a maximum offset, and pauses or NTP faults can be much larger than normal millisecond-scale skew. A writer ahead of a reader produces fail-closed misses until the reader clock catches up. Operation durations and deadlines continue to use the monotonic `performance.now()` clock.
 
-Watermarks are invalidation state, not disposable cache entries. The Redis deployment must preserve them for their derived TTL: use `noeviction` or an equivalent guarantee for deployments that rely on the publication fence, and choose persistence and failover guarantees appropriate to the application's consistency requirements. If a watermark is lost, a tracked read treats it as zero and may serve an existing frame that the lost watermark had fenced. Alert on memory headroom and rejected writes under `noeviction`; if another eviction policy is used, also alert on `evicted_keys`. Redis replication is asynchronous by default, and DialCache does not issue `WAIT` or provide strong consistency across failover.
+Watermarks are invalidation state, not disposable cache entries. The Redis deployment must preserve them for their derived TTL: use `noeviction` or an equivalent guarantee for deployments that rely on the read-time fence, and choose persistence and failover guarantees appropriate to the application's consistency requirements. If a watermark is lost, a tracked read treats it as zero and may serve an existing frame that the lost watermark had fenced. Alert on memory headroom and rejected writes under `noeviction`; if another eviction policy is used, also alert on `evicted_keys`. Redis replication is asynchronous by default, and DialCache does not issue `WAIT` or provide strong consistency across failover.
 
-Tracked Redis value TTLs are capped at one hour. Only invalidation creates or updates a watermark. Its TTL is `max(existing TTL, 2 hours, watermark - invalidatedAtMs + 1 hour + 1 minute)`; an existing persistent watermark stays persistent. Reads and writes never extend it. This makes every finite watermark outlive every value it can fence, including a maximum future-buffer proposal.
+Tracked Redis value TTLs are capped at one hour. Only invalidation creates or updates a watermark. Its TTL is `max(existing TTL, 2 hours, watermark - invalidatedAtMs + 1 hour + 1 minute)`; an existing persistent watermark stays persistent. Reads and writes never extend it. Under the documented clock-skew and in-flight-work bounds, this makes every finite watermark outlive every value it can fence, including a maximum future-buffer proposal.
 
-`futureBufferMs` must be a nonnegative safe integer no greater than 31,536,000,000 (a fixed 365-day duration). The default is zero, but zero provides no stale-publication protection once a writer timestamp advances past the watermark. Every production invalidation should pass a named, application-owned nonzero value based on that application's measured or conservatively bounded timings; there is no universally safe library value.
+`futureBufferMs` must be a nonnegative safe integer no greater than 31,536,000,000 (a fixed 365-day duration). The default is zero, but zero provides no stale-serving protection once a writer timestamp advances past the watermark. Every production invalidation should pass a named, application-owned nonzero value based on that application's measured or conservatively bounded timings; there is no universally safe library value.
 
-Let `Dmax` be the maximum elapsed time from invalidation sampling until pre-mutation work can still sample its value-write timestamp, `S` the maximum writer-clock lead over the invalidator across participating application nodes, and `M` an operational margin. Callers that require stale-publication protection must satisfy `futureBufferMs >= Dmax + S + M`. Bound `Dmax` across source visibility or replication lag, the remaining tail of any fallback that may already have observed the pre-mutation value, `serializer.dump`, Redis client queue and network latency, and mutation dispatch. Invalidate only after the source mutation commits. The dangerous skew direction is a fast writer and slow invalidator: an undersized buffer can let delayed stale work receive a timestamp above the watermark and remain readable until expiry or another invalidation. The reverse direction is conservative. Overestimating the buffer increases fallback load, full-payload `MGET` transfer, and full-frame `SET`, replication, and AOF churn on hot large-value keys. It does not delay or suppress returning fallback values to callers.
+Let `Dmax` be the maximum elapsed time from invalidation sampling until a stale pre-mutation `SET` can become visible in Redis, `S` the maximum writer-clock lead over the invalidator across participating application nodes, and `M` an operational margin. Callers that require stale-serving protection must satisfy `futureBufferMs >= Dmax + S + M`. Bound `Dmax` through source visibility or replication lag, the remaining tail of any fallback that may observe the pre-mutation value, `serializer.dump`, Redis client queueing or reconnect/offline-queue delay, network transit, and Redis execution and visibility. An unbounded offline queue or retry path makes a finite `Dmax` impossible. Invalidate only after the source mutation commits. The dangerous skew direction is a fast writer and slow invalidator: an undersized buffer can let delayed stale work receive a timestamp above the watermark and remain readable until expiry or another invalidation. The reverse direction is conservative. Overestimating the buffer increases fallback load, full-payload `MGET` transfer, and full-frame `SET`, replication, and AOF churn on hot large-value keys. It does not delay or suppress returning fallback values to callers.
+
+The fixed one-minute watermark-TTL margin is retention slack after the covered visibility bound; it is not a substitute for `Dmax`. The operational contract should include the full post-sample dispatch tail in `Dmax` rather than relying on that slack.
 
 This is a read-time timing contract rather than a cancellation or acquisition fence. The buffer makes covered frames unreadable; it does not stop their SETs, cancel in-flight work, or force fallback to read from an authoritative source.
 
-The version-1 value envelope, Redis keys, and decimal watermarks remain wire-compatible. The adapter contract and Lua surface are not source-compatible: `write()` is now void and has no `watermarkKey`, the stamp script and placeholder helpers are removed, invalidation is the only script, and `fill_blocked` is removed from `ShadowValidationOutcome`. Do not run old and new writers concurrently. Gate rollout externally, drain old in-flight work and version-0 placeholders, then enable the new protocol; this library change intentionally does not implement that deployment gate. Deploy the future-timestamp metric and external node-clock alerts first. The metric is only a workload-shaped smoke detector: it cannot detect co-skewed readers and writers, an ahead invalidator, watermark skew hidden by a fenced miss, or which node is wrong.
+The version-1 value envelope, Redis keys, and decimal watermarks remain wire-format-compatible. The adapter contract and Lua surface are not source-compatible: `write()` is now void and has no `watermarkKey`; the stamp script, placeholder helpers, and `DialCacheRedisPlaceholderLostError` are removed; `dialcacheRedisScripts` and `DialCacheNodeRedisScripts` are removed because node-redis manages invalidation dispatch internally; `ValkeyGlideRuntime` no longer requires `ClusterBatch`; invalidation is the only script; and `fill_blocked` is removed from `ShadowValidationOutcome`. Follow the externally gated [protocol cutover](#protocol-cutover) before deployment. Deploy the future-timestamp metric and external node-clock alerts first. The metric is only a workload-shaped smoke detector: it cannot detect co-skewed readers and writers, an ahead invalidator, watermark skew hidden by a fenced miss, or which node is wrong.
 
 Targeted invalidation is remote-only and enforced by Redis watermarks. `invalidateRemote` does not evict existing request-local or process-local entries. Strongly invalidated mutable data should disable request-local and process-local caching (or use a very short process-local TTL only when stale reads are acceptable).
 
@@ -697,7 +707,7 @@ Coalescing only applies when at least one cache layer is active and the use case
 
 Because coalescing is keyed by the selected or direct key, concurrent calls with the same key share the leader's execution. Any function argument or captured value omitted from the key must be safe to share this way; include inputs such as locale, auth context, or cancellation behavior when they can change the returned value or whether the underlying loader should run separately.
 
-The per-use-case `coalesce` boolean (default true) turns this sharing off. `coalesce: false` in a `defaultConfig` or runtime overlay disables both scopes: same-key concurrent callers each perform their own layer reads with their own full remote-read budget, their own fallback with an independent [fallback deadline](#fallback-deadlines), and their own cache writes — request-local and process-local publication is last-writer-wins, and each Redis write applies its ordinary TTL-based or watermark-fenced semantics. Request-local memoization of settled values still serves later sequential calls in the same scope. Use it when the key intentionally omits per-caller inputs that must not be shared, or when callers must not inherit a leader's failure or `FallbackTimeoutError`. Disabling coalescing reintroduces the thundering-herd exposure described above, emits `request`/`miss`/latency metrics once per caller instead of once per flight, never emits `dialcache_coalesced_counter`, and keeps `getCoalescingState()` idle for that use case. With shadow work enabled, each un-coalesced caller may attempt to schedule detached validation; same-key shadow deduplication and `shadowMaxInFlight` still bound admitted jobs and drop the excess, but source reads are no longer combined.
+The per-use-case `coalesce` boolean (default true) turns this sharing off. `coalesce: false` in a `defaultConfig` or runtime overlay disables both scopes: same-key concurrent callers each perform their own layer reads with their own full remote-read budget, their own fallback with an independent [fallback deadline](#fallback-deadlines), and their own cache writes — request-local and process-local publication is last-writer-wins, every Redis write is one complete-frame last-writer-wins `SET`, and tracked Redis reads later apply their usual watermark fence. Request-local memoization of settled values still serves later sequential calls in the same scope. Use it when the key intentionally omits per-caller inputs that must not be shared, or when callers must not inherit a leader's failure or `FallbackTimeoutError`. Disabling coalescing reintroduces the thundering-herd exposure described above, emits `request`/`miss`/latency metrics once per caller instead of once per flight, never emits `dialcache_coalesced_counter`, and keeps `getCoalescingState()` idle for that use case. With shadow work enabled, each un-coalesced caller may attempt to schedule detached validation; same-key shadow deduplication and `shadowMaxInFlight` still bound admitted jobs and drop the excess, but source reads are no longer combined.
 
 ### Fallback deadlines
 
@@ -920,7 +930,7 @@ With an otherwise idle Redis reachable at `REDIS_URL` (default `redis://127.0.0.
 pnpm benchmark:redis-write
 ```
 
-The command builds `dist`, then runs sequential native writes at 100 B, 10 KiB, 100 KiB, and 1 MiB payloads. It reports `SET`, script, and `TIME` calls per operation, server-side `SET` cost from `INFO commandstats`, and client-side p50/p95 latency. Semantic assertions require exactly one `SET`, zero scripts, and zero `TIME` calls per write. Like the cache-path benchmark it is a maintainer tool, is not part of the published package, and applies no timing threshold — absolute numbers depend on the machine, engine, and load, so compare runs only within one environment. Scale iteration counts with `DIALCACHE_BENCH_WRITE_SCALE`.
+The command builds `dist`, then runs sequential native writes at 100 B, 10 KiB, 100 KiB, and 1 MiB payloads. It reports `SET`, script, and `TIME` calls per operation, server-side `SET` cost from `INFO commandstats`, and client-side p50/p95 latency. Semantic assertions require exactly one `SET`, zero scripts, and zero `TIME` calls per write. Because operations are sequential, the benchmark validates command shape and single-operation latency; it does not measure saturated concurrent throughput or maximum write capacity. Like the cache-path benchmark it is a maintainer tool, is not part of the published package, and applies no timing threshold — absolute numbers depend on the machine, engine, and load, so compare runs only within one environment. Scale iteration counts with `DIALCACHE_BENCH_WRITE_SCALE`.
 
 ### Releasing
 

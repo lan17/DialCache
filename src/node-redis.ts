@@ -1,4 +1,6 @@
-import { commandOptions, defineScript } from "redis";
+import { createHash } from "node:crypto";
+
+import { commandOptions } from "redis";
 
 import { INVALIDATE_CACHE_SCRIPT } from "./internal/redis-scripts.js";
 import {
@@ -14,7 +16,6 @@ import {
 } from "./internal/redis-script-reply.js";
 import {
   DialCacheRedisPayloadError,
-  DialCacheRedisProtocolError,
   type DialCacheRedisClient,
 } from "./redis-client.js";
 
@@ -26,62 +27,13 @@ type BufferReplyOptions = ReturnType<
 >;
 // Redis bulk strings are binary data; decoding them as UTF-8 would corrupt arbitrary serializer output.
 const bufferReplyOptions: BufferReplyOptions = commandOptions({ returnBuffers: true });
-const invalidationReply = (reply: number): number => validateRedisScriptInvalidationReply(reply);
 type NodeRedisArgument = string | Buffer;
 
-interface NodeRedisScript<Args extends Array<unknown>, Reply> {
-  readonly SCRIPT: string;
-  readonly SHA1: string;
-  readonly NUMBER_OF_KEYS: number;
-  readonly FIRST_KEY_INDEX: number;
-  readonly IS_READ_ONLY: boolean;
-  transformArguments(...args: Args): Array<NodeRedisArgument>;
-  transformReply(reply: Reply): Reply;
-}
+// Redis caches EVAL'd sources under sha1(source), so this is both the digest
+// used by EVALSHA and the digest populated by the EVAL recovery.
+const INVALIDATE_CACHE_SHA1 = createHash("sha1").update(INVALIDATE_CACHE_SCRIPT).digest("hex");
 
-type NodeRedisScriptConfig<Args extends Array<unknown>, Reply> = Omit<NodeRedisScript<Args, Reply>, "SHA1">;
-
-function defineDialCacheScript<Args extends Array<unknown>, Reply>(
-  config: NodeRedisScriptConfig<Args, Reply>,
-): NodeRedisScript<Args, Reply> {
-  return defineScript(config);
-}
-
-/** DialCache's node-redis invalidation-script wiring. */
-export type DialCacheNodeRedisScripts = {
-  readonly dialcacheInvalidate: NodeRedisScript<
-    [watermarkKey: string, futureBufferMs: number, invalidatedAtMs: number],
-    number
-  >;
-};
-
-/** See {@link DialCacheNodeRedisScripts}: wiring for the adapter, not a direct write API. */
-export const dialcacheRedisScripts: DialCacheNodeRedisScripts = {
-  dialcacheInvalidate: defineDialCacheScript({
-    SCRIPT: INVALIDATE_CACHE_SCRIPT,
-    NUMBER_OF_KEYS: 1,
-    FIRST_KEY_INDEX: 0,
-    IS_READ_ONLY: false,
-    transformArguments(
-      watermarkKey: string,
-      futureBufferMs: number,
-      invalidatedAtMs: number,
-    ): Array<string> {
-      return [watermarkKey, String(futureBufferMs), String(invalidatedAtMs)];
-    },
-    transformReply: invalidationReply,
-  }),
-};
-
-interface NodeRedisScriptingClient {
-  dialcacheInvalidate(
-    watermarkKey: string,
-    futureBufferMs: number,
-    invalidatedAtMs: number,
-  ): Promise<number>;
-}
-
-interface NodeRedisStandaloneClient extends NodeRedisScriptingClient {
+interface NodeRedisStandaloneClient {
   get(options: BufferReplyOptions, valueKey: string): Promise<Buffer | null>;
   sendCommand(
     args: Array<NodeRedisArgument>,
@@ -89,7 +41,7 @@ interface NodeRedisStandaloneClient extends NodeRedisScriptingClient {
   ): Promise<unknown>;
 }
 
-interface NodeRedisClusterClient extends NodeRedisScriptingClient {
+interface NodeRedisClusterClient {
   /** Public node-redis Cluster topology view, used only to distinguish its sendCommand overload. */
   readonly masters: ReadonlyArray<unknown>;
   get(options: BufferReplyOptions, valueKey: string): Promise<Buffer | null>;
@@ -162,11 +114,11 @@ function sendFrameSet(
  * Read signals are passed to node-redis so queued commands can be removed when
  * supported. Aborting after dispatch does not unsend a command or prove the
  * server stopped executing it. Every write is one native SET of a complete
- * client-stamped frame. Invalidation retries any dispatch rejection other
- * than a reply-domain violation once by
+ * client-stamped frame. Invalidation retries any EVALSHA rejection once by
  * re-sending the script source as EVAL — the script is idempotent, so a
- * duplicate run is harmless — and a failed retry surfaces unmodified, with
- * the original rejection discarded. node-redis has no per-command deadline:
+ * duplicate run is harmless — and a failed retry surfaces unmodified. An
+ * accepted reply is validated after dispatch and is never retried. node-redis
+ * has no per-command deadline:
  * `disableOfflineQueue`, `commandsQueueMaxLength`, and `reconnectStrategy`
  * bound queueing and dispatch, not the reply wait, so with the offline queue
  * enabled a retry issued during a disconnect can wait until reconnect. The
@@ -174,11 +126,6 @@ function sendFrameSet(
  * work, and closing the client.
  */
 export function createNodeRedisDialCacheClient(client: NodeRedisClient): DialCacheRedisClient {
-  if (typeof client.dialcacheInvalidate !== "function") {
-    throw new TypeError(
-      "node-redis DialCache requires a client created with scripts: dialcacheRedisScripts",
-    );
-  }
   return {
     async read({ valueKey, watermarkKey }, context) {
       const options: BufferReplyOptions = context === undefined
@@ -205,21 +152,24 @@ export function createNodeRedisDialCacheClient(client: NodeRedisClient): DialCac
     async invalidate({ watermarkKey, futureBufferMs }) {
       const invalidatedAtMs = Date.now();
       assertValidRedisTimestampMs(invalidatedAtMs);
+      const invalidateArgs: NodeRedisArgument[] = [
+        String(futureBufferMs),
+        String(invalidatedAtMs),
+      ];
       let raw: unknown;
       try {
-        raw = await client.dialcacheInvalidate(watermarkKey, futureBufferMs, invalidatedAtMs);
-      } catch (error) {
-        // The registered transformReply validates inside the returned
-        // promise, so a reply-domain violation surfaces here as a rejection;
-        // it is deterministic and must not be retried. Any other rejection
-        // is retried once with the source: the invalidation script is
+        raw = await sendKeyedCommand(
+          client,
+          watermarkKey,
+          ["EVALSHA", INVALIDATE_CACHE_SHA1, "1", watermarkKey, ...invalidateArgs],
+          bufferReplyOptions,
+        );
+      } catch {
+        // Any rejection is retried once with the source: the invalidation script is
         // idempotent (the watermark only advances and its TTL only widens),
         // so a duplicate run after an ambiguous failure is harmless, and
         // EVAL self-heals both a flushed script cache and an
         // EVALSHA-rejecting proxy without depending on error wording.
-        if (error instanceof DialCacheRedisProtocolError) {
-          throw error;
-        }
         // A failed retry surfaces unmodified, discarding this original
         // rejection: node-redis rejects every command flushed by a single
         // disconnect with one shared error instance — the same object its
@@ -233,8 +183,7 @@ export function createNodeRedisDialCacheClient(client: NodeRedisClient): DialCac
             INVALIDATE_CACHE_SCRIPT,
             "1",
             watermarkKey,
-            String(futureBufferMs),
-            String(invalidatedAtMs),
+            ...invalidateArgs,
           ],
           bufferReplyOptions,
         );

@@ -499,15 +499,18 @@ export class DialCache {
    * for at least two hours, or long enough to outlive its future window plus
    * the one-hour value bound and a safety margin; longer and persistent
    * existing TTLs are preserved. Watermarks are invalidation state and must not
-   * be evicted or lost during that interval. Losing one removes its publication
-   * fence and can make an existing frame readable. Use `noeviction` or an
-   * equivalent guarantee when relying on the fence, and choose persistence and
-   * failover guarantees accordingly; DialCache does not issue `WAIT`.
+   * be evicted or lost during that interval. Losing one removes its read-time
+   * invalidation fence and can make an existing frame readable. Use
+   * `noeviction` or an equivalent guarantee when relying on the fence, and
+   * choose persistence and failover guarantees accordingly; DialCache does not
+   * issue `WAIT`.
    *
-   * `futureBufferMs` is application-owned. Size it for source visibility lag,
-   * in-flight fallback and serialization work, client and network delay, and
-   * the maximum writer-clock lead over the invalidator. DialCache reports
-   * future-dated frames through optional metrics but does not calibrate clocks.
+   * `futureBufferMs` is application-owned. Size it through the point where a
+   * stale SET can become visible: source visibility lag, in-flight fallback and
+   * serialization work, bounded client queue/reconnect delay, network and Redis
+   * execution, plus the maximum writer-clock lead over the invalidator.
+   * DialCache reports future-dated frames through optional metrics but does not
+   * calibrate clocks.
    * A zero buffer fences only frames stamped no later than the invalidation;
    * an undersized buffer can admit stale work, while an oversized one causes
    * more tracked misses without delaying the returned fallback value.

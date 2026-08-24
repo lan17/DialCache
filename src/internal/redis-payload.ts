@@ -5,13 +5,13 @@ import {
   type RedisCachePayload,
 } from "../redis-client.js";
 
-export const REDIS_FRAME_VERSION = 1;
+const REDIS_FRAME_VERSION = 1;
 const REDIS_ENCODING_UTF8 = 0;
 const REDIS_ENCODING_BINARY = 1;
 const REDIS_FRAME_TIMESTAMP_OFFSET = 1;
-export const REDIS_FRAME_TIMESTAMP_BYTES = 8;
+const REDIS_FRAME_TIMESTAMP_BYTES = 8;
 
-export const REDIS_FRAME_HEADER_BYTES = REDIS_FRAME_TIMESTAMP_OFFSET + REDIS_FRAME_TIMESTAMP_BYTES;
+const REDIS_FRAME_HEADER_BYTES = REDIS_FRAME_TIMESTAMP_OFFSET + REDIS_FRAME_TIMESTAMP_BYTES;
 const REDIS_FRAME_MIN_BYTES = REDIS_FRAME_HEADER_BYTES + 1;
 
 function validateRedisBulkStringReply(raw: unknown): Buffer | null {
@@ -42,10 +42,6 @@ function parseRedisWatermark(raw: Buffer | null): number | null {
   return Number.isFinite(watermark) ? watermark : null;
 }
 
-function redisPayloadEncoding(value: RedisCachePayload): number {
-  return Buffer.isBuffer(value) ? REDIS_ENCODING_BINARY : REDIS_ENCODING_UTF8;
-}
-
 function decodeRedisPayload(raw: Buffer): RedisCachePayload {
   const encoding = raw[0];
   const payload = raw.subarray(1);
@@ -56,20 +52,6 @@ function decodeRedisPayload(raw: Buffer): RedisCachePayload {
     return payload;
   }
   throw new DialCacheRedisPayloadEncodingError("Invalid DialCache Redis payload encoding");
-}
-
-function encodeFrameBytes(payload: RedisCachePayload, version: number, stampBytes: Buffer): Buffer {
-  const payloadBytes = Buffer.isBuffer(payload) ? payload.length : Buffer.byteLength(payload, "utf8");
-  const frame = Buffer.allocUnsafe(REDIS_FRAME_MIN_BYTES + payloadBytes);
-  frame[0] = version;
-  stampBytes.copy(frame, REDIS_FRAME_TIMESTAMP_OFFSET);
-  frame[REDIS_FRAME_HEADER_BYTES] = redisPayloadEncoding(payload);
-  if (Buffer.isBuffer(payload)) {
-    payload.copy(frame, REDIS_FRAME_MIN_BYTES);
-  } else {
-    frame.write(payload, REDIS_FRAME_MIN_BYTES, "utf8");
-  }
-  return frame;
 }
 
 /**
@@ -83,9 +65,18 @@ export function encodeRedisFrame(payload: RedisCachePayload, createdAtMs: number
   if (!isValidRedisTimestampMs(createdAtMs)) {
     throw new RangeError("DialCache frame createdAtMs must be a nonnegative safe integer");
   }
-  const timestamp = Buffer.allocUnsafe(REDIS_FRAME_TIMESTAMP_BYTES);
-  timestamp.writeBigUInt64BE(BigInt(createdAtMs));
-  return encodeFrameBytes(payload, REDIS_FRAME_VERSION, timestamp);
+  const isBinary = Buffer.isBuffer(payload);
+  const payloadBytes = isBinary ? payload.length : Buffer.byteLength(payload, "utf8");
+  const frame = Buffer.allocUnsafe(REDIS_FRAME_MIN_BYTES + payloadBytes);
+  frame[0] = REDIS_FRAME_VERSION;
+  frame.writeBigUInt64BE(BigInt(createdAtMs), REDIS_FRAME_TIMESTAMP_OFFSET);
+  frame[REDIS_FRAME_HEADER_BYTES] = isBinary ? REDIS_ENCODING_BINARY : REDIS_ENCODING_UTF8;
+  if (isBinary) {
+    payload.copy(frame, REDIS_FRAME_MIN_BYTES);
+  } else {
+    frame.write(payload, REDIS_FRAME_MIN_BYTES, "utf8");
+  }
+  return frame;
 }
 
 /** Validate an application-clock epoch timestamp before mutation dispatch. */

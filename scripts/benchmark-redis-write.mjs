@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 
 import { createClient } from "redis";
 
-import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "../dist/node-redis.js";
+import { createNodeRedisDialCacheClient } from "../dist/node-redis.js";
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
 const SCALE = Number(process.env.DIALCACHE_BENCH_WRITE_SCALE ?? "1");
@@ -43,7 +43,6 @@ async function commandStats(client) {
 
 const client = createClient({
   url: REDIS_URL,
-  scripts: dialcacheRedisScripts,
   disableOfflineQueue: true,
   socket: { connectTimeout: 2_000 },
 });

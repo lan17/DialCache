@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -6,7 +8,7 @@ import {
   DialCacheKeyConfig,
   DialCacheRedisProtocolError,
 } from "../src/index.js";
-import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "../src/node-redis.js";
+import { createNodeRedisDialCacheClient } from "../src/node-redis.js";
 import { INVALIDATE_CACHE_SCRIPT } from "../src/redis-protocol.js";
 
 const INVALID_INVALIDATION_REPLIES: readonly unknown[] = [
@@ -30,7 +32,7 @@ interface FakeReplies {
   readonly mGet?: unknown;
   readonly set?: unknown;
   readonly eval?: unknown;
-  readonly invalidate?: unknown;
+  readonly evalSha?: unknown;
 }
 
 function fakeClient(replies: FakeReplies = {}) {
@@ -45,9 +47,11 @@ function fakeClient(replies: FakeReplies = {}) {
       if (args[0] === "EVAL") {
         return Object.hasOwn(replies, "eval") ? replies.eval : 1;
       }
+      if (args[0] === "EVALSHA") {
+        return Object.hasOwn(replies, "evalSha") ? replies.evalSha : 1;
+      }
       return Object.hasOwn(replies, "mGet") ? replies.mGet : [null, null];
     }),
-    dialcacheInvalidate: vi.fn(async () => Object.hasOwn(replies, "invalidate") ? replies.invalidate : 1),
   };
 }
 
@@ -85,25 +89,11 @@ describe("node-redis adapter", () => {
     vi.restoreAllMocks();
   });
 
-  it("provides the expected arguments for the bundled invalidation script", () => {
-    expect(Object.keys(dialcacheRedisScripts)).toEqual(["dialcacheInvalidate"]);
-    expect(
-      dialcacheRedisScripts.dialcacheInvalidate.transformArguments(
-        "tracked:{id}:watermark",
-        50,
-        1_234,
-      ),
-    ).toEqual(["tracked:{id}:watermark", "50", "1234"]);
+  it("keeps invalidation independent of the Redis server clock", () => {
     expect(INVALIDATE_CACHE_SCRIPT).not.toMatch(/redis\.call\(["']TIME["']\)/);
   });
 
-  it("rejects clients constructed without the DialCache script registrations", () => {
-    expect(
-      () => createNodeRedisDialCacheClient({ get: vi.fn(), sendCommand: vi.fn() } as never),
-    ).toThrow(TypeError);
-    expect(
-      () => createNodeRedisDialCacheClient({ get: vi.fn(), sendCommand: vi.fn() } as never),
-    ).toThrow("requires a client created with scripts: dialcacheRedisScripts");
+  it("accepts an ordinary node-redis client without custom script registrations", () => {
     expect(() => createNodeRedisDialCacheClient(fakeClient() as never)).not.toThrow();
   });
 
@@ -112,7 +102,7 @@ describe("node-redis adapter", () => {
       get: encodeFrame("plain"),
       mGet: [encodeFrame(Buffer.from([0, 0xff]), { createdAtMs: 2 }), Buffer.from("1")],
       set: "OK",
-      invalidate: 1,
+      evalSha: 1,
     });
     const adapter = createNodeRedisDialCacheClient(client as never);
 
@@ -261,7 +251,6 @@ describe("node-redis adapter", () => {
     }
 
     expect(client.sendCommand).not.toHaveBeenCalled();
-    expect(client.dialcacheInvalidate).not.toHaveBeenCalled();
   });
 
   it("surfaces a SET failure as the write error", async () => {
@@ -378,7 +367,7 @@ describe("node-redis adapter", () => {
     const invalidationMessage = "Invalid DialCache Redis invalidate reply; expected integer 1";
 
     for (const reply of INVALID_INVALIDATION_REPLIES) {
-      const adapter = createNodeRedisDialCacheClient(fakeClient({ invalidate: reply }) as never);
+      const adapter = createNodeRedisDialCacheClient(fakeClient({ evalSha: reply }) as never);
       await expectProtocolError(
         Promise.resolve(adapter.invalidate({
           watermarkKey: "tracked:{id}:watermark",
@@ -389,7 +378,7 @@ describe("node-redis adapter", () => {
     }
   });
 
-  it("dispatches invalidation once and sends no EVAL when the registered script resolves", async () => {
+  it("dispatches invalidation once with EVALSHA by the source digest", async () => {
     const now = vi.spyOn(Date, "now").mockReturnValue(1_234);
     const client = fakeClient();
     const adapter = createNodeRedisDialCacheClient(client as never);
@@ -398,20 +387,25 @@ describe("node-redis adapter", () => {
       adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 }),
     ).resolves.toBeUndefined();
 
-    expect(client.dialcacheInvalidate).toHaveBeenCalledTimes(1);
-    expect(client.dialcacheInvalidate).toHaveBeenCalledWith(
+    expect(client.sendCommand).toHaveBeenCalledTimes(1);
+    const [args, options] = client.sendCommand.mock.calls[0] as [Array<unknown>, object];
+    expect(args).toEqual([
+      "EVALSHA",
+      createHash("sha1").update(INVALIDATE_CACHE_SCRIPT).digest("hex"),
+      "1",
       "tracked:{id}:watermark",
-      50,
-      1_234,
-    );
+      "50",
+      "1234",
+    ]);
     expect(now).toHaveBeenCalledTimes(1);
-    expect(client.sendCommand).not.toHaveBeenCalled();
+    expect(options).toMatchObject({ returnBuffers: true });
+    expect(Object.keys(options)).toEqual(["returnBuffers"]);
   });
 
-  it("retries a rejected invalidation dispatch once with EVAL by source", async () => {
+  it("retries a rejected EVALSHA once with EVAL by source", async () => {
     const now = vi.spyOn(Date, "now").mockReturnValue(1_234);
     const client = fakeClient();
-    client.dialcacheInvalidate.mockRejectedValueOnce(
+    client.sendCommand.mockRejectedValueOnce(
       new Error("NOPERM this user has no permissions to run the 'evalsha' command"),
     );
     const adapter = createNodeRedisDialCacheClient(client as never);
@@ -420,14 +414,10 @@ describe("node-redis adapter", () => {
       adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 }),
     ).resolves.toBeUndefined();
 
-    expect(client.dialcacheInvalidate).toHaveBeenCalledTimes(1);
-    expect(client.dialcacheInvalidate).toHaveBeenCalledWith(
-      "tracked:{id}:watermark",
-      50,
-      1_234,
-    );
-    expect(client.sendCommand).toHaveBeenCalledTimes(1);
-    const [args, options] = client.sendCommand.mock.calls[0] as [Array<unknown>, object];
+    expect(client.sendCommand).toHaveBeenCalledTimes(2);
+    const [firstArgs] = client.sendCommand.mock.calls[0] as [Array<unknown>];
+    const [args, options] = client.sendCommand.mock.calls[1] as [Array<unknown>, object];
+    expect(firstArgs[0]).toBe("EVALSHA");
     expect(args).toEqual([
       "EVAL",
       INVALIDATE_CACHE_SCRIPT,
@@ -443,15 +433,20 @@ describe("node-redis adapter", () => {
 
   it("routes the invalidation EVAL retry through the cluster keyed overload", async () => {
     const client = fakeCluster();
-    client.dialcacheInvalidate.mockRejectedValueOnce(new Error("NOPERM evalsha denied"));
+    client.sendCommand.mockRejectedValueOnce(new Error("NOPERM evalsha denied"));
     const adapter = createNodeRedisDialCacheClient(client as never);
 
     await expect(
       adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 }),
     ).resolves.toBeUndefined();
 
-    expect(client.sendCommand).toHaveBeenCalledTimes(1);
-    const [firstKey, isReadonly, args, options] = client.sendCommand.mock.calls[0] as [
+    expect(client.sendCommand).toHaveBeenCalledTimes(2);
+    const [firstKey, isReadonly, firstArgs] = client.sendCommand.mock.calls[0] as [
+      string,
+      boolean,
+      Array<unknown>,
+    ];
+    const [retryKey, retryIsReadonly, args, options] = client.sendCommand.mock.calls[1] as [
       string,
       boolean,
       Array<unknown>,
@@ -459,6 +454,9 @@ describe("node-redis adapter", () => {
     ];
     expect(firstKey).toBe("tracked:{id}:watermark");
     expect(isReadonly).toBe(false);
+    expect(firstArgs[0]).toBe("EVALSHA");
+    expect(retryKey).toBe("tracked:{id}:watermark");
+    expect(retryIsReadonly).toBe(false);
     expect(args[0]).toBe("EVAL");
     expect(options).toMatchObject({ returnBuffers: true });
   });
@@ -467,7 +465,7 @@ describe("node-redis adapter", () => {
     const client = fakeClient();
     const original = new Error("NOPERM evalsha denied");
     const retryFailure = new Error("NOPERM eval denied");
-    client.dialcacheInvalidate.mockRejectedValueOnce(original);
+    client.sendCommand.mockRejectedValueOnce(original);
     client.sendCommand.mockRejectedValueOnce(retryFailure);
     const adapter = createNodeRedisDialCacheClient(client as never);
 
@@ -476,7 +474,7 @@ describe("node-redis adapter", () => {
     ).rejects.toBe(retryFailure);
 
     expect(retryFailure.cause).toBeUndefined();
-    expect(client.sendCommand).toHaveBeenCalledTimes(1);
+    expect(client.sendCommand).toHaveBeenCalledTimes(2);
   });
 
   it("never writes to the rejection even when one instance rejects both dispatches", async () => {
@@ -486,7 +484,7 @@ describe("node-redis adapter", () => {
     // both dispatches, the adapter writes nothing to it.
     const client = fakeClient();
     const shared = new Error("socket torn down");
-    client.dialcacheInvalidate.mockRejectedValueOnce(shared);
+    client.sendCommand.mockRejectedValueOnce(shared);
     client.sendCommand.mockRejectedValueOnce(shared);
     const adapter = createNodeRedisDialCacheClient(client as never);
 
@@ -499,7 +497,7 @@ describe("node-redis adapter", () => {
 
   it("passes a non-Error invalidation retry rejection through as-is", async () => {
     const client = fakeClient();
-    client.dialcacheInvalidate.mockRejectedValueOnce(new Error("NOPERM evalsha denied"));
+    client.sendCommand.mockRejectedValueOnce(new Error("NOPERM evalsha denied"));
     client.sendCommand.mockRejectedValueOnce("socket closed");
     const adapter = createNodeRedisDialCacheClient(client as never);
 
@@ -509,10 +507,22 @@ describe("node-redis adapter", () => {
   });
 
   it("validates the invalidation retry reply through the shared validator", async () => {
-    // The retry bypasses the registered transformReply, so the trailing
-    // validator is the only guard on this path.
     const client = fakeClient({ eval: 0 });
-    client.dialcacheInvalidate.mockRejectedValueOnce(new Error("NOPERM evalsha denied"));
+    client.sendCommand.mockRejectedValueOnce(new Error("NOPERM evalsha denied"));
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await expectProtocolError(
+      Promise.resolve(adapter.invalidate({
+        watermarkKey: "tracked:{id}:watermark",
+        futureBufferMs: 50,
+      })),
+      "Invalid DialCache Redis invalidate reply; expected integer 1",
+    );
+    expect(client.sendCommand).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry an invalidation reply-domain violation", async () => {
+    const client = fakeClient({ evalSha: 0 });
     const adapter = createNodeRedisDialCacheClient(client as never);
 
     await expectProtocolError(
@@ -523,36 +533,6 @@ describe("node-redis adapter", () => {
       "Invalid DialCache Redis invalidate reply; expected integer 1",
     );
     expect(client.sendCommand).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not retry an invalidation reply-domain violation", async () => {
-    // The registered transformReply validates inside the returned promise on
-    // a real client, so a domain violation arrives as a rejection; it is
-    // deterministic and must surface without a second dispatch.
-    const client = fakeClient();
-    client.dialcacheInvalidate.mockRejectedValueOnce(
-      new DialCacheRedisProtocolError("Invalid DialCache Redis invalidate reply; expected integer 1"),
-    );
-    const adapter = createNodeRedisDialCacheClient(client as never);
-
-    await expectProtocolError(
-      Promise.resolve(adapter.invalidate({
-        watermarkKey: "tracked:{id}:watermark",
-        futureBufferMs: 50,
-      })),
-      "Invalid DialCache Redis invalidate reply; expected integer 1",
-    );
-    expect(client.sendCommand).not.toHaveBeenCalled();
-  });
-
-  it("validates replies at the public node-redis script transform boundary", () => {
-    expect(dialcacheRedisScripts.dialcacheInvalidate.transformReply(1)).toBe(1);
-
-    for (const reply of INVALID_INVALIDATION_REPLIES) {
-      expect(() => dialcacheRedisScripts.dialcacheInvalidate.transformReply(reply as number)).toThrow(
-        DialCacheRedisProtocolError,
-      );
-    }
   });
 
   it("keeps protocol error instanceof checks specific to the base class and subclasses", () => {
@@ -574,7 +554,7 @@ describe("node-redis adapter", () => {
   });
 
   it("surfaces protocol failures through the normal DialCache observability path", async () => {
-    const redisClient = createNodeRedisDialCacheClient(fakeClient({ set: 2, invalidate: 0 }) as never);
+    const redisClient = createNodeRedisDialCacheClient(fakeClient({ set: 2, evalSha: 0 }) as never);
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
     const metrics = {
       request: vi.fn(),

@@ -251,12 +251,12 @@ describe("DialCache targeted invalidation watermarks", () => {
     });
 
     await dialcache.invalidateRemote("user_id", "123", 0);
-    const blocked = await dialcache.enable(async () => await getUser("123"));
+    const fenced = await dialcache.enable(async () => await getUser("123"));
     vi.advanceTimersByTime(1);
     const written = await dialcache.enable(async () => await getUser("123"));
     const cached = await dialcache.enable(async () => await getUser("123"));
 
-    expect(blocked).toEqual({ userId: "123", calls: 1 });
+    expect(fenced).toEqual({ userId: "123", calls: 1 });
     expect(written).toEqual({ userId: "123", calls: 2 });
     expect(cached).toEqual(written);
     expect(calls).toBe(2);
@@ -540,6 +540,10 @@ describe("DialCache targeted invalidation watermarks", () => {
 
     const first = await dialcache.enable(async () => await getUser("123"));
     const second = await dialcache.enable(async () => await getUser("123"));
+    expect(redis.ttlMs(valueKey("MaximumSupportedTtl"))).toBe(MAX_TRACKED_REDIS_VALUE_TTL_MS);
+    expect(redis.ttlMs(watermarkKey)).toBe(-2);
+
+    vi.advanceTimersByTime(MAX_TRACKED_REDIS_VALUE_TTL_MS + 1);
     const third = await dialcache.enable(async () => await getUser("123"));
 
     expect(second).toEqual(first);
@@ -547,8 +551,37 @@ describe("DialCache targeted invalidation watermarks", () => {
     expect(third).toBe(second);
     expect(calls).toBe(1);
     expect(redis.mGetCalls).toBe(2);
-    expect(redis.ttlMs(valueKey("MaximumSupportedTtl"))).toBe(MAX_TRACKED_REDIS_VALUE_TTL_MS);
-    expect(redis.ttlMs(watermarkKey)).toBe(-2);
+  });
+
+  it("caps only tracked Redis TTLs above one hour", async () => {
+    const redis = new FakeRedis();
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
+    const trackedTtlSec = MAX_TRACKED_REDIS_VALUE_TTL_MS / 1_000 - 1;
+    const untrackedTtlSec = 2 * MAX_TRACKED_REDIS_VALUE_TTL_MS / 1_000;
+    const getTracked = dialcache.cached(async (id: string) => ({ id }), {
+      keyType: "user_id",
+      useCase: "TrackedBelowCap",
+      cacheKey: (id) => id,
+      trackForInvalidation: true,
+      defaultConfig: remoteOnly(trackedTtlSec),
+    });
+    const getUntracked = dialcache.cached(async (id: string) => ({ id }), {
+      keyType: "user_id",
+      useCase: "UntrackedAboveCap",
+      cacheKey: (id) => id,
+      defaultConfig: remoteOnly(untrackedTtlSec),
+    });
+
+    await dialcache.enable(async () => await getTracked("123"));
+    await dialcache.enable(async () => await getUntracked("123"));
+
+    const untrackedValueKey = `${new DialCacheKey({
+      keyType: "user_id",
+      id: "123",
+      useCase: "UntrackedAboveCap",
+    }).urn}:dialcache-frame-v1`;
+    expect(redis.ttlMs(valueKey("TrackedBelowCap"))).toBe(trackedTtlSec * 1_000);
+    expect(redis.ttlMs(untrackedValueKey)).toBe(untrackedTtlSec * 1_000);
   });
 
   it("accepts the maximum future buffer and derives its watermark TTL safely", async () => {

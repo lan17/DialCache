@@ -65,7 +65,7 @@ export type RedisCachePayload = string | Buffer;
  * A served Redis frame: the payload bytes past the frame header plus the
  * header's creation time. The payload is the serializer output, possibly
  * still wrapped in a compression envelope that DialCache core interprets
- * above the adapter (see the `dialcache/redis-protocol` module doc). Tracked
+ * above the adapter (see the `dialcache/redis-protocol` module doc). All
  * frames carry application-clock time supplied by the writer. DialCache
  * rejects frames dated after the reading process's clock before deserialization
  * and otherwise uses `createdAtMs` for shadow value-age observability. Tracked
@@ -85,11 +85,11 @@ interface TrackedRedisReadRequest extends RedisValueRequest {
   readonly watermarkKey: string;
 }
 
-interface UntrackedRedisValueRequest extends RedisValueRequest {
+interface UntrackedRedisReadRequest extends RedisValueRequest {
   readonly watermarkKey?: never;
 }
 
-export type RedisReadRequest = TrackedRedisReadRequest | UntrackedRedisValueRequest;
+export type RedisReadRequest = TrackedRedisReadRequest | UntrackedRedisReadRequest;
 
 /**
  * Per-use-case read policy supplied by DialCache. Adapters may use the signal
@@ -125,7 +125,8 @@ export interface RedisInvalidationRequest {
  *
  * Tracked invalidation also requires the Redis deployment to preserve
  * watermark keys for their derived TTL. Losing a watermark through eviction,
- * failover, restore, or external deletion removes its prior publication fence.
+ * failover, restore, or external deletion removes its prior read-time
+ * invalidation fence.
  */
 export interface DialCacheRedisClient {
   /**
@@ -164,8 +165,9 @@ export interface DialCacheRedisClient {
    * must stamp real client time, not a constant.
    *
    * Tracked and untracked writes use the same complete-frame SET. Core caps a
-   * tracked value's physical TTL at one hour; invalidation markers outlive all
-   * values they fence, so writers never read, create, or extend watermarks.
+   * tracked value's physical TTL at one hour. Under the documented clock-skew
+   * and in-flight-work bounds, invalidation markers outlive every value they
+   * fence, so writers never read, create, or extend watermarks.
    */
   write(request: RedisWriteRequest): Awaitable<void>;
   /**

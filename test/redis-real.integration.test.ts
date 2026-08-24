@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import * as valkeyGlide from "@valkey/valkey-glide";
 import { commandOptions, createClient } from "redis";
 import { GenericContainer, type StartedTestContainer, Wait } from "testcontainers";
@@ -15,7 +17,7 @@ import {
 import { MARKER_ESCAPED_RAW, MARKER_ZSTD_UTF8 } from "../src/internal/compression.js";
 import { markerCollidingSerializer, type Row } from "./marker-colliding-serializer.js";
 import { INVALIDATE_CACHE_SCRIPT } from "../src/internal/redis-scripts.js";
-import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "../src/node-redis.js";
+import { createNodeRedisDialCacheClient } from "../src/node-redis.js";
 import { createValkeyGlideDialCacheClient } from "../src/valkey-glide.js";
 
 const engines = [
@@ -32,6 +34,7 @@ const MAX_SUPPORTED_DURATION_MS = 31_536_000_000;
 const MAX_TRACKED_REDIS_VALUE_TTL_MS = 3_600_000;
 const MIN_WATERMARK_TTL_MS = 7_200_000;
 const WATERMARK_TTL_MARGIN_MS = 60_000;
+const INVALIDATE_CACHE_SHA1 = createHash("sha1").update(INVALIDATE_CACHE_SCRIPT).digest("hex");
 
 interface Deferred<T> {
   readonly promise: Promise<T>;
@@ -51,7 +54,7 @@ const remoteOnly = new DialCacheKeyConfig({
   ramp: { [CacheLayer.REMOTE]: 100 },
 });
 
-const createTestClient = (url: string) => createClient({ url, scripts: dialcacheRedisScripts });
+const createTestClient = (url: string) => createClient({ url });
 type NodeRedisTestClient = ReturnType<typeof createTestClient>;
 
 interface RawRedisScriptClient {
@@ -69,7 +72,20 @@ function createNodeRedisHarness(client: NodeRedisTestClient): RedisAdapterHarnes
   return {
     adapter: createNodeRedisDialCacheClient(client),
     raw: {
-      invalidate: async (...args) => await client.dialcacheInvalidate(...args),
+      invalidate: async (watermarkKey, futureBufferMs, invalidatedAtMs) => {
+        const reply = await client.sendCommand([
+          "EVAL",
+          INVALIDATE_CACHE_SCRIPT,
+          "1",
+          watermarkKey,
+          String(futureBufferMs),
+          String(invalidatedAtMs),
+        ]);
+        if (typeof reply !== "number") {
+          throw new Error("Unexpected non-integer reply from DialCache test script");
+        }
+        return reply;
+      },
     },
     dispose: () => undefined,
   };
@@ -863,10 +879,10 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       if (client === undefined || admin === undefined) {
         throw new Error("Redis test clients did not start");
       }
-      const namespace = "real-dark-shadow-blocked";
-      const useCase = "RealDarkShadowBlocked";
-      const valueKey = `{${namespace}:item_id:blocked}#${useCase}:dialcache-frame-v1`;
-      const watermarkKey = `{${namespace}:item_id:blocked}#watermark`;
+      const namespace = "real-dark-shadow-fenced";
+      const useCase = "RealDarkShadowFenced";
+      const valueKey = `{${namespace}:item_id:fenced}#${useCase}:dialcache-frame-v1`;
+      const watermarkKey = `{${namespace}:item_id:fenced}#watermark`;
       await client.adapter.invalidate({ watermarkKey, futureBufferMs: 60_000 });
       const watermarkBefore = await admin.get(watermarkKey);
 
@@ -897,12 +913,12 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
         redis: { client: redisClient, readTimeoutMs: 10_000 },
         metrics,
       });
-      const sourceValue = { id: "blocked", version: 1 };
+      const sourceValue = { id: "fenced", version: 1 };
       const source = vi.fn(async () => sourceValue);
       const getPayload = dialcache.cached(source, {
         keyType: "item_id",
         useCase,
-        cacheKey: () => "blocked",
+        cacheKey: () => "fenced",
         trackForInvalidation: true,
         defaultConfig: new DialCacheKeyConfig({
           ttlSec: { [CacheLayer.REMOTE]: 60 },
@@ -962,7 +978,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
           futureBufferMs: 0,
         }),
       ).resolves.toBeUndefined();
-      expect(await admin.scriptExists(dialcacheRedisScripts.dialcacheInvalidate.SHA1)).toEqual([true]);
+      expect(await admin.scriptExists(INVALIDATE_CACHE_SHA1)).toEqual([true]);
       expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toBeNull();
     });
 
@@ -1077,6 +1093,12 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
         payload: "cached",
         createdAtMs: 1_000,
       });
+      await expect(scriptClient.invalidate({
+        watermarkKey,
+        futureBufferMs: 0,
+      })).rejects.toThrow(/WRONGTYPE/);
+      expect(await admin.type(watermarkKey)).toBe("hash");
+      expect(await admin.hGet(watermarkKey, "field")).toBe("value");
 
       const namespace = "wrong-type-repair";
       const repairValueKey = `{${namespace}:item_id:repair}#WrongTypeRepair:dialcache-frame-v1`;
@@ -1570,32 +1592,37 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
         cacheTtlMs: 2_000,
         value: "cached",
       };
+      const invalidatedAtMs = 1_700_000_000_000;
+      const now = vi.spyOn(Date, "now").mockReturnValue(invalidatedAtMs);
+      try {
+        await scriptClient.write(writeRequest);
+        expect(await admin.exists(watermarkKey)).toBe(0);
+        expect((await scriptClient.read({ valueKey, watermarkKey }))?.payload).toBe("cached");
 
-      await scriptClient.write(writeRequest);
-      expect(await admin.exists(watermarkKey)).toBe(0);
-      expect((await scriptClient.read({ valueKey, watermarkKey }))?.payload).toBe("cached");
+        await scriptClient.invalidate({ watermarkKey, futureBufferMs: 100 });
+        expect(await scriptClient.read({ valueKey, watermarkKey })).toBeNull();
+        const watermarkBeforeWrite = await admin.get(watermarkKey);
+        const watermarkTtlBeforeWrite = await admin.pTTL(watermarkKey);
+        await scriptClient.write({ ...writeRequest, value: "behind-watermark" });
+        expect((await scriptClient.read({ valueKey }))?.payload).toBe("behind-watermark");
+        expect(await scriptClient.read({ valueKey, watermarkKey })).toBeNull();
+        expect(await admin.get(watermarkKey)).toBe(watermarkBeforeWrite);
+        const watermarkTtlAfterWrite = await admin.pTTL(watermarkKey);
+        expect(watermarkTtlAfterWrite).toBeGreaterThan(watermarkTtlBeforeWrite - 1_000);
+        expect(watermarkTtlAfterWrite).toBeLessThanOrEqual(watermarkTtlBeforeWrite);
+        const ttlBeforeRead = watermarkTtlAfterWrite;
+        await scriptClient.read({ valueKey, watermarkKey });
+        expect(await admin.pTTL(watermarkKey)).toBeLessThanOrEqual(ttlBeforeRead);
 
-      await scriptClient.invalidate({ watermarkKey, futureBufferMs: 100 });
-      expect(await scriptClient.read({ valueKey, watermarkKey })).toBeNull();
-      const watermarkBeforeWrite = await admin.get(watermarkKey);
-      const watermarkTtlBeforeWrite = await admin.pTTL(watermarkKey);
-      await scriptClient.write({ ...writeRequest, value: "blocked" });
-      expect((await scriptClient.read({ valueKey }))?.payload).toBe("blocked");
-      expect(await scriptClient.read({ valueKey, watermarkKey })).toBeNull();
-      expect(await admin.get(watermarkKey)).toBe(watermarkBeforeWrite);
-      const watermarkTtlAfterWrite = await admin.pTTL(watermarkKey);
-      expect(watermarkTtlAfterWrite).toBeGreaterThan(watermarkTtlBeforeWrite - 1_000);
-      expect(watermarkTtlAfterWrite).toBeLessThanOrEqual(watermarkTtlBeforeWrite);
-      const ttlBeforeRead = watermarkTtlAfterWrite;
-      await scriptClient.read({ valueKey, watermarkKey });
-      expect(await admin.pTTL(watermarkKey)).toBeLessThanOrEqual(ttlBeforeRead);
-
-      await new Promise((resolve) => setTimeout(resolve, 110));
-      await scriptClient.write({ ...writeRequest, value: "fresh" });
-      expect((await scriptClient.read({ valueKey, watermarkKey }))?.payload).toBe("fresh");
+        now.mockReturnValue(invalidatedAtMs + 101);
+        await scriptClient.write({ ...writeRequest, value: "fresh" });
+        expect((await scriptClient.read({ valueKey, watermarkKey }))?.payload).toBe("fresh");
+      } finally {
+        now.mockRestore();
+      }
     });
 
-    it("documents that losing a watermark removes its publication fence", async () => {
+    it("documents that losing a watermark removes its read-time invalidation fence", async () => {
       if (client === undefined || admin === undefined) {
         throw new Error("Redis test clients did not start");
       }

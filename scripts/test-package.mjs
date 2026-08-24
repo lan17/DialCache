@@ -9,6 +9,7 @@ const exec = promisify(execFile);
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspace = await mkdtemp(join(tmpdir(), "dialcache-package-"));
 const fallbackTimeoutMarker = "dialcache-fallback-timeout-delivered";
+const nodeInvalidationMarker = "dialcache-node-invalidation-retry-verified";
 const observerIsolationMarker = "dialcache-observer-rejections-isolated";
 const shadowPayloadReleaseMarker = "dialcache-shadow-payload-released";
 const rootConsumer = `import {
@@ -54,7 +55,11 @@ const rootConsumer = `import {
 import { MissingKeyConfigError } from "dialcache";
 // @ts-expect-error Placeholder promotion was removed from the Redis adapter protocol.
 import { DialCacheRedisPlaceholderLostError } from "dialcache";
-import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "dialcache/node-redis";
+import { createNodeRedisDialCacheClient } from "dialcache/node-redis";
+// @ts-expect-error The node-redis adapter no longer requires public script registrations.
+import { dialcacheRedisScripts } from "dialcache/node-redis";
+// @ts-expect-error The node-redis script-registration type was removed with the facade.
+import type { DialCacheNodeRedisScripts } from "dialcache/node-redis";
 import {
   ceilSupportedCacheTtlMs,
   decodeRedisFrame,
@@ -188,11 +193,6 @@ const zeroTimestampRedisFrame: Buffer = encodeRedisFrame("pending", 0);
 const setReplyValidation: void = validateRedisSetReply("OK");
 const invalidationReplyValidation: 1 = validateRedisScriptInvalidationReply(1);
 const ceiledCacheTtlMs: number = ceilSupportedCacheTtlMs(1_000.5);
-const invalidationArguments: Array<string | Buffer> = dialcacheRedisScripts.dialcacheInvalidate.transformArguments(
-  "tracked:{id}:watermark",
-  50,
-  1_234,
-);
 const fallbackTimeoutError = new FallbackTimeoutError("Load", 1_000);
 const redisReadTimeoutError = new RedisReadTimeoutError("Load", 100);
 const coalescingState: CoalescingState = cache.getCoalescingState();
@@ -540,16 +540,8 @@ void redisConfigAcceptsCompressionOptOut;
 void createNodeRedisDialCacheClient;
 void decodedEmptyRedisFrame;
 void decodedStaleRedisFrame;
-// @ts-expect-error Native reads removed the legacy node-redis registration.
-void dialcacheRedisScripts.dialcacheRead;
-// @ts-expect-error Native tracked reads removed the legacy node-redis registration.
-void dialcacheRedisScripts.dialcacheReadTracked;
-// @ts-expect-error Native SET writes removed the legacy node-redis registration.
-void dialcacheRedisScripts.dialcacheWrite;
-// @ts-expect-error The stamp protocol removed the legacy tracked-write registration.
-void dialcacheRedisScripts.dialcacheWriteTracked;
-// @ts-expect-error Native tracked writes removed the stamp-script registration.
-void dialcacheRedisScripts.dialcacheWriteTrackedStamp;
+void dialcacheRedisScripts;
+void (undefined as unknown as DialCacheNodeRedisScripts);
 void READ_CACHE_SCRIPT;
 void READ_TRACKED_CACHE_SCRIPT;
 void WRITE_CACHE_SCRIPT;
@@ -563,7 +555,6 @@ void REDIS_FRAME_VERSION;
 void REDIS_ENCODING_UTF8;
 void REDIS_ENCODING_BINARY;
 void WRITE_TRACKED_STAMP_SCRIPT;
-void invalidationArguments;
 void customRedisClient;
 const globalSerializer: Serializer<unknown> = {
   dump: () => "global",
@@ -636,7 +627,7 @@ import {
 import { type ValkeyGlideDialCacheClient } from "dialcache/valkey-glide";
 // @ts-expect-error The handle-free GLIDE adapter removed the Script handle type.
 import { type ValkeyGlideScriptHandle } from "dialcache/valkey-glide";
-import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "dialcache/node-redis";
+import { createNodeRedisDialCacheClient } from "dialcache/node-redis";
 import { Registry, type OpenMetricsContentType } from "prom-client";
 
 const registry = new Registry();
@@ -649,14 +640,19 @@ openMetricsRegistry.setContentType(Registry.OPENMETRICS_CONTENT_TYPE);
 const openMetricsAdapter = new PrometheusDialCacheMetrics({ registry: openMetricsRegistry, prefix: "open_" });
 const registryIsRequired: {} extends Pick<PrometheusMetricsOptions, "registry"> ? false : true = true;
 const glideRedisClient: DialCacheRedisClient | undefined = undefined;
-const standaloneNodeRedisClient = createRedisClient({ scripts: dialcacheRedisScripts });
+const standaloneNodeRedisClient = createRedisClient();
 const clusterNodeRedisClient = createRedisCluster({
   rootNodes: [{ url: "redis://127.0.0.1:6379" }],
-  scripts: dialcacheRedisScripts,
 });
 const standaloneNodeRedisAdapter = createNodeRedisDialCacheClient(standaloneNodeRedisClient);
 const clusterNodeRedisAdapter = createNodeRedisDialCacheClient(clusterNodeRedisClient);
 const glideRuntime: ValkeyGlideRuntime<valkeyGlide.Decoder> = valkeyGlide;
+const glideRuntimeWithoutClusterBatch: ValkeyGlideRuntime<valkeyGlide.Decoder> = {
+  Batch: valkeyGlide.Batch,
+  GlideClient: valkeyGlide.GlideClient,
+  GlideClusterClient: valkeyGlide.GlideClusterClient,
+  Decoder: valkeyGlide.Decoder,
+};
 declare const standaloneGlideClient: valkeyGlide.GlideClient;
 declare const clusterGlideClient: valkeyGlide.GlideClusterClient;
 const standaloneGlideAdapter: DialCacheRedisClient = createValkeyGlideDialCacheClient(standaloneGlideClient, glideRuntime);
@@ -685,6 +681,7 @@ void classAdapter;
 void openMetricsAdapter;
 void registryIsRequired;
 void glideRedisClient;
+void glideRuntimeWithoutClusterBatch;
 void standaloneNodeRedisAdapter;
 void clusterNodeRedisAdapter;
 void standaloneGlideAdapter;
@@ -736,16 +733,67 @@ try {
     [
       "--input-type=module",
       "--eval",
-      `const root = await import("dialcache");
+      `const { createHash } = await import("node:crypto");
+const root = await import("dialcache");
 const nodeRedis = await import("dialcache/node-redis");
 await import("dialcache/valkey-glide");
 await import("dialcache/datadog");
 const redisProtocol = await import("dialcache/redis-protocol");
-// Each bundle embeds its own copy of the Lua sources; a divergence forks the
-// protocol (different SHA1s) without failing any behavioral test.
-if (nodeRedis.dialcacheRedisScripts.dialcacheInvalidate.SCRIPT !== redisProtocol.INVALIDATE_CACHE_SCRIPT) {
-  throw new Error("The packed ESM node-redis Lua sources diverged from the redis-protocol entry");
+if (typeof nodeRedis.createNodeRedisDialCacheClient !== "function") {
+  throw new Error("The packed ESM node-redis adapter export is missing");
 }
+if ("dialcacheRedisScripts" in nodeRedis) {
+  throw new Error("The removed ESM node-redis script-registration facade is still exported");
+}
+const esmNodeInvalidationDispatches = [];
+const esmFakeNodeClient = {
+  get: async () => null,
+  sendCommand: async (...callArgs) => {
+    if (
+      callArgs.length !== 2
+      || !Array.isArray(callArgs[0])
+      || callArgs[1]?.returnBuffers !== true
+    ) {
+      throw new Error("The packed ESM node-redis adapter used the wrong standalone command shape");
+    }
+    esmNodeInvalidationDispatches.push(callArgs[0]);
+    if (esmNodeInvalidationDispatches.length === 1) {
+      throw new Error("packed ESM node invalidation dispatch rejected");
+    }
+    return 1;
+  },
+};
+const esmNodeInvalidatedAtMs = 1700000000456;
+const esmNodeNativeDateNow = Date.now;
+Date.now = () => esmNodeInvalidatedAtMs;
+try {
+  await nodeRedis
+    .createNodeRedisDialCacheClient(esmFakeNodeClient)
+    .invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 });
+} finally {
+  Date.now = esmNodeNativeDateNow;
+}
+const esmExpectedInvalidateSha = createHash("sha1")
+  .update(redisProtocol.INVALIDATE_CACHE_SCRIPT)
+  .digest("hex");
+if (
+  esmNodeInvalidationDispatches.length !== 2
+  || esmNodeInvalidationDispatches[0][0] !== "EVALSHA"
+  || esmNodeInvalidationDispatches[0][1] !== esmExpectedInvalidateSha
+  || esmNodeInvalidationDispatches[1][0] !== "EVAL"
+  || esmNodeInvalidationDispatches[1][1] !== redisProtocol.INVALIDATE_CACHE_SCRIPT
+  || esmNodeInvalidationDispatches[0][2] !== "1"
+  || esmNodeInvalidationDispatches[1][2] !== "1"
+  || esmNodeInvalidationDispatches[0][3] !== "tracked:{id}:watermark"
+  || esmNodeInvalidationDispatches[1][3] !== "tracked:{id}:watermark"
+  || esmNodeInvalidationDispatches[0][4] !== "50"
+  || esmNodeInvalidationDispatches[1][4] !== "50"
+  || esmNodeInvalidationDispatches[0][5] !== String(esmNodeInvalidatedAtMs)
+  || esmNodeInvalidationDispatches[1][5] !== String(esmNodeInvalidatedAtMs)
+) {
+  throw new Error("The packed ESM node-redis invalidation retry contract is invalid");
+}
+console.log("${nodeInvalidationMarker}");
 const fallbackTimeoutError = new root.FallbackTimeoutError("PackageRuntime", 1000);
 if (!(fallbackTimeoutError instanceof root.DialCacheError) || fallbackTimeoutError.timeoutMs !== 1000) {
   throw new Error("The root ESM fallback-timeout error export is invalid");
@@ -776,35 +824,14 @@ try {
   }
   console.log("${fallbackTimeoutMarker}");
 }
-try {
-  nodeRedis.dialcacheRedisScripts.dialcacheInvalidate.transformReply(0);
-  throw new Error("Expected an invalid node-redis script reply to fail");
-} catch (error) {
-  if (!(error instanceof root.DialCacheRedisProtocolError)) {
-    throw new Error("The node-redis protocol error does not match the root ESM export");
-  }
-}
 if ("MissingKeyConfigError" in root || "DialCacheRedisPlaceholderLostError" in root) {
   throw new Error("Removed error classes must not be exported from the root ESM entry");
-}
-if (
-  "dialcacheRead" in nodeRedis.dialcacheRedisScripts
-  || "dialcacheReadTracked" in nodeRedis.dialcacheRedisScripts
-) {
-  throw new Error("The removed read scripts must not be registered by the packed ESM node-redis entry");
 }
 if (
   "READ_CACHE_SCRIPT" in redisProtocol
   || "READ_TRACKED_CACHE_SCRIPT" in redisProtocol
 ) {
   throw new Error("The removed read scripts must not be exported by the packed ESM Redis protocol entry");
-}
-if (
-  "dialcacheWrite" in nodeRedis.dialcacheRedisScripts
-  || "dialcacheWriteTracked" in nodeRedis.dialcacheRedisScripts
-  || "dialcacheWriteTrackedStamp" in nodeRedis.dialcacheRedisScripts
-) {
-  throw new Error("The removed write scripts must not be registered by the packed ESM node-redis entry");
 }
 if (
   "WRITE_CACHE_SCRIPT" in redisProtocol
@@ -940,6 +967,9 @@ if (inlineCalls !== 1 || inlineSecond !== inlineFirst) {
   );
   if (!esmRootRuntimeOutput.includes(fallbackTimeoutMarker)) {
     throw new Error("The packaged ESM only-handle fallback timeout marker is missing");
+  }
+  if (!esmRootRuntimeOutput.includes(nodeInvalidationMarker)) {
+    throw new Error("The packaged ESM node-redis invalidation marker is missing");
   }
 
   const { stdout: observerIsolationOutput } = await exec(
@@ -1080,16 +1110,69 @@ console.log("${shadowPayloadReleaseMarker}");`,
     process.execPath,
     [
       "--eval",
-      `const root = require("dialcache");
+      `const { createHash } = require("node:crypto");
+const root = require("dialcache");
 const nodeRedis = require("dialcache/node-redis");
 require("dialcache/valkey-glide");
 require("dialcache/datadog");
 const redisProtocol = require("dialcache/redis-protocol");
-// CommonJS bundles duplicate the Lua sources per entry point; a divergence
-// forks the protocol (different SHA1s) without failing any behavioral test.
-if (nodeRedis.dialcacheRedisScripts.dialcacheInvalidate.SCRIPT !== redisProtocol.INVALIDATE_CACHE_SCRIPT) {
-  throw new Error("The packed CommonJS node-redis Lua sources diverged from the redis-protocol entry");
+if (typeof nodeRedis.createNodeRedisDialCacheClient !== "function") {
+  throw new Error("The packed CommonJS node-redis adapter export is missing");
 }
+if ("dialcacheRedisScripts" in nodeRedis) {
+  throw new Error("The removed CommonJS node-redis script-registration facade is still exported");
+}
+const cjsNodeInvalidationCheck = (async () => {
+  const dispatches = [];
+  const fakeClient = {
+    get: async () => null,
+    sendCommand: async (...callArgs) => {
+      if (
+        callArgs.length !== 2
+        || !Array.isArray(callArgs[0])
+        || callArgs[1]?.returnBuffers !== true
+      ) {
+        throw new Error("The packed CommonJS node-redis adapter used the wrong standalone command shape");
+      }
+      dispatches.push(callArgs[0]);
+      if (dispatches.length === 1) {
+        throw new Error("packed CommonJS node invalidation dispatch rejected");
+      }
+      return 1;
+    },
+  };
+  const invalidatedAtMs = 1700000000456;
+  const nativeDateNow = Date.now;
+  Date.now = () => invalidatedAtMs;
+  try {
+    await nodeRedis
+      .createNodeRedisDialCacheClient(fakeClient)
+      .invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 });
+  } finally {
+    Date.now = nativeDateNow;
+  }
+  const expectedSha = createHash("sha1")
+    .update(redisProtocol.INVALIDATE_CACHE_SCRIPT)
+    .digest("hex");
+  if (
+    dispatches.length !== 2
+    || dispatches[0][0] !== "EVALSHA"
+    || dispatches[0][1] !== expectedSha
+    || dispatches[1][0] !== "EVAL"
+    || dispatches[1][1] !== redisProtocol.INVALIDATE_CACHE_SCRIPT
+    || dispatches[0][2] !== "1"
+    || dispatches[1][2] !== "1"
+    || dispatches[0][3] !== "tracked:{id}:watermark"
+    || dispatches[1][3] !== "tracked:{id}:watermark"
+    || dispatches[0][4] !== "50"
+    || dispatches[1][4] !== "50"
+    || dispatches[0][5] !== String(invalidatedAtMs)
+    || dispatches[1][5] !== String(invalidatedAtMs)
+  ) {
+    throw new Error("The packed CommonJS node-redis invalidation retry contract is invalid");
+  }
+  console.log("${nodeInvalidationMarker}");
+})();
 const fallbackTimeoutError = new root.FallbackTimeoutError("PackageRuntime", 1000);
 if (!(fallbackTimeoutError instanceof root.DialCacheError) || fallbackTimeoutError.timeoutMs !== 1000) {
   throw new Error("The root CommonJS fallback-timeout error export is invalid");
@@ -1122,35 +1205,14 @@ void (async () => {
     console.log("${fallbackTimeoutMarker}");
   }
 })();
-try {
-  nodeRedis.dialcacheRedisScripts.dialcacheInvalidate.transformReply(0);
-  throw new Error("Expected an invalid node-redis script reply to fail");
-} catch (error) {
-  if (!(error instanceof root.DialCacheRedisProtocolError)) {
-    throw new Error("The node-redis protocol error does not match the root CommonJS export");
-  }
-}
 if ("MissingKeyConfigError" in root || "DialCacheRedisPlaceholderLostError" in root) {
   throw new Error("Removed error classes must not be exported from the root CommonJS entry");
-}
-if (
-  "dialcacheRead" in nodeRedis.dialcacheRedisScripts
-  || "dialcacheReadTracked" in nodeRedis.dialcacheRedisScripts
-) {
-  throw new Error("The removed read scripts must not be registered by the packed CommonJS node-redis entry");
 }
 if (
   "READ_CACHE_SCRIPT" in redisProtocol
   || "READ_TRACKED_CACHE_SCRIPT" in redisProtocol
 ) {
   throw new Error("The removed read scripts must not be exported by the packed CommonJS Redis protocol entry");
-}
-if (
-  "dialcacheWrite" in nodeRedis.dialcacheRedisScripts
-  || "dialcacheWriteTracked" in nodeRedis.dialcacheRedisScripts
-  || "dialcacheWriteTrackedStamp" in nodeRedis.dialcacheRedisScripts
-) {
-  throw new Error("The removed write scripts must not be registered by the packed CommonJS node-redis entry");
 }
 if (
   "WRITE_CACHE_SCRIPT" in redisProtocol
@@ -1247,6 +1309,7 @@ if (
   throw new Error("The packed CommonJS runtime did not build the disabled() kill-switch overlay");
 }
 void (async () => {
+  await cjsNodeInvalidationCheck;
   let calls = 0;
   const overlayCache = new root.DialCache({
     cacheConfigProvider: () => new root.DialCacheKeyConfig({
@@ -1291,6 +1354,9 @@ void (async () => {
   );
   if (!cjsRootRuntimeOutput.includes(fallbackTimeoutMarker)) {
     throw new Error("The packaged CommonJS only-handle fallback timeout marker is missing");
+  }
+  if (!cjsRootRuntimeOutput.includes(nodeInvalidationMarker)) {
+    throw new Error("The packaged CommonJS node-redis invalidation marker is missing");
   }
   await exec(
     join(workspace, "node_modules", ".bin", "tsc"),
