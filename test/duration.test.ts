@@ -6,12 +6,14 @@ import {
   isSupportedCacheTtlSec,
   MAX_CACHE_TTL_SEC,
   MAX_SUPPORTED_DURATION_MS,
+  MAX_TRACKED_REDIS_VALUE_TTL_MS,
 } from "../src/internal/duration.js";
 
 describe("DialCache supported durations", () => {
   it("uses one fixed 365-day ceiling for TTLs and invalidation buffers", () => {
     expect(MAX_CACHE_TTL_SEC).toBe(31_536_000);
     expect(MAX_SUPPORTED_DURATION_MS).toBe(31_536_000_000);
+    expect(MAX_TRACKED_REDIS_VALUE_TTL_MS).toBe(3_600_000);
     expect(isSupportedCacheTtlSec(MAX_CACHE_TTL_SEC)).toBe(true);
     expect(cacheTtlSecToMs(MAX_CACHE_TTL_SEC)).toBe(MAX_SUPPORTED_DURATION_MS);
     expect(() => assertSupportedFutureBufferMs(MAX_SUPPORTED_DURATION_MS)).not.toThrow();

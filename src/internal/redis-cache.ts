@@ -21,7 +21,7 @@ import {
   type CompressionConfig,
 } from "./compression.js";
 import { assertValidDeadlineMs, withMonotonicDeadline } from "./deadline.js";
-import { cacheTtlSecToMs } from "./duration.js";
+import { cacheTtlSecToMs, MAX_TRACKED_REDIS_VALUE_TTL_MS } from "./duration.js";
 import { fetchKeyConfig, resolveLayerConfigResult, type ResolvedLayerConfig } from "./runtime-config.js";
 
 export interface RedisConfig {
@@ -181,21 +181,21 @@ export class RedisCache {
     );
   }
 
-  async put<T>(key: DialCacheKey, value: T, config?: { readonly ttlSec: number }): Promise<boolean> {
+  async put<T>(key: DialCacheKey, value: T, config?: { readonly ttlSec: number }): Promise<void> {
     const ttlSec = config?.ttlSec ?? await this.resolveRemoteTtlSec(key);
     if (ttlSec === null) {
-      return true;
+      return;
     }
-    return await this.putWithLayer(key, value, ttlSec, CacheLayer.REMOTE);
+    await this.putWithLayer(key, value, ttlSec, CacheLayer.REMOTE);
   }
 
-  /** Populate a clean detached Redis miss using the caller's resolved policy snapshot. */
+  /** Populate a detached Redis miss using the caller's resolved policy snapshot. */
   async putForShadow<T>(
     key: DialCacheKey,
     value: T,
     config: { readonly ttlSec: number },
     shouldWrite: () => boolean,
-  ): Promise<boolean | null> {
+  ): Promise<boolean> {
     return await this.putWithLayer(
       key,
       value,
@@ -205,27 +205,17 @@ export class RedisCache {
     );
   }
 
-  private putWithLayer<T>(
-    key: DialCacheKey,
-    value: T,
-    ttlSec: number,
-    metricLayer: MetricLayer,
-  ): Promise<boolean>;
-  private putWithLayer<T>(
-    key: DialCacheKey,
-    value: T,
-    ttlSec: number,
-    metricLayer: MetricLayer,
-    shouldWrite: () => boolean,
-  ): Promise<boolean | null>;
   private async putWithLayer<T>(
     key: DialCacheKey,
     value: T,
     ttlSec: number,
     metricLayer: MetricLayer,
     shouldWrite?: () => boolean,
-  ): Promise<boolean | null> {
-    const cacheTtlMs = cacheTtlSecToMs(ttlSec);
+  ): Promise<boolean> {
+    const configuredTtlMs = cacheTtlSecToMs(ttlSec);
+    const cacheTtlMs = key.trackForInvalidation
+      ? Math.min(configuredTtlMs, MAX_TRACKED_REDIS_VALUE_TTL_MS)
+      : configuredTtlMs;
 
     const start = performance.now();
     let serialized: string | Buffer;
@@ -264,25 +254,20 @@ export class RedisCache {
     }
     this.recordMetric((metrics) => metrics.observeStoredSize?.(labelsFor(key, metricLayer), payloadSize(serialized)));
     if (shouldWrite !== undefined && !shouldWrite()) {
-      return null;
+      return false;
     }
 
     try {
-      const request = {
+      await this.client.write({
         valueKey: this.redisKey(key),
         cacheTtlMs,
         value: serialized,
-      } as const;
-      return key.trackForInvalidation
-        ? await this.client.write({
-            ...request,
-            watermarkKey: this.redisWatermarkKeyFromKey(key),
-          })
-        : await this.client.write(request);
+      });
     } catch (error) {
       this.recordError(key, metricLayer, "cache_write");
       throw error;
     }
+    return true;
   }
 
   async invalidate(keyType: string, id: string, futureBufferMs = 0, namespace = "urn"): Promise<void> {

@@ -2,7 +2,6 @@ import {
   decodeRedisFrame,
   decodeTrackedRedisFrame,
   encodeRedisFrame,
-  encodeTrackedRedisPlaceholder,
 } from "../src/redis-protocol.js";
 import {
   DialCacheRedisPayloadEncodingError,
@@ -74,11 +73,19 @@ describe("Redis frame decoding", () => {
     expect(decodeTrackedRedisFrame(frame, Buffer.from("1000.5"))).toBeNull();
   });
 
-  it("treats missing, malformed, and non-finite watermarks as misses", () => {
+  it("treats a missing watermark as the zero baseline", () => {
+    const frame = encodeFrame("cached", 0, 1_000);
+
+    expect(decodeTrackedRedisFrame(frame, null)).toEqual({
+      payload: "cached",
+      createdAtMs: 1_000,
+    });
+  });
+
+  it("treats malformed and non-finite watermarks as misses", () => {
     const frame = encodeFrame("cached", 0, 1_000);
 
     for (const watermark of [
-      null,
       Buffer.from(""),
       Buffer.from("-1"),
       Buffer.from("1."),
@@ -96,7 +103,9 @@ describe("Redis frame decoding", () => {
 
     expect(decodeTrackedRedisFrame(null, Buffer.from("0"))).toBeNull();
     expect(decodeTrackedRedisFrame(Buffer.alloc(9), Buffer.from("0"))).toBeNull();
-    expect(decodeTrackedRedisFrame(malformedPayload, null)).toBeNull();
+    expect(() => decodeTrackedRedisFrame(malformedPayload, null)).toThrow(
+      DialCacheRedisPayloadEncodingError,
+    );
     expect(decodeTrackedRedisFrame(malformedPayload, Buffer.from("1000"))).toBeNull();
     expect(() => decodeTrackedRedisFrame(malformedPayload, Buffer.from("999"))).toThrow(
       DialCacheRedisPayloadEncodingError,
@@ -131,39 +140,7 @@ describe("Redis frame decoding", () => {
     expect(decodeRedisFrame(zeroStamped)).toEqual({ payload: "pending", createdAtMs: 0 });
   });
 
-  it("encodes tracked placeholders that no read path serves", () => {
-    const { frame, nonce } = encodeTrackedRedisPlaceholder("pending");
-
-    expect(frame[0]).toBe(0);
-    expect(nonce.byteLength).toBe(8);
-    expect(frame.subarray(1, 9)).toEqual(nonce);
-    expect(frame[9]).toBe(0);
-    expect(frame.subarray(10).toString("utf8")).toBe("pending");
-    expect(decodeRedisFrame(frame)).toBeNull();
-    expect(decodeTrackedRedisFrame(frame, null)).toBeNull();
-    expect(decodeTrackedRedisFrame(frame, Buffer.from("0"))).toBeNull();
-    expect(decodeTrackedRedisFrame(frame, Buffer.from("1"))).toBeNull();
-
-    const binary = encodeTrackedRedisPlaceholder(Buffer.from([0, 0xff]));
-    expect(binary.frame[9]).toBe(1);
-    expect(decodeRedisFrame(binary.frame)).toBeNull();
-  });
-
-  it("mints a distinct nonce for every placeholder", () => {
-    // The stamp promotes only the placeholder carrying its own nonce, so
-    // nonce uniqueness is what keeps concurrent same-key writes disjoint.
-    const mints = Array.from({ length: 32 }, () => encodeTrackedRedisPlaceholder("pending"));
-    const nonces = new Set(mints.map(({ nonce }) => nonce.toString("hex")));
-
-    expect(nonces.size).toBe(32);
-    for (const { frame, nonce } of mints) {
-      expect(frame.subarray(1, 9)).toEqual(nonce);
-    }
-  });
-
-  it("gates serving on the version byte even for hostile placeholder nonces", () => {
-    // A nonce that would decode as a huge timestamp must never beat the
-    // watermark: version 0 alone keeps the frame a miss on both paths.
+  it("gates serving on the version byte even for hostile header bytes", () => {
     const hostile = encodeFrame("pending", 0, 1, 0);
     hostile.fill(0xff, 1, 9);
 

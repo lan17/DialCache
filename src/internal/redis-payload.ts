@@ -1,5 +1,3 @@
-import { randomBytes } from "node:crypto";
-
 import {
   DialCacheRedisPayloadEncodingError,
   DialCacheRedisPayloadError,
@@ -10,8 +8,6 @@ import {
 export const REDIS_FRAME_VERSION = 1;
 const REDIS_ENCODING_UTF8 = 0;
 const REDIS_ENCODING_BINARY = 1;
-/** Version byte of a tracked-write placeholder; no read path serves it. */
-export const REDIS_FRAME_PLACEHOLDER_VERSION = 0;
 const REDIS_FRAME_TIMESTAMP_OFFSET = 1;
 export const REDIS_FRAME_TIMESTAMP_BYTES = 8;
 
@@ -79,11 +75,9 @@ function encodeFrameBytes(payload: RedisCachePayload, version: number, stampByte
 /**
  * Encode a serializer payload into a servable DialCache Redis frame.
  *
- * Untracked writes stamp a client-clock `createdAtMs`. Core rejects decoded
+ * Writes stamp a client-clock `createdAtMs`. Core rejects decoded
  * frames dated after the reader's clock and uses the timestamp for shadow
- * value-age observations, so stamp real client time, not a constant. Tracked
- * writes must not use this directly — they pair
- * `encodeTrackedRedisPlaceholder` with `WRITE_TRACKED_STAMP_SCRIPT` instead.
+ * value-age observations, so stamp real client time, not a constant.
  */
 export function encodeRedisFrame(payload: RedisCachePayload, createdAtMs: number): Buffer {
   if (!isValidRedisTimestampMs(createdAtMs)) {
@@ -103,31 +97,6 @@ export function assertValidRedisTimestampMs(timestampMs: number): void {
 
 function isValidRedisTimestampMs(timestampMs: number): boolean {
   return Number.isSafeInteger(timestampMs) && timestampMs >= 0;
-}
-
-export interface TrackedRedisPlaceholder {
-  /** Version-0 frame that no read path serves until the stamp promotes it. */
-  readonly frame: Buffer;
-  /** Per-write identity passed to `WRITE_TRACKED_STAMP_SCRIPT` as its nonce argument. */
-  readonly nonce: Buffer;
-}
-
-/**
- * Encode the placeholder frame a tracked write pairs with
- * `WRITE_TRACKED_STAMP_SCRIPT`.
- *
- * The frame carries the placeholder version byte, so both read paths treat it
- * as a miss, and a fresh random nonce where a stamped frame carries its
- * timestamp. The stamp promotes the frame — patching version and the supplied
- * application timestamp — only when the stored header matches this exact
- * nonce, so it can never publish a placeholder left behind by a different
- * write. Mint one placeholder per logical write: client-level retries must
- * reuse the same frame and nonce so a retried SET re-establishes the
- * placeholder its stamp expects.
- */
-export function encodeTrackedRedisPlaceholder(payload: RedisCachePayload): TrackedRedisPlaceholder {
-  const nonce = randomBytes(REDIS_FRAME_TIMESTAMP_BYTES);
-  return { frame: encodeFrameBytes(payload, REDIS_FRAME_PLACEHOLDER_VERSION, nonce), nonce };
 }
 
 /**
@@ -151,9 +120,10 @@ export function decodeRedisFrame(raw: unknown): DecodedRedisFrame | null {
 /**
  * Decode a tracked DialCache frame against a watermark from the same atomic,
  * authoritative snapshot into its serializer payload and header creation time
- * (application time supplied to the stamp script). Missing or malformed state
- * and frames created at or before the watermark are cache misses. Invalid
- * runtime reply types and unsupported payload encodings throw typed errors.
+ * (application time supplied by the writer). A missing watermark is the
+ * natural zero baseline; malformed state and frames created at or before the
+ * watermark are cache misses. Invalid runtime reply types and unsupported
+ * payload encodings throw typed errors.
  */
 export function decodeTrackedRedisFrame(
   raw: unknown,
@@ -164,7 +134,7 @@ export function decodeTrackedRedisFrame(
   if (!isSupportedRedisFrame(frame)) {
     return null;
   }
-  const watermark = parseRedisWatermark(watermarkFrame);
+  const watermark = watermarkFrame === null ? 0 : parseRedisWatermark(watermarkFrame);
   if (watermark === null) {
     return null;
   }

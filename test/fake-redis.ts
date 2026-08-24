@@ -12,6 +12,8 @@ const FRAME_VERSION = 1;
 const ENCODING_OFFSET = 9;
 const PAYLOAD_OFFSET = 10;
 const WATERMARK_TTL_MARGIN_MS = 60_000;
+const MAX_TRACKED_REDIS_VALUE_TTL_MS = 60 * 60 * 1_000;
+const MIN_WATERMARK_TTL_MS = 2 * MAX_TRACKED_REDIS_VALUE_TTL_MS;
 
 interface StoredValue {
   value: Buffer;
@@ -41,27 +43,13 @@ export class FakeRedis implements DialCacheRedisClient {
 
   async write({
     valueKey,
-    watermarkKey,
     cacheTtlMs,
     value,
-  }: RedisWriteRequest): Promise<boolean> {
+  }: RedisWriteRequest): Promise<void> {
     const createdAtMs = Date.now();
     this.setCalls += 1;
     this.throwIfWriteFails();
-    if (watermarkKey !== undefined) {
-      const watermark = this.readWatermark(watermarkKey) ?? 0;
-      if (watermark >= createdAtMs) {
-        return false;
-      }
-      this.storeFrame(valueKey, cacheTtlMs, value, createdAtMs);
-      const currentTtlMs = this.remainingTtlMs(watermarkKey);
-      const desiredTtlMs = Math.max(currentTtlMs, cacheTtlMs + WATERMARK_TTL_MARGIN_MS);
-      this.storeWatermark(watermarkKey, watermark, desiredTtlMs);
-      return true;
-    }
-
     this.storeFrame(valueKey, cacheTtlMs, value, createdAtMs);
-    return true;
   }
 
   async invalidate({ watermarkKey, futureBufferMs }: RedisInvalidationRequest): Promise<void> {
@@ -78,8 +66,8 @@ export class FakeRedis implements DialCacheRedisClient {
     const currentTtlMs = this.remainingTtlMs(watermarkKey);
     const desiredTtlMs = Math.max(
       currentTtlMs,
-      futureBufferMs + WATERMARK_TTL_MARGIN_MS,
-      watermark - invalidatedAtMs + WATERMARK_TTL_MARGIN_MS,
+      MIN_WATERMARK_TTL_MS,
+      watermark - invalidatedAtMs + MAX_TRACKED_REDIS_VALUE_TTL_MS + WATERMARK_TTL_MARGIN_MS,
     );
     this.storeWatermark(watermarkKey, watermark, desiredTtlMs);
   }
@@ -139,7 +127,7 @@ export class FakeRedis implements DialCacheRedisClient {
       } catch {
         return null;
       }
-      if (watermark === null || createdAtMs <= watermark) {
+      if (createdAtMs <= (watermark ?? 0)) {
         return null;
       }
     }
@@ -174,7 +162,7 @@ export class FakeRedis implements DialCacheRedisClient {
   }
 
   private storeWatermark(key: string, watermark: number, ttlMs: number): void {
-    this.values.set(key, { value: Buffer.from(String(Math.floor(watermark))), expiresAtMs: Date.now() + ttlMs });
+    this.values.set(key, { value: Buffer.from(String(Math.ceil(watermark))), expiresAtMs: Date.now() + ttlMs });
   }
 
   private readWatermark(key: string): number | null {

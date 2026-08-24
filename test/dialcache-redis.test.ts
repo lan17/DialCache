@@ -587,7 +587,7 @@ describe("DialCache Redis TTL layer", () => {
       read: vi.fn(async () => {
         throw new DialCacheRedisPayloadEncodingError("Invalid DialCache Redis payload encoding");
       }),
-      write: vi.fn(async () => true),
+      write: vi.fn(async () => {}),
       invalidate: vi.fn(async () => undefined),
     };
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };

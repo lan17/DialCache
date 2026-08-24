@@ -1,8 +1,7 @@
 // Maintainer benchmark for the Redis write path. Measures the local build's
-// tracked and untracked writes against a live Redis and reports server-side
-// command cost per write (INFO commandstats; the EVALSHA entry envelopes
-// script-internal calls) alongside client-side latency percentiles. It asserts
-// the steady-state top-level SET/script shape and that no write invokes TIME,
+// writes against a live Redis and reports server-side command cost per write
+// (INFO commandstats) alongside client-side latency percentiles. It asserts
+// the steady-state one-SET shape and that no write invokes Lua or Redis TIME,
 // but applies no timing thresholds: absolute numbers are machine-, engine-,
 // and load-dependent, so compare runs only against the same idle Redis.
 //
@@ -58,67 +57,51 @@ try {
 const adapter = createNodeRedisDialCacheClient(client);
 
 const rows = [];
-for (const mode of ["tracked", "untracked"]) {
-  for (const size of SIZES) {
-    const iterations = Math.max(1, Math.round(size.n * SCALE));
-    const payload = "x".repeat(size.bytes);
-    const valueKey = `benchmark:write:${mode}:${size.bytes}:value`;
-    const watermarkKey = `benchmark:write:${mode}:${size.bytes}:watermark`;
-    const request = mode === "tracked"
-      ? { valueKey, watermarkKey, cacheTtlMs: 60_000, value: payload }
-      : { valueKey, cacheTtlMs: 60_000, value: payload };
+for (const size of SIZES) {
+  const iterations = Math.max(1, Math.round(size.n * SCALE));
+  const payload = "x".repeat(size.bytes);
+  const valueKey = `benchmark:write:native:${size.bytes}:value`;
+  const request = { valueKey, cacheTtlMs: 60_000, value: payload };
 
-    for (let i = 0; i < WARMUP; i += 1) {
-      await adapter.write(request);
-    }
-    await client.sendCommand(["CONFIG", "RESETSTAT"]);
-
-    const latenciesUsec = [];
-    for (let i = 0; i < iterations; i += 1) {
-      const start = process.hrtime.bigint();
-      await adapter.write(request);
-      latenciesUsec.push(Number(process.hrtime.bigint() - start) / 1_000);
-    }
-
-    // Sum only the commands the client dispatches top-level (SET, EVALSHA,
-    // and the EVAL recovery). Script-internal calls surface in commandstats
-    // too, but the EVALSHA entry already envelopes their execution time.
-    const stats = await commandStats(client);
-    const setCalls = stats.set?.calls ?? 0;
-    const scriptCalls = (stats.evalsha?.calls ?? 0) + (stats.eval?.calls ?? 0);
-    const timeCalls = stats.time?.calls ?? 0;
-    assert.equal(setCalls, iterations, `${mode} writes must issue one top-level SET each`);
-    assert.equal(
-      scriptCalls,
-      mode === "tracked" ? iterations : 0,
-      `${mode} writes dispatched an unexpected number of stamp scripts`,
-    );
-    assert.equal(timeCalls, 0, `${mode} writes must not invoke Redis TIME`);
-    const serverUsec = (stats.set?.usec ?? 0)
-      + (stats.evalsha?.usec ?? 0)
-      + (stats.eval?.usec ?? 0);
-    latenciesUsec.sort((a, b) => a - b);
-    rows.push({
-      mode,
-      size: size.name,
-      writes: iterations,
-      setCallsPerWrite: setCalls / iterations,
-      scriptCallsPerWrite: scriptCalls / iterations,
-      timeCallsPerWrite: timeCalls / iterations,
-      serverUsecPerWrite: serverUsec / iterations,
-      clientP50Usec: percentile(latenciesUsec, 50),
-      clientP95Usec: percentile(latenciesUsec, 95),
-    });
+  for (let i = 0; i < WARMUP; i += 1) {
+    await adapter.write(request);
   }
+  await client.sendCommand(["CONFIG", "RESETSTAT"]);
+
+  const latenciesUsec = [];
+  for (let i = 0; i < iterations; i += 1) {
+    const start = process.hrtime.bigint();
+    await adapter.write(request);
+    latenciesUsec.push(Number(process.hrtime.bigint() - start) / 1_000);
+  }
+
+  const stats = await commandStats(client);
+  const setCalls = stats.set?.calls ?? 0;
+  const scriptCalls = (stats.evalsha?.calls ?? 0) + (stats.eval?.calls ?? 0);
+  const timeCalls = stats.time?.calls ?? 0;
+  assert.equal(setCalls, iterations, "writes must issue one top-level SET each");
+  assert.equal(scriptCalls, 0, "writes must not dispatch Lua scripts");
+  assert.equal(timeCalls, 0, "writes must not invoke Redis TIME");
+  const serverUsec = stats.set?.usec ?? 0;
+  latenciesUsec.sort((a, b) => a - b);
+  rows.push({
+    size: size.name,
+    writes: iterations,
+    setCallsPerWrite: setCalls / iterations,
+    scriptCallsPerWrite: scriptCalls / iterations,
+    timeCallsPerWrite: timeCalls / iterations,
+    serverUsecPerWrite: serverUsec / iterations,
+    clientP50Usec: percentile(latenciesUsec, 50),
+    clientP95Usec: percentile(latenciesUsec, 95),
+  });
 }
 await client.quit();
 
 console.log(`Redis write benchmark — ${REDIS_URL}`);
-console.log("mode       size      writes   SET/op   script/op   TIME/op   server µs/write   client p50 µs   client p95 µs");
+console.log("size      writes   SET/op   script/op   TIME/op   server µs/write   client p50 µs   client p95 µs");
 for (const row of rows) {
   console.log(
-    row.mode.padEnd(10)
-    + row.size.padEnd(10)
+    row.size.padEnd(10)
     + String(row.writes).padEnd(9)
     + row.setCallsPerWrite.toFixed(1).padEnd(9)
     + row.scriptCallsPerWrite.toFixed(1).padEnd(12)

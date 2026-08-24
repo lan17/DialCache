@@ -62,7 +62,7 @@ function redisClient(read: DialCacheRedisClient["read"]): {
   readonly write: ReturnType<typeof vi.fn<DialCacheRedisClient["write"]>>;
 } {
   const readMock = vi.fn<DialCacheRedisClient["read"]>(read);
-  const write = vi.fn<DialCacheRedisClient["write"]>(async () => true);
+  const write = vi.fn<DialCacheRedisClient["write"]>(async () => {});
   return {
     client: {
       read: readMock,

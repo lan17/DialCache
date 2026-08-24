@@ -109,7 +109,6 @@ const SHADOW_VALIDATION_OUTCOMES: Readonly<Record<ShadowValidationOutcome, true>
   mismatch: true,
   superseded: true,
   filled: true,
-  fill_blocked: true,
   fill_error: true,
   redis_error: true,
   source_error: true,
@@ -470,7 +469,7 @@ describe("Datadog metrics adapter", () => {
         error.name = rawErrorName;
         throw error;
       },
-      write: async () => true,
+      write: async () => {},
       invalidate: async () => undefined,
     };
     const dialcache = new DialCache({

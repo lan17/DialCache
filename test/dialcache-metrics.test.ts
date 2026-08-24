@@ -422,7 +422,7 @@ describe("DialCache observability metrics", () => {
       read: vi.fn(async () => {
         throw cacheError;
       }),
-      write: vi.fn(async () => true),
+      write: vi.fn(async () => {}),
       invalidate: vi.fn(async () => undefined),
     };
     const cacheFailure = new DialCache({ redis: { client: failingRedis, readTimeoutMs: 1_000 }, metrics, logger });

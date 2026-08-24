@@ -547,7 +547,7 @@ describe("DialCache fallback liveness", () => {
         readStarted.resolve();
         return await readGate.promise;
       },
-      write: async () => true,
+      write: async () => {},
       invalidate: async () => undefined,
     };
     const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 200 } });
@@ -589,7 +589,7 @@ describe("DialCache fallback liveness", () => {
     };
     const redis: DialCacheRedisClient = {
       read: async () => ({ payload: "stored", createdAtMs: Date.now() }),
-      write: async () => true,
+      write: async () => {},
       invalidate: async () => undefined,
     };
     const dialcache = new DialCache({ redis: { client: redis }, metrics });
@@ -621,7 +621,7 @@ describe("DialCache fallback liveness", () => {
   it("does not apply a completed fallback's deadline to serializer dump or Redis write", async () => {
     const dumpGate = deferred<string>();
     const dumpStarted = deferred<void>();
-    const writeGate = deferred<boolean>();
+    const writeGate = deferred<void>();
     const writeStarted = deferred<void>();
     const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
     const serializer: Serializer<string> = {
@@ -673,7 +673,7 @@ describe("DialCache fallback liveness", () => {
     expect(settled).toBe(false);
     expect(dialcache.getCoalescingState().process.activeLeaders).toBe(1);
 
-    writeGate.resolve(true);
+    writeGate.resolve();
     await expect(result).resolves.toBe("value");
     expect(dialcache.getCoalescingState().process.activeLeaders).toBe(0);
   });

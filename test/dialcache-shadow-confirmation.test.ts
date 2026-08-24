@@ -60,7 +60,7 @@ const SCRIPTED_FRAME_CREATED_AT_MS = 1_700_000_000_000;
 class ScriptedRedis implements DialCacheRedisClient {
   readonly requests: RedisReadRequest[] = [];
   readonly contexts: Array<RedisReadContext | undefined> = [];
-  readonly write = vi.fn(async (_request: RedisWriteRequest): Promise<boolean> => true);
+  readonly write = vi.fn(async (_request: RedisWriteRequest): Promise<void> => undefined);
   readonly invalidate = vi.fn(async (_request: RedisInvalidationRequest): Promise<void> => undefined);
   frameCreatedAtMs = SCRIPTED_FRAME_CREATED_AT_MS;
 
@@ -1143,7 +1143,7 @@ describe("DialCache Redis shadow confirmation", () => {
       cacheTtlMs: 60_000,
       value: JSON.stringify({ id: "123" }),
     }));
-    expect(Object.hasOwn(redis.write.mock.calls[0]?.[0] ?? {}, "watermarkKey")).toBe(tracked);
+    expect(Object.hasOwn(redis.write.mock.calls[0]?.[0] ?? {}, "watermarkKey")).toBe(false);
     expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
       name === "request" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
     )).toHaveLength(1);
@@ -1161,33 +1161,6 @@ describe("DialCache Redis shadow confirmation", () => {
     expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
       name === "size" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
     )).toHaveLength(1);
-  });
-
-  it("reports fill_blocked when tracked invalidation rejects a detached fill", async () => {
-    const redis = new ScriptedRedis([() => null]);
-    redis.write.mockImplementationOnce(async () => false);
-    const metrics = new RecordingMetrics();
-    const sourceValue = { id: "123", version: 2 };
-    const dialcache = createCache(redis, metrics);
-    const getUser = dialcache.cached(async () => sourceValue, {
-      ...trackedOptions("ShadowDarkFillBlocked", remoteConfig(0)),
-      cacheKey: () => "123",
-    });
-
-    await expect(dialcache.enable(async () => await getUser())).resolves.toBe(sourceValue);
-    await waitForShadowEvents(metrics, 1);
-
-    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["fill_blocked"]);
-    expect(redis.write).toHaveBeenCalledOnce();
-    expect(redis.write).toHaveBeenCalledWith(expect.objectContaining({
-      cacheTtlMs: 60_000,
-      watermarkKey: expect.any(String),
-    }));
-    expect(redis.invalidate).not.toHaveBeenCalled();
-    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
-      name === "error"
-      && labels.layer === REMOTE_SHADOW_CACHE_LAYER
-    )).toHaveLength(0);
   });
 
   it("reports a detached serializer dump failure as fill_error with an exact remote_shadow error", async () => {
@@ -1326,7 +1299,7 @@ describe("DialCache Redis shadow confirmation", () => {
     const dumpStarted = deferred<void>();
     const dumpGate = deferred<void>();
     const writeStarted = deferred<void>();
-    const writeGate = deferred<boolean>();
+    const writeGate = deferred<void>();
     const redis = new ScriptedRedis([() => null]);
     redis.write.mockImplementationOnce(async () => {
       writeStarted.resolve(undefined);
@@ -1363,12 +1336,12 @@ describe("DialCache Redis shadow confirmation", () => {
       await writeStarted.promise;
       expect(metrics.shadowEvents).toHaveLength(0);
 
-      writeGate.resolve(true);
+      writeGate.resolve(undefined);
       await waitForShadowEvents(metrics, 1);
       expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["filled"]);
     } finally {
       dumpGate.resolve(undefined);
-      writeGate.resolve(true);
+      writeGate.resolve(undefined);
     }
   });
 
@@ -1436,8 +1409,8 @@ describe("DialCache Redis shadow confirmation", () => {
     expect(redis.write).toHaveBeenCalledOnce();
     expect(redis.write).toHaveBeenCalledWith(expect.objectContaining({
       cacheTtlMs: 17_000,
-      watermarkKey: expect.any(String),
     }));
+    expect(Object.hasOwn(redis.write.mock.calls[0]?.[0] ?? {}, "watermarkKey")).toBe(false);
   });
 
   it("reports a dark Redis error with remote_shadow read telemetry and never writes", async () => {
@@ -1839,17 +1812,12 @@ describe("DialCache Redis shadow confirmation", () => {
     expectTrackedReads(redis, 2, { singleWatermark: false });
   });
 
-  it.each([
-    { name: "successful", result: true },
-    { name: "watermark-blocked", result: false },
-  ])("retains capacity after an overall timeout until an already-dispatched $name write settles", async ({
-    result,
-  }) => {
+  it("retains capacity after an overall timeout until an already-dispatched write settles", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     let nowMs = 0;
     const performanceSpy = vi.spyOn(performance, "now").mockImplementation(() => nowMs);
     const writeStarted = deferred<void>();
-    const writeGate = deferred<boolean>();
+    const writeGate = deferred<void>();
     const redis = new ScriptedRedis([
       () => null,
       () => JSON.stringify({ id: "b" }),
@@ -1879,7 +1847,7 @@ describe("DialCache Redis shadow confirmation", () => {
       expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["timeout", "dropped"]);
       expect(redis.requests).toHaveLength(1);
 
-      writeGate.resolve(result);
+      writeGate.resolve(undefined);
       await nextImmediate();
 
       await expect(dialcache.enable(async () => await getUser("b"))).resolves.toEqual({ id: "b" });
@@ -1892,7 +1860,7 @@ describe("DialCache Redis shadow confirmation", () => {
       expect(redis.write).toHaveBeenCalledOnce();
       expectTrackedReads(redis, 2, { singleWatermark: false });
     } finally {
-      writeGate.resolve(result);
+      writeGate.resolve(undefined);
       performanceSpy.mockRestore();
       vi.useRealTimers();
     }

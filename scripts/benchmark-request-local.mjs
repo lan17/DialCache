@@ -250,9 +250,7 @@ async function benchmarkRedisReadDeadlineCoalescing(fanout) {
       await gate.promise;
       return { payload: JSON.stringify("shared"), createdAtMs: Date.now() };
     },
-    async write() {
-      return true;
-    },
+    async write() {},
     async invalidate() {},
   };
   const dialcache = new DialCache({
@@ -327,7 +325,6 @@ async function benchmarkSequentialTrackedRedisHits(iterations, { scenario, useCa
     },
     async write() {
       redisWriteCalls += 1;
-      return true;
     },
     async invalidate() {
       redisInvalidationCalls += 1;
@@ -400,7 +397,6 @@ async function benchmarkDarkShadowDetachment() {
     },
     async write() {
       redisWriteCalls += 1;
-      return true;
     },
     async invalidate() {
       redisInvalidationCalls += 1;
@@ -482,12 +478,15 @@ async function benchmarkDarkShadowFillDetachment() {
       redisReadCalls += 1;
       return null;
     },
-    async write({ watermarkKey }) {
-      assert.equal(typeof watermarkKey, "string", "dark shadow fills must remain tracked");
+    async write(request) {
+      assert.equal(
+        Object.hasOwn(request, "watermarkKey"),
+        false,
+        "dark shadow fills must use the unified native write request",
+      );
       redisWriteCalls += 1;
       writeStarted.resolve();
       await writeGate.promise;
-      return true;
     },
     async invalidate() {},
   };
