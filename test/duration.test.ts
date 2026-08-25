@@ -6,7 +6,9 @@ import {
   isSupportedCacheTtlSec,
   MAX_CACHE_TTL_SEC,
   MAX_SUPPORTED_DURATION_MS,
+  MAX_TRACKED_REDIS_VALUE_TTL_MS,
 } from "../src/internal/duration.js";
+import { MIN_WATERMARK_TTL_MS } from "../src/internal/redis-scripts.js";
 
 describe("DialCache supported durations", () => {
   it("uses one fixed 365-day ceiling for TTLs and invalidation buffers", () => {
@@ -15,6 +17,13 @@ describe("DialCache supported durations", () => {
     expect(isSupportedCacheTtlSec(MAX_CACHE_TTL_SEC)).toBe(true);
     expect(cacheTtlSecToMs(MAX_CACHE_TTL_SEC)).toBe(MAX_SUPPORTED_DURATION_MS);
     expect(() => assertSupportedFutureBufferMs(MAX_SUPPORTED_DURATION_MS)).not.toThrow();
+  });
+
+  it("pins tracked Redis lifetimes as protocol-cutover constants", () => {
+    // Increasing the value cap is not made rolling-safe by increasing the
+    // current floor: already-deployed invalidators retain their compiled floor.
+    expect(MAX_TRACKED_REDIS_VALUE_TTL_MS).toBe(60 * 60 * 1_000);
+    expect(MIN_WATERMARK_TTL_MS).toBe(2 * 60 * 60 * 1_000);
   });
 
   it.each([0, MAX_CACHE_TTL_SEC + 1, Number.MAX_SAFE_INTEGER])(

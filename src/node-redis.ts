@@ -1,25 +1,23 @@
-import { commandOptions, defineScript } from "redis";
+import { commandOptions } from "redis";
 
 import {
+  buildRedisInvalidationScriptArguments,
   INVALIDATE_CACHE_SCRIPT,
-  WRITE_TRACKED_STAMP_SCRIPT,
-} from "./internal/redis-scripts.js";
+  INVALIDATE_CACHE_SCRIPT_SHA1,
+} from "./internal/redis-invalidation.js";
 import {
+  assertValidRedisTimestampMs,
   decodeRedisFrame,
   decodeTrackedRedisFrame,
   encodeRedisFrame,
-  encodeTrackedRedisPlaceholder,
 } from "./internal/redis-payload.js";
 import { ceilSupportedCacheTtlMs } from "./internal/duration.js";
 import {
-  resolveTrackedRedisWriteReply,
   validateRedisScriptInvalidationReply,
-  validateRedisScriptWriteReply,
   validateRedisSetReply,
 } from "./internal/redis-script-reply.js";
 import {
   DialCacheRedisPayloadError,
-  DialCacheRedisProtocolError,
   type DialCacheRedisClient,
 } from "./redis-client.js";
 
@@ -31,87 +29,9 @@ type BufferReplyOptions = ReturnType<
 >;
 // Redis bulk strings are binary data; decoding them as UTF-8 would corrupt arbitrary serializer output.
 const bufferReplyOptions: BufferReplyOptions = commandOptions({ returnBuffers: true });
-const writeReply = (reply: number): number => validateRedisScriptWriteReply(reply);
-const invalidationReply = (reply: number): number => validateRedisScriptInvalidationReply(reply);
 type NodeRedisArgument = string | Buffer;
 
-interface NodeRedisScript<Args extends Array<unknown>, Reply> {
-  readonly SCRIPT: string;
-  readonly SHA1: string;
-  readonly NUMBER_OF_KEYS: number;
-  readonly FIRST_KEY_INDEX: number;
-  readonly IS_READ_ONLY: boolean;
-  transformArguments(...args: Args): Array<NodeRedisArgument>;
-  transformReply(reply: Reply): Reply;
-}
-
-type NodeRedisScriptConfig<Args extends Array<unknown>, Reply> = Omit<NodeRedisScript<Args, Reply>, "SHA1">;
-
-function defineDialCacheScript<Args extends Array<unknown>, Reply>(
-  config: NodeRedisScriptConfig<Args, Reply>,
-): NodeRedisScript<Args, Reply> {
-  return defineScript(config);
-}
-
-/**
- * DialCache's client wiring, not a write API: the registered methods return
- * raw script replies. `dialcacheWriteTrackedStamp` replies `0 | 1 | 2`, and
- * `2` means the placeholder was lost — not success. Code invoking these
- * methods directly must map stamp replies through
- * `resolveTrackedRedisWriteReply` from `dialcache/redis-protocol`, which
- * throws `DialCacheRedisPlaceholderLostError` on `2`.
- */
-export type DialCacheNodeRedisScripts = {
-  readonly dialcacheWriteTrackedStamp: NodeRedisScript<
-    [valueKey: string, watermarkKey: string, cacheTtlMs: number, nonce: Buffer],
-    number
-  >;
-  readonly dialcacheInvalidate: NodeRedisScript<
-    [watermarkKey: string, futureBufferMs: number],
-    number
-  >;
-};
-
-/** See {@link DialCacheNodeRedisScripts}: wiring for the adapter, not a direct write API. */
-export const dialcacheRedisScripts: DialCacheNodeRedisScripts = {
-  dialcacheWriteTrackedStamp: defineDialCacheScript({
-    SCRIPT: WRITE_TRACKED_STAMP_SCRIPT,
-    NUMBER_OF_KEYS: 2,
-    FIRST_KEY_INDEX: 0,
-    IS_READ_ONLY: false,
-    transformArguments(
-      valueKey: string,
-      watermarkKey: string,
-      cacheTtlMs: number,
-      nonce: Buffer,
-    ): Array<NodeRedisArgument> {
-      return [valueKey, watermarkKey, String(cacheTtlMs), nonce];
-    },
-    transformReply: writeReply,
-  }),
-  dialcacheInvalidate: defineDialCacheScript({
-    SCRIPT: INVALIDATE_CACHE_SCRIPT,
-    NUMBER_OF_KEYS: 1,
-    FIRST_KEY_INDEX: 0,
-    IS_READ_ONLY: false,
-    transformArguments(watermarkKey: string, futureBufferMs: number): Array<string> {
-      return [watermarkKey, String(futureBufferMs)];
-    },
-    transformReply: invalidationReply,
-  }),
-};
-
-interface NodeRedisWriteClient {
-  dialcacheWriteTrackedStamp(
-    valueKey: string,
-    watermarkKey: string,
-    cacheTtlMs: number,
-    nonce: Buffer,
-  ): Promise<number>;
-  dialcacheInvalidate(watermarkKey: string, futureBufferMs: number): Promise<number>;
-}
-
-interface NodeRedisStandaloneClient extends NodeRedisWriteClient {
+interface NodeRedisStandaloneClient {
   get(options: BufferReplyOptions, valueKey: string): Promise<Buffer | null>;
   sendCommand(
     args: Array<NodeRedisArgument>,
@@ -119,7 +39,7 @@ interface NodeRedisStandaloneClient extends NodeRedisWriteClient {
   ): Promise<unknown>;
 }
 
-interface NodeRedisClusterClient extends NodeRedisWriteClient {
+interface NodeRedisClusterClient {
   /** Public node-redis Cluster topology view, used only to distinguish its sendCommand overload. */
   readonly masters: ReadonlyArray<unknown>;
   get(options: BufferReplyOptions, valueKey: string): Promise<Buffer | null>;
@@ -191,13 +111,12 @@ function sendFrameSet(
  * Create a resource-free semantic view over a caller-owned node-redis client.
  * Read signals are passed to node-redis so queued commands can be removed when
  * supported. Aborting after dispatch does not unsend a command or prove the
- * server stopped executing it. Tracked writes enqueue their placeholder SET
- * and stamp script in one synchronous tick, so node-redis pipelines them in
- * order on one connection (per slot node in cluster mode). Invalidation
- * retries any dispatch rejection other than a reply-domain violation once by
+ * server stopped executing it. Every write is one native SET of a complete
+ * client-stamped frame. Invalidation retries any EVALSHA rejection once by
  * re-sending the script source as EVAL — the script is idempotent, so a
- * duplicate run is harmless — and a failed retry surfaces unmodified, with
- * the original rejection discarded. node-redis has no per-command deadline:
+ * duplicate run is harmless — and a failed retry surfaces unmodified. An
+ * accepted reply is validated after dispatch and is never retried. node-redis
+ * has no per-command deadline:
  * `disableOfflineQueue`, `commandsQueueMaxLength`, and `reconnectStrategy`
  * bound queueing and dispatch, not the reply wait, so with the offline queue
  * enabled a retry issued during a disconnect can wait until reconnect. The
@@ -205,14 +124,6 @@ function sendFrameSet(
  * work, and closing the client.
  */
 export function createNodeRedisDialCacheClient(client: NodeRedisClient): DialCacheRedisClient {
-  if (
-    typeof client.dialcacheWriteTrackedStamp !== "function"
-    || typeof client.dialcacheInvalidate !== "function"
-  ) {
-    throw new TypeError(
-      "node-redis DialCache requires a client created with scripts: dialcacheRedisScripts",
-    );
-  }
   return {
     async read({ valueKey, watermarkKey }, context) {
       const options: BufferReplyOptions = context === undefined
@@ -230,49 +141,33 @@ export function createNodeRedisDialCacheClient(client: NodeRedisClient): DialCac
       return decodeTrackedRedisFrame(rawValue, rawWatermark);
     },
     async write(request) {
-      const { valueKey, watermarkKey, value } = request;
+      const { valueKey, value } = request;
       const cacheTtlMs = ceilSupportedCacheTtlMs(request.cacheTtlMs);
-      if (watermarkKey === undefined) {
-        validateRedisSetReply(
-          await sendFrameSet(client, valueKey, encodeRedisFrame(value, Date.now()), cacheTtlMs),
-        );
-        return true;
-      }
-      const { frame, nonce } = encodeTrackedRedisPlaceholder(value);
-      // Both commands must enqueue in this synchronous tick so they pipeline
-      // in order; an await between them would allow reordering around them.
-      const setPromise = sendFrameSet(client, valueKey, frame, cacheTtlMs);
-      // Observe the SET unconditionally so a synchronous throw before
-      // allSettled cannot leave its rejection unhandled.
-      setPromise.catch(() => undefined);
-      const stampPromise = client.dialcacheWriteTrackedStamp(valueKey, watermarkKey, cacheTtlMs, nonce);
-      const [setResult, stampResult] = await Promise.allSettled([setPromise, stampPromise]);
-      // A failed SET is the write outcome even when the stamp settled.
-      if (setResult.status === "rejected") {
-        throw setResult.reason;
-      }
-      validateRedisSetReply(setResult.value);
-      if (stampResult.status === "rejected") {
-        throw stampResult.reason;
-      }
-      return resolveTrackedRedisWriteReply(stampResult.value);
+      validateRedisSetReply(
+        await sendFrameSet(client, valueKey, encodeRedisFrame(value, Date.now()), cacheTtlMs),
+      );
     },
     async invalidate({ watermarkKey, futureBufferMs }) {
+      const invalidatedAtMs = Date.now();
+      assertValidRedisTimestampMs(invalidatedAtMs);
+      const invalidateArgs = buildRedisInvalidationScriptArguments(
+        futureBufferMs,
+        invalidatedAtMs,
+      );
       let raw: unknown;
       try {
-        raw = await client.dialcacheInvalidate(watermarkKey, futureBufferMs);
-      } catch (error) {
-        // The registered transformReply validates inside the returned
-        // promise, so a reply-domain violation surfaces here as a rejection;
-        // it is deterministic and must not be retried. Any other rejection
-        // is retried once with the source: the invalidation script is
+        raw = await sendKeyedCommand(
+          client,
+          watermarkKey,
+          ["EVALSHA", INVALIDATE_CACHE_SCRIPT_SHA1, "1", watermarkKey, ...invalidateArgs],
+          bufferReplyOptions,
+        );
+      } catch {
+        // Any rejection is retried once with the source: the invalidation script is
         // idempotent (the watermark only advances and its TTL only widens),
         // so a duplicate run after an ambiguous failure is harmless, and
         // EVAL self-heals both a flushed script cache and an
         // EVALSHA-rejecting proxy without depending on error wording.
-        if (error instanceof DialCacheRedisProtocolError) {
-          throw error;
-        }
         // A failed retry surfaces unmodified, discarding this original
         // rejection: node-redis rejects every command flushed by a single
         // disconnect with one shared error instance — the same object its
@@ -281,7 +176,13 @@ export function createNodeRedisDialCacheClient(client: NodeRedisClient): DialCac
         raw = await sendKeyedCommand(
           client,
           watermarkKey,
-          ["EVAL", INVALIDATE_CACHE_SCRIPT, "1", watermarkKey, String(futureBufferMs)],
+          [
+            "EVAL",
+            INVALIDATE_CACHE_SCRIPT,
+            "1",
+            watermarkKey,
+            ...invalidateArgs,
+          ],
           bufferReplyOptions,
         );
       }

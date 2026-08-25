@@ -15,6 +15,11 @@ import {
   type SerializationMetricLabels,
   type Serializer,
 } from "../src/index.js";
+import {
+  MAX_SUPPORTED_DURATION_MS,
+  MAX_TRACKED_REDIS_VALUE_TTL_MS,
+} from "../src/internal/duration.js";
+import { MIN_WATERMARK_TTL_MS } from "../src/internal/redis-scripts.js";
 import { encodeFrame, FakeRedis } from "./fake-redis.js";
 
 class RecordingMetrics implements DialCacheMetricsAdapter {
@@ -71,7 +76,6 @@ const localAndRemote = (ttlSec = 60) => DialCacheKeyConfig.enabled(ttlSec);
 const valueKey = (useCase: string, args = ""): string => `{urn:user_id:123}${args}#${useCase}:dialcache-frame-v1`;
 const watermarkKey = "{urn:user_id:123}#watermark";
 const MAX_CACHE_TTL_SEC = 31_536_000;
-const MAX_SUPPORTED_DURATION_MS = 31_536_000_000;
 const WATERMARK_TTL_MARGIN_MS = 60_000;
 
 describe("DialCache targeted invalidation watermarks", () => {
@@ -118,7 +122,7 @@ describe("DialCache targeted invalidation watermarks", () => {
     expect(redis.readWatermarkValue(watermarkKey)).toBe(Date.parse("2026-05-12T18:00:00.000Z"));
   });
 
-  it("does not write remote or local cache during a future invalidation window", async () => {
+  it("stores a complete remote frame but does not publish local cache during a future invalidation window", async () => {
     const redis = new FakeRedis();
     const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     let calls = 0;
@@ -137,10 +141,20 @@ describe("DialCache targeted invalidation watermarks", () => {
 
     expect(first).toEqual({ userId: "123", calls: 1 });
     expect(second).toEqual({ userId: "123", calls: 2 });
-    expect([...redis.values.keys()]).toEqual([watermarkKey]);
+    expect([...redis.values.keys()].sort()).toEqual([
+      watermarkKey,
+      valueKey("FutureBufferUser"),
+    ].sort());
+    await expect(redis.read({
+      valueKey: valueKey("FutureBufferUser"),
+      watermarkKey,
+    })).resolves.toBeNull();
+    await expect(redis.read({ valueKey: valueKey("FutureBufferUser") })).resolves.toMatchObject({
+      payload: JSON.stringify(second),
+    });
   });
 
-  it("rejects a write when invalidation arrives during fallback", async () => {
+  it("stores but fences a write when invalidation arrives during fallback", async () => {
     const redis = new FakeRedis();
     const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     let calls = 0;
@@ -164,10 +178,17 @@ describe("DialCache targeted invalidation watermarks", () => {
 
     expect(first).toEqual({ userId: "123", calls: 1 });
     expect(second).toEqual({ userId: "123", calls: 2 });
-    expect([...redis.values.keys()]).toEqual([watermarkKey]);
+    expect([...redis.values.keys()].sort()).toEqual([
+      watermarkKey,
+      valueKey("FutureBufferFallbackRace"),
+    ].sort());
+    await expect(redis.read({
+      valueKey: valueKey("FutureBufferFallbackRace"),
+      watermarkKey,
+    })).resolves.toBeNull();
   });
 
-  it("rejects a write when invalidation remains active after slow serialization", async () => {
+  it("stores but fences a write when invalidation remains active after slow serialization", async () => {
     const redis = new FakeRedis();
     let signalDumpStarted = (): void => undefined;
     const dumpStarted = new Promise<void>((resolve) => {
@@ -209,10 +230,17 @@ describe("DialCache targeted invalidation watermarks", () => {
 
     expect(first).toEqual({ userId: "123", calls: 1 });
     expect(second).toEqual({ userId: "123", calls: 2 });
-    expect([...redis.values.keys()]).toEqual([watermarkKey]);
+    expect([...redis.values.keys()].sort()).toEqual([
+      watermarkKey,
+      valueKey("FutureBufferSerializationRace"),
+    ].sort());
+    await expect(redis.read({
+      valueKey: valueKey("FutureBufferSerializationRace"),
+      watermarkKey,
+    })).resolves.toBeNull();
   });
 
-  it("blocks a same-millisecond write for a zero-length future buffer", async () => {
+  it("fences a same-millisecond complete write for a zero-length future buffer", async () => {
     const redis = new FakeRedis();
     const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     let calls = 0;
@@ -225,18 +253,18 @@ describe("DialCache targeted invalidation watermarks", () => {
     });
 
     await dialcache.invalidateRemote("user_id", "123", 0);
-    const blocked = await dialcache.enable(async () => await getUser("123"));
+    const fenced = await dialcache.enable(async () => await getUser("123"));
     vi.advanceTimersByTime(1);
     const written = await dialcache.enable(async () => await getUser("123"));
     const cached = await dialcache.enable(async () => await getUser("123"));
 
-    expect(blocked).toEqual({ userId: "123", calls: 1 });
+    expect(fenced).toEqual({ userId: "123", calls: 1 });
     expect(written).toEqual({ userId: "123", calls: 2 });
     expect(cached).toEqual(written);
     expect(calls).toBe(2);
   });
 
-  it("resumes tracked writes after the future buffer", async () => {
+  it("serves tracked writes after the future buffer", async () => {
     const redis = new FakeRedis();
     const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     let calls = 0;
@@ -258,7 +286,7 @@ describe("DialCache targeted invalidation watermarks", () => {
     expect(redis.values.has(valueKey("FutureBufferExpires"))).toBe(true);
   });
 
-  it("treats a tracked value with a missing watermark marker as a miss", async () => {
+  it("treats a missing tracked watermark as the zero baseline", async () => {
     const redis = new FakeRedis();
     redis.setRaw(valueKey("MissingWatermark"), encodeFrame({ source: "stale" }));
     const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
@@ -274,9 +302,10 @@ describe("DialCache targeted invalidation watermarks", () => {
     const first = await dialcache.enable(async () => await getUser("123"));
     const second = await dialcache.enable(async () => await getUser("123"));
 
-    expect(first).toEqual({ userId: "123", source: "fallback-1" });
-    expect(second).toEqual({ userId: "123", source: "fallback-1" });
-    expect(redis.readWatermarkValue(watermarkKey)).toBe(0);
+    expect(first).toEqual({ source: "stale" });
+    expect(second).toEqual(first);
+    expect(calls).toBe(0);
+    expect(redis.readWatermarkValue(watermarkKey)).toBeNull();
   });
 
   it("preserves the furthest watermark across repeated invalidations", async () => {
@@ -291,7 +320,7 @@ describe("DialCache targeted invalidation watermarks", () => {
     expect(redis.readWatermarkValue(watermarkKey)).toBe(first);
   });
 
-  it("derives watermark lifetime from value TTLs and invalidations without extending it on reads", async () => {
+  it("creates watermarks only on invalidation and does not extend them on reads or writes", async () => {
     const redis = new FakeRedis();
     const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     const getUser = dialcache.cached(async (userId: string) => ({ userId }), {
@@ -303,19 +332,20 @@ describe("DialCache targeted invalidation watermarks", () => {
     });
 
     await dialcache.enable(async () => await getUser("123"));
-    const afterWrite = redis.ttlMs(watermarkKey);
-    vi.advanceTimersByTime(1_000);
-    await dialcache.enable(async () => await getUser("123"));
-    const afterRead = redis.ttlMs(watermarkKey);
+    expect(redis.ttlMs(watermarkKey)).toBe(-2);
+    expect(redis.ttlMs(valueKey("WatermarkLifetime"))).toBe(MAX_TRACKED_REDIS_VALUE_TTL_MS);
+
     await dialcache.invalidateRemote("user_id", "123");
     const afterInvalidation = redis.ttlMs(watermarkKey);
+    vi.advanceTimersByTime(1_000);
+    await dialcache.enable(async () => await getUser("123"));
+    const afterReadAndWrite = redis.ttlMs(watermarkKey);
 
-    expect(afterWrite).toBe(2 * 60 * 60 * 1_000 + 60_000);
-    expect(afterRead).toBe(afterWrite - 1_000);
-    expect(afterInvalidation).toBe(afterRead);
+    expect(afterInvalidation).toBe(MIN_WATERMARK_TTL_MS);
+    expect(afterReadAndWrite).toBe(afterInvalidation - 1_000);
   });
 
-  it("keeps one shared watermark alive for the longest outstanding tracked value", async () => {
+  it("does not create or extend a shared watermark for tracked values with different TTLs", async () => {
     const redis = new FakeRedis();
     const dialcache = new DialCache({ redis: { client: redis } });
     const getLongLived = dialcache.cached(async (userId: string) => ({ userId, lifetime: "long" }), {
@@ -334,12 +364,16 @@ describe("DialCache targeted invalidation watermarks", () => {
     });
 
     await dialcache.enable(async () => await getLongLived("123"));
-    const afterLongWrite = redis.ttlMs(watermarkKey);
+    expect(redis.ttlMs(watermarkKey)).toBe(-2);
+    expect(redis.ttlMs(valueKey("LongWatermarkLifetime"))).toBe(MAX_TRACKED_REDIS_VALUE_TTL_MS);
+
+    await dialcache.invalidateRemote("user_id", "123");
+    const afterInvalidation = redis.ttlMs(watermarkKey);
     vi.advanceTimersByTime(60 * 60 * 1_000);
     await dialcache.enable(async () => await getShortLived("123"));
 
-    expect(afterLongWrite).toBe(2 * 60 * 60 * 1_000 + 60_000);
-    expect(redis.ttlMs(watermarkKey)).toBe(afterLongWrite - 60 * 60 * 1_000);
+    expect(afterInvalidation).toBe(MIN_WATERMARK_TTL_MS);
+    expect(redis.ttlMs(watermarkKey)).toBe(afterInvalidation - 60 * 60 * 1_000);
   });
 
   it("fails open without caching when tracked watermark reads fail", async () => {
@@ -494,9 +528,10 @@ describe("DialCache targeted invalidation watermarks", () => {
     expect(metrics.events).toEqual([]);
   });
 
-  it("accepts the maximum TTL across local, Redis, and tracked-watermark storage", async () => {
+  it("caps tracked Redis values at one hour while retaining the configured local TTL", async () => {
     const redis = new FakeRedis();
-    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
+    const metrics = new RecordingMetrics();
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 }, metrics });
     let calls = 0;
     const getUser = dialcache.cached(async (id: string) => ({ id, calls: ++calls }), {
       keyType: "user_id",
@@ -508,14 +543,58 @@ describe("DialCache targeted invalidation watermarks", () => {
 
     const first = await dialcache.enable(async () => await getUser("123"));
     const second = await dialcache.enable(async () => await getUser("123"));
+    expect(redis.ttlMs(valueKey("MaximumSupportedTtl"))).toBe(MAX_TRACKED_REDIS_VALUE_TTL_MS);
+    expect(redis.ttlMs(watermarkKey)).toBe(-2);
+    expect(metrics.events.filter(({ name }) => name === "error").map(({ labels }) => labels)).toEqual([
+      {
+        cacheNamespace: "urn",
+        useCase: "MaximumSupportedTtl",
+        keyType: "user_id",
+        layer: CacheLayer.REMOTE,
+        error: "tracked_ttl_clamped",
+        inFallback: false,
+      },
+    ]);
 
-    expect(second).toBe(first);
+    vi.advanceTimersByTime(MAX_TRACKED_REDIS_VALUE_TTL_MS + 1);
+    const third = await dialcache.enable(async () => await getUser("123"));
+
+    expect(second).toEqual(first);
+    expect(second).not.toBe(first);
+    expect(third).toBe(second);
     expect(calls).toBe(1);
-    expect(redis.mGetCalls).toBe(1);
-    expect(redis.ttlMs(valueKey("MaximumSupportedTtl"))).toBe(MAX_SUPPORTED_DURATION_MS);
-    expect(redis.ttlMs(watermarkKey)).toBe(
-      MAX_SUPPORTED_DURATION_MS + WATERMARK_TTL_MARGIN_MS,
-    );
+    expect(redis.mGetCalls).toBe(2);
+  });
+
+  it("caps only tracked Redis TTLs above one hour", async () => {
+    const redis = new FakeRedis();
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
+    const trackedTtlSec = MAX_TRACKED_REDIS_VALUE_TTL_MS / 1_000 - 1;
+    const untrackedTtlSec = 2 * MAX_TRACKED_REDIS_VALUE_TTL_MS / 1_000;
+    const getTracked = dialcache.cached(async (id: string) => ({ id }), {
+      keyType: "user_id",
+      useCase: "TrackedBelowCap",
+      cacheKey: (id) => id,
+      trackForInvalidation: true,
+      defaultConfig: remoteOnly(trackedTtlSec),
+    });
+    const getUntracked = dialcache.cached(async (id: string) => ({ id }), {
+      keyType: "user_id",
+      useCase: "UntrackedAboveCap",
+      cacheKey: (id) => id,
+      defaultConfig: remoteOnly(untrackedTtlSec),
+    });
+
+    await dialcache.enable(async () => await getTracked("123"));
+    await dialcache.enable(async () => await getUntracked("123"));
+
+    const untrackedValueKey = `${new DialCacheKey({
+      keyType: "user_id",
+      id: "123",
+      useCase: "UntrackedAboveCap",
+    }).urn}:dialcache-frame-v1`;
+    expect(redis.ttlMs(valueKey("TrackedBelowCap"))).toBe(trackedTtlSec * 1_000);
+    expect(redis.ttlMs(untrackedValueKey)).toBe(untrackedTtlSec * 1_000);
   });
 
   it("accepts the maximum future buffer and derives its watermark TTL safely", async () => {
@@ -529,7 +608,7 @@ describe("DialCache targeted invalidation watermarks", () => {
       Date.now() + MAX_SUPPORTED_DURATION_MS,
     );
     expect(redis.ttlMs(watermarkKey)).toBe(
-      MAX_SUPPORTED_DURATION_MS + WATERMARK_TTL_MARGIN_MS,
+      MAX_SUPPORTED_DURATION_MS + MAX_TRACKED_REDIS_VALUE_TTL_MS + WATERMARK_TTL_MARGIN_MS,
     );
   });
 
@@ -560,7 +639,7 @@ describe("DialCache targeted invalidation watermarks", () => {
     );
   });
 
-  it("documents that Redis invalidation does not evict local cache", async () => {
+  it("documents that Redis invalidation does not evict a validated local cache entry", async () => {
     const redis = new FakeRedis();
     const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     let version = 1;
@@ -573,11 +652,13 @@ describe("DialCache targeted invalidation watermarks", () => {
     });
 
     const before = await dialcache.enable(async () => await getUser("123"));
+    const warmed = await dialcache.enable(async () => await getUser("123"));
     version = 2;
     await dialcache.invalidateRemote("user_id", "123");
     const after = await dialcache.enable(async () => await getUser("123"));
 
     expect(before).toEqual({ userId: "123", version: 1 });
+    expect(warmed).toEqual(before);
     expect(after).toEqual({ userId: "123", version: 1 });
   });
 

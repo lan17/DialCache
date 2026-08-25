@@ -60,6 +60,25 @@ const SIZE_BUCKETS = [100, 1_000, 10_000, 100_000, 1_000_000, 10_000_000];
 const RATIO_BUCKETS = [0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 1];
 // Value ages span seconds to the 365-day TTL ceiling: 1s..15m, then 1h, 3h, 12h, 1d, 3d, 7d.
 const VALUE_AGE_BUCKETS = [1, 5, 15, 60, 300, 900, 3_600, 10_800, 43_200, 86_400, 259_200, 604_800];
+const FUTURE_TIMESTAMP_OFFSET_BUCKETS = [
+  0.001,
+  0.005,
+  0.01,
+  0.025,
+  0.05,
+  0.1,
+  0.25,
+  0.5,
+  1,
+  5,
+  15,
+  60,
+  300,
+  900,
+  3_600,
+  10_800,
+  43_200,
+];
 
 export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
   private readonly requestCounter: Counter<CounterLabels>;
@@ -70,6 +89,7 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
   private readonly coalescedCounter: Counter<CoalescedLabels>;
   private readonly shadowValidationCounter: Counter<ShadowValidationLabels>;
   private readonly shadowValueAgeHistogram: Histogram<ShadowValidationLabels>;
+  private readonly futureTimestampOffsetHistogram: Histogram<CounterLabels>;
   private readonly compressionCounter: Counter<CompressionLabels>;
   private readonly getTimer: Histogram<CounterLabels>;
   private readonly fallbackTimer: Histogram<CounterLabels>;
@@ -93,6 +113,7 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
     this.coalescedCounter = counter(registry, collectors.coalescedCounter);
     this.shadowValidationCounter = counter(registry, collectors.shadowValidationCounter);
     this.shadowValueAgeHistogram = histogram(registry, collectors.shadowValueAgeHistogram);
+    this.futureTimestampOffsetHistogram = histogram(registry, collectors.futureTimestampOffsetHistogram);
     this.compressionCounter = counter(registry, collectors.compressionCounter);
     this.getTimer = histogram(registry, collectors.getTimer);
     this.fallbackTimer = histogram(registry, collectors.fallbackTimer);
@@ -146,6 +167,13 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
 
   observeShadowValueAge(labels: ShadowValidationMetricLabels, seconds: number): void {
     this.shadowValueAgeHistogram.observe(shadowValidationLabels(labels), seconds);
+  }
+
+  observeFutureTimestampOffset(labels: CacheMetricLabels, seconds: number): void {
+    if (!Number.isFinite(seconds) || seconds <= 0) {
+      return;
+    }
+    this.futureTimestampOffsetHistogram.observe(cacheLabels(labels), seconds);
   }
 
   compression(labels: CompressionMetricLabels): void {
@@ -253,6 +281,13 @@ function collectorConfigs(prefix: string) {
       help: "Age in seconds of the validated Redis value at DialCache shadow verdict time.",
       labelNames: ["cache_namespace", "use_case", "key_type", "outcome"],
       buckets: VALUE_AGE_BUCKETS,
+    },
+    futureTimestampOffsetHistogram: {
+      type: "histogram",
+      name: `${prefix}dialcache_future_timestamp_offset_histogram`,
+      help: "Positive offset in seconds of tracked Redis frames dated after the observing DialCache process clock.",
+      labelNames: ["cache_namespace", "use_case", "key_type", "layer"],
+      buckets: FUTURE_TIMESTAMP_OFFSET_BUCKETS,
     },
     compressionCounter: {
       type: "counter",

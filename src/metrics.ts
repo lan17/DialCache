@@ -16,7 +16,6 @@ export type ShadowValidationOutcome =
   | "mismatch"
   | "superseded"
   | "filled"
-  | "fill_blocked"
   | "fill_error"
   | "redis_error"
   | "source_error"
@@ -43,13 +42,14 @@ export type CompressionOutcome =
   | "read_over_limit";
 /** Bounded reasons for skipping cache work; policy_disabled means a shared layer has no effective TTL. */
 export type DisabledReason = "context" | "policy_disabled" | "invalid_ttl" | "invalid_ramp" | "ramped_down" | "config_error";
-/** Stable failure sites used instead of backend- or application-defined error names. */
+/** Stable failure sites and configuration signals; never backend- or application-defined names. */
 export type MetricErrorKind =
   | "key_construction"
   | "config_resolution"
   | "cache_read"
   | "cache_read_timeout"
   | "cache_write"
+  | "tracked_ttl_clamped"
   | "serialization_load"
   | "serialization_dump"
   | "compression"
@@ -121,13 +121,20 @@ export interface DialCacheMetricsAdapter {
    * a mismatch, after the confirming re-read): the observing process's epoch
    * clock minus the validated frame's `createdAtMs`, clamped at zero.
    * Emitted only alongside terminal `match` and `mismatch` outcomes; other
-   * outcomes deliver no verdict on a retained value. Tracked frames are
-   * stamped with Redis server time and untracked frames with the writer's
-   * client clock, so the age mixes clocks and is coarse operational
-   * evidence, not a precise measurement. Optional so existing custom
-   * adapters keep compiling without changes.
+   * outcomes deliver no verdict on a retained value. Frames are stamped with
+   * the writer application's epoch clock, so cross-process skew still makes
+   * this coarse operational evidence rather than a precise measurement.
+   * Optional so existing custom adapters keep compiling without changes.
    */
   observeShadowValueAge?(labels: ShadowValidationMetricLabels, seconds: number): void;
+  /**
+   * Positive offset in seconds when a decoded tracked Redis frame is dated
+   * after the observing process's epoch clock. Serving and initial shadow reads
+   * fail closed as misses; a shadow confirmation retains the frame solely for
+   * payload comparison. This is a workload-shaped diagnostic, not proof of
+   * clock skew. Optional so existing custom adapters keep compiling.
+   */
+  observeFutureTimestampOffset?(labels: CacheMetricLabels, seconds: number): void;
   // Optional so existing custom adapters keep compiling without changes.
   compression?(labels: CompressionMetricLabels): void;
   observeGet(labels: CacheMetricLabels, seconds: number): void;

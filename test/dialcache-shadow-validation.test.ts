@@ -25,9 +25,15 @@ interface ShadowAgeEvent {
   readonly seconds: number;
 }
 
+interface FutureTimestampEvent {
+  readonly labels: CacheMetricLabels;
+  readonly seconds: number;
+}
+
 class RecordingMetrics implements DialCacheMetricsAdapter {
   readonly shadowEvents: ShadowValidationMetricLabels[] = [];
   readonly shadowAgeEvents: ShadowAgeEvent[] = [];
+  readonly futureTimestampEvents: FutureTimestampEvent[] = [];
   readonly errorEvents: ErrorMetricLabels[] = [];
 
   request(_labels: CacheMetricLabels): void {}
@@ -46,6 +52,10 @@ class RecordingMetrics implements DialCacheMetricsAdapter {
 
   observeShadowValueAge(labels: ShadowValidationMetricLabels, seconds: number): void {
     this.shadowAgeEvents.push({ labels: { ...labels }, seconds });
+  }
+
+  observeFutureTimestampOffset(labels: CacheMetricLabels, seconds: number): void {
+    this.futureTimestampEvents.push({ labels: { ...labels }, seconds });
   }
 
   observeGet(_labels: CacheMetricLabels, _seconds: number): void {}
@@ -341,35 +351,76 @@ describe("DialCache Redis shadow validation", () => {
     }
   });
 
-  it("clamps a future-stamped frame to a zero value age instead of a negative one", async () => {
+  it("clamps value age to zero when the reader clock steps backward after accepting the frame", async () => {
     const nowMs = 1_700_000_000_000;
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(nowMs);
     try {
       const redis = new FakeRedis();
       const metrics = new RecordingMetrics();
-      const useCase = "ShadowValueAgeClamped";
+      const useCase = "ShadowValueAgeClockRollback";
       const cachedValue = { id: "123" };
       seedRedis(redis, {
         id: "123",
         useCase,
         payload: JSON.stringify(cachedValue),
-        createdAtMs: nowMs + 60_000,
+        createdAtMs: nowMs,
       });
+      const sourceStarted = deferred<void>();
+      const sourceGate = deferred<typeof cachedValue>();
       const dialcache = createShadowCache(redis, metrics);
-      const getUser = dialcache.cached(async () => cachedValue, {
+      const getUser = dialcache.cached(async () => {
+        sourceStarted.resolve(undefined);
+        return await sourceGate.promise;
+      }, {
         ...trackedRemoteDefaults(useCase),
         cacheKey: () => "123",
       });
 
       expect(await dialcache.enable(async () => await getUser())).toEqual(cachedValue);
+      await sourceStarted.promise;
+      nowSpy.mockReturnValue(nowMs - 60_000);
+      sourceGate.resolve(cachedValue);
       await waitForShadowEvents(metrics, 1);
 
       expect(metrics.shadowEvents[0]?.outcome).toBe("match");
       expect(metrics.shadowAgeEvents).toHaveLength(1);
       expect(metrics.shadowAgeEvents[0]?.seconds).toBe(0);
+      expect(metrics.futureTimestampEvents).toEqual([]);
     } finally {
       nowSpy.mockRestore();
     }
+  });
+
+  it("skips a non-finite value-age observation from an untracked custom client", async () => {
+    const redis = new FakeRedis();
+    const metrics = new RecordingMetrics();
+    const useCase = "ShadowNonFiniteValueAge";
+    const cachedValue = { id: "123", version: 1 };
+    seedRedis(redis, {
+      id: "123",
+      useCase,
+      payload: JSON.stringify(cachedValue),
+      tracked: false,
+    });
+    const originalRead = redis.read.bind(redis);
+    vi.spyOn(redis, "read").mockImplementation(async (request) => {
+      const frame = await originalRead(request);
+      return frame === null ? null : { ...frame, createdAtMs: Number.POSITIVE_INFINITY };
+    });
+    const dialcache = createShadowCache(redis, metrics);
+    const getUser = dialcache.cached(async () => cachedValue, {
+      keyType: "user_id",
+      useCase,
+      cacheKey: () => "123",
+      defaultConfig: remoteOnly(100),
+    });
+
+    expect(await dialcache.enable(async () => await getUser())).toEqual(cachedValue);
+    await waitForShadowEvents(metrics, 1);
+
+    expect(metrics.shadowEvents[0]?.outcome).toBe("match");
+    expect(metrics.shadowAgeEvents).toEqual([]);
+    expect(metrics.futureTimestampEvents).toEqual([]);
   });
 
   it("re-deserializes the retained payload instead of comparing a caller-mutated hit", async () => {

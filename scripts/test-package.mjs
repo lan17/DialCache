@@ -9,8 +9,76 @@ const exec = promisify(execFile);
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspace = await mkdtemp(join(tmpdir(), "dialcache-package-"));
 const fallbackTimeoutMarker = "dialcache-fallback-timeout-delivered";
+const nodeInvalidationMarker = "dialcache-node-invalidation-retry-verified";
 const observerIsolationMarker = "dialcache-observer-rejections-isolated";
 const shadowPayloadReleaseMarker = "dialcache-shadow-payload-released";
+const packedInvalidationCheckSource = String.raw`
+function createPackedNodeRedisInvalidationAdapter(nodeRedis, dispatch, label) {
+  const client = {
+    get: async () => null,
+    sendCommand: async (...callArgs) => {
+      if (
+        callArgs.length !== 2
+        || !Array.isArray(callArgs[0])
+        || callArgs[1]?.returnBuffers !== true
+      ) {
+        throw new Error("The packed " + label + " adapter used the wrong standalone command shape");
+      }
+      return await dispatch(callArgs[0]);
+    },
+  };
+  return nodeRedis.createNodeRedisDialCacheClient(client);
+}
+
+function createPackedGlideInvalidationAdapter(glide, appGlide, dispatch) {
+  const client = {
+    customCommand: async (args) => await dispatch(args),
+  };
+  const runtime = {
+    ...appGlide,
+    GlideClient: { [Symbol.hasInstance]: (value) => value === client },
+    GlideClusterClient: { [Symbol.hasInstance]: () => false },
+  };
+  return glide.createValkeyGlideDialCacheClient(client, runtime);
+}
+
+async function verifyPackedInvalidation({ createAdapter, label, redisProtocol }) {
+  const dispatches = [];
+  const dispatch = async (args) => {
+    dispatches.push(args);
+    if (dispatches.length === 1) {
+      throw new Error("packed invalidation EVALSHA rejected");
+    }
+    return 1;
+  };
+  const invalidatedAtMs = 1700000000456;
+  const nativeDateNow = Date.now;
+  Date.now = () => invalidatedAtMs;
+  try {
+    await createAdapter(dispatch).invalidate({
+      watermarkKey: "tracked:{id}:watermark",
+      futureBufferMs: 50,
+    });
+  } finally {
+    Date.now = nativeDateNow;
+  }
+
+  const script = redisProtocol.INVALIDATE_CACHE_SCRIPT;
+  const sha = createHash("sha1").update(script).digest("hex");
+  const args = ["1", "tracked:{id}:watermark", "50", String(invalidatedAtMs)];
+  const expected = [
+    ["EVALSHA", sha, ...args],
+    ["EVAL", script, ...args],
+  ];
+  const commandsMatch = dispatches.length === expected.length
+    && dispatches.every((command, index) =>
+      command.length === expected[index].length
+      && command.every((part, partIndex) => part === expected[index][partIndex]));
+  if (!commandsMatch) {
+    throw new Error("The packed " + label + " invalidation script or argument contract is invalid");
+  }
+}
+`;
 const rootConsumer = `import {
   CacheLayer,
   DialCache,
@@ -52,21 +120,28 @@ const rootConsumer = `import {
 } from "dialcache";
 // @ts-expect-error The unused MissingKeyConfigError class was removed instead of deprecated.
 import { MissingKeyConfigError } from "dialcache";
+// @ts-expect-error Placeholder promotion was removed from the Redis adapter protocol.
 import { DialCacheRedisPlaceholderLostError } from "dialcache";
-import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "dialcache/node-redis";
+import { createNodeRedisDialCacheClient } from "dialcache/node-redis";
+// @ts-expect-error The node-redis adapter no longer requires public script registrations.
+import { dialcacheRedisScripts } from "dialcache/node-redis";
+// @ts-expect-error The node-redis script-registration type was removed with the facade.
+import type { DialCacheNodeRedisScripts } from "dialcache/node-redis";
 import {
   ceilSupportedCacheTtlMs,
   decodeRedisFrame,
   decodeTrackedRedisFrame,
   encodeRedisFrame,
-  encodeTrackedRedisPlaceholder,
-  resolveTrackedRedisWriteReply,
   validateRedisScriptInvalidationReply,
   validateRedisSetReply,
-  WRITE_TRACKED_STAMP_SCRIPT,
   type DecodedRedisFrame,
-  type TrackedRedisPlaceholder,
 } from "dialcache/redis-protocol";
+// @ts-expect-error Placeholder promotion was removed from the Redis adapter protocol.
+import { encodeTrackedRedisPlaceholder } from "dialcache/redis-protocol";
+// @ts-expect-error Tracked writes no longer have a script reply to resolve.
+import { resolveTrackedRedisWriteReply } from "dialcache/redis-protocol";
+// @ts-expect-error Tracked writes are native SET commands and no longer use Lua.
+import { WRITE_TRACKED_STAMP_SCRIPT } from "dialcache/redis-protocol";
 // @ts-expect-error The codec functions replaced the frame-version wire constant.
 import { REDIS_FRAME_VERSION } from "dialcache/redis-protocol";
 // @ts-expect-error The codec functions replaced the UTF-8 encoding wire constant.
@@ -79,7 +154,7 @@ import { READ_CACHE_SCRIPT } from "dialcache/redis-protocol";
 import { READ_TRACKED_CACHE_SCRIPT } from "dialcache/redis-protocol";
 // @ts-expect-error The untracked write Lua was replaced by a native client-framed SET.
 import { WRITE_CACHE_SCRIPT } from "dialcache/redis-protocol";
-// @ts-expect-error The tracked write Lua was replaced by a native SET plus the stamp script.
+// @ts-expect-error The tracked write Lua was replaced by a native client-framed SET.
 import { WRITE_TRACKED_CACHE_SCRIPT } from "dialcache/redis-protocol";
 import {
   DatadogDialCacheMetrics,
@@ -112,6 +187,12 @@ const metrics: DialCacheMetricsAdapter = {
 };
 const shadowMetrics: DialCacheMetricsAdapter = {
   ...metrics,
+  observeFutureTimestampOffset: (labels: CacheMetricLabels, seconds: number) => {
+    const cacheNamespace: string = labels.cacheNamespace;
+    const offsetSeconds: number = seconds;
+    void cacheNamespace;
+    void offsetSeconds;
+  },
   shadowValidation: (labels: ShadowValidationMetricLabels) => {
     const outcome: ShadowValidationOutcome = labels.outcome;
     void outcome;
@@ -122,7 +203,6 @@ const shadowOutcomes: Readonly<Record<ShadowValidationOutcome, true>> = {
   mismatch: true,
   superseded: true,
   filled: true,
-  fill_blocked: true,
   fill_error: true,
   redis_error: true,
   source_error: true,
@@ -176,20 +256,10 @@ const decodedStaleRedisFrame: DecodedRedisFrame | null = decodeTrackedRedisFrame
   emptyRedisFrame,
   Buffer.from("1"),
 );
-const placeholderRedisFrame: Buffer = encodeRedisFrame("pending", 0);
-const trackedRedisPlaceholder: TrackedRedisPlaceholder = encodeTrackedRedisPlaceholder("pending");
-const stampReplyResolution: boolean = resolveTrackedRedisWriteReply(1);
+const zeroTimestampRedisFrame: Buffer = encodeRedisFrame("pending", 0);
 const setReplyValidation: void = validateRedisSetReply("OK");
 const invalidationReplyValidation: 1 = validateRedisScriptInvalidationReply(1);
 const ceiledCacheTtlMs: number = ceilSupportedCacheTtlMs(1_000.5);
-const placeholderLostError = new DialCacheRedisPlaceholderLostError("lost");
-const stampScriptSource: string = WRITE_TRACKED_STAMP_SCRIPT;
-const stampArguments: Array<string | Buffer> = dialcacheRedisScripts.dialcacheWriteTrackedStamp.transformArguments(
-  "tracked:{id}:value",
-  "tracked:{id}:watermark",
-  1_000,
-  trackedRedisPlaceholder.nonce,
-);
 const fallbackTimeoutError = new FallbackTimeoutError("Load", 1_000);
 const redisReadTimeoutError = new RedisReadTimeoutError("Load", 100);
 const coalescingState: CoalescingState = cache.getCoalescingState();
@@ -364,6 +434,7 @@ const metricErrorKinds: Readonly<Record<MetricErrorKind, true>> = {
   cache_read: true,
   cache_read_timeout: true,
   cache_write: true,
+  tracked_ttl_clamped: true,
   serialization_load: true,
   serialization_dump: true,
   compression: true,
@@ -403,7 +474,9 @@ const unboundedCompressionOutcome: CompressionOutcome = "inflated";
 const customRedisClient: DialCacheRedisClient = {
   // The optional second read argument preserves one-argument custom clients.
   read: async () => ({ payload: Buffer.from([0, 255]), createdAtMs: 1 }),
-  write: async ({ value }) => typeof value === "string" || Buffer.isBuffer(value),
+  write: async ({ value }) => {
+    void (typeof value === "string" || Buffer.isBuffer(value));
+  },
   invalidate: async () => undefined,
 };
 const redisClientMethods: Readonly<Record<keyof DialCacheRedisClient, true>> = {
@@ -419,20 +492,25 @@ const redisConfigAcceptsCompressionOptOut: RedisConfig = {
 const cacheHasNoFlushAll: "flushAll" extends keyof DialCache ? false : true = true;
 const cacheHasNoClose: "close" extends keyof DialCache ? false : true = true;
 const clientHasNoFlushAll: "flushAll" extends keyof DialCacheRedisClient ? false : true = true;
-type TrackedRedisWriteRequest = Extract<RedisWriteRequest, { readonly watermarkKey: string }>;
-const trackedWriteHasNoWatermarkTtlFloor: "watermarkTtlFloorMs" extends keyof TrackedRedisWriteRequest
+const writeHasNoWatermark: "watermarkKey" extends keyof RedisWriteRequest ? false : true = true;
+const trackedWriteHasNoWatermarkTtlFloor: "watermarkTtlFloorMs" extends keyof RedisWriteRequest
+  ? false
+  : true = true;
+const trackedWriteHasNoCreatedAt: "createdAtMs" extends keyof RedisWriteRequest
   ? false
   : true = true;
 const invalidationHasNoWatermarkTtlFloor: "watermarkTtlFloorMs" extends keyof RedisInvalidationRequest
   ? false
   : true = true;
+const invalidationHasNoInvalidatedAt: "invalidatedAtMs" extends keyof RedisInvalidationRequest
+  ? false
+  : true = true;
 const legacyTrackedWriteRequest: RedisWriteRequest = {
   valueKey: "tracked:{id}:value",
+  // @ts-expect-error Writes no longer inspect or mutate invalidation watermarks.
   watermarkKey: "tracked:{id}:watermark",
   cacheTtlMs: 1_000,
   value: "tracked",
-  // @ts-expect-error Watermark lifetime is derived by the Redis invalidation protocol.
-  watermarkTtlFloorMs: 1_000,
 };
 const legacyInvalidationRequest: RedisInvalidationRequest = {
   watermarkKey: "tracked:{id}:watermark",
@@ -530,29 +608,21 @@ void redisConfigAcceptsCompressionOptOut;
 void createNodeRedisDialCacheClient;
 void decodedEmptyRedisFrame;
 void decodedStaleRedisFrame;
-// @ts-expect-error Native reads removed the legacy node-redis registration.
-void dialcacheRedisScripts.dialcacheRead;
-// @ts-expect-error Native tracked reads removed the legacy node-redis registration.
-void dialcacheRedisScripts.dialcacheReadTracked;
-// @ts-expect-error Native SET writes removed the legacy node-redis registration.
-void dialcacheRedisScripts.dialcacheWrite;
-// @ts-expect-error The stamp protocol removed the legacy tracked-write registration.
-void dialcacheRedisScripts.dialcacheWriteTracked;
-void dialcacheRedisScripts.dialcacheWriteTrackedStamp;
+void dialcacheRedisScripts;
+void (undefined as unknown as DialCacheNodeRedisScripts);
 void READ_CACHE_SCRIPT;
 void READ_TRACKED_CACHE_SCRIPT;
 void WRITE_CACHE_SCRIPT;
 void WRITE_TRACKED_CACHE_SCRIPT;
-void placeholderRedisFrame;
-void trackedRedisPlaceholder;
-void stampReplyResolution;
+void zeroTimestampRedisFrame;
 void setReplyValidation;
-void placeholderLostError;
+void DialCacheRedisPlaceholderLostError;
+void encodeTrackedRedisPlaceholder;
+void resolveTrackedRedisWriteReply;
 void REDIS_FRAME_VERSION;
 void REDIS_ENCODING_UTF8;
 void REDIS_ENCODING_BINARY;
-void stampScriptSource;
-void stampArguments;
+void WRITE_TRACKED_STAMP_SCRIPT;
 void customRedisClient;
 const globalSerializer: Serializer<unknown> = {
   dump: () => "global",
@@ -568,8 +638,11 @@ cacheWithGlobalSerializer.getOrLoad(async () => new Date(0), inlineOptionsFor("G
 void cacheHasNoFlushAll;
 void cacheHasNoClose;
 void clientHasNoFlushAll;
+void writeHasNoWatermark;
 void trackedWriteHasNoWatermarkTtlFloor;
+void trackedWriteHasNoCreatedAt;
 void invalidationHasNoWatermarkTtlFloor;
+void invalidationHasNoInvalidatedAt;
 void legacyTrackedWriteRequest;
 void legacyInvalidationRequest;
 void configHasNoMetricsRegistry;
@@ -622,7 +695,7 @@ import {
 import { type ValkeyGlideDialCacheClient } from "dialcache/valkey-glide";
 // @ts-expect-error The handle-free GLIDE adapter removed the Script handle type.
 import { type ValkeyGlideScriptHandle } from "dialcache/valkey-glide";
-import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "dialcache/node-redis";
+import { createNodeRedisDialCacheClient } from "dialcache/node-redis";
 import { Registry, type OpenMetricsContentType } from "prom-client";
 
 const registry = new Registry();
@@ -635,14 +708,19 @@ openMetricsRegistry.setContentType(Registry.OPENMETRICS_CONTENT_TYPE);
 const openMetricsAdapter = new PrometheusDialCacheMetrics({ registry: openMetricsRegistry, prefix: "open_" });
 const registryIsRequired: {} extends Pick<PrometheusMetricsOptions, "registry"> ? false : true = true;
 const glideRedisClient: DialCacheRedisClient | undefined = undefined;
-const standaloneNodeRedisClient = createRedisClient({ scripts: dialcacheRedisScripts });
+const standaloneNodeRedisClient = createRedisClient();
 const clusterNodeRedisClient = createRedisCluster({
   rootNodes: [{ url: "redis://127.0.0.1:6379" }],
-  scripts: dialcacheRedisScripts,
 });
 const standaloneNodeRedisAdapter = createNodeRedisDialCacheClient(standaloneNodeRedisClient);
 const clusterNodeRedisAdapter = createNodeRedisDialCacheClient(clusterNodeRedisClient);
 const glideRuntime: ValkeyGlideRuntime<valkeyGlide.Decoder> = valkeyGlide;
+const glideRuntimeWithoutClusterBatch: ValkeyGlideRuntime<valkeyGlide.Decoder> = {
+  Batch: valkeyGlide.Batch,
+  GlideClient: valkeyGlide.GlideClient,
+  GlideClusterClient: valkeyGlide.GlideClusterClient,
+  Decoder: valkeyGlide.Decoder,
+};
 declare const standaloneGlideClient: valkeyGlide.GlideClient;
 declare const clusterGlideClient: valkeyGlide.GlideClusterClient;
 const standaloneGlideAdapter: DialCacheRedisClient = createValkeyGlideDialCacheClient(standaloneGlideClient, glideRuntime);
@@ -671,6 +749,7 @@ void classAdapter;
 void openMetricsAdapter;
 void registryIsRequired;
 void glideRedisClient;
+void glideRuntimeWithoutClusterBatch;
 void standaloneNodeRedisAdapter;
 void clusterNodeRedisAdapter;
 void standaloneGlideAdapter;
@@ -722,19 +801,26 @@ try {
     [
       "--input-type=module",
       "--eval",
-      `const root = await import("dialcache");
+      `const { createHash } = await import("node:crypto");
+const root = await import("dialcache");
 const nodeRedis = await import("dialcache/node-redis");
 await import("dialcache/valkey-glide");
 await import("dialcache/datadog");
 const redisProtocol = await import("dialcache/redis-protocol");
-// Each bundle embeds its own copy of the Lua sources; a divergence forks the
-// protocol (different SHA1s) without failing any behavioral test.
-if (
-  nodeRedis.dialcacheRedisScripts.dialcacheWriteTrackedStamp.SCRIPT !== redisProtocol.WRITE_TRACKED_STAMP_SCRIPT
-  || nodeRedis.dialcacheRedisScripts.dialcacheInvalidate.SCRIPT !== redisProtocol.INVALIDATE_CACHE_SCRIPT
-) {
-  throw new Error("The packed ESM node-redis Lua sources diverged from the redis-protocol entry");
+${packedInvalidationCheckSource}
+if (typeof nodeRedis.createNodeRedisDialCacheClient !== "function") {
+  throw new Error("The packed ESM node-redis adapter export is missing");
 }
+if ("dialcacheRedisScripts" in nodeRedis) {
+  throw new Error("The removed ESM node-redis script-registration facade is still exported");
+}
+await verifyPackedInvalidation({
+  createAdapter: (dispatch) =>
+    createPackedNodeRedisInvalidationAdapter(nodeRedis, dispatch, "ESM node-redis"),
+  label: "ESM node-redis",
+  redisProtocol,
+});
+console.log("${nodeInvalidationMarker}");
 const fallbackTimeoutError = new root.FallbackTimeoutError("PackageRuntime", 1000);
 if (!(fallbackTimeoutError instanceof root.DialCacheError) || fallbackTimeoutError.timeoutMs !== 1000) {
   throw new Error("The root ESM fallback-timeout error export is invalid");
@@ -765,22 +851,8 @@ try {
   }
   console.log("${fallbackTimeoutMarker}");
 }
-try {
-  nodeRedis.dialcacheRedisScripts.dialcacheWriteTrackedStamp.transformReply(3);
-  throw new Error("Expected an invalid node-redis script reply to fail");
-} catch (error) {
-  if (!(error instanceof root.DialCacheRedisProtocolError)) {
-    throw new Error("The node-redis protocol error does not match the root ESM export");
-  }
-}
-if ("MissingKeyConfigError" in root) {
-  throw new Error("The removed MissingKeyConfigError class must not be exported from the root ESM entry");
-}
-if (
-  "dialcacheRead" in nodeRedis.dialcacheRedisScripts
-  || "dialcacheReadTracked" in nodeRedis.dialcacheRedisScripts
-) {
-  throw new Error("The removed read scripts must not be registered by the packed ESM node-redis entry");
+if ("MissingKeyConfigError" in root || "DialCacheRedisPlaceholderLostError" in root) {
+  throw new Error("Removed error classes must not be exported from the root ESM entry");
 }
 if (
   "READ_CACHE_SCRIPT" in redisProtocol
@@ -789,35 +861,27 @@ if (
   throw new Error("The removed read scripts must not be exported by the packed ESM Redis protocol entry");
 }
 if (
-  "dialcacheWrite" in nodeRedis.dialcacheRedisScripts
-  || "dialcacheWriteTracked" in nodeRedis.dialcacheRedisScripts
-) {
-  throw new Error("The removed write scripts must not be registered by the packed ESM node-redis entry");
-}
-if (
   "WRITE_CACHE_SCRIPT" in redisProtocol
   || "WRITE_TRACKED_CACHE_SCRIPT" in redisProtocol
 ) {
   throw new Error("The removed write scripts must not be exported by the packed ESM Redis protocol entry");
 }
-if (typeof redisProtocol.WRITE_TRACKED_STAMP_SCRIPT !== "string") {
-  throw new Error("The packed ESM Redis protocol entry must export the tracked stamp script source");
+if (
+  "WRITE_TRACKED_STAMP_SCRIPT" in redisProtocol
+  || "encodeTrackedRedisPlaceholder" in redisProtocol
+  || "resolveTrackedRedisWriteReply" in redisProtocol
+) {
+  throw new Error("Removed placeholder and stamp helpers must not be exported by the packed ESM Redis protocol entry");
 }
 const esmRoundTrip = redisProtocol.decodeRedisFrame(redisProtocol.encodeRedisFrame("value", 1));
 if (esmRoundTrip?.payload !== "value" || esmRoundTrip.createdAtMs !== 1) {
   throw new Error("The packed ESM Redis protocol encoder did not round-trip through the decoder");
 }
 if (redisProtocol.decodeTrackedRedisFrame(redisProtocol.encodeRedisFrame("pending", 0), Buffer.from("0")) !== null) {
-  throw new Error("The packed ESM Redis protocol encoder did not produce a fenced placeholder frame");
+  throw new Error("The packed ESM tracked decoder did not fence an equal timestamp");
 }
-const esmPlaceholder = redisProtocol.encodeTrackedRedisPlaceholder("pending");
-if (
-  esmPlaceholder.frame[0] !== 0
-  || esmPlaceholder.nonce.byteLength !== 8
-  || redisProtocol.decodeRedisFrame(esmPlaceholder.frame) !== null
-  || redisProtocol.decodeTrackedRedisFrame(esmPlaceholder.frame, Buffer.from("0")) !== null
-) {
-  throw new Error("The packed ESM tracked placeholder must be unreadable until stamped");
+if (redisProtocol.decodeTrackedRedisFrame(redisProtocol.encodeRedisFrame("value", 1), null)?.payload !== "value") {
+  throw new Error("The packed ESM tracked decoder did not use zero for a missing watermark");
 }
 if (
   "REDIS_FRAME_VERSION" in redisProtocol
@@ -825,20 +889,6 @@ if (
   || "REDIS_ENCODING_BINARY" in redisProtocol
 ) {
   throw new Error("The removed wire constants must not be exported by the packed ESM Redis protocol entry");
-}
-if (
-  redisProtocol.resolveTrackedRedisWriteReply(1) !== true
-  || redisProtocol.resolveTrackedRedisWriteReply(0) !== false
-) {
-  throw new Error("The packed ESM stamp reply resolver did not map replies 0 and 1");
-}
-try {
-  redisProtocol.resolveTrackedRedisWriteReply(2);
-  throw new Error("Expected a lost-placeholder stamp reply to fail");
-} catch (error) {
-  if (!(error instanceof root.DialCacheRedisPlaceholderLostError)) {
-    throw new Error("The lost-placeholder error does not match the root ESM export");
-  }
 }
 if (redisProtocol.validateRedisScriptInvalidationReply(1) !== 1) {
   throw new Error("The packed ESM invalidation reply validator must accept reply 1");
@@ -865,17 +915,6 @@ for (const invalidCacheTtlMs of [0, 31_536_000_001]) {
       throw new Error("The packed ESM TTL guard must reject out-of-domain durations with RangeError");
     }
   }
-}
-// ESM chunk splitting shares one class instance across entries, so also
-// prove the brand itself: a hand-branded foreign Error must satisfy the
-// root export's Symbol.hasInstance.
-const esmBrandedLost = Object.defineProperty(
-  new Error("lost"),
-  Symbol.for("dialcache.DialCacheRedisPlaceholderLostError"),
-  { value: true },
-);
-if (!(esmBrandedLost instanceof root.DialCacheRedisPlaceholderLostError)) {
-  throw new Error("The ESM lost-placeholder brand did not satisfy instanceof");
 }
 const esmEmptyFrame = Buffer.alloc(10);
 esmEmptyFrame[0] = 1;
@@ -956,6 +995,9 @@ if (inlineCalls !== 1 || inlineSecond !== inlineFirst) {
   if (!esmRootRuntimeOutput.includes(fallbackTimeoutMarker)) {
     throw new Error("The packaged ESM only-handle fallback timeout marker is missing");
   }
+  if (!esmRootRuntimeOutput.includes(nodeInvalidationMarker)) {
+    throw new Error("The packaged ESM node-redis invalidation marker is missing");
+  }
 
   const { stdout: observerIsolationOutput } = await exec(
     process.execPath,
@@ -1016,7 +1058,7 @@ let payload = Buffer.alloc(4 * 1024 * 1024, 1);
 const payloadReference = new WeakRef(payload);
 const redis = {
   read: async () => ({ payload, createdAtMs: 1 }),
-  write: async () => true,
+  write: async () => undefined,
   invalidate: async () => undefined,
 };
 let resolveTimeout;
@@ -1095,19 +1137,25 @@ console.log("${shadowPayloadReleaseMarker}");`,
     process.execPath,
     [
       "--eval",
-      `const root = require("dialcache");
+      `const { createHash } = require("node:crypto");
+const root = require("dialcache");
 const nodeRedis = require("dialcache/node-redis");
 require("dialcache/valkey-glide");
 require("dialcache/datadog");
 const redisProtocol = require("dialcache/redis-protocol");
-// CommonJS bundles duplicate the Lua sources per entry point; a divergence
-// forks the protocol (different SHA1s) without failing any behavioral test.
-if (
-  nodeRedis.dialcacheRedisScripts.dialcacheWriteTrackedStamp.SCRIPT !== redisProtocol.WRITE_TRACKED_STAMP_SCRIPT
-  || nodeRedis.dialcacheRedisScripts.dialcacheInvalidate.SCRIPT !== redisProtocol.INVALIDATE_CACHE_SCRIPT
-) {
-  throw new Error("The packed CommonJS node-redis Lua sources diverged from the redis-protocol entry");
+${packedInvalidationCheckSource}
+if (typeof nodeRedis.createNodeRedisDialCacheClient !== "function") {
+  throw new Error("The packed CommonJS node-redis adapter export is missing");
 }
+if ("dialcacheRedisScripts" in nodeRedis) {
+  throw new Error("The removed CommonJS node-redis script-registration facade is still exported");
+}
+const cjsNodeInvalidationCheck = verifyPackedInvalidation({
+  createAdapter: (dispatch) =>
+    createPackedNodeRedisInvalidationAdapter(nodeRedis, dispatch, "CommonJS node-redis"),
+  label: "CommonJS node-redis",
+  redisProtocol,
+}).then(() => console.log("${nodeInvalidationMarker}"));
 const fallbackTimeoutError = new root.FallbackTimeoutError("PackageRuntime", 1000);
 if (!(fallbackTimeoutError instanceof root.DialCacheError) || fallbackTimeoutError.timeoutMs !== 1000) {
   throw new Error("The root CommonJS fallback-timeout error export is invalid");
@@ -1140,22 +1188,8 @@ void (async () => {
     console.log("${fallbackTimeoutMarker}");
   }
 })();
-try {
-  nodeRedis.dialcacheRedisScripts.dialcacheWriteTrackedStamp.transformReply(3);
-  throw new Error("Expected an invalid node-redis script reply to fail");
-} catch (error) {
-  if (!(error instanceof root.DialCacheRedisProtocolError)) {
-    throw new Error("The node-redis protocol error does not match the root CommonJS export");
-  }
-}
-if ("MissingKeyConfigError" in root) {
-  throw new Error("The removed MissingKeyConfigError class must not be exported from the root CommonJS entry");
-}
-if (
-  "dialcacheRead" in nodeRedis.dialcacheRedisScripts
-  || "dialcacheReadTracked" in nodeRedis.dialcacheRedisScripts
-) {
-  throw new Error("The removed read scripts must not be registered by the packed CommonJS node-redis entry");
+if ("MissingKeyConfigError" in root || "DialCacheRedisPlaceholderLostError" in root) {
+  throw new Error("Removed error classes must not be exported from the root CommonJS entry");
 }
 if (
   "READ_CACHE_SCRIPT" in redisProtocol
@@ -1164,35 +1198,27 @@ if (
   throw new Error("The removed read scripts must not be exported by the packed CommonJS Redis protocol entry");
 }
 if (
-  "dialcacheWrite" in nodeRedis.dialcacheRedisScripts
-  || "dialcacheWriteTracked" in nodeRedis.dialcacheRedisScripts
-) {
-  throw new Error("The removed write scripts must not be registered by the packed CommonJS node-redis entry");
-}
-if (
   "WRITE_CACHE_SCRIPT" in redisProtocol
   || "WRITE_TRACKED_CACHE_SCRIPT" in redisProtocol
 ) {
   throw new Error("The removed write scripts must not be exported by the packed CommonJS Redis protocol entry");
 }
-if (typeof redisProtocol.WRITE_TRACKED_STAMP_SCRIPT !== "string") {
-  throw new Error("The packed CommonJS Redis protocol entry must export the tracked stamp script source");
+if (
+  "WRITE_TRACKED_STAMP_SCRIPT" in redisProtocol
+  || "encodeTrackedRedisPlaceholder" in redisProtocol
+  || "resolveTrackedRedisWriteReply" in redisProtocol
+) {
+  throw new Error("Removed placeholder and stamp helpers must not be exported by the packed CommonJS Redis protocol entry");
 }
 const cjsRoundTrip = redisProtocol.decodeRedisFrame(redisProtocol.encodeRedisFrame("value", 1));
 if (cjsRoundTrip?.payload !== "value" || cjsRoundTrip.createdAtMs !== 1) {
   throw new Error("The packed CommonJS Redis protocol encoder did not round-trip through the decoder");
 }
 if (redisProtocol.decodeTrackedRedisFrame(redisProtocol.encodeRedisFrame("pending", 0), Buffer.from("0")) !== null) {
-  throw new Error("The packed CommonJS Redis protocol encoder did not produce a fenced placeholder frame");
+  throw new Error("The packed CommonJS tracked decoder did not fence an equal timestamp");
 }
-const cjsPlaceholder = redisProtocol.encodeTrackedRedisPlaceholder("pending");
-if (
-  cjsPlaceholder.frame[0] !== 0
-  || cjsPlaceholder.nonce.byteLength !== 8
-  || redisProtocol.decodeRedisFrame(cjsPlaceholder.frame) !== null
-  || redisProtocol.decodeTrackedRedisFrame(cjsPlaceholder.frame, Buffer.from("0")) !== null
-) {
-  throw new Error("The packed CommonJS tracked placeholder must be unreadable until stamped");
+if (redisProtocol.decodeTrackedRedisFrame(redisProtocol.encodeRedisFrame("value", 1), null)?.payload !== "value") {
+  throw new Error("The packed CommonJS tracked decoder did not use zero for a missing watermark");
 }
 if (
   "REDIS_FRAME_VERSION" in redisProtocol
@@ -1200,20 +1226,6 @@ if (
   || "REDIS_ENCODING_BINARY" in redisProtocol
 ) {
   throw new Error("The removed wire constants must not be exported by the packed CommonJS Redis protocol entry");
-}
-if (
-  redisProtocol.resolveTrackedRedisWriteReply(1) !== true
-  || redisProtocol.resolveTrackedRedisWriteReply(0) !== false
-) {
-  throw new Error("The packed CommonJS stamp reply resolver did not map replies 0 and 1");
-}
-try {
-  redisProtocol.resolveTrackedRedisWriteReply(2);
-  throw new Error("Expected a lost-placeholder stamp reply to fail");
-} catch (error) {
-  if (!(error instanceof root.DialCacheRedisPlaceholderLostError)) {
-    throw new Error("The lost-placeholder error does not match the root CommonJS export");
-  }
 }
 if (redisProtocol.validateRedisScriptInvalidationReply(1) !== 1) {
   throw new Error("The packed CommonJS invalidation reply validator must accept reply 1");
@@ -1240,17 +1252,6 @@ for (const invalidCacheTtlMs of [0, 31_536_000_001]) {
       throw new Error("The packed CommonJS TTL guard must reject out-of-domain durations with RangeError");
     }
   }
-}
-// Keep the brand coverage bundler-independent: a hand-branded foreign Error
-// must satisfy the root export's Symbol.hasInstance even if CJS ever shares
-// chunks the way ESM does.
-const cjsBrandedLost = Object.defineProperty(
-  new Error("lost"),
-  Symbol.for("dialcache.DialCacheRedisPlaceholderLostError"),
-  { value: true },
-);
-if (!(cjsBrandedLost instanceof root.DialCacheRedisPlaceholderLostError)) {
-  throw new Error("The CommonJS lost-placeholder brand did not satisfy instanceof");
 }
 const cjsEmptyFrame = Buffer.alloc(10);
 cjsEmptyFrame[0] = 1;
@@ -1291,6 +1292,7 @@ if (
   throw new Error("The packed CommonJS runtime did not build the disabled() kill-switch overlay");
 }
 void (async () => {
+  await cjsNodeInvalidationCheck;
   let calls = 0;
   const overlayCache = new root.DialCache({
     cacheConfigProvider: () => new root.DialCacheKeyConfig({
@@ -1336,6 +1338,9 @@ void (async () => {
   if (!cjsRootRuntimeOutput.includes(fallbackTimeoutMarker)) {
     throw new Error("The packaged CommonJS only-handle fallback timeout marker is missing");
   }
+  if (!cjsRootRuntimeOutput.includes(nodeInvalidationMarker)) {
+    throw new Error("The packaged CommonJS node-redis invalidation marker is missing");
+  }
   await exec(
     join(workspace, "node_modules", ".bin", "tsc"),
     ["--project", join(workspace, "tsconfig.root.json")],
@@ -1371,7 +1376,7 @@ void (async () => {
     [
       "--input-type=module",
       "--eval",
-      `const root = await import("dialcache");
+      `const { createHash } = await import("node:crypto");
 const glide = await import("dialcache/valkey-glide");
 const appGlide = await import("@valkey/valkey-glide");
 const otherGlide = await import("dialcache-test-glide");
@@ -1379,9 +1384,12 @@ await import("dialcache/datadog");
 await import("dialcache/prometheus");
 const redisProtocol = await import("dialcache/redis-protocol");
 await import("dialcache/node-redis");
+${packedInvalidationCheckSource}
+const esmCreatedAtMs = 1700000000123;
 if (appGlide.Script === otherGlide.Script) {
   throw new Error("The package test requires two distinct GLIDE module instances");
 }
+let esmWriteCommand;
 const esmFakeGlideClient = {
   exec: async (batch, _raiseOnError, options) => {
     if (!(batch instanceof appGlide.Batch) || batch instanceof otherGlide.Batch) {
@@ -1390,19 +1398,17 @@ const esmFakeGlideClient = {
     if (options.decoder !== appGlide.Decoder.Bytes) {
       throw new Error("The ESM adapter did not use the caller-supplied GLIDE byte decoder");
     }
-    return ["OK", new Error("NOSCRIPT No matching script. Please use EVAL.")];
+    return [[esmWriteCommand[2], null]];
   },
   customCommand: async (args, options) => {
-    if (args[0] !== "EVAL") {
-      throw new Error("The ESM adapter's NOSCRIPT recovery must resend the stamp source via EVAL");
-    }
-    if (args[1] !== redisProtocol.WRITE_TRACKED_STAMP_SCRIPT) {
-      throw new Error("The ESM GLIDE bundle's embedded stamp source diverged from the redis-protocol entry");
+    if (args[0] !== "SET") {
+      throw new Error("The ESM adapter's write must dispatch one native SET");
     }
     if (options.decoder !== appGlide.Decoder.Bytes) {
       throw new Error("The ESM adapter did not use the caller-supplied GLIDE byte decoder");
     }
-    return 3;
+    esmWriteCommand = args;
+    return "OK";
   },
 };
 const esmGlideRuntime = {
@@ -1411,47 +1417,39 @@ const esmGlideRuntime = {
   GlideClusterClient: { [Symbol.hasInstance]: () => false },
 };
 const adapter = glide.createValkeyGlideDialCacheClient(esmFakeGlideClient, esmGlideRuntime);
+const esmNativeDateNow = Date.now;
+Date.now = () => esmCreatedAtMs;
 try {
   await adapter.write({
     valueKey: "tracked:{id}:value",
-    watermarkKey: "tracked:{id}:watermark",
     cacheTtlMs: 1_000,
     value: "payload",
   });
-  throw new Error("Expected an invalid GLIDE script reply to fail");
-} catch (error) {
-  if (!(error instanceof root.DialCacheRedisProtocolError)) {
-    throw new Error("The GLIDE protocol error does not match the root ESM export", { cause: error });
+  if (
+    esmWriteCommand[0] !== "SET"
+    || esmWriteCommand[3] !== "PX"
+    || esmWriteCommand[4] !== "1000"
+    || !Buffer.isBuffer(esmWriteCommand[2])
+    || esmWriteCommand[2][0] !== 1
+    || esmWriteCommand[2].readBigUInt64BE(1) !== BigInt(esmCreatedAtMs)
+  ) {
+    throw new Error("The packed ESM GLIDE write did not send one complete client-stamped frame");
   }
+  const trackedRead = await adapter.read({
+    valueKey: "tracked:{id}:value",
+    watermarkKey: "tracked:{id}:watermark",
+  });
+  if (trackedRead?.payload !== "payload" || trackedRead.createdAtMs !== esmCreatedAtMs) {
+    throw new Error("The packed ESM GLIDE read did not use the caller-supplied Batch runtime");
+  }
+} finally {
+  Date.now = esmNativeDateNow;
 }
-const esmInvalidationDispatches = [];
-const esmFakeInvalidationClient = {
-  customCommand: async (args) => {
-    esmInvalidationDispatches.push(args);
-    if (esmInvalidationDispatches.length === 1) {
-      throw new Error("packed invalidation dispatch rejected");
-    }
-    return 1;
-  },
-};
-const esmInvalidationRuntime = {
-  ...appGlide,
-  GlideClient: { [Symbol.hasInstance]: (value) => value === esmFakeInvalidationClient },
-  GlideClusterClient: { [Symbol.hasInstance]: () => false },
-};
-await glide
-  .createValkeyGlideDialCacheClient(esmFakeInvalidationClient, esmInvalidationRuntime)
-  .invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 });
-if (
-  esmInvalidationDispatches.length !== 2
-  || esmInvalidationDispatches[0][0] !== "EVALSHA"
-  || esmInvalidationDispatches[1][0] !== "EVAL"
-) {
-  throw new Error("The ESM GLIDE invalidation retry did not dispatch EVALSHA then EVAL");
-}
-if (esmInvalidationDispatches[1][1] !== redisProtocol.INVALIDATE_CACHE_SCRIPT) {
-  throw new Error("The ESM GLIDE bundle's embedded invalidation source diverged from the redis-protocol entry");
-}`,
+await verifyPackedInvalidation({
+  createAdapter: (dispatch) => createPackedGlideInvalidationAdapter(glide, appGlide, dispatch),
+  label: "ESM GLIDE",
+  redisProtocol,
+});`,
     ],
     { cwd: workspace },
   );
@@ -1459,7 +1457,7 @@ if (esmInvalidationDispatches[1][1] !== redisProtocol.INVALIDATE_CACHE_SCRIPT) {
     process.execPath,
     [
       "--eval",
-      `const root = require("dialcache");
+      `const { createHash } = require("node:crypto");
 const glide = require("dialcache/valkey-glide");
 const appGlide = require("@valkey/valkey-glide");
 const otherGlide = require("dialcache-test-glide");
@@ -1467,10 +1465,13 @@ require("dialcache/datadog");
 require("dialcache/prometheus");
 const redisProtocol = require("dialcache/redis-protocol");
 require("dialcache/node-redis");
+${packedInvalidationCheckSource}
 void (async () => {
+  const cjsCreatedAtMs = 1700000000123;
   if (appGlide.Script === otherGlide.Script) {
     throw new Error("The package test requires two distinct GLIDE module instances");
   }
+  let cjsWriteCommand;
   const cjsFakeGlideClient = {
     exec: async (batch, _raiseOnError, options) => {
       if (!(batch instanceof appGlide.Batch) || batch instanceof otherGlide.Batch) {
@@ -1479,19 +1480,17 @@ void (async () => {
       if (options.decoder !== appGlide.Decoder.Bytes) {
         throw new Error("The CommonJS adapter did not use the caller-supplied GLIDE byte decoder");
       }
-      return ["OK", new Error("NOSCRIPT No matching script. Please use EVAL.")];
+      return [[cjsWriteCommand[2], null]];
     },
     customCommand: async (args, options) => {
-      if (args[0] !== "EVAL") {
-        throw new Error("The CommonJS adapter's NOSCRIPT recovery must resend the stamp source via EVAL");
-      }
-      if (args[1] !== redisProtocol.WRITE_TRACKED_STAMP_SCRIPT) {
-        throw new Error("The CommonJS GLIDE bundle's embedded stamp source diverged from the redis-protocol entry");
+      if (args[0] !== "SET") {
+        throw new Error("The CommonJS adapter's write must dispatch one native SET");
       }
       if (options.decoder !== appGlide.Decoder.Bytes) {
         throw new Error("The CommonJS adapter did not use the caller-supplied GLIDE byte decoder");
       }
-      return 3;
+      cjsWriteCommand = args;
+      return "OK";
     },
   };
   const cjsGlideRuntime = {
@@ -1500,47 +1499,39 @@ void (async () => {
     GlideClusterClient: { [Symbol.hasInstance]: () => false },
   };
   const adapter = glide.createValkeyGlideDialCacheClient(cjsFakeGlideClient, cjsGlideRuntime);
+  const cjsNativeDateNow = Date.now;
+  Date.now = () => cjsCreatedAtMs;
   try {
     await adapter.write({
       valueKey: "tracked:{id}:value",
-      watermarkKey: "tracked:{id}:watermark",
       cacheTtlMs: 1_000,
       value: "payload",
     });
-    throw new Error("Expected an invalid GLIDE script reply to fail");
-  } catch (error) {
-    if (!(error instanceof root.DialCacheRedisProtocolError)) {
-      throw new Error("The GLIDE protocol error does not match the root CommonJS export", { cause: error });
+    if (
+      cjsWriteCommand[0] !== "SET"
+      || cjsWriteCommand[3] !== "PX"
+      || cjsWriteCommand[4] !== "1000"
+      || !Buffer.isBuffer(cjsWriteCommand[2])
+      || cjsWriteCommand[2][0] !== 1
+      || cjsWriteCommand[2].readBigUInt64BE(1) !== BigInt(cjsCreatedAtMs)
+    ) {
+      throw new Error("The packed CommonJS GLIDE write did not send one complete client-stamped frame");
     }
+    const trackedRead = await adapter.read({
+      valueKey: "tracked:{id}:value",
+      watermarkKey: "tracked:{id}:watermark",
+    });
+    if (trackedRead?.payload !== "payload" || trackedRead.createdAtMs !== cjsCreatedAtMs) {
+      throw new Error("The packed CommonJS GLIDE read did not use the caller-supplied Batch runtime");
+    }
+  } finally {
+    Date.now = cjsNativeDateNow;
   }
-  const cjsInvalidationDispatches = [];
-  const cjsFakeInvalidationClient = {
-    customCommand: async (args) => {
-      cjsInvalidationDispatches.push(args);
-      if (cjsInvalidationDispatches.length === 1) {
-        throw new Error("packed invalidation dispatch rejected");
-      }
-      return 1;
-    },
-  };
-  const cjsInvalidationRuntime = {
-    ...appGlide,
-    GlideClient: { [Symbol.hasInstance]: (value) => value === cjsFakeInvalidationClient },
-    GlideClusterClient: { [Symbol.hasInstance]: () => false },
-  };
-  await glide
-    .createValkeyGlideDialCacheClient(cjsFakeInvalidationClient, cjsInvalidationRuntime)
-    .invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 });
-  if (
-    cjsInvalidationDispatches.length !== 2
-    || cjsInvalidationDispatches[0][0] !== "EVALSHA"
-    || cjsInvalidationDispatches[1][0] !== "EVAL"
-  ) {
-    throw new Error("The CommonJS GLIDE invalidation retry did not dispatch EVALSHA then EVAL");
-  }
-  if (cjsInvalidationDispatches[1][1] !== redisProtocol.INVALIDATE_CACHE_SCRIPT) {
-    throw new Error("The CommonJS GLIDE bundle's embedded invalidation source diverged from the redis-protocol entry");
-  }
+  await verifyPackedInvalidation({
+    createAdapter: (dispatch) => createPackedGlideInvalidationAdapter(glide, appGlide, dispatch),
+    label: "CommonJS GLIDE",
+    redisProtocol,
+  });
 })();`,
     ],
     { cwd: workspace },

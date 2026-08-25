@@ -43,6 +43,7 @@ const METRIC_ERROR_KINDS: Readonly<Record<MetricErrorKind, true>> = {
   cache_read: true,
   cache_read_timeout: true,
   cache_write: true,
+  tracked_ttl_clamped: true,
   serialization_load: true,
   serialization_dump: true,
   compression: true,
@@ -72,7 +73,6 @@ const SHADOW_VALIDATION_OUTCOMES: Readonly<Record<ShadowValidationOutcome, true>
   mismatch: true,
   superseded: true,
   filled: true,
-  fill_blocked: true,
   fill_error: true,
   redis_error: true,
   source_error: true,
@@ -191,6 +191,7 @@ describe("Prometheus metrics adapter", () => {
       },
       42,
     );
+    metrics.observeFutureTimestampOffset(labels, 0.007);
     metrics.compression({ ...labels, outcome: "compressed" });
     metrics.observeGet(labels, 0.05);
     metrics.observeFallback(labels, 0.05);
@@ -233,6 +234,11 @@ describe("Prometheus metrics adapter", () => {
         "in_fallback",
       ]),
       histogramSchema("schema_dialcache_fallback_timer", ["cache_namespace", "use_case", "key_type", "layer"], TIMER_BUCKETS),
+      histogramSchema(
+        "schema_dialcache_future_timestamp_offset_histogram",
+        ["cache_namespace", "use_case", "key_type", "layer"],
+        FUTURE_TIMESTAMP_OFFSET_BUCKETS,
+      ),
       histogramSchema("schema_dialcache_get_timer", ["cache_namespace", "use_case", "key_type", "layer"], TIMER_BUCKETS),
       counterSchema("schema_dialcache_invalidation_counter", ["cache_namespace", "key_type", "layer"]),
       counterSchema("schema_dialcache_miss_counter", ["cache_namespace", "use_case", "key_type", "layer"]),
@@ -271,6 +277,20 @@ describe("Prometheus metrics adapter", () => {
       outcome: "match",
     });
 
+    const futureTimestampOffset = families.find(
+      ({ name }) => name === "schema_dialcache_future_timestamp_offset_histogram",
+    );
+    const futureTimestampOffsetSum = futureTimestampOffset?.values.find(
+      ({ metricName }) => metricName === "schema_dialcache_future_timestamp_offset_histogram_sum",
+    );
+    expect(futureTimestampOffsetSum?.value).toBe(0.007);
+    expect(futureTimestampOffsetSum?.labels).toEqual({
+      cache_namespace: labels.cacheNamespace,
+      use_case: labels.useCase,
+      key_type: labels.keyType,
+      layer: labels.layer,
+    });
+
     const serialization = families.find(({ name }) => name === "schema_dialcache_serialization_timer");
     const serializationLabels = serialization?.values
       .filter(({ metricName }) => metricName === `${serialization.name}_sum`)
@@ -291,6 +311,31 @@ describe("Prometheus metrics adapter", () => {
         operation: "load",
       },
     ]);
+  });
+
+  it("ignores non-finite and non-positive future timestamp offsets", async () => {
+    const registry = new Registry();
+    const metrics = new PrometheusDialCacheMetrics({ registry, prefix: "finite_skew_" });
+    const labels = {
+      cacheNamespace: "users",
+      useCase: "PrometheusFiniteFutureOffset",
+      keyType: "user_id",
+      layer: CacheLayer.REMOTE,
+    } as const;
+
+    metrics.observeFutureTimestampOffset(labels, 0.25);
+    for (const invalid of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, 0, -1]) {
+      metrics.observeFutureTimestampOffset(labels, invalid);
+    }
+
+    const families = (await registry.getMetricsAsJSON()) as unknown as MetricFamily[];
+    const family = families.find(({ name }) => name === "finite_skew_dialcache_future_timestamp_offset_histogram");
+    expect(family?.values.find(({ metricName }) =>
+      metricName === "finite_skew_dialcache_future_timestamp_offset_histogram_count"
+    )?.value).toBe(1);
+    expect(family?.values.find(({ metricName }) =>
+      metricName === "finite_skew_dialcache_future_timestamp_offset_histogram_sum"
+    )?.value).toBe(0.25);
   });
 
   it("exports every bounded error category without rewriting labels", async () => {
@@ -670,6 +715,26 @@ describe("Prometheus metrics adapter", () => {
 });
 
 const TIMER_BUCKETS = [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, "+Inf"];
+const FUTURE_TIMESTAMP_OFFSET_BUCKETS = [
+  0.001,
+  0.005,
+  0.01,
+  0.025,
+  0.05,
+  0.1,
+  0.25,
+  0.5,
+  1,
+  5,
+  15,
+  60,
+  300,
+  900,
+  3_600,
+  10_800,
+  43_200,
+  "+Inf",
+];
 const SIZE_BUCKETS = [100, 1_000, 10_000, 100_000, 1_000_000, 10_000_000, "+Inf"];
 const RATIO_BUCKETS = [0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 1, "+Inf"];
 const VALUE_AGE_BUCKETS = [1, 5, 15, 60, 300, 900, 3_600, 10_800, 43_200, 86_400, 259_200, 604_800, "+Inf"];

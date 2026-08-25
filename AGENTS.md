@@ -18,11 +18,11 @@ src/
   prometheus.ts         # Optional Prometheus adapter
   datadog.ts            # Optional Datadog (DogStatsD) adapter
   redis-client.ts       # Client-independent semantic Redis interface and its public error classes
-  node-redis.ts         # node-redis adapter and script registration
+  node-redis.ts         # node-redis adapter and invalidation dispatch
   valkey-glide.ts       # Valkey GLIDE adapter (standalone and cluster)
   redis-protocol.ts     # Public frame codec and Lua protocol exports
   serializer.ts         # Serializer contract and JSON implementation
-  internal/             # Cache layers, runtime config, payload compression, and mutation Lua scripts
+  internal/             # Cache layers, runtime config, payload compression, and invalidation Lua script
 test/                   # Unit and Redis integration tests
 ```
 
@@ -36,10 +36,12 @@ test/                   # Unit and Redis integration tests
 - Cache plumbing fails open; explicit maintenance operations surface mutation failures.
 - Tracked Redis values and invalidation watermarks share a Redis Cluster hash tag.
 - Tracked reads run on primaries so replica lag cannot hide invalidation.
-- A tracked write's placeholder frame (version byte 0) is unreadable on both
-  read paths until the stamp script promotes it, and the stamp promotes only
-  the placeholder carrying its own per-write nonce.
-- A SET failure is the tracked write's outcome even when the stamp settled.
+- Every Redis value write is one native `SET` of a complete version-1 frame
+  stamped from the writer process's clock; Redis value writes never create or
+  extend watermarks.
+- A tracked read atomically reads the value and watermark from the primary and
+  serves the frame only when `createdAtMs` is strictly greater than the
+  watermark. A missing watermark is the zero baseline.
 - Local entries are process-local and are not synchronously invalidated across instances.
 
 ## Conventions

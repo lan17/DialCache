@@ -1,17 +1,18 @@
 import { createHash } from "node:crypto";
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   DialCacheRedisPayloadEncodingError,
   DialCacheRedisPayloadError,
-  DialCacheRedisPlaceholderLostError,
   DialCacheRedisProtocolError,
 } from "../src/redis-client.js";
-import { INVALIDATE_CACHE_SCRIPT, WRITE_TRACKED_STAMP_SCRIPT } from "../src/redis-protocol.js";
+import { INVALIDATE_CACHE_SCRIPT } from "../src/redis-protocol.js";
 import { createValkeyGlideDialCacheClient } from "../src/valkey-glide.js";
 
-const INVALID_WRITE_REPLIES: readonly unknown[] = [
+const INVALID_INVALIDATION_REPLIES: readonly unknown[] = [
+  0,
+  2,
   -1,
   3,
   0.5,
@@ -24,35 +25,21 @@ const INVALID_WRITE_REPLIES: readonly unknown[] = [
   null,
   undefined,
 ];
-const INVALID_INVALIDATION_REPLIES: readonly unknown[] = [0, 2, ...INVALID_WRITE_REPLIES];
 
 const decoderBytes = Symbol("bytes");
 const batchInstances: MockBatch[] = [];
-const clusterBatchInstances: MockClusterBatch[] = [];
 const standaloneClients = new WeakSet<object>();
 const clusterClients = new WeakSet<object>();
 
 class MockBatch {
-  readonly commands: Array<Array<string | Buffer>> = [];
   readonly mget = vi.fn((keys: Array<string | Buffer>) => {
     this.keys = keys;
-    return this;
-  });
-  readonly customCommand = vi.fn((args: Array<string | Buffer>) => {
-    this.commands.push(args);
     return this;
   });
   keys: Array<string | Buffer> | undefined;
 
   constructor(readonly isAtomic: boolean) {
     batchInstances.push(this);
-  }
-}
-
-class MockClusterBatch extends MockBatch {
-  constructor(isAtomic: boolean) {
-    super(isAtomic);
-    clusterBatchInstances.push(this);
   }
 }
 
@@ -69,7 +56,6 @@ function mockClientIdentity(instances: WeakSet<object>) {
 
 const mockGlide = {
   Batch: MockBatch,
-  ClusterBatch: MockClusterBatch,
   Decoder: { Bytes: decoderBytes },
   GlideClient: mockClientIdentity(standaloneClients),
   GlideClusterClient: mockClientIdentity(clusterClients),
@@ -142,7 +128,10 @@ async function expectProtocolError(operation: Promise<unknown>, message: string)
 describe("Valkey GLIDE adapter", () => {
   beforeEach(() => {
     batchInstances.length = 0;
-    clusterBatchInstances.length = 0;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("uses GET and a non-atomic primary MGET batch that preserves caller WATCH state", async () => {
@@ -243,7 +232,7 @@ describe("Valkey GLIDE adapter", () => {
     );
   });
 
-  it("rejects an ambiguous client identity before allocating scripts", () => {
+  it("rejects an ambiguous client identity", () => {
     const client = fakeClient();
     clusterClients.add(client);
 
@@ -254,24 +243,18 @@ describe("Valkey GLIDE adapter", () => {
     );
   });
 
-  it("requires GLIDE 2.x Batch support before allocating scripts", () => {
+  it("requires GLIDE 2.x Batch support", () => {
     const client = fakeClient();
     const glideWithoutBatch = {
       ...mockGlide,
       Batch: undefined,
     } as unknown as typeof mockGlide;
-    const glideWithoutClusterBatch = {
-      ...mockGlide,
-      ClusterBatch: undefined,
-    } as unknown as typeof mockGlide;
 
-    for (const runtime of [glideWithoutBatch, glideWithoutClusterBatch]) {
-      expect(
-        () => createValkeyGlideDialCacheClient(client, runtime),
-      ).toThrow(
-        "Valkey GLIDE DialCache requires @valkey/valkey-glide >=2.0.0 with Batch and ClusterBatch constructors",
-      );
-    }
+    expect(
+      () => createValkeyGlideDialCacheClient(client, glideWithoutBatch),
+    ).toThrow(
+      "Valkey GLIDE DialCache requires @valkey/valkey-glide >=2.0.0 with a Batch constructor",
+    );
   });
 
   it("preserves GLIDE invocation options when given a core read context", async () => {
@@ -290,28 +273,25 @@ describe("Valkey GLIDE adapter", () => {
     );
   });
 
-  it("writes untracked SETs directly and tracked pairs through a batch", async () => {
+  it("writes string and binary values as complete frames with one SET each", async () => {
+    const now = vi.spyOn(Date, "now")
+      .mockReturnValueOnce(1_234)
+      .mockReturnValueOnce(2_345)
+      .mockReturnValueOnce(3_456);
     const binary = Buffer.from([0, 0xff, 0x80]);
-    const client = fakeClient(
-      Buffer.from("OK"),
-      [Buffer.from("OK"), 0],
-      1,
-    );
+    const client = fakeClient(Buffer.from("OK"), "OK", 1);
     const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
 
-    const before = Date.now();
     await expect(
       adapter.write({ valueKey: "plain:value", cacheTtlMs: 1_000, value: "hello" }),
-    ).resolves.toBe(true);
-    const after = Date.now();
+    ).resolves.toBeUndefined();
     await expect(
       adapter.write({
         valueKey: "tracked:{id}:value",
-        watermarkKey: "tracked:{id}:watermark",
         cacheTtlMs: 2_000,
         value: binary,
       }),
-    ).resolves.toBe(false);
+    ).resolves.toBeUndefined();
     await expect(
       adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 100 }),
     ).resolves.toBeUndefined();
@@ -326,83 +306,54 @@ describe("Valkey GLIDE adapter", () => {
     expect(untrackedFrame[0]).toBe(1);
     expect(untrackedFrame[9]).toBe(0);
     expect(untrackedFrame.subarray(10).toString("utf8")).toBe("hello");
-    const createdAtMs = Number(untrackedFrame.readBigUInt64BE(1));
-    expect(createdAtMs).toBeGreaterThanOrEqual(before);
-    expect(createdAtMs).toBeLessThanOrEqual(after);
+    expect(Number(untrackedFrame.readBigUInt64BE(1))).toBe(1_234);
     expect(untrackedOptions).toEqual({ decoder: decoderBytes });
 
-    expect(batchInstances).toHaveLength(1);
-    const trackedBatch = batchInstances[0];
-    expect(trackedBatch?.isAtomic).toBe(false);
-    expect(trackedBatch?.commands).toHaveLength(2);
-    const [trackedSet, stamp] = trackedBatch?.commands ?? [];
-    expect(trackedSet?.[0]).toBe("SET");
-    expect(trackedSet?.[1]).toBe("tracked:{id}:value");
-    expect(trackedSet?.[3]).toBe("PX");
-    expect(trackedSet?.[4]).toBe("2000");
-    const trackedFrame = trackedSet?.[2] as Buffer;
-    expect(trackedFrame[0]).toBe(0);
+    const [trackedSet, trackedOptions] = client.customCommand.mock.calls[1]
+      ?? [[], undefined];
+    expect(trackedSet[0]).toBe("SET");
+    expect(trackedSet[1]).toBe("tracked:{id}:value");
+    expect(trackedSet[3]).toBe("PX");
+    expect(trackedSet[4]).toBe("2000");
+    const trackedFrame = trackedSet[2] as Buffer;
+    expect(trackedFrame[0]).toBe(1);
     expect(trackedFrame[9]).toBe(1);
     expect(trackedFrame.subarray(10)).toEqual(binary);
-    const nonce = trackedFrame.subarray(1, 9);
-    expect(stamp).toEqual([
-      "EVALSHA",
-      createHash("sha1").update(WRITE_TRACKED_STAMP_SCRIPT).digest("hex"),
-      "2",
-      "tracked:{id}:value",
-      "tracked:{id}:watermark",
-      "2000",
-      nonce,
-    ]);
-    expect(client.exec).toHaveBeenCalledTimes(1);
-    expect(client.exec).toHaveBeenCalledWith(trackedBatch, false, { decoder: decoderBytes });
+    expect(Number(trackedFrame.readBigUInt64BE(1))).toBe(2_345);
+    expect(trackedOptions).toEqual({ decoder: decoderBytes });
 
-    // Call 1 is the untracked SET; invalidation dispatches by its source SHA1.
-    expect(client.customCommand).toHaveBeenCalledTimes(2);
+    expect(batchInstances).toHaveLength(0);
+    expect(client.exec).not.toHaveBeenCalled();
+    expect(client.customCommand).toHaveBeenCalledTimes(3);
     expect(client.customCommand).toHaveBeenNthCalledWith(
-      2,
+      3,
       [
         "EVALSHA",
         createHash("sha1").update(INVALIDATE_CACHE_SCRIPT).digest("hex"),
         "1",
         "tracked:{id}:watermark",
         "100",
+        "3456",
       ],
       { decoder: decoderBytes },
     );
-  });
-
-  it("fails a tracked write whose placeholder was lost before the stamp", async () => {
-    const client = fakeClient([Buffer.from("OK"), 2]);
-    const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
-
-    const write = adapter.write({
-      valueKey: "tracked:{id}:value",
-      watermarkKey: "tracked:{id}:watermark",
-      cacheTtlMs: 1_000,
-      value: "tracked",
-    });
-    await expect(write).rejects.toThrow("DialCache tracked write lost its placeholder before the stamp");
-    await expect(write).rejects.toBeInstanceOf(DialCacheRedisPlaceholderLostError);
-    // Reply 2 is a settled outcome, not a recovery trigger.
-    expect(client.customCommand).not.toHaveBeenCalled();
+    expect(now).toHaveBeenCalledTimes(3);
   });
 
   it("routes cluster writes and invalidations to the slot primary", async () => {
-    const client = fakeClusterClient("OK", ["OK", 1], 1);
+    const client = fakeClusterClient("OK", "OK", 1);
     const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
 
     await expect(
       adapter.write({ valueKey: "plain:value", cacheTtlMs: 1_000, value: "plain" }),
-    ).resolves.toBe(true);
+    ).resolves.toBeUndefined();
     await expect(
       adapter.write({
         valueKey: "tracked:{id}:value",
-        watermarkKey: "tracked:{id}:watermark",
         cacheTtlMs: 1_000,
         value: "tracked",
       }),
-    ).resolves.toBe(true);
+    ).resolves.toBeUndefined();
     await expect(
       adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 25 }),
     ).resolves.toBeUndefined();
@@ -412,101 +363,27 @@ describe("Valkey GLIDE adapter", () => {
       decoder: decoderBytes,
       route: { type: "primarySlotKey", key: "plain:value" },
     });
-    expect(clusterBatchInstances).toHaveLength(1);
-    expect(client.exec).toHaveBeenCalledWith(clusterBatchInstances[0], false, {
+    const [, trackedOptions] = client.customCommand.mock.calls[1] ?? [[], undefined];
+    expect(trackedOptions).toEqual({
       decoder: decoderBytes,
       route: { type: "primarySlotKey", key: "tracked:{id}:value" },
     });
-    const [, invalidateOptions] = client.customCommand.mock.calls[1] ?? [[], undefined];
+    expect(batchInstances).toHaveLength(0);
+    expect(client.exec).not.toHaveBeenCalled();
+    const [, invalidateOptions] = client.customCommand.mock.calls[2] ?? [[], undefined];
     expect(invalidateOptions).toEqual({
       decoder: decoderBytes,
       route: { type: "primarySlotKey", key: "tracked:{id}:watermark" },
     });
   });
 
-  it("routes the EVAL recovery to the slot primary on cluster", async () => {
-    const noscript = new Error("NOSCRIPT No matching script. Please use EVAL.");
-    const client = fakeClusterClient([Buffer.from("OK"), noscript], 1);
-    const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
-
-    await expect(adapter.write({
-      valueKey: "tracked:{id}:value",
-      watermarkKey: "tracked:{id}:watermark",
-      cacheTtlMs: 2_000,
-      value: "tracked",
-    })).resolves.toBe(true);
-
-    const trackedFrame = clusterBatchInstances[0]?.commands[0]?.[2] as Buffer;
-    expect(client.customCommand).toHaveBeenCalledWith(
-      [
-        "EVAL",
-        WRITE_TRACKED_STAMP_SCRIPT,
-        "2",
-        "tracked:{id}:value",
-        "tracked:{id}:watermark",
-        "2000",
-        trackedFrame.subarray(1, 9),
-      ],
-      {
-        decoder: decoderBytes,
-        route: { type: "primarySlotKey", key: "tracked:{id}:value" },
-      },
-    );
-  });
-
-  it("falls back to EVAL by source when the batched stamp hits NOSCRIPT", async () => {
-    const noscriptWordings = [
-      // Raw server reply wording.
-      "NOSCRIPT No matching script. Please use EVAL.",
-      // GLIDE's mapped RequestError wording.
-      "An error was signalled by the server: - NoScriptError: No matching script.",
-      // Case drift must not blind the stamp's recovery either.
-      "noscript no matching script",
-    ];
-    for (const wording of noscriptWordings) {
-      batchInstances.length = 0;
-      const client = fakeClient([Buffer.from("OK"), new Error(wording)], 1);
-      const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
-
-      await expect(adapter.write({
-        valueKey: "tracked:{id}:value",
-        watermarkKey: "tracked:{id}:watermark",
-        cacheTtlMs: 2_000,
-        value: "tracked",
-      })).resolves.toBe(true);
-
-      const trackedFrame = batchInstances[0]?.commands[0]?.[2] as Buffer;
-      expect(client.customCommand).toHaveBeenCalledTimes(1);
-      expect(client.customCommand).toHaveBeenCalledWith(
-        [
-          "EVAL",
-          WRITE_TRACKED_STAMP_SCRIPT,
-          "2",
-          "tracked:{id}:value",
-          "tracked:{id}:watermark",
-          "2000",
-          trackedFrame.subarray(1, 9),
-        ],
-        { decoder: decoderBytes },
-      );
-    }
-  });
-
-  it("rejects out-of-range cacheTtlMs before batching and ceils fractional TTLs", async () => {
-    const client = fakeClient([Buffer.from("OK"), 1]);
+  it("rejects out-of-range cacheTtlMs before dispatch and ceils fractional TTLs", async () => {
+    const client = fakeClient("OK");
     const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
     const invalidTtls = [0, -1, Number.NaN, Number.POSITIVE_INFINITY, 31_536_000_001, "500" as unknown as number];
     for (const cacheTtlMs of invalidTtls) {
       await expect(
         adapter.write({ valueKey: "plain:value", cacheTtlMs, value: "plain" }),
-      ).rejects.toThrow(RangeError);
-      await expect(
-        adapter.write({
-          valueKey: "tracked:{id}:value",
-          watermarkKey: "tracked:{id}:watermark",
-          cacheTtlMs,
-          value: "tracked",
-        }),
       ).rejects.toThrow(RangeError);
     }
     expect(client.customCommand).not.toHaveBeenCalled();
@@ -515,67 +392,56 @@ describe("Valkey GLIDE adapter", () => {
 
     await expect(adapter.write({
       valueKey: "tracked:{id}:value",
-      watermarkKey: "tracked:{id}:watermark",
       cacheTtlMs: 1_000.1,
       value: "tracked",
-    })).resolves.toBe(true);
-    const [trackedSet, stamp] = batchInstances[0]?.commands ?? [];
-    expect(trackedSet?.[4]).toBe("1001");
-    expect(stamp?.[5]).toBe("1001");
-    expect(Buffer.isBuffer(stamp?.[6])).toBe(true);
+    })).resolves.toBeUndefined();
+    expect(client.customCommand.mock.calls[0]?.[0]?.[4]).toBe("1001");
   });
 
-  it("surfaces batched SET and stamp command errors", async () => {
+  it("rejects invalid application timestamps before dispatching mutations", async () => {
+    const now = vi.spyOn(Date, "now");
+    const client = fakeClient();
+    const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
+
+    for (const timestampMs of [
+      -1,
+      1.5,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.MAX_SAFE_INTEGER + 1,
+    ]) {
+      now.mockReturnValue(timestampMs);
+      await expect(
+        adapter.write({ valueKey: "plain:value", cacheTtlMs: 1_000, value: "plain" }),
+      ).rejects.toThrow(RangeError);
+      await expect(
+        adapter.invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 }),
+      ).rejects.toThrow(RangeError);
+    }
+
+    expect(client.customCommand).not.toHaveBeenCalled();
+    expect(client.exec).not.toHaveBeenCalled();
+    expect(batchInstances).toHaveLength(0);
+  });
+
+  it("surfaces SET command errors", async () => {
     const setFailure = new Error("OOM command not allowed when used memory > 'maxmemory'.");
-    const setClient = fakeClient([setFailure, 1]);
+    const setClient = fakeClient();
+    setClient.customCommand.mockRejectedValueOnce(setFailure);
     const setAdapter = createValkeyGlideDialCacheClient(setClient, mockGlide);
     await expect(setAdapter.write({
       valueKey: "tracked:{id}:value",
-      watermarkKey: "tracked:{id}:watermark",
       cacheTtlMs: 1_000,
       value: "tracked",
     })).rejects.toBe(setFailure);
-    expect(setClient.customCommand).not.toHaveBeenCalled();
-
-    const stampFailure = new Error("ERR invalid DialCache watermark");
-    const stampClient = fakeClient([Buffer.from("OK"), stampFailure]);
-    const stampAdapter = createValkeyGlideDialCacheClient(stampClient, mockGlide);
-    await expect(stampAdapter.write({
-      valueKey: "tracked:{id}:value",
-      watermarkKey: "tracked:{id}:watermark",
-      cacheTtlMs: 1_000,
-      value: "tracked",
-    })).rejects.toBe(stampFailure);
-    expect(stampClient.customCommand).not.toHaveBeenCalled();
+    expect(setClient.customCommand).toHaveBeenCalledTimes(1);
   });
 
-  it("validates write batch envelopes and SET replies", async () => {
-    const envelopeClient = fakeClient("not-a-batch-reply");
-    const envelopeAdapter = createValkeyGlideDialCacheClient(envelopeClient, mockGlide);
-    await expect(envelopeAdapter.write({
-      valueKey: "tracked:{id}:value",
-      watermarkKey: "tracked:{id}:watermark",
-      cacheTtlMs: 1_000,
-      value: "tracked",
-    })).rejects.toBeInstanceOf(DialCacheRedisPayloadError);
-
+  it("validates native SET replies", async () => {
     const setReplyClient = fakeClient("QUEUED");
     const setReplyAdapter = createValkeyGlideDialCacheClient(setReplyClient, mockGlide);
     await expectProtocolError(
       Promise.resolve(setReplyAdapter.write({ valueKey: "plain:value", cacheTtlMs: 1_000, value: "plain" })),
-      "Invalid DialCache Redis SET reply; expected OK",
-    );
-
-    // A bad SET reply wins over a failing stamp, matching the write contract.
-    const combinedClient = fakeClient(["QUEUED", new Error("ERR invalid DialCache watermark")]);
-    const combinedAdapter = createValkeyGlideDialCacheClient(combinedClient, mockGlide);
-    await expectProtocolError(
-      Promise.resolve(combinedAdapter.write({
-        valueKey: "tracked:{id}:value",
-        watermarkKey: "tracked:{id}:watermark",
-        cacheTtlMs: 1_000,
-        value: "tracked",
-      })),
       "Invalid DialCache Redis SET reply; expected OK",
     );
   });
@@ -586,8 +452,8 @@ describe("Valkey GLIDE adapter", () => {
       redisFrame("invalid", { encoding: 2 }),
       "not-a-batch-reply",
       [[redisFrame("missing-watermark")]],
-      [Buffer.from("OK"), "not-an-integer"],
-      null,
+      "QUEUED",
+      0,
     );
     const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
 
@@ -604,11 +470,10 @@ describe("Valkey GLIDE adapter", () => {
     await expectProtocolError(
       Promise.resolve(adapter.write({
         valueKey: "bad-write:{id}:value",
-        watermarkKey: "bad-write:{id}:watermark",
         cacheTtlMs: 1_000,
         value: "value",
       })),
-      "Invalid DialCache Redis write reply; expected integer 0, 1, or 2",
+      "Invalid DialCache Redis SET reply; expected OK",
     );
     await expectProtocolError(
       Promise.resolve(
@@ -618,25 +483,8 @@ describe("Valkey GLIDE adapter", () => {
     );
   });
 
-  it("rejects every out-of-domain write and invalidation reply", async () => {
-    const writeMessage = "Invalid DialCache Redis write reply; expected integer 0, 1, or 2";
+  it("rejects every out-of-domain invalidation reply", async () => {
     const invalidationMessage = "Invalid DialCache Redis invalidate reply; expected integer 1";
-
-    for (const reply of INVALID_WRITE_REPLIES) {
-      const tracked = createValkeyGlideDialCacheClient(
-        fakeClient([Buffer.from("OK"), reply]),
-        mockGlide,
-      );
-      await expectProtocolError(
-        Promise.resolve(tracked.write({
-          valueKey: "tracked:{id}:value",
-          watermarkKey: "tracked:{id}:watermark",
-          cacheTtlMs: 1_000,
-          value: "tracked",
-        })),
-        writeMessage,
-      );
-    }
 
     for (const reply of INVALID_INVALIDATION_REPLIES) {
       const client = fakeClient(reply);
@@ -654,6 +502,7 @@ describe("Valkey GLIDE adapter", () => {
   });
 
   it("retries any invalidation rejection once with EVAL by source", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_234);
     // NOSCRIPT is the common trigger, but the retry deliberately covers every
     // rejection: the invalidation script is idempotent, and an
     // EVALSHA-rejecting proxy must self-heal rather than fail every call.
@@ -671,11 +520,24 @@ describe("Valkey GLIDE adapter", () => {
 
       expect(client.customCommand).toHaveBeenCalledTimes(2);
       expect(client.customCommand).toHaveBeenNthCalledWith(
+        1,
+        [
+          "EVALSHA",
+          createHash("sha1").update(INVALIDATE_CACHE_SCRIPT).digest("hex"),
+          "1",
+          "tracked:{id}:watermark",
+          "50",
+          "1234",
+        ],
+        { decoder: decoderBytes },
+      );
+      expect(client.customCommand).toHaveBeenNthCalledWith(
         2,
-        ["EVAL", INVALIDATE_CACHE_SCRIPT, "1", "tracked:{id}:watermark", "50"],
+        ["EVAL", INVALIDATE_CACHE_SCRIPT, "1", "tracked:{id}:watermark", "50", "1234"],
         { decoder: decoderBytes },
       );
     }
+    expect(now).toHaveBeenCalledTimes(2);
   });
 
   it("chains the original rejection when the invalidation retry also fails", async () => {
@@ -750,7 +612,7 @@ describe("Valkey GLIDE adapter", () => {
     };
     const client = fakeClient(
       [[redisFrame("tracked"), Buffer.from("0")]],
-      [Buffer.from("OK"), 1],
+      "OK",
       1,
     );
     const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
@@ -761,19 +623,16 @@ describe("Valkey GLIDE adapter", () => {
     });
     await adapter.write({
       valueKey: "module:{instance}:value",
-      watermarkKey: "module:{instance}:watermark",
       cacheTtlMs: 1_000,
       value: "value",
     });
     await adapter.invalidate({ watermarkKey: "module:{instance}:watermark", futureBufferMs: 5 });
 
     const [readBatch, , readOptions] = client.exec.mock.calls[0] ?? [];
-    const [writeBatch, , writeOptions] = client.exec.mock.calls[1] ?? [];
-    const [, invalidateOptions] = client.customCommand.mock.calls[0] ?? [];
+    const [, writeOptions] = client.customCommand.mock.calls[0] ?? [];
+    const [, invalidateOptions] = client.customCommand.mock.calls[1] ?? [];
     expect(readBatch).toBeInstanceOf(MockBatch);
     expect(readBatch).not.toBeInstanceOf(otherGlide.Batch);
-    expect(writeBatch).toBeInstanceOf(MockBatch);
-    expect(writeBatch).not.toBeInstanceOf(otherGlide.Batch);
     expect(readOptions?.decoder).toBe(mockGlide.Decoder.Bytes);
     expect(readOptions?.decoder).not.toBe(otherGlide.Decoder.Bytes);
     expect(writeOptions?.decoder).toBe(mockGlide.Decoder.Bytes);

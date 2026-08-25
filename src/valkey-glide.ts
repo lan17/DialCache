@@ -1,18 +1,16 @@
-import { createHash } from "node:crypto";
-
 import { ceilSupportedCacheTtlMs } from "./internal/duration.js";
 import {
+  buildRedisInvalidationScriptArguments,
+  INVALIDATE_CACHE_SCRIPT,
+  INVALIDATE_CACHE_SCRIPT_SHA1,
+} from "./internal/redis-invalidation.js";
+import {
+  assertValidRedisTimestampMs,
   decodeRedisFrame,
   decodeTrackedRedisFrame,
   encodeRedisFrame,
-  encodeTrackedRedisPlaceholder,
 } from "./internal/redis-payload.js";
 import {
-  INVALIDATE_CACHE_SCRIPT,
-  WRITE_TRACKED_STAMP_SCRIPT,
-} from "./internal/redis-scripts.js";
-import {
-  resolveTrackedRedisWriteReply,
   validateRedisScriptInvalidationReply,
   validateRedisSetReply,
 } from "./internal/redis-script-reply.js";
@@ -20,20 +18,7 @@ import { DialCacheRedisPayloadError, type DialCacheRedisClient } from "./redis-c
 
 type ValkeyGlideString = string | Buffer;
 
-// Redis caches EVAL'd sources under sha1(source), so these digests are by
-// definition the ones the EVALSHA dispatches must use and the ones the EVAL
-// recoveries repopulate.
-const WRITE_TRACKED_STAMP_SHA1 = createHash("sha1").update(WRITE_TRACKED_STAMP_SCRIPT).digest("hex");
-const INVALIDATE_CACHE_SHA1 = createHash("sha1").update(INVALIDATE_CACHE_SCRIPT).digest("hex");
-
-// Matches the server's raw NOSCRIPT reply and GLIDE's mapped NoScriptError
-// wording, case-insensitively so message-format drift cannot blind it.
-function isNoScriptError(error: Error): boolean {
-  return error.message.toLowerCase().includes("noscript");
-}
-
 interface ValkeyGlideBatch {
-  customCommand(args: ValkeyGlideString[]): ValkeyGlideBatch;
   mget(keys: ValkeyGlideString[]): ValkeyGlideBatch;
 }
 
@@ -66,8 +51,6 @@ interface ValkeyGlideClientIdentity {
 export interface ValkeyGlideRuntime<TDecoder> {
   /** The Batch constructor exported by the same GLIDE module instance as the client. */
   readonly Batch: new (isAtomic: boolean) => ValkeyGlideBatch;
-  /** The ClusterBatch constructor exported by the same GLIDE module instance as the client. */
-  readonly ClusterBatch: new (isAtomic: boolean) => ValkeyGlideBatch;
   /** The standalone client class exported by the same GLIDE module instance as the client. */
   readonly GlideClient: ValkeyGlideClientIdentity;
   /** The cluster client class exported by the same GLIDE module instance as the client. */
@@ -129,16 +112,11 @@ function classifyValkeyGlideClient<TDecoder>(
  * read deadline may return before this adapter's invocation settles. Tracked
  * standalone reads use a one-command primary batch, while tracked cluster
  * reads route MGET explicitly to the slot primary, so replica lag cannot hide
- * an invalidation watermark. Both mutation scripts dispatch as EVALSHA by
- * their source SHA1 and recover a flushed script cache by re-sending the
- * source as EVAL — which the server caches under that same SHA1 — so the
- * first mutation against a cold script cache pays one extra round trip.
- * Tracked writes batch a native placeholder SET with the stamp EVALSHA;
- * cluster write batches route to the slot primary. Batches are deliberately
- * non-atomic: MGET and SET are atomic themselves, an interleaved stamp is
- * safe by design, and MULTI/EXEC would consume caller-owned WATCH state.
- * Recovery differs by script: the stamp is retried only on NOSCRIPT, while
- * invalidation retries any rejection once with EVAL by source. When that
+ * an invalidation watermark. Every write is one native SET of a complete
+ * client-stamped frame, routed to the slot primary for cluster clients.
+ * Invalidation dispatches as EVALSHA by its source SHA1 and retries any
+ * rejection once by re-sending the source as EVAL, which also repopulates a
+ * flushed script cache. When that
  * retry also fails, the original rejection is attached as the retry error's
  * `cause` unless it already carries one.
  */
@@ -146,9 +124,9 @@ export function createValkeyGlideDialCacheClient<TDecoder>(
   client: ValkeyGlideScriptingClient<TDecoder>,
   glide: ValkeyGlideRuntime<TDecoder>,
 ): DialCacheRedisClient {
-  if (typeof glide.Batch !== "function" || typeof glide.ClusterBatch !== "function") {
+  if (typeof glide.Batch !== "function") {
     throw new Error(
-      "Valkey GLIDE DialCache requires @valkey/valkey-glide >=2.0.0 with Batch and ClusterBatch constructors",
+      "Valkey GLIDE DialCache requires @valkey/valkey-glide >=2.0.0 with a Batch constructor",
     );
   }
   const isCluster = classifyValkeyGlideClient(client, glide) === "cluster";
@@ -188,65 +166,26 @@ export function createValkeyGlideDialCacheClient<TDecoder>(
       return decodeTrackedRedisFrame(pair[0], pair[1]);
     },
     async write(request) {
-      const { valueKey, watermarkKey, value } = request;
+      const { valueKey, value } = request;
       const cacheTtlMs = ceilSupportedCacheTtlMs(request.cacheTtlMs);
       const execOptions = keyedOptions(valueKey);
-
-      if (watermarkKey === undefined) {
-        const frame = encodeRedisFrame(value, Date.now());
-        validateRedisSetReply(
-          await client.customCommand(["SET", valueKey, frame, "PX", String(cacheTtlMs)], execOptions),
-        );
-        return true;
-      }
-
-      const { frame, nonce } = encodeTrackedRedisPlaceholder(value);
-      const stampArgs: ValkeyGlideString[] = [String(cacheTtlMs), nonce];
-      const batch = (isCluster ? new glide.ClusterBatch(false) : new glide.Batch(false))
-        .customCommand(["SET", valueKey, frame, "PX", String(cacheTtlMs)])
-        .customCommand([
-          "EVALSHA",
-          WRITE_TRACKED_STAMP_SHA1,
-          "2",
-          valueKey,
-          watermarkKey,
-          ...stampArgs,
-        ]);
-      const replies = await client.exec(batch, false, execOptions);
-      if (!Array.isArray(replies) || replies.length !== 2) {
-        throw new DialCacheRedisPayloadError("Invalid DialCache Redis write reply");
-      }
-      const [setReply, rawStamp] = replies as [unknown, unknown];
-      // A failed SET is the write outcome even when the stamp settled.
-      if (setReply instanceof Error) {
-        throw setReply;
-      }
-      validateRedisSetReply(setReply);
-      let stampReply: unknown = rawStamp;
-      if (rawStamp instanceof Error) {
-        if (!isNoScriptError(rawStamp)) {
-          throw rawStamp;
-        }
-        // Only NOSCRIPT proves the batched stamp never executed, so only it
-        // is retried: after any other error a re-run could find its own
-        // frame already promoted and misreport the write as a lost
-        // placeholder. EVAL resends the source, the server caches it under
-        // the same SHA1 the batched EVALSHA uses, and the nonce keeps the
-        // late stamp paired to this write.
-        stampReply = await client.customCommand(
-          ["EVAL", WRITE_TRACKED_STAMP_SCRIPT, "2", valueKey, watermarkKey, ...stampArgs],
-          execOptions,
-        );
-      }
-      return resolveTrackedRedisWriteReply(stampReply);
+      const frame = encodeRedisFrame(value, Date.now());
+      validateRedisSetReply(
+        await client.customCommand(["SET", valueKey, frame, "PX", String(cacheTtlMs)], execOptions),
+      );
     },
     async invalidate({ watermarkKey, futureBufferMs }) {
-      const invalidateArgs: ValkeyGlideString[] = [String(futureBufferMs)];
+      const invalidatedAtMs = Date.now();
+      assertValidRedisTimestampMs(invalidatedAtMs);
+      const invalidateArgs = buildRedisInvalidationScriptArguments(
+        futureBufferMs,
+        invalidatedAtMs,
+      );
       const options = keyedOptions(watermarkKey);
       let raw: unknown;
       try {
         raw = await client.customCommand(
-          ["EVALSHA", INVALIDATE_CACHE_SHA1, "1", watermarkKey, ...invalidateArgs],
+          ["EVALSHA", INVALIDATE_CACHE_SCRIPT_SHA1, "1", watermarkKey, ...invalidateArgs],
           options,
         );
       } catch (error) {
