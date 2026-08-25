@@ -391,6 +391,38 @@ describe("DialCache Redis shadow validation", () => {
     }
   });
 
+  it("skips a non-finite value-age observation from an untracked custom client", async () => {
+    const redis = new FakeRedis();
+    const metrics = new RecordingMetrics();
+    const useCase = "ShadowNonFiniteValueAge";
+    const cachedValue = { id: "123", version: 1 };
+    seedRedis(redis, {
+      id: "123",
+      useCase,
+      payload: JSON.stringify(cachedValue),
+      tracked: false,
+    });
+    const originalRead = redis.read.bind(redis);
+    vi.spyOn(redis, "read").mockImplementation(async (request) => {
+      const frame = await originalRead(request);
+      return frame === null ? null : { ...frame, createdAtMs: Number.POSITIVE_INFINITY };
+    });
+    const dialcache = createShadowCache(redis, metrics);
+    const getUser = dialcache.cached(async () => cachedValue, {
+      keyType: "user_id",
+      useCase,
+      cacheKey: () => "123",
+      defaultConfig: remoteOnly(100),
+    });
+
+    expect(await dialcache.enable(async () => await getUser())).toEqual(cachedValue);
+    await waitForShadowEvents(metrics, 1);
+
+    expect(metrics.shadowEvents[0]?.outcome).toBe("match");
+    expect(metrics.shadowAgeEvents).toEqual([]);
+    expect(metrics.futureTimestampEvents).toEqual([]);
+  });
+
   it("re-deserializes the retained payload instead of comparing a caller-mutated hit", async () => {
     const redis = new FakeRedis();
     const metrics = new RecordingMetrics();

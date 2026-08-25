@@ -29,10 +29,7 @@ function isSupportedRedisFrame(raw: Buffer | null): raw is Buffer {
     && raw[0] === REDIS_FRAME_VERSION;
 }
 
-function parseRedisWatermark(raw: Buffer | null): number | null {
-  if (raw === null) {
-    return null;
-  }
+function parseRedisWatermark(raw: Buffer): number | null {
   const text = raw.toString("utf8");
   if (!/^[0-9]+$/.test(text)) {
     return null;
