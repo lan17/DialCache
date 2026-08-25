@@ -15,8 +15,15 @@ import {
   type Serializer,
 } from "../src/index.js";
 import { MARKER_ESCAPED_RAW, MARKER_ZSTD_UTF8 } from "../src/internal/compression.js";
+import {
+  MAX_SUPPORTED_DURATION_MS,
+  MAX_TRACKED_REDIS_VALUE_TTL_MS,
+} from "../src/internal/duration.js";
 import { markerCollidingSerializer, type Row } from "./marker-colliding-serializer.js";
-import { INVALIDATE_CACHE_SCRIPT } from "../src/internal/redis-scripts.js";
+import {
+  INVALIDATE_CACHE_SCRIPT,
+  MIN_WATERMARK_TTL_MS,
+} from "../src/internal/redis-scripts.js";
 import { createNodeRedisDialCacheClient } from "../src/node-redis.js";
 import { createValkeyGlideDialCacheClient } from "../src/valkey-glide.js";
 
@@ -30,9 +37,6 @@ const adapterKinds = [
   { kind: "valkeyGlide", name: "Valkey GLIDE" },
 ] as const;
 type AdapterKind = (typeof adapterKinds)[number]["kind"];
-const MAX_SUPPORTED_DURATION_MS = 31_536_000_000;
-const MAX_TRACKED_REDIS_VALUE_TTL_MS = 3_600_000;
-const MIN_WATERMARK_TTL_MS = 7_200_000;
 const WATERMARK_TTL_MARGIN_MS = 60_000;
 const INVALIDATE_CACHE_SHA1 = createHash("sha1").update(INVALIDATE_CACHE_SCRIPT).digest("hex");
 
@@ -1011,7 +1015,10 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       expect(await scriptClient.read({ valueKey, watermarkKey })).toBeNull();
 
       await admin.set(watermarkKey, "999.5");
-      expect((await scriptClient.read({ valueKey, watermarkKey }))?.payload).toBe("tracked");
+      expect(await scriptClient.read({ valueKey, watermarkKey })).toBeNull();
+
+      await admin.set(watermarkKey, String(Number.MAX_SAFE_INTEGER + 1));
+      expect(await scriptClient.read({ valueKey, watermarkKey })).toBeNull();
     });
 
     it("records a stale tracked frame as a remote miss without a read error", async () => {
@@ -1073,7 +1080,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       expect(metrics.error).not.toHaveBeenCalled();
     });
 
-    it("uses native wrong-type semantics and repairs tracked value keys", async () => {
+    it("uses native wrong-type read semantics and repairs wrong-type keys", async () => {
       if (client === undefined || admin === undefined) {
         throw new Error("Redis test clients did not start");
       }
@@ -1093,12 +1100,21 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
         payload: "cached",
         createdAtMs: 1_000,
       });
-      await expect(scriptClient.invalidate({
-        watermarkKey,
-        futureBufferMs: 0,
-      })).rejects.toThrow(/WRONGTYPE/);
-      expect(await admin.type(watermarkKey)).toBe("hash");
-      expect(await admin.hGet(watermarkKey, "field")).toBe("value");
+      const invalidatedAtMs = 1_700_000_000_000;
+      const now = vi.spyOn(Date, "now").mockReturnValue(invalidatedAtMs);
+      try {
+        await expect(scriptClient.invalidate({
+          watermarkKey,
+          futureBufferMs: 100,
+        })).resolves.toBeUndefined();
+      } finally {
+        now.mockRestore();
+      }
+      expect(await admin.type(watermarkKey)).toBe("string");
+      expect(await admin.get(watermarkKey)).toBe(String(invalidatedAtMs + 100));
+      expect(await admin.pTTL(watermarkKey)).toBeGreaterThan(MIN_WATERMARK_TTL_MS - 1_000);
+      expect(await admin.pTTL(watermarkKey)).toBeLessThanOrEqual(MIN_WATERMARK_TTL_MS);
+      expect(await scriptClient.read({ valueKey, watermarkKey })).toBeNull();
 
       const namespace = "wrong-type-repair";
       const repairValueKey = `{${namespace}:item_id:repair}#WrongTypeRepair:dialcache-frame-v1`;
@@ -1211,6 +1227,9 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       await expect(client.raw.invalidate(watermarkKey, -1, validTimestampMs)).rejects.toThrow(
         "invalid DialCache future buffer",
       );
+      await expect(client.raw.invalidate(watermarkKey, 1.5, validTimestampMs)).rejects.toThrow(
+        "invalid DialCache future buffer",
+      );
       await expect(client.raw.invalidate(watermarkKey, notANumber, validTimestampMs)).rejects.toThrow(
         "invalid DialCache future buffer",
       );
@@ -1285,28 +1304,24 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       expect(await admin.pTTL(invalidationKey)).toBeLessThanOrEqual(
         MAX_SUPPORTED_DURATION_MS + MAX_TRACKED_REDIS_VALUE_TTL_MS + WATERMARK_TTL_MARGIN_MS,
       );
+
+      const maximumTimestampKey = "maximum-args:{item:timestamp}:watermark";
+      expect(
+        await client.raw.invalidate(maximumTimestampKey, 0, Number.MAX_SAFE_INTEGER),
+      ).toBe(1);
+      expect(await admin.get(maximumTimestampKey)).toBe(String(Number.MAX_SAFE_INTEGER));
     });
 
-    it("rounds fractional raw protocol durations upward", async () => {
+    it("rounds fractional native write TTLs upward", async () => {
       if (client === undefined || admin === undefined) {
         throw new Error("Redis test clients did not start");
       }
       const valueKey = "fractional-args:{item:fractional}:value";
-      const watermarkKey = "fractional-args:{item:fractional}:watermark";
-
       await expect(
         client.adapter.write({ valueKey, cacheTtlMs: 1_000.1, value: "value" }),
       ).resolves.toBeUndefined();
       expect(await admin.pTTL(valueKey)).toBeGreaterThan(900);
       expect(await admin.pTTL(valueKey)).toBeLessThanOrEqual(1_001);
-
-      const invalidatedAtMs = 1_700_000_000_000;
-      expect(await client.raw.invalidate(watermarkKey, 100.1, invalidatedAtMs)).toBe(1);
-      const watermark = Number(await admin.get(watermarkKey));
-      expect(Number.isSafeInteger(watermark)).toBe(true);
-      expect(watermark).toBe(invalidatedAtMs + 101);
-      expect(await admin.pTTL(watermarkKey)).toBeGreaterThan(MIN_WATERMARK_TTL_MS - 1_000);
-      expect(await admin.pTTL(watermarkKey)).toBeLessThanOrEqual(MIN_WATERMARK_TTL_MS);
     });
 
     it("keeps native reads working after SCRIPT FLUSH", async () => {
@@ -1443,45 +1458,6 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       );
     });
 
-    it("keeps future fractional watermarks alive without shortening longer TTLs", async () => {
-      if (client === undefined || admin === undefined) {
-        throw new Error("Redis test clients did not start");
-      }
-      const scriptClient = client.adapter;
-      const invalidatedAtMs = 1_700_000_000_000;
-      const legacyWatermark = invalidatedAtMs + 30_000.5;
-      const now = vi.spyOn(Date, "now").mockReturnValue(invalidatedAtMs);
-      const shortTtlKey = "legacy:{urn:user_id:short}#watermark";
-      try {
-        await admin.set(shortTtlKey, String(legacyWatermark), { PX: 1_000 });
-
-        await scriptClient.invalidate({
-          watermarkKey: shortTtlKey,
-          futureBufferMs: 1_000,
-        });
-
-        expect(Number(await admin.get(shortTtlKey))).toBe(Math.ceil(legacyWatermark));
-        expect(await admin.pTTL(shortTtlKey)).toBeGreaterThan(MIN_WATERMARK_TTL_MS - 1_000);
-        expect(await admin.pTTL(shortTtlKey)).toBeLessThanOrEqual(MIN_WATERMARK_TTL_MS);
-
-        const longTtlKey = "legacy:{urn:user_id:long}#watermark";
-        await admin.set(longTtlKey, String(legacyWatermark), { PX: 10_800_000 });
-        const ttlBefore = await admin.pTTL(longTtlKey);
-
-        await scriptClient.invalidate({
-          watermarkKey: longTtlKey,
-          futureBufferMs: 1_000,
-        });
-
-        expect(Number(await admin.get(longTtlKey))).toBe(Math.ceil(legacyWatermark));
-        const ttlAfter = await admin.pTTL(longTtlKey);
-        expect(ttlAfter).toBeGreaterThan(ttlBefore - 1_000);
-        expect(ttlAfter).toBeLessThanOrEqual(ttlBefore);
-      } finally {
-        now.mockRestore();
-      }
-    });
-
     it("creates missing and repairs malformed invalidation watermarks", async () => {
       if (client === undefined || admin === undefined) {
         throw new Error("Redis test clients did not start");
@@ -1500,6 +1476,8 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
 
         for (const [suffix, malformed] of [
           ["syntax", "not-a-watermark"],
+          ["fractional", "1700000030000.5"],
+          ["unsafe", String(Number.MAX_SAFE_INTEGER + 1)],
           ["overflow", "9".repeat(400)],
         ] as const) {
           const watermarkKey = `invalidate-paths:{item:${suffix}}:watermark`;
@@ -1528,29 +1506,6 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       expect(await admin.pTTL(watermarkKey)).toBe(-1);
     });
 
-    it("leaves a fractional legacy watermark unchanged on native writes", async () => {
-      if (client === undefined || admin === undefined) {
-        throw new Error("Redis test clients did not start");
-      }
-      const scriptClient = client.adapter;
-      const valueKey = "legacy-write:{urn:user_id:123}:value";
-      const watermarkKey = "legacy-write:{urn:user_id:123}:watermark";
-      await admin.set(watermarkKey, "1.75", { PX: 10_000 });
-      const ttlBefore = await admin.pTTL(watermarkKey);
-
-      await expect(scriptClient.write({
-        valueKey,
-        cacheTtlMs: 2_000,
-        value: "cached",
-      })).resolves.toBeUndefined();
-
-      expect(await admin.get(watermarkKey)).toBe("1.75");
-      const ttlAfter = await admin.pTTL(watermarkKey);
-      expect(ttlAfter).toBeGreaterThan(ttlBefore - 1_000);
-      expect(ttlAfter).toBeLessThanOrEqual(ttlBefore);
-      expect((await scriptClient.read({ valueKey, watermarkKey }))?.payload).toBe("cached");
-    });
-
     it("does not create or rewrite watermarks on writes", async () => {
       if (client === undefined || admin === undefined) {
         throw new Error("Redis test clients did not start");
@@ -1567,7 +1522,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
 
       const persistentValueKey = "write-persistent:{item:persistent}:value";
       const persistentWatermarkKey = "write-persistent:{item:persistent}:watermark";
-      await admin.set(persistentWatermarkKey, "2.25");
+      await admin.set(persistentWatermarkKey, "2");
 
       await expect(
         scriptClient.write({
@@ -1576,7 +1531,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
           value: "cached",
         }),
       ).resolves.toBeUndefined();
-      expect(await admin.get(persistentWatermarkKey)).toBe("2.25");
+      expect(await admin.get(persistentWatermarkKey)).toBe("2");
       expect(await admin.pTTL(persistentWatermarkKey)).toBe(-1);
     });
 
@@ -1640,6 +1595,43 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       expect((await scriptClient.read({ valueKey, watermarkKey }))?.payload).toBe("stale");
     });
 
+  });
+
+  it("preserves a watermark when GET fails for a reason other than WRONGTYPE", async () => {
+    if (admin === undefined) {
+      throw new Error("Redis test clients did not start");
+    }
+    const username = "dialcache-invalidation-no-get";
+    const password = "dialcache-invalidation-test-password";
+    const watermarkKey = "invalidation-acl:{item:protected}:watermark";
+    const existingWatermark = "1800000000000";
+    await admin.set(watermarkKey, existingWatermark, { PX: 60_000 });
+    await admin.sendCommand([
+      "ACL",
+      "SETUSER",
+      username,
+      "reset",
+      "on",
+      `>${password}`,
+      "~*",
+      "+eval",
+      "+set",
+      "+pttl",
+      "-get",
+    ]);
+    const restricted = admin.duplicate({ username, password });
+    restricted.on("error", () => undefined);
+    try {
+      await restricted.connect();
+      await expect(restricted.eval(INVALIDATE_CACHE_SCRIPT, {
+        keys: [watermarkKey],
+        arguments: ["0", "1700000000000"],
+      })).rejects.toThrow(/ACL|can't run this command|no permissions/);
+      expect(await admin.get(watermarkKey)).toBe(existingWatermark);
+    } finally {
+      await restricted.quit().catch(() => undefined);
+      await admin.sendCommand(["ACL", "DELUSER", username]);
+    }
   });
 
   it("uses one wire format across node-redis and Valkey GLIDE", async () => {

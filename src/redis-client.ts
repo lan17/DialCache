@@ -66,10 +66,12 @@ export type RedisCachePayload = string | Buffer;
  * header's creation time. The payload is the serializer output, possibly
  * still wrapped in a compression envelope that DialCache core interprets
  * above the adapter (see the `dialcache/redis-protocol` module doc). All
- * frames carry application-clock time supplied by the writer. DialCache
- * rejects frames dated after the reading process's clock before deserialization
- * and otherwise uses `createdAtMs` for shadow value-age observability. Tracked
- * watermark fencing already happened inside the decoder.
+ * frames carry application-clock time supplied by the writer. Tracked serving
+ * and initial-shadow reads reject frames dated after the reading process's
+ * clock before deserialization; confirmation reads retain them for payload
+ * comparison, and untracked reads treat the stamp as informational. DialCache
+ * also uses `createdAtMs` for shadow value-age observability. Tracked watermark
+ * fencing already happened inside the decoder.
  */
 export interface DecodedRedisFrame {
   readonly payload: RedisCachePayload;
@@ -139,8 +141,8 @@ export interface DialCacheRedisClient {
    * frame shorter than the version/timestamp/encoding header, or an
    * unsupported frame version is a cache miss. A missing tracked watermark
    * is the zero baseline. A tracked read misses when a present watermark is
-   * not a finite unsigned decimal or is greater than or equal to the frame's
-   * creation time. In other words, `createdAt <= watermark` is fenced.
+   * not a nonnegative safe-integer decimal or is greater than or equal to the
+   * frame's creation time. In other words, `createdAt <= watermark` is fenced.
    * Unsupported payload encodings and non-bulk runtime replies are payload
    * protocol errors rather than misses.
    *
@@ -160,9 +162,11 @@ export interface DialCacheRedisClient {
    *
    * All writes are one native `SET valueKey frame PX cacheTtlMs` whose
    * frame comes from `encodeRedisFrame` with a client-clock `createdAtMs`.
-   * DialCache uses the decoded frame's `createdAtMs` to reject future-dated
-   * values and to feed shadow value-age observations, so writers
-   * must stamp real client time, not a constant.
+   * DialCache uses a tracked frame's decoded `createdAtMs` for future-time
+   * rejection and uses decoded timestamps for shadow value-age observations,
+   * so writers must stamp real client time, not a constant. Untracked serving
+   * remains governed by Redis TTL and does not reject on the informational
+   * timestamp.
    *
    * Tracked and untracked writes use the same complete-frame SET. Core caps a
    * tracked value's physical TTL at one hour. Under the documented clock-skew
@@ -177,7 +181,8 @@ export interface DialCacheRedisClient {
    * Reuse that sample through retries within one adapter invocation.
    * Its TTL is at least two hours and otherwise derived to outlive the future
    * buffer plus the maximum tracked-value TTL. Longer or persistent existing
-   * markers are preserved.
+   * markers are preserved. A wrong-type watermark is repaired; any other Redis
+   * read error surfaces without replacing prior state.
    */
   invalidate(request: RedisInvalidationRequest): Awaitable<void>;
 }

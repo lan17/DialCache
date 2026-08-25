@@ -34,12 +34,11 @@ function parseRedisWatermark(raw: Buffer | null): number | null {
     return null;
   }
   const text = raw.toString("utf8");
-  const match = /^[0-9]+(?:\.[0-9]+)?/.exec(text);
-  if (match?.[0].length !== text.length) {
+  if (!/^[0-9]+$/.test(text)) {
     return null;
   }
   const watermark = Number(text);
-  return Number.isFinite(watermark) ? watermark : null;
+  return watermark <= Number.MAX_SAFE_INTEGER ? watermark : null;
 }
 
 function decodeRedisPayload(raw: Buffer): RedisCachePayload {
@@ -57,9 +56,9 @@ function decodeRedisPayload(raw: Buffer): RedisCachePayload {
 /**
  * Encode a serializer payload into a servable DialCache Redis frame.
  *
- * Writes stamp a client-clock `createdAtMs`. Core rejects decoded
- * frames dated after the reader's clock and uses the timestamp for shadow
- * value-age observations, so stamp real client time, not a constant.
+ * Writes stamp a client-clock `createdAtMs`. Core rejects tracked frames dated
+ * after the reader's clock and uses decoded timestamps for shadow value-age
+ * observations, so stamp real client time, not a constant.
  */
 export function encodeRedisFrame(payload: RedisCachePayload, createdAtMs: number): Buffer {
   if (!isValidRedisTimestampMs(createdAtMs)) {

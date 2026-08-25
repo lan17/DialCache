@@ -96,6 +96,7 @@ const ERROR_KINDS: Readonly<Record<MetricErrorKind, true>> = {
   cache_read: true,
   cache_read_timeout: true,
   cache_write: true,
+  tracked_ttl_clamped: true,
   serialization_load: true,
   serialization_dump: true,
   compression: true,

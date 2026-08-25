@@ -56,6 +56,7 @@ function deferred<T>(): Deferred<T> {
 type ReadStep = () => RedisCachePayload | null | Promise<RedisCachePayload | null>;
 
 const SCRIPTED_FRAME_CREATED_AT_MS = 1_700_000_000_000;
+const MAX_TRACKED_REDIS_VALUE_TTL_MS = 60 * 60 * 1_000;
 
 class ScriptedRedis implements DialCacheRedisClient {
   readonly requests: RedisReadRequest[] = [];
@@ -560,7 +561,7 @@ describe("DialCache Redis shadow confirmation", () => {
     expectTrackedReads(redis, 2);
   });
 
-  it("treats a future-dated C1 as superseded and attributes its offset to remote_shadow", async () => {
+  it("retains a future-dated C1 for payload confirmation and attributes its offset to remote_shadow", async () => {
     const nowMs = 1_700_000_000_000;
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(nowMs);
     try {
@@ -588,8 +589,18 @@ describe("DialCache Redis shadow confirmation", () => {
       await dialcache.enable(async () => await getUser());
       await waitForShadowEvents(metrics, 1);
 
-      expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["superseded"]);
-      expect(metrics.shadowAgeEvents).toEqual([]);
+      expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["mismatch"]);
+      expect(metrics.shadowAgeEvents).toEqual([
+        {
+          labels: {
+            cacheNamespace: "urn",
+            useCase: "ShadowFutureConfirmation",
+            keyType: "user_id",
+            outcome: "mismatch",
+          },
+          seconds: 1,
+        },
+      ]);
       expect(metrics.futureTimestampEvents).toEqual([
         {
           labels: {
@@ -603,9 +614,60 @@ describe("DialCache Redis shadow confirmation", () => {
       ]);
       expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
         name === "miss" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
-      )).toHaveLength(1);
+      )).toHaveLength(0);
       expect(serializer.load).toHaveBeenCalledTimes(2);
       expect(serializer.dump).not.toHaveBeenCalled();
+      expectTrackedReads(redis, 2);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it("confirms the same C1 payload when the reader clock steps backward after accepting C0", async () => {
+    const nowMs = 1_700_000_000_000;
+    const nowSpy = vi.spyOn(Date, "now")
+      .mockReturnValueOnce(nowMs)
+      .mockReturnValue(nowMs - 2_000);
+    try {
+      const payload = JSON.stringify({ id: "123", version: 1 });
+      const redis = new ScriptedRedis([() => payload, () => payload]);
+      redis.frameCreatedAtMs = nowMs - 1_000;
+      const metrics = new RecordingMetrics();
+      const dialcache = createCache(redis, metrics);
+      const getUser = dialcache.cached(async () => ({ id: "123", version: 2 }), {
+        ...trackedOptions("ShadowConfirmationClockStepBack", remoteConfig(100)),
+        cacheKey: () => "123",
+      });
+
+      await dialcache.enable(async () => await getUser());
+      await waitForShadowEvents(metrics, 1);
+
+      expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["mismatch"]);
+      expect(metrics.shadowAgeEvents).toEqual([
+        {
+          labels: {
+            cacheNamespace: "urn",
+            useCase: "ShadowConfirmationClockStepBack",
+            keyType: "user_id",
+            outcome: "mismatch",
+          },
+          seconds: 0,
+        },
+      ]);
+      expect(metrics.futureTimestampEvents).toEqual([
+        {
+          labels: {
+            cacheNamespace: "urn",
+            useCase: "ShadowConfirmationClockStepBack",
+            keyType: "user_id",
+            layer: REMOTE_SHADOW_CACHE_LAYER,
+          },
+          seconds: 1,
+        },
+      ]);
+      expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+        name === "miss" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+      )).toHaveLength(0);
       expectTrackedReads(redis, 2);
     } finally {
       nowSpy.mockRestore();
@@ -651,23 +713,27 @@ describe("DialCache Redis shadow confirmation", () => {
     }
   });
 
-  it("skips the value-age observation when an out-of-contract client stamps a non-finite time", async () => {
+  it("treats a non-finite tracked dark frame timestamp as a miss without observing an offset", async () => {
     const payload = JSON.stringify({ id: "123", version: 1 });
     const redis = new ScriptedRedis([() => payload]);
     redis.frameCreatedAtMs = Number.NaN;
     const metrics = new RecordingMetrics();
     const dialcache = createCache(redis, metrics);
     const getUser = dialcache.cached(async () => ({ id: "123", version: 1 }), {
-      ...trackedOptions("ShadowValueAgeNonFinite", remoteConfig(100)),
+      ...trackedOptions("ShadowValueAgeNonFinite", remoteConfig(0)),
       cacheKey: () => "123",
     });
 
     await dialcache.enable(async () => await getUser());
     await waitForShadowEvents(metrics, 1);
 
-    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["match"]);
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["filled"]);
     expect(metrics.shadowAgeEvents).toEqual([]);
     expect(metrics.futureTimestampEvents).toEqual([]);
+    expect(redis.write).toHaveBeenCalledOnce();
+    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+      name === "miss" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+    )).toHaveLength(1);
   });
 
   it("does not log a mismatch candidate when C1 is superseded", async () => {
@@ -750,6 +816,39 @@ describe("DialCache Redis shadow confirmation", () => {
 
     expect(metrics.shadowEvents.map(({ outcome: actual }) => actual)).toEqual([outcome]);
     expectTrackedReads(redis, 2);
+  });
+
+  it("reports a tracked TTL clamp when a dark fill is actually dispatched", async () => {
+    const redis = new ScriptedRedis([() => null]);
+    const metrics = new RecordingMetrics();
+    const config = new DialCacheKeyConfig({
+      ttlSec: { [CacheLayer.REMOTE]: 2 * MAX_TRACKED_REDIS_VALUE_TTL_MS / 1_000 },
+      ramp: { [CacheLayer.REMOTE]: 0 },
+      shadow: { ramp: 100 },
+    });
+    const dialcache = createCache(redis, metrics);
+    const getUser = dialcache.cached(async () => ({ id: "123" }), {
+      ...trackedOptions("ShadowDarkTrackedTtlClamp", config),
+      cacheKey: () => "123",
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ id: "123" });
+    await waitForShadowEvents(metrics, 1);
+
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["filled"]);
+    expect(redis.write).toHaveBeenCalledWith(expect.objectContaining({
+      cacheTtlMs: MAX_TRACKED_REDIS_VALUE_TTL_MS,
+    }));
+    expect(metrics.ordinaryEvents.filter(({ name }) => name === "error").map(({ labels }) => labels)).toEqual([
+      {
+        cacheNamespace: "urn",
+        useCase: "ShadowDarkTrackedTtlClamp",
+        keyType: "user_id",
+        layer: REMOTE_SHADOW_CACHE_LAYER,
+        error: "tracked_ttl_clamped",
+        inFallback: false,
+      },
+    ]);
   });
 
   it("reports confirmation_error with its Redis work attributed to remote_shadow", async () => {
@@ -1886,8 +1985,13 @@ describe("DialCache Redis shadow confirmation", () => {
       load: vi.fn(async (payload) => JSON.parse(payload.toString()) as { readonly id: string }),
     };
     const dialcache = createCache(redis, metrics, { shadowMaxInFlight: 1 });
+    const config = new DialCacheKeyConfig({
+      ttlSec: { [CacheLayer.REMOTE]: 2 * MAX_TRACKED_REDIS_VALUE_TTL_MS / 1_000 },
+      ramp: { [CacheLayer.REMOTE]: 0 },
+      shadow: { ramp: 100 },
+    });
     const getUser = dialcache.cached(async (id: string) => ({ id }), {
-      ...trackedOptions("ShadowDarkDumpTimeoutRetention", remoteConfig(0)),
+      ...trackedOptions("ShadowDarkDumpTimeoutRetention", config),
       cacheKey: (id) => id,
       fallbackTimeoutMs: 50,
       serializer,
@@ -1909,6 +2013,9 @@ describe("DialCache Redis shadow confirmation", () => {
       dumpGate.resolve(undefined);
       await nextImmediate();
       expect(redis.write).not.toHaveBeenCalled();
+      expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+        name === "error" && labels.error === "tracked_ttl_clamped"
+      )).toHaveLength(0);
 
       await expect(dialcache.enable(async () => await getUser("b"))).resolves.toEqual({ id: "b" });
       await waitForShadowEvents(metrics, 3);

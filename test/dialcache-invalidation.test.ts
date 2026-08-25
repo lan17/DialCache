@@ -15,6 +15,11 @@ import {
   type SerializationMetricLabels,
   type Serializer,
 } from "../src/index.js";
+import {
+  MAX_SUPPORTED_DURATION_MS,
+  MAX_TRACKED_REDIS_VALUE_TTL_MS,
+} from "../src/internal/duration.js";
+import { MIN_WATERMARK_TTL_MS } from "../src/internal/redis-scripts.js";
 import { encodeFrame, FakeRedis } from "./fake-redis.js";
 
 class RecordingMetrics implements DialCacheMetricsAdapter {
@@ -71,9 +76,6 @@ const localAndRemote = (ttlSec = 60) => DialCacheKeyConfig.enabled(ttlSec);
 const valueKey = (useCase: string, args = ""): string => `{urn:user_id:123}${args}#${useCase}:dialcache-frame-v1`;
 const watermarkKey = "{urn:user_id:123}#watermark";
 const MAX_CACHE_TTL_SEC = 31_536_000;
-const MAX_SUPPORTED_DURATION_MS = 31_536_000_000;
-const MAX_TRACKED_REDIS_VALUE_TTL_MS = 60 * 60 * 1_000;
-const MIN_WATERMARK_TTL_MS = 2 * MAX_TRACKED_REDIS_VALUE_TTL_MS;
 const WATERMARK_TTL_MARGIN_MS = 60_000;
 
 describe("DialCache targeted invalidation watermarks", () => {
@@ -528,7 +530,8 @@ describe("DialCache targeted invalidation watermarks", () => {
 
   it("caps tracked Redis values at one hour while retaining the configured local TTL", async () => {
     const redis = new FakeRedis();
-    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
+    const metrics = new RecordingMetrics();
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 }, metrics });
     let calls = 0;
     const getUser = dialcache.cached(async (id: string) => ({ id, calls: ++calls }), {
       keyType: "user_id",
@@ -542,6 +545,16 @@ describe("DialCache targeted invalidation watermarks", () => {
     const second = await dialcache.enable(async () => await getUser("123"));
     expect(redis.ttlMs(valueKey("MaximumSupportedTtl"))).toBe(MAX_TRACKED_REDIS_VALUE_TTL_MS);
     expect(redis.ttlMs(watermarkKey)).toBe(-2);
+    expect(metrics.events.filter(({ name }) => name === "error").map(({ labels }) => labels)).toEqual([
+      {
+        cacheNamespace: "urn",
+        useCase: "MaximumSupportedTtl",
+        keyType: "user_id",
+        layer: CacheLayer.REMOTE,
+        error: "tracked_ttl_clamped",
+        inFallback: false,
+      },
+    ]);
 
     vi.advanceTimersByTime(MAX_TRACKED_REDIS_VALUE_TTL_MS + 1);
     const third = await dialcache.enable(async () => await getUser("123"));

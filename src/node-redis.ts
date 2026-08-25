@@ -1,8 +1,10 @@
-import { createHash } from "node:crypto";
-
 import { commandOptions } from "redis";
 
-import { INVALIDATE_CACHE_SCRIPT } from "./internal/redis-scripts.js";
+import {
+  buildRedisInvalidationScriptArguments,
+  INVALIDATE_CACHE_SCRIPT,
+  INVALIDATE_CACHE_SCRIPT_SHA1,
+} from "./internal/redis-invalidation.js";
 import {
   assertValidRedisTimestampMs,
   decodeRedisFrame,
@@ -28,10 +30,6 @@ type BufferReplyOptions = ReturnType<
 // Redis bulk strings are binary data; decoding them as UTF-8 would corrupt arbitrary serializer output.
 const bufferReplyOptions: BufferReplyOptions = commandOptions({ returnBuffers: true });
 type NodeRedisArgument = string | Buffer;
-
-// Redis caches EVAL'd sources under sha1(source), so this is both the digest
-// used by EVALSHA and the digest populated by the EVAL recovery.
-const INVALIDATE_CACHE_SHA1 = createHash("sha1").update(INVALIDATE_CACHE_SCRIPT).digest("hex");
 
 interface NodeRedisStandaloneClient {
   get(options: BufferReplyOptions, valueKey: string): Promise<Buffer | null>;
@@ -152,16 +150,16 @@ export function createNodeRedisDialCacheClient(client: NodeRedisClient): DialCac
     async invalidate({ watermarkKey, futureBufferMs }) {
       const invalidatedAtMs = Date.now();
       assertValidRedisTimestampMs(invalidatedAtMs);
-      const invalidateArgs: NodeRedisArgument[] = [
-        String(futureBufferMs),
-        String(invalidatedAtMs),
-      ];
+      const invalidateArgs = buildRedisInvalidationScriptArguments(
+        futureBufferMs,
+        invalidatedAtMs,
+      );
       let raw: unknown;
       try {
         raw = await sendKeyedCommand(
           client,
           watermarkKey,
-          ["EVALSHA", INVALIDATE_CACHE_SHA1, "1", watermarkKey, ...invalidateArgs],
+          ["EVALSHA", INVALIDATE_CACHE_SCRIPT_SHA1, "1", watermarkKey, ...invalidateArgs],
           bufferReplyOptions,
         );
       } catch {

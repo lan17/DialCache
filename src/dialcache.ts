@@ -34,7 +34,7 @@ import {
 } from "./internal/duration.js";
 import { LocalCache } from "./internal/local-cache.js";
 import { deterministicShadowRampSample } from "./internal/ramp.js";
-import { RedisCache } from "./internal/redis-cache.js";
+import { RedisCache, type FutureFramePolicy } from "./internal/redis-cache.js";
 import {
   fetchKeyConfig,
   resolveLayerConfigResult,
@@ -495,7 +495,8 @@ export class DialCache {
    * never read, create, or extend watermarks; every write is one native SET of
    * a complete client-stamped frame.
    *
-   * Core caps tracked Redis values at one hour. Invalidation keeps a watermark
+   * Core caps tracked Redis values at one hour and reports a bounded metric
+   * error when a dispatched write is clamped. Invalidation keeps a watermark
    * for at least two hours, or long enough to outlive its future window plus
    * the one-hour value bound and a safety margin; longer and persistent
    * existing TTLs are preserved. Watermarks are invalidation state and must not
@@ -509,17 +510,19 @@ export class DialCache {
    * stale SET can become visible: source visibility lag, in-flight fallback and
    * serialization work, bounded client queue/reconnect delay, network and Redis
    * execution, plus the maximum writer-clock lead over the invalidator.
-   * DialCache reports future-dated frames through optional metrics but does not
-   * calibrate clocks.
+   * DialCache reports future-dated tracked frames through optional metrics but
+   * does not calibrate clocks.
    * A zero buffer fences only frames stamped no later than the invalidation;
    * an undersized buffer can admit stale work, while an oversized one causes
    * more tracked misses without delaying the returned fallback value.
    *
-   * Caller-path tracked fallbacks are not published directly to process-local
-   * cache; a later validated Redis hit may warm it. Request-local memoization
-   * remains unconditional, and already-warm local entries are not evicted by
-   * this remote operation. Ramped-out invocations without shadow work do not
-   * consult Redis.
+   * When an invocation reaches the tracked Redis read/write path, its fallback
+   * is not published directly to process-local cache; a later validated Redis
+   * hit may warm it. Local-only, remote-policy-disabled, and ramped-down paths
+   * retain their local publication policy. Request-local memoization remains
+   * unconditional, and already-warm local entries are not evicted by this
+   * remote operation. Ramped-out invocations without shadow work do not consult
+   * Redis.
    *
    * @param futureBufferMs Nonnegative safe integer no greater than
    * 31,536,000,000 (365 days); defaults to zero for backward compatibility.
@@ -784,16 +787,16 @@ export class DialCache {
     const fallbackLayer = remote.status === "miss" || remoteErrored ? CacheLayer.REMOTE : CacheLayer.LOCAL;
     const value = await this.callFallback(labelsFor(key, fallbackLayer), fallback);
     const skipCacheWrite = (remote.status === "miss" || remote.status === "disabled") && remote.skipCacheWrite === true;
-    let suppressLocalWrite = skipCacheWrite;
-    if (!suppressLocalWrite && remoteWriteConfig !== undefined) {
+    // A tracked fallback was not validated against a watermark after the source
+    // call. If this invocation reached the Redis write path, let a later
+    // authoritative Redis hit populate local regardless of write success.
+    const suppressLocalWrite = skipCacheWrite
+      || (remoteWriteConfig !== undefined && key.trackForInvalidation);
+    if (!skipCacheWrite && remoteWriteConfig !== undefined) {
       try {
         await redisCache.put(key, value, remoteWriteConfig);
-        // A tracked fallback was not validated against a watermark after the
-        // source call. Let a later authoritative Redis hit populate local.
-        suppressLocalWrite = key.trackForInvalidation;
       } catch (error) {
         this.logger.warn("Error putting value in Redis cache", error);
-        suppressLocalWrite = key.trackForInvalidation;
       }
     }
     if (!suppressLocalWrite && local.status === "miss") {
@@ -944,8 +947,8 @@ export class DialCache {
       operationFinished = true;
       maybeRelease();
     };
-    const readShadowFrame = (): Promise<DecodedRedisFrame | null> => {
-      const read = redisCache.startPayloadReadForShadow(key, readTimeoutMs);
+    const readShadowFrame = (futureFramePolicy: FutureFramePolicy): Promise<DecodedRedisFrame | null> => {
+      const read = redisCache.startPayloadReadForShadow(key, readTimeoutMs, futureFramePolicy);
       pendingRedisReads.add(read.settled);
       void read.settled.then(() => {
         pendingRedisReads.delete(read.settled);
@@ -987,7 +990,7 @@ export class DialCache {
           if (start.kind === "redis") {
             let frame: DecodedRedisFrame | null;
             try {
-              frame = await readShadowFrame();
+              frame = await readShadowFrame("reject");
             } catch {
               return "redis_error";
             }
@@ -1029,7 +1032,7 @@ export class DialCache {
 
           if (shadowFillConfig !== null) {
             try {
-              const didWrite = await redisCache.putForShadow(
+              await redisCache.putForShadow(
                 key,
                 sourceValue,
                 shadowFillConfig,
@@ -1037,7 +1040,7 @@ export class DialCache {
               );
               // A late result remains the already-emitted whole-job timeout:
               // dispatch success does not retroactively change its outcome.
-              if (!didWrite || abandonIfExpired()) {
+              if (abandonIfExpired()) {
                 return "timeout";
               }
               return "filled";
@@ -1086,7 +1089,7 @@ export class DialCache {
 
           let confirmationFrame: DecodedRedisFrame | null;
           try {
-            confirmationFrame = await readShadowFrame();
+            confirmationFrame = await readShadowFrame("retain");
           } catch {
             return "confirmation_error";
           }
@@ -1579,11 +1582,11 @@ function resolveShadowComparator<Value>(
 }
 
 // Frame stamps and the observation both use application-process epoch clocks.
-// Core rejects frames that are future-dated when read, but the reader clock can
-// step backward before a detached shadow verdict, so clamp that age to zero. A
-// custom client that violates the decode contract can hand over a non-finite
-// stamp; recording it would permanently poison backend histogram sums, so the
-// observation is skipped instead.
+// Core rejects tracked frames that are future-dated when read, but the reader
+// clock can step backward before a detached shadow verdict, so clamp that age
+// to zero. A custom client that violates the decode contract can hand over a
+// non-finite stamp; recording it would permanently poison backend histogram
+// sums, so the observation is skipped instead.
 function shadowValueAgeSeconds(createdAtMs: number): number | undefined {
   const ageSeconds = (Date.now() - createdAtMs) / 1000;
   if (!Number.isFinite(ageSeconds)) {

@@ -42,13 +42,14 @@ export type CompressionOutcome =
   | "read_over_limit";
 /** Bounded reasons for skipping cache work; policy_disabled means a shared layer has no effective TTL. */
 export type DisabledReason = "context" | "policy_disabled" | "invalid_ttl" | "invalid_ramp" | "ramped_down" | "config_error";
-/** Stable failure sites used instead of backend- or application-defined error names. */
+/** Stable failure sites and configuration signals; never backend- or application-defined names. */
 export type MetricErrorKind =
   | "key_construction"
   | "config_resolution"
   | "cache_read"
   | "cache_read_timeout"
   | "cache_write"
+  | "tracked_ttl_clamped"
   | "serialization_load"
   | "serialization_dump"
   | "compression"
@@ -127,10 +128,11 @@ export interface DialCacheMetricsAdapter {
    */
   observeShadowValueAge?(labels: ShadowValidationMetricLabels, seconds: number): void;
   /**
-   * Positive offset in seconds when a decoded Redis frame is dated after the
-   * observing process's epoch clock. Such frames fail closed as cache misses.
-   * This is a workload-shaped diagnostic, not proof of clock skew. Optional
-   * so existing custom adapters keep compiling without changes.
+   * Positive offset in seconds when a decoded tracked Redis frame is dated
+   * after the observing process's epoch clock. Serving and initial shadow reads
+   * fail closed as misses; a shadow confirmation retains the frame solely for
+   * payload comparison. This is a workload-shaped diagnostic, not proof of
+   * clock skew. Optional so existing custom adapters keep compiling.
    */
   observeFutureTimestampOffset?(labels: CacheMetricLabels, seconds: number): void;
   // Optional so existing custom adapters keep compiling without changes.

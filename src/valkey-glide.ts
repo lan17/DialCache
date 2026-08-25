@@ -1,13 +1,15 @@
-import { createHash } from "node:crypto";
-
 import { ceilSupportedCacheTtlMs } from "./internal/duration.js";
+import {
+  buildRedisInvalidationScriptArguments,
+  INVALIDATE_CACHE_SCRIPT,
+  INVALIDATE_CACHE_SCRIPT_SHA1,
+} from "./internal/redis-invalidation.js";
 import {
   assertValidRedisTimestampMs,
   decodeRedisFrame,
   decodeTrackedRedisFrame,
   encodeRedisFrame,
 } from "./internal/redis-payload.js";
-import { INVALIDATE_CACHE_SCRIPT } from "./internal/redis-scripts.js";
 import {
   validateRedisScriptInvalidationReply,
   validateRedisSetReply,
@@ -15,11 +17,6 @@ import {
 import { DialCacheRedisPayloadError, type DialCacheRedisClient } from "./redis-client.js";
 
 type ValkeyGlideString = string | Buffer;
-
-// Redis caches EVAL'd sources under sha1(source), so these digests are by
-// definition the ones the EVALSHA dispatches must use and the ones the EVAL
-// recoveries repopulate.
-const INVALIDATE_CACHE_SHA1 = createHash("sha1").update(INVALIDATE_CACHE_SCRIPT).digest("hex");
 
 interface ValkeyGlideBatch {
   mget(keys: ValkeyGlideString[]): ValkeyGlideBatch;
@@ -180,15 +177,15 @@ export function createValkeyGlideDialCacheClient<TDecoder>(
     async invalidate({ watermarkKey, futureBufferMs }) {
       const invalidatedAtMs = Date.now();
       assertValidRedisTimestampMs(invalidatedAtMs);
-      const invalidateArgs: ValkeyGlideString[] = [
-        String(futureBufferMs),
-        String(invalidatedAtMs),
-      ];
+      const invalidateArgs = buildRedisInvalidationScriptArguments(
+        futureBufferMs,
+        invalidatedAtMs,
+      );
       const options = keyedOptions(watermarkKey);
       let raw: unknown;
       try {
         raw = await client.customCommand(
-          ["EVALSHA", INVALIDATE_CACHE_SHA1, "1", watermarkKey, ...invalidateArgs],
+          ["EVALSHA", INVALIDATE_CACHE_SCRIPT_SHA1, "1", watermarkKey, ...invalidateArgs],
           options,
         );
       } catch (error) {

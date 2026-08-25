@@ -172,22 +172,17 @@ describe("DialCache Redis TTL layer", () => {
     });
   });
 
-  it.each([
-    { name: "tracked", tracked: true },
-    { name: "untracked", tracked: false },
-  ])("rejects a future-dated $name frame before deserialization and observes one exact offset", async ({ tracked }) => {
+  it("rejects a future-dated tracked frame before deserialization and observes one exact offset", async () => {
     const nowMs = 1_700_000_000_000;
     vi.spyOn(Date, "now").mockReturnValue(nowMs);
     const redis = new FakeRedis();
-    const useCase = tracked ? "RedisTrackedFutureFrame" : "RedisUntrackedFutureFrame";
-    const key = keyFor("123", useCase, tracked);
+    const useCase = "RedisTrackedFutureFrame";
+    const key = keyFor("123", useCase, true);
     redis.setRaw(
       `${key.urn}:dialcache-frame-v1`,
       encodeFrame(JSON.stringify({ source: "redis" }), nowMs + 1_250),
     );
-    if (tracked) {
-      redis.setRaw(`${key.prefix}#watermark`, "0");
-    }
+    redis.setRaw(`${key.prefix}#watermark`, "0");
     const observeFutureTimestampOffset = vi.fn();
     const metrics = metricsWithFutureTimestampObserver(observeFutureTimestampOffset);
     const serializer: Serializer<{ readonly source: string }> = {
@@ -205,7 +200,7 @@ describe("DialCache Redis TTL layer", () => {
       keyType: "user_id",
       useCase,
       cacheKey: () => "123",
-      trackForInvalidation: tracked,
+      trackForInvalidation: true,
       defaultConfig: new DialCacheKeyConfig({
         ttlSec: { [CacheLayer.REMOTE]: 60 },
         ramp: { [CacheLayer.REMOTE]: 100 },
@@ -227,6 +222,89 @@ describe("DialCache Redis TTL layer", () => {
       },
       1.25,
     );
+    expect(metrics.miss).toHaveBeenCalledOnce();
+  });
+
+  it("serves a future-dated untracked frame without consulting the reader clock", async () => {
+    const cachedValue = { source: "redis" };
+    const redis: DialCacheRedisClient = {
+      read: vi.fn(async () => ({ payload: JSON.stringify(cachedValue), createdAtMs: Number.MAX_SAFE_INTEGER })),
+      write: vi.fn(async () => undefined),
+      invalidate: vi.fn(async () => undefined),
+    };
+    const observeFutureTimestampOffset = vi.fn();
+    const metrics = metricsWithFutureTimestampObserver(observeFutureTimestampOffset);
+    const serializer: Serializer<typeof cachedValue> = {
+      dump: vi.fn((value) => JSON.stringify(value)),
+      load: vi.fn((value) => JSON.parse(Buffer.isBuffer(value) ? value.toString("utf8") : value)),
+    };
+    const fallback = vi.fn(async () => ({ source: "fallback" }));
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 }, metrics });
+    const getUser = dialcache.cached(fallback, {
+      keyType: "user_id",
+      useCase: "RedisUntrackedFutureFrame",
+      cacheKey: () => "123",
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 100 },
+      }),
+      serializer,
+    });
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => {
+      throw new Error("untracked reads must not consult the reader clock");
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).resolves.toEqual(cachedValue);
+
+    expect(nowSpy).not.toHaveBeenCalled();
+    expect(serializer.load).toHaveBeenCalledOnce();
+    expect(serializer.dump).not.toHaveBeenCalled();
+    expect(fallback).not.toHaveBeenCalled();
+    expect(observeFutureTimestampOffset).not.toHaveBeenCalled();
+    expect(metrics.miss).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    -1,
+    1.5,
+    Number.MAX_SAFE_INTEGER + 1,
+  ])("treats invalid tracked frame timestamp %s as a miss without observing an offset", async (createdAtMs) => {
+    const redis: DialCacheRedisClient = {
+      read: vi.fn(async () => ({ payload: JSON.stringify({ source: "redis" }), createdAtMs })),
+      write: vi.fn(async () => undefined),
+      invalidate: vi.fn(async () => undefined),
+    };
+    const observeFutureTimestampOffset = vi.fn();
+    const metrics = metricsWithFutureTimestampObserver(observeFutureTimestampOffset);
+    const serializer: Serializer<{ readonly source: string }> = {
+      dump: vi.fn((value) => JSON.stringify(value)),
+      load: vi.fn(() => {
+        throw new Error("invalid tracked frames must not be deserialized");
+      }),
+    };
+    const fallback = vi.fn(async () => ({ source: "fallback" }));
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 }, metrics });
+    const getUser = dialcache.cached(fallback, {
+      keyType: "user_id",
+      useCase: "RedisInvalidTrackedFrameTimestamp",
+      cacheKey: () => "123",
+      trackForInvalidation: true,
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 100 },
+      }),
+      serializer,
+    });
+    const nowSpy = vi.spyOn(Date, "now");
+
+    await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ source: "fallback" });
+
+    expect(nowSpy).not.toHaveBeenCalled();
+    expect(serializer.load).not.toHaveBeenCalled();
+    expect(fallback).toHaveBeenCalledOnce();
+    expect(observeFutureTimestampOffset).not.toHaveBeenCalled();
     expect(metrics.miss).toHaveBeenCalledOnce();
   });
 
@@ -278,10 +356,12 @@ describe("DialCache Redis TTL layer", () => {
       vi.spyOn(Date, "now").mockReturnValue(nowMs);
       const redis = new FakeRedis();
       const useCase = `RedisFutureTimestampObserver${failure}`;
+      const key = keyFor("123", useCase, true);
       redis.setRaw(
-        redisKeyFor("123", useCase),
+        `${key.urn}:dialcache-frame-v1`,
         encodeFrame(JSON.stringify({ source: "redis" }), nowMs + 1),
       );
+      redis.setRaw(`${key.prefix}#watermark`, "0");
       const observerFailure = new Error("metrics transport failed");
       const observeFutureTimestampOffset = failure === "throw"
         ? vi.fn(() => {
@@ -298,6 +378,7 @@ describe("DialCache Redis TTL layer", () => {
         keyType: "user_id",
         useCase,
         cacheKey: () => "123",
+        trackForInvalidation: true,
         defaultConfig: new DialCacheKeyConfig({
           ttlSec: { [CacheLayer.REMOTE]: 60 },
           ramp: { [CacheLayer.REMOTE]: 100 },

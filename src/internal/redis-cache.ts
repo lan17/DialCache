@@ -58,6 +58,8 @@ interface StartedRedisRead {
   readonly settled: Promise<void>;
 }
 
+export type FutureFramePolicy = "reject" | "retain";
+
 const defaultSerializer = new JsonSerializer<unknown>();
 const REDIS_FRAME_KEY_SUFFIX = ":dialcache-frame-v1";
 const DEFAULT_REMOTE_READ_TIMEOUT_MS = 50;
@@ -172,12 +174,14 @@ export class RedisCache {
   startPayloadReadForShadow(
     key: DialCacheKey,
     readTimeoutMs: number,
+    futureFramePolicy: FutureFramePolicy,
   ): StartedRedisRead {
     return this.startMeasuredPayloadRead(
       key,
       readTimeoutMs,
       REMOTE_SHADOW_CACHE_LAYER,
       true,
+      futureFramePolicy,
     );
   }
 
@@ -195,8 +199,8 @@ export class RedisCache {
     value: T,
     config: { readonly ttlSec: number },
     shouldWrite: () => boolean,
-  ): Promise<boolean> {
-    return await this.putWithLayer(
+  ): Promise<void> {
+    await this.putWithLayer(
       key,
       value,
       config.ttlSec,
@@ -211,7 +215,7 @@ export class RedisCache {
     ttlSec: number,
     metricLayer: MetricLayer,
     shouldWrite?: () => boolean,
-  ): Promise<boolean> {
+  ): Promise<void> {
     const configuredTtlMs = cacheTtlSecToMs(ttlSec);
     const cacheTtlMs = key.trackForInvalidation
       ? Math.min(configuredTtlMs, MAX_TRACKED_REDIS_VALUE_TTL_MS)
@@ -254,7 +258,10 @@ export class RedisCache {
     }
     this.recordMetric((metrics) => metrics.observeStoredSize?.(labelsFor(key, metricLayer), payloadSize(serialized)));
     if (shouldWrite !== undefined && !shouldWrite()) {
-      return false;
+      return;
+    }
+    if (cacheTtlMs < configuredTtlMs) {
+      this.recordError(key, metricLayer, "tracked_ttl_clamped");
     }
 
     try {
@@ -267,7 +274,6 @@ export class RedisCache {
       this.recordError(key, metricLayer, "cache_write");
       throw error;
     }
-    return true;
   }
 
   async invalidate(keyType: string, id: string, futureBufferMs = 0, namespace = "urn"): Promise<void> {
@@ -294,6 +300,7 @@ export class RedisCache {
     readTimeoutMs: number,
     metricLayer: MetricLayer,
     unrefTimer: boolean,
+    futureFramePolicy: FutureFramePolicy = "reject",
   ): StartedRedisRead {
     const abortController = new AbortController();
     const pending = Promise.resolve().then(() =>
@@ -312,7 +319,8 @@ export class RedisCache {
       timeoutError: () => new RedisReadTimeoutError(key.useCase, readTimeoutMs),
       unrefTimer,
     });
-    const result = bounded.then((frame) => this.rejectFutureFrame(key, frame, metricLayer));
+    const result = bounded.then((frame) =>
+      this.validateTrackedFrame(key, frame, metricLayer, futureFramePolicy));
     return {
       result,
       settled: pending.then(
@@ -327,10 +335,11 @@ export class RedisCache {
     readTimeoutMs: number,
     metricLayer: MetricLayer,
     unrefTimer: boolean,
+    futureFramePolicy: FutureFramePolicy,
   ): StartedRedisRead {
     const start = performance.now();
     this.recordMetric((metrics) => metrics.request(labelsFor(key, metricLayer)));
-    const read = this.startPayloadRead(key, readTimeoutMs, metricLayer, unrefTimer);
+    const read = this.startPayloadRead(key, readTimeoutMs, metricLayer, unrefTimer, futureFramePolicy);
     const result = read.result.then(
       (frame) => {
         if (frame === null) {
@@ -352,22 +361,29 @@ export class RedisCache {
     return { result, settled: read.settled };
   }
 
-  private rejectFutureFrame(
+  private validateTrackedFrame(
     key: DialCacheKey,
     frame: DecodedRedisFrame | null,
     metricLayer: MetricLayer,
+    futureFramePolicy: FutureFramePolicy,
   ): DecodedRedisFrame | null {
-    if (frame === null) {
+    if (frame === null || !key.trackForInvalidation) {
+      return frame;
+    }
+    if (!Number.isSafeInteger(frame.createdAtMs) || frame.createdAtMs < 0) {
       return null;
     }
 
     const readerNowMs = Date.now();
     if (frame.createdAtMs > readerNowMs) {
-      this.recordMetric((metrics) => metrics.observeFutureTimestampOffset?.(
-        labelsFor(key, metricLayer),
-        (frame.createdAtMs - readerNowMs) / 1_000,
-      ));
-      return null;
+      const offsetSeconds = (frame.createdAtMs - readerNowMs) / 1_000;
+      if (Number.isFinite(offsetSeconds)) {
+        this.recordMetric((metrics) => metrics.observeFutureTimestampOffset?.(
+          labelsFor(key, metricLayer),
+          offsetSeconds,
+        ));
+      }
+      return futureFramePolicy === "reject" ? null : frame;
     }
     return frame;
   }

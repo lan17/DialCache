@@ -229,6 +229,7 @@ describe("DialCache Redis read deadlines", () => {
       keyType: "id",
       useCase: "RedisReadSettledClockSample",
       cacheKey: () => "123",
+      trackForInvalidation: true,
       defaultConfig: remoteConfig,
     });
 

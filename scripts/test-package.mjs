@@ -12,6 +12,73 @@ const fallbackTimeoutMarker = "dialcache-fallback-timeout-delivered";
 const nodeInvalidationMarker = "dialcache-node-invalidation-retry-verified";
 const observerIsolationMarker = "dialcache-observer-rejections-isolated";
 const shadowPayloadReleaseMarker = "dialcache-shadow-payload-released";
+const packedInvalidationCheckSource = String.raw`
+function createPackedNodeRedisInvalidationAdapter(nodeRedis, dispatch, label) {
+  const client = {
+    get: async () => null,
+    sendCommand: async (...callArgs) => {
+      if (
+        callArgs.length !== 2
+        || !Array.isArray(callArgs[0])
+        || callArgs[1]?.returnBuffers !== true
+      ) {
+        throw new Error("The packed " + label + " adapter used the wrong standalone command shape");
+      }
+      return await dispatch(callArgs[0]);
+    },
+  };
+  return nodeRedis.createNodeRedisDialCacheClient(client);
+}
+
+function createPackedGlideInvalidationAdapter(glide, appGlide, dispatch) {
+  const client = {
+    customCommand: async (args) => await dispatch(args),
+  };
+  const runtime = {
+    ...appGlide,
+    GlideClient: { [Symbol.hasInstance]: (value) => value === client },
+    GlideClusterClient: { [Symbol.hasInstance]: () => false },
+  };
+  return glide.createValkeyGlideDialCacheClient(client, runtime);
+}
+
+async function verifyPackedInvalidation({ createAdapter, label, redisProtocol }) {
+  const dispatches = [];
+  const dispatch = async (args) => {
+    dispatches.push(args);
+    if (dispatches.length === 1) {
+      throw new Error("packed invalidation EVALSHA rejected");
+    }
+    return 1;
+  };
+  const invalidatedAtMs = 1700000000456;
+  const nativeDateNow = Date.now;
+  Date.now = () => invalidatedAtMs;
+  try {
+    await createAdapter(dispatch).invalidate({
+      watermarkKey: "tracked:{id}:watermark",
+      futureBufferMs: 50,
+    });
+  } finally {
+    Date.now = nativeDateNow;
+  }
+
+  const script = redisProtocol.INVALIDATE_CACHE_SCRIPT;
+  const sha = createHash("sha1").update(script).digest("hex");
+  const args = ["1", "tracked:{id}:watermark", "50", String(invalidatedAtMs)];
+  const expected = [
+    ["EVALSHA", sha, ...args],
+    ["EVAL", script, ...args],
+  ];
+  const commandsMatch = dispatches.length === expected.length
+    && dispatches.every((command, index) =>
+      command.length === expected[index].length
+      && command.every((part, partIndex) => part === expected[index][partIndex]));
+  if (!commandsMatch) {
+    throw new Error("The packed " + label + " invalidation script or argument contract is invalid");
+  }
+}
+`;
 const rootConsumer = `import {
   CacheLayer,
   DialCache,
@@ -367,6 +434,7 @@ const metricErrorKinds: Readonly<Record<MetricErrorKind, true>> = {
   cache_read: true,
   cache_read_timeout: true,
   cache_write: true,
+  tracked_ttl_clamped: true,
   serialization_load: true,
   serialization_dump: true,
   compression: true,
@@ -739,60 +807,19 @@ const nodeRedis = await import("dialcache/node-redis");
 await import("dialcache/valkey-glide");
 await import("dialcache/datadog");
 const redisProtocol = await import("dialcache/redis-protocol");
+${packedInvalidationCheckSource}
 if (typeof nodeRedis.createNodeRedisDialCacheClient !== "function") {
   throw new Error("The packed ESM node-redis adapter export is missing");
 }
 if ("dialcacheRedisScripts" in nodeRedis) {
   throw new Error("The removed ESM node-redis script-registration facade is still exported");
 }
-const esmNodeInvalidationDispatches = [];
-const esmFakeNodeClient = {
-  get: async () => null,
-  sendCommand: async (...callArgs) => {
-    if (
-      callArgs.length !== 2
-      || !Array.isArray(callArgs[0])
-      || callArgs[1]?.returnBuffers !== true
-    ) {
-      throw new Error("The packed ESM node-redis adapter used the wrong standalone command shape");
-    }
-    esmNodeInvalidationDispatches.push(callArgs[0]);
-    if (esmNodeInvalidationDispatches.length === 1) {
-      throw new Error("packed ESM node invalidation dispatch rejected");
-    }
-    return 1;
-  },
-};
-const esmNodeInvalidatedAtMs = 1700000000456;
-const esmNodeNativeDateNow = Date.now;
-Date.now = () => esmNodeInvalidatedAtMs;
-try {
-  await nodeRedis
-    .createNodeRedisDialCacheClient(esmFakeNodeClient)
-    .invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 });
-} finally {
-  Date.now = esmNodeNativeDateNow;
-}
-const esmExpectedInvalidateSha = createHash("sha1")
-  .update(redisProtocol.INVALIDATE_CACHE_SCRIPT)
-  .digest("hex");
-if (
-  esmNodeInvalidationDispatches.length !== 2
-  || esmNodeInvalidationDispatches[0][0] !== "EVALSHA"
-  || esmNodeInvalidationDispatches[0][1] !== esmExpectedInvalidateSha
-  || esmNodeInvalidationDispatches[1][0] !== "EVAL"
-  || esmNodeInvalidationDispatches[1][1] !== redisProtocol.INVALIDATE_CACHE_SCRIPT
-  || esmNodeInvalidationDispatches[0][2] !== "1"
-  || esmNodeInvalidationDispatches[1][2] !== "1"
-  || esmNodeInvalidationDispatches[0][3] !== "tracked:{id}:watermark"
-  || esmNodeInvalidationDispatches[1][3] !== "tracked:{id}:watermark"
-  || esmNodeInvalidationDispatches[0][4] !== "50"
-  || esmNodeInvalidationDispatches[1][4] !== "50"
-  || esmNodeInvalidationDispatches[0][5] !== String(esmNodeInvalidatedAtMs)
-  || esmNodeInvalidationDispatches[1][5] !== String(esmNodeInvalidatedAtMs)
-) {
-  throw new Error("The packed ESM node-redis invalidation retry contract is invalid");
-}
+await verifyPackedInvalidation({
+  createAdapter: (dispatch) =>
+    createPackedNodeRedisInvalidationAdapter(nodeRedis, dispatch, "ESM node-redis"),
+  label: "ESM node-redis",
+  redisProtocol,
+});
 console.log("${nodeInvalidationMarker}");
 const fallbackTimeoutError = new root.FallbackTimeoutError("PackageRuntime", 1000);
 if (!(fallbackTimeoutError instanceof root.DialCacheError) || fallbackTimeoutError.timeoutMs !== 1000) {
@@ -1116,63 +1143,19 @@ const nodeRedis = require("dialcache/node-redis");
 require("dialcache/valkey-glide");
 require("dialcache/datadog");
 const redisProtocol = require("dialcache/redis-protocol");
+${packedInvalidationCheckSource}
 if (typeof nodeRedis.createNodeRedisDialCacheClient !== "function") {
   throw new Error("The packed CommonJS node-redis adapter export is missing");
 }
 if ("dialcacheRedisScripts" in nodeRedis) {
   throw new Error("The removed CommonJS node-redis script-registration facade is still exported");
 }
-const cjsNodeInvalidationCheck = (async () => {
-  const dispatches = [];
-  const fakeClient = {
-    get: async () => null,
-    sendCommand: async (...callArgs) => {
-      if (
-        callArgs.length !== 2
-        || !Array.isArray(callArgs[0])
-        || callArgs[1]?.returnBuffers !== true
-      ) {
-        throw new Error("The packed CommonJS node-redis adapter used the wrong standalone command shape");
-      }
-      dispatches.push(callArgs[0]);
-      if (dispatches.length === 1) {
-        throw new Error("packed CommonJS node invalidation dispatch rejected");
-      }
-      return 1;
-    },
-  };
-  const invalidatedAtMs = 1700000000456;
-  const nativeDateNow = Date.now;
-  Date.now = () => invalidatedAtMs;
-  try {
-    await nodeRedis
-      .createNodeRedisDialCacheClient(fakeClient)
-      .invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 });
-  } finally {
-    Date.now = nativeDateNow;
-  }
-  const expectedSha = createHash("sha1")
-    .update(redisProtocol.INVALIDATE_CACHE_SCRIPT)
-    .digest("hex");
-  if (
-    dispatches.length !== 2
-    || dispatches[0][0] !== "EVALSHA"
-    || dispatches[0][1] !== expectedSha
-    || dispatches[1][0] !== "EVAL"
-    || dispatches[1][1] !== redisProtocol.INVALIDATE_CACHE_SCRIPT
-    || dispatches[0][2] !== "1"
-    || dispatches[1][2] !== "1"
-    || dispatches[0][3] !== "tracked:{id}:watermark"
-    || dispatches[1][3] !== "tracked:{id}:watermark"
-    || dispatches[0][4] !== "50"
-    || dispatches[1][4] !== "50"
-    || dispatches[0][5] !== String(invalidatedAtMs)
-    || dispatches[1][5] !== String(invalidatedAtMs)
-  ) {
-    throw new Error("The packed CommonJS node-redis invalidation retry contract is invalid");
-  }
-  console.log("${nodeInvalidationMarker}");
-})();
+const cjsNodeInvalidationCheck = verifyPackedInvalidation({
+  createAdapter: (dispatch) =>
+    createPackedNodeRedisInvalidationAdapter(nodeRedis, dispatch, "CommonJS node-redis"),
+  label: "CommonJS node-redis",
+  redisProtocol,
+}).then(() => console.log("${nodeInvalidationMarker}"));
 const fallbackTimeoutError = new root.FallbackTimeoutError("PackageRuntime", 1000);
 if (!(fallbackTimeoutError instanceof root.DialCacheError) || fallbackTimeoutError.timeoutMs !== 1000) {
   throw new Error("The root CommonJS fallback-timeout error export is invalid");
@@ -1393,13 +1376,15 @@ void (async () => {
     [
       "--input-type=module",
       "--eval",
-      `const glide = await import("dialcache/valkey-glide");
+      `const { createHash } = await import("node:crypto");
+const glide = await import("dialcache/valkey-glide");
 const appGlide = await import("@valkey/valkey-glide");
 const otherGlide = await import("dialcache-test-glide");
 await import("dialcache/datadog");
 await import("dialcache/prometheus");
 const redisProtocol = await import("dialcache/redis-protocol");
 await import("dialcache/node-redis");
+${packedInvalidationCheckSource}
 const esmCreatedAtMs = 1700000000123;
 if (appGlide.Script === otherGlide.Script) {
   throw new Error("The package test requires two distinct GLIDE module instances");
@@ -1460,42 +1445,11 @@ try {
 } finally {
   Date.now = esmNativeDateNow;
 }
-const esmInvalidationDispatches = [];
-const esmInvalidatedAtMs = 1700000000456;
-const esmFakeInvalidationClient = {
-  customCommand: async (args) => {
-    esmInvalidationDispatches.push(args);
-    if (esmInvalidationDispatches.length === 1) {
-      throw new Error("packed invalidation dispatch rejected");
-    }
-    return 1;
-  },
-};
-const esmInvalidationRuntime = {
-  ...appGlide,
-  GlideClient: { [Symbol.hasInstance]: (value) => value === esmFakeInvalidationClient },
-  GlideClusterClient: { [Symbol.hasInstance]: () => false },
-};
-Date.now = () => esmInvalidatedAtMs;
-try {
-  await glide
-    .createValkeyGlideDialCacheClient(esmFakeInvalidationClient, esmInvalidationRuntime)
-    .invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 });
-} finally {
-  Date.now = esmNativeDateNow;
-}
-if (
-  esmInvalidationDispatches.length !== 2
-  || esmInvalidationDispatches[0][0] !== "EVALSHA"
-  || esmInvalidationDispatches[1][0] !== "EVAL"
-  || esmInvalidationDispatches[0].at(-1) !== String(esmInvalidatedAtMs)
-  || esmInvalidationDispatches[1].at(-1) !== String(esmInvalidatedAtMs)
-) {
-  throw new Error("The ESM GLIDE invalidation retry did not preserve its EVALSHA-to-EVAL timestamp");
-}
-if (esmInvalidationDispatches[1][1] !== redisProtocol.INVALIDATE_CACHE_SCRIPT) {
-  throw new Error("The ESM GLIDE bundle's embedded invalidation source diverged from the redis-protocol entry");
-}`,
+await verifyPackedInvalidation({
+  createAdapter: (dispatch) => createPackedGlideInvalidationAdapter(glide, appGlide, dispatch),
+  label: "ESM GLIDE",
+  redisProtocol,
+});`,
     ],
     { cwd: workspace },
   );
@@ -1503,13 +1457,15 @@ if (esmInvalidationDispatches[1][1] !== redisProtocol.INVALIDATE_CACHE_SCRIPT) {
     process.execPath,
     [
       "--eval",
-      `const glide = require("dialcache/valkey-glide");
+      `const { createHash } = require("node:crypto");
+const glide = require("dialcache/valkey-glide");
 const appGlide = require("@valkey/valkey-glide");
 const otherGlide = require("dialcache-test-glide");
 require("dialcache/datadog");
 require("dialcache/prometheus");
 const redisProtocol = require("dialcache/redis-protocol");
 require("dialcache/node-redis");
+${packedInvalidationCheckSource}
 void (async () => {
   const cjsCreatedAtMs = 1700000000123;
   if (appGlide.Script === otherGlide.Script) {
@@ -1571,42 +1527,11 @@ void (async () => {
   } finally {
     Date.now = cjsNativeDateNow;
   }
-  const cjsInvalidationDispatches = [];
-  const cjsInvalidatedAtMs = 1700000000456;
-  const cjsFakeInvalidationClient = {
-    customCommand: async (args) => {
-      cjsInvalidationDispatches.push(args);
-      if (cjsInvalidationDispatches.length === 1) {
-        throw new Error("packed invalidation dispatch rejected");
-      }
-      return 1;
-    },
-  };
-  const cjsInvalidationRuntime = {
-    ...appGlide,
-    GlideClient: { [Symbol.hasInstance]: (value) => value === cjsFakeInvalidationClient },
-    GlideClusterClient: { [Symbol.hasInstance]: () => false },
-  };
-  Date.now = () => cjsInvalidatedAtMs;
-  try {
-    await glide
-      .createValkeyGlideDialCacheClient(cjsFakeInvalidationClient, cjsInvalidationRuntime)
-      .invalidate({ watermarkKey: "tracked:{id}:watermark", futureBufferMs: 50 });
-  } finally {
-    Date.now = cjsNativeDateNow;
-  }
-  if (
-    cjsInvalidationDispatches.length !== 2
-    || cjsInvalidationDispatches[0][0] !== "EVALSHA"
-    || cjsInvalidationDispatches[1][0] !== "EVAL"
-    || cjsInvalidationDispatches[0].at(-1) !== String(cjsInvalidatedAtMs)
-    || cjsInvalidationDispatches[1].at(-1) !== String(cjsInvalidatedAtMs)
-  ) {
-    throw new Error("The CommonJS GLIDE invalidation retry did not preserve its EVALSHA-to-EVAL timestamp");
-  }
-  if (cjsInvalidationDispatches[1][1] !== redisProtocol.INVALIDATE_CACHE_SCRIPT) {
-    throw new Error("The CommonJS GLIDE bundle's embedded invalidation source diverged from the redis-protocol entry");
-  }
+  await verifyPackedInvalidation({
+    createAdapter: (dispatch) => createPackedGlideInvalidationAdapter(glide, appGlide, dispatch),
+    label: "CommonJS GLIDE",
+    redisProtocol,
+  });
 })();`,
     ],
     { cwd: workspace },

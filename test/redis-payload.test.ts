@@ -63,14 +63,20 @@ describe("Redis frame decoding", () => {
     }
   });
 
-  it("validates tracked frames against integer and fractional watermarks", () => {
+  it("validates tracked frames against safe-integer watermarks", () => {
     const frame = encodeFrame("cached", 0, 1_000);
     const decoded = { payload: "cached", createdAtMs: 1_000 };
 
     expect(decodeTrackedRedisFrame(frame, Buffer.from("999"))).toEqual(decoded);
-    expect(decodeTrackedRedisFrame(frame, Buffer.from("999.5"))).toEqual(decoded);
     expect(decodeTrackedRedisFrame(frame, Buffer.from("1000"))).toBeNull();
-    expect(decodeTrackedRedisFrame(frame, Buffer.from("1000.5"))).toBeNull();
+
+    const latestFrame = encodeFrame("latest", 0, Number.MAX_SAFE_INTEGER);
+    expect(
+      decodeTrackedRedisFrame(latestFrame, Buffer.from(String(Number.MAX_SAFE_INTEGER - 1))),
+    ).toEqual({ payload: "latest", createdAtMs: Number.MAX_SAFE_INTEGER });
+    expect(
+      decodeTrackedRedisFrame(latestFrame, Buffer.from(String(Number.MAX_SAFE_INTEGER))),
+    ).toBeNull();
   });
 
   it("treats a missing watermark as the zero baseline", () => {
@@ -92,6 +98,8 @@ describe("Redis frame decoding", () => {
       Buffer.from(".1"),
       Buffer.from("1e2"),
       Buffer.from("1\n"),
+      Buffer.from("999.5"),
+      Buffer.from(String(Number.MAX_SAFE_INTEGER + 1)),
       Buffer.from("9".repeat(400)),
     ]) {
       expect(decodeTrackedRedisFrame(frame, watermark)).toBeNull();

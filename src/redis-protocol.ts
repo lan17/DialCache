@@ -4,9 +4,9 @@
  * These exports encode and decode complete frames, validate mutation replies,
  * guard the write-TTL acceptance domain, and carry the invalidation Lua source
  * the bundled adapters dispatch. The invalidation script accepts
- * `[futureBufferMs, invalidatedAtMs]`; the timestamp is a nonnegative
- * safe-integer application-clock sample that must remain stable through one
- * logical dispatch and its recovery. The
+ * `[futureBufferMs, invalidatedAtMs]`; both are nonnegative safe integers, and
+ * the application-clock timestamp must remain stable through one logical
+ * dispatch and its recovery. The
  * payload region past the header is opaque at this layer: entries written by
  * DialCache releases with payload compression may begin with a compression
  * envelope byte (0x00 escape, 0x01/0x02 zstd; see the README Compression
