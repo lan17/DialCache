@@ -15,6 +15,7 @@ import {
   type Serializer,
 } from "../src/index.js";
 import { MARKER_ZSTD_UTF8 } from "../src/internal/compression.js";
+import { RedisCache } from "../src/internal/redis-cache.js";
 import { decodeFrame, encodeFrame, FakeRedis } from "./fake-redis.js";
 
 const FRESH_TTL_SEC = 1;
@@ -204,41 +205,48 @@ describe("DialCache stale-on-error recovery", () => {
     });
   });
 
-  it("returns a logically fresh Redis hit without calling the source or recovery", async () => {
-    const useCase = "StaleRecoveryFreshHit";
-    const source = vi.fn(async () => ({ id: "123", version: 2 }));
-    const { redis, dialcache, getUser, staleRecovery } = setupDefaultStaleUseCase(useCase, source);
-    redis.setRaw(
-      redisValueKey(useCase),
-      encodeFrame({ id: "123", version: 1 }, Date.now()),
-      MAX_AGE_SEC * 1_000,
-    );
-
-    await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ id: "123", version: 1 });
-
-    expect(source).not.toHaveBeenCalled();
-    expectNativeReadCount(redis, 1);
-    expect(staleRecovery).not.toHaveBeenCalled();
-  });
-
-  it("treats a frame at the exact fresh-age boundary as stale", async () => {
-    const useCase = "StaleRecoveryExactFreshBoundary";
+  it.each([
+    { boundary: "F - 1 ms", ageMs: FRESH_TTL_SEC * 1_000 - 1, expectedStatus: "hit" },
+    { boundary: "F", ageMs: FRESH_TTL_SEC * 1_000, expectedStatus: "retained" },
+    { boundary: "M - 1 ms", ageMs: MAX_AGE_SEC * 1_000 - 1, expectedStatus: "retained" },
+    { boundary: "M", ageMs: MAX_AGE_SEC * 1_000, expectedStatus: "miss" },
+  ] as const)("classifies an initial frame at $boundary as $expectedStatus", async ({
+    boundary,
+    ageMs,
+    expectedStatus,
+  }) => {
+    const useCase = `StaleRecoveryInitialBoundary${boundary.replaceAll(/[^A-Za-z0-9]/g, "")}`;
     const retained = { id: "123", version: 1 };
-    const source = vi.fn(async () => {
-      throw new Error("source unavailable");
+    const redis = new RecordingRedis();
+    const redisCache = new RedisCache({
+      redis: { client: redis, readTimeoutMs: 1_000 },
+      metrics: null,
     });
-    const { redis, dialcache, getUser, staleRecovery } = setupDefaultStaleUseCase(useCase, source);
+    const key = new DialCacheKey({ keyType: "user_id", id: "123", useCase });
     redis.setRaw(
       redisValueKey(useCase),
-      encodeFrame(retained, Date.now() - FRESH_TTL_SEC * 1_000),
-      MAX_AGE_SEC * 1_000,
+      encodeFrame(retained, Date.now() - ageMs),
+      // Keep the frame physically present beyond M so exact-M coverage proves
+      // logical classification rather than FakeRedis expiry.
+      (MAX_AGE_SEC + 1) * 1_000,
     );
 
-    await expect(dialcache.enable(async () => await getUser())).resolves.toEqual(retained);
+    const result = await redisCache.getWithResolvedConfig<typeof retained>(key, {
+      ttlSec: FRESH_TTL_SEC,
+      ramp: 100,
+      staleOnErrorMaxAgeSec: MAX_AGE_SEC,
+    });
 
-    expect(source).toHaveBeenCalledOnce();
+    expect(result.status).toBe(expectedStatus);
+    if (result.status === "hit") {
+      expect(result.value).toEqual(retained);
+    } else if (result.status === "retained") {
+      expect(result.frame.createdAtMs).toBe(Date.now() - ageMs);
+    } else {
+      expect(result.reason).toBe("cache_miss");
+    }
     expectNativeReadCount(redis, 1);
-    expect(staleRecovery).toHaveBeenCalledWith(expect.objectContaining({ outcome: "served" }));
+    expect(redis.ttlMs(redisValueKey(useCase))).toBeGreaterThan(MAX_AGE_SEC * 1_000);
   });
 
   it("fails closed on a future-dated frame without retaining it for recovery", async () => {
@@ -320,6 +328,44 @@ describe("DialCache stale-on-error recovery", () => {
     expect(refreshedFrame.createdAtMs).toBe(Date.now());
     expect(JSON.parse(refreshedFrame.payload as string)).toEqual(sourceValue);
     expect(staleRecovery).not.toHaveBeenCalled();
+  });
+
+  it("does not deserialize or record recovery when the classifier denies a retained candidate", async () => {
+    const useCase = "StaleRecoveryClassifierDenied";
+    const retained = { id: "123", version: 1 };
+    const sourceError = Object.freeze({ code: "SOURCE_UNAVAILABLE" });
+    const redis = new RecordingRedis();
+    const { metrics, staleRecovery } = recordingMetrics();
+    const denyRecovery = vi.fn(() => false);
+    const serializer: Serializer<typeof retained> = {
+      dump: vi.fn(async (value) => JSON.stringify(value)),
+      load: vi.fn(async () => retained),
+    };
+    const dialcache = new DialCache({
+      redis: { client: redis, readTimeoutMs: 1_000 },
+      metrics,
+      shouldAttemptStaleRecovery: allowStaleRecovery,
+    });
+    const getUser = dialcache.cached(async (): Promise<typeof retained> => {
+      throw sourceError;
+    }, {
+      keyType: "user_id",
+      useCase,
+      cacheKey: () => "123",
+      defaultConfig: staleConfig(),
+      serializer,
+      shouldAttemptStaleRecovery: denyRecovery,
+    });
+    seedStale(redis, useCase, retained);
+
+    await expect(dialcache.enable(async () => await getUser())).rejects.toBe(sourceError);
+
+    expect(denyRecovery).toHaveBeenCalledOnce();
+    expect(denyRecovery).toHaveBeenCalledWith(sourceError);
+    expect(serializer.load).not.toHaveBeenCalled();
+    expect(serializer.dump).not.toHaveBeenCalled();
+    expect(staleRecovery).not.toHaveBeenCalled();
+    expectNativeReadCount(redis, 1);
   });
 
   it("rejects with the original source error when a retained frame reaches the exact maximum age", async () => {
