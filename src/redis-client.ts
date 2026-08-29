@@ -66,11 +66,12 @@ export type RedisCachePayload = string | Buffer;
  * header's creation time. The payload is the serializer output, possibly
  * still wrapped in a compression envelope that DialCache core interprets
  * above the adapter (see the `dialcache/redis-protocol` module doc). All
- * frames carry application-clock time supplied by the writer. Serving and
- * initial-shadow reads apply logical age and reject frames dated after the
- * reading process's clock before deserialization; confirmation reads may
- * retain them solely for payload comparison. DialCache also uses
- * `createdAtMs` for shadow value-age observability. Tracked watermark fencing
+ * frames carry application-clock time supplied by the writer. Caller-serving
+ * reads apply their logical age ceiling and reject frames dated after the
+ * reading process's clock before deserialization; stale-on-error may retain a
+ * raw frame between its fresh and maximum ages. Confirmation reads may retain
+ * a frame solely for payload comparison. DialCache also uses `createdAtMs` for
+ * shadow and stale-recovery value-age observability. Tracked watermark fencing
  * already happened inside the decoder.
  */
 export interface DecodedRedisFrame {
@@ -151,9 +152,9 @@ export interface DialCacheRedisClient {
    *
    * A non-null frame is transferred to DialCache. A returned Buffer payload
    * must remain stable and must not be mutated, pooled, or reused after this
-   * method settles; DialCache may retain it beyond the request for
-   * best-effort shadow deserialization. Adapters that recycle response
-   * storage must return a dedicated Buffer.
+   * method settles; DialCache may retain it for source-error recovery or
+   * best-effort shadow work. Adapters that recycle response storage must
+   * return a dedicated Buffer.
    */
   read(request: RedisReadRequest, context?: RedisReadContext): Awaitable<DecodedRedisFrame | null>;
   /**

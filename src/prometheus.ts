@@ -93,6 +93,7 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
   private readonly shadowValueAgeHistogram: Histogram<OutcomeLabels>;
   private readonly futureTimestampOffsetHistogram: Histogram<CounterLabels>;
   private readonly staleRecoveryCounter: Counter<OutcomeLabels>;
+  private readonly staleRecoveryValueAgeHistogram: Histogram<OutcomeLabels>;
   private readonly compressionCounter: Counter<CompressionLabels>;
   private readonly getTimer: Histogram<CounterLabels>;
   private readonly fallbackTimer: Histogram<CounterLabels>;
@@ -118,6 +119,7 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
     this.shadowValueAgeHistogram = histogram(registry, collectors.shadowValueAgeHistogram);
     this.futureTimestampOffsetHistogram = histogram(registry, collectors.futureTimestampOffsetHistogram);
     this.staleRecoveryCounter = counter(registry, collectors.staleRecoveryCounter);
+    this.staleRecoveryValueAgeHistogram = histogram(registry, collectors.staleRecoveryValueAgeHistogram);
     this.compressionCounter = counter(registry, collectors.compressionCounter);
     this.getTimer = histogram(registry, collectors.getTimer);
     this.fallbackTimer = histogram(registry, collectors.fallbackTimer);
@@ -182,6 +184,10 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
 
   staleRecovery(labels: StaleRecoveryMetricLabels): void {
     this.staleRecoveryCounter.inc(outcomeLabels(labels));
+  }
+
+  observeStaleRecoveryValueAge(labels: StaleRecoveryMetricLabels, seconds: number): void {
+    this.staleRecoveryValueAgeHistogram.observe(outcomeLabels(labels), seconds);
   }
 
   compression(labels: CompressionMetricLabels): void {
@@ -302,6 +308,13 @@ function collectorConfigs(prefix: string) {
       name: `${prefix}dialcache_stale_recovery_counter`,
       help: "DialCache stale-on-error Redis recovery outcomes.",
       labelNames: ["cache_namespace", "use_case", "key_type", "outcome"],
+    },
+    staleRecoveryValueAgeHistogram: {
+      type: "histogram",
+      name: `${prefix}dialcache_stale_recovery_value_age_histogram`,
+      help: "Age in seconds of Redis values served by DialCache stale-on-error recovery.",
+      labelNames: ["cache_namespace", "use_case", "key_type", "outcome"],
+      buckets: VALUE_AGE_BUCKETS,
     },
     compressionCounter: {
       type: "counter",

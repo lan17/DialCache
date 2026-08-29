@@ -50,6 +50,10 @@ class RecordingMetrics implements DialCacheMetricsAdapter {
     this.record("staleRecovery", labels);
   }
 
+  observeStaleRecoveryValueAge(labels: StaleRecoveryMetricLabels, seconds: number): void {
+    this.record("staleRecoveryValueAge", labels, seconds);
+  }
+
   observeGet(labels: CacheMetricLabels, seconds: number): void {
     this.record("get", labels, seconds);
   }
@@ -104,6 +108,7 @@ describe("DialCache observability metrics", () => {
       shadowValidation: vi.fn(() => thenable),
       observeFutureTimestampOffset: vi.fn(() => thenable),
       staleRecovery: vi.fn(() => thenable),
+      observeStaleRecoveryValueAge: vi.fn(() => thenable),
       observeGet: vi.fn(() => thenable),
       observeFallback: vi.fn(() => thenable),
       observeSerialization: vi.fn(() => thenable),
@@ -148,6 +153,15 @@ describe("DialCache observability metrics", () => {
       keyType: "user_id",
       outcome: "served",
     } satisfies StaleRecoveryMetricLabels);
+    isolatedMetrics.observeStaleRecoveryValueAge?.(
+      {
+        cacheNamespace: "urn",
+        useCase: "RejectingMetricsThenable",
+        keyType: "user_id",
+        outcome: "served",
+      } satisfies StaleRecoveryMetricLabels,
+      60,
+    );
     isolatedMetrics.observeGet(labels, 0);
     isolatedMetrics.observeFallback(labels, 0);
     isolatedMetrics.observeSerialization({ ...labels, operation: "dump" }, 0);
@@ -155,7 +169,7 @@ describe("DialCache observability metrics", () => {
 
     expect(then).not.toHaveBeenCalled();
     await tick();
-    expect(then).toHaveBeenCalledTimes(13);
+    expect(then).toHaveBeenCalledTimes(14);
   });
 
   it("includes the configured cache namespace on every metric path", async () => {
@@ -539,6 +553,7 @@ describe("DialCache observability metrics", () => {
       metrics,
       redis: { client: redis, readTimeoutMs: 1_000 },
       logger,
+      shouldAttemptStaleRecovery: () => true,
     });
     const getUser = dialcache.cached(source, {
       keyType: "user_id",
@@ -581,10 +596,8 @@ describe("DialCache observability metrics", () => {
     ]);
     expect(events(metrics, "request", { useCase })).toEqual([
       { name: "request", labels: remoteLabels },
-      { name: "request", labels: remoteLabels },
     ]);
     expect(events(metrics, "get", { useCase })).toEqual([
-      { name: "get", labels: remoteLabels, value: expect.any(Number) },
       { name: "get", labels: remoteLabels, value: expect.any(Number) },
     ]);
     expect(events(metrics, "staleRecovery", { useCase })).toEqual([
@@ -598,6 +611,19 @@ describe("DialCache observability metrics", () => {
         },
       },
     ]);
+    expect(events(metrics, "staleRecoveryValueAge", { useCase })).toEqual([
+      {
+        name: "staleRecoveryValueAge",
+        labels: {
+          cacheNamespace: "urn",
+          useCase,
+          keyType: "user_id",
+          outcome: "served",
+        },
+        value: expect.any(Number),
+      },
+    ]);
+    expect(events(metrics, "staleRecoveryValueAge", { useCase })[0]?.value).toBeGreaterThanOrEqual(2);
     expect(logger.warn).not.toHaveBeenCalled();
   });
 

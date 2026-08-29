@@ -16,6 +16,12 @@ export type RedisCacheMissReason = "cache_miss" | "deserialization_error";
 export type RedisCacheGetResult<T> =
   | { readonly status: "hit"; readonly value: T; readonly frame: DecodedRedisFrame }
   | {
+      /** A valid F..M frame retained only as a possible source-error fallback. */
+      readonly status: "retained";
+      readonly frame: DecodedRedisFrame;
+      readonly config: ResolvedRemoteLayerConfig;
+    }
+  | {
       readonly status: "miss";
       readonly config: ResolvedRemoteLayerConfig;
       readonly reason: RedisCacheMissReason;

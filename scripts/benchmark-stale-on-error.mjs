@@ -5,9 +5,14 @@
 //
 // Requires Redis, e.g.: docker run --rm -p 6379:6379 redis:6.2
 // Usage: pnpm benchmark:stale-on-error       (REDIS_URL to override)
+// For less noisy memory deltas: pnpm build && node --expose-gc scripts/benchmark-stale-on-error.mjs
 // Optional sizing: DIALCACHE_BENCH_STALE_ITERATIONS,
-// DIALCACHE_BENCH_STALE_FANOUT, and DIALCACHE_BENCH_STALE_PAYLOAD_BYTES.
+// DIALCACHE_BENCH_STALE_FANOUT, DIALCACHE_BENCH_STALE_PAYLOAD_BYTES,
+// DIALCACHE_BENCH_STALE_MEMORY_KEYS,
+// DIALCACHE_BENCH_STALE_MEMORY_PAYLOAD_BYTES, and
+// DIALCACHE_BENCH_STALE_MEMORY_SOURCE_DELAY_MS.
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import { performance } from "node:perf_hooks";
 
 import { createClient } from "redis";
@@ -24,6 +29,15 @@ const redisUrl = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
 const iterations = readPositiveInteger("DIALCACHE_BENCH_STALE_ITERATIONS", 200);
 const fanout = readPositiveInteger("DIALCACHE_BENCH_STALE_FANOUT", 500);
 const payloadBytes = readPositiveInteger("DIALCACHE_BENCH_STALE_PAYLOAD_BYTES", 64 * 1024);
+const memoryKeyCount = readPositiveInteger("DIALCACHE_BENCH_STALE_MEMORY_KEYS", 128);
+const memoryPayloadBytes = readPositiveInteger(
+  "DIALCACHE_BENCH_STALE_MEMORY_PAYLOAD_BYTES",
+  64 * 1024,
+);
+const memorySourceDelayMs = readPositiveInteger(
+  "DIALCACHE_BENCH_STALE_MEMORY_SOURCE_DELAY_MS",
+  250,
+);
 const freshAgeSec = 60;
 const logicalFreshAgeSec = 1;
 const staleMaxAgeSec = 60;
@@ -41,6 +55,21 @@ const payload = {
   body: payloadPattern.repeat(
     Math.ceil(payloadBytes / payloadPattern.length),
   ).slice(0, payloadBytes),
+};
+const memoryPayload = randomBytes(memoryPayloadBytes);
+// Avoid the single-byte escape used for raw payloads whose first byte overlaps
+// a compression marker. This keeps the representative Redis frame exactly ten
+// bytes larger than the random serializer payload.
+memoryPayload[0] = 0xff;
+const rawBufferSerializer = {
+  dump(value) {
+    assert(Buffer.isBuffer(value), "the memory benchmark serializer expects a Buffer");
+    return Buffer.from(value);
+  },
+  load(value) {
+    assert(Buffer.isBuffer(value), "the memory benchmark serializer expects binary Redis data");
+    return Buffer.from(value);
+  },
 };
 
 const redis = createClient({
@@ -60,8 +89,17 @@ try {
   throw error;
 }
 
-const adapter = createNodeRedisDialCacheClient(redis);
+const nativeAdapter = createNodeRedisDialCacheClient(redis);
+let adapterReadCalls = 0;
+const adapter = {
+  ...nativeAdapter,
+  read(...args) {
+    adapterReadCalls += 1;
+    return nativeAdapter.read(...args);
+  },
+};
 const staleOutcomes = new Map();
+const compressionOutcomes = new Map();
 const noOpMetrics = {
   request() {},
   miss() {},
@@ -73,7 +111,9 @@ const noOpMetrics = {
   staleRecovery({ outcome }) {
     staleOutcomes.set(outcome, (staleOutcomes.get(outcome) ?? 0) + 1);
   },
-  compression() {},
+  compression({ outcome }) {
+    compressionOutcomes.set(outcome, (compressionOutcomes.get(outcome) ?? 0) + 1);
+  },
   observeGet() {},
   observeFallback() {},
   observeSerialization() {},
@@ -84,6 +124,7 @@ const noOpMetrics = {
 };
 const dialcache = new DialCache({
   namespace,
+  shouldAttemptStaleRecovery: () => true,
   redis: {
     client: adapter,
     readTimeoutMs: redisReadTimeoutMs,
@@ -140,8 +181,40 @@ const loadStale = dialcache.cached(
   },
 );
 
+let memorySourceCalls = 0;
+let memorySourceMode = "warm";
+let memorySourceGate;
+const memoryUseCase = "BenchmarkHighCardinalityMemory";
+const memoryIds = Array.from(
+  { length: memoryKeyCount },
+  (_, index) => `memory-${index}`,
+);
+const loadMemory = dialcache.cached(
+  async () => {
+    memorySourceCalls += 1;
+    if (memorySourceMode === "warm") {
+      return memoryPayload;
+    }
+    await memorySourceGate.promise;
+    throw sourceError;
+  },
+  {
+    keyType,
+    useCase: memoryUseCase,
+    cacheKey: (memoryId) => memoryId,
+    serializer: rawBufferSerializer,
+    defaultConfig: new DialCacheKeyConfig({
+      ttlSec: { [CacheLayer.REMOTE]: logicalFreshAgeSec },
+      staleOnErrorMaxAgeSec: staleMaxAgeSec,
+    }),
+  },
+);
+
 const freshValueKey = redisValueKey(namespace, keyType, id, freshUseCase);
 const staleValueKey = redisValueKey(namespace, keyType, id, staleUseCase);
+const memoryValueKeys = memoryIds.map((memoryId) =>
+  redisValueKey(namespace, keyType, memoryId, memoryUseCase)
+);
 
 try {
   assert.deepEqual(await dialcache.enable(async () => await loadFresh()), payload);
@@ -196,7 +269,7 @@ try {
 
   const recoveryOutcomesBefore = staleOutcomes.get("served") ?? 0;
   const recoverySourceCallsBefore = staleSourceCalls;
-  rows.push(await measureRetainedScenario({
+  const endToEndRecovery = await measureRetainedScenario({
     name: "end-to-end stale recovery",
     operations: iterations,
     run: async () => {
@@ -204,7 +277,13 @@ try {
         assert.deepEqual(await dialcache.enable(async () => await loadStale()), payload);
       }
     },
-  }));
+  });
+  rows.push(endToEndRecovery);
+  assert.equal(
+    endToEndRecovery.adapterReadCalls,
+    iterations,
+    "each stale-recovery flight must issue exactly one native Redis read",
+  );
   assert.equal(staleSourceCalls - recoverySourceCallsBefore, iterations);
   assert.equal((staleOutcomes.get("served") ?? 0) - recoveryOutcomesBefore, iterations);
 
@@ -251,7 +330,111 @@ try {
   assert.equal(
     (staleOutcomes.get("served") ?? 0) - coalescedOutcomesBefore,
     1,
-    "same-key coalescing must share one recovery read",
+    "same-key coalescing must share one recovery decision",
+  );
+  assert.equal(
+    coalesced.adapterReadCalls,
+    1,
+    "same-key coalescing must share one native Redis read",
+  );
+
+  const memoryCompressionBefore = compressionOutcomes.get("compressed") ?? 0;
+  const memoryWarmSourceCallsBefore = memorySourceCalls;
+  const warmedMemoryValues = await Promise.all(
+    memoryIds.map((memoryId) =>
+      dialcache.enable(async () => await loadMemory(memoryId))
+    ),
+  );
+  for (const value of warmedMemoryValues) {
+    assert.deepEqual(value, memoryPayload);
+  }
+  assert.equal(
+    memorySourceCalls - memoryWarmSourceCallsBefore,
+    memoryKeyCount,
+    "each high-cardinality key must be warmed from the source",
+  );
+  assert.equal(
+    (compressionOutcomes.get("compressed") ?? 0) - memoryCompressionBefore,
+    0,
+    "random memory-benchmark payloads must remain raw rather than compressing",
+  );
+  const memoryStoredBytes = await redis.strLen(memoryValueKeys[0]);
+  assert.equal(
+    memoryStoredBytes,
+    memoryPayloadBytes + 10,
+    "the raw binary Redis frame must contain only its ten-byte protocol header beyond the payload",
+  );
+
+  await wait(logicalFreshAgeSec * 1_000 + 100);
+  assert(
+    (await redis.pTTL(memoryValueKeys[0])) > 0,
+    "the high-cardinality frames must remain retained after becoming logically stale",
+  );
+
+  memorySourceGate = deferred();
+  memorySourceMode = "gated-rejection";
+  const memoryRecoverySourceCallsBefore = memorySourceCalls;
+  const memoryOutcomesBefore = staleOutcomes.get("served") ?? 0;
+  let memoryBefore;
+  let memoryRetained;
+  await collectGarbageIfAvailable();
+  memoryBefore = process.memoryUsage();
+  const highCardinality = await measureRetainedScenario({
+    name: "high-cardinality delayed stale recovery",
+    operations: memoryKeyCount,
+    retainedValueKey: memoryValueKeys[0],
+    run: async () => {
+      const pending = memoryIds.map((memoryId) =>
+        dialcache.enable(async () => await loadMemory(memoryId))
+      );
+      let sourceStartError;
+      try {
+        await waitFor(
+          () => memorySourceCalls - memoryRecoverySourceCallsBefore >= memoryKeyCount,
+          Math.max(sourceStartTimeoutMs, 10_000),
+        );
+        // Hold every distinct source call open so each flight retains its own
+        // raw candidate before the process-level memory snapshot.
+        await wait(memorySourceDelayMs);
+        await collectGarbageIfAvailable();
+        memoryRetained = process.memoryUsage();
+      } catch (error) {
+        sourceStartError = error;
+      } finally {
+        memorySourceGate.resolve();
+      }
+      if (sourceStartError !== undefined) {
+        await Promise.allSettled(pending);
+        throw sourceStartError;
+      }
+      const values = await Promise.all(pending);
+      for (const value of values) {
+        assert.deepEqual(value, memoryPayload);
+      }
+    },
+  });
+  await collectGarbageIfAvailable();
+  const memoryAfter = process.memoryUsage();
+  rows.push(highCardinality);
+  assert.equal(
+    highCardinality.adapterReadCalls,
+    memoryKeyCount,
+    "each distinct high-cardinality flight must issue exactly one native Redis read",
+  );
+  assert.equal(
+    memorySourceCalls - memoryRecoverySourceCallsBefore,
+    memoryKeyCount,
+    "each distinct high-cardinality flight must reach its own source call",
+  );
+  assert.equal(
+    (staleOutcomes.get("served") ?? 0) - memoryOutcomesBefore,
+    memoryKeyCount,
+    "each distinct high-cardinality flight must serve its retained candidate",
+  );
+  assert.notEqual(
+    memoryRetained,
+    undefined,
+    "the delayed-source memory snapshot must be captured",
   );
 
   const serverInfo = parseInfo(await redis.sendCommand(["INFO", "server"]));
@@ -266,24 +449,39 @@ try {
     operations: row.operations,
     "elapsed (ms)": row.elapsedMs.toFixed(2),
     "ops/sec": Math.round((row.operations / row.elapsedMs) * 1_000).toLocaleString("en-US"),
+    "adapter reads": row.adapterReadCalls,
+    "adapter reads/op": perOperation(row.adapterReadCalls, row.operations),
     "GET/op": perOperation(row.getCalls, row.operations),
     "server us/op": perOperation(row.serverUsec, row.operations),
     "net in B/op": perOperation(row.netInputBytes, row.operations),
     "net out B/op": perOperation(row.netOutputBytes, row.operations),
   })));
   console.log(
+    `Node memory snapshots — ${memoryKeyCount.toLocaleString("en-US")} distinct flights held for ${memorySourceDelayMs.toLocaleString("en-US")} ms with ${memoryPayloadBytes.toLocaleString("en-US")} B incompressible raw payloads`,
+  );
+  console.table([
+    memorySnapshotRow("before flights", memoryBefore, memoryBefore),
+    memorySnapshotRow("all sources delayed", memoryRetained, memoryBefore),
+    memorySnapshotRow("after recovery", memoryAfter, memoryBefore),
+  ]);
+  console.log(
+    `Memory deltas are process-level observations that include Redis client buffers, promises, and source-call state; GC ${typeof globalThis.gc === "function" ? "was requested before the baseline" : "was not exposed"}. No memory or timing threshold is applied.`,
+  );
+  console.log(
     "Semantic assertions passed. INFO deltas are observational and include small snapshot-query overhead; no timing threshold is applied.",
   );
 } finally {
-  await redis.del([freshValueKey, staleValueKey]).catch(() => undefined);
+  await redis.del([freshValueKey, staleValueKey, ...memoryValueKeys]).catch(() => undefined);
   await redis.quit().catch(() => redis.disconnect());
 }
 
 async function measureScenario({ name, operations, run }) {
   const before = await redisSnapshot(redis);
+  const adapterReadsBefore = adapterReadCalls;
   const start = performance.now();
   await run();
   const elapsedMs = performance.now() - start;
+  const scenarioAdapterReadCalls = adapterReadCalls - adapterReadsBefore;
   const after = await redisSnapshot(redis);
   const getCalls = commandDelta(before, after, "get", "calls");
   let serverUsec = 0;
@@ -294,6 +492,7 @@ async function measureScenario({ name, operations, run }) {
     name,
     operations,
     elapsedMs,
+    adapterReadCalls: scenarioAdapterReadCalls,
     getCalls,
     serverUsec,
     netInputBytes: after.netInputBytes - before.netInputBytes,
@@ -305,7 +504,9 @@ async function measureRetainedScenario(options) {
   try {
     return await measureScenario(options);
   } catch (error) {
-    const remainingTtlMs = await redis.pTTL(staleValueKey).catch(() => null);
+    const remainingTtlMs = await redis.pTTL(
+      options.retainedValueKey ?? staleValueKey,
+    ).catch(() => null);
     if (remainingTtlMs !== null && remainingTtlMs <= 0) {
       throw new Error(
         `Stale-on-error benchmark exhausted its M=${staleMaxAgeSec}s retention window during "${options.name}"; reduce the configured iteration, fanout, or payload size`,
@@ -314,6 +515,32 @@ async function measureRetainedScenario(options) {
     }
     throw error;
   }
+}
+
+async function collectGarbageIfAvailable() {
+  if (typeof globalThis.gc === "function") {
+    globalThis.gc();
+    // Give native Redis and compression buffers one turn to release their
+    // backing stores before a second collection stabilizes the snapshot.
+    await wait(0);
+    globalThis.gc();
+  }
+}
+
+function memorySnapshotRow(name, snapshot, baseline) {
+  return {
+    snapshot: name,
+    "rss MiB": mebibytes(snapshot.rss),
+    "rss delta MiB": mebibytes(snapshot.rss - baseline.rss),
+    "heap MiB": mebibytes(snapshot.heapUsed),
+    "heap delta MiB": mebibytes(snapshot.heapUsed - baseline.heapUsed),
+    "external MiB": mebibytes(snapshot.external),
+    "external delta MiB": mebibytes(snapshot.external - baseline.external),
+  };
+}
+
+function mebibytes(bytes) {
+  return (bytes / (1024 * 1024)).toFixed(2);
 }
 
 function commandDelta(before, after, command, field) {

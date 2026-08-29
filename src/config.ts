@@ -10,6 +10,8 @@ export enum CacheLayer {
 
 export type Awaitable<T> = T | Promise<T>;
 export type LayerConfig = Partial<Record<CacheLayer, number>>;
+/** Synchronously classifies whether one source rejection may use a retained Redis candidate. */
+export type StaleRecoveryPredicate = (error: unknown) => boolean;
 
 /** Per-use-case runtime policy for detached Redis shadow work. */
 export interface ShadowConfig {
@@ -41,11 +43,12 @@ export class DialCacheKeyConfig {
    */
   readonly coalesce?: boolean;
   /**
-   * Absolute Redis-frame age in seconds through which a retained value may be
-   * returned after the source of truth rejects. Omission disables recovery by
-   * default and inherits in runtime overlays; zero explicitly disables an
-   * inherited policy. A positive value requires a smaller positive remote TTL
-   * and may not exceed 31,536,000 seconds (365 days).
+   * Logical Redis-frame age in seconds through which a value retained by the
+   * initial read may be returned after an eligible source rejection. Omission
+   * disables recovery by default and inherits in runtime overlays; zero
+   * explicitly disables an inherited policy. A positive value requires a
+   * smaller positive remote TTL and may not exceed 31,536,000 seconds (365
+   * days). Tracked values retain their separate one-hour physical TTL cap.
    */
   readonly staleOnErrorMaxAgeSec?: number;
   /**
@@ -164,6 +167,14 @@ export type Logger = Pick<Console, "debug" | "error" | "warn">;
 
 export interface DialCacheConfig {
   readonly cacheConfigProvider?: CacheConfigProvider;
+  /**
+   * Instance default for deciding whether a source rejection may use a
+   * retained Redis value. Must be synchronous. Per-use-case policy overrides
+   * and replaces this callback; omission admits only DialCache's
+   * FallbackTimeoutError. Throws, thenables, and non-boolean results deny
+   * recovery without replacing the source rejection.
+   */
+  readonly shouldAttemptStaleRecovery?: StaleRecoveryPredicate;
   /**
    * Logical namespace used in cache keys, invalidation identity, ramp sampling,
    * and metrics. Defaults to "urn". May not contain `{` or `}`.

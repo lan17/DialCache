@@ -124,8 +124,6 @@ const shadowValidationOutcomes = Object.keys(SHADOW_VALIDATION_OUTCOMES) as Shad
 const STALE_RECOVERY_OUTCOMES: Readonly<Record<StaleRecoveryOutcome, true>> = {
   served: true,
   miss: true,
-  read_error: true,
-  read_timeout: true,
   deserialization_error: true,
 };
 const staleRecoveryOutcomes = Object.keys(STALE_RECOVERY_OUTCOMES) as StaleRecoveryOutcome[];
@@ -175,6 +173,15 @@ describe("Datadog metrics adapter", () => {
       keyType: "user_id",
       outcome: "served",
     });
+    metrics.observeStaleRecoveryValueAge(
+      {
+        cacheNamespace: cacheLabels.cacheNamespace,
+        useCase: "LoadUser",
+        keyType: "user_id",
+        outcome: "served",
+      },
+      90.5,
+    );
     metrics.observeShadowValueAge(
       {
         cacheNamespace: cacheLabels.cacheNamespace,
@@ -232,6 +239,12 @@ describe("Datadog metrics adapter", () => {
         method: "increment",
         name: "dialcache.stale_recovery.count",
         value: 1,
+        tags: { cache_namespace: "users", use_case: "LoadUser", key_type: "user_id", outcome: "served" },
+      },
+      {
+        method: "distribution",
+        name: "dialcache.stale_recovery.value_age",
+        value: 90.5,
         tags: { cache_namespace: "users", use_case: "LoadUser", key_type: "user_id", outcome: "served" },
       },
       {
@@ -299,6 +312,15 @@ describe("Datadog metrics adapter", () => {
         },
         60,
       );
+      metrics.observeStaleRecoveryValueAge(
+        {
+          cacheNamespace: cacheLabels.cacheNamespace,
+          useCase: cacheLabels.useCase,
+          keyType: cacheLabels.keyType,
+          outcome: "served",
+        },
+        90,
+      );
       metrics.observeFutureTimestampOffset(cacheLabels, 0.006);
 
       expect(client.calls.map(({ method, name, value }) => ({ method, name, value }))).toEqual([
@@ -310,6 +332,7 @@ describe("Datadog metrics adapter", () => {
         { method: observationMetricType, name: "service.cache.compression.ratio", value: 0.04 },
         { method: observationMetricType, name: "service.cache.compression.duration", value: 0.05 },
         { method: observationMetricType, name: "service.cache.shadow.value_age", value: 60 },
+        { method: observationMetricType, name: "service.cache.stale_recovery.value_age", value: 90 },
         { method: observationMetricType, name: "service.cache.future_timestamp_offset", value: 0.006 },
       ]);
     });
@@ -625,15 +648,23 @@ describe("Datadog metrics adapter", () => {
 
   it("enforces Datadog's 200-character final metric-name limit", () => {
     const client = new RecordingDogStatsDClient();
-    const longestValidNamespace = "a".repeat(176);
-    const tooLongNamespace = "a".repeat(177);
+    const longestValidNamespace = "a".repeat(175);
+    const tooLongNamespace = "a".repeat(176);
     const metrics = new DatadogDialCacheMetrics({
       client,
       namespace: longestValidNamespace,
       observationMetricType: "distribution",
     });
 
-    metrics.observeFutureTimestampOffset(cacheLabels, 1);
+    metrics.observeStaleRecoveryValueAge(
+      {
+        cacheNamespace: cacheLabels.cacheNamespace,
+        useCase: cacheLabels.useCase,
+        keyType: cacheLabels.keyType,
+        outcome: "served",
+      },
+      1,
+    );
 
     expect(client.calls[0]?.name).toHaveLength(200);
     expect(

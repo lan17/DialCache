@@ -79,6 +79,44 @@ async function verifyPackedInvalidation({ createAdapter, label, redisProtocol })
   }
 }
 `;
+const packedStaleRecoveryCheckSource = String.raw`
+async function verifyPackedStaleRecovery(root, label) {
+  let readCalls = 0;
+  const sourceError = new Error("packed source unavailable");
+  const cache = new root.DialCache({
+    shouldAttemptStaleRecovery: (error) => error === sourceError,
+    redis: {
+      client: {
+        read: async () => {
+          readCalls += 1;
+          return {
+            payload: JSON.stringify({ source: "cached" }),
+            createdAtMs: Date.now() - 2_000,
+          };
+        },
+        write: async () => undefined,
+        invalidate: async () => undefined,
+      },
+    },
+  });
+  const load = cache.cached(async () => {
+    throw sourceError;
+  }, {
+    keyType: "id",
+    useCase: "PackedStaleRecovery",
+    cacheKey: () => "123",
+    defaultConfig: new root.DialCacheKeyConfig({
+      ttlSec: { [root.CacheLayer.REMOTE]: 1 },
+      ramp: { [root.CacheLayer.REMOTE]: 100 },
+      staleOnErrorMaxAgeSec: 60,
+    }),
+  });
+  const value = await cache.enable(() => load());
+  if (readCalls !== 1 || value.source !== "cached") {
+    throw new Error("The packed " + label + " stale recovery did not retain one Redis snapshot");
+  }
+}
+`;
 const rootConsumer = `import {
   CacheLayer,
   DialCache,
@@ -119,6 +157,7 @@ const rootConsumer = `import {
   type ShadowValidationOutcome,
   type StaleRecoveryMetricLabels,
   type StaleRecoveryOutcome,
+  type StaleRecoveryPredicate,
 } from "dialcache";
 // @ts-expect-error The unused MissingKeyConfigError class was removed instead of deprecated.
 import { MissingKeyConfigError } from "dialcache";
@@ -206,6 +245,12 @@ const staleMetrics: DialCacheMetricsAdapter = {
     const outcome: StaleRecoveryOutcome = labels.outcome;
     void outcome;
   },
+  observeStaleRecoveryValueAge: (labels: StaleRecoveryMetricLabels, seconds: number) => {
+    const outcome: StaleRecoveryOutcome = labels.outcome;
+    const ageSeconds: number = seconds;
+    void outcome;
+    void ageSeconds;
+  },
 };
 const shadowOutcomes: Readonly<Record<ShadowValidationOutcome, true>> = {
   match: true,
@@ -225,8 +270,6 @@ void shadowOutcomes;
 const staleRecoveryOutcomes: Readonly<Record<StaleRecoveryOutcome, true>> = {
   served: true,
   miss: true,
-  read_error: true,
-  read_timeout: true,
   deserialization_error: true,
 };
 const staleRecoveryLabels: StaleRecoveryMetricLabels = {
@@ -251,6 +294,13 @@ const shadowCacheConfig: DialCacheConfig = {
   shadowMaxInFlight: 2,
 };
 const shadowCache = new DialCache(shadowCacheConfig);
+const staleRecoveryPredicate: StaleRecoveryPredicate = (error) => error instanceof Error;
+const staleCacheConfig: DialCacheConfig = {
+  namespace: "consumer-stale-cache",
+  metrics: staleMetrics,
+  shouldAttemptStaleRecovery: staleRecoveryPredicate,
+};
+const staleCache = new DialCache(staleCacheConfig);
 const shadowConfig: ShadowConfig = {
   ramp: 50,
   logMismatches: true,
@@ -302,6 +352,7 @@ const load = cache.cached(async (id: string) => id, {
   cacheKey: (id) => id,
   fallbackTimeoutMs: 1_000,
   shadowComparator: stringShadowComparator,
+  shouldAttemptStaleRecovery: staleRecoveryPredicate,
   defaultConfig: new DialCacheKeyConfig({
     ttlSec: { [CacheLayer.LOCAL]: 60, [CacheLayer.REMOTE]: 60 },
     ramp: { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 100 },
@@ -323,6 +374,7 @@ const inlineAsync: Promise<{ readonly id: string }> = cache.getOrLoad(
   {
     ...inlineOptionsFor("InlineAsync"),
     shadowComparator: (cachedValue, sourceValue) => cachedValue.id === sourceValue.id,
+    shouldAttemptStaleRecovery: staleRecoveryPredicate,
   },
 );
 
@@ -610,6 +662,9 @@ void structuralConfigProvider;
 void shadowCache;
 void shadowKeyConfig;
 void staleMetrics;
+void staleCache;
+void staleCacheConfig;
+void staleRecoveryPredicate;
 void staleKeyConfig;
 void staleRecoveryMaxAgeSec;
 void requestLocalCoalescingLabels;
@@ -840,6 +895,7 @@ await import("dialcache/valkey-glide");
 await import("dialcache/datadog");
 const redisProtocol = await import("dialcache/redis-protocol");
 ${packedInvalidationCheckSource}
+${packedStaleRecoveryCheckSource}
 if (typeof nodeRedis.createNodeRedisDialCacheClient !== "function") {
   throw new Error("The packed ESM node-redis adapter export is missing");
 }
@@ -852,6 +908,7 @@ await verifyPackedInvalidation({
   label: "ESM node-redis",
   redisProtocol,
 });
+await verifyPackedStaleRecovery(root, "ESM");
 console.log("${nodeInvalidationMarker}");
 const fallbackTimeoutError = new root.FallbackTimeoutError("PackageRuntime", 1000);
 if (!(fallbackTimeoutError instanceof root.DialCacheError) || fallbackTimeoutError.timeoutMs !== 1000) {
@@ -1213,6 +1270,7 @@ require("dialcache/valkey-glide");
 require("dialcache/datadog");
 const redisProtocol = require("dialcache/redis-protocol");
 ${packedInvalidationCheckSource}
+${packedStaleRecoveryCheckSource}
 if (typeof nodeRedis.createNodeRedisDialCacheClient !== "function") {
   throw new Error("The packed CommonJS node-redis adapter export is missing");
 }
@@ -1363,6 +1421,7 @@ if (
 }
 void (async () => {
   await cjsNodeInvalidationCheck;
+  await verifyPackedStaleRecovery(root, "CommonJS");
   let calls = 0;
   const overlayCache = new root.DialCache({
     cacheConfigProvider: () => new root.DialCacheKeyConfig({

@@ -28,8 +28,6 @@ export type ShadowValidationOutcome =
 export type StaleRecoveryOutcome =
   | "served"
   | "miss"
-  | "read_error"
-  | "read_timeout"
   | "deserialization_error";
 /**
  * Bounded compression outcomes. Writes record compressed, below_threshold,
@@ -151,6 +149,16 @@ export interface DialCacheMetricsAdapter {
   observeFutureTimestampOffset?(labels: CacheMetricLabels, seconds: number): void;
   // Optional so existing custom adapters keep compiling without changes.
   staleRecovery?(labels: StaleRecoveryMetricLabels): void;
+  /**
+   * Age in seconds of the Redis value when stale-on-error recovery serves it:
+   * the observing process's epoch clock minus the retained frame's
+   * `createdAtMs`, clamped at zero. Emitted only alongside the terminal
+   * `served` outcome. Frames are stamped with the writer application's epoch
+   * clock, so cross-process skew makes this coarse operational evidence rather
+   * than a precise measurement. Optional so existing custom adapters keep
+   * compiling without changes.
+   */
+  observeStaleRecoveryValueAge?(labels: StaleRecoveryMetricLabels, seconds: number): void;
   // Optional so existing custom adapters keep compiling without changes.
   compression?(labels: CompressionMetricLabels): void;
   observeGet(labels: CacheMetricLabels, seconds: number): void;

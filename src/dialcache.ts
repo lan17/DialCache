@@ -8,6 +8,7 @@ import {
   type CacheConfigProvider,
   type DialCacheConfig,
   type Logger,
+  type StaleRecoveryPredicate,
 } from "./config.js";
 import { DialCacheContext, getOrCreateRequestLocalCache, type RequestLocalCache } from "./context.js";
 import { FallbackTimeoutError, UseCaseIsAlreadyRegisteredError, UseCaseNameIsReservedError } from "./errors.js";
@@ -127,6 +128,14 @@ interface CacheOperationOptionsBase<Value> {
    * This is stable use-case behavior, not runtime rollout configuration.
    */
   readonly shadowComparator?: ShadowComparator<Value>;
+  /**
+   * Overrides the DialCache-instance source-error classifier for this use
+   * case, replacing both the instance and built-in policies. Must be
+   * synchronous. Returning true authorizes recovery from the Redis candidate
+   * retained by the initial read; every other result fails closed without
+   * replacing the source rejection.
+   */
+  readonly shouldAttemptStaleRecovery?: StaleRecoveryPredicate;
   /**
    * Monotonic deadline applied once an initially enabled invocation starts its
    * fallback, in milliseconds. Must be at most 2,147,483,647. Defaults to 60
@@ -254,6 +263,8 @@ const DEFAULT_FALLBACK_TIMEOUT_MS = 60_000;
 const DEFAULT_SHADOW_MAX_IN_FLIGHT = 1;
 const defaultConfigProvider: CacheConfigProvider = () => null;
 const defaultLogger: Logger = console;
+const defaultStaleRecoveryPredicate: StaleRecoveryPredicate =
+  (error) => error instanceof FallbackTimeoutError;
 
 export class DialCache {
   private readonly context = new DialCacheContext();
@@ -264,6 +275,7 @@ export class DialCache {
   private readonly logger: Logger;
   private readonly redisCache: RedisCache | null;
   private readonly metrics: DialCacheMetricsAdapter | null;
+  private readonly staleRecoveryPredicate: StaleRecoveryPredicate;
   private readonly shadowMaxInFlight: number;
   private readonly shadowFlights = new Map<string, ShadowFlight>();
   private readonly processFlights = new Map<string, ProcessFlight>();
@@ -298,6 +310,10 @@ export class DialCache {
     this.namespace = namespace;
     this.logger = safeLogger(config.logger ?? defaultLogger);
     this.metrics = safeMetrics(config.metrics ?? null);
+    this.staleRecoveryPredicate = resolveStaleRecoveryPredicate(
+      config.shouldAttemptStaleRecovery,
+      defaultStaleRecoveryPredicate,
+    );
     this.shadowMaxInFlight = shadowMaxInFlight;
     this.localCache = new LocalCache(localMaxSize);
     this.redisCache =
@@ -350,6 +366,10 @@ export class DialCache {
     const defaultConfig = snapshotDefaultConfig(options.defaultConfig);
     const fallbackTimeoutMs = resolveFallbackTimeoutMs(options.fallbackTimeoutMs);
     const shadowComparator = resolveShadowComparator(options.shadowComparator);
+    const staleRecoveryPredicate = resolveStaleRecoveryPredicate(
+      options.shouldAttemptStaleRecovery,
+      this.staleRecoveryPredicate,
+    );
     this.registerUseCase(options.useCase);
 
     return (...args: Parameters<Fn>): Promise<CachedValue<Fn>> =>
@@ -362,6 +382,7 @@ export class DialCache {
         defaultConfig,
         fallbackTimeoutMs,
         shadowComparator,
+        staleRecoveryPredicate,
       );
   }
 
@@ -375,6 +396,10 @@ export class DialCache {
     const defaultConfig = snapshotDefaultConfig(options.defaultConfig);
     const fallbackTimeoutMs = resolveFallbackTimeoutMs(options.fallbackTimeoutMs);
     const shadowComparator = resolveShadowComparator(options.shadowComparator);
+    const staleRecoveryPredicate = resolveStaleRecoveryPredicate(
+      options.shouldAttemptStaleRecovery,
+      this.staleRecoveryPredicate,
+    );
     this.assertUseCaseIsNotReserved(options.useCase);
 
     return this.executeCacheOperation(
@@ -384,6 +409,7 @@ export class DialCache {
       defaultConfig,
       fallbackTimeoutMs,
       shadowComparator,
+      staleRecoveryPredicate,
     );
   }
 
@@ -394,6 +420,7 @@ export class DialCache {
     defaultConfig: DialCacheKeyConfig | null,
     fallbackTimeoutMs: number | null,
     shadowComparator: ShadowComparator<Value>,
+    staleRecoveryPredicate: StaleRecoveryPredicate,
   ): Promise<Value> {
     const rawFallback = async (): Promise<Value> => await load();
     const noLayerLabels = {
@@ -465,6 +492,7 @@ export class DialCache {
           keyConfig,
           fallback,
           shadowValidation,
+          staleRecoveryPredicate,
         );
       }
     }
@@ -474,6 +502,7 @@ export class DialCache {
       keyConfig,
       fallback,
       shadowValidation,
+      staleRecoveryPredicate,
       CacheLayer.LOCAL,
     );
   }
@@ -557,6 +586,7 @@ export class DialCache {
     keyConfig: DialCacheKeyConfig,
     fallback: () => Promise<T>,
     shadowValidation: ShadowValidationPlan<T>,
+    staleRecoveryPredicate: StaleRecoveryPredicate,
   ): Promise<T> {
     const run = async (): Promise<T> => {
       const start = performance.now();
@@ -573,6 +603,7 @@ export class DialCache {
         keyConfig,
         fallback,
         shadowValidation,
+        staleRecoveryPredicate,
         REQUEST_LOCAL_CACHE_LAYER,
       );
       requestLocalCache.set(key.urn, value);
@@ -589,6 +620,7 @@ export class DialCache {
     keyConfig: DialCacheKeyConfig | null,
     fallback: () => Promise<T>,
     shadowValidation: ShadowValidationPlan<T>,
+    staleRecoveryPredicate: StaleRecoveryPredicate,
     fallbackMetricLayer: MetricLayer,
   ): Promise<T> {
     // This predicate is the single home of the default: omission means on in
@@ -603,6 +635,7 @@ export class DialCache {
           localLayer.config,
           fallback,
           shadowValidation,
+          staleRecoveryPredicate,
         );
       return coalesce ? await this.singleFlightProcess(key, run) : await run();
     }
@@ -645,6 +678,7 @@ export class DialCache {
         remote,
         fallback,
         shadowValidation,
+        staleRecoveryPredicate,
       );
     };
     return coalesce ? await this.singleFlightProcess(key, run) : await run();
@@ -656,6 +690,7 @@ export class DialCache {
     localConfig: ResolvedLayerConfig,
     fallback: () => Promise<T>,
     shadowValidation: ShadowValidationPlan<T>,
+    staleRecoveryPredicate: StaleRecoveryPredicate,
   ): Promise<T> {
     const local = this.readLocalWithResolvedConfig<T>(key, localConfig);
     if (local.status === "hit") {
@@ -689,6 +724,7 @@ export class DialCache {
         remoteLayer,
         fallback,
         shadowValidation,
+        staleRecoveryPredicate,
       );
     }
 
@@ -706,6 +742,7 @@ export class DialCache {
       remote,
       fallback,
       shadowValidation,
+      staleRecoveryPredicate,
     );
   }
 
@@ -755,6 +792,7 @@ export class DialCache {
     remote: RemoteCacheGetResult<T>,
     fallback: () => Promise<T>,
     shadowValidation: ShadowValidationPlan<T>,
+    staleRecoveryPredicate: StaleRecoveryPredicate,
   ): Promise<T> {
     if (remote.status === "hit") {
       if (local.status === "miss") {
@@ -780,29 +818,39 @@ export class DialCache {
     }
 
     const remoteConfigErrored = remote.status === "disabled" && remote.reason === "config_error";
-    const remoteWriteConfig = remote.status === "miss" ? remote.config : undefined;
-    const fallbackLayer = remote.status === "miss" || remoteConfigErrored ? CacheLayer.REMOTE : CacheLayer.LOCAL;
+    const remoteWriteConfig = remote.status === "miss" || remote.status === "retained"
+      ? remote.config
+      : undefined;
+    const fallbackLayer = remote.status === "miss" || remote.status === "retained" || remoteConfigErrored
+      ? CacheLayer.REMOTE
+      : CacheLayer.LOCAL;
+    const staleRecoveryMaxAgeSec = remote.status === "retained"
+      || (remote.status === "miss" && remote.reason === "cache_miss")
+      ? remote.config.staleOnErrorMaxAgeSec
+      : null;
+    const retainedFrame = remote.status === "retained" ? remote.frame : null;
     let value: T;
     try {
       value = await this.callFallback(labelsFor(key, fallbackLayer), fallback);
     } catch (fallbackError) {
       if (
-        remote.status === "miss"
-        && remote.reason === "cache_miss"
-        && remote.config.staleOnErrorMaxAgeSec !== null
+        staleRecoveryMaxAgeSec !== null
+        && this.shouldAttemptStaleRecovery(staleRecoveryPredicate, fallbackError)
       ) {
         try {
-          const recovered = await redisCache.recoverWithinAge<T>(
+          const recovered = await redisCache.recoverRetainedCandidate<T>(
             key,
-            remote.config.staleOnErrorMaxAgeSec,
-            keyConfig?.remoteReadTimeoutMs ?? redisCache.readTimeoutMs,
+            retainedFrame,
+            staleRecoveryMaxAgeSec,
           );
           if (recovered.status === "hit") {
             return recovered.value;
           }
         } catch (recoveryError) {
-          // Recovery is subordinate to the source rejection and must never replace it.
-          this.logger.warn("Error getting value from Redis cache during stale recovery", recoveryError);
+          // Recovery is subordinate to the source rejection and must never
+          // replace it, including for a custom serializer that violates its
+          // declared contract in an unexpected way.
+          this.logger.warn("Error using retained Redis value during stale recovery", recoveryError);
         }
       }
       throw fallbackError;
@@ -823,6 +871,28 @@ export class DialCache {
       await this.putLocalFailOpen(key, value, local.config);
     }
     return value;
+  }
+
+  private shouldAttemptStaleRecovery(
+    predicate: StaleRecoveryPredicate,
+    fallbackError: unknown,
+  ): boolean {
+    let result: unknown;
+    try {
+      result = predicate(fallbackError);
+    } catch (predicateError) {
+      this.logger.warn("DialCache stale recovery predicate threw; recovery was denied", predicateError);
+      return false;
+    }
+    if (typeof result !== "boolean") {
+      // The public contract is synchronous. Consume an accidental rejecting
+      // thenable without awaiting it, and fail closed without delaying the
+      // original source rejection.
+      void settleUnexpectedThenable(result);
+      this.logger.warn("DialCache stale recovery predicate returned a non-boolean; recovery was denied");
+      return false;
+    }
+    return result;
   }
 
   private scheduleShadowValidation<T>(
@@ -1606,6 +1676,8 @@ function safeMetrics(metrics: DialCacheMetricsAdapter | null): DialCacheMetricsA
         }
       : {}),
     staleRecovery: (labels) => callObserver(() => metrics.staleRecovery?.(labels)),
+    observeStaleRecoveryValueAge: (labels, seconds) =>
+      callObserver(() => metrics.observeStaleRecoveryValueAge?.(labels, seconds)),
     observeShadowValueAge: (labels, seconds) =>
       callObserver(() => metrics.observeShadowValueAge?.(labels, seconds)),
     observeFutureTimestampOffset: (labels, seconds) =>
@@ -1637,6 +1709,19 @@ function resolveShadowComparator<Value>(
   comparator: ShadowComparator<Value> | undefined,
 ): ShadowComparator<Value> {
   return comparator ?? isDeepStrictEqual;
+}
+
+function resolveStaleRecoveryPredicate(
+  predicate: StaleRecoveryPredicate | undefined,
+  fallback: StaleRecoveryPredicate,
+): StaleRecoveryPredicate {
+  if (predicate === undefined) {
+    return fallback;
+  }
+  if (typeof predicate !== "function") {
+    throw new TypeError("DialCache shouldAttemptStaleRecovery must be a function");
+  }
+  return predicate;
 }
 
 // Frame stamps and the observation both use application-process epoch clocks.
@@ -1673,6 +1758,7 @@ async function settleUnexpectedThenable(value: unknown): Promise<void> {
   try {
     await Promise.resolve(value);
   } catch {
-    // Comparators are synchronous; consume accidental async rejection safely.
+    // Synchronous extension points may accidentally return a rejected thenable;
+    // consume it without letting that rejection affect cache control flow.
   }
 }

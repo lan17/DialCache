@@ -86,8 +86,6 @@ const SHADOW_VALIDATION_OUTCOMES: Readonly<Record<ShadowValidationOutcome, true>
 const STALE_RECOVERY_OUTCOMES: Readonly<Record<StaleRecoveryOutcome, true>> = {
   served: true,
   miss: true,
-  read_error: true,
-  read_timeout: true,
   deserialization_error: true,
 };
 
@@ -196,6 +194,15 @@ describe("Prometheus metrics adapter", () => {
       keyType: labels.keyType,
       outcome: "served",
     });
+    metrics.observeStaleRecoveryValueAge(
+      {
+        cacheNamespace: labels.cacheNamespace,
+        useCase: labels.useCase,
+        keyType: labels.keyType,
+        outcome: "served",
+      },
+      90,
+    );
     metrics.observeShadowValueAge(
       {
         cacheNamespace: labels.cacheNamespace,
@@ -277,6 +284,11 @@ describe("Prometheus metrics adapter", () => {
         ["cache_namespace", "use_case", "key_type", "outcome"],
       ),
       histogramSchema(
+        "schema_dialcache_stale_recovery_value_age_histogram",
+        ["cache_namespace", "use_case", "key_type", "outcome"],
+        VALUE_AGE_BUCKETS,
+      ),
+      histogramSchema(
         "schema_dialcache_stored_size_histogram",
         ["cache_namespace", "use_case", "key_type", "layer"],
         SIZE_BUCKETS,
@@ -293,6 +305,20 @@ describe("Prometheus metrics adapter", () => {
       use_case: labels.useCase,
       key_type: labels.keyType,
       outcome: "match",
+    });
+
+    const staleRecoveryValueAge = families.find(
+      ({ name }) => name === "schema_dialcache_stale_recovery_value_age_histogram",
+    );
+    const staleRecoveryValueAgeSum = staleRecoveryValueAge?.values.find(
+      ({ metricName }) => metricName === "schema_dialcache_stale_recovery_value_age_histogram_sum",
+    );
+    expect(staleRecoveryValueAgeSum?.value).toBe(90);
+    expect(staleRecoveryValueAgeSum?.labels).toEqual({
+      cache_namespace: labels.cacheNamespace,
+      use_case: labels.useCase,
+      key_type: labels.keyType,
+      outcome: "served",
     });
 
     const futureTimestampOffset = families.find(

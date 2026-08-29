@@ -53,6 +53,7 @@ const METRIC_SUFFIXES = {
   shadowValueAge: "shadow.value_age",
   futureTimestampOffset: "future_timestamp_offset",
   staleRecovery: "stale_recovery.count",
+  staleRecoveryValueAge: "stale_recovery.value_age",
   compression: "compression.count",
   get: "get.duration",
   fallback: "fallback.duration",
@@ -138,6 +139,10 @@ export class DatadogDialCacheMetrics implements DialCacheMetricsAdapter {
 
   staleRecovery(labels: StaleRecoveryMetricLabels): void {
     return this.increment(this.metricNames.staleRecovery, outcomeTags(labels));
+  }
+
+  observeStaleRecoveryValueAge(labels: StaleRecoveryMetricLabels, seconds: number): void {
+    this.observe(this.metricNames.staleRecoveryValueAge, seconds, outcomeTags(labels));
   }
 
   compression(labels: CompressionMetricLabels): void {
