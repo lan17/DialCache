@@ -20,7 +20,7 @@ import {
   MAX_TRACKED_REDIS_VALUE_TTL_MS,
 } from "../src/internal/duration.js";
 import { MIN_WATERMARK_TTL_MS } from "../src/internal/redis-scripts.js";
-import { encodeFrame, FakeRedis } from "./fake-redis.js";
+import { decodeFrame, encodeFrame, FakeRedis } from "./fake-redis.js";
 
 class RecordingMetrics implements DialCacheMetricsAdapter {
   readonly events: Array<{ readonly name: string; readonly labels: Record<string, unknown> }> = [];
@@ -122,7 +122,7 @@ describe("DialCache targeted invalidation watermarks", () => {
     expect(redis.readWatermarkValue(watermarkKey)).toBe(Date.parse("2026-05-12T18:00:00.000Z"));
   });
 
-  it("stores a complete remote frame but does not publish local cache during a future invalidation window", async () => {
+  it("skips remote refills and local publication during an observed future invalidation window", async () => {
     const redis = new FakeRedis();
     const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
     let calls = 0;
@@ -141,17 +141,79 @@ describe("DialCache targeted invalidation watermarks", () => {
 
     expect(first).toEqual({ userId: "123", calls: 1 });
     expect(second).toEqual({ userId: "123", calls: 2 });
-    expect([...redis.values.keys()].sort()).toEqual([
-      watermarkKey,
-      valueKey("FutureBufferUser"),
-    ].sort());
+    expect([...redis.values.keys()]).toEqual([watermarkKey]);
+    expect(redis.setCalls).toBe(1);
     await expect(redis.read({
       valueKey: valueKey("FutureBufferUser"),
       watermarkKey,
-    })).resolves.toBeNull();
-    await expect(redis.read({ valueKey: valueKey("FutureBufferUser") })).resolves.toMatchObject({
-      payload: JSON.stringify(second),
+    })).resolves.toEqual({
+      observedWatermarkMs: Date.parse("2026-05-12T18:00:01.000Z"),
     });
+    await expect(redis.read({ valueKey: valueKey("FutureBufferUser") })).resolves.toBeNull();
+  });
+
+  it("writes the exact refill candidate when it is newer than the observed watermark", async () => {
+    const now = Date.now();
+    const redis = new FakeRedis();
+    redis.setRaw(valueKey("NewerRefillCandidate"), encodeFrame({ source: "old" }, now - 15));
+    redis.setRaw(watermarkKey, String(now - 5));
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "NewerRefillCandidate",
+      cacheKey: (userId) => userId,
+      trackForInvalidation: true,
+      defaultConfig: remoteOnly(),
+    });
+
+    const first = await dialcache.enable(async () => await getUser("123"));
+    const second = await dialcache.enable(async () => await getUser("123"));
+
+    expect(first).toEqual({ userId: "123", calls: 1 });
+    expect(second).toEqual(first);
+    expect(calls).toBe(1);
+    expect(redis.mGetCalls).toBe(2);
+    expect(redis.setCalls).toBe(1);
+    expect(decodeFrame(redis.raw(valueKey("NewerRefillCandidate"))).createdAtMs).toBe(now);
+  });
+
+  it.each([
+    { boundary: "equal to", watermarkOffsetMs: 0 },
+    { boundary: "behind", watermarkOffsetMs: 10 },
+  ])("skips a refill $boundary the observed watermark before serialization", async ({ watermarkOffsetMs }) => {
+    const now = Date.now();
+    const useCase = `SkippedRefillCandidate${watermarkOffsetMs}`;
+    const redis = new FakeRedis();
+    redis.setRaw(valueKey(useCase), encodeFrame({ source: "old" }, now - 20));
+    redis.setRaw(watermarkKey, String(now + watermarkOffsetMs));
+    const dump = vi.fn((): string => {
+      throw new Error("fenced refill must not serialize");
+    });
+    const serializer: Serializer<{ userId: string; calls: number }> = {
+      dump,
+      load: () => {
+        throw new Error("fenced stale frame must not deserialize");
+      },
+    };
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase,
+      cacheKey: (userId) => userId,
+      trackForInvalidation: true,
+      defaultConfig: remoteOnly(),
+      serializer,
+    });
+
+    const value = await dialcache.enable(async () => await getUser("123"));
+
+    expect(value).toEqual({ userId: "123", calls: 1 });
+    expect(dump).not.toHaveBeenCalled();
+    expect(redis.mGetCalls).toBe(1);
+    expect(redis.setCalls).toBe(0);
+    expect(decodeFrame(redis.raw(valueKey(useCase))).createdAtMs).toBe(now - 20);
   });
 
   it("stores but fences a write when invalidation arrives during fallback", async () => {
@@ -185,7 +247,9 @@ describe("DialCache targeted invalidation watermarks", () => {
     await expect(redis.read({
       valueKey: valueKey("FutureBufferFallbackRace"),
       watermarkKey,
-    })).resolves.toBeNull();
+    })).resolves.toEqual({
+      observedWatermarkMs: Date.parse("2026-05-12T18:00:01.000Z"),
+    });
   });
 
   it("stores but fences a write when invalidation remains active after slow serialization", async () => {
@@ -237,7 +301,9 @@ describe("DialCache targeted invalidation watermarks", () => {
     await expect(redis.read({
       valueKey: valueKey("FutureBufferSerializationRace"),
       watermarkKey,
-    })).resolves.toBeNull();
+    })).resolves.toEqual({
+      observedWatermarkMs: Date.parse("2026-05-12T18:00:01.000Z"),
+    });
   });
 
   it("fences a same-millisecond complete write for a zero-length future buffer", async () => {
@@ -254,6 +320,8 @@ describe("DialCache targeted invalidation watermarks", () => {
 
     await dialcache.invalidateRemote("user_id", "123", 0);
     const fenced = await dialcache.enable(async () => await getUser("123"));
+    expect(redis.values.has(valueKey("ZeroBufferBoundary"))).toBe(false);
+    expect(redis.setCalls).toBe(1);
     vi.advanceTimersByTime(1);
     const written = await dialcache.enable(async () => await getUser("123"));
     const cached = await dialcache.enable(async () => await getUser("123"));
@@ -262,6 +330,7 @@ describe("DialCache targeted invalidation watermarks", () => {
     expect(written).toEqual({ userId: "123", calls: 2 });
     expect(cached).toEqual(written);
     expect(calls).toBe(2);
+    expect(redis.setCalls).toBe(2);
   });
 
   it("serves tracked writes after the future buffer", async () => {

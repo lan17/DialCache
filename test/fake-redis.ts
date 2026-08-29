@@ -1,9 +1,10 @@
 import type {
-  DecodedRedisFrame,
   DialCacheRedisClient,
   RedisInvalidationRequest,
+  RedisReadResult,
   RedisReadRequest,
   RedisWriteRequest,
+  RedisWatermarkMiss,
 } from "../src/index.js";
 import { MAX_TRACKED_REDIS_VALUE_TTL_MS } from "../src/internal/duration.js";
 import { MIN_WATERMARK_TTL_MS } from "../src/internal/redis-scripts.js";
@@ -30,7 +31,7 @@ export class FakeRedis implements DialCacheRedisClient {
   failWatermarkGet = false;
   getGate: Promise<void> | null = null;
 
-  async read({ valueKey, watermarkKey }: RedisReadRequest): Promise<DecodedRedisFrame | null> {
+  async read({ valueKey, watermarkKey }: RedisReadRequest): Promise<RedisReadResult> {
     if (watermarkKey === undefined) {
       this.getCalls += 1;
     } else {
@@ -45,15 +46,16 @@ export class FakeRedis implements DialCacheRedisClient {
     valueKey,
     cacheTtlMs,
     value,
+    createdAtMs,
   }: RedisWriteRequest): Promise<void> {
     const validatedTtlMs = ceilSupportedCacheTtlMs(cacheTtlMs);
-    const createdAtMs = Date.now();
-    const frame = encodeRedisFrame(value, createdAtMs);
+    const storedAtMs = Date.now();
+    const frame = encodeRedisFrame(value, createdAtMs === undefined ? storedAtMs : createdAtMs);
     this.setCalls += 1;
     this.throwIfWriteFails();
     this.values.set(valueKey, {
       value: frame,
-      expiresAtMs: createdAtMs + validatedTtlMs,
+      expiresAtMs: storedAtMs + validatedTtlMs,
     });
   }
 
@@ -118,23 +120,28 @@ export class FakeRedis implements DialCacheRedisClient {
     }
   }
 
-  private readPayload(valueKey: string, watermarkKey: string | null): DecodedRedisFrame | null {
-    const raw = this.readRaw(valueKey);
-    if (raw === null || raw.length < PAYLOAD_OFFSET || raw[0] !== FRAME_VERSION) {
-      return null;
-    }
-
-    const createdAtMs = Number(readTimestamp(raw));
+  private readPayload(valueKey: string, watermarkKey: string | null): RedisReadResult {
+    let watermark: number | null = null;
+    let watermarkMiss: RedisWatermarkMiss | null = null;
     if (watermarkKey !== null) {
-      let watermark: number | null;
       try {
         watermark = this.readWatermark(watermarkKey);
       } catch {
         return null;
       }
-      if (createdAtMs <= (watermark ?? 0)) {
-        return null;
+      if (watermark !== null) {
+        watermarkMiss = { observedWatermarkMs: watermark };
       }
+    }
+
+    const raw = this.readRaw(valueKey);
+    if (raw === null || raw.length < PAYLOAD_OFFSET || raw[0] !== FRAME_VERSION) {
+      return watermarkMiss;
+    }
+
+    const createdAtMs = Number(readTimestamp(raw));
+    if (createdAtMs <= (watermark ?? 0)) {
+      return watermarkMiss;
     }
 
     const encoding = raw[ENCODING_OFFSET];

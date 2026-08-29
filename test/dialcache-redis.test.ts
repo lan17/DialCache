@@ -269,6 +269,45 @@ describe("DialCache Redis TTL layer", () => {
     expect(metrics.miss).toHaveBeenCalledOnce();
   });
 
+  it("preserves structurally compatible custom frames with extra watermark metadata", async () => {
+    const nowMs = 1_700_000_000_000;
+    vi.spyOn(Date, "now").mockReturnValue(nowMs);
+    const cachedValue = { source: "redis" };
+    const redis: DialCacheRedisClient = {
+      read: vi.fn(async () => ({
+        payload: JSON.stringify(cachedValue),
+        createdAtMs: nowMs,
+        observedWatermarkMs: nowMs - 1,
+      })),
+      write: vi.fn(async () => undefined),
+      invalidate: vi.fn(async () => undefined),
+    };
+    const serializer: Serializer<typeof cachedValue> = {
+      dump: vi.fn((value) => JSON.stringify(value)),
+      load: vi.fn((value) => JSON.parse(Buffer.isBuffer(value) ? value.toString("utf8") : value)),
+    };
+    const fallback = vi.fn(async () => ({ source: "fallback" }));
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
+    const getUser = dialcache.cached(fallback, {
+      keyType: "user_id",
+      useCase: "RedisAugmentedTrackedFrame",
+      cacheKey: () => "123",
+      trackForInvalidation: true,
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 100 },
+      }),
+      serializer,
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).resolves.toEqual(cachedValue);
+
+    expect(serializer.load).toHaveBeenCalledOnce();
+    expect(serializer.dump).not.toHaveBeenCalled();
+    expect(fallback).not.toHaveBeenCalled();
+    expect(redis.write).not.toHaveBeenCalled();
+  });
+
   it.each([
     Number.NaN,
     Number.POSITIVE_INFINITY,

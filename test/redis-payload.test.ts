@@ -1,6 +1,7 @@
 import {
   decodeRedisFrame,
   decodeTrackedRedisFrame,
+  decodeTrackedRedisReadResult,
   encodeRedisFrame,
 } from "../src/redis-protocol.js";
 import {
@@ -60,6 +61,12 @@ describe("Redis frame decoding", () => {
       expect(() => decodeRedisFrame(reply)).toThrow(DialCacheRedisPayloadError);
       expect(() => decodeTrackedRedisFrame(reply, null)).toThrow(DialCacheRedisPayloadError);
       expect(() => decodeTrackedRedisFrame(null, reply)).toThrow(DialCacheRedisPayloadError);
+      expect(() => decodeTrackedRedisReadResult(reply, null)).toThrow(
+        DialCacheRedisPayloadError,
+      );
+      expect(() => decodeTrackedRedisReadResult(null, reply)).toThrow(
+        DialCacheRedisPayloadError,
+      );
     }
   });
 
@@ -77,6 +84,42 @@ describe("Redis frame decoding", () => {
     expect(
       decodeTrackedRedisFrame(latestFrame, Buffer.from(String(Number.MAX_SAFE_INTEGER))),
     ).toBeNull();
+  });
+
+  it("preserves valid observed watermarks for every tracked semantic miss", () => {
+    const watermark = Buffer.from("1000");
+
+    for (const frame of [
+      null,
+      Buffer.alloc(9),
+      encodeFrame("unsupported", 0, 2_000, 2),
+      encodeFrame("fenced", 0, 1_000),
+    ]) {
+      expect(decodeTrackedRedisReadResult(frame, watermark)).toEqual({
+        observedWatermarkMs: 1_000,
+      });
+      expect(decodeTrackedRedisFrame(frame, watermark)).toBeNull();
+    }
+  });
+
+  it("retains generic misses when no trustworthy watermark was observed", () => {
+    for (const watermark of [null, Buffer.from("invalid")]) {
+      expect(decodeTrackedRedisReadResult(null, watermark)).toBeNull();
+      expect(decodeTrackedRedisReadResult(Buffer.alloc(9), watermark)).toBeNull();
+      expect(decodeTrackedRedisReadResult(
+        encodeFrame("unsupported", 0, 2_000, 2),
+        watermark,
+      )).toBeNull();
+    }
+  });
+
+  it("returns eligible tracked frames through the typed decoder", () => {
+    expect(
+      decodeTrackedRedisReadResult(
+        encodeFrame("cached", 0, 1_001),
+        Buffer.from("1000"),
+      ),
+    ).toEqual({ payload: "cached", createdAtMs: 1_001 });
   });
 
   it("treats a missing watermark as the zero baseline", () => {

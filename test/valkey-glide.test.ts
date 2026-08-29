@@ -175,6 +175,18 @@ describe("Valkey GLIDE adapter", () => {
     expect(client.customCommand).not.toHaveBeenCalled();
   });
 
+  it("returns an observed watermark for tracked semantic misses", async () => {
+    const client = fakeClient([[null, Buffer.from("1234")]]);
+    const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
+
+    await expect(adapter.read({
+      valueKey: "tracked:{id}:value",
+      watermarkKey: "tracked:{id}:watermark",
+    })).resolves.toEqual({ observedWatermarkMs: 1_234 });
+
+    expect(client.exec).toHaveBeenCalledTimes(1);
+  });
+
   it("routes tracked cluster MGET directly to the slot primary", async () => {
     const client = fakeClusterClient([
       redisFrame("tracked-cluster"),
@@ -338,6 +350,25 @@ describe("Valkey GLIDE adapter", () => {
       { decoder: decoderBytes },
     );
     expect(now).toHaveBeenCalledTimes(3);
+  });
+
+  it("honors a supplied write timestamp without sampling the client clock", async () => {
+    const now = vi.spyOn(Date, "now").mockImplementation(() => {
+      throw new Error("Date.now must not be sampled for a supplied timestamp");
+    });
+    const client = fakeClient("OK");
+    const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
+
+    await expect(adapter.write({
+      valueKey: "tracked:{id}:value",
+      cacheTtlMs: 1_000,
+      value: "tracked",
+      createdAtMs: 0,
+    })).resolves.toBeUndefined();
+
+    const [args] = client.customCommand.mock.calls[0] ?? [[]];
+    expect(Number((args[2] as Buffer).readBigUInt64BE(1))).toBe(0);
+    expect(now).not.toHaveBeenCalled();
   });
 
   it("routes cluster writes and invalidations to the slot primary", async () => {

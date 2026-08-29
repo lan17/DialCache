@@ -74,6 +74,7 @@ const SHADOW_VALIDATION_OUTCOMES: Readonly<Record<ShadowValidationOutcome, true>
   mismatch: true,
   superseded: true,
   filled: true,
+  fill_fenced: true,
   fill_error: true,
   redis_error: true,
   source_error: true,

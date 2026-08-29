@@ -8,7 +8,7 @@ import {
 import {
   assertValidRedisTimestampMs,
   decodeRedisFrame,
-  decodeTrackedRedisFrame,
+  decodeTrackedRedisReadResult,
   encodeRedisFrame,
 } from "./internal/redis-payload.js";
 import { ceilSupportedCacheTtlMs } from "./internal/duration.js";
@@ -138,13 +138,14 @@ export function createNodeRedisDialCacheClient(client: NodeRedisClient): DialCac
         valueKey,
         watermarkKey,
       );
-      return decodeTrackedRedisFrame(rawValue, rawWatermark);
+      return decodeTrackedRedisReadResult(rawValue, rawWatermark);
     },
     async write(request) {
       const { valueKey, value } = request;
       const cacheTtlMs = ceilSupportedCacheTtlMs(request.cacheTtlMs);
+      const createdAtMs = request.createdAtMs === undefined ? Date.now() : request.createdAtMs;
       validateRedisSetReply(
-        await sendFrameSet(client, valueKey, encodeRedisFrame(value, Date.now()), cacheTtlMs),
+        await sendFrameSet(client, valueKey, encodeRedisFrame(value, createdAtMs), cacheTtlMs),
       );
     },
     async invalidate({ watermarkKey, futureBufferMs }) {
