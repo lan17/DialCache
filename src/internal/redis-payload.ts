@@ -1,9 +1,10 @@
 import {
   DialCacheRedisPayloadEncodingError,
   DialCacheRedisPayloadError,
-  isRedisWatermarkMiss,
+  isRedisReadMiss,
   type DecodedRedisFrame,
   type RedisCachePayload,
+  type RedisReadMiss,
   type RedisReadResult,
   type RedisWatermarkMiss,
 } from "../redis-client.js";
@@ -90,30 +91,37 @@ function isValidRedisTimestampMs(timestampMs: number): boolean {
 }
 
 /**
- * Decode an untracked DialCache frame returned as a Redis bulk string into
- * its serializer payload and header creation time (the writer's application
- * clock). Missing, short, and unsupported-version frames are cache
- * misses. Invalid runtime reply types and unsupported payload encodings throw
- * typed errors.
+ * Decode an untracked DialCache read with a bounded miss reason. Invalid
+ * runtime reply types and unsupported payload encodings still throw typed
+ * errors rather than becoming misses.
+ */
+export function decodeRedisReadResult(raw: unknown): RedisReadResult {
+  const frame = validateRedisBulkStringReply(raw);
+  if (frame === null) {
+    return redisReadMiss("value_absent");
+  }
+  if (!isSupportedRedisFrame(frame)) {
+    return redisReadMiss("unclassified");
+  }
+  return decodedRedisFrame(frame);
+}
+
+/**
+ * Backward-compatible untracked-frame decoder. It collapses classified misses
+ * to the established `DecodedRedisFrame | null` surface.
  */
 export function decodeRedisFrame(raw: unknown): DecodedRedisFrame | null {
-  const frame = validateRedisBulkStringReply(raw);
-  if (!isSupportedRedisFrame(frame)) {
-    return null;
-  }
-  return {
-    payload: decodeRedisPayload(frame.subarray(REDIS_FRAME_HEADER_BYTES)),
-    createdAtMs: readFrameCreatedAtMs(frame),
-  };
+  const result = decodeRedisReadResult(raw);
+  return isRedisReadMiss(result) ? null : result;
 }
 
 /**
  * Decode a tracked DialCache read while preserving a trustworthy observed
- * watermark for semantic misses. A present valid numeric watermark produces a
- * `RedisWatermarkMiss` whenever the value is absent, unsupported, or fenced;
- * missing or malformed watermark metadata retains the generic `null` miss.
- * Invalid runtime reply types and unsupported payload encodings on otherwise
- * eligible frames throw typed errors.
+ * watermark for semantic misses. Miss cause and a valid observed watermark are
+ * independent: an absent value can retain a refill fence, while only a
+ * supported, complete frame actually rejected by a valid watermark is
+ * `watermark_fenced`. Invalid runtime reply types and unsupported payload
+ * encodings on otherwise eligible frames throw typed errors.
  *
  * Custom adapters opting into this result must also honor a supplied
  * `RedisWriteRequest.createdAtMs` exactly.
@@ -124,17 +132,30 @@ export function decodeTrackedRedisReadResult(
 ): RedisReadResult {
   const frame = validateRedisBulkStringReply(raw);
   const watermarkFrame = validateRedisBulkStringReply(rawWatermark);
+
+  // Redis nil is decisive evidence of absence regardless of paired metadata.
+  // Preserve a valid paired watermark separately so a later refill can still
+  // be skipped before serialization if its client timestamp cannot clear it.
+  if (frame === null) {
+    return redisReadMiss(
+      "value_absent",
+      watermarkFrame === null ? undefined : parseRedisWatermark(watermarkFrame) ?? undefined,
+    );
+  }
+  if (!isSupportedRedisFrame(frame)) {
+    return redisReadMiss(
+      "unclassified",
+      watermarkFrame === null ? undefined : parseRedisWatermark(watermarkFrame) ?? undefined,
+    );
+  }
   if (watermarkFrame === null) {
-    return decodeTrackedFrame(frame, 0, null);
+    return decodeTrackedFrame(frame);
   }
   const watermark = parseRedisWatermark(watermarkFrame);
   if (watermark === null) {
-    return null;
+    return redisReadMiss("unclassified");
   }
-  return decodeTrackedFrame(frame, watermark, {
-    kind: "watermark_miss",
-    observedWatermarkMs: watermark,
-  });
+  return decodeTrackedFrame(frame, watermark);
 }
 
 /**
@@ -148,24 +169,46 @@ export function decodeTrackedRedisFrame(
   rawWatermark: unknown,
 ): DecodedRedisFrame | null {
   const result = decodeTrackedRedisReadResult(raw, rawWatermark);
-  return isRedisWatermarkMiss(result) ? null : result;
+  if (result === null || isRedisReadMiss(result)) {
+    return null;
+  }
+  // Do not widen the established compatibility helper's served-frame shape.
+  return { payload: result.payload, createdAtMs: result.createdAtMs };
 }
 
 function decodeTrackedFrame(
-  frame: Buffer | null,
-  watermark: number,
-  miss: RedisWatermarkMiss | null,
+  frame: Buffer,
+  observedWatermarkMs?: number,
 ): RedisReadResult {
-  if (!isSupportedRedisFrame(frame)) {
-    return miss;
-  }
   const createdAtMs = readFrameCreatedAtMs(frame);
-  return createdAtMs <= watermark
-    ? miss
-    : {
-        payload: decodeRedisPayload(frame.subarray(REDIS_FRAME_HEADER_BYTES)),
-        createdAtMs,
-      };
+  // Tracked protocol frames require a positive safe-integer timestamp. Keep
+  // malformed/future decisions out of the watermark-fenced category.
+  if (!isValidRedisTimestampMs(createdAtMs) || createdAtMs === 0) {
+    return redisReadMiss("unclassified", observedWatermarkMs);
+  }
+  if (observedWatermarkMs !== undefined && createdAtMs <= observedWatermarkMs) {
+    return redisReadMiss("watermark_fenced", observedWatermarkMs);
+  }
+  return decodedRedisFrame(frame, observedWatermarkMs);
+}
+
+function decodedRedisFrame(frame: Buffer, observedWatermarkMs?: number): DecodedRedisFrame {
+  const decoded = {
+    payload: decodeRedisPayload(frame.subarray(REDIS_FRAME_HEADER_BYTES)),
+    createdAtMs: readFrameCreatedAtMs(frame),
+  };
+  return observedWatermarkMs === undefined
+    ? decoded
+    : { ...decoded, observedWatermarkMs };
+}
+
+function redisReadMiss(
+  reason: RedisReadMiss["reason"],
+  observedWatermarkMs?: number,
+): RedisReadMiss | RedisWatermarkMiss {
+  return observedWatermarkMs === undefined
+    ? { reason }
+    : { kind: "watermark_miss", reason, observedWatermarkMs };
 }
 
 function readFrameCreatedAtMs(frame: Buffer): number {

@@ -330,6 +330,65 @@ describe("DialCache stale-on-error recovery", () => {
     expect(staleRecovery).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { candidateOffsetMs: 0, expectedWrite: false },
+    { candidateOffsetMs: 1, expectedWrite: true },
+  ])(
+    "keeps a retained miss reason independent when its refill candidate is watermark + $candidateOffsetMs ms",
+    async ({ candidateOffsetMs, expectedWrite }) => {
+      const useCase = `StaleRecoveryRetainedRefillFence${candidateOffsetMs}`;
+      const initialNowMs = Date.now();
+      const observedWatermarkMs = initialNowMs - 3_000;
+      const candidateAtMs = observedWatermarkMs + candidateOffsetMs;
+      const sourceValue = { id: "123", version: 2 };
+      const source = vi.fn(async () => {
+        vi.setSystemTime(candidateAtMs);
+        return sourceValue;
+      });
+      const redis = new RecordingRedis();
+      const { metrics } = recordingMetrics();
+      const serializer: Serializer<typeof sourceValue> = {
+        dump: vi.fn(async (value) => JSON.stringify(value)),
+        load: vi.fn(async (value) => JSON.parse(String(value)) as typeof sourceValue),
+      };
+      const dialcache = new DialCache({
+        redis: { client: redis, readTimeoutMs: 1_000 },
+        metrics,
+        shouldAttemptStaleRecovery: allowStaleRecovery,
+      });
+      const getUser = dialcache.cached(source, {
+        keyType: "user_id",
+        useCase,
+        cacheKey: () => "123",
+        trackForInvalidation: true,
+        defaultConfig: staleConfig(),
+        serializer,
+      });
+      redis.setRaw(
+        redisValueKey(useCase, "123", true),
+        encodeFrame({ id: "123", version: 1 }, initialNowMs - 2_000),
+        MAX_AGE_SEC * 1_000,
+      );
+      redis.setRaw(watermarkKey(), String(observedWatermarkMs), MAX_AGE_SEC * 1_000);
+
+      await expect(dialcache.enable(async () => await getUser())).resolves.toBe(sourceValue);
+
+      expect(metrics.miss).toHaveBeenCalledWith({
+        cacheNamespace: "urn",
+        useCase,
+        keyType: "user_id",
+        layer: CacheLayer.REMOTE,
+        reason: "unclassified",
+      });
+      expect(serializer.load).not.toHaveBeenCalled();
+      expect(serializer.dump).toHaveBeenCalledTimes(expectedWrite ? 1 : 0);
+      expect(redis.setCalls).toBe(expectedWrite ? 1 : 0);
+      if (expectedWrite) {
+        expect(decodeFrame(redis.raw(redisValueKey(useCase, "123", true))).createdAtMs).toBe(candidateAtMs);
+      }
+    },
+  );
+
   it("does not deserialize or record recovery when the classifier denies a retained candidate", async () => {
     const useCase = "StaleRecoveryClassifierDenied";
     const retained = { id: "123", version: 1 };

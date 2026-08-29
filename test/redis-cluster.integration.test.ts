@@ -296,6 +296,7 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
     expect(observedWatermark).not.toBeNull();
     expect(await adapter.read({ valueKey, watermarkKey })).toEqual({
       kind: "watermark_miss",
+      reason: "watermark_fenced",
       observedWatermarkMs: Number(observedWatermark),
     });
     await expect(
@@ -340,6 +341,7 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
     expect(observedWatermark).not.toBeNull();
     expect(await adapter.read({ valueKey, watermarkKey })).toEqual({
       kind: "watermark_miss",
+      reason: "watermark_fenced",
       observedWatermarkMs: Number(observedWatermark),
     });
   });

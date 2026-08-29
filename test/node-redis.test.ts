@@ -112,7 +112,11 @@ describe("node-redis adapter", () => {
     });
     await expect(
       adapter.read({ valueKey: "tracked:{id}:value", watermarkKey: "tracked:{id}:watermark" }),
-    ).resolves.toEqual({ payload: Buffer.from([0, 0xff]), createdAtMs: 2 });
+    ).resolves.toEqual({
+      payload: Buffer.from([0, 0xff]),
+      createdAtMs: 2,
+      observedWatermarkMs: 1,
+    });
     await expect(
       adapter.write({ valueKey: "plain:value", cacheTtlMs: 1_000, value: "plain" }),
     ).resolves.toBeUndefined();
@@ -128,14 +132,18 @@ describe("node-redis adapter", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("returns an observed watermark for tracked semantic misses", async () => {
+  it("classifies an absent tracked value while preserving its observed watermark", async () => {
     const client = fakeClient({ mGet: [null, Buffer.from("1234")] });
     const adapter = createNodeRedisDialCacheClient(client as never);
 
     await expect(adapter.read({
       valueKey: "tracked:{id}:value",
       watermarkKey: "tracked:{id}:watermark",
-    })).resolves.toEqual({ kind: "watermark_miss", observedWatermarkMs: 1_234 });
+    })).resolves.toEqual({
+      kind: "watermark_miss",
+      reason: "value_absent",
+      observedWatermarkMs: 1_234,
+    });
 
     expect(client.sendCommand).toHaveBeenCalledTimes(1);
   });
@@ -329,7 +337,7 @@ describe("node-redis adapter", () => {
     await expect(adapter.read(
       { valueKey: "tracked:{id}:value", watermarkKey: "tracked:{id}:watermark" },
       { timeoutMs: 25, signal: controller.signal },
-    )).resolves.toEqual({ payload: "tracked", createdAtMs: 2 });
+    )).resolves.toEqual({ payload: "tracked", createdAtMs: 2, observedWatermarkMs: 1 });
 
     expect(client.sendCommand).toHaveBeenCalledWith(
       "tracked:{id}:value",
@@ -351,7 +359,7 @@ describe("node-redis adapter", () => {
     await expect(adapter.read({
       valueKey: "tracked:{id}:value",
       watermarkKey: "tracked:{id}:watermark",
-    })).resolves.toEqual({ payload: "tracked", createdAtMs: 2 });
+    })).resolves.toEqual({ payload: "tracked", createdAtMs: 2, observedWatermarkMs: 1 });
 
     expect(client.sendCommand).toHaveBeenCalledWith(
       ["MGET", "tracked:{id}:value", "tracked:{id}:watermark"],

@@ -177,6 +177,7 @@ describe("DialCache Redis TTL layer", () => {
     const nowMs = 1_700_000_000_000;
     vi.spyOn(Date, "now").mockReturnValue(nowMs);
     const redis = new FakeRedis();
+    const write = vi.spyOn(redis, "write");
     const useCase = "RedisTrackedFutureFrame";
     const key = keyFor("123", useCase, true);
     redis.setRaw(
@@ -213,6 +214,7 @@ describe("DialCache Redis TTL layer", () => {
 
     expect(serializer.load).not.toHaveBeenCalled();
     expect(fallback).toHaveBeenCalledOnce();
+    expect(write).toHaveBeenCalledWith(expect.objectContaining({ createdAtMs: nowMs }));
     expect(observeFutureTimestampOffset).toHaveBeenCalledOnce();
     expect(observeFutureTimestampOffset).toHaveBeenCalledWith(
       {
@@ -223,7 +225,13 @@ describe("DialCache Redis TTL layer", () => {
       },
       1.25,
     );
-    expect(metrics.miss).toHaveBeenCalledOnce();
+    expect(metrics.miss).toHaveBeenCalledWith({
+      cacheNamespace: "urn",
+      useCase,
+      keyType: "user_id",
+      layer: CacheLayer.REMOTE,
+      reason: "unclassified",
+    });
   });
 
   it("rejects a future-dated untracked frame using the reader clock", async () => {
@@ -404,7 +412,13 @@ describe("DialCache Redis TTL layer", () => {
     expect(serializer.load).not.toHaveBeenCalled();
     expect(fallback).toHaveBeenCalledOnce();
     expect(observeFutureTimestampOffset).not.toHaveBeenCalled();
-    expect(metrics.miss).toHaveBeenCalledOnce();
+    expect(metrics.miss).toHaveBeenCalledWith({
+      cacheNamespace: "urn",
+      useCase: "RedisInvalidTrackedFrameTimestamp",
+      keyType: "user_id",
+      layer: CacheLayer.REMOTE,
+      reason: "unclassified",
+    });
   });
 
   it("keeps a frame stamped exactly at the reader clock eligible", async () => {
@@ -760,6 +774,36 @@ describe("DialCache Redis TTL layer", () => {
     expect(redis.values.get(badKey)).toBeDefined();
     expect(redis.values.get(nonFiniteKey)).toBeDefined();
     expect(logger.warn).not.toHaveBeenCalledWith("Error getting value from Redis cache", expect.any(Error));
+  });
+
+  it("classifies a malformed bundled Redis frame as an unclassified miss", async () => {
+    const redis = new FakeRedis();
+    const useCase = "RedisMalformedFrameReason";
+    redis.setRaw(redisKeyFor("123", useCase), Buffer.from([2, 0, 0, 0, 0, 0, 0, 0, 0, 0]));
+    const metrics = metricsWithFutureTimestampObserver(vi.fn());
+    const dialcache = new DialCache({
+      metrics,
+      redis: { client: redis, readTimeoutMs: 1_000 },
+    });
+    const getUser = dialcache.cached(async () => ({ source: "fallback" }), {
+      keyType: "user_id",
+      useCase,
+      cacheKey: () => "123",
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 100 },
+      }),
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ source: "fallback" });
+
+    expect(metrics.miss).toHaveBeenCalledWith({
+      cacheNamespace: "urn",
+      useCase,
+      keyType: "user_id",
+      layer: CacheLayer.REMOTE,
+      reason: "unclassified",
+    });
   });
 
   it("records a distinct metric label when a Redis adapter reports invalid payload encoding", async () => {

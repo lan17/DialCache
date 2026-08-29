@@ -20,6 +20,7 @@ export type RedisCacheGetResult<T> =
       readonly status: "retained";
       readonly frame: DecodedRedisFrame;
       readonly config: ResolvedRemoteLayerConfig;
+      readonly watermarkMiss?: RedisWatermarkMiss;
     }
   | {
       readonly status: "miss";

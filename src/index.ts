@@ -10,6 +10,7 @@ export type {
 export { DialCacheContext } from "./context.js";
 export type {
   CacheMetricLabels,
+  CacheMissReason,
   CoalescedMetricLabels,
   CoalescingScope,
   CompressionMetricLabels,
@@ -22,6 +23,7 @@ export type {
   InvalidationMetricLabels,
   MetricErrorKind,
   MetricLayer,
+  MissMetricLabels,
   SerializationMetricLabels,
   ShadowValidationMetricLabels,
   ShadowValidationOutcome,
@@ -61,6 +63,7 @@ export type {
   RedisCachePayload,
   RedisInvalidationRequest,
   RedisReadContext,
+  RedisReadMiss,
   RedisReadRequest,
   RedisReadResult,
   RedisWatermarkMiss,

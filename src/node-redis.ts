@@ -7,7 +7,7 @@ import {
 } from "./internal/redis-invalidation.js";
 import {
   assertValidRedisTimestampMs,
-  decodeRedisFrame,
+  decodeRedisReadResult,
   decodeTrackedRedisReadResult,
   encodeRedisFrame,
 } from "./internal/redis-payload.js";
@@ -130,7 +130,7 @@ export function createNodeRedisDialCacheClient(client: NodeRedisClient): DialCac
         ? bufferReplyOptions
         : commandOptions({ returnBuffers: true, signal: context.signal });
       if (watermarkKey === undefined) {
-        return decodeRedisFrame(await client.get(options, valueKey));
+        return decodeRedisReadResult(await client.get(options, valueKey));
       }
       const [rawValue, rawWatermark] = await readTracked(
         client,

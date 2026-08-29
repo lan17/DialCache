@@ -12,6 +12,8 @@ import {
   type DialCacheMetricsAdapter,
   type DialCacheRedisClient,
   type InvalidationMetricLabels,
+  type MissMetricLabels,
+  type RedisReadResult,
   type SerializationMetricLabels,
   type Serializer,
   type ShadowValidationMetricLabels,
@@ -26,7 +28,7 @@ class RecordingMetrics implements DialCacheMetricsAdapter {
     this.record("request", labels);
   }
 
-  miss(labels: CacheMetricLabels): void {
+  miss(labels: MissMetricLabels): void {
     this.record("miss", labels);
   }
 
@@ -133,7 +135,7 @@ describe("DialCache observability metrics", () => {
     };
 
     isolatedMetrics.request(labels);
-    isolatedMetrics.miss(labels);
+    isolatedMetrics.miss({ ...labels, reason: "value_absent" });
     isolatedMetrics.disabled({ ...labels, reason: "ramped_down" });
     isolatedMetrics.error({ ...labels, error: "cache_read", inFallback: false });
     isolatedMetrics.invalidation({
@@ -268,9 +270,193 @@ describe("DialCache observability metrics", () => {
     expect(first).toEqual({ userId: "123", calls: 1 });
     expect(second).toEqual({ userId: "123", calls: 1 });
     expect(events(metrics, "request", { useCase: "CustomMetricsAdapter", layer: CacheLayer.LOCAL })).toHaveLength(2);
-    expect(events(metrics, "miss", { useCase: "CustomMetricsAdapter", layer: CacheLayer.LOCAL })).toHaveLength(1);
+    expect(
+      events(metrics, "miss", {
+        useCase: "CustomMetricsAdapter",
+        layer: CacheLayer.LOCAL,
+        reason: "value_absent",
+      }),
+    ).toHaveLength(1);
     expect(events(metrics, "fallback", { useCase: "CustomMetricsAdapter", layer: CacheLayer.LOCAL })).toHaveLength(1);
     expect(events(metrics, "get", { useCase: "CustomMetricsAdapter", layer: CacheLayer.LOCAL })).toHaveLength(2);
+  });
+
+  it("classifies request-local, local, and bundled Redis absence as value_absent", async () => {
+    const metrics = new RecordingMetrics();
+    const requestLocalCache = new DialCache({ metrics });
+    const localCache = new DialCache({ metrics });
+    const remoteCache = new DialCache({
+      metrics,
+      redis: { client: new FakeRedis(), readTimeoutMs: 1_000 },
+    });
+
+    const requestLocal = requestLocalCache.cached(async () => "request-local", {
+      keyType: "user_id",
+      useCase: "RequestLocalAbsentReason",
+      cacheKey: () => "123",
+      defaultConfig: new DialCacheKeyConfig({ requestLocal: true }),
+    });
+    const local = localCache.cached(async () => "local", {
+      keyType: "user_id",
+      useCase: "LocalAbsentReason",
+      cacheKey: () => "123",
+      defaultConfig: localOnly(),
+    });
+    const remote = remoteCache.cached(async () => "remote", {
+      keyType: "user_id",
+      useCase: "BundledRedisAbsentReason",
+      cacheKey: () => "123",
+      defaultConfig: remoteOnly(),
+    });
+
+    await requestLocalCache.enable(async () => await requestLocal());
+    await localCache.enable(async () => await local());
+    await remoteCache.enable(async () => await remote());
+
+    expect(
+      events(metrics, "miss", {
+        useCase: "RequestLocalAbsentReason",
+        layer: "request_local",
+        reason: "value_absent",
+      }),
+    ).toHaveLength(1);
+    expect(
+      events(metrics, "miss", {
+        useCase: "LocalAbsentReason",
+        layer: CacheLayer.LOCAL,
+        reason: "value_absent",
+      }),
+    ).toHaveLength(1);
+    expect(
+      events(metrics, "miss", {
+        useCase: "BundledRedisAbsentReason",
+        layer: CacheLayer.REMOTE,
+        reason: "value_absent",
+      }),
+    ).toHaveLength(1);
+  });
+
+  it("classifies a legacy custom Redis null miss as unclassified", async () => {
+    const metrics = new RecordingMetrics();
+    const redis: DialCacheRedisClient = {
+      read: vi.fn(async () => null),
+      write: vi.fn(async () => undefined),
+      invalidate: vi.fn(async () => undefined),
+    };
+    const dialcache = new DialCache({ metrics, redis: { client: redis, readTimeoutMs: 1_000 } });
+    const getUser = dialcache.cached(async () => "fallback", {
+      keyType: "user_id",
+      useCase: "LegacyRedisNullReason",
+      cacheKey: () => "123",
+      defaultConfig: remoteOnly(),
+    });
+
+    await dialcache.enable(async () => await getUser());
+
+    expect(
+      events(metrics, "miss", {
+        useCase: "LegacyRedisNullReason",
+        layer: CacheLayer.REMOTE,
+        reason: "unclassified",
+      }),
+    ).toHaveLength(1);
+  });
+
+  it("normalizes untrusted custom miss metadata to unclassified", async () => {
+    const cases: ReadonlyArray<{
+      readonly useCase: string;
+      readonly trackForInvalidation: boolean;
+      readonly result: RedisReadResult;
+    }> = [
+      {
+        useCase: "UntrackedCustomFenceReason",
+        trackForInvalidation: false,
+        result: { reason: "watermark_fenced" },
+      },
+      {
+        useCase: "UntrackedCustomWatermarkMiss",
+        trackForInvalidation: false,
+        result: {
+          kind: "watermark_miss",
+          reason: "watermark_fenced",
+          observedWatermarkMs: 1_700_000_000_000,
+        },
+      },
+      {
+        useCase: "UnboundedCustomReason",
+        trackForInvalidation: false,
+        result: { reason: "invented" } as unknown as RedisReadResult,
+      },
+      {
+        useCase: "InvalidTrackedCustomFenceReason",
+        trackForInvalidation: true,
+        result: {
+          kind: "watermark_miss",
+          reason: "watermark_fenced",
+          observedWatermarkMs: Number.NaN,
+        },
+      },
+    ];
+    let readIndex = 0;
+    const metrics = new RecordingMetrics();
+    const redis: DialCacheRedisClient = {
+      read: vi.fn(async () => cases[readIndex++]?.result ?? null),
+      write: vi.fn(async () => undefined),
+      invalidate: vi.fn(async () => undefined),
+    };
+    const dialcache = new DialCache({ metrics, redis: { client: redis, readTimeoutMs: 1_000 } });
+
+    for (const { useCase, trackForInvalidation } of cases) {
+      const getUser = dialcache.cached(async () => "fallback", {
+        keyType: "user_id",
+        useCase,
+        cacheKey: () => useCase,
+        trackForInvalidation,
+        defaultConfig: remoteOnly(),
+      });
+      await expect(dialcache.enable(async () => await getUser())).resolves.toBe("fallback");
+      expect(
+        events(metrics, "miss", { useCase, layer: CacheLayer.REMOTE, reason: "unclassified" }),
+      ).toHaveLength(1);
+      expect(
+        events(metrics, "miss", { useCase, layer: CacheLayer.REMOTE, reason: "watermark_fenced" }),
+      ).toHaveLength(0);
+      expect(
+        events(metrics, "error", { useCase, layer: CacheLayer.REMOTE, error: "cache_read", inFallback: false }),
+      ).toHaveLength(0);
+    }
+  });
+
+  it("classifies a tracked FakeRedis frame fenced by its observed watermark", async () => {
+    const metrics = new RecordingMetrics();
+    const redis = new FakeRedis();
+    const useCase = "TrackedWatermarkFencedReason";
+    const key = new DialCacheKey({
+      keyType: "user_id",
+      id: "123",
+      useCase,
+      trackForInvalidation: true,
+    });
+    redis.setRaw(`${key.urn}:dialcache-frame-v1`, encodeFrame("stale", 100));
+    redis.setRaw(`${key.prefix}#watermark`, "100");
+    const dialcache = new DialCache({ metrics, redis: { client: redis, readTimeoutMs: 1_000 } });
+    const getUser = dialcache.cached(async () => "fallback", {
+      keyType: "user_id",
+      useCase,
+      cacheKey: () => "123",
+      trackForInvalidation: true,
+      defaultConfig: remoteOnly(),
+    });
+
+    await dialcache.enable(async () => await getUser());
+
+    expect(
+      events(metrics, "miss", {
+        useCase,
+        layer: CacheLayer.REMOTE,
+        reason: "watermark_fenced",
+      }),
+    ).toHaveLength(1);
   });
 
   it("reports request-local cache activity and request-scoped coalescing with bounded labels", async () => {
@@ -293,7 +479,13 @@ describe("DialCache observability metrics", () => {
     expect(values[2]).toBe(values[0]);
     expect(calls).toBe(1);
     expect(events(metrics, "request", { useCase: "RequestLocalMetrics", layer: "request_local" })).toHaveLength(2);
-    expect(events(metrics, "miss", { useCase: "RequestLocalMetrics", layer: "request_local" })).toHaveLength(1);
+    expect(
+      events(metrics, "miss", {
+        useCase: "RequestLocalMetrics",
+        layer: "request_local",
+        reason: "value_absent",
+      }),
+    ).toHaveLength(1);
     expect(events(metrics, "get", { useCase: "RequestLocalMetrics", layer: "request_local" })).toHaveLength(2);
     expect(events(metrics, "fallback", { useCase: "RequestLocalMetrics", layer: "request_local" })).toHaveLength(1);
     expect(events(metrics, "coalesced", { useCase: "RequestLocalMetrics", scope: "request_local" })).toHaveLength(1);
@@ -595,7 +787,7 @@ describe("DialCache observability metrics", () => {
       { name: "fallback", labels: remoteLabels, value: expect.any(Number) },
     ]);
     expect(events(metrics, "miss", { useCase })).toEqual([
-      { name: "miss", labels: remoteLabels },
+      { name: "miss", labels: { ...remoteLabels, reason: "unclassified" } },
     ]);
     expect(events(metrics, "request", { useCase })).toEqual([
       { name: "request", labels: remoteLabels },
@@ -906,6 +1098,7 @@ describe("DialCache observability metrics", () => {
       events(metrics, "miss", {
         useCase: "SerializationLoadClassification",
         layer: CacheLayer.REMOTE,
+        reason: "unclassified",
       }),
     ).toHaveLength(1);
     expect(JSON.stringify(events(metrics, "error", {}))).not.toMatch(

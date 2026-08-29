@@ -25,6 +25,7 @@ import {
   type ShadowValidationOutcome,
 } from "./metrics.js";
 import {
+  isRedisReadMiss,
   isRedisWatermarkMiss,
   type DecodedRedisFrame,
   type RedisCachePayload,
@@ -607,7 +608,7 @@ export class DialCache {
         return result.value;
       }
 
-      this.metrics?.miss(labelsFor(key, REQUEST_LOCAL_CACHE_LAYER));
+      this.metrics?.miss({ ...labelsFor(key, REQUEST_LOCAL_CACHE_LAYER), reason: "value_absent" });
       const value = await this.getThroughSharedLayers(
         key,
         keyConfig,
@@ -876,7 +877,9 @@ export class DialCache {
           key,
           value,
           remoteWriteConfig,
-          remote.status === "miss" ? remote.watermarkMiss : undefined,
+          remote.status === "miss" || remote.status === "retained"
+            ? remote.watermarkMiss
+            : undefined,
         );
       } catch (error) {
         this.logger.warn("Error putting value in Redis cache", error);
@@ -1111,11 +1114,9 @@ export class DialCache {
             if (abandonIfExpired()) {
               return "timeout";
             }
-            if (isRedisWatermarkMiss(readResult)) {
+            if (isRedisReadMiss(readResult) || readResult === null) {
               shadowFillConfig = start.remoteConfig;
-              shadowFillWatermarkMiss = readResult;
-            } else if (readResult === null) {
-              shadowFillConfig = start.remoteConfig;
+              shadowFillWatermarkMiss = isRedisWatermarkMiss(readResult) ? readResult : undefined;
             } else {
               flight.cachedFrame = readResult;
             }
@@ -1219,7 +1220,7 @@ export class DialCache {
           if (originalFrame === null) {
             return "timeout";
           }
-          const confirmationFrame = isRedisWatermarkMiss(confirmationResult)
+          const confirmationFrame = isRedisReadMiss(confirmationResult)
             ? null
             : confirmationResult;
           if (confirmationFrame === null || !redisPayloadsEqual(originalFrame.payload, confirmationFrame.payload)) {
@@ -1316,7 +1317,7 @@ export class DialCache {
       this.metrics?.request(labelsFor(key, CacheLayer.LOCAL));
       this.metrics?.observeGet(labelsFor(key, CacheLayer.LOCAL), elapsedSeconds(start));
       if (result.status === "miss") {
-        this.metrics?.miss(labelsFor(key, CacheLayer.LOCAL));
+        this.metrics?.miss({ ...labelsFor(key, CacheLayer.LOCAL), reason: "value_absent" });
       }
       return result;
     } catch (error) {

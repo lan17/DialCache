@@ -148,9 +148,12 @@ describe("DialCache targeted invalidation watermarks", () => {
       watermarkKey,
     })).resolves.toEqual({
       kind: "watermark_miss",
+      reason: "value_absent",
       observedWatermarkMs: Date.parse("2026-05-12T18:00:01.000Z"),
     });
-    await expect(redis.read({ valueKey: valueKey("FutureBufferUser") })).resolves.toBeNull();
+    await expect(redis.read({ valueKey: valueKey("FutureBufferUser") })).resolves.toEqual({
+      reason: "value_absent",
+    });
   });
 
   it("writes the exact refill candidate when it is newer than the observed watermark", async () => {
@@ -325,6 +328,7 @@ describe("DialCache targeted invalidation watermarks", () => {
       watermarkKey,
     })).resolves.toEqual({
       kind: "watermark_miss",
+      reason: "watermark_fenced",
       observedWatermarkMs: Date.parse("2026-05-12T18:00:01.000Z"),
     });
   });
@@ -380,6 +384,7 @@ describe("DialCache targeted invalidation watermarks", () => {
       watermarkKey,
     })).resolves.toEqual({
       kind: "watermark_miss",
+      reason: "watermark_fenced",
       observedWatermarkMs: Date.parse("2026-05-12T18:00:01.000Z"),
     });
   });

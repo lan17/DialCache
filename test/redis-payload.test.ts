@@ -1,5 +1,6 @@
 import {
   decodeRedisFrame,
+  decodeRedisReadResult,
   decodeTrackedRedisFrame,
   decodeTrackedRedisReadResult,
   encodeRedisFrame,
@@ -48,6 +49,14 @@ describe("Redis frame decoding", () => {
     expect(decodeRedisFrame(encodeFrame("cached", 0, 1_000, 2))).toBeNull();
   });
 
+  it("classifies untracked absence separately from malformed frames", () => {
+    expect(decodeRedisReadResult(null)).toEqual({ reason: "value_absent" });
+    expect(decodeRedisReadResult(Buffer.alloc(9))).toEqual({ reason: "unclassified" });
+    expect(decodeRedisReadResult(encodeFrame("cached", 0, 1_000, 2))).toEqual({
+      reason: "unclassified",
+    });
+  });
+
   it("rejects unsupported payload encodings after validating the frame", () => {
     expect(() => decodeRedisFrame(encodeFrame("cached", 2))).toThrow(
       DialCacheRedisPayloadEncodingError,
@@ -86,31 +95,33 @@ describe("Redis frame decoding", () => {
     ).toBeNull();
   });
 
-  it("preserves valid observed watermarks for every tracked semantic miss", () => {
+  it("classifies tracked misses while preserving a valid observed watermark independently", () => {
     const watermark = Buffer.from("1000");
 
-    for (const frame of [
-      null,
-      Buffer.alloc(9),
-      encodeFrame("unsupported", 0, 2_000, 2),
-      encodeFrame("fenced", 0, 1_000),
-    ]) {
+    const cases: ReadonlyArray<readonly [unknown, "value_absent" | "watermark_fenced" | "unclassified"]> = [
+      [null, "value_absent"],
+      [Buffer.alloc(9), "unclassified"],
+      [encodeFrame("unsupported", 0, 2_000, 2), "unclassified"],
+      [encodeFrame("fenced", 0, 1_000), "watermark_fenced"],
+    ];
+    for (const [frame, reason] of cases) {
       expect(decodeTrackedRedisReadResult(frame, watermark)).toEqual({
         kind: "watermark_miss",
+        reason,
         observedWatermarkMs: 1_000,
       });
       expect(decodeTrackedRedisFrame(frame, watermark)).toBeNull();
     }
   });
 
-  it("retains generic misses when no trustworthy watermark was observed", () => {
+  it("classifies nil before malformed or absent watermark metadata", () => {
     for (const watermark of [null, Buffer.from("invalid")]) {
-      expect(decodeTrackedRedisReadResult(null, watermark)).toBeNull();
-      expect(decodeTrackedRedisReadResult(Buffer.alloc(9), watermark)).toBeNull();
+      expect(decodeTrackedRedisReadResult(null, watermark)).toEqual({ reason: "value_absent" });
+      expect(decodeTrackedRedisReadResult(Buffer.alloc(9), watermark)).toEqual({ reason: "unclassified" });
       expect(decodeTrackedRedisReadResult(
         encodeFrame("unsupported", 0, 2_000, 2),
         watermark,
-      )).toBeNull();
+      )).toEqual({ reason: "unclassified" });
     }
   });
 
@@ -120,7 +131,7 @@ describe("Redis frame decoding", () => {
         encodeFrame("cached", 0, 1_001),
         Buffer.from("1000"),
       ),
-    ).toEqual({ payload: "cached", createdAtMs: 1_001 });
+    ).toEqual({ payload: "cached", createdAtMs: 1_001, observedWatermarkMs: 1_000 });
   });
 
   it("treats a missing watermark as the zero baseline", () => {
@@ -132,7 +143,7 @@ describe("Redis frame decoding", () => {
     });
   });
 
-  it("treats malformed and non-finite watermarks as misses", () => {
+  it("treats malformed and non-finite watermarks as unclassified tracked misses", () => {
     const frame = encodeFrame("cached", 0, 1_000);
 
     for (const watermark of [
@@ -147,6 +158,8 @@ describe("Redis frame decoding", () => {
       Buffer.from("9".repeat(400)),
     ]) {
       expect(decodeTrackedRedisFrame(frame, watermark)).toBeNull();
+      expect(decodeTrackedRedisReadResult(frame, watermark)).toEqual({ reason: "unclassified" });
+      expect(decodeTrackedRedisReadResult(null, watermark)).toEqual({ reason: "value_absent" });
     }
   });
 
@@ -189,6 +202,7 @@ describe("Redis frame decoding", () => {
     expect(decodeTrackedRedisFrame(zeroStamped, null)).toBeNull();
     expect(decodeTrackedRedisFrame(zeroStamped, Buffer.from("0"))).toBeNull();
     expect(decodeTrackedRedisFrame(zeroStamped, Buffer.from("1"))).toBeNull();
+    expect(decodeTrackedRedisReadResult(zeroStamped, null)).toEqual({ reason: "unclassified" });
     expect(decodeRedisFrame(zeroStamped)).toEqual({ payload: "pending", createdAtMs: 0 });
   });
 

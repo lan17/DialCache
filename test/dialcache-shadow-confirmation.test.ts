@@ -19,6 +19,7 @@ import {
   type RedisCachePayload,
   type RedisInvalidationRequest,
   type RedisReadContext,
+  type RedisReadMiss,
   type RedisReadResult,
   type RedisReadRequest,
   type RedisWriteRequest,
@@ -54,7 +55,7 @@ function deferred<T>(): Deferred<T> {
   return { promise, resolve, reject };
 }
 
-type ScriptedReadResult = RedisCachePayload | RedisWatermarkMiss | null;
+type ScriptedReadResult = RedisCachePayload | RedisReadMiss | RedisWatermarkMiss | null;
 type ReadStep = () => ScriptedReadResult | Promise<ScriptedReadResult>;
 
 const MAX_TRACKED_REDIS_VALUE_TTL_MS = 60 * 60 * 1_000;
@@ -76,19 +77,17 @@ class ScriptedRedis implements DialCacheRedisClient {
       throw new Error("Unexpected Redis read");
     }
     const result = await step();
-    if (result === null || isWatermarkMiss(result)) {
+    if (result === null || isScriptedReadMiss(result)) {
       return result;
     }
     return { payload: result, createdAtMs: this.frameCreatedAtMs };
   }
 }
 
-function isWatermarkMiss(result: ScriptedReadResult): result is RedisWatermarkMiss {
+function isScriptedReadMiss(result: ScriptedReadResult): result is RedisReadMiss | RedisWatermarkMiss {
   return typeof result === "object"
     && !Buffer.isBuffer(result)
-    && result !== null
-    && "kind" in result
-    && result.kind === "watermark_miss";
+    && result !== null;
 }
 
 type OrdinaryMetricName =
@@ -1068,7 +1067,9 @@ describe("DialCache Redis shadow confirmation", () => {
       expect(redis.write).toHaveBeenCalledOnce();
       expectTrackedReads(redis, 1);
       expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
-        name === "miss" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+        name === "miss"
+        && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+        && labels.reason === "unclassified"
       )).toHaveLength(1);
     } finally {
       nowSpy.mockRestore();
@@ -1428,7 +1429,9 @@ describe("DialCache Redis shadow confirmation", () => {
         name === "request" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
       )).toHaveLength(1);
       expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
-        name === "miss" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+        name === "miss"
+        && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+        && labels.reason === "unclassified"
       )).toHaveLength(1);
       expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
         name === "get" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
@@ -1441,14 +1444,49 @@ describe("DialCache Redis shadow confirmation", () => {
     }
   });
 
-  it("fills a typed shadow miss when the final candidate clears the observed watermark", async () => {
+  it("records value_absent for a valid-watermark dark miss even when its refill is fenced", async () => {
     const nowMs = 1_700_000_000_000;
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(nowMs);
     try {
-      const redis = new ScriptedRedis([() => ({
-        kind: "watermark_miss",
-        observedWatermarkMs: nowMs - 1,
-      })]);
+      const redis = new ScriptedRedis([
+        (): RedisWatermarkMiss => ({
+          kind: "watermark_miss",
+          reason: "value_absent",
+          observedWatermarkMs: nowMs,
+        }),
+      ]);
+      const metrics = new RecordingMetrics();
+      const dialcache = createCache(redis, metrics);
+      const getUser = dialcache.cached(async () => ({ id: "123" }), {
+        ...trackedOptions("ShadowDarkValueAbsentFillFenced", remoteConfig(0)),
+        cacheKey: () => "123",
+      });
+
+      await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ id: "123" });
+      await waitForShadowEvents(metrics, 1);
+
+      expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["fill_fenced"]);
+      expect(redis.write).not.toHaveBeenCalled();
+      expectTrackedReads(redis, 1);
+      expect(metrics.ordinaryEvents
+        .filter(({ name, labels }) => name === "miss" && labels.layer === REMOTE_SHADOW_CACHE_LAYER)
+        .map(({ labels }) => labels.reason)).toEqual(["value_absent"]);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it("records watermark_fenced for a fenced dark frame that admits a later refill", async () => {
+    const nowMs = 1_700_000_000_000;
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(nowMs);
+    try {
+      const redis = new ScriptedRedis([
+        (): RedisWatermarkMiss => ({
+          kind: "watermark_miss",
+          reason: "watermark_fenced",
+          observedWatermarkMs: nowMs - 1,
+        }),
+      ]);
       const metrics = new RecordingMetrics();
       const serializer: Serializer<{ readonly id: string }> = {
         dump: vi.fn((value) => JSON.stringify(value)),
@@ -1459,7 +1497,7 @@ describe("DialCache Redis shadow confirmation", () => {
       const source = vi.fn(async () => ({ id: "123" }));
       const dialcache = createCache(redis, metrics);
       const getUser = dialcache.cached(source, {
-        ...trackedOptions("ShadowDarkFillAboveWatermark", remoteConfig(0)),
+        ...trackedOptions("ShadowDarkWatermarkFencedFill", remoteConfig(0)),
         cacheKey: () => "123",
         serializer,
       });
@@ -1477,6 +1515,9 @@ describe("DialCache Redis shadow confirmation", () => {
         createdAtMs: nowMs,
       }));
       expectTrackedReads(redis, 1);
+      expect(metrics.ordinaryEvents
+        .filter(({ name, labels }) => name === "miss" && labels.layer === REMOTE_SHADOW_CACHE_LAYER)
+        .map(({ labels }) => labels.reason)).toEqual(["watermark_fenced"]);
     } finally {
       nowSpy.mockRestore();
     }

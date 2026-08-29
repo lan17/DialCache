@@ -71,6 +71,13 @@ export interface CacheMetricLabels {
   readonly layer: MetricLayer;
 }
 
+/** Bounded causes for cache misses. */
+export type CacheMissReason = "value_absent" | "watermark_fenced" | "unclassified";
+
+export interface MissMetricLabels extends CacheMetricLabels {
+  readonly reason: CacheMissReason;
+}
+
 export interface DisabledMetricLabels extends CacheMetricLabels {
   readonly reason: DisabledReason;
 }
@@ -121,7 +128,7 @@ export interface StaleRecoveryMetricLabels {
 
 export interface DialCacheMetricsAdapter {
   request(labels: CacheMetricLabels): void;
-  miss(labels: CacheMetricLabels): void;
+  miss(labels: MissMetricLabels): void;
   disabled(labels: DisabledMetricLabels): void;
   error(labels: ErrorMetricLabels): void;
   invalidation(labels: InvalidationMetricLabels): void;

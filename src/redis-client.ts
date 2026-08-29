@@ -1,4 +1,5 @@
 import type { Awaitable } from "./config.js";
+import type { CacheMissReason } from "./metrics.js";
 
 const redisPayloadErrorBrand = Symbol.for("dialcache.DialCacheRedisPayloadError");
 const redisPayloadEncodingErrorBrand = Symbol.for("dialcache.DialCacheRedisPayloadEncodingError");
@@ -78,28 +79,58 @@ export interface DecodedRedisFrame {
   readonly payload: RedisCachePayload;
   /** Epoch milliseconds copied from the frame header. */
   readonly createdAtMs: number;
+  /**
+   * A trustworthy watermark observed alongside this eligible tracked frame.
+   * It is retained so a later core-side rejection can carry the independent
+   * refill fence forward without relabeling that rejection as a watermark
+   * fence. Untracked and legacy decoder results omit it.
+   */
+  readonly observedWatermarkMs?: number;
 }
 
-/**
- * A semantic tracked-read miss carrying a trustworthy write fence from the
- * same authoritative value-and-watermark snapshot. A refill stamped at or
- * before `observedWatermarkMs` is known to remain unreadable.
- */
-export interface RedisWatermarkMiss {
-  readonly kind: "watermark_miss";
-  readonly observedWatermarkMs: number;
+/** A classified semantic Redis miss without a trustworthy refill fence. */
+export interface RedisReadMiss {
+  readonly reason: CacheMissReason;
   readonly payload?: never;
   readonly createdAtMs?: never;
 }
 
 /**
- * Semantic Redis read result. `null` remains the generic/legacy miss; bundled
- * adapters return `RedisWatermarkMiss` only when a tracked read observed a
- * present, valid numeric watermark that can safely fence a candidate refill.
+ * A semantic tracked-read miss carrying a trustworthy write fence from the
+ * same authoritative value-and-watermark snapshot. A refill stamped at or
+ * before `observedWatermarkMs` is known to remain unreadable. `reason` is
+ * optional only for source compatibility with the pre-classification typed
+ * result; DialCache maps its absence to `unclassified`.
  */
-export type RedisReadResult = DecodedRedisFrame | RedisWatermarkMiss | null;
+export interface RedisWatermarkMiss {
+  readonly kind: "watermark_miss";
+  readonly observedWatermarkMs: number;
+  readonly reason?: CacheMissReason;
+  readonly payload?: never;
+  readonly createdAtMs?: never;
+}
 
-/** Package-private runtime discriminator for the semantic miss variant. */
+/**
+ * Semantic Redis read result. `null` remains the generic/legacy miss. Bundled
+ * adapters return classified misses; a present, valid tracked watermark is
+ * carried independently by `RedisWatermarkMiss` so it can fence a candidate
+ * refill even when the miss reason is `value_absent`.
+ */
+export type RedisReadResult = DecodedRedisFrame | RedisReadMiss | RedisWatermarkMiss | null;
+
+/** Package-private runtime guard for classified and pre-classification misses. */
+export function isRedisReadMiss(result: unknown): result is RedisReadMiss | RedisWatermarkMiss {
+  return isRedisWatermarkMiss(result)
+    || (
+      typeof result === "object"
+      && result !== null
+      && "reason" in result
+      && !("payload" in result)
+      && !("createdAtMs" in result)
+    );
+}
+
+/** Package-private runtime discriminator for a miss carrying a refill fence. */
 export function isRedisWatermarkMiss(result: unknown): result is RedisWatermarkMiss {
   return typeof result === "object"
     && result !== null
@@ -139,11 +170,12 @@ export interface RedisWriteRequest extends RedisValueRequest {
   /**
    * Nonnegative safe-integer epoch milliseconds to encode in the frame.
    * DialCache core supplies the final dispatch-adjacent sample for admitted
-   * refills following `RedisWatermarkMiss`.
+   * tracked refills whose read result carried a trustworthy observed watermark.
    * It remains optional so ordinary refills, existing direct adapter callers,
    * and custom adapter implementations keep their established behavior. An
-   * adapter that returns `RedisWatermarkMiss` must honor a supplied value
-   * exactly so the final fence decision and stored frame cannot diverge.
+   * adapter that returns a typed miss with an observed watermark must honor a
+   * supplied value exactly so the final fence decision and stored frame cannot
+   * diverge.
    */
   readonly createdAtMs?: number;
 }
@@ -174,9 +206,9 @@ export interface DialCacheRedisClient {
   /**
    * Read a DialCache Redis frame. Hits return the decoded serializer payload
    * with the frame header's creation time. Implementations must use
-   * `decodeRedisFrame` and either `decodeTrackedRedisFrame` (legacy null
-   * misses) or `decodeTrackedRedisReadResult` (typed watermark misses) from
-   * `dialcache/redis-protocol`, or preserve their exact behavior.
+   * `decodeRedisFrame` / `decodeTrackedRedisFrame` (legacy null misses), or
+   * `decodeRedisReadResult` / `decodeTrackedRedisReadResult` (classified
+   * misses) from `dialcache/redis-protocol`, or preserve their exact behavior.
    *
    * Raw values are Redis bulk strings (`Buffer`) or null. A missing value, a
    * frame shorter than the version/timestamp/encoding header, or an
@@ -190,12 +222,13 @@ export interface DialCacheRedisClient {
    * Tracked implementations must read the value and watermark atomically from
    * one authoritative snapshot; replica lag must not hide an invalidation.
    *
-   * Implementations may return a `RedisWatermarkMiss` for a tracked semantic
-   * miss when the same snapshot contained a present, valid numeric watermark.
-   * Existing adapters may continue returning `null` and remain correct while
-   * missing the conditional refill optimization. Adapters that opt into the
-   * discriminated miss must also honor `RedisWriteRequest.createdAtMs` when
-   * supplied.
+   * Implementations may return a classified `RedisReadMiss`; when the same
+   * tracked snapshot contained a present, valid numeric watermark, return the
+   * discriminated `RedisWatermarkMiss` with that `observedWatermarkMs`. Existing
+   * adapters may continue returning `null` and remain correct, with their misses
+   * recorded as `unclassified`. Adapters that opt into a typed miss with an
+   * observed watermark must also honor
+   * `RedisWriteRequest.createdAtMs` when supplied.
    *
    * A returned frame's payload is transferred to DialCache. A returned Buffer
    * must remain stable and must not be mutated, pooled, or reused after this

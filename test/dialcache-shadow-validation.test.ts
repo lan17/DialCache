@@ -8,11 +8,13 @@ import {
   DialCacheKey,
   DialCacheKeyConfig,
   type CacheMetricLabels,
+  type DecodedRedisFrame,
   type DialCacheConfig,
   type DialCacheMetricsAdapter,
   type DisabledMetricLabels,
   type ErrorMetricLabels,
   type InvalidationMetricLabels,
+  type RedisReadResult,
   type SerializationMetricLabels,
   type Serializer,
   type ShadowValidationMetricLabels,
@@ -28,6 +30,10 @@ interface ShadowAgeEvent {
 interface FutureTimestampEvent {
   readonly labels: CacheMetricLabels;
   readonly seconds: number;
+}
+
+function isDecodedRedisFrame(result: RedisReadResult): result is DecodedRedisFrame {
+  return result !== null && "payload" in result && "createdAtMs" in result;
 }
 
 class RecordingMetrics implements DialCacheMetricsAdapter {
@@ -405,7 +411,9 @@ describe("DialCache Redis shadow validation", () => {
     const originalRead = redis.read.bind(redis);
     vi.spyOn(redis, "read").mockImplementation(async (request) => {
       const frame = await originalRead(request);
-      return frame === null ? null : { ...frame, createdAtMs: Number.POSITIVE_INFINITY };
+      return !isDecodedRedisFrame(frame)
+        ? frame
+        : { ...frame, createdAtMs: Number.POSITIVE_INFINITY };
     });
     const dialcache = createShadowCache(redis, metrics);
     const source = vi.fn(async () => cachedValue);
