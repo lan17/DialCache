@@ -8,6 +8,7 @@ import {
   FallbackTimeoutError,
   type CachedOptions,
   type GetOrLoadOptions,
+  type Serializer,
 } from "../src/index.js";
 import { encodeFrame, FakeRedis } from "./fake-redis.js";
 
@@ -239,6 +240,53 @@ describe("DialCache stale-recovery error policy", () => {
 
     expect(predicate).toHaveBeenCalledOnce();
     expect(predicate).toHaveBeenCalledWith(sourceError);
+  });
+
+  it("consumes a rejecting predicate thenable while failing closed without stale recovery", async () => {
+    const useCase = "RejectingThenableStaleRecoveryPolicy";
+    const sourceError = new Error("source unavailable");
+    const predicateError = new Error("predicate failed asynchronously");
+    let markThenableConsumed!: () => void;
+    const thenableConsumed = new Promise<void>((resolve) => {
+      markThenableConsumed = resolve;
+    });
+    const then = vi.fn((
+      _onFulfilled: ((value: boolean) => unknown) | null | undefined,
+      onRejected: ((reason: unknown) => unknown) | null | undefined,
+    ) => {
+      onRejected?.(predicateError);
+      markThenableConsumed();
+    });
+    const predicate = vi.fn(() => ({ then })) as unknown as StaleRecoveryPredicate;
+    const load = vi.fn((): CachedValue => ({ id: "123", version: 1 }));
+    const serializer = {
+      dump: (value: CachedValue) => JSON.stringify(value),
+      load,
+    } satisfies Serializer<CachedValue>;
+    const redis = new FakeRedis();
+    const dialcache = createDialCache(redis);
+    const source = vi.fn(async (): Promise<CachedValue> => {
+      throw sourceError;
+    });
+    const getUser = dialcache.cached(source, {
+      keyType: "user_id",
+      useCase,
+      cacheKey: () => "123",
+      defaultConfig: staleConfig(),
+      shouldAttemptStaleRecovery: predicate,
+      serializer,
+    });
+    seedStale(redis, useCase);
+
+    await expect(dialcache.enable(async () => await getUser())).rejects.toBe(sourceError);
+    await thenableConsumed;
+
+    expect(predicate).toHaveBeenCalledOnce();
+    expect(predicate).toHaveBeenCalledWith(sourceError);
+    expect(then).toHaveBeenCalledOnce();
+    expect(then.mock.calls[0]?.[1]).toEqual(expect.any(Function));
+    expect(load).not.toHaveBeenCalled();
+    expect(redis.getCalls).toBe(1);
   });
 
   it("snapshots a cached function's predicate at registration", async () => {

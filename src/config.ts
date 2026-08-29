@@ -43,12 +43,14 @@ export class DialCacheKeyConfig {
    */
   readonly coalesce?: boolean;
   /**
-   * Logical Redis-frame age in seconds through which a value retained by the
-   * initial read may be returned after an eligible source rejection. Omission
-   * disables recovery by default and inherits in runtime overlays; zero
-   * explicitly disables an inherited policy. A positive value requires a
-   * smaller positive remote TTL and may not exceed 31,536,000 seconds (365
-   * days). Tracked values retain their separate one-hour physical TTL cap.
+   * Exclusive logical Redis-frame age ceiling in seconds. A value retained by
+   * the initial read may be returned after an eligible source rejection only
+   * while its age is less than this value; an age exactly at the ceiling is a
+   * miss. Omission disables recovery by default and inherits in runtime
+   * overlays; zero explicitly disables an inherited policy. A positive value
+   * requires a smaller positive remote TTL and may not exceed 31,536,000
+   * seconds (365 days). Tracked values retain their separate one-hour physical
+   * TTL cap.
    */
   readonly staleOnErrorMaxAgeSec?: number;
   /**
@@ -172,7 +174,11 @@ export interface DialCacheConfig {
    * retained Redis value. Must be synchronous. Per-use-case policy overrides
    * and replaces this callback; omission admits only DialCache's
    * FallbackTimeoutError. Throws, thenables, and non-boolean results deny
-   * recovery without replacing the source rejection.
+   * recovery without replacing the source rejection. Custom predicates should
+   * narrowly admit transient, retriable infrastructure failures and deny
+   * authoritative outcomes such as auth, permission, entitlement, revocation,
+   * deletion, not-found, validation, and programmer errors. Use per-use-case
+   * overrides when particular data requires a stricter policy.
    */
   readonly shouldAttemptStaleRecovery?: StaleRecoveryPredicate;
   /**

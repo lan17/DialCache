@@ -133,7 +133,11 @@ interface CacheOperationOptionsBase<Value> {
    * case, replacing both the instance and built-in policies. Must be
    * synchronous. Returning true authorizes recovery from the Redis candidate
    * retained by the initial read; every other result fails closed without
-   * replacing the source rejection.
+   * replacing the source rejection. Custom predicates should narrowly admit
+   * transient, retriable infrastructure failures and deny authoritative
+   * outcomes such as auth, permission, entitlement, revocation, deletion,
+   * not-found, validation, and programmer errors. Use this override for data
+   * that requires a stricter policy than the instance default.
    */
   readonly shouldAttemptStaleRecovery?: StaleRecoveryPredicate;
   /**

@@ -295,6 +295,10 @@ const shadowCacheConfig: DialCacheConfig = {
 };
 const shadowCache = new DialCache(shadowCacheConfig);
 const staleRecoveryPredicate: StaleRecoveryPredicate = (error) => error instanceof Error;
+const invalidAsyncStaleRecoveryConfig: DialCacheConfig = {
+  // @ts-expect-error Stale-recovery predicates must return a boolean synchronously.
+  shouldAttemptStaleRecovery: async () => true,
+};
 const staleCacheConfig: DialCacheConfig = {
   namespace: "consumer-stale-cache",
   metrics: staleMetrics,
@@ -756,6 +760,7 @@ void rootHasNoRandomRampSampler;
 void datadogMetrics;
 void datadogClassAdapter;
 void missingObservationType;
+void invalidAsyncStaleRecoveryConfig;
 `;
 const integrationConsumer = `import * as valkeyGlide from "@valkey/valkey-glide";
 import { DialCache } from "dialcache";
