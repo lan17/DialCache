@@ -262,6 +262,189 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       });
     });
 
+    it.each([false, true])(
+      "retains a logically stale value through its maximum age and recovers it after source rejection (tracked=%s)",
+      async (trackForInvalidation) => {
+        if (client === undefined || admin === undefined) {
+          throw new Error("Redis test clients did not start");
+        }
+        const namespace = `real-stale-${kind}-${trackForInvalidation ? "tracked" : "untracked"}`;
+        const useCase = "RealStaleOnError";
+        const id = "123";
+        const key = new DialCacheKey({
+          namespace,
+          keyType: "item_id",
+          id,
+          useCase,
+          trackForInvalidation,
+        });
+        const valueKey = `${key.urn}:dialcache-frame-v1`;
+        const sourceValue = { id, version: 1 };
+        const sourceError = new Error("source unavailable");
+        const source = vi.fn<() => Promise<typeof sourceValue>>()
+          .mockResolvedValueOnce(sourceValue)
+          .mockRejectedValueOnce(sourceError);
+        const redisRead = vi.fn(client.adapter.read.bind(client.adapter));
+        const redisClient: DialCacheRedisClient = {
+          read: redisRead,
+          write: client.adapter.write.bind(client.adapter),
+          invalidate: client.adapter.invalidate.bind(client.adapter),
+        };
+        const dialcache = new DialCache({
+          namespace,
+          redis: { client: redisClient, readTimeoutMs: 10_000 },
+          shouldAttemptStaleRecovery: () => true,
+        });
+        const getItem = dialcache.cached(source, {
+          keyType: "item_id",
+          useCase,
+          cacheKey: () => id,
+          trackForInvalidation,
+          defaultConfig: new DialCacheKeyConfig({
+            ttlSec: { [CacheLayer.REMOTE]: 1 },
+            ramp: { [CacheLayer.REMOTE]: 100 },
+            staleOnErrorMaxAgeSec: 60,
+          }),
+        });
+
+        await expect(dialcache.enable(async () => await getItem())).resolves.toEqual(sourceValue);
+        const retainedTtlMs = await admin.pTTL(valueKey);
+        expect(retainedTtlMs).toBeGreaterThan(55_000);
+        expect(retainedTtlMs).toBeLessThanOrEqual(60_000);
+
+        await admin.set(
+          valueKey,
+          encodeFrame(JSON.stringify(sourceValue), 0, Date.now() - 2_000),
+          { PX: 60_000 },
+        );
+        const ttlBeforeRecovery = await admin.pTTL(valueKey);
+
+        await expect(dialcache.enable(async () => await getItem())).resolves.toEqual(sourceValue);
+
+        expect(source).toHaveBeenCalledTimes(2);
+        expect(redisRead).toHaveBeenCalledTimes(2);
+        expect(await admin.pTTL(valueKey)).toBeLessThanOrEqual(ttlBeforeRecovery);
+      },
+    );
+
+    it("does not recover a tracked stale value fenced by invalidation", async () => {
+      if (client === undefined || admin === undefined) {
+        throw new Error("Redis test clients did not start");
+      }
+      const namespace = `real-stale-invalidated-${kind}`;
+      const useCase = "RealStaleOnErrorInvalidated";
+      const id = "123";
+      const key = new DialCacheKey({
+        namespace,
+        keyType: "item_id",
+        id,
+        useCase,
+        trackForInvalidation: true,
+      });
+      const valueKey = `${key.urn}:dialcache-frame-v1`;
+      const sourceValue = { id, version: 1 };
+      const sourceError = new Error("source unavailable");
+      const source = vi.fn<() => Promise<typeof sourceValue>>()
+        .mockResolvedValueOnce(sourceValue)
+        .mockRejectedValueOnce(sourceError);
+      const redisRead = vi.fn(client.adapter.read.bind(client.adapter));
+      const redisClient: DialCacheRedisClient = {
+        read: redisRead,
+        write: client.adapter.write.bind(client.adapter),
+        invalidate: client.adapter.invalidate.bind(client.adapter),
+      };
+      const dialcache = new DialCache({
+        namespace,
+        redis: { client: redisClient, readTimeoutMs: 10_000 },
+        shouldAttemptStaleRecovery: () => true,
+      });
+      const getItem = dialcache.cached(source, {
+        keyType: "item_id",
+        useCase,
+        cacheKey: () => id,
+        trackForInvalidation: true,
+        defaultConfig: new DialCacheKeyConfig({
+          ttlSec: { [CacheLayer.REMOTE]: 1 },
+          ramp: { [CacheLayer.REMOTE]: 100 },
+          staleOnErrorMaxAgeSec: 60,
+        }),
+      });
+
+      await expect(dialcache.enable(async () => await getItem())).resolves.toEqual(sourceValue);
+      await admin.set(
+        valueKey,
+        encodeFrame(JSON.stringify(sourceValue), 0, Date.now() - 2_000),
+        { PX: 60_000 },
+      );
+      await dialcache.invalidateRemote("item_id", id);
+
+      await expect(dialcache.enable(async () => await getItem())).rejects.toBe(sourceError);
+      expect(source).toHaveBeenCalledTimes(2);
+      expect(redisRead).toHaveBeenCalledTimes(2);
+    });
+
+    it("serves the retained tracked snapshot when invalidation arrives during the source attempt", async () => {
+      if (client === undefined || admin === undefined) {
+        throw new Error("Redis test clients did not start");
+      }
+      const namespace = `real-stale-invalidation-race-${kind}`;
+      const useCase = "RealStaleOnErrorInvalidationRace";
+      const id = "123";
+      const key = new DialCacheKey({
+        namespace,
+        keyType: "item_id",
+        id,
+        useCase,
+        trackForInvalidation: true,
+      });
+      const valueKey = `${key.urn}:dialcache-frame-v1`;
+      const sourceValue = { id, version: 1 };
+      const sourceError = new Error("source unavailable");
+      const sourceStarted = deferred<void>();
+      const releaseSource = deferred<void>();
+      const source = vi.fn(async (): Promise<typeof sourceValue> => {
+        sourceStarted.resolve(undefined);
+        await releaseSource.promise;
+        throw sourceError;
+      });
+      const redisRead = vi.fn(client.adapter.read.bind(client.adapter));
+      const redisClient: DialCacheRedisClient = {
+        read: redisRead,
+        write: client.adapter.write.bind(client.adapter),
+        invalidate: client.adapter.invalidate.bind(client.adapter),
+      };
+      const dialcache = new DialCache({
+        namespace,
+        redis: { client: redisClient, readTimeoutMs: 10_000 },
+        shouldAttemptStaleRecovery: () => true,
+      });
+      const getItem = dialcache.cached(source, {
+        keyType: "item_id",
+        useCase,
+        cacheKey: () => id,
+        trackForInvalidation: true,
+        defaultConfig: new DialCacheKeyConfig({
+          ttlSec: { [CacheLayer.REMOTE]: 1 },
+          ramp: { [CacheLayer.REMOTE]: 100 },
+          staleOnErrorMaxAgeSec: 60,
+        }),
+      });
+      await admin.set(
+        valueKey,
+        encodeFrame(JSON.stringify(sourceValue), 0, Date.now() - 2_000),
+        { PX: 60_000 },
+      );
+
+      const pending = dialcache.enable(async () => await getItem());
+      await sourceStarted.promise;
+      await dialcache.invalidateRemote("item_id", id);
+      releaseSource.resolve(undefined);
+
+      await expect(pending).resolves.toEqual(sourceValue);
+      expect(source).toHaveBeenCalledOnce();
+      expect(redisRead).toHaveBeenCalledOnce();
+    });
+
     it("compresses values above the threshold and stores small values byte-identical", async () => {
       if (client === undefined || admin === undefined) {
         throw new Error("Redis test clients did not start");

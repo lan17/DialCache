@@ -10,6 +10,8 @@ export enum CacheLayer {
 
 export type Awaitable<T> = T | Promise<T>;
 export type LayerConfig = Partial<Record<CacheLayer, number>>;
+/** Synchronously classifies whether one source rejection may use a retained Redis candidate. */
+export type StaleRecoveryPredicate = (error: unknown) => boolean;
 
 /** Per-use-case runtime policy for detached Redis shadow work. */
 export interface ShadowConfig {
@@ -41,6 +43,17 @@ export class DialCacheKeyConfig {
    */
   readonly coalesce?: boolean;
   /**
+   * Exclusive logical Redis-frame age ceiling in seconds. A value retained by
+   * the initial read may be returned after an eligible source rejection only
+   * while its age is less than this value; an age exactly at the ceiling is a
+   * miss. Omission disables recovery by default and inherits in runtime
+   * overlays; zero explicitly disables an inherited policy. A positive value
+   * requires a smaller positive remote TTL and may not exceed 31,536,000
+   * seconds (365 days). Tracked values retain their separate one-hour physical
+   * TTL cap.
+   */
+  readonly staleOnErrorMaxAgeSec?: number;
+  /**
    * Maximum time DialCache waits for a remote read before failing open to the
    * source of truth. Overrides the instance default for this use case.
    */
@@ -52,6 +65,7 @@ export class DialCacheKeyConfig {
     shadow?: ShadowConfig;
     requestLocal?: boolean;
     coalesce?: boolean;
+    staleOnErrorMaxAgeSec?: number;
     remoteReadTimeoutMs?: number;
   }) {
     if (config === null || typeof config !== "object" || Array.isArray(config)) {
@@ -78,6 +92,11 @@ export class DialCacheKeyConfig {
     if (config.coalesce !== undefined) {
       this.coalesce = config.coalesce;
     }
+    // Like ttlSec/ramp leaves, validation is deferred to static-default capture
+    // or runtime resolution so malformed runtime policy can fail open narrowly.
+    if (config.staleOnErrorMaxAgeSec !== undefined) {
+      this.staleOnErrorMaxAgeSec = config.staleOnErrorMaxAgeSec;
+    }
     if (config.remoteReadTimeoutMs !== undefined) {
       assertValidDeadlineMs(config.remoteReadTimeoutMs, "DialCache remoteReadTimeoutMs");
       this.remoteReadTimeoutMs = config.remoteReadTimeoutMs;
@@ -98,15 +117,16 @@ export class DialCacheKeyConfig {
   }
 
   /**
-   * The explicit cache-invocation kill switch: request-local caching and
-   * shadow work off, with both shared layers ramped to 0. As a provider
-   * overlay it disables every inherited path instead of relying on field
-   * omission. It does not cancel admitted work or disable explicit
+   * The explicit cache-invocation kill switch: request-local caching, stale
+   * recovery, and shadow work off, with both shared layers ramped to 0. As a
+   * provider overlay it disables every inherited path instead of relying on
+   * field omission. It does not cancel admitted work or disable explicit
    * maintenance operations.
    */
   static disabled(): DialCacheKeyConfig {
     return new DialCacheKeyConfig({
       requestLocal: false,
+      staleOnErrorMaxAgeSec: 0,
       shadow: {
         ramp: 0,
         logMismatches: false,
@@ -149,6 +169,18 @@ export type Logger = Pick<Console, "debug" | "error" | "warn">;
 
 export interface DialCacheConfig {
   readonly cacheConfigProvider?: CacheConfigProvider;
+  /**
+   * Instance default for deciding whether a source rejection may use a
+   * retained Redis value. Must be synchronous. Per-use-case policy overrides
+   * and replaces this callback; omission admits only DialCache's
+   * FallbackTimeoutError. Throws, thenables, and non-boolean results deny
+   * recovery without replacing the source rejection. Custom predicates should
+   * narrowly admit transient, retriable infrastructure failures and deny
+   * authoritative outcomes such as auth, permission, entitlement, revocation,
+   * deletion, not-found, validation, and programmer errors. Use per-use-case
+   * overrides when particular data requires a stricter policy.
+   */
+  readonly shouldAttemptStaleRecovery?: StaleRecoveryPredicate;
   /**
    * Logical namespace used in cache keys, invalidation identity, ramp sampling,
    * and metrics. Defaults to "urn". May not contain `{` or `}`.

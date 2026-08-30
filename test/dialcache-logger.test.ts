@@ -119,10 +119,12 @@ describe("DialCache logger isolation", () => {
     const dialcache = new DialCache({ logger });
     const localCache = (dialcache as unknown as {
       readonly localCache: {
-        put: (key: DialCacheKey, value: unknown, config?: { readonly ttlSec: number }) => Promise<void>;
+        put: (key: DialCacheKey, value: unknown, config: { readonly ttlSec: number }) => void;
       };
     }).localCache;
-    vi.spyOn(localCache, "put").mockRejectedValueOnce(new Error("local write failed"));
+    vi.spyOn(localCache, "put").mockImplementationOnce(() => {
+      throw new Error("local write failed");
+    });
     const getUser = dialcache.cached(async () => ({ source: "fallback" }), {
       keyType: "user_id",
       useCase: "ThrowingLoggerLocalWrite",

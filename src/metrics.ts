@@ -24,6 +24,11 @@ export type ShadowValidationOutcome =
   | "confirmation_error"
   | "timeout"
   | "dropped";
+/** Bounded terminal outcomes for an attempted stale-on-error Redis recovery. */
+export type StaleRecoveryOutcome =
+  | "served"
+  | "miss"
+  | "deserialization_error";
 /**
  * Bounded compression outcomes. Writes record compressed, below_threshold,
  * not_smaller, or write_over_limit (serialized form exceeds the decompression
@@ -106,6 +111,13 @@ export interface ShadowValidationMetricLabels {
   readonly outcome: ShadowValidationOutcome;
 }
 
+export interface StaleRecoveryMetricLabels {
+  readonly cacheNamespace: string;
+  readonly useCase: string;
+  readonly keyType: string;
+  readonly outcome: StaleRecoveryOutcome;
+}
+
 export interface DialCacheMetricsAdapter {
   request(labels: CacheMetricLabels): void;
   miss(labels: CacheMetricLabels): void;
@@ -128,13 +140,25 @@ export interface DialCacheMetricsAdapter {
    */
   observeShadowValueAge?(labels: ShadowValidationMetricLabels, seconds: number): void;
   /**
-   * Positive offset in seconds when a decoded tracked Redis frame is dated
-   * after the observing process's epoch clock. Serving and initial shadow reads
-   * fail closed as misses; a shadow confirmation retains the frame solely for
+   * Positive offset in seconds when a decoded Redis frame is dated after the
+   * observing process's epoch clock. Serving and initial shadow reads fail
+   * closed as misses; a shadow confirmation retains the frame solely for
    * payload comparison. This is a workload-shaped diagnostic, not proof of
    * clock skew. Optional so existing custom adapters keep compiling.
    */
   observeFutureTimestampOffset?(labels: CacheMetricLabels, seconds: number): void;
+  // Optional so existing custom adapters keep compiling without changes.
+  staleRecovery?(labels: StaleRecoveryMetricLabels): void;
+  /**
+   * Age in seconds of the Redis value when stale-on-error recovery serves it:
+   * the observing process's epoch clock minus the retained frame's
+   * `createdAtMs`, clamped at zero. Emitted only alongside the terminal
+   * `served` outcome. Frames are stamped with the writer application's epoch
+   * clock, so cross-process skew makes this coarse operational evidence rather
+   * than a precise measurement. Optional so existing custom adapters keep
+   * compiling without changes.
+   */
+  observeStaleRecoveryValueAge?(labels: StaleRecoveryMetricLabels, seconds: number): void;
   // Optional so existing custom adapters keep compiling without changes.
   compression?(labels: CompressionMetricLabels): void;
   observeGet(labels: CacheMetricLabels, seconds: number): void;

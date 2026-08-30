@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   CacheLayer,
   DialCache,
+  DialCacheKey,
   DialCacheKeyConfig,
   type CacheMetricLabels,
   type CoalescedMetricLabels,
@@ -14,8 +15,9 @@ import {
   type SerializationMetricLabels,
   type Serializer,
   type ShadowValidationMetricLabels,
+  type StaleRecoveryMetricLabels,
 } from "../src/index.js";
-import { FakeRedis } from "./fake-redis.js";
+import { encodeFrame, FakeRedis } from "./fake-redis.js";
 
 class RecordingMetrics implements DialCacheMetricsAdapter {
   readonly events: Array<{ readonly name: string; readonly labels: Record<string, unknown>; readonly value?: number }> = [];
@@ -42,6 +44,14 @@ class RecordingMetrics implements DialCacheMetricsAdapter {
 
   coalesced(labels: CoalescedMetricLabels): void {
     this.record("coalesced", labels);
+  }
+
+  staleRecovery(labels: StaleRecoveryMetricLabels): void {
+    this.record("staleRecovery", labels);
+  }
+
+  observeStaleRecoveryValueAge(labels: StaleRecoveryMetricLabels, seconds: number): void {
+    this.record("staleRecoveryValueAge", labels, seconds);
   }
 
   observeGet(labels: CacheMetricLabels, seconds: number): void {
@@ -77,6 +87,13 @@ const remoteOnly = () =>
     ramp: { [CacheLayer.REMOTE]: 100 },
   });
 
+const staleRemoteOnly = () =>
+  new DialCacheKeyConfig({
+    ttlSec: { [CacheLayer.REMOTE]: 1 },
+    ramp: { [CacheLayer.REMOTE]: 100 },
+    staleOnErrorMaxAgeSec: 10,
+  });
+
 const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("DialCache observability metrics", () => {
@@ -97,6 +114,8 @@ describe("DialCache observability metrics", () => {
       coalesced: vi.fn(() => thenable),
       shadowValidation: vi.fn(() => thenable),
       observeFutureTimestampOffset: vi.fn(() => thenable),
+      staleRecovery: vi.fn(() => thenable),
+      observeStaleRecoveryValueAge: vi.fn(() => thenable),
       observeGet: vi.fn(() => thenable),
       observeFallback: vi.fn(() => thenable),
       observeSerialization: vi.fn(() => thenable),
@@ -135,6 +154,21 @@ describe("DialCache observability metrics", () => {
       outcome: "match",
     } satisfies ShadowValidationMetricLabels);
     isolatedMetrics.observeFutureTimestampOffset?.(labels, 0.001);
+    isolatedMetrics.staleRecovery?.({
+      cacheNamespace: "urn",
+      useCase: "RejectingMetricsThenable",
+      keyType: "user_id",
+      outcome: "served",
+    } satisfies StaleRecoveryMetricLabels);
+    isolatedMetrics.observeStaleRecoveryValueAge?.(
+      {
+        cacheNamespace: "urn",
+        useCase: "RejectingMetricsThenable",
+        keyType: "user_id",
+        outcome: "served",
+      } satisfies StaleRecoveryMetricLabels,
+      60,
+    );
     isolatedMetrics.observeGet(labels, 0);
     isolatedMetrics.observeFallback(labels, 0);
     isolatedMetrics.observeSerialization({ ...labels, operation: "dump" }, 0);
@@ -142,7 +176,7 @@ describe("DialCache observability metrics", () => {
 
     expect(then).not.toHaveBeenCalled();
     await tick();
-    expect(then).toHaveBeenCalledTimes(12);
+    expect(then).toHaveBeenCalledTimes(14);
   });
 
   it("includes the configured cache namespace on every metric path", async () => {
@@ -412,6 +446,43 @@ describe("DialCache observability metrics", () => {
     expect(events(metrics, "error", { useCase: "DisabledByPolicy" })).toHaveLength(0);
   });
 
+  it("reports invalid stale-on-error policy without disabling fresh Redis", async () => {
+    const metrics = new RecordingMetrics();
+    const redis = new FakeRedis();
+    const dialcache = new DialCache({
+      metrics,
+      redis: { client: redis, readTimeoutMs: 1_000 },
+      cacheConfigProvider: async () => new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        staleOnErrorMaxAgeSec: 60,
+      }),
+    });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase: "InvalidStaleOnErrorPolicy",
+      cacheKey: (userId) => userId,
+    });
+
+    const first = await dialcache.enable(async () => await getUser("123"));
+    const second = await dialcache.enable(async () => await getUser("123"));
+
+    expect(second).toEqual(first);
+    expect(calls).toBe(1);
+    expect(redis.getCalls).toBe(2);
+    expect(redis.setCalls).toBe(1);
+    expect(events(metrics, "error", {
+      useCase: "InvalidStaleOnErrorPolicy",
+      layer: CacheLayer.REMOTE,
+      error: "config_resolution",
+      inFallback: false,
+    })).toHaveLength(2);
+    expect(events(metrics, "disabled", {
+      useCase: "InvalidStaleOnErrorPolicy",
+      layer: CacheLayer.REMOTE,
+    })).toHaveLength(0);
+  });
+
   it("labels cache errors separately from fallback errors", async () => {
     // Given cache and fallback errors carry caller-defined names containing dynamic identifiers.
     const metrics = new RecordingMetrics();
@@ -468,6 +539,250 @@ describe("DialCache observability metrics", () => {
     expect(JSON.stringify(events(metrics, "error", {}))).not.toMatch(
       /Tenant123RedisError|Tenant456DatabaseError|tenant-123|tenant-456|urn:user_id/,
     );
+  });
+
+  it("records one complete telemetry trail when stale recovery serves a retained value", async () => {
+    const metrics = new RecordingMetrics();
+    const redis = new FakeRedis();
+    const useCase = "StaleRecoveryServedMetrics";
+    const staleValue = { userId: "123", version: 1 };
+    const key = new DialCacheKey({ keyType: "user_id", id: "123", useCase });
+    redis.setRaw(
+      `${key.urn}:dialcache-frame-v1`,
+      encodeFrame(staleValue, Date.now() - 2_000),
+      10_000,
+    );
+    const source = vi.fn(async () => {
+      throw new Error("source unavailable");
+    });
+    const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const dialcache = new DialCache({
+      metrics,
+      redis: { client: redis, readTimeoutMs: 1_000 },
+      logger,
+      shouldAttemptStaleRecovery: () => true,
+    });
+    const getUser = dialcache.cached(source, {
+      keyType: "user_id",
+      useCase,
+      cacheKey: () => "123",
+      defaultConfig: staleRemoteOnly(),
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).resolves.toEqual(staleValue);
+
+    expect(source).toHaveBeenCalledOnce();
+    expect(events(metrics, "error", { useCase })).toEqual([
+      {
+        name: "error",
+        labels: {
+          cacheNamespace: "urn",
+          useCase,
+          keyType: "user_id",
+          layer: CacheLayer.REMOTE,
+          error: "fallback",
+          inFallback: true,
+        },
+      },
+    ]);
+    const remoteLabels = {
+      cacheNamespace: "urn",
+      useCase,
+      keyType: "user_id",
+      layer: CacheLayer.REMOTE,
+    };
+    expect(events(metrics, "fallback", { useCase })).toEqual([
+      { name: "fallback", labels: remoteLabels, value: expect.any(Number) },
+    ]);
+    expect(events(metrics, "miss", { useCase })).toEqual([
+      { name: "miss", labels: remoteLabels },
+    ]);
+    expect(events(metrics, "request", { useCase })).toEqual([
+      { name: "request", labels: remoteLabels },
+    ]);
+    expect(events(metrics, "get", { useCase })).toEqual([
+      { name: "get", labels: remoteLabels, value: expect.any(Number) },
+    ]);
+    expect(events(metrics, "staleRecovery", { useCase })).toEqual([
+      {
+        name: "staleRecovery",
+        labels: {
+          cacheNamespace: "urn",
+          useCase,
+          keyType: "user_id",
+          outcome: "served",
+        },
+      },
+    ]);
+    expect(events(metrics, "staleRecoveryValueAge", { useCase })).toEqual([
+      {
+        name: "staleRecoveryValueAge",
+        labels: {
+          cacheNamespace: "urn",
+          useCase,
+          keyType: "user_id",
+          outcome: "served",
+        },
+        value: expect.any(Number),
+      },
+    ]);
+    expect(events(metrics, "staleRecoveryValueAge", { useCase })[0]?.value).toBeGreaterThanOrEqual(2);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it("does not record stale value age when recovery misses", async () => {
+    const metrics = new RecordingMetrics();
+    const redis = new FakeRedis();
+    const useCase = "StaleRecoveryMissMetrics";
+    const sourceError = new Error("source unavailable");
+    const dialcache = new DialCache({
+      metrics,
+      redis: { client: redis, readTimeoutMs: 1_000 },
+      shouldAttemptStaleRecovery: () => true,
+    });
+    const getUser = dialcache.cached(async (): Promise<{ readonly userId: string }> => {
+      throw sourceError;
+    }, {
+      keyType: "user_id",
+      useCase,
+      cacheKey: () => "123",
+      defaultConfig: staleRemoteOnly(),
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).rejects.toBe(sourceError);
+
+    expect(events(metrics, "staleRecovery", { useCase })).toEqual([
+      {
+        name: "staleRecovery",
+        labels: {
+          cacheNamespace: "urn",
+          useCase,
+          keyType: "user_id",
+          outcome: "miss",
+        },
+      },
+    ]);
+    expect(events(metrics, "staleRecoveryValueAge", { useCase })).toHaveLength(0);
+  });
+
+  it("does not record stale value age when recovery deserialization fails", async () => {
+    const metrics = new RecordingMetrics();
+    const redis = new FakeRedis();
+    const useCase = "StaleRecoveryDeserializationErrorMetrics";
+    const sourceError = new Error("source unavailable");
+    const key = new DialCacheKey({ keyType: "user_id", id: "123", useCase });
+    redis.setRaw(
+      `${key.urn}:dialcache-frame-v1`,
+      encodeFrame({ userId: "123" }, Date.now() - 2_000),
+      10_000,
+    );
+    const serializer: Serializer<{ readonly userId: string }> = {
+      dump: async (value) => JSON.stringify(value),
+      load: async () => {
+        throw new Error("cannot deserialize retained value");
+      },
+    };
+    const dialcache = new DialCache({
+      metrics,
+      redis: { client: redis, readTimeoutMs: 1_000 },
+      shouldAttemptStaleRecovery: () => true,
+    });
+    const getUser = dialcache.cached(async (): Promise<{ readonly userId: string }> => {
+      throw sourceError;
+    }, {
+      keyType: "user_id",
+      useCase,
+      cacheKey: () => "123",
+      defaultConfig: staleRemoteOnly(),
+      serializer,
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).rejects.toBe(sourceError);
+
+    expect(events(metrics, "staleRecovery", { useCase })).toEqual([
+      {
+        name: "staleRecovery",
+        labels: {
+          cacheNamespace: "urn",
+          useCase,
+          keyType: "user_id",
+          outcome: "deserialization_error",
+        },
+      },
+    ]);
+    expect(events(metrics, "staleRecoveryValueAge", { useCase })).toHaveLength(0);
+  });
+
+  it("samples served stale value age after asynchronous deserialization completes", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const clockStart = new Date("2026-08-29T12:00:00.000Z");
+    vi.setSystemTime(clockStart);
+
+    try {
+      const metrics = new RecordingMetrics();
+      const redis = new FakeRedis();
+      const useCase = "StaleRecoveryReturnTimeValueAgeMetrics";
+      const staleValue = { userId: "123" };
+      const key = new DialCacheKey({ keyType: "user_id", id: "123", useCase });
+      redis.setRaw(
+        `${key.urn}:dialcache-frame-v1`,
+        encodeFrame(staleValue, clockStart.getTime() - 2_000),
+        10_000,
+      );
+      let markLoadStarted!: () => void;
+      const loadStarted = new Promise<void>((resolve) => {
+        markLoadStarted = resolve;
+      });
+      let releaseLoad!: () => void;
+      const loadGate = new Promise<void>((resolve) => {
+        releaseLoad = resolve;
+      });
+      const serializer: Serializer<typeof staleValue> = {
+        dump: async (value) => JSON.stringify(value),
+        load: async () => {
+          markLoadStarted();
+          await loadGate;
+          return staleValue;
+        },
+      };
+      const dialcache = new DialCache({
+        metrics,
+        redis: { client: redis, readTimeoutMs: 1_000 },
+        shouldAttemptStaleRecovery: () => true,
+      });
+      const getUser = dialcache.cached(async (): Promise<typeof staleValue> => {
+        throw new Error("source unavailable");
+      }, {
+        keyType: "user_id",
+        useCase,
+        cacheKey: () => "123",
+        defaultConfig: staleRemoteOnly(),
+        serializer,
+      });
+
+      const result = dialcache.enable(async () => await getUser());
+      await loadStarted;
+      expect(events(metrics, "staleRecoveryValueAge", { useCase })).toHaveLength(0);
+
+      vi.setSystemTime(clockStart.getTime() + 3_000);
+      releaseLoad();
+
+      await expect(result).resolves.toEqual(staleValue);
+      expect(events(metrics, "staleRecoveryValueAge", { useCase })).toEqual([
+        {
+          name: "staleRecoveryValueAge",
+          labels: {
+            cacheNamespace: "urn",
+            useCase,
+            keyType: "user_id",
+            outcome: "served",
+          },
+          value: 5,
+        },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("classifies config, Redis write, and serializer failures by stable operation", async () => {
@@ -689,9 +1004,11 @@ describe("DialCache observability metrics", () => {
 
     const writeFailure = new DialCache({ metrics, logger });
     const writeLocalCache = (writeFailure as unknown as {
-      readonly localCache: { put: () => Promise<void> };
+      readonly localCache: { put: () => void };
     }).localCache;
-    vi.spyOn(writeLocalCache, "put").mockRejectedValueOnce(new Error("local write failed"));
+    vi.spyOn(writeLocalCache, "put").mockImplementationOnce(() => {
+      throw new Error("local write failed");
+    });
     const writeValue = writeFailure.cached(async (id: string) => id, {
       keyType: "user_id",
       useCase: "LocalWriteErrorClassification",

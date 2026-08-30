@@ -53,9 +53,9 @@ function decodeRedisPayload(raw: Buffer): RedisCachePayload {
 /**
  * Encode a serializer payload into a servable DialCache Redis frame.
  *
- * Writes stamp a client-clock `createdAtMs`. Core rejects tracked frames dated
- * after the reader's clock and uses decoded timestamps for shadow value-age
- * observations, so stamp real client time, not a constant.
+ * Writes stamp a client-clock `createdAtMs`. Core rejects serving frames dated
+ * after the reader's clock, enforces logical age, and uses decoded timestamps
+ * for shadow value-age observations, so stamp real client time, not a constant.
  */
 export function encodeRedisFrame(payload: RedisCachePayload, createdAtMs: number): Buffer {
   if (!isValidRedisTimestampMs(createdAtMs)) {

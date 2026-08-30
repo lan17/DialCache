@@ -8,6 +8,7 @@ import {
   type CacheConfigProvider,
   type DialCacheConfig,
   type Logger,
+  type StaleRecoveryPredicate,
 } from "./config.js";
 import { DialCacheContext, getOrCreateRequestLocalCache, type RequestLocalCache } from "./context.js";
 import { FallbackTimeoutError, UseCaseIsAlreadyRegisteredError, UseCaseNameIsReservedError } from "./errors.js";
@@ -37,9 +38,10 @@ import { deterministicShadowRampSample } from "./internal/ramp.js";
 import { RedisCache, type FutureFramePolicy } from "./internal/redis-cache.js";
 import {
   fetchKeyConfig,
-  resolveLayerConfigResult,
+  resolveRemoteLayerConfigResult,
   type LayerConfigResolution,
   type ResolvedLayerConfig,
+  type ResolvedRemoteLayerConfig,
 } from "./internal/runtime-config.js";
 import { shadowMismatchLogDetails } from "./internal/shadow-log-json.js";
 
@@ -126,6 +128,18 @@ interface CacheOperationOptionsBase<Value> {
    * This is stable use-case behavior, not runtime rollout configuration.
    */
   readonly shadowComparator?: ShadowComparator<Value>;
+  /**
+   * Overrides the DialCache-instance source-error classifier for this use
+   * case, replacing both the instance and built-in policies. Must be
+   * synchronous. Returning true authorizes recovery from the Redis candidate
+   * retained by the initial read; every other result fails closed without
+   * replacing the source rejection. Custom predicates should narrowly admit
+   * transient, retriable infrastructure failures and deny authoritative
+   * outcomes such as auth, permission, entitlement, revocation, deletion,
+   * not-found, validation, and programmer errors. Use this override for data
+   * that requires a stricter policy than the instance default.
+   */
+  readonly shouldAttemptStaleRecovery?: StaleRecoveryPredicate;
   /**
    * Monotonic deadline applied once an initially enabled invocation starts its
    * fallback, in milliseconds. Must be at most 2,147,483,647. Defaults to 60
@@ -235,7 +249,7 @@ type ShadowValidationStart<Value> =
       /** The caller-owned, fallback-deadline-bounded SoT operation. */
       readonly source: Promise<Value>;
       /** Valid remote policy retained even though its serving ramp excluded this key. */
-      readonly remoteConfig: ResolvedLayerConfig;
+      readonly remoteConfig: ResolvedRemoteLayerConfig;
       /** Includes synchronous SoT work that ran before shadow admission. */
       readonly startedAtMs: number | null;
     };
@@ -245,7 +259,7 @@ type ShadowValidationRunStart<Value> =
   | {
       readonly kind: "redis";
       readonly source: Promise<Value>;
-      readonly remoteConfig: ResolvedLayerConfig;
+      readonly remoteConfig: ResolvedRemoteLayerConfig;
     };
 
 const DEFAULT_LOCAL_MAX_SIZE = 10_000;
@@ -253,6 +267,8 @@ const DEFAULT_FALLBACK_TIMEOUT_MS = 60_000;
 const DEFAULT_SHADOW_MAX_IN_FLIGHT = 1;
 const defaultConfigProvider: CacheConfigProvider = () => null;
 const defaultLogger: Logger = console;
+const defaultStaleRecoveryPredicate: StaleRecoveryPredicate =
+  (error) => error instanceof FallbackTimeoutError;
 
 export class DialCache {
   private readonly context = new DialCacheContext();
@@ -263,6 +279,7 @@ export class DialCache {
   private readonly logger: Logger;
   private readonly redisCache: RedisCache | null;
   private readonly metrics: DialCacheMetricsAdapter | null;
+  private readonly staleRecoveryPredicate: StaleRecoveryPredicate;
   private readonly shadowMaxInFlight: number;
   private readonly shadowFlights = new Map<string, ShadowFlight>();
   private readonly processFlights = new Map<string, ProcessFlight>();
@@ -297,13 +314,16 @@ export class DialCache {
     this.namespace = namespace;
     this.logger = safeLogger(config.logger ?? defaultLogger);
     this.metrics = safeMetrics(config.metrics ?? null);
+    this.staleRecoveryPredicate = resolveStaleRecoveryPredicate(
+      config.shouldAttemptStaleRecovery,
+      defaultStaleRecoveryPredicate,
+    );
     this.shadowMaxInFlight = shadowMaxInFlight;
-    this.localCache = new LocalCache(this.configProvider, localMaxSize);
+    this.localCache = new LocalCache(localMaxSize);
     this.redisCache =
       config.redis === undefined
         ? null
         : new RedisCache({
-            configProvider: this.configProvider,
             redis: config.redis,
             metrics: this.metrics,
           });
@@ -350,6 +370,10 @@ export class DialCache {
     const defaultConfig = snapshotDefaultConfig(options.defaultConfig);
     const fallbackTimeoutMs = resolveFallbackTimeoutMs(options.fallbackTimeoutMs);
     const shadowComparator = resolveShadowComparator(options.shadowComparator);
+    const staleRecoveryPredicate = resolveStaleRecoveryPredicate(
+      options.shouldAttemptStaleRecovery,
+      this.staleRecoveryPredicate,
+    );
     this.registerUseCase(options.useCase);
 
     return (...args: Parameters<Fn>): Promise<CachedValue<Fn>> =>
@@ -362,6 +386,7 @@ export class DialCache {
         defaultConfig,
         fallbackTimeoutMs,
         shadowComparator,
+        staleRecoveryPredicate,
       );
   }
 
@@ -375,6 +400,10 @@ export class DialCache {
     const defaultConfig = snapshotDefaultConfig(options.defaultConfig);
     const fallbackTimeoutMs = resolveFallbackTimeoutMs(options.fallbackTimeoutMs);
     const shadowComparator = resolveShadowComparator(options.shadowComparator);
+    const staleRecoveryPredicate = resolveStaleRecoveryPredicate(
+      options.shouldAttemptStaleRecovery,
+      this.staleRecoveryPredicate,
+    );
     this.assertUseCaseIsNotReserved(options.useCase);
 
     return this.executeCacheOperation(
@@ -384,6 +413,7 @@ export class DialCache {
       defaultConfig,
       fallbackTimeoutMs,
       shadowComparator,
+      staleRecoveryPredicate,
     );
   }
 
@@ -394,6 +424,7 @@ export class DialCache {
     defaultConfig: DialCacheKeyConfig | null,
     fallbackTimeoutMs: number | null,
     shadowComparator: ShadowComparator<Value>,
+    staleRecoveryPredicate: StaleRecoveryPredicate,
   ): Promise<Value> {
     const rawFallback = async (): Promise<Value> => await load();
     const noLayerLabels = {
@@ -465,6 +496,7 @@ export class DialCache {
           keyConfig,
           fallback,
           shadowValidation,
+          staleRecoveryPredicate,
         );
       }
     }
@@ -474,6 +506,7 @@ export class DialCache {
       keyConfig,
       fallback,
       shadowValidation,
+      staleRecoveryPredicate,
       CacheLayer.LOCAL,
     );
   }
@@ -557,6 +590,7 @@ export class DialCache {
     keyConfig: DialCacheKeyConfig,
     fallback: () => Promise<T>,
     shadowValidation: ShadowValidationPlan<T>,
+    staleRecoveryPredicate: StaleRecoveryPredicate,
   ): Promise<T> {
     const run = async (): Promise<T> => {
       const start = performance.now();
@@ -573,6 +607,7 @@ export class DialCache {
         keyConfig,
         fallback,
         shadowValidation,
+        staleRecoveryPredicate,
         REQUEST_LOCAL_CACHE_LAYER,
       );
       requestLocalCache.set(key.urn, value);
@@ -589,6 +624,7 @@ export class DialCache {
     keyConfig: DialCacheKeyConfig | null,
     fallback: () => Promise<T>,
     shadowValidation: ShadowValidationPlan<T>,
+    staleRecoveryPredicate: StaleRecoveryPredicate,
     fallbackMetricLayer: MetricLayer,
   ): Promise<T> {
     // This predicate is the single home of the default: omission means on in
@@ -603,6 +639,7 @@ export class DialCache {
           localLayer.config,
           fallback,
           shadowValidation,
+          staleRecoveryPredicate,
         );
       return coalesce ? await this.singleFlightProcess(key, run) : await run();
     }
@@ -645,7 +682,7 @@ export class DialCache {
         remote,
         fallback,
         shadowValidation,
-        remoteLayer.config,
+        staleRecoveryPredicate,
       );
     };
     return coalesce ? await this.singleFlightProcess(key, run) : await run();
@@ -657,6 +694,7 @@ export class DialCache {
     localConfig: ResolvedLayerConfig,
     fallback: () => Promise<T>,
     shadowValidation: ShadowValidationPlan<T>,
+    staleRecoveryPredicate: StaleRecoveryPredicate,
   ): Promise<T> {
     const local = this.readLocalWithResolvedConfig<T>(key, localConfig);
     if (local.status === "hit") {
@@ -690,6 +728,7 @@ export class DialCache {
         remoteLayer,
         fallback,
         shadowValidation,
+        staleRecoveryPredicate,
       );
     }
 
@@ -707,7 +746,7 @@ export class DialCache {
       remote,
       fallback,
       shadowValidation,
-      remoteLayer.config,
+      staleRecoveryPredicate,
     );
   }
 
@@ -724,7 +763,7 @@ export class DialCache {
     key: DialCacheKey,
     keyConfig: DialCacheKeyConfig | null,
     local: CacheGetResult<T> | null,
-    remoteConfig: ResolvedLayerConfig,
+    remoteConfig: ResolvedRemoteLayerConfig,
     fallbackLabels: CacheMetricLabels,
     fallback: () => Promise<T>,
     shadowValidation: ShadowValidationPlan<T>,
@@ -757,7 +796,7 @@ export class DialCache {
     remote: RemoteCacheGetResult<T>,
     fallback: () => Promise<T>,
     shadowValidation: ShadowValidationPlan<T>,
-    resolvedRemoteConfig?: ResolvedLayerConfig,
+    staleRecoveryPredicate: StaleRecoveryPredicate,
   ): Promise<T> {
     if (remote.status === "hit") {
       if (local.status === "miss") {
@@ -782,17 +821,50 @@ export class DialCache {
       return value;
     }
 
-    const remoteErrored = remote.status === "disabled" && remote.reason === "config_error";
-    const remoteWriteConfig = remote.status === "miss" ? remote.config : remoteErrored ? resolvedRemoteConfig : undefined;
-    const fallbackLayer = remote.status === "miss" || remoteErrored ? CacheLayer.REMOTE : CacheLayer.LOCAL;
-    const value = await this.callFallback(labelsFor(key, fallbackLayer), fallback);
-    const skipCacheWrite = (remote.status === "miss" || remote.status === "disabled") && remote.skipCacheWrite === true;
+    const remoteConfigErrored = remote.status === "disabled" && remote.reason === "config_error";
+    const remoteWriteConfig = remote.status === "miss" || remote.status === "retained"
+      ? remote.config
+      : undefined;
+    const fallbackLayer = remote.status === "miss" || remote.status === "retained" || remoteConfigErrored
+      ? CacheLayer.REMOTE
+      : CacheLayer.LOCAL;
+    const staleRecoveryMaxAgeSec = remote.status === "retained"
+      || (remote.status === "miss" && remote.reason === "cache_miss")
+      ? remote.config.staleOnErrorMaxAgeSec
+      : null;
+    const retainedFrame = remote.status === "retained" ? remote.frame : null;
+    let value: T;
+    try {
+      value = await this.callFallback(labelsFor(key, fallbackLayer), fallback);
+    } catch (fallbackError) {
+      if (
+        staleRecoveryMaxAgeSec !== null
+        && this.shouldAttemptStaleRecovery(staleRecoveryPredicate, fallbackError)
+      ) {
+        try {
+          const recovered = await redisCache.recoverRetainedCandidate<T>(
+            key,
+            retainedFrame,
+            staleRecoveryMaxAgeSec,
+          );
+          if (recovered.status === "hit") {
+            return recovered.value;
+          }
+        } catch (recoveryError) {
+          // Recovery is subordinate to the source rejection and must never
+          // replace it, including for a custom serializer that violates its
+          // declared contract in an unexpected way.
+          this.logger.warn("Error using retained Redis value during stale recovery", recoveryError);
+        }
+      }
+      throw fallbackError;
+    }
     // A tracked fallback was not validated against a watermark after the source
     // call. If this invocation reached the Redis write path, let a later
     // authoritative Redis hit populate local regardless of write success.
-    const suppressLocalWrite = skipCacheWrite
+    const suppressLocalWrite = (remote.status === "disabled" && remote.skipCacheWrite === true)
       || (remoteWriteConfig !== undefined && key.trackForInvalidation);
-    if (!skipCacheWrite && remoteWriteConfig !== undefined) {
+    if (remoteWriteConfig !== undefined) {
       try {
         await redisCache.put(key, value, remoteWriteConfig);
       } catch (error) {
@@ -803,6 +875,28 @@ export class DialCache {
       await this.putLocalFailOpen(key, value, local.config);
     }
     return value;
+  }
+
+  private shouldAttemptStaleRecovery(
+    predicate: StaleRecoveryPredicate,
+    fallbackError: unknown,
+  ): boolean {
+    let result: unknown;
+    try {
+      result = predicate(fallbackError);
+    } catch (predicateError) {
+      this.logger.warn("DialCache stale recovery predicate threw; recovery was denied", predicateError);
+      return false;
+    }
+    if (typeof result !== "boolean") {
+      // The public contract is synchronous. Consume an accidental rejecting
+      // thenable without awaiting it, and fail closed without delaying the
+      // original source rejection.
+      void settleUnexpectedThenable(result);
+      this.logger.warn("DialCache stale recovery predicate returned a non-boolean; recovery was denied");
+      return false;
+    }
+    return result;
   }
 
   private scheduleShadowValidation<T>(
@@ -947,8 +1041,16 @@ export class DialCache {
       operationFinished = true;
       maybeRelease();
     };
-    const readShadowFrame = (futureFramePolicy: FutureFramePolicy): Promise<DecodedRedisFrame | null> => {
-      const read = redisCache.startPayloadReadForShadow(key, readTimeoutMs, futureFramePolicy);
+    const readShadowFrame = (
+      maxAgeSec: number | null,
+      futureFramePolicy: FutureFramePolicy,
+    ): Promise<DecodedRedisFrame | null> => {
+      const read = redisCache.startPayloadReadForShadow(
+        key,
+        maxAgeSec,
+        readTimeoutMs,
+        futureFramePolicy,
+      );
       pendingRedisReads.add(read.settled);
       void read.settled.then(() => {
         pendingRedisReads.delete(read.settled);
@@ -986,11 +1088,11 @@ export class DialCache {
             return "timeout";
           }
 
-          let shadowFillConfig: ResolvedLayerConfig | null = null;
+          let shadowFillConfig: ResolvedRemoteLayerConfig | null = null;
           if (start.kind === "redis") {
             let frame: DecodedRedisFrame | null;
             try {
-              frame = await readShadowFrame("reject");
+              frame = await readShadowFrame(start.remoteConfig.ttlSec, "reject");
             } catch {
               return "redis_error";
             }
@@ -1089,7 +1191,7 @@ export class DialCache {
 
           let confirmationFrame: DecodedRedisFrame | null;
           try {
-            confirmationFrame = await readShadowFrame("retain");
+            confirmationFrame = await readShadowFrame(null, "retain");
           } catch {
             return "confirmation_error";
           }
@@ -1208,11 +1310,13 @@ export class DialCache {
 
   private async resolveRemoteLayerConfig(key: DialCacheKey, keyConfig: DialCacheKeyConfig | null) {
     try {
-      const result = resolveLayerConfigResult({
+      const result = resolveRemoteLayerConfigResult({
         config: keyConfig,
         key,
-        layer: CacheLayer.REMOTE,
       });
+      if (result.staleOnErrorConfigError === true) {
+        this.recordError(key, CacheLayer.REMOTE, "config_resolution");
+      }
       if (result.status === "disabled") {
         this.metrics?.disabled({ ...labelsFor(key, CacheLayer.REMOTE), reason: result.reason });
         this.recordInvalidLeaf(key, CacheLayer.REMOTE, result.reason);
@@ -1229,20 +1333,20 @@ export class DialCache {
   private async readRemoteWithResolvedConfig<T>(
     redisCache: RedisCache,
     key: DialCacheKey,
-    layerConfig: ResolvedLayerConfig,
+    layerConfig: ResolvedRemoteLayerConfig,
     readTimeoutMs: number,
   ): Promise<RemoteCacheGetResult<T>> {
     try {
       return await redisCache.getWithResolvedConfig<T>(key, layerConfig, readTimeoutMs);
     } catch (error) {
       this.logger.warn("Error getting value from Redis cache", error);
-      return { status: "error", operation: "read" };
+      return { status: "error" };
     }
   }
 
-  private async putLocalFailOpen<T>(key: DialCacheKey, value: T, config?: { readonly ttlSec: number }): Promise<void> {
+  private async putLocalFailOpen<T>(key: DialCacheKey, value: T, config: { readonly ttlSec: number }): Promise<void> {
     try {
-      await this.localCache.put(key, value, config);
+      this.localCache.put(key, value, config);
     } catch (error) {
       this.logger.warn("Error putting value in local cache", error);
       this.recordError(key, CacheLayer.LOCAL, "cache_write");
@@ -1405,6 +1509,7 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
   const shadowConfig = config.shadow;
   const requestLocal = config.requestLocal;
   const coalesce = config.coalesce;
+  const staleOnErrorMaxAgeSec = config.staleOnErrorMaxAgeSec;
   const remoteReadTimeoutMs = config.remoteReadTimeoutMs;
   if (requestLocal !== undefined && typeof requestLocal !== "boolean") {
     throw new TypeError("DialCache defaultConfig requestLocal must be a boolean");
@@ -1422,6 +1527,7 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
     ramp: rampConfig,
     ...(requestLocal === undefined ? {} : { requestLocal }),
     ...(coalesce === undefined ? {} : { coalesce }),
+    ...(staleOnErrorMaxAgeSec === undefined ? {} : { staleOnErrorMaxAgeSec }),
     ...(remoteReadTimeoutMs === undefined ? {} : { remoteReadTimeoutMs }),
     ...(shadowConfig === undefined ? {} : { shadow: shadowConfig }),
   });
@@ -1446,6 +1552,31 @@ function snapshotDefaultConfig(config: DialCacheKeyConfig | null | undefined): D
       }
       if (!Number.isFinite(ramp) || ramp < 0 || ramp > 100) {
         throw new RangeError(`DialCache defaultConfig ramp.${layer} must be between 0 and 100`);
+      }
+    }
+  }
+
+  if (snapshot.staleOnErrorMaxAgeSec !== undefined) {
+    const maxAgeSec = snapshot.staleOnErrorMaxAgeSec;
+    if (typeof maxAgeSec !== "number") {
+      throw new TypeError("DialCache defaultConfig staleOnErrorMaxAgeSec must be a number");
+    }
+    if (maxAgeSec !== 0 && !isSupportedCacheTtlSec(maxAgeSec)) {
+      throw new RangeError(
+        `DialCache defaultConfig staleOnErrorMaxAgeSec must be a nonnegative safe integer no greater than ${MAX_CACHE_TTL_SEC}`,
+      );
+    }
+    if (maxAgeSec > 0) {
+      const remoteTtlSec = snapshot.ttlSec[CacheLayer.REMOTE];
+      if (remoteTtlSec === undefined) {
+        throw new RangeError(
+          "DialCache defaultConfig staleOnErrorMaxAgeSec requires ttlSec.remote",
+        );
+      }
+      if (maxAgeSec <= remoteTtlSec) {
+        throw new RangeError(
+          "DialCache defaultConfig staleOnErrorMaxAgeSec must be greater than ttlSec.remote",
+        );
       }
     }
   }
@@ -1548,6 +1679,9 @@ function safeMetrics(metrics: DialCacheMetricsAdapter | null): DialCacheMetricsA
             callObserver(() => metrics.shadowValidation!(labels)),
         }
       : {}),
+    staleRecovery: (labels) => callObserver(() => metrics.staleRecovery?.(labels)),
+    observeStaleRecoveryValueAge: (labels, seconds) =>
+      callObserver(() => metrics.observeStaleRecoveryValueAge?.(labels, seconds)),
     observeShadowValueAge: (labels, seconds) =>
       callObserver(() => metrics.observeShadowValueAge?.(labels, seconds)),
     observeFutureTimestampOffset: (labels, seconds) =>
@@ -1581,12 +1715,25 @@ function resolveShadowComparator<Value>(
   return comparator ?? isDeepStrictEqual;
 }
 
+function resolveStaleRecoveryPredicate(
+  predicate: StaleRecoveryPredicate | undefined,
+  fallback: StaleRecoveryPredicate,
+): StaleRecoveryPredicate {
+  if (predicate === undefined) {
+    return fallback;
+  }
+  if (typeof predicate !== "function") {
+    throw new TypeError("DialCache shouldAttemptStaleRecovery must be a function");
+  }
+  return predicate;
+}
+
 // Frame stamps and the observation both use application-process epoch clocks.
-// Core rejects tracked frames that are future-dated when read, but the reader
-// clock can step backward before a detached shadow verdict, so clamp that age
-// to zero. A custom client that violates the decode contract can hand over a
-// non-finite stamp; recording it would permanently poison backend histogram
-// sums, so the observation is skipped instead.
+// Core rejects future frames before they can serve, but a confirmation read
+// may retain one solely for payload supersession comparison. Clamp that
+// diagnostic age to zero. A custom client that violates the decode contract
+// can hand over a non-finite stamp; recording it would permanently poison
+// backend histogram sums, so the observation is skipped instead.
 function shadowValueAgeSeconds(createdAtMs: number): number | undefined {
   const ageSeconds = (Date.now() - createdAtMs) / 1000;
   if (!Number.isFinite(ageSeconds)) {
@@ -1615,6 +1762,7 @@ async function settleUnexpectedThenable(value: unknown): Promise<void> {
   try {
     await Promise.resolve(value);
   } catch {
-    // Comparators are synchronous; consume accidental async rejection safely.
+    // Synchronous extension points may accidentally return a rejected thenable;
+    // consume it without letting that rejection affect cache control flow.
   }
 }

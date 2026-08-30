@@ -504,10 +504,12 @@ describe("DialCache local-only MVP", () => {
     const dialcache = new DialCache({ logger });
     const localCache = (dialcache as unknown as {
       readonly localCache: {
-        put: (key: DialCacheKey, value: unknown, config?: { readonly ttlSec: number }) => Promise<void>;
+        put: (key: DialCacheKey, value: unknown, config: { readonly ttlSec: number }) => void;
       };
     }).localCache;
-    vi.spyOn(localCache, "put").mockRejectedValueOnce(new Error("local write failed"));
+    vi.spyOn(localCache, "put").mockImplementationOnce(() => {
+      throw new Error("local write failed");
+    });
     let calls = 0;
     const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
       keyType: "user_id",

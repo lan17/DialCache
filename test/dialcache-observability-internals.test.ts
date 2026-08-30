@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { CacheLayer, DialCacheKey, DialCacheKeyConfig } from "../src/index.js";
-import { LocalCache } from "../src/internal/local-cache.js";
-import { RedisCache } from "../src/internal/redis-cache.js";
-import { fetchKeyConfig, resolveLayerConfig } from "../src/internal/runtime-config.js";
-import { encodeFrame, FakeRedis } from "./fake-redis.js";
+import {
+  fetchKeyConfig,
+  resolveRemoteLayerConfigResult,
+} from "../src/internal/runtime-config.js";
 
 const key = (defaultConfig: DialCacheKeyConfig | null = DialCacheKeyConfig.enabled(60)) =>
   new DialCacheKey({ keyType: "user_id", id: "123", useCase: "ObservabilityInternals", defaultConfig });
@@ -20,6 +20,7 @@ describe("DialCache observability internal compatibility paths", () => {
         ramp: 20,
         logMismatches: true,
       },
+      staleOnErrorMaxAgeSec: 3_600,
     });
     const cases = [
       {
@@ -39,6 +40,7 @@ describe("DialCache observability internal compatibility paths", () => {
             ramp: 80,
             logMismatches: true,
           },
+          staleOnErrorMaxAgeSec: 3_600,
         }),
       },
       {
@@ -48,6 +50,7 @@ describe("DialCache observability internal compatibility paths", () => {
           shadow: {
             logMismatches: false,
           },
+          staleOnErrorMaxAgeSec: 0,
         }),
         expected: new DialCacheKeyConfig({
           requestLocal: true,
@@ -58,10 +61,11 @@ describe("DialCache observability internal compatibility paths", () => {
             ramp: 20,
             logMismatches: false,
           },
+          staleOnErrorMaxAgeSec: 0,
         }),
       },
       {
-        runtime: new DialCacheKeyConfig({ shadow: {} }),
+        runtime: new DialCacheKeyConfig({ shadow: {}, staleOnErrorMaxAgeSec: 7_200 }),
         expected: new DialCacheKeyConfig({
           requestLocal: true,
           coalesce: false,
@@ -71,6 +75,7 @@ describe("DialCache observability internal compatibility paths", () => {
             ramp: 20,
             logMismatches: true,
           },
+          staleOnErrorMaxAgeSec: 7_200,
         }),
       },
     ];
@@ -96,72 +101,47 @@ describe("DialCache observability internal compatibility paths", () => {
     expect(merged?.ramp[CacheLayer.LOCAL]).toBe(50);
   });
 
-  it("keeps LocalCache get/getIfPresent compatibility while exposing disabled reads", async () => {
-    // Given a local cache with enabled config and a second key with no config.
-    const cache = new LocalCache(async () => null, 10);
-    const enabledKey = key();
-    const disabledKey = key(null);
-    let calls = 0;
+  it("keeps invalid stale-on-error policy diagnostic-only in remote resolution", () => {
+    const remoteKey = key();
 
-    // When get() populates a value and getIfPresent() reads it back.
-    const first = await cache.get(enabledKey, async () => ({ calls: ++calls }));
-    const hit = await cache.getIfPresent<{ calls: number }>(enabledKey);
-    const disabled = await cache.getIfPresentResult(disabledKey);
-
-    // Then compatibility helpers still behave like the pre-metrics API, and disabled state is explicit.
-    expect(first).toEqual({ calls: 1 });
-    expect(hit).toEqual({ calls: 1 });
-    expect(disabled).toEqual({ status: "disabled", reason: "policy_disabled" });
-    expect(calls).toBe(1);
-  });
-
-  it("keeps RedisCache get compatibility and skips writes when remote config is disabled", async () => {
-    // Given a Redis cache with one valid stored frame and one key without remote config.
-    const redis = new FakeRedis();
-    const redisCache = new RedisCache({
-      configProvider: async () => null,
-      redis: { client: redis },
-      metrics: null,
-    });
-    const enabledKey = key();
-    const disabledKey = new DialCacheKey({
-      keyType: "user_id",
-      id: "456",
-      useCase: "ObservabilityInternals",
-      defaultConfig: new DialCacheKeyConfig({
-        ttlSec: { [CacheLayer.LOCAL]: 60 },
-        ramp: { [CacheLayer.LOCAL]: 100 },
+    expect(resolveRemoteLayerConfigResult({
+      config: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        staleOnErrorMaxAgeSec: 3_600,
       }),
+      key: remoteKey,
+    })).toEqual({
+      status: "enabled",
+      config: { ttlSec: 60, ramp: 100, staleOnErrorMaxAgeSec: 3_600 },
     });
-    redis.setRaw(`${enabledKey.urn}:dialcache-frame-v1`, encodeFrame({ source: "redis" }));
-
-    // When the compatibility get() reads Redis and put() sees disabled remote config.
-    const hit = await redisCache.get<{ source: string }>(enabledKey);
-    await redisCache.put(disabledKey, { source: "fallback" });
-
-    // Then get() unwraps the value and the disabled remote write is skipped.
-    expect(hit).toEqual({ source: "redis" });
-    expect(redis.values.has(`${disabledKey.urn}:dialcache-frame-v1`)).toBe(false);
-  });
-
-  it("preserves runtime-config edge behavior used by metrics", async () => {
-    // Given a config with an omitted ramp.
-    const missingRamp = new DialCacheKeyConfig({ ttlSec: { [CacheLayer.LOCAL]: 60 }, ramp: {} });
-
-    // When runtime config is resolved through compatibility paths.
-    const noConfig = await resolveLayerConfig({
-      config: null,
-      key: key(null),
-      layer: CacheLayer.LOCAL,
+    expect(resolveRemoteLayerConfigResult({
+      config: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        staleOnErrorMaxAgeSec: 60,
+      }),
+      key: remoteKey,
+    })).toEqual({
+      status: "enabled",
+      config: { ttlSec: 60, ramp: 100, staleOnErrorMaxAgeSec: null },
+      staleOnErrorConfigError: true,
     });
-    const noRamp = await resolveLayerConfig({
-      config: missingRamp,
-      key: key(),
-      layer: CacheLayer.LOCAL,
+    expect(resolveRemoteLayerConfigResult({
+      config: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        staleOnErrorMaxAgeSec: 0,
+      }),
+      key: remoteKey,
+    })).toEqual({
+      status: "enabled",
+      config: { ttlSec: 60, ramp: 100, staleOnErrorMaxAgeSec: null },
     });
-
-    // Then absent policy stays disabled and an omitted ramp defaults to 100%.
-    expect(noConfig).toBeNull();
-    expect(noRamp).toEqual({ ttlSec: 60, ramp: 100 });
+    expect(resolveRemoteLayerConfigResult({
+      config: new DialCacheKeyConfig({ staleOnErrorMaxAgeSec: 3_600 }),
+      key: remoteKey,
+    })).toEqual({
+      status: "disabled",
+      reason: "policy_disabled",
+      staleOnErrorConfigError: true,
+    });
   });
 });

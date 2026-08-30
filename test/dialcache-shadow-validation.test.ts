@@ -331,7 +331,7 @@ describe("DialCache Redis shadow validation", () => {
         id: "123",
         useCase,
         payload: JSON.stringify({ id: "123", version: 1 }),
-        createdAtMs: nowMs - 120_000,
+        createdAtMs: nowMs - 50_000,
       });
       const dialcache = createShadowCache(redis, metrics);
       const getUser = dialcache.cached(async () => ({ id: "123", version: 2 }), {
@@ -344,7 +344,7 @@ describe("DialCache Redis shadow validation", () => {
 
       expect(metrics.shadowEvents[0]?.outcome).toBe("mismatch");
       expect(metrics.shadowAgeEvents).toHaveLength(1);
-      expect(metrics.shadowAgeEvents[0]?.seconds).toBe(120);
+      expect(metrics.shadowAgeEvents[0]?.seconds).toBe(50);
       expect(metrics.shadowAgeEvents[0]?.labels).toMatchObject({ useCase, outcome: "mismatch" });
     } finally {
       nowSpy.mockRestore();
@@ -391,7 +391,7 @@ describe("DialCache Redis shadow validation", () => {
     }
   });
 
-  it("skips a non-finite value-age observation from an untracked custom client", async () => {
+  it("rejects a non-finite untracked timestamp before shadow validation", async () => {
     const redis = new FakeRedis();
     const metrics = new RecordingMetrics();
     const useCase = "ShadowNonFiniteValueAge";
@@ -408,7 +408,8 @@ describe("DialCache Redis shadow validation", () => {
       return frame === null ? null : { ...frame, createdAtMs: Number.POSITIVE_INFINITY };
     });
     const dialcache = createShadowCache(redis, metrics);
-    const getUser = dialcache.cached(async () => cachedValue, {
+    const source = vi.fn(async () => cachedValue);
+    const getUser = dialcache.cached(source, {
       keyType: "user_id",
       useCase,
       cacheKey: () => "123",
@@ -416,11 +417,13 @@ describe("DialCache Redis shadow validation", () => {
     });
 
     expect(await dialcache.enable(async () => await getUser())).toEqual(cachedValue);
-    await waitForShadowEvents(metrics, 1);
+    await nextImmediate();
 
-    expect(metrics.shadowEvents[0]?.outcome).toBe("match");
+    expect(source).toHaveBeenCalledOnce();
+    expect(metrics.shadowEvents).toEqual([]);
     expect(metrics.shadowAgeEvents).toEqual([]);
     expect(metrics.futureTimestampEvents).toEqual([]);
+    expect(redis.setCalls).toBe(1);
   });
 
   it("re-deserializes the retained payload instead of comparing a caller-mutated hit", async () => {
