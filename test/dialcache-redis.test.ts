@@ -9,6 +9,7 @@ import {
   type DialCacheMetricsAdapter,
   type DialCacheRedisClient,
   type RedisConfig,
+  type RedisWriteRequest,
   type Serializer,
 } from "../src/index.js";
 import { decodeFrame, encodeFrame, FakeRedis } from "./fake-redis.js";
@@ -267,6 +268,99 @@ describe("DialCache Redis TTL layer", () => {
       1.25,
     );
     expect(metrics.miss).toHaveBeenCalledOnce();
+  });
+
+  it("preserves custom frames that collide with miss metadata", async () => {
+    const nowMs = 1_700_000_000_000;
+    vi.spyOn(Date, "now").mockReturnValue(nowMs);
+    const cachedValue = { source: "redis" };
+    const redis: DialCacheRedisClient = {
+      read: vi.fn(async () => ({
+        payload: JSON.stringify(cachedValue),
+        createdAtMs: nowMs,
+        kind: "watermark_miss",
+        observedWatermarkMs: nowMs - 1,
+      })),
+      write: vi.fn(async () => undefined),
+      invalidate: vi.fn(async () => undefined),
+    };
+    const serializer: Serializer<typeof cachedValue> = {
+      dump: vi.fn((value) => JSON.stringify(value)),
+      load: vi.fn((value) => JSON.parse(Buffer.isBuffer(value) ? value.toString("utf8") : value)),
+    };
+    const fallback = vi.fn(async () => ({ source: "fallback" }));
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
+    const getUser = dialcache.cached(fallback, {
+      keyType: "user_id",
+      useCase: "RedisAugmentedTrackedFrame",
+      cacheKey: () => "123",
+      trackForInvalidation: true,
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 100 },
+      }),
+      serializer,
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).resolves.toEqual(cachedValue);
+
+    expect(serializer.load).toHaveBeenCalledOnce();
+    expect(serializer.dump).not.toHaveBeenCalled();
+    expect(fallback).not.toHaveBeenCalled();
+    expect(redis.write).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { name: "NaN watermark", trackForInvalidation: true, observedWatermarkMs: Number.NaN },
+    { name: "negative watermark", trackForInvalidation: true, observedWatermarkMs: -1 },
+    { name: "fractional watermark", trackForInvalidation: true, observedWatermarkMs: 1.5 },
+    {
+      name: "unsafe watermark",
+      trackForInvalidation: true,
+      observedWatermarkMs: Number.MAX_SAFE_INTEGER + 1,
+    },
+    {
+      name: "typed miss on an untracked request",
+      trackForInvalidation: false,
+      observedWatermarkMs: 1_700_000_001_000,
+    },
+  ])("normalizes $name to an ordinary miss", async ({ trackForInvalidation, observedWatermarkMs }) => {
+    vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+    const write = vi.fn(async (_request: RedisWriteRequest) => undefined);
+    const redis: DialCacheRedisClient = {
+      read: vi.fn(async () => ({
+        kind: "watermark_miss" as const,
+        observedWatermarkMs,
+      })),
+      write,
+      invalidate: vi.fn(async () => undefined),
+    };
+    const serializer: Serializer<{ readonly source: string }> = {
+      dump: vi.fn((value) => JSON.stringify(value)),
+      load: vi.fn(() => {
+        throw new Error("invalid typed misses must not be deserialized");
+      }),
+    };
+    const fallback = vi.fn(async () => ({ source: "fallback" }));
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
+    const getUser = dialcache.cached(fallback, {
+      keyType: "user_id",
+      useCase: "RedisInvalidWatermarkMiss",
+      cacheKey: () => "123",
+      trackForInvalidation,
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 100 },
+      }),
+      serializer,
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ source: "fallback" });
+
+    expect(serializer.load).not.toHaveBeenCalled();
+    expect(fallback).toHaveBeenCalledOnce();
+    expect(write).toHaveBeenCalledOnce();
+    expect(write.mock.calls[0]?.[0]).not.toHaveProperty("createdAtMs");
   });
 
   it.each([

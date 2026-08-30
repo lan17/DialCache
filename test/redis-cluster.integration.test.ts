@@ -267,6 +267,9 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
     if (glideCluster === undefined) {
       return ctx.skip();
     }
+    if (cluster === undefined) {
+      throw new Error("Redis Cluster did not start");
+    }
     const adapter = createValkeyGlideDialCacheClient(glideCluster, valkeyGlide);
     const valueKey = "glide-cluster:{item:tracked}:value";
     const watermarkKey = "glide-cluster:{item:tracked}:watermark";
@@ -289,7 +292,12 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
     // The existing value remains fenced until a later client-stamped frame is
     // written past the zero-buffer watermark.
     await new Promise((resolve) => setTimeout(resolve, 25));
-    expect(await adapter.read({ valueKey, watermarkKey })).toBeNull();
+    const observedWatermark = await cluster.get(watermarkKey);
+    expect(observedWatermark).not.toBeNull();
+    expect(await adapter.read({ valueKey, watermarkKey })).toEqual({
+      kind: "watermark_miss",
+      observedWatermarkMs: Number(observedWatermark),
+    });
     await expect(
       adapter.write({ valueKey, cacheTtlMs: 60_000, value: "glide-2" }),
     ).resolves.toBeUndefined();
@@ -328,6 +336,11 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
 
     await flushAllMasters();
     await expect(adapter.invalidate({ watermarkKey, futureBufferMs: 0 })).resolves.toBeUndefined();
-    expect(await adapter.read({ valueKey, watermarkKey })).toBeNull();
+    const observedWatermark = await cluster.get(watermarkKey);
+    expect(observedWatermark).not.toBeNull();
+    expect(await adapter.read({ valueKey, watermarkKey })).toEqual({
+      kind: "watermark_miss",
+      observedWatermarkMs: Number(observedWatermark),
+    });
   });
 });

@@ -18,9 +18,14 @@ export { INVALIDATE_CACHE_SCRIPT } from "./internal/redis-scripts.js";
 export {
   decodeRedisFrame,
   decodeTrackedRedisFrame,
+  decodeTrackedRedisReadResult,
   encodeRedisFrame,
 } from "./internal/redis-payload.js";
-export type { DecodedRedisFrame } from "./redis-client.js";
+export type {
+  DecodedRedisFrame,
+  RedisReadResult,
+  RedisWatermarkMiss,
+} from "./redis-client.js";
 export {
   validateRedisScriptInvalidationReply,
   validateRedisSetReply,

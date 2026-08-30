@@ -10,7 +10,6 @@ import {
   FallbackTimeoutError,
   type CacheMetricLabels,
   type CoalescedMetricLabels,
-  type DecodedRedisFrame,
   type DialCacheConfig,
   type DialCacheMetricsAdapter,
   type DialCacheRedisClient,
@@ -20,8 +19,10 @@ import {
   type RedisCachePayload,
   type RedisInvalidationRequest,
   type RedisReadContext,
+  type RedisReadResult,
   type RedisReadRequest,
   type RedisWriteRequest,
+  type RedisWatermarkMiss,
   type SerializationMetricLabels,
   type Serializer,
   type ShadowValidationMetricLabels,
@@ -53,7 +54,8 @@ function deferred<T>(): Deferred<T> {
   return { promise, resolve, reject };
 }
 
-type ReadStep = () => RedisCachePayload | null | Promise<RedisCachePayload | null>;
+type ScriptedReadResult = RedisCachePayload | RedisWatermarkMiss | null;
+type ReadStep = () => ScriptedReadResult | Promise<ScriptedReadResult>;
 
 const MAX_TRACKED_REDIS_VALUE_TTL_MS = 60 * 60 * 1_000;
 
@@ -66,19 +68,27 @@ class ScriptedRedis implements DialCacheRedisClient {
 
   constructor(private readonly steps: ReadStep[]) {}
 
-  async read(request: RedisReadRequest, context?: RedisReadContext): Promise<DecodedRedisFrame | null> {
+  async read(request: RedisReadRequest, context?: RedisReadContext): Promise<RedisReadResult> {
     this.requests.push(request);
     this.contexts.push(context);
     const step = this.steps.shift();
     if (step === undefined) {
       throw new Error("Unexpected Redis read");
     }
-    const payload = await step();
-    if (payload === null) {
-      return null;
+    const result = await step();
+    if (result === null || isWatermarkMiss(result)) {
+      return result;
     }
-    return { payload, createdAtMs: this.frameCreatedAtMs };
+    return { payload: result, createdAtMs: this.frameCreatedAtMs };
   }
+}
+
+function isWatermarkMiss(result: ScriptedReadResult): result is RedisWatermarkMiss {
+  return typeof result === "object"
+    && !Buffer.isBuffer(result)
+    && result !== null
+    && "kind" in result
+    && result.kind === "watermark_miss";
 }
 
 type OrdinaryMetricName =
@@ -588,6 +598,36 @@ describe("DialCache Redis shadow confirmation", () => {
     const dialcache = createCache(redis, metrics);
     const getUser = dialcache.cached(async () => ({ id: "123", version: 2 }), {
       ...trackedOptions(`ShadowSuperseded${name}`, remoteConfig(100)),
+      cacheKey: () => "123",
+      serializer,
+    });
+
+    await dialcache.enable(async () => await getUser());
+    await waitForShadowEvents(metrics, 1);
+
+    expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["superseded"]);
+    expect(metrics.shadowAgeEvents).toEqual([]);
+    expect(serializer.load).toHaveBeenCalledTimes(2);
+    expect(serializer.dump).not.toHaveBeenCalled();
+    expectTrackedReads(redis, 2);
+  });
+
+  it("reports superseded when C1 becomes a typed watermark miss", async () => {
+    const payload = JSON.stringify({ id: "123", version: 1 });
+    const frameCreatedAtMs = Date.now();
+    const redis = new ScriptedRedis([
+      () => payload,
+      () => ({ kind: "watermark_miss", observedWatermarkMs: frameCreatedAtMs + 1 }),
+    ]);
+    redis.frameCreatedAtMs = frameCreatedAtMs;
+    const metrics = new RecordingMetrics();
+    const serializer: Serializer<{ readonly id: string; readonly version: number }> = {
+      dump: vi.fn((value) => JSON.stringify(value)),
+      load: vi.fn((value) => JSON.parse(Buffer.isBuffer(value) ? value.toString("utf8") : value)),
+    };
+    const dialcache = createCache(redis, metrics);
+    const getUser = dialcache.cached(async () => ({ id: "123", version: 2 }), {
+      ...trackedOptions("ShadowSupersededWatermarkMiss", remoteConfig(100)),
       cacheKey: () => "123",
       serializer,
     });
@@ -1335,6 +1375,7 @@ describe("DialCache Redis shadow confirmation", () => {
       value: JSON.stringify({ id: "123" }),
     }));
     expect(Object.hasOwn(redis.write.mock.calls[0]?.[0] ?? {}, "watermarkKey")).toBe(false);
+    expect(Object.hasOwn(redis.write.mock.calls[0]?.[0] ?? {}, "createdAtMs")).toBe(false);
     expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
       name === "request" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
     )).toHaveLength(1);
@@ -1352,6 +1393,93 @@ describe("DialCache Redis shadow confirmation", () => {
     expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
       name === "size" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
     )).toHaveLength(1);
+  });
+
+  it("reports fill_fenced and skips shadow serialization when the candidate cannot clear the observed watermark", async () => {
+    const nowMs = 1_700_000_000_000;
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(nowMs);
+    try {
+      const redis = new ScriptedRedis([() => ({ kind: "watermark_miss", observedWatermarkMs: nowMs })]);
+      const metrics = new RecordingMetrics();
+      const serializer: Serializer<{ readonly id: string }> = {
+        dump: vi.fn(() => {
+          throw new Error("fenced shadow fill must not serialize");
+        }),
+        load: vi.fn(() => {
+          throw new Error("watermark miss must not deserialize");
+        }),
+      };
+      const dialcache = createCache(redis, metrics);
+      const getUser = dialcache.cached(async () => ({ id: "123" }), {
+        ...trackedOptions("ShadowDarkFillFenced", remoteConfig(0)),
+        cacheKey: () => "123",
+        serializer,
+      });
+
+      await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ id: "123" });
+      await waitForShadowEvents(metrics, 1);
+
+      expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["fill_fenced"]);
+      expect(serializer.dump).not.toHaveBeenCalled();
+      expect(serializer.load).not.toHaveBeenCalled();
+      expect(redis.write).not.toHaveBeenCalled();
+      expectTrackedReads(redis, 1);
+      expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+        name === "request" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+      )).toHaveLength(1);
+      expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+        name === "miss" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+      )).toHaveLength(1);
+      expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+        name === "get" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+      )).toHaveLength(1);
+      expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
+        (name === "serialization" || name === "size") && labels.layer === REMOTE_SHADOW_CACHE_LAYER
+      )).toHaveLength(0);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it("fills a typed shadow miss when the final candidate clears the observed watermark", async () => {
+    const nowMs = 1_700_000_000_000;
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(nowMs);
+    try {
+      const redis = new ScriptedRedis([() => ({
+        kind: "watermark_miss",
+        observedWatermarkMs: nowMs - 1,
+      })]);
+      const metrics = new RecordingMetrics();
+      const serializer: Serializer<{ readonly id: string }> = {
+        dump: vi.fn((value) => JSON.stringify(value)),
+        load: vi.fn(() => {
+          throw new Error("watermark miss must not deserialize");
+        }),
+      };
+      const source = vi.fn(async () => ({ id: "123" }));
+      const dialcache = createCache(redis, metrics);
+      const getUser = dialcache.cached(source, {
+        ...trackedOptions("ShadowDarkFillAboveWatermark", remoteConfig(0)),
+        cacheKey: () => "123",
+        serializer,
+      });
+
+      await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ id: "123" });
+      await waitForShadowEvents(metrics, 1);
+
+      expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["filled"]);
+      expect(source).toHaveBeenCalledOnce();
+      expect(serializer.dump).toHaveBeenCalledOnce();
+      expect(serializer.load).not.toHaveBeenCalled();
+      expect(redis.write).toHaveBeenCalledOnce();
+      expect(redis.write).toHaveBeenCalledWith(expect.objectContaining({
+        value: JSON.stringify({ id: "123" }),
+        createdAtMs: nowMs,
+      }));
+      expectTrackedReads(redis, 1);
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 
   it("reports a detached serializer dump failure as fill_error with an exact remote_shadow error", async () => {

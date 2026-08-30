@@ -8,8 +8,8 @@ import {
   DialCacheKey,
   DialCacheKeyConfig,
   type CachedOptions,
-  type DecodedRedisFrame,
   type DialCacheMetricsAdapter,
+  type RedisReadResult,
   type RedisReadContext,
   type RedisReadRequest,
   type Serializer,
@@ -30,7 +30,7 @@ class RecordingRedis extends FakeRedis {
   override async read(
     request: RedisReadRequest,
     context?: RedisReadContext,
-  ): Promise<DecodedRedisFrame | null> {
+  ): Promise<RedisReadResult> {
     this.readRequests.push(request);
     this.readContexts.push(context);
     return await super.read(request);
@@ -48,11 +48,11 @@ class HangingReadRedis extends FakeRedis {
   override async read(
     request: RedisReadRequest,
     context?: RedisReadContext,
-  ): Promise<DecodedRedisFrame | null> {
+  ): Promise<RedisReadResult> {
     this.readRequests.push(request);
     this.readContexts.push(context);
     if (this.readRequests.length === this.hangOnCall) {
-      return await new Promise<DecodedRedisFrame | null>(() => undefined);
+      return await new Promise<RedisReadResult>(() => undefined);
     }
     return await super.read(request);
   }

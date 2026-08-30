@@ -16,6 +16,7 @@ export type ShadowValidationOutcome =
   | "mismatch"
   | "superseded"
   | "filled"
+  | "fill_fenced"
   | "fill_error"
   | "redis_error"
   | "source_error"

@@ -24,7 +24,13 @@ import {
   type MetricLayer,
   type ShadowValidationOutcome,
 } from "./metrics.js";
-import type { DecodedRedisFrame, RedisCachePayload } from "./redis-client.js";
+import {
+  isRedisWatermarkMiss,
+  type DecodedRedisFrame,
+  type RedisCachePayload,
+  type RedisReadResult,
+  type RedisWatermarkMiss,
+} from "./redis-client.js";
 import type { Serializer } from "./serializer.js";
 import type { CacheGetResult, RemoteCacheGetResult } from "./internal/cache-result.js";
 import { MAX_TIMER_DELAY_MS, withMonotonicDeadline } from "./internal/deadline.js";
@@ -866,7 +872,12 @@ export class DialCache {
       || (remoteWriteConfig !== undefined && key.trackForInvalidation);
     if (remoteWriteConfig !== undefined) {
       try {
-        await redisCache.put(key, value, remoteWriteConfig);
+        await redisCache.put(
+          key,
+          value,
+          remoteWriteConfig,
+          remote.status === "miss" ? remote.watermarkMiss : undefined,
+        );
       } catch (error) {
         this.logger.warn("Error putting value in Redis cache", error);
       }
@@ -1044,7 +1055,7 @@ export class DialCache {
     const readShadowFrame = (
       maxAgeSec: number | null,
       futureFramePolicy: FutureFramePolicy,
-    ): Promise<DecodedRedisFrame | null> => {
+    ): Promise<RedisReadResult> => {
       const read = redisCache.startPayloadReadForShadow(
         key,
         maxAgeSec,
@@ -1089,20 +1100,24 @@ export class DialCache {
           }
 
           let shadowFillConfig: ResolvedRemoteLayerConfig | null = null;
+          let shadowFillWatermarkMiss: RedisWatermarkMiss | undefined;
           if (start.kind === "redis") {
-            let frame: DecodedRedisFrame | null;
+            let readResult: RedisReadResult;
             try {
-              frame = await readShadowFrame(start.remoteConfig.ttlSec, "reject");
+              readResult = await readShadowFrame(start.remoteConfig.ttlSec, "reject");
             } catch {
               return "redis_error";
             }
             if (abandonIfExpired()) {
               return "timeout";
             }
-            if (frame === null) {
+            if (isRedisWatermarkMiss(readResult)) {
+              shadowFillConfig = start.remoteConfig;
+              shadowFillWatermarkMiss = readResult;
+            } else if (readResult === null) {
               shadowFillConfig = start.remoteConfig;
             } else {
-              flight.cachedFrame = frame;
+              flight.cachedFrame = readResult;
             }
           }
 
@@ -1134,18 +1149,19 @@ export class DialCache {
 
           if (shadowFillConfig !== null) {
             try {
-              await redisCache.putForShadow(
+              const filled = await redisCache.putForShadow(
                 key,
                 sourceValue,
                 shadowFillConfig,
                 () => !abandonIfExpired(),
+                shadowFillWatermarkMiss,
               );
               // A late result remains the already-emitted whole-job timeout:
               // dispatch success does not retroactively change its outcome.
               if (abandonIfExpired()) {
                 return "timeout";
               }
-              return "filled";
+              return filled ? "filled" : "fill_fenced";
             } catch (error) {
               this.logger.warn("Error populating Redis from DialCache shadow work", error);
               return "fill_error";
@@ -1189,9 +1205,9 @@ export class DialCache {
             return "match";
           }
 
-          let confirmationFrame: DecodedRedisFrame | null;
+          let confirmationResult: RedisReadResult;
           try {
-            confirmationFrame = await readShadowFrame(null, "retain");
+            confirmationResult = await readShadowFrame(null, "retain");
           } catch {
             return "confirmation_error";
           }
@@ -1203,6 +1219,9 @@ export class DialCache {
           if (originalFrame === null) {
             return "timeout";
           }
+          const confirmationFrame = isRedisWatermarkMiss(confirmationResult)
+            ? null
+            : confirmationResult;
           if (confirmationFrame === null || !redisPayloadsEqual(originalFrame.payload, confirmationFrame.payload)) {
             return "superseded";
           }

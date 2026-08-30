@@ -1,6 +1,6 @@
 import type { ResolvedLayerConfig, ResolvedRemoteLayerConfig } from "./runtime-config.js";
 import type { DisabledReason } from "../metrics.js";
-import type { DecodedRedisFrame } from "../redis-client.js";
+import type { DecodedRedisFrame, RedisWatermarkMiss } from "../redis-client.js";
 
 export type CacheGetResult<T> =
   | { readonly status: "hit"; readonly value: T }
@@ -25,6 +25,7 @@ export type RedisCacheGetResult<T> =
       readonly status: "miss";
       readonly config: ResolvedRemoteLayerConfig;
       readonly reason: RedisCacheMissReason;
+      readonly watermarkMiss?: RedisWatermarkMiss;
     };
 
 export type RemoteCacheGetResult<T> =

@@ -128,6 +128,18 @@ describe("node-redis adapter", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("returns an observed watermark for tracked semantic misses", async () => {
+    const client = fakeClient({ mGet: [null, Buffer.from("1234")] });
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await expect(adapter.read({
+      valueKey: "tracked:{id}:value",
+      watermarkKey: "tracked:{id}:watermark",
+    })).resolves.toEqual({ kind: "watermark_miss", observedWatermarkMs: 1_234 });
+
+    expect(client.sendCommand).toHaveBeenCalledTimes(1);
+  });
+
   it("writes complete frames with one native SET", async () => {
     vi.spyOn(Date, "now").mockReturnValue(1_234);
     const client = fakeClient();
@@ -148,6 +160,25 @@ describe("node-redis adapter", () => {
     expect(frame.subarray(10).toString("utf8")).toBe("plain");
     expect(Number(frame.readBigUInt64BE(1))).toBe(1_234);
     expect(options).toMatchObject({ returnBuffers: true });
+  });
+
+  it("honors a supplied write timestamp without sampling the client clock", async () => {
+    const now = vi.spyOn(Date, "now").mockImplementation(() => {
+      throw new Error("Date.now must not be sampled for a supplied timestamp");
+    });
+    const client = fakeClient();
+    const adapter = createNodeRedisDialCacheClient(client as never);
+
+    await expect(adapter.write({
+      valueKey: "tracked:{id}:value",
+      cacheTtlMs: 1_000,
+      value: "tracked",
+      createdAtMs: 0,
+    })).resolves.toBeUndefined();
+
+    const [args] = client.sendCommand.mock.calls[0] as [Array<unknown>];
+    expect(Number((args[2] as Buffer).readBigUInt64BE(1))).toBe(0);
+    expect(now).not.toHaveBeenCalled();
   });
 
   it("writes binary values as complete frames with one client-clock sample", async () => {

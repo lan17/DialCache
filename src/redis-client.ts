@@ -80,6 +80,35 @@ export interface DecodedRedisFrame {
   readonly createdAtMs: number;
 }
 
+/**
+ * A semantic tracked-read miss carrying a trustworthy write fence from the
+ * same authoritative value-and-watermark snapshot. A refill stamped at or
+ * before `observedWatermarkMs` is known to remain unreadable.
+ */
+export interface RedisWatermarkMiss {
+  readonly kind: "watermark_miss";
+  readonly observedWatermarkMs: number;
+  readonly payload?: never;
+  readonly createdAtMs?: never;
+}
+
+/**
+ * Semantic Redis read result. `null` remains the generic/legacy miss; bundled
+ * adapters return `RedisWatermarkMiss` only when a tracked read observed a
+ * present, valid numeric watermark that can safely fence a candidate refill.
+ */
+export type RedisReadResult = DecodedRedisFrame | RedisWatermarkMiss | null;
+
+/** Package-private runtime discriminator for the semantic miss variant. */
+export function isRedisWatermarkMiss(result: unknown): result is RedisWatermarkMiss {
+  return typeof result === "object"
+    && result !== null
+    && "kind" in result
+    && result.kind === "watermark_miss"
+    && !("payload" in result)
+    && !("createdAtMs" in result);
+}
+
 interface RedisValueRequest {
   readonly valueKey: string;
 }
@@ -107,6 +136,16 @@ export interface RedisWriteRequest extends RedisValueRequest {
   /** Positive integer no greater than 31,536,000,000 (365 days). */
   readonly cacheTtlMs: number;
   readonly value: RedisCachePayload;
+  /**
+   * Nonnegative safe-integer epoch milliseconds to encode in the frame.
+   * DialCache core supplies the final dispatch-adjacent sample for admitted
+   * refills following `RedisWatermarkMiss`.
+   * It remains optional so ordinary refills, existing direct adapter callers,
+   * and custom adapter implementations keep their established behavior. An
+   * adapter that returns `RedisWatermarkMiss` must honor a supplied value
+   * exactly so the final fence decision and stored frame cannot diverge.
+   */
+  readonly createdAtMs?: number;
 }
 
 export interface RedisInvalidationRequest {
@@ -133,9 +172,10 @@ export interface RedisInvalidationRequest {
  */
 export interface DialCacheRedisClient {
   /**
-   * Read a DialCache Redis frame and return its decoded serializer payload
-   * together with the frame header's creation time. Implementations must use
-   * `decodeRedisFrame` / `decodeTrackedRedisFrame` from
+   * Read a DialCache Redis frame. Hits return the decoded serializer payload
+   * with the frame header's creation time. Implementations must use
+   * `decodeRedisFrame` and either `decodeTrackedRedisFrame` (legacy null
+   * misses) or `decodeTrackedRedisReadResult` (typed watermark misses) from
    * `dialcache/redis-protocol`, or preserve their exact behavior.
    *
    * Raw values are Redis bulk strings (`Buffer`) or null. A missing value, a
@@ -150,22 +190,32 @@ export interface DialCacheRedisClient {
    * Tracked implementations must read the value and watermark atomically from
    * one authoritative snapshot; replica lag must not hide an invalidation.
    *
-   * A non-null frame is transferred to DialCache. A returned Buffer payload
+   * Implementations may return a `RedisWatermarkMiss` for a tracked semantic
+   * miss when the same snapshot contained a present, valid numeric watermark.
+   * Existing adapters may continue returning `null` and remain correct while
+   * missing the conditional refill optimization. Adapters that opt into the
+   * discriminated miss must also honor `RedisWriteRequest.createdAtMs` when
+   * supplied.
+   *
+   * A returned frame's payload is transferred to DialCache. A returned Buffer
    * must remain stable and must not be mutated, pooled, or reused after this
    * method settles; DialCache may retain it for source-error recovery or
    * best-effort shadow work. Adapters that recycle response storage must
    * return a dedicated Buffer.
    */
-  read(request: RedisReadRequest, context?: RedisReadContext): Awaitable<DecodedRedisFrame | null>;
+  read(request: RedisReadRequest, context?: RedisReadContext): Awaitable<RedisReadResult>;
   /**
    * Write a DialCache Redis frame using the `dialcache/redis-protocol`
    * encoders, or preserve their exact behavior.
    *
-   * All writes are one native `SET valueKey frame PX cacheTtlMs` whose
-   * frame comes from `encodeRedisFrame` with a client-clock `createdAtMs`.
+   * All writes are one native `SET valueKey frame PX cacheTtlMs` whose frame
+   * comes from `encodeRedisFrame`. Honor `request.createdAtMs` exactly when it
+   * is supplied; callers that omit it may be stamped from the adapter's client
+   * clock.
    * DialCache uses every frame's decoded `createdAtMs` for future-time
-   * rejection and logical-age enforcement, and for shadow value-age
-   * observations, so writers must stamp real client time, not a constant.
+   * rejection and logical-age enforcement, and for shadow and stale-recovery
+   * value-age observations, so writers must stamp real client time, not a
+   * constant.
    *
    * Tracked and untracked writes use the same complete-frame SET. Core caps a
    * tracked value's physical TTL at one hour. Under the documented clock-skew

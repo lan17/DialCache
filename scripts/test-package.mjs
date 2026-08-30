@@ -149,6 +149,8 @@ const rootConsumer = `import {
   type RedisConfig,
   type RedisInvalidationRequest,
   type RedisReadContext,
+  type RedisReadResult,
+  type RedisWatermarkMiss,
   type RedisWriteRequest,
   type Serializer,
   type ShadowComparator,
@@ -172,6 +174,7 @@ import {
   ceilSupportedCacheTtlMs,
   decodeRedisFrame,
   decodeTrackedRedisFrame,
+  decodeTrackedRedisReadResult,
   encodeRedisFrame,
   validateRedisScriptInvalidationReply,
   validateRedisSetReply,
@@ -257,6 +260,7 @@ const shadowOutcomes: Readonly<Record<ShadowValidationOutcome, true>> = {
   mismatch: true,
   superseded: true,
   filled: true,
+  fill_fenced: true,
   fill_error: true,
   redis_error: true,
   source_error: true,
@@ -339,6 +343,19 @@ const decodedStaleRedisFrame: DecodedRedisFrame | null = decodeTrackedRedisFrame
   emptyRedisFrame,
   Buffer.from("1"),
 );
+const decodedTrackedRedisReadResult: RedisReadResult = decodeTrackedRedisReadResult(
+  emptyRedisFrame,
+  Buffer.from("1"),
+);
+if (
+  decodedTrackedRedisReadResult !== null
+  && "kind" in decodedTrackedRedisReadResult
+  && decodedTrackedRedisReadResult.kind === "watermark_miss"
+) {
+  const typedWatermarkMiss: RedisWatermarkMiss = decodedTrackedRedisReadResult;
+  const observedWatermarkMs: number = typedWatermarkMiss.observedWatermarkMs;
+  void observedWatermarkMs;
+}
 const zeroTimestampRedisFrame: Buffer = encodeRedisFrame("pending", 0);
 const setReplyValidation: void = validateRedisSetReply("OK");
 const invalidationReplyValidation: 1 = validateRedisScriptInvalidationReply(1);
@@ -557,8 +574,11 @@ const compressionOperationMetricLabels: CompressionOperationMetricLabels = {
 const unboundedCompressionOutcome: CompressionOutcome = "inflated";
 
 const customRedisClient: DialCacheRedisClient = {
-  // The optional second read argument preserves one-argument custom clients.
-  read: async () => ({ payload: Buffer.from([0, 255]), createdAtMs: 1 }),
+  // The optional second argument and widened result preserve legacy frame-or-null clients.
+  read: async (): Promise<DecodedRedisFrame | null> => ({
+    payload: Buffer.from([0, 255]),
+    createdAtMs: 1,
+  }),
   write: async ({ value }) => {
     void (typeof value === "string" || Buffer.isBuffer(value));
   },
@@ -581,9 +601,9 @@ const writeHasNoWatermark: "watermarkKey" extends keyof RedisWriteRequest ? fals
 const trackedWriteHasNoWatermarkTtlFloor: "watermarkTtlFloorMs" extends keyof RedisWriteRequest
   ? false
   : true = true;
-const trackedWriteHasNoCreatedAt: "createdAtMs" extends keyof RedisWriteRequest
-  ? false
-  : true = true;
+const writeAcceptsOptionalCreatedAt: {} extends Pick<RedisWriteRequest, "createdAtMs">
+  ? true
+  : false = true;
 const invalidationHasNoWatermarkTtlFloor: "watermarkTtlFloorMs" extends keyof RedisInvalidationRequest
   ? false
   : true = true;
@@ -596,6 +616,17 @@ const legacyTrackedWriteRequest: RedisWriteRequest = {
   watermarkKey: "tracked:{id}:watermark",
   cacheTtlMs: 1_000,
   value: "tracked",
+};
+const timestampedWriteRequest: RedisWriteRequest = {
+  valueKey: "tracked:{id}:value",
+  cacheTtlMs: 1_000,
+  value: "tracked",
+  createdAtMs: 1,
+};
+const omittedTimestampWriteRequest: RedisWriteRequest = {
+  valueKey: "legacy:{id}:value",
+  cacheTtlMs: 1_000,
+  value: "legacy",
 };
 const legacyInvalidationRequest: RedisInvalidationRequest = {
   watermarkKey: "tracked:{id}:watermark",
@@ -731,10 +762,12 @@ void cacheHasNoClose;
 void clientHasNoFlushAll;
 void writeHasNoWatermark;
 void trackedWriteHasNoWatermarkTtlFloor;
-void trackedWriteHasNoCreatedAt;
+void writeAcceptsOptionalCreatedAt;
 void invalidationHasNoWatermarkTtlFloor;
 void invalidationHasNoInvalidatedAt;
 void legacyTrackedWriteRequest;
+void timestampedWriteRequest;
+void omittedTimestampWriteRequest;
 void legacyInvalidationRequest;
 void configHasNoMetricsRegistry;
 void configHasNoMetricsPrefix;
@@ -974,8 +1007,22 @@ if (esmRoundTrip?.payload !== "value" || esmRoundTrip.createdAtMs !== 1) {
 if (redisProtocol.decodeTrackedRedisFrame(redisProtocol.encodeRedisFrame("pending", 0), Buffer.from("0")) !== null) {
   throw new Error("The packed ESM tracked decoder did not fence an equal timestamp");
 }
+const esmWatermarkMiss = redisProtocol.decodeTrackedRedisReadResult(
+  redisProtocol.encodeRedisFrame("pending", 0),
+  Buffer.from("0"),
+);
+if (
+  esmWatermarkMiss?.kind !== "watermark_miss"
+  || esmWatermarkMiss.observedWatermarkMs !== 0
+  || "payload" in esmWatermarkMiss
+) {
+  throw new Error("The packed ESM tracked result decoder did not preserve the observed watermark miss");
+}
 if (redisProtocol.decodeTrackedRedisFrame(redisProtocol.encodeRedisFrame("value", 1), null)?.payload !== "value") {
   throw new Error("The packed ESM tracked decoder did not use zero for a missing watermark");
+}
+if (redisProtocol.decodeTrackedRedisReadResult(null, null) !== null) {
+  throw new Error("The packed ESM tracked result decoder did not preserve a generic miss without a watermark");
 }
 if (
   "REDIS_FRAME_VERSION" in redisProtocol
@@ -1349,8 +1396,22 @@ if (cjsRoundTrip?.payload !== "value" || cjsRoundTrip.createdAtMs !== 1) {
 if (redisProtocol.decodeTrackedRedisFrame(redisProtocol.encodeRedisFrame("pending", 0), Buffer.from("0")) !== null) {
   throw new Error("The packed CommonJS tracked decoder did not fence an equal timestamp");
 }
+const cjsWatermarkMiss = redisProtocol.decodeTrackedRedisReadResult(
+  redisProtocol.encodeRedisFrame("pending", 0),
+  Buffer.from("0"),
+);
+if (
+  cjsWatermarkMiss?.kind !== "watermark_miss"
+  || cjsWatermarkMiss.observedWatermarkMs !== 0
+  || "payload" in cjsWatermarkMiss
+) {
+  throw new Error("The packed CommonJS tracked result decoder did not preserve the observed watermark miss");
+}
 if (redisProtocol.decodeTrackedRedisFrame(redisProtocol.encodeRedisFrame("value", 1), null)?.payload !== "value") {
   throw new Error("The packed CommonJS tracked decoder did not use zero for a missing watermark");
+}
+if (redisProtocol.decodeTrackedRedisReadResult(null, null) !== null) {
+  throw new Error("The packed CommonJS tracked result decoder did not preserve a generic miss without a watermark");
 }
 if (
   "REDIS_FRAME_VERSION" in redisProtocol
@@ -1520,6 +1581,7 @@ const redisProtocol = await import("dialcache/redis-protocol");
 await import("dialcache/node-redis");
 ${packedInvalidationCheckSource}
 const esmCreatedAtMs = 1700000000123;
+const esmAdapterClockMs = esmCreatedAtMs + 999;
 if (appGlide.Script === otherGlide.Script) {
   throw new Error("The package test requires two distinct GLIDE module instances");
 }
@@ -1552,12 +1614,13 @@ const esmGlideRuntime = {
 };
 const adapter = glide.createValkeyGlideDialCacheClient(esmFakeGlideClient, esmGlideRuntime);
 const esmNativeDateNow = Date.now;
-Date.now = () => esmCreatedAtMs;
+Date.now = () => esmAdapterClockMs;
 try {
   await adapter.write({
     valueKey: "tracked:{id}:value",
     cacheTtlMs: 1_000,
     value: "payload",
+    createdAtMs: esmCreatedAtMs,
   });
   if (
     esmWriteCommand[0] !== "SET"
@@ -1567,7 +1630,7 @@ try {
     || esmWriteCommand[2][0] !== 1
     || esmWriteCommand[2].readBigUInt64BE(1) !== BigInt(esmCreatedAtMs)
   ) {
-    throw new Error("The packed ESM GLIDE write did not send one complete client-stamped frame");
+    throw new Error("The packed ESM GLIDE write did not preserve the supplied frame timestamp exactly");
   }
   const trackedRead = await adapter.read({
     valueKey: "tracked:{id}:value",
@@ -1649,7 +1712,7 @@ void (async () => {
       || cjsWriteCommand[2][0] !== 1
       || cjsWriteCommand[2].readBigUInt64BE(1) !== BigInt(cjsCreatedAtMs)
     ) {
-      throw new Error("The packed CommonJS GLIDE write did not send one complete client-stamped frame");
+      throw new Error("The packed CommonJS GLIDE write did not stamp an omitted timestamp from its client clock");
     }
     const trackedRead = await adapter.read({
       valueKey: "tracked:{id}:value",

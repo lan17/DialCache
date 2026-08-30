@@ -7,7 +7,7 @@ import {
 import {
   assertValidRedisTimestampMs,
   decodeRedisFrame,
-  decodeTrackedRedisFrame,
+  decodeTrackedRedisReadResult,
   encodeRedisFrame,
 } from "./internal/redis-payload.js";
 import {
@@ -163,13 +163,14 @@ export function createValkeyGlideDialCacheClient<TDecoder>(
       if (!Array.isArray(pair) || pair.length !== 2) {
         throw new DialCacheRedisPayloadError("Invalid DialCache Redis payload reply");
       }
-      return decodeTrackedRedisFrame(pair[0], pair[1]);
+      return decodeTrackedRedisReadResult(pair[0], pair[1]);
     },
     async write(request) {
       const { valueKey, value } = request;
       const cacheTtlMs = ceilSupportedCacheTtlMs(request.cacheTtlMs);
       const execOptions = keyedOptions(valueKey);
-      const frame = encodeRedisFrame(value, Date.now());
+      const createdAtMs = request.createdAtMs === undefined ? Date.now() : request.createdAtMs;
+      const frame = encodeRedisFrame(value, createdAtMs);
       validateRedisSetReply(
         await client.customCommand(["SET", valueKey, frame, "PX", String(cacheTtlMs)], execOptions),
       );
