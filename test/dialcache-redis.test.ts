@@ -184,7 +184,7 @@ describe("DialCache Redis TTL layer", () => {
       `${key.urn}:dialcache-frame-v1`,
       encodeFrame(JSON.stringify({ source: "redis" }), nowMs + 1_250),
     );
-    redis.setRaw(`${key.prefix}#watermark`, "0");
+    redis.setRaw(`${key.prefix}#watermark`, String(nowMs + 500));
     const observeFutureTimestampOffset = vi.fn();
     const metrics = metricsWithFutureTimestampObserver(observeFutureTimestampOffset);
     const serializer: Serializer<{ readonly source: string }> = {
@@ -214,7 +214,8 @@ describe("DialCache Redis TTL layer", () => {
 
     expect(serializer.load).not.toHaveBeenCalled();
     expect(fallback).toHaveBeenCalledOnce();
-    expect(write).toHaveBeenCalledWith(expect.objectContaining({ createdAtMs: nowMs }));
+    expect(write).toHaveBeenCalledOnce();
+    expect(write.mock.calls[0]?.[0]).not.toHaveProperty("createdAtMs");
     expect(observeFutureTimestampOffset).toHaveBeenCalledOnce();
     expect(observeFutureTimestampOffset).toHaveBeenCalledWith(
       {
@@ -859,10 +860,19 @@ describe("DialCache Redis TTL layer", () => {
     );
   });
 
-  it("records the same payload encoding label for malformed FakeRedis frames", async () => {
+  it.each([
+    { trackForInvalidation: false, unsafeTimestamp: false },
+    { trackForInvalidation: false, unsafeTimestamp: true },
+    { trackForInvalidation: true, unsafeTimestamp: false },
+    { trackForInvalidation: true, unsafeTimestamp: true },
+  ])("preserves encoding errors without refilling (tracked=$trackForInvalidation, unsafe=$unsafeTimestamp)", async ({ trackForInvalidation, unsafeTimestamp }) => {
     const redis = new FakeRedis();
-    const redisKey = redisKeyFor("123", "RedisFakeBadPayloadEncoding");
-    redis.setRaw(redisKey, encodeFrame({ userId: "123", source: "stale" }, Date.now(), 2));
+    const key = keyFor("123", "RedisFakeBadPayloadEncoding", trackForInvalidation);
+    const createdAtMs = unsafeTimestamp ? Number.MAX_SAFE_INTEGER + 1 : Date.now();
+    redis.setRaw(`${key.urn}:dialcache-frame-v1`, encodeFrame({ userId: "123", source: "stale" }, createdAtMs, 2));
+    if (trackForInvalidation) {
+      redis.setRaw(`${key.prefix}#watermark`, "0");
+    }
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
     const metrics = {
       request: vi.fn(),
@@ -881,6 +891,7 @@ describe("DialCache Redis TTL layer", () => {
       keyType: "user_id",
       useCase: "RedisFakeBadPayloadEncoding",
       cacheKey: (userId) => userId,
+      trackForInvalidation,
       defaultConfig: new DialCacheKeyConfig({
         ttlSec: { [CacheLayer.REMOTE]: 60 },
         ramp: { [CacheLayer.REMOTE]: 100 },
@@ -891,7 +902,9 @@ describe("DialCache Redis TTL layer", () => {
 
     expect(value).toEqual({ userId: "123", calls: 1 });
     expect(calls).toBe(1);
-    expect(redis.getCalls).toBe(1);
+    expect(redis.getCalls + redis.mGetCalls).toBe(1);
+    expect(redis.setCalls).toBe(0);
+    expect(metrics.miss).not.toHaveBeenCalled();
     expect(metrics.error).toHaveBeenCalledWith({
       cacheNamespace: "urn",
       useCase: "RedisFakeBadPayloadEncoding",

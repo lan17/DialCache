@@ -115,7 +115,6 @@ describe("node-redis adapter", () => {
     ).resolves.toEqual({
       payload: Buffer.from([0, 0xff]),
       createdAtMs: 2,
-      observedWatermarkMs: 1,
     });
     await expect(
       adapter.write({ valueKey: "plain:value", cacheTtlMs: 1_000, value: "plain" }),
@@ -337,7 +336,7 @@ describe("node-redis adapter", () => {
     await expect(adapter.read(
       { valueKey: "tracked:{id}:value", watermarkKey: "tracked:{id}:watermark" },
       { timeoutMs: 25, signal: controller.signal },
-    )).resolves.toEqual({ payload: "tracked", createdAtMs: 2, observedWatermarkMs: 1 });
+    )).resolves.toEqual({ payload: "tracked", createdAtMs: 2 });
 
     expect(client.sendCommand).toHaveBeenCalledWith(
       "tracked:{id}:value",
@@ -359,7 +358,7 @@ describe("node-redis adapter", () => {
     await expect(adapter.read({
       valueKey: "tracked:{id}:value",
       watermarkKey: "tracked:{id}:watermark",
-    })).resolves.toEqual({ payload: "tracked", createdAtMs: 2, observedWatermarkMs: 1 });
+    })).resolves.toEqual({ payload: "tracked", createdAtMs: 2 });
 
     expect(client.sendCommand).toHaveBeenCalledWith(
       ["MGET", "tracked:{id}:value", "tracked:{id}:watermark"],

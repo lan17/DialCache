@@ -877,9 +877,7 @@ export class DialCache {
           key,
           value,
           remoteWriteConfig,
-          remote.status === "miss" || remote.status === "retained"
-            ? remote.watermarkMiss
-            : undefined,
+          remote.status === "miss" ? remote.watermarkMiss : undefined,
         );
       } catch (error) {
         this.logger.warn("Error putting value in Redis cache", error);

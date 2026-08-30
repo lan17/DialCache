@@ -330,13 +330,10 @@ describe("DialCache stale-on-error recovery", () => {
     expect(staleRecovery).not.toHaveBeenCalled();
   });
 
-  it.each([
-    { candidateOffsetMs: 0, expectedWrite: false },
-    { candidateOffsetMs: 1, expectedWrite: true },
-  ])(
-    "keeps a retained miss reason independent when its refill candidate is watermark + $candidateOffsetMs ms",
-    async ({ candidateOffsetMs, expectedWrite }) => {
-      const useCase = `StaleRecoveryRetainedRefillFence${candidateOffsetMs}`;
+  it.each([0, 1])(
+    "preserves ordinary retained-frame refills at watermark + %s ms",
+    async (candidateOffsetMs) => {
+      const useCase = `StaleRecoveryRetainedRefill${candidateOffsetMs}`;
       const initialNowMs = Date.now();
       const observedWatermarkMs = initialNowMs - 3_000;
       const candidateAtMs = observedWatermarkMs + candidateOffsetMs;
@@ -346,6 +343,7 @@ describe("DialCache stale-on-error recovery", () => {
         return sourceValue;
       });
       const redis = new RecordingRedis();
+      const write = vi.spyOn(redis, "write");
       const { metrics } = recordingMetrics();
       const serializer: Serializer<typeof sourceValue> = {
         dump: vi.fn(async (value) => JSON.stringify(value)),
@@ -381,11 +379,10 @@ describe("DialCache stale-on-error recovery", () => {
         reason: "unclassified",
       });
       expect(serializer.load).not.toHaveBeenCalled();
-      expect(serializer.dump).toHaveBeenCalledTimes(expectedWrite ? 1 : 0);
-      expect(redis.setCalls).toBe(expectedWrite ? 1 : 0);
-      if (expectedWrite) {
-        expect(decodeFrame(redis.raw(redisValueKey(useCase, "123", true))).createdAtMs).toBe(candidateAtMs);
-      }
+      expect(serializer.dump).toHaveBeenCalledOnce();
+      expect(redis.setCalls).toBe(1);
+      expect(write.mock.calls[0]?.[0]).not.toHaveProperty("createdAtMs");
+      expect(decodeFrame(redis.raw(redisValueKey(useCase, "123", true))).createdAtMs).toBe(candidateAtMs);
     },
   );
 

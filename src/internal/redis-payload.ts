@@ -169,11 +169,7 @@ export function decodeTrackedRedisFrame(
   rawWatermark: unknown,
 ): DecodedRedisFrame | null {
   const result = decodeTrackedRedisReadResult(raw, rawWatermark);
-  if (result === null || isRedisReadMiss(result)) {
-    return null;
-  }
-  // Do not widen the established compatibility helper's served-frame shape.
-  return { payload: result.payload, createdAtMs: result.createdAtMs };
+  return isRedisReadMiss(result) ? null : result;
 }
 
 function decodeTrackedFrame(
@@ -181,25 +177,22 @@ function decodeTrackedFrame(
   observedWatermarkMs?: number,
 ): RedisReadResult {
   const createdAtMs = readFrameCreatedAtMs(frame);
-  // Tracked protocol frames require a positive safe-integer timestamp. Keep
-  // malformed/future decisions out of the watermark-fenced category.
-  if (!isValidRedisTimestampMs(createdAtMs) || createdAtMs === 0) {
+  // Preserve zero-baseline misses. Core validates all other timestamps after
+  // payload decoding so corrupt encodings retain their existing error path.
+  if (createdAtMs === 0) {
     return redisReadMiss("unclassified", observedWatermarkMs);
   }
   if (observedWatermarkMs !== undefined && createdAtMs <= observedWatermarkMs) {
     return redisReadMiss("watermark_fenced", observedWatermarkMs);
   }
-  return decodedRedisFrame(frame, observedWatermarkMs);
+  return decodedRedisFrame(frame);
 }
 
-function decodedRedisFrame(frame: Buffer, observedWatermarkMs?: number): DecodedRedisFrame {
-  const decoded = {
+function decodedRedisFrame(frame: Buffer): DecodedRedisFrame {
+  return {
     payload: decodeRedisPayload(frame.subarray(REDIS_FRAME_HEADER_BYTES)),
     createdAtMs: readFrameCreatedAtMs(frame),
   };
-  return observedWatermarkMs === undefined
-    ? decoded
-    : { ...decoded, observedWatermarkMs };
 }
 
 function redisReadMiss(

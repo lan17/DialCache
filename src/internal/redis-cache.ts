@@ -163,29 +163,20 @@ export class RedisCache {
       // remains the ordinary serving boundary.
       const frameAge = this.frameAge(key, result, metricLayer);
       if (frameAge.status !== "valid" || frameAge.ageMs >= maximumAgeMs) {
-        const miss = unclassifiedFrameMiss(key, result);
-        this.recordMiss(key, metricLayer, missReason(miss));
-        return isRedisWatermarkMiss(miss)
-          ? { status: "miss", config: layerConfig, reason: "cache_miss", watermarkMiss: miss }
-          : { status: "miss", config: layerConfig, reason: "cache_miss" };
+        this.recordMiss(key, metricLayer, "unclassified");
+        return { status: "miss", config: layerConfig, reason: "cache_miss" };
       }
       if (frameAge.ageMs >= freshAgeMs) {
-        const miss = unclassifiedFrameMiss(key, result);
-        this.recordMiss(key, metricLayer, missReason(miss));
-        return isRedisWatermarkMiss(miss)
-          ? { status: "retained", config: layerConfig, frame: result, watermarkMiss: miss }
-          : { status: "retained", config: layerConfig, frame: result };
+        this.recordMiss(key, metricLayer, "unclassified");
+        return { status: "retained", config: layerConfig, frame: result };
       }
 
       try {
         const value = await this.deserializePayload<T>(key, result.payload, metricLayer);
         return { status: "hit", value, frame: result };
       } catch {
-        const miss = unclassifiedFrameMiss(key, result);
-        this.recordMiss(key, metricLayer, missReason(miss));
-        return isRedisWatermarkMiss(miss)
-          ? { status: "miss", config: layerConfig, reason: "deserialization_error", watermarkMiss: miss }
-          : { status: "miss", config: layerConfig, reason: "deserialization_error" };
+        this.recordMiss(key, metricLayer, "unclassified");
+        return { status: "miss", config: layerConfig, reason: "deserialization_error" };
       }
     } finally {
       // Preserve the caller-serving boundary: Redis read plus any ordinary
@@ -503,16 +494,12 @@ export class RedisCache {
     }
     const age = this.frameAge(key, result, metricLayer);
     if (age.status === "future") {
-      return futureFramePolicy === "retain"
-        ? result
-        : unclassifiedFrameMiss(key, result);
+      return futureFramePolicy === "reject" ? null : result;
     }
     if (age.status === "invalid") {
-      return unclassifiedFrameMiss(key, result);
+      return null;
     }
-    return maxAgeMs === null || age.ageMs < maxAgeMs
-      ? result
-      : unclassifiedFrameMiss(key, result);
+    return maxAgeMs === null || age.ageMs < maxAgeMs ? result : null;
   }
 
   private validateReadResult(key: DialCacheKey, result: RedisReadResult): RedisReadResult {
@@ -665,16 +652,6 @@ function classifiedRedisReadMiss(
   return observed === undefined
     ? { reason }
     : { kind: "watermark_miss", reason, observedWatermarkMs: observed };
-}
-
-function unclassifiedFrameMiss(
-  key: DialCacheKey,
-  frame: DecodedRedisFrame,
-): RedisReadMiss | RedisWatermarkMiss {
-  return classifiedRedisReadMiss(
-    "unclassified",
-    key.trackForInvalidation ? frame.observedWatermarkMs : undefined,
-  );
 }
 
 function validObservedWatermarkMs(value: unknown): number | undefined {

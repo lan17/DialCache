@@ -151,7 +151,6 @@ describe("Valkey GLIDE adapter", () => {
     ).resolves.toEqual({
       payload: Buffer.from([0, 0xff]),
       createdAtMs: 1_000,
-      observedWatermarkMs: 0,
     });
     await expect(adapter.read({ valueKey: "missing:value" })).resolves.toEqual({
       reason: "value_absent",
@@ -212,7 +211,6 @@ describe("Valkey GLIDE adapter", () => {
     ).resolves.toEqual({
       payload: "tracked-cluster",
       createdAtMs: 1_000,
-      observedWatermarkMs: 0,
     });
 
     expect(client.customCommand).toHaveBeenCalledWith(

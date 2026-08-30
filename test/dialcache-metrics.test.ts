@@ -427,6 +427,43 @@ describe("DialCache observability metrics", () => {
     }
   });
 
+  it.each(["value_absent", "watermark_fenced"] as const)(
+    "recognizes a custom %s miss with explicitly undefined hit fields",
+    async (reason) => {
+      const trackForInvalidation = reason === "watermark_fenced";
+      const result = {
+        reason,
+        ...(trackForInvalidation ? {
+          kind: "watermark_miss",
+          observedWatermarkMs: Date.now() + 60_000,
+        } : {}),
+        payload: undefined,
+        createdAtMs: undefined,
+      } as unknown as RedisReadResult;
+      const metrics = new RecordingMetrics();
+      const redis: DialCacheRedisClient = {
+        read: vi.fn(async () => result),
+        write: vi.fn(async () => undefined),
+        invalidate: vi.fn(async () => undefined),
+      };
+      const useCase = "ExplicitlyUndefinedMissFields";
+      const dialcache = new DialCache({ metrics, redis: { client: redis, readTimeoutMs: 1_000 } });
+      const getUser = dialcache.cached(async () => "fallback", {
+        keyType: "user_id",
+        useCase,
+        cacheKey: () => "123",
+        trackForInvalidation,
+        defaultConfig: remoteOnly(),
+      });
+
+      await expect(dialcache.enable(async () => await getUser())).resolves.toBe("fallback");
+
+      expect(events(metrics, "miss", { useCase, layer: CacheLayer.REMOTE, reason })).toHaveLength(1);
+      expect(events(metrics, "error", { useCase })).toHaveLength(0);
+      expect(redis.write).toHaveBeenCalledTimes(trackForInvalidation ? 0 : 1);
+    },
+  );
+
   it("classifies a tracked FakeRedis frame fenced by its observed watermark", async () => {
     const metrics = new RecordingMetrics();
     const redis = new FakeRedis();

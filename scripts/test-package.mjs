@@ -347,6 +347,20 @@ emptyRedisFrame[0] = 1;
 emptyRedisFrame.writeBigUInt64BE(1n, 1);
 const decodedEmptyRedisFrame: DecodedRedisFrame | null = decodeRedisFrame(emptyRedisFrame);
 const decodedRedisReadResult: RedisReadResult = decodeRedisReadResult(null);
+const explicitlyUndefinedReadMiss: RedisReadMiss = {
+  reason: "value_absent",
+  payload: undefined,
+  createdAtMs: undefined,
+};
+const explicitlyUndefinedWatermarkMiss: RedisWatermarkMiss = {
+  kind: "watermark_miss",
+  reason: "watermark_fenced",
+  observedWatermarkMs: 1,
+  payload: undefined,
+  createdAtMs: undefined,
+};
+void explicitlyUndefinedReadMiss;
+void explicitlyUndefinedWatermarkMiss;
 if (
   decodedRedisReadResult !== null
   && "reason" in decodedRedisReadResult
@@ -1851,6 +1865,7 @@ function typescriptConfig(include) {
         moduleResolution: "Node16",
         noEmit: true,
         strict: true,
+        exactOptionalPropertyTypes: false,
       },
       include,
     },

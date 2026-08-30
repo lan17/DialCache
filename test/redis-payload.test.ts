@@ -125,13 +125,44 @@ describe("Redis frame decoding", () => {
     }
   });
 
-  it("returns eligible tracked frames through the typed decoder", () => {
-    expect(
-      decodeTrackedRedisReadResult(
-        encodeFrame("cached", 0, 1_001),
-        Buffer.from("1000"),
-      ),
-    ).toEqual({ payload: "cached", createdAtMs: 1_001, observedWatermarkMs: 1_000 });
+  it("keeps hit shapes identical through classified and legacy decoders", () => {
+    const frame = encodeFrame("cached", 0, 1_001);
+    const decoded = { payload: "cached", createdAtMs: 1_001 };
+
+    expect(decodeRedisReadResult(frame)).toEqual(decoded);
+    expect(decodeRedisFrame(frame)).toEqual(decoded);
+    for (const watermark of [null, Buffer.from("1000")]) {
+      expect(decodeTrackedRedisReadResult(frame, watermark)).toEqual(decoded);
+      expect(decodeTrackedRedisFrame(frame, watermark)).toEqual(decoded);
+    }
+  });
+
+  it("preserves unsafe timestamps for core validation after decoding the payload", () => {
+    const createdAtMs = Number.MAX_SAFE_INTEGER + 1;
+    const frame = encodeFrame("cached", 0, createdAtMs);
+    const decoded = { payload: "cached", createdAtMs };
+
+    expect(decodeRedisReadResult(frame)).toEqual(decoded);
+    expect(decodeRedisFrame(frame)).toEqual(decoded);
+    for (const watermark of [null, Buffer.from("1000")]) {
+      expect(decodeTrackedRedisReadResult(frame, watermark)).toEqual(decoded);
+      expect(decodeTrackedRedisFrame(frame, watermark)).toEqual(decoded);
+    }
+  });
+
+  it("preserves payload encoding errors for frames with unsafe timestamps", () => {
+    const frame = encodeFrame("cached", 2, Number.MAX_SAFE_INTEGER + 1);
+
+    expect(() => decodeRedisReadResult(frame)).toThrow(DialCacheRedisPayloadEncodingError);
+    expect(() => decodeRedisFrame(frame)).toThrow(DialCacheRedisPayloadEncodingError);
+    for (const watermark of [null, Buffer.from("1000")]) {
+      expect(() => decodeTrackedRedisReadResult(frame, watermark)).toThrow(
+        DialCacheRedisPayloadEncodingError,
+      );
+      expect(() => decodeTrackedRedisFrame(frame, watermark)).toThrow(
+        DialCacheRedisPayloadEncodingError,
+      );
+    }
   });
 
   it("treats a missing watermark as the zero baseline", () => {

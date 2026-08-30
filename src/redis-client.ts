@@ -79,13 +79,6 @@ export interface DecodedRedisFrame {
   readonly payload: RedisCachePayload;
   /** Epoch milliseconds copied from the frame header. */
   readonly createdAtMs: number;
-  /**
-   * A trustworthy watermark observed alongside this eligible tracked frame.
-   * It is retained so a later core-side rejection can carry the independent
-   * refill fence forward without relabeling that rejection as a watermark
-   * fence. Untracked and legacy decoder results omit it.
-   */
-  readonly observedWatermarkMs?: number;
 }
 
 /** A classified semantic Redis miss without a trustworthy refill fence. */
@@ -125,8 +118,8 @@ export function isRedisReadMiss(result: unknown): result is RedisReadMiss | Redi
       typeof result === "object"
       && result !== null
       && "reason" in result
-      && !("payload" in result)
-      && !("createdAtMs" in result)
+      && (!("payload" in result) || result.payload === undefined)
+      && (!("createdAtMs" in result) || result.createdAtMs === undefined)
     );
 }
 
@@ -136,8 +129,8 @@ export function isRedisWatermarkMiss(result: unknown): result is RedisWatermarkM
     && result !== null
     && "kind" in result
     && result.kind === "watermark_miss"
-    && !("payload" in result)
-    && !("createdAtMs" in result);
+    && (!("payload" in result) || result.payload === undefined)
+    && (!("createdAtMs" in result) || result.createdAtMs === undefined);
 }
 
 interface RedisValueRequest {
