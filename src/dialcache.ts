@@ -24,11 +24,12 @@ import {
   type MetricLayer,
   type ShadowValidationOutcome,
 } from "./metrics.js";
-import type {
-  DecodedRedisFrame,
-  RedisCachePayload,
-  RedisReadResult,
-  RedisWatermarkMiss,
+import {
+  isRedisWatermarkMiss,
+  type DecodedRedisFrame,
+  type RedisCachePayload,
+  type RedisReadResult,
+  type RedisWatermarkMiss,
 } from "./redis-client.js";
 import type { Serializer } from "./serializer.js";
 import type { CacheGetResult, RemoteCacheGetResult } from "./internal/cache-result.js";
@@ -1771,14 +1772,6 @@ function redisPayloadsEqual(left: RedisCachePayload, right: RedisCachePayload): 
     return typeof right === "string" && left.equals(Buffer.from(right, "utf8"));
   }
   return Buffer.isBuffer(right) && right.equals(Buffer.from(left, "utf8"));
-}
-
-function isRedisWatermarkMiss(result: RedisReadResult): result is RedisWatermarkMiss {
-  return typeof result === "object"
-    && result !== null
-    && "observedWatermarkMs" in result
-    && !("payload" in result)
-    && !("createdAtMs" in result);
 }
 
 async function settleUnexpectedThenable(value: unknown): Promise<void> {

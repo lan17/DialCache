@@ -135,7 +135,7 @@ describe("node-redis adapter", () => {
     await expect(adapter.read({
       valueKey: "tracked:{id}:value",
       watermarkKey: "tracked:{id}:watermark",
-    })).resolves.toEqual({ observedWatermarkMs: 1_234 });
+    })).resolves.toEqual({ kind: "watermark_miss", observedWatermarkMs: 1_234 });
 
     expect(client.sendCommand).toHaveBeenCalledTimes(1);
   });

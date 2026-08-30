@@ -1184,6 +1184,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       expect(invalidate).not.toHaveBeenCalled();
       expect(await admin.exists(valueKey)).toBe(0);
       expect(await client.adapter.read({ valueKey, watermarkKey })).toEqual({
+        kind: "watermark_miss",
         observedWatermarkMs: candidateAtMs,
       });
       expect(await admin.get(watermarkKey)).toBe(String(candidateAtMs));
@@ -1230,6 +1231,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       expect(await admin.scriptExists(INVALIDATE_CACHE_SHA1)).toEqual([true]);
       const watermark = Number(await admin.get(watermarkKey));
       expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toEqual({
+        kind: "watermark_miss",
         observedWatermarkMs: watermark,
       });
     });
@@ -1261,6 +1263,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
 
       await admin.set(watermarkKey, "1000");
       expect(await scriptClient.read({ valueKey, watermarkKey })).toEqual({
+        kind: "watermark_miss",
         observedWatermarkMs: 1_000,
       });
 
@@ -1342,6 +1345,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       await admin.set(watermarkKey, "0");
       await expect(scriptClient.read({ valueKey })).rejects.toThrow(/WRONGTYPE/);
       await expect(scriptClient.read({ valueKey, watermarkKey })).resolves.toEqual({
+        kind: "watermark_miss",
         observedWatermarkMs: 0,
       });
 
@@ -1367,6 +1371,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       expect(await admin.pTTL(watermarkKey)).toBeGreaterThan(MIN_WATERMARK_TTL_MS - 1_000);
       expect(await admin.pTTL(watermarkKey)).toBeLessThanOrEqual(MIN_WATERMARK_TTL_MS);
       expect(await scriptClient.read({ valueKey, watermarkKey })).toEqual({
+        kind: "watermark_miss",
         observedWatermarkMs: invalidatedAtMs + 100,
       });
 
@@ -1810,6 +1815,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
 
         await scriptClient.invalidate({ watermarkKey, futureBufferMs: 100 });
         expect(await scriptClient.read({ valueKey, watermarkKey })).toEqual({
+          kind: "watermark_miss",
           observedWatermarkMs: invalidatedAtMs + 100,
         });
         const watermarkBeforeWrite = await admin.get(watermarkKey);
@@ -1817,6 +1823,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
         await scriptClient.write({ ...writeRequest, value: "behind-watermark" });
         expect((await scriptClient.read({ valueKey }))?.payload).toBe("behind-watermark");
         expect(await scriptClient.read({ valueKey, watermarkKey })).toEqual({
+          kind: "watermark_miss",
           observedWatermarkMs: invalidatedAtMs + 100,
         });
         expect(await admin.get(watermarkKey)).toBe(watermarkBeforeWrite);
@@ -1847,6 +1854,7 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       await scriptClient.invalidate({ watermarkKey, futureBufferMs: 60_000 });
       const watermark = Number(await admin.get(watermarkKey));
       expect(await scriptClient.read({ valueKey, watermarkKey })).toEqual({
+        kind: "watermark_miss",
         observedWatermarkMs: watermark,
       });
 

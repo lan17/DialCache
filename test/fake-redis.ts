@@ -130,7 +130,7 @@ export class FakeRedis implements DialCacheRedisClient {
         return null;
       }
       if (watermark !== null) {
-        watermarkMiss = { observedWatermarkMs: watermark };
+        watermarkMiss = { kind: "watermark_miss", observedWatermarkMs: watermark };
       }
     }
 

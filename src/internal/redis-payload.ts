@@ -1,6 +1,7 @@
 import {
   DialCacheRedisPayloadEncodingError,
   DialCacheRedisPayloadError,
+  isRedisWatermarkMiss,
   type DecodedRedisFrame,
   type RedisCachePayload,
   type RedisReadResult,
@@ -130,7 +131,10 @@ export function decodeTrackedRedisReadResult(
   if (watermark === null) {
     return null;
   }
-  return decodeTrackedFrame(frame, watermark, { observedWatermarkMs: watermark });
+  return decodeTrackedFrame(frame, watermark, {
+    kind: "watermark_miss",
+    observedWatermarkMs: watermark,
+  });
 }
 
 /**
@@ -162,13 +166,6 @@ function decodeTrackedFrame(
         payload: decodeRedisPayload(frame.subarray(REDIS_FRAME_HEADER_BYTES)),
         createdAtMs,
       };
-}
-
-function isRedisWatermarkMiss(result: RedisReadResult): result is RedisWatermarkMiss {
-  return result !== null
-    && "observedWatermarkMs" in result
-    && !("payload" in result)
-    && !("createdAtMs" in result);
 }
 
 function readFrameCreatedAtMs(frame: Buffer): number {

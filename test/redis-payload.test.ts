@@ -96,6 +96,7 @@ describe("Redis frame decoding", () => {
       encodeFrame("fenced", 0, 1_000),
     ]) {
       expect(decodeTrackedRedisReadResult(frame, watermark)).toEqual({
+        kind: "watermark_miss",
         observedWatermarkMs: 1_000,
       });
       expect(decodeTrackedRedisFrame(frame, watermark)).toBeNull();

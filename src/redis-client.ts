@@ -86,6 +86,7 @@ export interface DecodedRedisFrame {
  * before `observedWatermarkMs` is known to remain unreadable.
  */
 export interface RedisWatermarkMiss {
+  readonly kind: "watermark_miss";
   readonly observedWatermarkMs: number;
   readonly payload?: never;
   readonly createdAtMs?: never;
@@ -97,6 +98,16 @@ export interface RedisWatermarkMiss {
  * present, valid numeric watermark that can safely fence a candidate refill.
  */
 export type RedisReadResult = DecodedRedisFrame | RedisWatermarkMiss | null;
+
+/** Package-private runtime discriminator for the semantic miss variant. */
+export function isRedisWatermarkMiss(result: unknown): result is RedisWatermarkMiss {
+  return typeof result === "object"
+    && result !== null
+    && "kind" in result
+    && result.kind === "watermark_miss"
+    && !("payload" in result)
+    && !("createdAtMs" in result);
+}
 
 interface RedisValueRequest {
   readonly valueKey: string;
@@ -127,11 +138,12 @@ export interface RedisWriteRequest extends RedisValueRequest {
   readonly value: RedisCachePayload;
   /**
    * Nonnegative safe-integer epoch milliseconds to encode in the frame.
-   * DialCache core supplies this for refills following `RedisWatermarkMiss`.
+   * DialCache core supplies the final dispatch-adjacent sample for admitted
+   * refills following `RedisWatermarkMiss`.
    * It remains optional so ordinary refills, existing direct adapter callers,
    * and custom adapter implementations keep their established behavior. An
    * adapter that returns `RedisWatermarkMiss` must honor a supplied value
-   * exactly so the refill decision and stored frame cannot diverge.
+   * exactly so the final fence decision and stored frame cannot diverge.
    */
   readonly createdAtMs?: number;
 }
@@ -182,7 +194,8 @@ export interface DialCacheRedisClient {
    * miss when the same snapshot contained a present, valid numeric watermark.
    * Existing adapters may continue returning `null` and remain correct while
    * missing the conditional refill optimization. Adapters that opt into the
-   * typed miss must also honor `RedisWriteRequest.createdAtMs` when supplied.
+   * discriminated miss must also honor `RedisWriteRequest.createdAtMs` when
+   * supplied.
    *
    * A returned frame's payload is transferred to DialCache. A returned Buffer
    * must remain stable and must not be mutated, pooled, or reused after this

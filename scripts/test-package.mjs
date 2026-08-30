@@ -349,7 +349,8 @@ const decodedTrackedRedisReadResult: RedisReadResult = decodeTrackedRedisReadRes
 );
 if (
   decodedTrackedRedisReadResult !== null
-  && "observedWatermarkMs" in decodedTrackedRedisReadResult
+  && "kind" in decodedTrackedRedisReadResult
+  && decodedTrackedRedisReadResult.kind === "watermark_miss"
 ) {
   const typedWatermarkMiss: RedisWatermarkMiss = decodedTrackedRedisReadResult;
   const observedWatermarkMs: number = typedWatermarkMiss.observedWatermarkMs;
@@ -1010,7 +1011,11 @@ const esmWatermarkMiss = redisProtocol.decodeTrackedRedisReadResult(
   redisProtocol.encodeRedisFrame("pending", 0),
   Buffer.from("0"),
 );
-if (esmWatermarkMiss?.observedWatermarkMs !== 0 || "payload" in esmWatermarkMiss) {
+if (
+  esmWatermarkMiss?.kind !== "watermark_miss"
+  || esmWatermarkMiss.observedWatermarkMs !== 0
+  || "payload" in esmWatermarkMiss
+) {
   throw new Error("The packed ESM tracked result decoder did not preserve the observed watermark miss");
 }
 if (redisProtocol.decodeTrackedRedisFrame(redisProtocol.encodeRedisFrame("value", 1), null)?.payload !== "value") {
@@ -1395,7 +1400,11 @@ const cjsWatermarkMiss = redisProtocol.decodeTrackedRedisReadResult(
   redisProtocol.encodeRedisFrame("pending", 0),
   Buffer.from("0"),
 );
-if (cjsWatermarkMiss?.observedWatermarkMs !== 0 || "payload" in cjsWatermarkMiss) {
+if (
+  cjsWatermarkMiss?.kind !== "watermark_miss"
+  || cjsWatermarkMiss.observedWatermarkMs !== 0
+  || "payload" in cjsWatermarkMiss
+) {
   throw new Error("The packed CommonJS tracked result decoder did not preserve the observed watermark miss");
 }
 if (redisProtocol.decodeTrackedRedisFrame(redisProtocol.encodeRedisFrame("value", 1), null)?.payload !== "value") {

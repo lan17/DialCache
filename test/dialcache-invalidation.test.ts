@@ -147,6 +147,7 @@ describe("DialCache targeted invalidation watermarks", () => {
       valueKey: valueKey("FutureBufferUser"),
       watermarkKey,
     })).resolves.toEqual({
+      kind: "watermark_miss",
       observedWatermarkMs: Date.parse("2026-05-12T18:00:01.000Z"),
     });
     await expect(redis.read({ valueKey: valueKey("FutureBufferUser") })).resolves.toBeNull();
@@ -176,6 +177,81 @@ describe("DialCache targeted invalidation watermarks", () => {
     expect(redis.mGetCalls).toBe(2);
     expect(redis.setCalls).toBe(1);
     expect(decodeFrame(redis.raw(valueKey("NewerRefillCandidate"))).createdAtMs).toBe(now);
+  });
+
+  it("starts an admitted refill's logical TTL after slow serialization", async () => {
+    const now = Date.now();
+    const useCase = "PostSerializationRefillCandidate";
+    const redis = new FakeRedis();
+    redis.setRaw(valueKey(useCase), encodeFrame({ source: "old" }, now - 15));
+    redis.setRaw(watermarkKey, String(now - 5));
+    const serializer: Serializer<{ userId: string; calls: number }> = {
+      dump: vi.fn(async (value) => {
+        vi.advanceTimersByTime(1_500);
+        return JSON.stringify(value);
+      }),
+      load: vi.fn((value) => {
+        const payload = Buffer.isBuffer(value) ? value.toString("utf8") : value;
+        return JSON.parse(payload) as { userId: string; calls: number };
+      }),
+    };
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase,
+      cacheKey: (userId) => userId,
+      trackForInvalidation: true,
+      defaultConfig: remoteOnly(1),
+      serializer,
+    });
+
+    const first = await dialcache.enable(async () => await getUser("123"));
+    const second = await dialcache.enable(async () => await getUser("123"));
+
+    expect(first).toEqual({ userId: "123", calls: 1 });
+    expect(second).toEqual(first);
+    expect(calls).toBe(1);
+    expect(redis.mGetCalls).toBe(2);
+    expect(redis.setCalls).toBe(1);
+    expect(decodeFrame(redis.raw(valueKey(useCase))).createdAtMs).toBe(now + 1_500);
+  });
+
+  it("suppresses an admitted refill when the clock rolls behind the watermark during serialization", async () => {
+    const now = Date.now();
+    const observedWatermarkMs = now - 1;
+    const useCase = "RolledBackRefillCandidate";
+    const redis = new FakeRedis();
+    redis.setRaw(valueKey(useCase), encodeFrame({ source: "old" }, now - 15));
+    redis.setRaw(watermarkKey, String(observedWatermarkMs));
+    const dump = vi.fn(async (value: { userId: string; calls: number }) => {
+      vi.setSystemTime(observedWatermarkMs - 1);
+      return JSON.stringify(value);
+    });
+    const serializer: Serializer<{ userId: string; calls: number }> = {
+      dump,
+      load: () => {
+        throw new Error("fenced stale frame must not deserialize");
+      },
+    };
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
+    let calls = 0;
+    const getUser = dialcache.cached(async (userId: string) => ({ userId, calls: ++calls }), {
+      keyType: "user_id",
+      useCase,
+      cacheKey: (userId) => userId,
+      trackForInvalidation: true,
+      defaultConfig: remoteOnly(),
+      serializer,
+    });
+
+    const value = await dialcache.enable(async () => await getUser("123"));
+
+    expect(value).toEqual({ userId: "123", calls: 1 });
+    expect(dump).toHaveBeenCalledOnce();
+    expect(redis.mGetCalls).toBe(1);
+    expect(redis.setCalls).toBe(0);
+    expect(decodeFrame(redis.raw(valueKey(useCase))).createdAtMs).toBe(now - 15);
   });
 
   it.each([
@@ -248,6 +324,7 @@ describe("DialCache targeted invalidation watermarks", () => {
       valueKey: valueKey("FutureBufferFallbackRace"),
       watermarkKey,
     })).resolves.toEqual({
+      kind: "watermark_miss",
       observedWatermarkMs: Date.parse("2026-05-12T18:00:01.000Z"),
     });
   });
@@ -302,6 +379,7 @@ describe("DialCache targeted invalidation watermarks", () => {
       valueKey: valueKey("FutureBufferSerializationRace"),
       watermarkKey,
     })).resolves.toEqual({
+      kind: "watermark_miss",
       observedWatermarkMs: Date.parse("2026-05-12T18:00:01.000Z"),
     });
   });

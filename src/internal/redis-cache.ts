@@ -11,12 +11,13 @@ import {
   type MetricLayer,
   type StaleRecoveryOutcome,
 } from "../metrics.js";
-import type {
-  DecodedRedisFrame,
-  DialCacheRedisClient,
-  RedisCachePayload,
-  RedisReadResult,
-  RedisWatermarkMiss,
+import {
+  isRedisWatermarkMiss,
+  type DecodedRedisFrame,
+  type DialCacheRedisClient,
+  type RedisCachePayload,
+  type RedisReadResult,
+  type RedisWatermarkMiss,
 } from "../redis-client.js";
 import { JsonSerializer, type Serializer } from "../serializer.js";
 import type { RedisCacheGetResult } from "./cache-result.js";
@@ -300,18 +301,14 @@ export class RedisCache {
     const cacheTtlMs = key.trackForInvalidation
       ? Math.min(configuredTtlMs, MAX_TRACKED_REDIS_VALUE_TTL_MS)
       : configuredTtlMs;
-    let createdAtMs: number | undefined;
-    if (key.trackForInvalidation && watermarkMiss !== undefined) {
-      createdAtMs = Date.now();
-      try {
-        assertValidRedisTimestampMs(createdAtMs);
-      } catch (error) {
-        this.recordError(key, metricLayer, "cache_write");
-        throw error;
-      }
-      if (createdAtMs <= watermarkMiss.observedWatermarkMs) {
-        return false;
-      }
+    const observedWatermarkMs = key.trackForInvalidation
+      ? watermarkMiss?.observedWatermarkMs
+      : undefined;
+    if (
+      observedWatermarkMs !== undefined
+      && this.sampleWriteTimestamp(key, metricLayer) <= observedWatermarkMs
+    ) {
+      return false;
     }
 
     const start = performance.now();
@@ -352,6 +349,13 @@ export class RedisCache {
     this.recordMetric((metrics) => metrics.observeStoredSize?.(labelsFor(key, metricLayer), payloadSize(serialized)));
     if (shouldWrite !== undefined && !shouldWrite()) {
       return false;
+    }
+    let createdAtMs: number | undefined;
+    if (observedWatermarkMs !== undefined) {
+      createdAtMs = this.sampleWriteTimestamp(key, metricLayer);
+      if (createdAtMs <= observedWatermarkMs) {
+        return false;
+      }
     }
     if (cacheTtlMs < configuredTtlMs) {
       this.recordError(key, metricLayer, "tracked_ttl_clamped");
@@ -579,6 +583,17 @@ export class RedisCache {
     this.recordMetric((metrics) => metrics.error({ ...labelsFor(key, layer), error: kind, inFallback: false }));
   }
 
+  private sampleWriteTimestamp(key: DialCacheKey, layer: MetricLayer): number {
+    const createdAtMs = Date.now();
+    try {
+      assertValidRedisTimestampMs(createdAtMs);
+    } catch (error) {
+      this.recordError(key, layer, "cache_write");
+      throw error;
+    }
+    return createdAtMs;
+  }
+
   private recordStaleRecovery(
     key: DialCacheKey,
     outcome: StaleRecoveryOutcome,
@@ -610,14 +625,6 @@ function payloadSize(payload: string | Buffer): number {
 
 function elapsedSeconds(startMs: number): number {
   return Math.max((performance.now() - startMs) / 1000, 0);
-}
-
-function isRedisWatermarkMiss(result: RedisReadResult): result is RedisWatermarkMiss {
-  return typeof result === "object"
-    && result !== null
-    && "observedWatermarkMs" in result
-    && !("payload" in result)
-    && !("createdAtMs" in result);
 }
 
 function isValidRedisWatermarkMiss(miss: RedisWatermarkMiss): boolean {
