@@ -226,6 +226,7 @@ describe("DialCache Redis TTL layer", () => {
       },
       1.25,
     );
+    expect(metrics.miss).toHaveBeenCalledOnce();
     expect(metrics.miss).toHaveBeenCalledWith({
       cacheNamespace: "urn",
       useCase,
@@ -277,6 +278,13 @@ describe("DialCache Redis TTL layer", () => {
       1.25,
     );
     expect(metrics.miss).toHaveBeenCalledOnce();
+    expect(metrics.miss).toHaveBeenCalledWith({
+      cacheNamespace: "urn",
+      useCase: "RedisUntrackedFutureFrame",
+      keyType: "user_id",
+      layer: CacheLayer.REMOTE,
+      reason: "unclassified",
+    });
   });
 
   it("preserves custom frames that collide with miss metadata", async () => {
@@ -413,6 +421,7 @@ describe("DialCache Redis TTL layer", () => {
     expect(serializer.load).not.toHaveBeenCalled();
     expect(fallback).toHaveBeenCalledOnce();
     expect(observeFutureTimestampOffset).not.toHaveBeenCalled();
+    expect(metrics.miss).toHaveBeenCalledOnce();
     expect(metrics.miss).toHaveBeenCalledWith({
       cacheNamespace: "urn",
       useCase: "RedisInvalidTrackedFrameTimestamp",
@@ -798,6 +807,7 @@ describe("DialCache Redis TTL layer", () => {
 
     await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ source: "fallback" });
 
+    expect(metrics.miss).toHaveBeenCalledOnce();
     expect(metrics.miss).toHaveBeenCalledWith({
       cacheNamespace: "urn",
       useCase,

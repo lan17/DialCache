@@ -430,10 +430,14 @@ describe("DialCache Redis shadow validation", () => {
       await waitForShadowEvents(metrics, 1);
 
       expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["filled"]);
-      expect(miss).toHaveBeenCalledWith(expect.objectContaining({
+      expect(miss).toHaveBeenCalledOnce();
+      expect(miss).toHaveBeenCalledWith({
+        cacheNamespace: "urn",
+        useCase,
+        keyType: "user_id",
         layer: "remote_shadow",
         reason: "unclassified",
-      }));
+      });
       expect(write).toHaveBeenCalledOnce();
       expect(write.mock.calls[0]?.[0]).not.toHaveProperty("createdAtMs");
     } finally {
