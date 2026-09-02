@@ -162,12 +162,16 @@ export class RedisCache {
       // sample after the bounded read settles. M is the absolute ceiling and F
       // remains the ordinary serving boundary.
       const frameAge = this.frameAge(key, result, metricLayer);
-      if (frameAge.status !== "valid" || frameAge.ageMs >= maximumAgeMs) {
+      if (frameAge.status !== "valid") {
         this.recordMiss(key, metricLayer, "unclassified");
         return { status: "miss", config: layerConfig, reason: "cache_miss" };
       }
+      if (frameAge.ageMs >= maximumAgeMs) {
+        this.recordMiss(key, metricLayer, "expired");
+        return { status: "miss", config: layerConfig, reason: "cache_miss" };
+      }
       if (frameAge.ageMs >= freshAgeMs) {
-        this.recordMiss(key, metricLayer, "unclassified");
+        this.recordMiss(key, metricLayer, "expired");
         return { status: "retained", config: layerConfig, frame: result };
       }
 
@@ -492,14 +496,16 @@ export class RedisCache {
     if (result === null || isRedisReadMiss(result)) {
       return result;
     }
+    // Core-side rejections never carry a refill fence. Logical age is a
+    // decisive expiry; future and invalid timestamps have no attributable cause.
     const age = this.frameAge(key, result, metricLayer);
     if (age.status === "future") {
-      return futureFramePolicy === "reject" ? null : result;
+      return futureFramePolicy === "reject" ? { reason: "unclassified" } : result;
     }
     if (age.status === "invalid") {
-      return null;
+      return { reason: "unclassified" };
     }
-    return maxAgeMs === null || age.ageMs < maxAgeMs ? result : null;
+    return maxAgeMs === null || age.ageMs < maxAgeMs ? result : { reason: "expired" };
   }
 
   private validateReadResult(key: DialCacheKey, result: RedisReadResult): RedisReadResult {
@@ -661,5 +667,8 @@ function validObservedWatermarkMs(value: unknown): number | undefined {
 }
 
 function isCacheMissReason(value: unknown): value is CacheMissReason {
-  return value === "value_absent" || value === "watermark_fenced" || value === "unclassified";
+  return value === "value_absent"
+    || value === "expired"
+    || value === "watermark_fenced"
+    || value === "unclassified";
 }

@@ -362,6 +362,70 @@ describe("DialCache observability metrics", () => {
     ).toHaveLength(1);
   });
 
+  it("classifies a logically expired bundled Redis frame as an expired miss", async () => {
+    const metrics = new RecordingMetrics();
+    const redis = new FakeRedis();
+    const useCase = "BundledRedisExpiredReason";
+    const key = new DialCacheKey({ keyType: "user_id", id: "123", useCase });
+    // Logically past the 60 s remote TTL while still physically present in Redis.
+    redis.setRaw(`${key.urn}:dialcache-frame-v1`, encodeFrame("cached", Date.now() - 60_000), 120_000);
+    const dialcache = new DialCache({ metrics, redis: { client: redis, readTimeoutMs: 1_000 } });
+    const getUser = dialcache.cached(async () => "fallback", {
+      keyType: "user_id",
+      useCase,
+      cacheKey: () => "123",
+      defaultConfig: remoteOnly(),
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).resolves.toBe("fallback");
+
+    expect(events(metrics, "miss", { useCase })).toEqual([
+      {
+        name: "miss",
+        labels: {
+          cacheNamespace: "urn",
+          useCase,
+          keyType: "user_id",
+          layer: CacheLayer.REMOTE,
+          reason: "expired",
+        },
+      },
+    ]);
+    expect(redis.setCalls).toBe(1);
+  });
+
+  it("passes a custom adapter's expired reason through unchanged", async () => {
+    const metrics = new RecordingMetrics();
+    const redis: DialCacheRedisClient = {
+      read: vi.fn(async () => ({ reason: "expired" as const })),
+      write: vi.fn(async () => undefined),
+      invalidate: vi.fn(async () => undefined),
+    };
+    const dialcache = new DialCache({ metrics, redis: { client: redis, readTimeoutMs: 1_000 } });
+    const getUser = dialcache.cached(async () => "fallback", {
+      keyType: "user_id",
+      useCase: "CustomExpiredReason",
+      cacheKey: () => "123",
+      defaultConfig: remoteOnly(),
+    });
+
+    await dialcache.enable(async () => await getUser());
+
+    expect(events(metrics, "miss", { useCase: "CustomExpiredReason" })).toEqual([
+      {
+        name: "miss",
+        labels: {
+          cacheNamespace: "urn",
+          useCase: "CustomExpiredReason",
+          keyType: "user_id",
+          layer: CacheLayer.REMOTE,
+          reason: "expired",
+        },
+      },
+    ]);
+    expect(redis.write).toHaveBeenCalledOnce();
+  });
+
   it("normalizes untrusted custom miss metadata to unclassified", async () => {
     const cases: ReadonlyArray<{
       readonly useCase: string;
@@ -824,7 +888,7 @@ describe("DialCache observability metrics", () => {
       { name: "fallback", labels: remoteLabels, value: expect.any(Number) },
     ]);
     expect(events(metrics, "miss", { useCase })).toEqual([
-      { name: "miss", labels: { ...remoteLabels, reason: "unclassified" } },
+      { name: "miss", labels: { ...remoteLabels, reason: "expired" } },
     ]);
     expect(events(metrics, "request", { useCase })).toEqual([
       { name: "request", labels: remoteLabels },

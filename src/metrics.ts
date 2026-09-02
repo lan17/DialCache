@@ -71,8 +71,16 @@ export interface CacheMetricLabels {
   readonly layer: MetricLayer;
 }
 
-/** Bounded causes for cache misses. */
-export type CacheMissReason = "value_absent" | "watermark_fenced" | "unclassified";
+/**
+ * Bounded causes for cache misses. `value_absent`: the layer had no
+ * retrievable value. `expired`: a complete, valid frame was present but its
+ * logical age reached the effective remote TTL, including stale-on-error
+ * retained candidates. `watermark_fenced`: a tracked frame was rejected by an
+ * invalidation watermark. `unclassified`: a real miss with no decisive cause
+ * (legacy `null`, malformed frames or metadata, invalid or future timestamps,
+ * deserialization failures).
+ */
+export type CacheMissReason = "value_absent" | "expired" | "watermark_fenced" | "unclassified";
 
 export interface MissMetricLabels extends CacheMetricLabels {
   readonly reason: CacheMissReason;

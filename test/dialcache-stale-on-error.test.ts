@@ -218,9 +218,10 @@ describe("DialCache stale-on-error recovery", () => {
     const useCase = `StaleRecoveryInitialBoundary${boundary.replaceAll(/[^A-Za-z0-9]/g, "")}`;
     const retained = { id: "123", version: 1 };
     const redis = new RecordingRedis();
+    const { metrics } = recordingMetrics();
     const redisCache = new RedisCache({
       redis: { client: redis, readTimeoutMs: 1_000 },
-      metrics: null,
+      metrics,
     });
     const key = new DialCacheKey({ keyType: "user_id", id: "123", useCase });
     redis.setRaw(
@@ -238,12 +239,24 @@ describe("DialCache stale-on-error recovery", () => {
     });
 
     expect(result.status).toBe(expectedStatus);
+    const expiredMiss = {
+      cacheNamespace: "urn",
+      useCase,
+      keyType: "user_id",
+      layer: CacheLayer.REMOTE,
+      reason: "expired",
+    };
     if (result.status === "hit") {
       expect(result.value).toEqual(retained);
+      expect(metrics.miss).not.toHaveBeenCalled();
     } else if (result.status === "retained") {
       expect(result.frame.createdAtMs).toBe(Date.now() - ageMs);
+      expect(metrics.miss).toHaveBeenCalledOnce();
+      expect(metrics.miss).toHaveBeenCalledWith(expiredMiss);
     } else {
       expect(result.reason).toBe("cache_miss");
+      expect(metrics.miss).toHaveBeenCalledOnce();
+      expect(metrics.miss).toHaveBeenCalledWith(expiredMiss);
     }
     expectNativeReadCount(redis, 1);
     expect(redis.ttlMs(redisValueKey(useCase))).toBeGreaterThan(MAX_AGE_SEC * 1_000);
@@ -371,12 +384,13 @@ describe("DialCache stale-on-error recovery", () => {
 
       await expect(dialcache.enable(async () => await getUser())).resolves.toBe(sourceValue);
 
+      expect(metrics.miss).toHaveBeenCalledOnce();
       expect(metrics.miss).toHaveBeenCalledWith({
         cacheNamespace: "urn",
         useCase,
         keyType: "user_id",
         layer: CacheLayer.REMOTE,
-        reason: "unclassified",
+        reason: "expired",
       });
       expect(serializer.load).not.toHaveBeenCalled();
       expect(serializer.dump).toHaveBeenCalledOnce();

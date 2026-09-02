@@ -94,6 +94,7 @@ const DISABLED_REASONS: Readonly<Record<DisabledReason, true>> = {
 const disabledReasons = Object.keys(DISABLED_REASONS) as DisabledReason[];
 const MISS_REASONS: Readonly<Record<CacheMissReason, true>> = {
   value_absent: true,
+  expired: true,
   watermark_fenced: true,
   unclassified: true,
 };

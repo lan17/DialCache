@@ -441,6 +441,53 @@ describe("DialCache Redis shadow validation", () => {
     }
   });
 
+  it("records an expired remote_shadow miss and refills when the C0 frame reaches the logical TTL", async () => {
+    const nowMs = 1_700_000_000_000;
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(nowMs);
+    try {
+      const redis = new FakeRedis();
+      const write = vi.spyOn(redis, "write");
+      const metrics = new RecordingMetrics();
+      const miss = vi.spyOn(metrics, "miss");
+      const useCase = "ShadowExpiredFrameRefill";
+      seedRedis(redis, {
+        id: "123",
+        useCase,
+        payload: JSON.stringify({ source: "redis" }),
+        createdAtMs: nowMs - 60_000,
+      });
+      const dialcache = createShadowCache(redis, metrics);
+      const getUser = dialcache.cached(async () => ({ source: "fallback" }), {
+        keyType: "user_id",
+        useCase,
+        cacheKey: () => "123",
+        trackForInvalidation: true,
+        defaultConfig: new DialCacheKeyConfig({
+          ttlSec: { [CacheLayer.REMOTE]: 60 },
+          ramp: { [CacheLayer.REMOTE]: 0 },
+          shadow: { ramp: 100 },
+        }),
+      });
+
+      await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ source: "fallback" });
+      await waitForShadowEvents(metrics, 1);
+
+      expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["filled"]);
+      expect(miss).toHaveBeenCalledOnce();
+      expect(miss).toHaveBeenCalledWith({
+        cacheNamespace: "urn",
+        useCase,
+        keyType: "user_id",
+        layer: "remote_shadow",
+        reason: "expired",
+      });
+      expect(write).toHaveBeenCalledOnce();
+      expect(write.mock.calls[0]?.[0]).not.toHaveProperty("createdAtMs");
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
   it("rejects a non-finite untracked timestamp before shadow validation", async () => {
     const redis = new FakeRedis();
     const metrics = new RecordingMetrics();
