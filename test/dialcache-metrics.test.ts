@@ -339,7 +339,8 @@ describe("DialCache observability metrics", () => {
   it("classifies a legacy custom Redis null miss as unclassified", async () => {
     const metrics = new RecordingMetrics();
     const redis: DialCacheRedisClient = {
-      read: vi.fn(async () => null),
+      // `null` is no longer a legal result; it must fall through the trust boundary as unclassified.
+      read: vi.fn(async () => null as unknown as RedisReadResult),
       write: vi.fn(async () => undefined),
       invalidate: vi.fn(async () => undefined),
     };
@@ -397,7 +398,7 @@ describe("DialCache observability metrics", () => {
   it("passes a custom adapter's expired reason through unchanged", async () => {
     const metrics = new RecordingMetrics();
     const redis: DialCacheRedisClient = {
-      read: vi.fn(async () => ({ reason: "expired" as const })),
+      read: vi.fn(async (): Promise<RedisReadResult> => ({ kind: "miss", reason: "expired" })),
       write: vi.fn(async () => undefined),
       invalidate: vi.fn(async () => undefined),
     };
@@ -426,51 +427,82 @@ describe("DialCache observability metrics", () => {
     expect(redis.write).toHaveBeenCalledOnce();
   });
 
-  it("normalizes untrusted custom miss metadata to unclassified", async () => {
+  it("normalizes untrusted custom miss metadata to an unclassified, unfenced miss", async () => {
     const cases: ReadonlyArray<{
       readonly useCase: string;
       readonly trackForInvalidation: boolean;
       readonly result: RedisReadResult;
     }> = [
       {
+        // `watermark_fenced` claimed without any fence.
         useCase: "UntrackedCustomFenceReason",
         trackForInvalidation: false,
-        result: { reason: "watermark_fenced" },
+        result: { kind: "miss", reason: "watermark_fenced" },
       },
       {
+        // A fence on an untracked key is dropped, which demotes the claim.
         useCase: "UntrackedCustomWatermarkMiss",
         trackForInvalidation: false,
         result: {
-          kind: "watermark_miss",
+          kind: "miss",
           reason: "watermark_fenced",
           observedWatermarkMs: 1_700_000_000_000,
         },
       },
       {
+        // A reason outside the bounded set.
         useCase: "UnboundedCustomReason",
         trackForInvalidation: false,
-        result: { reason: "invented" } as unknown as RedisReadResult,
+        result: { kind: "miss", reason: "invented" } as unknown as RedisReadResult,
       },
       {
+        // A miss with no reason at all.
+        useCase: "MissingCustomReason",
+        trackForInvalidation: true,
+        result: { kind: "miss" } as unknown as RedisReadResult,
+      },
+      {
+        // A fence that is not a nonnegative safe integer.
         useCase: "InvalidTrackedCustomFenceReason",
         trackForInvalidation: true,
         result: {
-          kind: "watermark_miss",
+          kind: "miss",
           reason: "watermark_fenced",
           observedWatermarkMs: Number.NaN,
         },
+      },
+      {
+        // A reason without the `kind: "miss"` discriminator is not a miss shape.
+        useCase: "KindlessCustomReason",
+        trackForInvalidation: true,
+        result: { reason: "value_absent" } as unknown as RedisReadResult,
+      },
+      {
+        // The pre-classification watermark miss shape is unrecognized: its fence must not survive.
+        useCase: "LegacyWatermarkMissShape",
+        trackForInvalidation: true,
+        result: {
+          kind: "watermark_miss",
+          observedWatermarkMs: Date.now() + 60_000,
+        } as unknown as RedisReadResult,
       },
     ];
     let readIndex = 0;
     const metrics = new RecordingMetrics();
     const redis: DialCacheRedisClient = {
-      read: vi.fn(async () => cases[readIndex++]?.result ?? null),
+      read: vi.fn(async () => {
+        const scripted = cases[readIndex++];
+        if (scripted === undefined) {
+          throw new Error("Unexpected Redis read");
+        }
+        return scripted.result;
+      }),
       write: vi.fn(async () => undefined),
       invalidate: vi.fn(async () => undefined),
     };
     const dialcache = new DialCache({ metrics, redis: { client: redis, readTimeoutMs: 1_000 } });
 
-    for (const { useCase, trackForInvalidation } of cases) {
+    for (const [index, { useCase, trackForInvalidation }] of cases.entries()) {
       const getUser = dialcache.cached(async () => "fallback", {
         keyType: "user_id",
         useCase,
@@ -480,29 +512,28 @@ describe("DialCache observability metrics", () => {
       });
       await expect(dialcache.enable(async () => await getUser())).resolves.toBe("fallback");
       expect(
-        events(metrics, "miss", { useCase, layer: CacheLayer.REMOTE, reason: "unclassified" }),
-      ).toHaveLength(1);
-      expect(
-        events(metrics, "miss", { useCase, layer: CacheLayer.REMOTE, reason: "watermark_fenced" }),
-      ).toHaveLength(0);
+        events(metrics, "miss", { useCase, layer: CacheLayer.REMOTE }).map(({ labels }) => labels.reason),
+      ).toEqual(["unclassified"]);
       expect(
         events(metrics, "error", { useCase, layer: CacheLayer.REMOTE, error: "cache_read", inFallback: false }),
       ).toHaveLength(0);
+      // No fence survives, so every case refills normally.
+      expect(redis.write).toHaveBeenCalledTimes(index + 1);
     }
   });
 
   it.each(["value_absent", "watermark_fenced"] as const)(
-    "recognizes a custom %s miss with explicitly undefined hit fields",
+    "classifies a custom %s miss that carries extra unknown properties",
     async (reason) => {
       const trackForInvalidation = reason === "watermark_fenced";
       const result = {
+        kind: "miss",
         reason,
-        ...(trackForInvalidation ? {
-          kind: "watermark_miss",
-          observedWatermarkMs: Date.now() + 60_000,
-        } : {}),
-        payload: undefined,
-        createdAtMs: undefined,
+        ...(trackForInvalidation ? { observedWatermarkMs: Date.now() + 60_000 } : {}),
+        // Stray frame fields and adapter extras must not turn a `kind: "miss"` result into a hit.
+        payload: "stale",
+        createdAtMs: 1,
+        adapterHint: "ignored",
       } as unknown as RedisReadResult;
       const metrics = new RecordingMetrics();
       const redis: DialCacheRedisClient = {
@@ -510,7 +541,7 @@ describe("DialCache observability metrics", () => {
         write: vi.fn(async () => undefined),
         invalidate: vi.fn(async () => undefined),
       };
-      const useCase = "ExplicitlyUndefinedMissFields";
+      const useCase = "ExtraPropertiesMiss";
       const dialcache = new DialCache({ metrics, redis: { client: redis, readTimeoutMs: 1_000 } });
       const getUser = dialcache.cached(async () => "fallback", {
         keyType: "user_id",
@@ -522,7 +553,9 @@ describe("DialCache observability metrics", () => {
 
       await expect(dialcache.enable(async () => await getUser())).resolves.toBe("fallback");
 
-      expect(events(metrics, "miss", { useCase, layer: CacheLayer.REMOTE, reason })).toHaveLength(1);
+      expect(
+        events(metrics, "miss", { useCase, layer: CacheLayer.REMOTE }).map(({ labels }) => labels.reason),
+      ).toEqual([reason]);
       expect(events(metrics, "error", { useCase })).toHaveLength(0);
       expect(redis.write).toHaveBeenCalledTimes(trackForInvalidation ? 0 : 1);
     },

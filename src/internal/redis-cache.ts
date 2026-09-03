@@ -4,6 +4,7 @@ import { CacheLayer } from "../config.js";
 import { RedisReadTimeoutError } from "../errors.js";
 import { invalidationPrefix, redisClusterHashTag, type DialCacheKey } from "../key.js";
 import {
+  CACHE_MISS_REASONS,
   labelsFor,
   REMOTE_SHADOW_CACHE_LAYER,
   type CacheMissReason,
@@ -14,13 +15,11 @@ import {
 } from "../metrics.js";
 import {
   isRedisReadMiss,
-  isRedisWatermarkMiss,
+  redisReadMiss,
   type DecodedRedisFrame,
   type DialCacheRedisClient,
   type RedisCachePayload,
-  type RedisReadMiss,
   type RedisReadResult,
-  type RedisWatermarkMiss,
 } from "../redis-client.js";
 import { JsonSerializer, type Serializer } from "../serializer.js";
 import type { RedisCacheGetResult } from "./cache-result.js";
@@ -33,7 +32,7 @@ import {
 } from "./compression.js";
 import { assertValidDeadlineMs, withMonotonicDeadline } from "./deadline.js";
 import { cacheTtlSecToMs, MAX_TRACKED_REDIS_VALUE_TTL_MS } from "./duration.js";
-import { assertValidRedisTimestampMs } from "./redis-payload.js";
+import { assertValidRedisTimestampMs, isValidRedisTimestampMs } from "./redis-payload.js";
 import type { ResolvedRemoteLayerConfig } from "./runtime-config.js";
 
 export interface RedisConfig {
@@ -148,14 +147,15 @@ export class RedisCache {
         throw error;
       }
       if (isRedisReadMiss(result)) {
-        this.recordMiss(key, metricLayer, missReason(result));
-        return isRedisWatermarkMiss(result)
-          ? { status: "miss", config: layerConfig, reason: "cache_miss", watermarkMiss: result }
-          : { status: "miss", config: layerConfig, reason: "cache_miss" };
-      }
-      if (result === null) {
-        this.recordMiss(key, metricLayer, "unclassified");
-        return { status: "miss", config: layerConfig, reason: "cache_miss" };
+        this.recordMiss(key, metricLayer, result.reason);
+        return result.observedWatermarkMs === undefined
+          ? { status: "miss", config: layerConfig, reason: "cache_miss" }
+          : {
+              status: "miss",
+              config: layerConfig,
+              reason: "cache_miss",
+              observedWatermarkMs: result.observedWatermarkMs,
+            };
       }
 
       // Classify the raw value/watermark snapshot from one application-clock
@@ -263,7 +263,7 @@ export class RedisCache {
     key: DialCacheKey,
     value: T,
     config: ResolvedRemoteLayerConfig,
-    watermarkMiss?: RedisWatermarkMiss,
+    observedWatermarkMs?: number,
   ): Promise<void> {
     await this.putWithLayer(
       key,
@@ -271,7 +271,7 @@ export class RedisCache {
       retentionTtlSecFor(config),
       CacheLayer.REMOTE,
       undefined,
-      watermarkMiss,
+      observedWatermarkMs,
     );
   }
 
@@ -281,7 +281,7 @@ export class RedisCache {
     value: T,
     config: ResolvedRemoteLayerConfig,
     shouldWrite: () => boolean,
-    watermarkMiss?: RedisWatermarkMiss,
+    observedWatermarkMs?: number,
   ): Promise<boolean> {
     return await this.putWithLayer(
       key,
@@ -289,7 +289,7 @@ export class RedisCache {
       retentionTtlSecFor(config),
       REMOTE_SHADOW_CACHE_LAYER,
       shouldWrite,
-      watermarkMiss,
+      observedWatermarkMs,
     );
   }
 
@@ -299,15 +299,13 @@ export class RedisCache {
     ttlSec: number,
     metricLayer: MetricLayer,
     shouldWrite?: () => boolean,
-    watermarkMiss?: RedisWatermarkMiss,
+    fenceMs?: number,
   ): Promise<boolean> {
     const configuredTtlMs = cacheTtlSecToMs(ttlSec);
     const cacheTtlMs = key.trackForInvalidation
       ? Math.min(configuredTtlMs, MAX_TRACKED_REDIS_VALUE_TTL_MS)
       : configuredTtlMs;
-    const observedWatermarkMs = key.trackForInvalidation
-      ? watermarkMiss?.observedWatermarkMs
-      : undefined;
+    const observedWatermarkMs = key.trackForInvalidation ? fenceMs : undefined;
     if (
       observedWatermarkMs !== undefined
       && this.sampleWriteTimestamp(key, metricLayer) <= observedWatermarkMs
@@ -466,9 +464,7 @@ export class RedisCache {
     const result = read.result.then(
       (result) => {
         if (isRedisReadMiss(result)) {
-          this.recordMiss(key, metricLayer, missReason(result));
-        } else if (result === null) {
-          this.recordMiss(key, metricLayer, "unclassified");
+          this.recordMiss(key, metricLayer, result.reason);
         }
         return result;
       },
@@ -493,38 +489,46 @@ export class RedisCache {
     metricLayer: MetricLayer,
     futureFramePolicy: FutureFramePolicy,
   ): RedisReadResult {
-    if (result === null || isRedisReadMiss(result)) {
+    if (isRedisReadMiss(result)) {
       return result;
     }
     // Core-side rejections never carry a refill fence. Logical age is a
     // decisive expiry; future and invalid timestamps have no attributable cause.
     const age = this.frameAge(key, result, metricLayer);
     if (age.status === "future") {
-      return futureFramePolicy === "reject" ? { reason: "unclassified" } : result;
+      return futureFramePolicy === "reject" ? redisReadMiss("unclassified") : result;
     }
     if (age.status === "invalid") {
-      return { reason: "unclassified" };
+      return redisReadMiss("unclassified");
     }
-    return maxAgeMs === null || age.ageMs < maxAgeMs ? result : { reason: "expired" };
+    return maxAgeMs === null || age.ageMs < maxAgeMs ? result : redisReadMiss("expired");
   }
 
-  private validateReadResult(key: DialCacheKey, result: RedisReadResult): RedisReadResult {
+  /**
+   * Single trust boundary for adapter results. Any unrecognized shape or reason
+   * becomes an `unclassified` miss; a fence survives only as a valid timestamp
+   * on a tracked key; a `watermark_fenced` claim without a fence is demoted.
+   * Frame-shaped objects pass through and are validated by `frameAge` and the
+   * serializer.
+   */
+  private validateReadResult(key: DialCacheKey, result: unknown): RedisReadResult {
     try {
-      if (!isRedisReadMiss(result)) {
-        return result;
+      if (isRedisReadMiss(result)) {
+        const reason = isCacheMissReason(result.reason) ? result.reason : "unclassified";
+        const observedWatermarkMs = key.trackForInvalidation && isValidRedisTimestampMs(result.observedWatermarkMs)
+          ? result.observedWatermarkMs
+          : undefined;
+        return redisReadMiss(
+          reason === "watermark_fenced" && observedWatermarkMs === undefined ? "unclassified" : reason,
+          observedWatermarkMs,
+        );
       }
-      const observedWatermarkMs = key.trackForInvalidation && isRedisWatermarkMiss(result)
-        ? validObservedWatermarkMs(result.observedWatermarkMs)
-        : undefined;
-      const reason = missReason(result);
-      return classifiedRedisReadMiss(
-        reason === "watermark_fenced" && observedWatermarkMs === undefined
-          ? "unclassified"
-          : reason,
-        observedWatermarkMs,
-      );
+      if (typeof result === "object" && result !== null) {
+        return result as DecodedRedisFrame;
+      }
+      return redisReadMiss("unclassified");
     } catch {
-      return null;
+      return redisReadMiss("unclassified");
     }
   }
 
@@ -646,29 +650,6 @@ function elapsedSeconds(startMs: number): number {
   return Math.max((performance.now() - startMs) / 1000, 0);
 }
 
-function missReason(result: RedisReadMiss | RedisWatermarkMiss): CacheMissReason {
-  return isCacheMissReason(result.reason) ? result.reason : "unclassified";
-}
-
-function classifiedRedisReadMiss(
-  reason: CacheMissReason,
-  observedWatermarkMs: unknown,
-): RedisReadMiss | RedisWatermarkMiss {
-  const observed = validObservedWatermarkMs(observedWatermarkMs);
-  return observed === undefined
-    ? { reason }
-    : { kind: "watermark_miss", reason, observedWatermarkMs: observed };
-}
-
-function validObservedWatermarkMs(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
-    ? value
-    : undefined;
-}
-
 function isCacheMissReason(value: unknown): value is CacheMissReason {
-  return value === "value_absent"
-    || value === "expired"
-    || value === "watermark_fenced"
-    || value === "unclassified";
+  return typeof value === "string" && (CACHE_MISS_REASONS as readonly string[]).includes(value);
 }

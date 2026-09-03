@@ -23,7 +23,6 @@ import {
   type RedisReadResult,
   type RedisReadRequest,
   type RedisWriteRequest,
-  type RedisWatermarkMiss,
   type SerializationMetricLabels,
   type Serializer,
   type ShadowValidationMetricLabels,
@@ -55,7 +54,7 @@ function deferred<T>(): Deferred<T> {
   return { promise, resolve, reject };
 }
 
-type ScriptedReadResult = RedisCachePayload | RedisReadMiss | RedisWatermarkMiss | null;
+type ScriptedReadResult = RedisCachePayload | RedisReadMiss | null;
 type ReadStep = () => ScriptedReadResult | Promise<ScriptedReadResult>;
 
 const MAX_TRACKED_REDIS_VALUE_TTL_MS = 60 * 60 * 1_000;
@@ -77,14 +76,18 @@ class ScriptedRedis implements DialCacheRedisClient {
       throw new Error("Unexpected Redis read");
     }
     const result = await step();
-    if (result === null || isScriptedReadMiss(result)) {
+    if (result === null) {
+      // Legacy `null` is not a legal result; the core must treat it as an unfenced unclassified miss.
+      return result as unknown as RedisReadResult;
+    }
+    if (isScriptedReadMiss(result)) {
       return result;
     }
     return { payload: result, createdAtMs: this.frameCreatedAtMs };
   }
 }
 
-function isScriptedReadMiss(result: ScriptedReadResult): result is RedisReadMiss | RedisWatermarkMiss {
+function isScriptedReadMiss(result: ScriptedReadResult): result is RedisReadMiss {
   return typeof result === "object"
     && !Buffer.isBuffer(result)
     && result !== null;
@@ -616,7 +619,11 @@ describe("DialCache Redis shadow confirmation", () => {
     const frameCreatedAtMs = Date.now();
     const redis = new ScriptedRedis([
       () => payload,
-      () => ({ kind: "watermark_miss", observedWatermarkMs: frameCreatedAtMs + 1 }),
+      (): RedisReadMiss => ({
+        kind: "miss",
+        reason: "watermark_fenced",
+        observedWatermarkMs: frameCreatedAtMs + 1,
+      }),
     ]);
     redis.frameCreatedAtMs = frameCreatedAtMs;
     const metrics = new RecordingMetrics();
@@ -1412,7 +1419,9 @@ describe("DialCache Redis shadow confirmation", () => {
     const nowMs = 1_700_000_000_000;
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(nowMs);
     try {
-      const redis = new ScriptedRedis([() => ({ kind: "watermark_miss", observedWatermarkMs: nowMs })]);
+      const redis = new ScriptedRedis([
+        (): RedisReadMiss => ({ kind: "miss", reason: "value_absent", observedWatermarkMs: nowMs }),
+      ]);
       const metrics = new RecordingMetrics();
       const serializer: Serializer<{ readonly id: string }> = {
         dump: vi.fn(() => {
@@ -1443,7 +1452,7 @@ describe("DialCache Redis shadow confirmation", () => {
       expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
         name === "miss"
         && labels.layer === REMOTE_SHADOW_CACHE_LAYER
-        && labels.reason === "unclassified"
+        && labels.reason === "value_absent"
       )).toHaveLength(1);
       expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
         name === "get" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
@@ -1461,8 +1470,8 @@ describe("DialCache Redis shadow confirmation", () => {
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(nowMs);
     try {
       const redis = new ScriptedRedis([
-        (): RedisWatermarkMiss => ({
-          kind: "watermark_miss",
+        (): RedisReadMiss => ({
+          kind: "miss",
           reason: "value_absent",
           observedWatermarkMs: nowMs,
         }),
@@ -1493,8 +1502,8 @@ describe("DialCache Redis shadow confirmation", () => {
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(nowMs);
     try {
       const redis = new ScriptedRedis([
-        (): RedisWatermarkMiss => ({
-          kind: "watermark_miss",
+        (): RedisReadMiss => ({
+          kind: "miss",
           reason: "watermark_fenced",
           observedWatermarkMs: nowMs - 1,
         }),

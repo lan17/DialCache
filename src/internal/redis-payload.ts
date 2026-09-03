@@ -1,12 +1,10 @@
 import {
   DialCacheRedisPayloadEncodingError,
   DialCacheRedisPayloadError,
-  isRedisReadMiss,
+  redisReadMiss,
   type DecodedRedisFrame,
   type RedisCachePayload,
-  type RedisReadMiss,
   type RedisReadResult,
-  type RedisWatermarkMiss,
 } from "../redis-client.js";
 
 const REDIS_FRAME_VERSION = 1;
@@ -86,8 +84,9 @@ export function assertValidRedisTimestampMs(timestampMs: number): void {
   }
 }
 
-function isValidRedisTimestampMs(timestampMs: number): boolean {
-  return Number.isSafeInteger(timestampMs) && timestampMs >= 0;
+/** Nonnegative safe-integer epoch milliseconds: the envelope for frame timestamps and watermarks. */
+export function isValidRedisTimestampMs(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
 /**
@@ -104,15 +103,6 @@ export function decodeRedisReadResult(raw: unknown): RedisReadResult {
     return redisReadMiss("unclassified");
   }
   return decodedRedisFrame(frame);
-}
-
-/**
- * Backward-compatible untracked-frame decoder. It collapses classified misses
- * to the established `DecodedRedisFrame | null` surface.
- */
-export function decodeRedisFrame(raw: unknown): DecodedRedisFrame | null {
-  const result = decodeRedisReadResult(raw);
-  return isRedisReadMiss(result) ? null : result;
 }
 
 /**
@@ -158,20 +148,6 @@ export function decodeTrackedRedisReadResult(
   return decodeTrackedFrame(frame, watermark);
 }
 
-/**
- * Backward-compatible tracked-frame decoder. It preserves the established
- * `DecodedRedisFrame | null` surface by collapsing typed watermark misses.
- * Use `decodeTrackedRedisReadResult` to opt a custom adapter into conditional
- * fenced-refill suppression.
- */
-export function decodeTrackedRedisFrame(
-  raw: unknown,
-  rawWatermark: unknown,
-): DecodedRedisFrame | null {
-  const result = decodeTrackedRedisReadResult(raw, rawWatermark);
-  return isRedisReadMiss(result) ? null : result;
-}
-
 function decodeTrackedFrame(
   frame: Buffer,
   observedWatermarkMs?: number,
@@ -193,15 +169,6 @@ function decodedRedisFrame(frame: Buffer): DecodedRedisFrame {
     payload: decodeRedisPayload(frame.subarray(REDIS_FRAME_HEADER_BYTES)),
     createdAtMs: readFrameCreatedAtMs(frame),
   };
-}
-
-function redisReadMiss(
-  reason: RedisReadMiss["reason"],
-  observedWatermarkMs?: number,
-): RedisReadMiss | RedisWatermarkMiss {
-  return observedWatermarkMs === undefined
-    ? { reason }
-    : { kind: "watermark_miss", reason, observedWatermarkMs };
 }
 
 function readFrameCreatedAtMs(frame: Buffer): number {

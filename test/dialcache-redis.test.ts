@@ -6,9 +6,11 @@ import {
   DialCacheKey,
   DialCacheKeyConfig,
   DialCacheRedisPayloadEncodingError,
+  isRedisReadMiss,
   type DialCacheMetricsAdapter,
   type DialCacheRedisClient,
   type RedisConfig,
+  type RedisReadResult,
   type RedisWriteRequest,
   type Serializer,
 } from "../src/index.js";
@@ -287,7 +289,7 @@ describe("DialCache Redis TTL layer", () => {
     });
   });
 
-  it("preserves custom frames that collide with miss metadata", async () => {
+  it("preserves custom frames that carry miss metadata without the miss discriminator", async () => {
     const nowMs = 1_700_000_000_000;
     vi.spyOn(Date, "now").mockReturnValue(nowMs);
     const cachedValue = { source: "redis" };
@@ -295,7 +297,7 @@ describe("DialCache Redis TTL layer", () => {
       read: vi.fn(async () => ({
         payload: JSON.stringify(cachedValue),
         createdAtMs: nowMs,
-        kind: "watermark_miss",
+        reason: "value_absent",
         observedWatermarkMs: nowMs - 1,
       })),
       write: vi.fn(async () => undefined),
@@ -346,7 +348,8 @@ describe("DialCache Redis TTL layer", () => {
     const write = vi.fn(async (_request: RedisWriteRequest) => undefined);
     const redis: DialCacheRedisClient = {
       read: vi.fn(async () => ({
-        kind: "watermark_miss" as const,
+        kind: "miss" as const,
+        reason: "value_absent" as const,
         observedWatermarkMs,
       })),
       write,
@@ -359,7 +362,8 @@ describe("DialCache Redis TTL layer", () => {
       }),
     };
     const fallback = vi.fn(async () => ({ source: "fallback" }));
-    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });
+    const metrics = metricsWithFutureTimestampObserver(vi.fn());
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 }, metrics });
     const getUser = dialcache.cached(fallback, {
       keyType: "user_id",
       useCase: "RedisInvalidWatermarkMiss",
@@ -378,6 +382,65 @@ describe("DialCache Redis TTL layer", () => {
     expect(fallback).toHaveBeenCalledOnce();
     expect(write).toHaveBeenCalledOnce();
     expect(write.mock.calls[0]?.[0]).not.toHaveProperty("createdAtMs");
+    expect(metrics.miss).toHaveBeenCalledOnce();
+    expect(metrics.miss).toHaveBeenCalledWith({
+      cacheNamespace: "urn",
+      useCase: "RedisInvalidWatermarkMiss",
+      keyType: "user_id",
+      layer: CacheLayer.REMOTE,
+      reason: "value_absent",
+    });
+  });
+
+  it("treats the legacy watermark_miss shape as an unclassified miss with a normal refill", async () => {
+    const nowMs = 1_700_000_000_000;
+    vi.spyOn(Date, "now").mockReturnValue(nowMs);
+    const write = vi.fn(async (_request: RedisWriteRequest) => undefined);
+    // Pre-classification adapters returned this reason-less shape. It is not a
+    // recognized miss any more, so the fence it carries must not be honored:
+    // the watermark equals the refill timestamp and would otherwise skip it.
+    const legacyMiss = { kind: "watermark_miss", observedWatermarkMs: nowMs } as unknown as RedisReadResult;
+    const redis: DialCacheRedisClient = {
+      read: vi.fn(async () => legacyMiss),
+      write,
+      invalidate: vi.fn(async () => undefined),
+    };
+    const serializer: Serializer<{ readonly source: string }> = {
+      dump: vi.fn((value) => JSON.stringify(value)),
+      load: vi.fn(() => {
+        throw new Error("unrecognized read results must not be deserialized");
+      }),
+    };
+    const fallback = vi.fn(async () => ({ source: "fallback" }));
+    const metrics = metricsWithFutureTimestampObserver(vi.fn());
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 }, metrics });
+    const getUser = dialcache.cached(fallback, {
+      keyType: "user_id",
+      useCase: "RedisLegacyWatermarkMiss",
+      cacheKey: () => "123",
+      trackForInvalidation: true,
+      defaultConfig: new DialCacheKeyConfig({
+        ttlSec: { [CacheLayer.REMOTE]: 60 },
+        ramp: { [CacheLayer.REMOTE]: 100 },
+      }),
+      serializer,
+    });
+
+    await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ source: "fallback" });
+
+    expect(serializer.load).not.toHaveBeenCalled();
+    expect(fallback).toHaveBeenCalledOnce();
+    expect(write).toHaveBeenCalledOnce();
+    expect(write.mock.calls[0]?.[0]).not.toHaveProperty("createdAtMs");
+    expect(metrics.observeFutureTimestampOffset).not.toHaveBeenCalled();
+    expect(metrics.miss).toHaveBeenCalledOnce();
+    expect(metrics.miss).toHaveBeenCalledWith({
+      cacheNamespace: "urn",
+      useCase: "RedisLegacyWatermarkMiss",
+      keyType: "user_id",
+      layer: CacheLayer.REMOTE,
+      reason: "unclassified",
+    });
   });
 
   it.each([
@@ -668,12 +731,16 @@ describe("DialCache Redis TTL layer", () => {
     await redis.write({ valueKey, cacheTtlMs: 60_000, value: payload });
 
     const firstRead = await redis.read({ valueKey });
-    if (!Buffer.isBuffer(firstRead?.payload)) {
+    if (isRedisReadMiss(firstRead) || !Buffer.isBuffer(firstRead.payload)) {
       throw new Error("Expected a binary Redis payload");
     }
     firstRead.payload[0] = 0xff;
 
-    expect((await redis.read({ valueKey }))?.payload).toEqual(payload);
+    const secondRead = await redis.read({ valueKey });
+    if (isRedisReadMiss(secondRead)) {
+      throw new Error("Expected a Redis hit");
+    }
+    expect(secondRead.payload).toEqual(payload);
   });
 
   it("fails open when Redis serializer dump fails", async () => {

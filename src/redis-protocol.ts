@@ -16,17 +16,15 @@
 export { ceilSupportedCacheTtlMs } from "./internal/duration.js";
 export { INVALIDATE_CACHE_SCRIPT } from "./internal/redis-scripts.js";
 export {
-  decodeRedisFrame,
   decodeRedisReadResult,
-  decodeTrackedRedisFrame,
   decodeTrackedRedisReadResult,
   encodeRedisFrame,
 } from "./internal/redis-payload.js";
+export { isRedisReadMiss } from "./redis-client.js";
 export type {
   DecodedRedisFrame,
   RedisReadMiss,
   RedisReadResult,
-  RedisWatermarkMiss,
 } from "./redis-client.js";
 export {
   validateRedisScriptInvalidationReply,

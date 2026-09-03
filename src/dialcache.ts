@@ -26,11 +26,9 @@ import {
 } from "./metrics.js";
 import {
   isRedisReadMiss,
-  isRedisWatermarkMiss,
   type DecodedRedisFrame,
   type RedisCachePayload,
   type RedisReadResult,
-  type RedisWatermarkMiss,
 } from "./redis-client.js";
 import type { Serializer } from "./serializer.js";
 import type { CacheGetResult, RemoteCacheGetResult } from "./internal/cache-result.js";
@@ -877,7 +875,7 @@ export class DialCache {
           key,
           value,
           remoteWriteConfig,
-          remote.status === "miss" ? remote.watermarkMiss : undefined,
+          remote.status === "miss" ? remote.observedWatermarkMs : undefined,
         );
       } catch (error) {
         this.logger.warn("Error putting value in Redis cache", error);
@@ -1101,7 +1099,7 @@ export class DialCache {
           }
 
           let shadowFillConfig: ResolvedRemoteLayerConfig | null = null;
-          let shadowFillWatermarkMiss: RedisWatermarkMiss | undefined;
+          let shadowFillObservedWatermarkMs: number | undefined;
           if (start.kind === "redis") {
             let readResult: RedisReadResult;
             try {
@@ -1112,9 +1110,9 @@ export class DialCache {
             if (abandonIfExpired()) {
               return "timeout";
             }
-            if (isRedisReadMiss(readResult) || readResult === null) {
+            if (isRedisReadMiss(readResult)) {
               shadowFillConfig = start.remoteConfig;
-              shadowFillWatermarkMiss = isRedisWatermarkMiss(readResult) ? readResult : undefined;
+              shadowFillObservedWatermarkMs = readResult.observedWatermarkMs;
             } else {
               flight.cachedFrame = readResult;
             }
@@ -1153,7 +1151,7 @@ export class DialCache {
                 sourceValue,
                 shadowFillConfig,
                 () => !abandonIfExpired(),
-                shadowFillWatermarkMiss,
+                shadowFillObservedWatermarkMs,
               );
               // A late result remains the already-emitted whole-job timeout:
               // dispatch success does not retroactively change its outcome.

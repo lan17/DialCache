@@ -66,8 +66,8 @@ export type {
   RedisReadMiss,
   RedisReadRequest,
   RedisReadResult,
-  RedisWatermarkMiss,
   RedisWriteRequest,
 } from "./redis-client.js";
+export { isRedisReadMiss } from "./redis-client.js";
 export { JsonSerializer } from "./serializer.js";
 export type { Serializer } from "./serializer.js";

@@ -139,7 +139,7 @@ describe("node-redis adapter", () => {
       valueKey: "tracked:{id}:value",
       watermarkKey: "tracked:{id}:watermark",
     })).resolves.toEqual({
-      kind: "watermark_miss",
+      kind: "miss",
       reason: "value_absent",
       observedWatermarkMs: 1_234,
     });

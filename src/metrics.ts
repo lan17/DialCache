@@ -77,10 +77,11 @@ export interface CacheMetricLabels {
  * logical age reached the effective remote TTL, including stale-on-error
  * retained candidates. `watermark_fenced`: a tracked frame was rejected by an
  * invalidation watermark. `unclassified`: a real miss with no decisive cause
- * (legacy `null`, malformed frames or metadata, invalid or future timestamps,
+ * (unrecognized adapter results, malformed frames or metadata, invalid or future timestamps,
  * deserialization failures).
  */
-export type CacheMissReason = "value_absent" | "expired" | "watermark_fenced" | "unclassified";
+export const CACHE_MISS_REASONS = ["value_absent", "expired", "watermark_fenced", "unclassified"] as const;
+export type CacheMissReason = (typeof CACHE_MISS_REASONS)[number];
 
 export interface MissMetricLabels extends CacheMetricLabels {
   readonly reason: CacheMissReason;
