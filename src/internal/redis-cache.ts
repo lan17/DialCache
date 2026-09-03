@@ -4,7 +4,7 @@ import { CacheLayer } from "../config.js";
 import { RedisReadTimeoutError } from "../errors.js";
 import { invalidationPrefix, redisClusterHashTag, type DialCacheKey } from "../key.js";
 import {
-  CACHE_MISS_REASONS,
+  isCacheMissReason,
   labelsFor,
   REMOTE_SHADOW_CACHE_LAYER,
   type CacheMissReason,
@@ -537,7 +537,7 @@ export class RedisCache {
     frame: DecodedRedisFrame,
     metricLayer: MetricLayer,
   ): FrameAgeResult {
-    if (!Number.isSafeInteger(frame.createdAtMs) || frame.createdAtMs < 0) {
+    if (!isValidRedisTimestampMs(frame.createdAtMs)) {
       return { status: "invalid" };
     }
 
@@ -648,8 +648,4 @@ function payloadSize(payload: string | Buffer): number {
 
 function elapsedSeconds(startMs: number): number {
   return Math.max((performance.now() - startMs) / 1000, 0);
-}
-
-function isCacheMissReason(value: unknown): value is CacheMissReason {
-  return typeof value === "string" && (CACHE_MISS_REASONS as readonly string[]).includes(value);
 }

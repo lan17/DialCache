@@ -11,6 +11,7 @@ export type CacheGetResult<T> =
       readonly skipCacheWrite?: boolean;
     };
 
+/** Read disposition consumed by stale recovery; distinct from the metric's CacheMissReason. */
 export type RedisCacheMissReason = "cache_miss" | "deserialization_error";
 
 export type RedisCacheGetResult<T> =

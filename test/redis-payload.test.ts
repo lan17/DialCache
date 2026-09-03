@@ -9,6 +9,7 @@ import {
   DialCacheRedisPayloadEncodingError,
   DialCacheRedisPayloadError,
 } from "../src/redis-client.js";
+import { isValidRedisTimestampMs } from "../src/internal/redis-payload.js";
 
 function encodeFrame(
   payload: string | Buffer,
@@ -27,6 +28,15 @@ function encodeFrame(
 }
 
 describe("Redis frame decoding", () => {
+  it("shares one nonnegative safe-integer timestamp domain without coercing values", () => {
+    for (const timestamp of [0, 1, Number.MAX_SAFE_INTEGER]) {
+      expect(isValidRedisTimestampMs(timestamp)).toBe(true);
+    }
+    for (const value of [-1, 0.5, Number.NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, "0", 1n, null, undefined, {}]) {
+      expect(isValidRedisTimestampMs(value)).toBe(false);
+    }
+  });
+
   it("decodes UTF-8 and binary payloads without copying binary data", () => {
     expect(decodeRedisReadResult(encodeFrame("cached"))).toEqual({
       payload: "cached",
