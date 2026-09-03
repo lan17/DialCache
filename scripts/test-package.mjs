@@ -183,6 +183,7 @@ import {
   isRedisReadMiss as isRedisProtocolReadMiss,
   validateRedisScriptInvalidationReply,
   validateRedisSetReply,
+  type CacheMissReason as ProtocolCacheMissReason,
   type DecodedRedisFrame,
   type RedisReadMiss as RedisProtocolReadMiss,
   type RedisReadResult as RedisProtocolReadResult,
@@ -555,6 +556,8 @@ const missReasons: Readonly<Record<CacheMissReason, true>> = {
   watermark_fenced: true,
   unclassified: true,
 };
+const protocolMissReason: ProtocolCacheMissReason = missMetricLabels.reason;
+const rootMissReasonFromProtocol: CacheMissReason = protocolMissReason;
 // @ts-expect-error Miss reasons are a bounded public taxonomy.
 const unboundedMissReason: CacheMissReason = "evicted";
 // @ts-expect-error The reason is required only for the miss callback's labels.
@@ -773,6 +776,7 @@ void requestLocalCoalescingLabels;
 void cacheMetricLabels;
 void missMetricLabels;
 void missReasons;
+void rootMissReasonFromProtocol;
 void unboundedMissReason;
 void missingMissReason;
 void cacheMetricLabelsWithMissReason;

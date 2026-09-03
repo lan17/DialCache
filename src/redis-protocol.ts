@@ -14,6 +14,7 @@
  * never decompress or otherwise rewrite payload bytes.
  */
 export { ceilSupportedCacheTtlMs } from "./internal/duration.js";
+export type { CacheMissReason } from "./metrics.js";
 export { INVALIDATE_CACHE_SCRIPT } from "./internal/redis-scripts.js";
 export {
   decodeRedisReadResult,

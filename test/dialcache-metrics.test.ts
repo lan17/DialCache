@@ -19,7 +19,17 @@ import {
   type ShadowValidationMetricLabels,
   type StaleRecoveryMetricLabels,
 } from "../src/index.js";
+import { isCacheMissReason } from "../src/metrics.js";
 import { encodeFrame, FakeRedis } from "./fake-redis.js";
+
+it("accepts only the bounded miss reasons, not inherited keys or non-string values", () => {
+  for (const reason of ["value_absent", "expired", "watermark_fenced", "unclassified"]) {
+    expect(isCacheMissReason(reason)).toBe(true);
+  }
+  for (const value of ["constructor", "toString", "__proto__", "includes", "invented", "", 0, null, undefined, {}]) {
+    expect(isCacheMissReason(value)).toBe(false);
+  }
+});
 
 class RecordingMetrics implements DialCacheMetricsAdapter {
   readonly events: Array<{ readonly name: string; readonly labels: Record<string, unknown>; readonly value?: number }> = [];

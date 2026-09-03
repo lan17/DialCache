@@ -83,6 +83,11 @@ export interface CacheMetricLabels {
 export const CACHE_MISS_REASONS = ["value_absent", "expired", "watermark_fenced", "unclassified"] as const;
 export type CacheMissReason = (typeof CACHE_MISS_REASONS)[number];
 
+/** Package-private guard for reasons supplied by custom Redis adapters. */
+export function isCacheMissReason(value: unknown): value is CacheMissReason {
+  return typeof value === "string" && (CACHE_MISS_REASONS as readonly string[]).includes(value);
+}
+
 export interface MissMetricLabels extends CacheMetricLabels {
   readonly reason: CacheMissReason;
 }

@@ -420,7 +420,7 @@ Node-redis forces tracked cluster commands to the slot primary. GLIDE uses an ex
 
 Invalidation is the only remaining Lua operation. Both adapters dispatch it as `EVALSHA` by the script source's SHA1 and retry a rejected dispatch once by re-sending the source as `EVAL`. The script is idempotent: its watermark advances monotonically and its TTL only widens, so a duplicate execution after an ambiguous failure is harmless. Reply-domain violations are deterministic and are not retried. If the retry also fails, GLIDE attaches the original rejection as `cause` when possible; node-redis surfaces the retry rejection unmodified because disconnect failures may be shared across callers. A healed retry is indistinguishable from first-attempt success in DialCache metrics. Monitor server-side `INFO commandstats` for unexpected `EVAL` volume or rejected `EVALSHA` calls.
 
-Command-restricted Redis ACLs must allow native `GET`, `MGET`, and `SET`, plus `EVALSHA` and `EVAL` for invalidation recovery. If script-invoked commands are checked separately, the invalidation script needs `GET`, `SET`, and `PTTL`. Redis `TIME`, `MULTI`, `EXEC`, `WATCH`, `UNLINK`, and `SCRIPT LOAD` are not used by DialCache. Conditional refill suppression reuses the existing tracked `MGET` result and adds no command or round trip. The integration matrix covers Redis 6.2 and Valkey 8.
+Command-restricted Redis ACLs must allow native `GET`, `MGET`, and `SET`, plus `EVALSHA` and `EVAL` for invalidation recovery. If script-invoked commands are checked separately, the invalidation script needs `GET`, `SET`, and `PTTL`. Redis `TIME`, `MULTI`, `EXEC`, `WATCH`, `UNLINK`, and `SCRIPT LOAD` are not used by DialCache. The integration matrix covers Redis 6.2 and Valkey 8.
 
 #### Stale on source error
 
