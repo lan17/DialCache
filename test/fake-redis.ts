@@ -4,12 +4,15 @@ import type {
   RedisReadResult,
   RedisReadRequest,
   RedisWriteRequest,
-  RedisWatermarkMiss,
 } from "../src/index.js";
 import { MAX_TRACKED_REDIS_VALUE_TTL_MS } from "../src/internal/duration.js";
 import { MIN_WATERMARK_TTL_MS } from "../src/internal/redis-scripts.js";
-import { DialCacheRedisPayloadEncodingError } from "../src/redis-client.js";
-import { ceilSupportedCacheTtlMs, encodeRedisFrame } from "../src/redis-protocol.js";
+import {
+  ceilSupportedCacheTtlMs,
+  decodeRedisReadResult,
+  decodeTrackedRedisReadResult,
+  encodeRedisFrame,
+} from "../src/redis-protocol.js";
 
 const FRAME_VERSION = 1;
 const ENCODING_OFFSET = 9;
@@ -121,37 +124,13 @@ export class FakeRedis implements DialCacheRedisClient {
   }
 
   private readPayload(valueKey: string, watermarkKey: string | null): RedisReadResult {
-    let watermark: number | null = null;
-    let watermarkMiss: RedisWatermarkMiss | null = null;
-    if (watermarkKey !== null) {
-      try {
-        watermark = this.readWatermark(watermarkKey);
-      } catch {
-        return null;
-      }
-      if (watermark !== null) {
-        watermarkMiss = { kind: "watermark_miss", observedWatermarkMs: watermark };
-      }
-    }
-
-    const raw = this.readRaw(valueKey);
-    if (raw === null || raw.length < PAYLOAD_OFFSET || raw[0] !== FRAME_VERSION) {
-      return watermarkMiss;
-    }
-
-    const createdAtMs = Number(readTimestamp(raw));
-    if (createdAtMs <= (watermark ?? 0)) {
-      return watermarkMiss;
-    }
-
-    const encoding = raw[ENCODING_OFFSET];
-    if (encoding === 0) {
-      return { payload: raw.subarray(PAYLOAD_OFFSET).toString("utf8"), createdAtMs };
-    }
-    if (encoding === 1) {
-      return { payload: Buffer.from(raw.subarray(PAYLOAD_OFFSET)), createdAtMs };
-    }
-    throw new DialCacheRedisPayloadEncodingError("Invalid DialCache Redis payload encoding");
+    const stored = this.readRaw(valueKey);
+    // Real clients transfer a reply buffer; do not let a test caller mutate the
+    // fake's retained frame through the decoder's zero-copy binary payload.
+    const raw = stored === null ? null : Buffer.from(stored);
+    return watermarkKey === null
+      ? decodeRedisReadResult(raw)
+      : decodeTrackedRedisReadResult(raw, this.readRaw(watermarkKey));
   }
 
   private storeWatermark(key: string, watermark: number, ttlMs: number): void {

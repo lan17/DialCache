@@ -1,11 +1,10 @@
 import {
   DialCacheRedisPayloadEncodingError,
   DialCacheRedisPayloadError,
-  isRedisWatermarkMiss,
+  redisReadMiss,
   type DecodedRedisFrame,
   type RedisCachePayload,
   type RedisReadResult,
-  type RedisWatermarkMiss,
 } from "../redis-client.js";
 
 const REDIS_FRAME_VERSION = 1;
@@ -85,35 +84,34 @@ export function assertValidRedisTimestampMs(timestampMs: number): void {
   }
 }
 
-function isValidRedisTimestampMs(timestampMs: number): boolean {
-  return Number.isSafeInteger(timestampMs) && timestampMs >= 0;
+/** Nonnegative safe-integer epoch milliseconds: the envelope for frame timestamps and watermarks. */
+export function isValidRedisTimestampMs(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
 /**
- * Decode an untracked DialCache frame returned as a Redis bulk string into
- * its serializer payload and header creation time (the writer's application
- * clock). Missing, short, and unsupported-version frames are cache
- * misses. Invalid runtime reply types and unsupported payload encodings throw
- * typed errors.
+ * Decode an untracked DialCache read with a bounded miss reason. Invalid
+ * runtime reply types and unsupported payload encodings still throw typed
+ * errors rather than becoming misses.
  */
-export function decodeRedisFrame(raw: unknown): DecodedRedisFrame | null {
+export function decodeRedisReadResult(raw: unknown): RedisReadResult {
   const frame = validateRedisBulkStringReply(raw);
-  if (!isSupportedRedisFrame(frame)) {
-    return null;
+  if (frame === null) {
+    return redisReadMiss("value_absent");
   }
-  return {
-    payload: decodeRedisPayload(frame.subarray(REDIS_FRAME_HEADER_BYTES)),
-    createdAtMs: readFrameCreatedAtMs(frame),
-  };
+  if (!isSupportedRedisFrame(frame)) {
+    return redisReadMiss("unclassified");
+  }
+  return decodedRedisFrame(frame);
 }
 
 /**
  * Decode a tracked DialCache read while preserving a trustworthy observed
- * watermark for semantic misses. A present valid numeric watermark produces a
- * `RedisWatermarkMiss` whenever the value is absent, unsupported, or fenced;
- * missing or malformed watermark metadata retains the generic `null` miss.
- * Invalid runtime reply types and unsupported payload encodings on otherwise
- * eligible frames throw typed errors.
+ * watermark for semantic misses. Miss cause and a valid observed watermark are
+ * independent: an absent value can retain a refill fence, while only a
+ * supported, complete frame actually rejected by a valid watermark is
+ * `watermark_fenced`. Invalid runtime reply types and unsupported payload
+ * encodings on otherwise eligible frames throw typed errors.
  *
  * Custom adapters opting into this result must also honor a supplied
  * `RedisWriteRequest.createdAtMs` exactly.
@@ -124,48 +122,53 @@ export function decodeTrackedRedisReadResult(
 ): RedisReadResult {
   const frame = validateRedisBulkStringReply(raw);
   const watermarkFrame = validateRedisBulkStringReply(rawWatermark);
+
+  // Redis nil is decisive evidence of absence regardless of paired metadata.
+  // Preserve a valid paired watermark separately so a later refill can still
+  // be skipped before serialization if its client timestamp cannot clear it.
+  if (frame === null) {
+    return redisReadMiss(
+      "value_absent",
+      watermarkFrame === null ? undefined : parseRedisWatermark(watermarkFrame) ?? undefined,
+    );
+  }
+  if (!isSupportedRedisFrame(frame)) {
+    return redisReadMiss(
+      "unclassified",
+      watermarkFrame === null ? undefined : parseRedisWatermark(watermarkFrame) ?? undefined,
+    );
+  }
   if (watermarkFrame === null) {
-    return decodeTrackedFrame(frame, 0, null);
+    return decodeTrackedFrame(frame);
   }
   const watermark = parseRedisWatermark(watermarkFrame);
   if (watermark === null) {
-    return null;
+    return redisReadMiss("unclassified");
   }
-  return decodeTrackedFrame(frame, watermark, {
-    kind: "watermark_miss",
-    observedWatermarkMs: watermark,
-  });
-}
-
-/**
- * Backward-compatible tracked-frame decoder. It preserves the established
- * `DecodedRedisFrame | null` surface by collapsing typed watermark misses.
- * Use `decodeTrackedRedisReadResult` to opt a custom adapter into conditional
- * fenced-refill suppression.
- */
-export function decodeTrackedRedisFrame(
-  raw: unknown,
-  rawWatermark: unknown,
-): DecodedRedisFrame | null {
-  const result = decodeTrackedRedisReadResult(raw, rawWatermark);
-  return isRedisWatermarkMiss(result) ? null : result;
+  return decodeTrackedFrame(frame, watermark);
 }
 
 function decodeTrackedFrame(
-  frame: Buffer | null,
-  watermark: number,
-  miss: RedisWatermarkMiss | null,
+  frame: Buffer,
+  observedWatermarkMs?: number,
 ): RedisReadResult {
-  if (!isSupportedRedisFrame(frame)) {
-    return miss;
-  }
   const createdAtMs = readFrameCreatedAtMs(frame);
-  return createdAtMs <= watermark
-    ? miss
-    : {
-        payload: decodeRedisPayload(frame.subarray(REDIS_FRAME_HEADER_BYTES)),
-        createdAtMs,
-      };
+  // Preserve zero-baseline misses. Core validates all other timestamps after
+  // payload decoding so corrupt encodings retain their existing error path.
+  if (createdAtMs === 0) {
+    return redisReadMiss("unclassified", observedWatermarkMs);
+  }
+  if (observedWatermarkMs !== undefined && createdAtMs <= observedWatermarkMs) {
+    return redisReadMiss("watermark_fenced", observedWatermarkMs);
+  }
+  return decodedRedisFrame(frame);
+}
+
+function decodedRedisFrame(frame: Buffer): DecodedRedisFrame {
+  return {
+    payload: decodeRedisPayload(frame.subarray(REDIS_FRAME_HEADER_BYTES)),
+    createdAtMs: readFrameCreatedAtMs(frame),
+  };
 }
 
 function readFrameCreatedAtMs(frame: Buffer): number {

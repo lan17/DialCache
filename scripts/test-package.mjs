@@ -126,6 +126,8 @@ const rootConsumer = `import {
   FallbackTimeoutError,
   JsonSerializer,
   RedisReadTimeoutError,
+  isRedisReadMiss,
+  type CacheMissReason,
   type CacheMetricLabels,
   type CacheConfigProvider,
   type CachedOptions,
@@ -145,12 +147,13 @@ const rootConsumer = `import {
   type InvalidationMetricLabels,
   type MetricErrorKind,
   type MetricLayer,
+  type MissMetricLabels,
   type ProcessCoalescingState,
   type RedisConfig,
   type RedisInvalidationRequest,
   type RedisReadContext,
+  type RedisReadMiss,
   type RedisReadResult,
-  type RedisWatermarkMiss,
   type RedisWriteRequest,
   type Serializer,
   type ShadowComparator,
@@ -165,6 +168,8 @@ const rootConsumer = `import {
 import { MissingKeyConfigError } from "dialcache";
 // @ts-expect-error Placeholder promotion was removed from the Redis adapter protocol.
 import { DialCacheRedisPlaceholderLostError } from "dialcache";
+// @ts-expect-error RedisWatermarkMiss folded into RedisReadMiss and its optional observedWatermarkMs fence.
+import type { RedisWatermarkMiss } from "dialcache";
 import { createNodeRedisDialCacheClient } from "dialcache/node-redis";
 // @ts-expect-error The node-redis adapter no longer requires public script registrations.
 import { dialcacheRedisScripts } from "dialcache/node-redis";
@@ -172,14 +177,20 @@ import { dialcacheRedisScripts } from "dialcache/node-redis";
 import type { DialCacheNodeRedisScripts } from "dialcache/node-redis";
 import {
   ceilSupportedCacheTtlMs,
-  decodeRedisFrame,
-  decodeTrackedRedisFrame,
+  decodeRedisReadResult,
   decodeTrackedRedisReadResult,
   encodeRedisFrame,
+  isRedisReadMiss as isRedisProtocolReadMiss,
   validateRedisScriptInvalidationReply,
   validateRedisSetReply,
   type DecodedRedisFrame,
+  type RedisReadMiss as RedisProtocolReadMiss,
+  type RedisReadResult as RedisProtocolReadResult,
 } from "dialcache/redis-protocol";
+// @ts-expect-error The frame-or-null decoder was replaced by the classified decodeRedisReadResult.
+import { decodeRedisFrame } from "dialcache/redis-protocol";
+// @ts-expect-error The tracked frame-or-null decoder was replaced by decodeTrackedRedisReadResult.
+import { decodeTrackedRedisFrame } from "dialcache/redis-protocol";
 // @ts-expect-error Placeholder promotion was removed from the Redis adapter protocol.
 import { encodeTrackedRedisPlaceholder } from "dialcache/redis-protocol";
 // @ts-expect-error Tracked writes no longer have a script reply to resolve.
@@ -220,7 +231,10 @@ const inlineOptionsFor = (useCase: string, key = "1") => ({
 });
 const metrics: DialCacheMetricsAdapter = {
   request: () => undefined,
-  miss: () => undefined,
+  miss: (labels: MissMetricLabels) => {
+    const reason: CacheMissReason = labels.reason;
+    void reason;
+  },
   disabled: () => undefined,
   error: () => undefined,
   invalidation: () => undefined,
@@ -338,24 +352,52 @@ const redisProtocolError = new DialCacheRedisProtocolError("Invalid DialCache Re
 const emptyRedisFrame = Buffer.alloc(10);
 emptyRedisFrame[0] = 1;
 emptyRedisFrame.writeBigUInt64BE(1n, 1);
-const decodedEmptyRedisFrame: DecodedRedisFrame | null = decodeRedisFrame(emptyRedisFrame);
-const decodedStaleRedisFrame: DecodedRedisFrame | null = decodeTrackedRedisFrame(
-  emptyRedisFrame,
-  Buffer.from("1"),
-);
+const decodedEmptyRedisFrame: RedisReadResult = decodeRedisReadResult(emptyRedisFrame);
+const decodedRedisReadResult: RedisReadResult = decodeRedisReadResult(null);
+const absentReadMiss: RedisReadMiss = { kind: "miss", reason: "value_absent" };
+const fencedReadMiss: RedisReadMiss = { kind: "miss", reason: "watermark_fenced", observedWatermarkMs: 1 };
+void absentReadMiss;
+void fencedReadMiss;
+// @ts-expect-error A miss is only recognized behind the "miss" discriminant.
+const missWithoutDiscriminant: RedisReadResult = { reason: "value_absent", observedWatermarkMs: 1 };
+void missWithoutDiscriminant;
+// @ts-expect-error null is no longer a legal Redis read result; misses are classified objects.
+const nullRedisReadResult: RedisReadResult = null;
+void nullRedisReadResult;
+if ("kind" in decodedRedisReadResult) {
+  const narrowedMiss: RedisReadMiss = decodedRedisReadResult;
+  const reason: CacheMissReason = narrowedMiss.reason;
+  const observedWatermarkMs: number | undefined = narrowedMiss.observedWatermarkMs;
+  const protocolMiss: RedisProtocolReadMiss = narrowedMiss;
+  void reason;
+  void observedWatermarkMs;
+  void protocolMiss;
+}
+if (isRedisReadMiss(decodedRedisReadResult)) {
+  const rootGuardedMiss: RedisReadMiss = decodedRedisReadResult;
+  void rootGuardedMiss;
+} else {
+  const rootGuardedFrame: DecodedRedisFrame = decodedRedisReadResult;
+  void rootGuardedFrame;
+}
 const decodedTrackedRedisReadResult: RedisReadResult = decodeTrackedRedisReadResult(
   emptyRedisFrame,
   Buffer.from("1"),
 );
-if (
-  decodedTrackedRedisReadResult !== null
-  && "kind" in decodedTrackedRedisReadResult
-  && decodedTrackedRedisReadResult.kind === "watermark_miss"
-) {
-  const typedWatermarkMiss: RedisWatermarkMiss = decodedTrackedRedisReadResult;
-  const observedWatermarkMs: number = typedWatermarkMiss.observedWatermarkMs;
+if (isRedisProtocolReadMiss(decodedTrackedRedisReadResult)) {
+  const protocolGuardedMiss: RedisReadMiss = decodedTrackedRedisReadResult;
+  const observedWatermarkMs: number | undefined = protocolGuardedMiss.observedWatermarkMs;
   void observedWatermarkMs;
+} else {
+  const protocolGuardedFrame: DecodedRedisFrame = decodedTrackedRedisReadResult;
+  void protocolGuardedFrame;
 }
+const protocolGuardMatchesRoot: typeof isRedisReadMiss = isRedisProtocolReadMiss;
+const rootGuardMatchesProtocol: typeof isRedisProtocolReadMiss = isRedisReadMiss;
+const protocolReadResult: RedisProtocolReadResult = decodedTrackedRedisReadResult;
+void protocolGuardMatchesRoot;
+void rootGuardMatchesProtocol;
+void protocolReadResult;
 const zeroTimestampRedisFrame: Buffer = encodeRedisFrame("pending", 0);
 const setReplyValidation: void = validateRedisSetReply("OK");
 const invalidationReplyValidation: 1 = validateRedisScriptInvalidationReply(1);
@@ -503,6 +545,25 @@ const cacheMetricLabels: CacheMetricLabels = {
   keyType: "id",
   layer: CacheLayer.LOCAL,
 };
+const missMetricLabels: MissMetricLabels = {
+  ...cacheMetricLabels,
+  reason: "value_absent",
+};
+const missReasons: Readonly<Record<CacheMissReason, true>> = {
+  value_absent: true,
+  expired: true,
+  watermark_fenced: true,
+  unclassified: true,
+};
+// @ts-expect-error Miss reasons are a bounded public taxonomy.
+const unboundedMissReason: CacheMissReason = "evicted";
+// @ts-expect-error The reason is required only for the miss callback's labels.
+const missingMissReason: MissMetricLabels = cacheMetricLabels;
+const cacheMetricLabelsWithMissReason: CacheMetricLabels = {
+  ...cacheMetricLabels,
+  // @ts-expect-error CacheMetricLabels intentionally remains shared by non-miss callbacks.
+  reason: "value_absent",
+};
 const invalidationMetricLabels: InvalidationMetricLabels = {
   cacheNamespace: "consumer-cache",
   keyType: "id",
@@ -574,8 +635,8 @@ const compressionOperationMetricLabels: CompressionOperationMetricLabels = {
 const unboundedCompressionOutcome: CompressionOutcome = "inflated";
 
 const customRedisClient: DialCacheRedisClient = {
-  // The optional second argument and widened result preserve legacy frame-or-null clients.
-  read: async (): Promise<DecodedRedisFrame | null> => ({
+  // The optional second argument may be omitted; hits are frames and misses are classified objects.
+  read: async (): Promise<RedisReadResult> => ({
     payload: Buffer.from([0, 255]),
     createdAtMs: 1,
   }),
@@ -584,6 +645,12 @@ const customRedisClient: DialCacheRedisClient = {
   },
   invalidate: async () => undefined,
 };
+const legacyNullMissRedisClient: DialCacheRedisClient = {
+  ...customRedisClient,
+  // @ts-expect-error Legacy frame-or-null reads must return a classified RedisReadMiss instead of null.
+  read: async (): Promise<DecodedRedisFrame | null> => null,
+};
+void legacyNullMissRedisClient;
 const redisClientMethods: Readonly<Record<keyof DialCacheRedisClient, true>> = {
   read: true,
   write: true,
@@ -704,6 +771,11 @@ void staleKeyConfig;
 void staleRecoveryMaxAgeSec;
 void requestLocalCoalescingLabels;
 void cacheMetricLabels;
+void missMetricLabels;
+void missReasons;
+void unboundedMissReason;
+void missingMissReason;
+void cacheMetricLabelsWithMissReason;
 void invalidationMetricLabels;
 void keyInitHasNoUrnPrefix;
 void legacyKeyInit;
@@ -729,7 +801,9 @@ void unboundedCompressionOutcome;
 void redisConfigAcceptsCompressionOptOut;
 void createNodeRedisDialCacheClient;
 void decodedEmptyRedisFrame;
-void decodedStaleRedisFrame;
+void decodeRedisFrame;
+void decodeTrackedRedisFrame;
+void (undefined as unknown as RedisWatermarkMiss);
 void dialcacheRedisScripts;
 void (undefined as unknown as DialCacheNodeRedisScripts);
 void READ_CACHE_SCRIPT;
@@ -1000,29 +1074,93 @@ if (
 ) {
   throw new Error("Removed placeholder and stamp helpers must not be exported by the packed ESM Redis protocol entry");
 }
-const esmRoundTrip = redisProtocol.decodeRedisFrame(redisProtocol.encodeRedisFrame("value", 1));
-if (esmRoundTrip?.payload !== "value" || esmRoundTrip.createdAtMs !== 1) {
-  throw new Error("The packed ESM Redis protocol encoder did not round-trip through the decoder");
+if (
+  "decodeRedisFrame" in redisProtocol
+  || "decodeTrackedRedisFrame" in redisProtocol
+) {
+  throw new Error("The legacy frame-or-null decoders must not be exported by the packed ESM Redis protocol entry");
 }
-if (redisProtocol.decodeTrackedRedisFrame(redisProtocol.encodeRedisFrame("pending", 0), Buffer.from("0")) !== null) {
-  throw new Error("The packed ESM tracked decoder did not fence an equal timestamp");
+if (typeof root.isRedisReadMiss !== "function" || typeof redisProtocol.isRedisReadMiss !== "function") {
+  throw new Error("The packed ESM isRedisReadMiss guard is missing from the root or Redis protocol entry");
 }
-const esmWatermarkMiss = redisProtocol.decodeTrackedRedisReadResult(
+const esmRoundTrip = redisProtocol.decodeRedisReadResult(redisProtocol.encodeRedisFrame("value", 1));
+if (
+  redisProtocol.isRedisReadMiss(esmRoundTrip)
+  || root.isRedisReadMiss(esmRoundTrip)
+  || esmRoundTrip.payload !== "value"
+  || esmRoundTrip.createdAtMs !== 1
+) {
+  throw new Error("The packed ESM Redis protocol encoder did not round-trip through the classified decoder");
+}
+const esmAbsentRead = redisProtocol.decodeRedisReadResult(null);
+if (
+  esmAbsentRead.kind !== "miss"
+  || esmAbsentRead.reason !== "value_absent"
+  || !redisProtocol.isRedisReadMiss(esmAbsentRead)
+  || !root.isRedisReadMiss(esmAbsentRead)
+  || "observedWatermarkMs" in esmAbsentRead
+  || "payload" in esmAbsentRead
+  || "createdAtMs" in esmAbsentRead
+) {
+  throw new Error("The packed ESM Redis result decoder did not classify an absent value");
+}
+if (
+  root.isRedisReadMiss(null)
+  || root.isRedisReadMiss({ reason: "value_absent", observedWatermarkMs: 1 })
+  || redisProtocol.isRedisReadMiss({ kind: "watermark_miss", reason: "watermark_fenced", observedWatermarkMs: 1 })
+) {
+  throw new Error("The packed ESM isRedisReadMiss guard accepted a value without the miss discriminant");
+}
+const esmEqualTimestampRead = redisProtocol.decodeTrackedRedisReadResult(
   redisProtocol.encodeRedisFrame("pending", 0),
   Buffer.from("0"),
 );
-if (
-  esmWatermarkMiss?.kind !== "watermark_miss"
-  || esmWatermarkMiss.observedWatermarkMs !== 0
-  || "payload" in esmWatermarkMiss
-) {
-  throw new Error("The packed ESM tracked result decoder did not preserve the observed watermark miss");
+if (!redisProtocol.isRedisReadMiss(esmEqualTimestampRead) || "payload" in esmEqualTimestampRead) {
+  throw new Error("The packed ESM tracked decoder did not reject a frame timestamped at the watermark");
 }
-if (redisProtocol.decodeTrackedRedisFrame(redisProtocol.encodeRedisFrame("value", 1), null)?.payload !== "value") {
+const esmWatermarkMiss = redisProtocol.decodeTrackedRedisReadResult(
+  redisProtocol.encodeRedisFrame("pending", 1),
+  Buffer.from("1"),
+);
+if (
+  esmWatermarkMiss.kind !== "miss"
+  || esmWatermarkMiss.reason !== "watermark_fenced"
+  || esmWatermarkMiss.observedWatermarkMs !== 1
+  || "payload" in esmWatermarkMiss
+  || "createdAtMs" in esmWatermarkMiss
+) {
+  throw new Error("The packed ESM tracked result decoder did not classify a watermark-fenced miss");
+}
+const esmTrackedHitWithoutWatermark = redisProtocol.decodeTrackedRedisReadResult(
+  redisProtocol.encodeRedisFrame("value", 1),
+  null,
+);
+if (
+  redisProtocol.isRedisReadMiss(esmTrackedHitWithoutWatermark)
+  || esmTrackedHitWithoutWatermark.payload !== "value"
+  || esmTrackedHitWithoutWatermark.createdAtMs !== 1
+) {
   throw new Error("The packed ESM tracked decoder did not use zero for a missing watermark");
 }
-if (redisProtocol.decodeTrackedRedisReadResult(null, null) !== null) {
-  throw new Error("The packed ESM tracked result decoder did not preserve a generic miss without a watermark");
+const esmAbsentTrackedRead = redisProtocol.decodeTrackedRedisReadResult(null, null);
+if (
+  esmAbsentTrackedRead.kind !== "miss"
+  || esmAbsentTrackedRead.reason !== "value_absent"
+  || "observedWatermarkMs" in esmAbsentTrackedRead
+  || "payload" in esmAbsentTrackedRead
+  || "createdAtMs" in esmAbsentTrackedRead
+) {
+  throw new Error("The packed ESM tracked result decoder did not classify an absent value");
+}
+const esmAbsentTrackedReadWithWatermark = redisProtocol.decodeTrackedRedisReadResult(null, Buffer.from("7"));
+if (
+  esmAbsentTrackedReadWithWatermark.kind !== "miss"
+  || esmAbsentTrackedReadWithWatermark.reason !== "value_absent"
+  || esmAbsentTrackedReadWithWatermark.observedWatermarkMs !== 7
+  || "payload" in esmAbsentTrackedReadWithWatermark
+  || "createdAtMs" in esmAbsentTrackedReadWithWatermark
+) {
+  throw new Error("The packed ESM tracked result decoder did not preserve an absent-value refill fence");
 }
 if (
   "REDIS_FRAME_VERSION" in redisProtocol
@@ -1060,14 +1198,15 @@ for (const invalidCacheTtlMs of [0, 31_536_000_001]) {
 const esmEmptyFrame = Buffer.alloc(10);
 esmEmptyFrame[0] = 1;
 esmEmptyFrame.writeBigUInt64BE(1n, 1);
-if (redisProtocol.decodeRedisFrame(esmEmptyFrame)?.payload !== "") {
+const esmEmptyFrameRead = redisProtocol.decodeRedisReadResult(esmEmptyFrame);
+if (redisProtocol.isRedisReadMiss(esmEmptyFrameRead) || esmEmptyFrameRead.payload !== "") {
   throw new Error("The packed ESM Redis protocol decoder did not preserve an empty UTF-8 payload");
 }
-if (redisProtocol.decodeTrackedRedisFrame(esmEmptyFrame, Buffer.from("1")) !== null) {
+if (redisProtocol.decodeTrackedRedisReadResult(esmEmptyFrame, Buffer.from("1")).kind !== "miss") {
   throw new Error("The packed ESM Redis protocol decoder did not reject a stale tracked frame");
 }
 try {
-  redisProtocol.decodeRedisFrame("not binary");
+  redisProtocol.decodeRedisReadResult("not binary");
   throw new Error("Expected the packed ESM Redis protocol decoder to reject a non-binary reply");
 } catch (error) {
   if (!(error instanceof root.DialCacheRedisPayloadError)) {
@@ -1077,7 +1216,7 @@ try {
 const esmInvalidEncodingFrame = Buffer.from(esmEmptyFrame);
 esmInvalidEncodingFrame[9] = 2;
 try {
-  redisProtocol.decodeRedisFrame(esmInvalidEncodingFrame);
+  redisProtocol.decodeRedisReadResult(esmInvalidEncodingFrame);
   throw new Error("Expected the packed ESM Redis protocol decoder to reject an unsupported encoding");
 } catch (error) {
   if (!(error instanceof root.DialCacheRedisPayloadEncodingError)) {
@@ -1389,29 +1528,93 @@ if (
 ) {
   throw new Error("Removed placeholder and stamp helpers must not be exported by the packed CommonJS Redis protocol entry");
 }
-const cjsRoundTrip = redisProtocol.decodeRedisFrame(redisProtocol.encodeRedisFrame("value", 1));
-if (cjsRoundTrip?.payload !== "value" || cjsRoundTrip.createdAtMs !== 1) {
-  throw new Error("The packed CommonJS Redis protocol encoder did not round-trip through the decoder");
+if (
+  "decodeRedisFrame" in redisProtocol
+  || "decodeTrackedRedisFrame" in redisProtocol
+) {
+  throw new Error("The legacy frame-or-null decoders must not be exported by the packed CommonJS Redis protocol entry");
 }
-if (redisProtocol.decodeTrackedRedisFrame(redisProtocol.encodeRedisFrame("pending", 0), Buffer.from("0")) !== null) {
-  throw new Error("The packed CommonJS tracked decoder did not fence an equal timestamp");
+if (typeof root.isRedisReadMiss !== "function" || typeof redisProtocol.isRedisReadMiss !== "function") {
+  throw new Error("The packed CommonJS isRedisReadMiss guard is missing from the root or Redis protocol entry");
 }
-const cjsWatermarkMiss = redisProtocol.decodeTrackedRedisReadResult(
+const cjsRoundTrip = redisProtocol.decodeRedisReadResult(redisProtocol.encodeRedisFrame("value", 1));
+if (
+  redisProtocol.isRedisReadMiss(cjsRoundTrip)
+  || root.isRedisReadMiss(cjsRoundTrip)
+  || cjsRoundTrip.payload !== "value"
+  || cjsRoundTrip.createdAtMs !== 1
+) {
+  throw new Error("The packed CommonJS Redis protocol encoder did not round-trip through the classified decoder");
+}
+const cjsAbsentRead = redisProtocol.decodeRedisReadResult(null);
+if (
+  cjsAbsentRead.kind !== "miss"
+  || cjsAbsentRead.reason !== "value_absent"
+  || !redisProtocol.isRedisReadMiss(cjsAbsentRead)
+  || !root.isRedisReadMiss(cjsAbsentRead)
+  || "observedWatermarkMs" in cjsAbsentRead
+  || "payload" in cjsAbsentRead
+  || "createdAtMs" in cjsAbsentRead
+) {
+  throw new Error("The packed CommonJS Redis result decoder did not classify an absent value");
+}
+if (
+  root.isRedisReadMiss(null)
+  || root.isRedisReadMiss({ reason: "value_absent", observedWatermarkMs: 1 })
+  || redisProtocol.isRedisReadMiss({ kind: "watermark_miss", reason: "watermark_fenced", observedWatermarkMs: 1 })
+) {
+  throw new Error("The packed CommonJS isRedisReadMiss guard accepted a value without the miss discriminant");
+}
+const cjsEqualTimestampRead = redisProtocol.decodeTrackedRedisReadResult(
   redisProtocol.encodeRedisFrame("pending", 0),
   Buffer.from("0"),
 );
-if (
-  cjsWatermarkMiss?.kind !== "watermark_miss"
-  || cjsWatermarkMiss.observedWatermarkMs !== 0
-  || "payload" in cjsWatermarkMiss
-) {
-  throw new Error("The packed CommonJS tracked result decoder did not preserve the observed watermark miss");
+if (!redisProtocol.isRedisReadMiss(cjsEqualTimestampRead) || "payload" in cjsEqualTimestampRead) {
+  throw new Error("The packed CommonJS tracked decoder did not reject a frame timestamped at the watermark");
 }
-if (redisProtocol.decodeTrackedRedisFrame(redisProtocol.encodeRedisFrame("value", 1), null)?.payload !== "value") {
+const cjsWatermarkMiss = redisProtocol.decodeTrackedRedisReadResult(
+  redisProtocol.encodeRedisFrame("pending", 1),
+  Buffer.from("1"),
+);
+if (
+  cjsWatermarkMiss.kind !== "miss"
+  || cjsWatermarkMiss.reason !== "watermark_fenced"
+  || cjsWatermarkMiss.observedWatermarkMs !== 1
+  || "payload" in cjsWatermarkMiss
+  || "createdAtMs" in cjsWatermarkMiss
+) {
+  throw new Error("The packed CommonJS tracked result decoder did not classify a watermark-fenced miss");
+}
+const cjsTrackedHitWithoutWatermark = redisProtocol.decodeTrackedRedisReadResult(
+  redisProtocol.encodeRedisFrame("value", 1),
+  null,
+);
+if (
+  redisProtocol.isRedisReadMiss(cjsTrackedHitWithoutWatermark)
+  || cjsTrackedHitWithoutWatermark.payload !== "value"
+  || cjsTrackedHitWithoutWatermark.createdAtMs !== 1
+) {
   throw new Error("The packed CommonJS tracked decoder did not use zero for a missing watermark");
 }
-if (redisProtocol.decodeTrackedRedisReadResult(null, null) !== null) {
-  throw new Error("The packed CommonJS tracked result decoder did not preserve a generic miss without a watermark");
+const cjsAbsentTrackedRead = redisProtocol.decodeTrackedRedisReadResult(null, null);
+if (
+  cjsAbsentTrackedRead.kind !== "miss"
+  || cjsAbsentTrackedRead.reason !== "value_absent"
+  || "observedWatermarkMs" in cjsAbsentTrackedRead
+  || "payload" in cjsAbsentTrackedRead
+  || "createdAtMs" in cjsAbsentTrackedRead
+) {
+  throw new Error("The packed CommonJS tracked result decoder did not classify an absent value");
+}
+const cjsAbsentTrackedReadWithWatermark = redisProtocol.decodeTrackedRedisReadResult(null, Buffer.from("7"));
+if (
+  cjsAbsentTrackedReadWithWatermark.kind !== "miss"
+  || cjsAbsentTrackedReadWithWatermark.reason !== "value_absent"
+  || cjsAbsentTrackedReadWithWatermark.observedWatermarkMs !== 7
+  || "payload" in cjsAbsentTrackedReadWithWatermark
+  || "createdAtMs" in cjsAbsentTrackedReadWithWatermark
+) {
+  throw new Error("The packed CommonJS tracked result decoder did not preserve an absent-value refill fence");
 }
 if (
   "REDIS_FRAME_VERSION" in redisProtocol
@@ -1449,14 +1652,15 @@ for (const invalidCacheTtlMs of [0, 31_536_000_001]) {
 const cjsEmptyFrame = Buffer.alloc(10);
 cjsEmptyFrame[0] = 1;
 cjsEmptyFrame.writeBigUInt64BE(1n, 1);
-if (redisProtocol.decodeRedisFrame(cjsEmptyFrame)?.payload !== "") {
+const cjsEmptyFrameRead = redisProtocol.decodeRedisReadResult(cjsEmptyFrame);
+if (redisProtocol.isRedisReadMiss(cjsEmptyFrameRead) || cjsEmptyFrameRead.payload !== "") {
   throw new Error("The packed CommonJS Redis protocol decoder did not preserve an empty UTF-8 payload");
 }
-if (redisProtocol.decodeTrackedRedisFrame(cjsEmptyFrame, Buffer.from("1")) !== null) {
+if (redisProtocol.decodeTrackedRedisReadResult(cjsEmptyFrame, Buffer.from("1")).kind !== "miss") {
   throw new Error("The packed CommonJS Redis protocol decoder did not reject a stale tracked frame");
 }
 try {
-  redisProtocol.decodeRedisFrame("not binary");
+  redisProtocol.decodeRedisReadResult("not binary");
   throw new Error("Expected the packed CommonJS Redis protocol decoder to reject a non-binary reply");
 } catch (error) {
   if (!(error instanceof root.DialCacheRedisPayloadError)) {
@@ -1466,7 +1670,7 @@ try {
 const cjsInvalidEncodingFrame = Buffer.from(cjsEmptyFrame);
 cjsInvalidEncodingFrame[9] = 2;
 try {
-  redisProtocol.decodeRedisFrame(cjsInvalidEncodingFrame);
+  redisProtocol.decodeRedisReadResult(cjsInvalidEncodingFrame);
   throw new Error("Expected the packed CommonJS Redis protocol decoder to reject an unsupported encoding");
 } catch (error) {
   if (!(error instanceof root.DialCacheRedisPayloadEncodingError)) {
@@ -1759,6 +1963,7 @@ function typescriptConfig(include) {
         moduleResolution: "Node16",
         noEmit: true,
         strict: true,
+        exactOptionalPropertyTypes: false,
       },
       include,
     },

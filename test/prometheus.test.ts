@@ -12,6 +12,7 @@ import {
   CacheLayer,
   DialCache,
   DialCacheKeyConfig,
+  type CacheMissReason,
   type CompressionOutcome,
   type DisabledReason,
   type MetricErrorKind,
@@ -59,6 +60,12 @@ const DISABLED_REASONS: Readonly<Record<DisabledReason, true>> = {
   invalid_ramp: true,
   ramped_down: true,
   config_error: true,
+};
+const MISS_REASONS: Readonly<Record<CacheMissReason, true>> = {
+  value_absent: true,
+  expired: true,
+  watermark_fenced: true,
+  unclassified: true,
 };
 const COMPRESSION_OUTCOMES: Readonly<Record<CompressionOutcome, true>> = {
   compressed: true,
@@ -173,7 +180,7 @@ describe("Prometheus metrics adapter", () => {
     } as const;
 
     metrics.request(labels);
-    metrics.miss(labels);
+    metrics.miss({ ...labels, reason: "value_absent" });
     metrics.disabled({ ...labels, reason: "context" });
     metrics.error({ ...labels, error: "cache_read", inFallback: false });
     metrics.invalidation({ cacheNamespace: labels.cacheNamespace, keyType: labels.keyType, layer: labels.layer });
@@ -263,7 +270,7 @@ describe("Prometheus metrics adapter", () => {
       ),
       histogramSchema("schema_dialcache_get_timer", ["cache_namespace", "use_case", "key_type", "layer"], TIMER_BUCKETS),
       counterSchema("schema_dialcache_invalidation_counter", ["cache_namespace", "key_type", "layer"]),
-      counterSchema("schema_dialcache_miss_counter", ["cache_namespace", "use_case", "key_type", "layer"]),
+      counterSchema("schema_dialcache_miss_counter", ["cache_namespace", "use_case", "key_type", "layer", "reason"]),
       counterSchema("schema_dialcache_request_counter", ["cache_namespace", "use_case", "key_type", "layer"]),
       histogramSchema(
         "schema_dialcache_serialization_timer",
@@ -440,6 +447,34 @@ describe("Prometheus metrics adapter", () => {
     }
   });
 
+  it("exports every bounded miss reason without rewriting labels", async () => {
+    const registry = new Registry();
+    const metrics = new PrometheusDialCacheMetrics({ registry, prefix: "miss_reason_" });
+    const labels = {
+      cacheNamespace: "users",
+      useCase: "PrometheusMissReasons",
+      keyType: "user_id",
+      layer: CacheLayer.REMOTE,
+    } as const;
+    const missReasons = Object.keys(MISS_REASONS) as CacheMissReason[];
+
+    for (const reason of missReasons) {
+      metrics.miss({ ...labels, reason });
+    }
+
+    for (const reason of missReasons) {
+      await expect(
+        sumMetric(registry, "miss_reason_dialcache_miss_counter", {
+          cache_namespace: labels.cacheNamespace,
+          use_case: labels.useCase,
+          key_type: labels.keyType,
+          layer: labels.layer,
+          reason,
+        }),
+      ).resolves.toBe(1);
+    }
+  });
+
   it("exports every bounded shadow-validation outcome without adding cache identity or layer labels", async () => {
     const registry = new Registry();
     const metrics = new PrometheusDialCacheMetrics({ registry, prefix: "shadow_" });
@@ -545,7 +580,7 @@ describe("Prometheus metrics adapter", () => {
     } as const;
 
     metrics.request(labels);
-    metrics.miss(labels);
+    metrics.miss({ ...labels, reason: "unclassified" });
     metrics.observeGet(labels, 0.01);
 
     await expect(
@@ -562,6 +597,7 @@ describe("Prometheus metrics adapter", () => {
         use_case: labels.useCase,
         key_type: labels.keyType,
         layer: labels.layer,
+        reason: "unclassified",
       }),
     ).resolves.toBe(1);
   });
@@ -590,6 +626,55 @@ describe("Prometheus metrics adapter", () => {
     await expect(registry.getSingleMetricAsString("dialcache_request_counter")).resolves.toContain(
       "dialcache_request_counter",
     );
+  });
+
+  it("rejects a pre-registered legacy miss collector before registering anything", () => {
+    const registry = new Registry();
+    const prefix = "legacy_miss_";
+    const metricName = `${prefix}dialcache_miss_counter`;
+    new Counter({
+      name: metricName,
+      help: "DialCache cache misses.",
+      labelNames: ["cache_namespace", "use_case", "key_type", "layer"],
+      registers: [registry],
+    });
+
+    expect(() => new PrometheusDialCacheMetrics({ registry, prefix })).toThrowError(
+      `Prometheus collector "${metricName}" already exists with an incompatible schema. ` +
+        "Use a unique prefix or a separate Registry.",
+    );
+    expect(registry.getMetricsAsArray().map(({ name }) => name)).toEqual([metricName]);
+  });
+
+  it("reuses a pre-registered current-schema miss collector", async () => {
+    const registry = new Registry();
+    const prefix = "current_miss_";
+    const metricName = `${prefix}dialcache_miss_counter`;
+    new Counter({
+      name: metricName,
+      help: "DialCache cache misses.",
+      labelNames: ["cache_namespace", "use_case", "key_type", "layer", "reason"],
+      registers: [registry],
+    });
+    const metrics = new PrometheusDialCacheMetrics({ registry, prefix });
+
+    metrics.miss({
+      cacheNamespace: "users",
+      useCase: "CurrentMissCollector",
+      keyType: "user_id",
+      layer: CacheLayer.REMOTE,
+      reason: "watermark_fenced",
+    });
+
+    await expect(
+      sumMetric(registry, metricName, {
+        cache_namespace: "users",
+        use_case: "CurrentMissCollector",
+        key_type: "user_id",
+        layer: "remote",
+        reason: "watermark_fenced",
+      }),
+    ).resolves.toBe(1);
   });
 
   for (const { schemaPart, register } of incompatibleCollectorCases) {
@@ -674,7 +759,7 @@ describe("Prometheus metrics adapter", () => {
     expect(second).toEqual({ userId: "123", calls: 1 });
     const labels = { cache_namespace: "metrics-cache", use_case: "PrometheusMetricExport", layer: "remote" };
     await expect(sumMetric(registry, "test_dialcache_request_counter", labels)).resolves.toBe(2);
-    await expect(sumMetric(registry, "test_dialcache_miss_counter", labels)).resolves.toBe(1);
+    await expect(sumMetric(registry, "test_dialcache_miss_counter", { ...labels, reason: "value_absent" })).resolves.toBe(1);
     await expect(sumMetric(registry, "test_dialcache_get_timer", labels)).resolves.toBeGreaterThan(0);
     await expect(sumMetric(registry, "test_dialcache_fallback_timer", labels)).resolves.toBeGreaterThan(0);
     await expect(

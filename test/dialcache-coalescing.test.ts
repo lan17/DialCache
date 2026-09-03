@@ -250,6 +250,7 @@ describe("DialCache request coalescing", () => {
       useCase: "RequestThenProcessCoalescing",
       keyType: "user_id",
       layer: "request_local",
+      reason: "value_absent",
     });
     expect(miss.mock.calls.filter(([labels]) => labels.layer === "request_local")).toHaveLength(2);
   });

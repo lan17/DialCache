@@ -71,6 +71,22 @@ export interface CacheMetricLabels {
   readonly layer: MetricLayer;
 }
 
+/**
+ * Bounded causes for cache misses. `value_absent`: the layer had no
+ * retrievable value. `expired`: a complete, valid frame was present but its
+ * logical age reached the effective remote TTL, including stale-on-error
+ * retained candidates. `watermark_fenced`: a tracked frame was rejected by an
+ * invalidation watermark. `unclassified`: a real miss with no decisive cause
+ * (unrecognized adapter results, malformed frames or metadata, invalid or future timestamps,
+ * deserialization failures).
+ */
+export const CACHE_MISS_REASONS = ["value_absent", "expired", "watermark_fenced", "unclassified"] as const;
+export type CacheMissReason = (typeof CACHE_MISS_REASONS)[number];
+
+export interface MissMetricLabels extends CacheMetricLabels {
+  readonly reason: CacheMissReason;
+}
+
 export interface DisabledMetricLabels extends CacheMetricLabels {
   readonly reason: DisabledReason;
 }
@@ -121,7 +137,7 @@ export interface StaleRecoveryMetricLabels {
 
 export interface DialCacheMetricsAdapter {
   request(labels: CacheMetricLabels): void;
-  miss(labels: CacheMetricLabels): void;
+  miss(labels: MissMetricLabels): void;
   disabled(labels: DisabledMetricLabels): void;
   error(labels: ErrorMetricLabels): void;
   invalidation(labels: InvalidationMetricLabels): void;

@@ -148,8 +148,14 @@ describe("Valkey GLIDE adapter", () => {
     });
     await expect(
       adapter.read({ valueKey: "tracked:{id}:value", watermarkKey: "tracked:{id}:watermark" }),
-    ).resolves.toEqual({ payload: Buffer.from([0, 0xff]), createdAtMs: 1_000 });
-    await expect(adapter.read({ valueKey: "missing:value" })).resolves.toBeNull();
+    ).resolves.toEqual({
+      payload: Buffer.from([0, 0xff]),
+      createdAtMs: 1_000,
+    });
+    await expect(adapter.read({ valueKey: "missing:value" })).resolves.toEqual({
+      kind: "miss",
+      reason: "value_absent",
+    });
 
     expect(client.get).toHaveBeenNthCalledWith(
       1,
@@ -175,14 +181,18 @@ describe("Valkey GLIDE adapter", () => {
     expect(client.customCommand).not.toHaveBeenCalled();
   });
 
-  it("returns an observed watermark for tracked semantic misses", async () => {
+  it("classifies an absent tracked value while preserving its observed watermark", async () => {
     const client = fakeClient([[null, Buffer.from("1234")]]);
     const adapter = createValkeyGlideDialCacheClient(client, mockGlide);
 
     await expect(adapter.read({
       valueKey: "tracked:{id}:value",
       watermarkKey: "tracked:{id}:watermark",
-    })).resolves.toEqual({ kind: "watermark_miss", observedWatermarkMs: 1_234 });
+    })).resolves.toEqual({
+      kind: "miss",
+      reason: "value_absent",
+      observedWatermarkMs: 1_234,
+    });
 
     expect(client.exec).toHaveBeenCalledTimes(1);
   });
@@ -199,7 +209,10 @@ describe("Valkey GLIDE adapter", () => {
         valueKey: "cluster:{id}:value",
         watermarkKey: "cluster:{id}:watermark",
       }),
-    ).resolves.toEqual({ payload: "tracked-cluster", createdAtMs: 1_000 });
+    ).resolves.toEqual({
+      payload: "tracked-cluster",
+      createdAtMs: 1_000,
+    });
 
     expect(client.customCommand).toHaveBeenCalledWith(
       ["MGET", "cluster:{id}:value", "cluster:{id}:watermark"],

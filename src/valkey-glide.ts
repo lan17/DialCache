@@ -6,7 +6,7 @@ import {
 } from "./internal/redis-invalidation.js";
 import {
   assertValidRedisTimestampMs,
-  decodeRedisFrame,
+  decodeRedisReadResult,
   decodeTrackedRedisReadResult,
   encodeRedisFrame,
 } from "./internal/redis-payload.js";
@@ -143,7 +143,7 @@ export function createValkeyGlideDialCacheClient<TDecoder>(
     async read({ valueKey, watermarkKey }) {
       if (watermarkKey === undefined) {
         const raw = await client.get(valueKey, { decoder: glide.Decoder.Bytes });
-        return decodeRedisFrame(raw);
+        return decodeRedisReadResult(raw);
       }
 
       let pair: unknown;

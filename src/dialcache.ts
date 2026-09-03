@@ -25,11 +25,10 @@ import {
   type ShadowValidationOutcome,
 } from "./metrics.js";
 import {
-  isRedisWatermarkMiss,
+  isRedisReadMiss,
   type DecodedRedisFrame,
   type RedisCachePayload,
   type RedisReadResult,
-  type RedisWatermarkMiss,
 } from "./redis-client.js";
 import type { Serializer } from "./serializer.js";
 import type { CacheGetResult, RemoteCacheGetResult } from "./internal/cache-result.js";
@@ -607,7 +606,7 @@ export class DialCache {
         return result.value;
       }
 
-      this.metrics?.miss(labelsFor(key, REQUEST_LOCAL_CACHE_LAYER));
+      this.metrics?.miss({ ...labelsFor(key, REQUEST_LOCAL_CACHE_LAYER), reason: "value_absent" });
       const value = await this.getThroughSharedLayers(
         key,
         keyConfig,
@@ -876,7 +875,7 @@ export class DialCache {
           key,
           value,
           remoteWriteConfig,
-          remote.status === "miss" ? remote.watermarkMiss : undefined,
+          remote.status === "miss" ? remote.observedWatermarkMs : undefined,
         );
       } catch (error) {
         this.logger.warn("Error putting value in Redis cache", error);
@@ -1100,7 +1099,7 @@ export class DialCache {
           }
 
           let shadowFillConfig: ResolvedRemoteLayerConfig | null = null;
-          let shadowFillWatermarkMiss: RedisWatermarkMiss | undefined;
+          let shadowFillObservedWatermarkMs: number | undefined;
           if (start.kind === "redis") {
             let readResult: RedisReadResult;
             try {
@@ -1111,11 +1110,9 @@ export class DialCache {
             if (abandonIfExpired()) {
               return "timeout";
             }
-            if (isRedisWatermarkMiss(readResult)) {
+            if (isRedisReadMiss(readResult)) {
               shadowFillConfig = start.remoteConfig;
-              shadowFillWatermarkMiss = readResult;
-            } else if (readResult === null) {
-              shadowFillConfig = start.remoteConfig;
+              shadowFillObservedWatermarkMs = readResult.observedWatermarkMs;
             } else {
               flight.cachedFrame = readResult;
             }
@@ -1154,7 +1151,7 @@ export class DialCache {
                 sourceValue,
                 shadowFillConfig,
                 () => !abandonIfExpired(),
-                shadowFillWatermarkMiss,
+                shadowFillObservedWatermarkMs,
               );
               // A late result remains the already-emitted whole-job timeout:
               // dispatch success does not retroactively change its outcome.
@@ -1219,7 +1216,7 @@ export class DialCache {
           if (originalFrame === null) {
             return "timeout";
           }
-          const confirmationFrame = isRedisWatermarkMiss(confirmationResult)
+          const confirmationFrame = isRedisReadMiss(confirmationResult)
             ? null
             : confirmationResult;
           if (confirmationFrame === null || !redisPayloadsEqual(originalFrame.payload, confirmationFrame.payload)) {
@@ -1316,7 +1313,7 @@ export class DialCache {
       this.metrics?.request(labelsFor(key, CacheLayer.LOCAL));
       this.metrics?.observeGet(labelsFor(key, CacheLayer.LOCAL), elapsedSeconds(start));
       if (result.status === "miss") {
-        this.metrics?.miss(labelsFor(key, CacheLayer.LOCAL));
+        this.metrics?.miss({ ...labelsFor(key, CacheLayer.LOCAL), reason: "value_absent" });
       }
       return result;
     } catch (error) {
