@@ -364,6 +364,10 @@ void explicitlyUndefinedWatermarkMiss;
 // @ts-expect-error A refill fence is only honored behind the watermark_miss discriminant.
 const fenceWithoutDiscriminant: RedisReadResult = { reason: "value_absent", observedWatermarkMs: 1 };
 void fenceWithoutDiscriminant;
+if (decodedRedisReadResult !== null && "kind" in decodedRedisReadResult) {
+  const narrowedWatermarkMiss: RedisWatermarkMiss = decodedRedisReadResult;
+  void narrowedWatermarkMiss;
+}
 if (
   decodedRedisReadResult !== null
   && "reason" in decodedRedisReadResult

@@ -82,14 +82,14 @@ export interface DecodedRedisFrame {
 }
 
 /**
- * A classified semantic Redis miss without a trustworthy refill fence. The
- * fence fields are closed here so a miss cannot carry `observedWatermarkMs`
- * without the `watermark_miss` discriminant that DialCache requires before it
- * will honor the fence.
+ * A classified semantic Redis miss without a trustworthy refill fence.
+ * `observedWatermarkMs` is closed so a miss cannot carry a fence without the
+ * `watermark_miss` discriminant that DialCache requires before honoring it.
+ * `kind` is deliberately left undeclared so `"kind" in result` still narrows
+ * a `RedisReadResult` to `RedisWatermarkMiss`.
  */
 export interface RedisReadMiss {
   readonly reason: CacheMissReason;
-  readonly kind?: never;
   readonly observedWatermarkMs?: never;
   readonly payload?: never;
   readonly createdAtMs?: never;
