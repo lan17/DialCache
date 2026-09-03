@@ -811,9 +811,15 @@ describe("DialCache Redis shadow confirmation", () => {
     expect(metrics.shadowAgeEvents).toEqual([]);
     expect(metrics.futureTimestampEvents).toEqual([]);
     expect(redis.write).toHaveBeenCalledOnce();
-    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
-      name === "miss" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
-    )).toHaveLength(1);
+    expect(metrics.ordinaryEvents.filter(({ name }) => name === "miss").map(({ labels }) => labels)).toEqual([
+      {
+        cacheNamespace: "urn",
+        useCase: "ShadowValueAgeNonFinite",
+        keyType: "user_id",
+        layer: REMOTE_SHADOW_CACHE_LAYER,
+        reason: "unclassified",
+      },
+    ]);
   });
 
   it("does not log a mismatch candidate when C1 is superseded", async () => {
@@ -1380,9 +1386,15 @@ describe("DialCache Redis shadow confirmation", () => {
     expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
       name === "request" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
     )).toHaveLength(1);
-    expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
-      name === "miss" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
-    )).toHaveLength(1);
+    expect(metrics.ordinaryEvents.filter(({ name }) => name === "miss").map(({ labels }) => labels)).toEqual([
+      {
+        cacheNamespace: "urn",
+        useCase: `ShadowDarkMissFill${name}`,
+        keyType: "user_id",
+        layer: REMOTE_SHADOW_CACHE_LAYER,
+        reason: "unclassified",
+      },
+    ]);
     expect(metrics.ordinaryEvents.filter(({ name, labels }) =>
       name === "get" && labels.layer === REMOTE_SHADOW_CACHE_LAYER
     )).toHaveLength(1);
