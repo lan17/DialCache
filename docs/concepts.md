@@ -22,8 +22,11 @@ Invocation
 ```
 
 Inactive layers are skipped. The first hit stops traversal, including any work
-that would otherwise happen at lower layers. Before the first active layer,
-same-key concurrent calls can join one in-flight execution.
+that would otherwise happen at lower layers. Same-key concurrent calls can
+share work within the request before request-local lookup, and within the
+instance before shared-layer lookup. With both kinds of storage enabled,
+each request-local miss can join the same instance-wide flight. See
+[Coalescing scopes](coalescing.md#request-coalescing).
 
 An enabled invocation resolves one policy snapshot before lookup. Defaults
 belong to the reader; the runtime provider overrides individual fields.
@@ -79,6 +82,11 @@ A local hit does not consult Redis. Remote invalidation therefore does not
 evict values already in request-local or process-local memory. A Redis hit can
 also warm the local layer with a full local TTL; the remote TTL is not an
 end-to-end maximum age across the chain.
+
+Changing policy does not evict old entries. In particular, a shorter local TTL
+applies to new writes; existing local values retain their insertion TTL. Redis
+reads classify frame age using the current remote policy. See
+[Policy changes and existing entries](configuration.md#changing-policy-on-a-running-service).
 
 For reads that must consult an entity's invalidation fence, enable only tracked
 remote caching. The watermark contract additionally depends on bounded

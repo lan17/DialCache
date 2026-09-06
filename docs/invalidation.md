@@ -95,9 +95,12 @@ carry a valid watermark and suppress a refill. A `watermark_fenced` miss can
 later refill if the timestamp advances beyond that watermark. A miss without
 an observed fence follows the normal write path.
 
-These checks never delay the returned fallback value. They do not establish a
-transaction with a later invalidation: the watermark can advance after the read
-and fence an admitted write.
+A fenced refill is skipped immediately; the call does not wait for the watermark
+to pass. An admitted refill still awaits serialization and the Redis write
+before returning the fallback value, so those operations need
+[application-owned budgets](coalescing.md#application-owned-budgets).
+The checks do not establish a transaction with a later invalidation: the
+watermark can advance after the read and fence an admitted write.
 
 ### In-memory publication
 

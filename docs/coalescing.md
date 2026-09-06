@@ -2,9 +2,10 @@
 
 [Documentation](index.md) · [API reference](api.md)
 
-By default, DialCache shares same-key in-flight work within the lifetime of the
-first active cache layer. A per-use-case policy can disable that sharing. Each
-active remote read has a finite deadline, and a separate default deadline begins
+By default, DialCache shares same-key in-flight work within a request or a
+`DialCache` instance, according to the active layers. A per-use-case policy can
+disable that sharing. Each active remote read has a finite deadline, and a
+separate default deadline begins
 when an initially enabled invocation starts its fallback loader.
 
 These mechanisms reduce duplicate source work. Their deadlines help flights
@@ -17,7 +18,18 @@ registry and capacity limit. It is not another coalescing scope.
 
 ## Request coalescing
 
-DialCache has two sharing scopes.
+DialCache has two sharing scopes. They can both participate in one call:
+
+| Active layers | Where same-key work is shared |
+| --- | --- |
+| Request-local only | Within one outermost `enable()` scope |
+| Process-local or remote only | Within and across requests using one `DialCache` instance |
+| Request-local plus a shared layer | Within each request first; each request-local miss can then join the instance's shared work |
+
+For example, two concurrent requests with both request-local and process-local
+caching each perform their own request-local lookup. If both miss on the same
+key, their lower-layer work can still coalesce into one process-local lookup
+and one source call. Each request then memoizes the result in its own scope.
 
 ### Request-local scope
 
@@ -58,6 +70,26 @@ cache write; followers await that result.
 
 For a process-local-only miss, followers share the leader's fallback and local
 write. This mitigates a thundering herd on one hot key within the instance.
+
+### What followers inherit
+
+Each enabled invocation resolves its own runtime config before it can join a
+flight. Once it joins, it awaits the leader's result: it does not restart the
+Redis read, run its own loader, or apply a separate source deadline. The leader
+controls the shared cache path, serialization, writes, and stale-recovery
+decision. Followers can therefore receive the leader's failure or recovered
+stale value as well as a fresh result.
+
+A runtime change does not cancel or replace a flight already in progress. A
+later invocation that is still eligible to coalesce can join that flight even
+if its TTL or timeout differs. Turning all layers off bypasses it; setting
+`coalesce: false` starts an independent cache path. Neither action cancels the
+leader or removes values it may publish.
+
+This also matters for `getOrLoad()` calls with different closures or operation
+options under one key. Keep their value meaning and serialization consistent,
+and make execution independent when inheriting another caller's deadline,
+failure, or cancellation behavior would be incorrect.
 
 ### Per-use-case opt-out
 
@@ -221,12 +253,24 @@ The timer starts only when the fallback begins:
 - calls that began outside an enabled context remain true pass-through and are
   not timed out, even when the operation has `fallbackTimeoutMs`.
 
-The fallback deadline does not cover work that happens before fallback. An
-active remote read has its own resolved
-[remote-read deadline](redis.md#remote-read-deadlines-and-async-liveness), while
-a pending config provider or serializer load does not. Serialization and a
-Redis write after fallback also remain outside it. Give every injected
-operation its own finite, resource-native budget.
+### Application-owned budgets
+
+The source deadline is not a total-call timeout. An enabled miss can pass through
+each of these stages before returning:
+
+| Stage | Settlement budget |
+| --- | --- |
+| Runtime config provider | Application-owned; neither read nor source timer has started |
+| Semantic Redis read | Resolved `remoteReadTimeoutMs`; see [Remote-read deadlines](redis.md#remote-read-deadlines-and-async-liveness) |
+| Deserialize a cached value | Application-owned; outside the semantic-read timer |
+| Source loader | `fallbackTimeoutMs`, starting when the source runs |
+| Serialize and write the replacement | Application-owned; the source timer has already finished |
+| Explicit `invalidateRemote()` | Application-owned; independent of enabled scopes |
+
+A pending serializer or Redis write can therefore keep a coalesced flight open
+after the source succeeds. Give injected operations finite, resource-native
+budgets for queueing, retries, and settlement. A separate application timeout
+on the overall request can stop waiting, but does not by itself cancel this work.
 
 ### Event-loop behavior
 

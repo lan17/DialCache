@@ -51,7 +51,8 @@ npm install dialcache
 Requires Node.js `>=22.15.0 <23.0.0 || >=23.8.0`.
 Redis and telemetry clients are optional dependencies you install separately.
 
-Create one `DialCache` instance and reuse the wrapped reader:
+Save this as `example.mts`. It creates one `DialCache` instance and reuses the
+wrapped reader:
 
 ```ts
 import { CacheLayer, DialCache, DialCacheKeyConfig } from "dialcache";
@@ -80,6 +81,15 @@ await dialcache.enable(async () => {
 
 await getUser("123"); // Outside enable(): loads from source again.
 ```
+
+Run it directly with Node:
+
+```bash
+node --experimental-strip-types example.mts
+```
+
+You will see `Loading from source: 123` twice: once for the first enabled read,
+then again for the uncached call. The second enabled read reuses the value.
 
 This example uses only the process-local layer. A TTL with no ramp enables that
 layer for every key inside the scope. The LRU holds at most 10,000 entries by
@@ -165,6 +175,10 @@ With Redis configured, serving and shadow ramps work independently. You can
 sample reads and fills in shadow mode before allowing Redis to serve callers.
 Turning serving off does not stop shadow work; `disabled()` disables both for
 new invocations.
+
+Policy changes govern new invocations; they do not evict existing values or
+cancel shared work. The reference explains
+[how TTL changes affect each layer](https://lan17.github.io/DialCache/configuration.html#changing-policy-on-a-running-service).
 
 [Runtime configuration](https://lan17.github.io/DialCache/configuration.html)
 · [Shadow validation](https://lan17.github.io/DialCache/shadow-validation.html)

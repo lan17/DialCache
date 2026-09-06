@@ -46,8 +46,12 @@ application-provided dependencies.
 The npm tarball contains `README.md` but not `docs/`. README links to the hosted
 reference therefore use absolute URLs. Reference pages use relative Markdown
 links so they work in a checkout, on GitHub, and in the documentation site.
-Before publishing, check file/anchor targets and parse TypeScript examples;
-execute the self-contained getting-started example as well.
+Before publishing, check file/anchor targets and parse TypeScript examples.
+`test:package` extracts the first TypeScript block from both the README and
+getting-started guide, typechecks it against the installed tarball, and executes
+it with the documented Node command. CI also runs this check at Node.js 22.15.0.
+Keep those blocks self-contained; when their demonstrated output changes,
+update the expectation in `scripts/test-package.mjs`.
 
 ### Run the documentation site
 

@@ -6,7 +6,7 @@ Check the installed version and the behavior being enabled before sharing a
 Redis namespace across releases. A compatible frame layout does not by itself
 make two implementations safe to run together.
 
-This guide covers the transitions relevant to the current `v0.23.2` reference.
+This guide covers the transitions relevant to the implementation on `main`.
 Use the [release notes](https://github.com/lan17/DialCache/releases) and matching
 tagged source for the versions in your fleet.
 

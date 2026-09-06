@@ -39,6 +39,21 @@ Enable a scope **and** configure at least one layer to store values.
 
 See [Configuration](configuration.md) for validation and lifetime rules.
 
+### `RedisConfig`
+
+Pass this object as the constructor's `redis` option:
+
+| Field | Default | Contract |
+| --- | --- | --- |
+| `client` | Required | Connected `DialCacheRedisClient`; the application owns connection and shutdown |
+| `readTimeoutMs` | `50` | Positive safe integer up to `2_147_483_647` ms; a use case's `remoteReadTimeoutMs` takes precedence |
+| `serializer` | `JsonSerializer` | Instance-level Redis serializer; an operation's serializer takes precedence |
+| `compression` | `{ thresholdBytes: 4_096, level: 3 }` | `CompressionConfig` or `false`; threshold is a positive safe integer, level is an integer from `1` through `22` |
+
+Providing a client makes the remote layer available; each operation still needs
+a remote TTL and an enabled scope. See [client setup](redis.md),
+[serialization](redis.md#serialization), and [compression](redis.md#compression).
+
 ## Scope methods
 
 | Method | Return | Behavior |

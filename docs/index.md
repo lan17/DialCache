@@ -33,10 +33,22 @@ and integration contracts.
 | [Upgrading](upgrading.md) | Protocol cutovers, longer Redis retention, serializer compatibility, and metric migrations |
 | [Maintainer guide](maintainers.md) | Local validation, documentation, benchmarks, and releases |
 
-These pages describe the code on this branch, based on `v0.23.2`. Documentation
-on `main` follows the repository; use the matching
-[release tag](https://github.com/lan17/DialCache/tags) when checking an older
-installation. The package's TypeScript declarations are the exact type source.
+## Find an answer
+
+| Question | Start here |
+| --- | --- |
+| Why is my loader still running? | [Enabled scopes](configuration.md#enable-and-disable-scopes), [layer policy](configuration.md#baseline-and-overlay-precedence), and [miss reasons](observability.md#miss-reasons) |
+| Why did changing a TTL leave an old value in cache? | [Policy changes and existing entries](configuration.md#changing-policy-on-a-running-service) |
+| Why can I still see a value after invalidation? | [In-memory publication](invalidation.md#in-memory-publication) and [recovery races](stale-on-error.md) |
+| Why are callers sharing a timeout or result? | [What followers inherit](coalescing.md#what-followers-inherit) |
+| What can still wait after the source deadline? | [Application-owned budgets](coalescing.md#application-owned-budgets) |
+| Why is shadow validation doing no work? | [Shadow eligibility](shadow-validation.md#eligibility) and [custom metrics hooks](observability.md#custom-adapters) |
+
+The published site follows `main`, which may be ahead of the npm package. For an
+installed version, consult its [release notes](https://github.com/lan17/DialCache/releases)
+and the README or reference at the matching
+[release tag](https://github.com/lan17/DialCache/tags). The package's TypeScript
+declarations are the exact type source.
 
 [Project overview](https://github.com/lan17/DialCache#readme)
 · [npm package](https://www.npmjs.com/package/dialcache)

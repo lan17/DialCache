@@ -18,7 +18,7 @@ The package provides ESM and CommonJS entry points and TypeScript declarations.
 
 Create one long-lived instance for the service and register reusable readers
 once. The function you wrap is the source loader: DialCache invokes it whenever
-the active cache layers cannot supply a value.
+the active cache layers cannot supply a value. Save this as `example.mts`:
 
 ```ts
 import { CacheLayer, DialCache, DialCacheKeyConfig } from "dialcache";
@@ -50,8 +50,23 @@ await getUser("123");
 console.log(sourceReads); // 2: caching is off outside enable().
 ```
 
-Save this as `example.ts` and run it with your project's TypeScript runner.
-Replace `fetchUser` with the real read when integrating it into your service.
+Run it directly with Node; no TypeScript runner is needed:
+
+```bash
+node --experimental-strip-types example.mts
+```
+
+It prints:
+
+```text
+1
+2
+```
+
+The `.mts` extension selects ESM, so top-level `await` works even in a project
+that otherwise uses CommonJS. The flag removes TypeScript annotations; use your
+project's TypeScript compiler for typechecking. Replace `fetchUser` with the
+real read when integrating the example into your service.
 
 The wrapper preserves the input parameters and always returns a `Promise`.
 `keyType` identifies the entity kind; `useCase` identifies the operation.
@@ -137,6 +152,10 @@ The map stands in for your configuration system. The 10% ramp selects a stable
 cohort of keys and inherits the 60-second TTL. It is not a traffic percentage.
 The disabled overlay stops new cache use and shadow admission; it does not
 cancel work already in flight.
+
+Changing a TTL also has different effects on existing local and Redis entries.
+Read [Changing policy on a running service](configuration.md#changing-policy-on-a-running-service)
+before using a runtime change to tighten freshness.
 
 ## Add shared caching when needed
 
