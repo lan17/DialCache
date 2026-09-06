@@ -186,10 +186,11 @@ cancel shared work. The reference explains
 ## Freshness is a policy you choose
 
 For mutable data, opt a reader into **targeted Redis invalidation** and advance
-its entity watermark after the source mutation commits. The next tracked Redis
-read checks the value and watermark together. Existing in-memory values have
-their own lifetimes, so use the remote layer alone when reads must observe that
-fence.
+its entity watermark after the source mutation commits. A tracked Redis read
+checks the value and watermark together. In-memory hits and coalesced callers
+can reuse an earlier observation. The
+[invalidation guide](https://lan17.github.io/DialCache/invalidation.html#independent-fence-checks)
+shows how to give each invocation its own fence check.
 
 For selected source failures, **stale-on-error** can return a retained Redis
 snapshot within a maximum age. It is off by default; when enabled, its built-in

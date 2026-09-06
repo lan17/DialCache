@@ -182,7 +182,7 @@ expire by TTL.
 ## Runtime config and ramp controls
 
 The constructor supplies shared resources and instance defaults. See
-[`DialCacheConfig`](api.md#new-dialcache-options) for its options.
+[`DialCacheConfig`](api.md#constructor) for its options.
 `DialCacheKeyConfig` supplies the baseline and per-invocation overlay: layer
 TTLs and ramps, request-local caching, coalescing, remote-read timeout,
 stale-recovery age, and shadow policy.

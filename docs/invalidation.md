@@ -6,9 +6,11 @@ Use targeted invalidation when a source mutation should invalidate every tracked
 Redis result for an entity. A single entity watermark covers all its tracked
 use cases and argument variants in the same namespace, without scanning keys.
 
-Invalidation is remote-only. For reads that must consult the watermark, keep
-request-local and process-local caching disabled. Already-cached in-memory
-values do not consult Redis and cannot be revoked by this operation.
+Invalidation is remote-only. In-memory hits and callers joining an existing
+flight can reuse a value without a new Redis read. For an independent watermark
+observation on each invocation, disable request-local and process-local caching,
+set `coalesce: false`, and leave stale recovery off. See
+[Independent fence checks](#independent-fence-checks) for the exact boundary.
 
 ## Configure a tracked use case
 
@@ -32,6 +34,7 @@ const getUser = dialcache.cached(
     trackForInvalidation: true,
     defaultConfig: new DialCacheKeyConfig({
       ttlSec: { [CacheLayer.REMOTE]: 300 },
+      coalesce: false, // Each invocation performs its own tracked read.
     }),
   },
 );
@@ -238,9 +241,32 @@ and cannot shorten a longer/persistent marker. A rejected dispatched mutation
 can have executed, so an error does not prove absence of a watermark change.
 See [Redis retries](redis.md#invalidation-retries-and-ambiguity).
 
+## Independent fence checks
+
+Invalidation changes what a subsequent tracked Redis read can accept. It does
+not revoke a snapshot already read or cancel a caller-path flight. This matters
+even with both in-memory layers and stale recovery disabled:
+
+1. A tracked Redis read acquires a valid cached value, then waits in an
+   asynchronous serializer.
+2. A source mutation commits and `invalidateRemote()` completes.
+3. A new same-key invocation joins that existing flight and receives the earlier
+   value without another Redis read.
+
+To keep later invocations from joining such work, set `coalesce: false` as in
+the example above. With tracked remote caching active, request-local and
+process-local caching off, and stale recovery off, a call starting after
+invalidation performs its own tracked read or falls back to the source on cache
+failure. Keep those effective settings in runtime overlays as well as defaults.
+
+Already-started invocations can still finish with their acquired snapshots.
+The source must supply authoritative reads, and the clock, buffer, and watermark
+durability requirements still apply. This policy does not cancel work or create
+a transaction between the source mutation and Redis.
+
 ## In-memory layers remain local
 
-For a strict remote read-after-invalidation policy, turn off both earlier layers
-and leave stale recovery disabled. If local reuse or recovery is acceptable,
-choose its scope and lifetime explicitly: neither remote invalidation nor
-`disable()` revokes a value already held in memory.
+If local reuse or recovery is acceptable, choose its scope and lifetime
+explicitly: neither remote invalidation nor `disable()` revokes a value already
+held in memory. Default coalescing also trades independent observations for
+shared work, as described above.

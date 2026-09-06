@@ -88,9 +88,12 @@ applies to new writes; existing local values retain their insertion TTL. Redis
 reads classify frame age using the current remote policy. See
 [Policy changes and existing entries](configuration.md#changing-policy-on-a-running-service).
 
-For reads that must consult an entity's invalidation fence, enable only tracked
-remote caching. The watermark contract additionally depends on bounded
-in-flight work, application clock skew, and preservation of watermark state.
+For each invocation to make its own invalidation-fence check, enable only tracked
+remote caching and set `coalesce: false`. Otherwise, a caller can join work that
+read Redis before invalidation and reuse that earlier observation. Invalidation
+does not cancel existing flights. The watermark contract additionally depends
+on bounded in-flight work, application clock skew, and preservation of watermark
+state; see [Independent fence checks](invalidation.md#independent-fence-checks).
 
 Stale-on-error deliberately permits reuse of a snapshot acquired before the
 source attempt. Later invalidation does not revoke that retained snapshot.

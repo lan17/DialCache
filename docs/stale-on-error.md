@@ -149,8 +149,9 @@ the underlying data's own last-update time. Clock skew affects the comparisons;
 see the [application clock contract](invalidation.md#application-clock-contract).
 
 Earlier local layers retain their own lifetimes. A nearly expired Redis hit can
-warm process-local storage with a full local TTL. Disable both earlier layers
-when the remote frame-age policy must govern every lookup.
+warm process-local storage with a full local TTL. For each invocation to make a
+new remote frame-age check, disable both earlier layers and set `coalesce: false`.
+Otherwise, a follower can reuse the leader's earlier age check and snapshot.
 
 Coalesced callers share one initial read, raw candidate, source attempt, and
 recovery decision. With `coalesce: false`, each caller retains its own bytes and

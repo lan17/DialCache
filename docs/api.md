@@ -20,9 +20,10 @@ package's declarations provide the full generic signatures.
 Optional integrations use their own import paths. The application installs and
 owns the corresponding client or metrics registry.
 
-## `new DialCache(options?)`
+## Constructor
 
-Construct one instance for each intended local-cache and coalescing boundary.
+`new DialCache(options?)` constructs one instance for each intended local-cache
+and coalescing boundary.
 With no options, it supports in-memory caching and uses a disabled baseline.
 Enable a scope **and** configure at least one layer to store values.
 
@@ -169,7 +170,10 @@ stringified and the buffer is a nonnegative safe integer, at most
 `31_536_000_000` milliseconds.
 
 It affects tracked Redis entries across use cases and argument variants in the
-same namespace. It does not evict in-memory or untracked Redis values. Missing
+same namespace. It does not evict in-memory or untracked Redis values, revoke
+acquired snapshots, or clear in-flight work. See
+[Independent fence checks](invalidation.md#independent-fence-checks) when each
+invocation must observe invalidation separately. Missing
 Redis configuration and mutation failures reject; the method works outside an
 enabled scope. Choose the buffer from the
 [clock and in-flight-work contract](invalidation.md#choosing-futurebufferms).

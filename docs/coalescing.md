@@ -91,6 +91,12 @@ options under one key. Keep their value meaning and serialization consistent,
 and make execution independent when inheriting another caller's deadline,
 failure, or cancellation behavior would be incorrect.
 
+`invalidateRemote()` does not clear existing flights. A caller arriving after
+invalidation can join a leader that read Redis before invalidation, even when
+only tracked remote caching is enabled. Use `coalesce: false` when each caller
+needs its own watermark observation; see
+[Independent fence checks](invalidation.md#independent-fence-checks).
+
 ### Per-use-case opt-out
 
 `DialCacheKeyConfig.coalesce` is a sparse runtime boolean whose effective
