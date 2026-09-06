@@ -14,9 +14,9 @@ Start with an in-memory cache. Add Redis or Valkey when you need a shared layer.
 Roll each use case out to a stable cohort of keys, observe the results, and
 adjust the policy while your service runs. Your loader stays the same.
 
-[**Read the documentation →**](https://github.com/lan17/DialCache/blob/main/docs/index.md)
-· [Getting started](https://github.com/lan17/DialCache/blob/main/docs/getting-started.md)
-· [API reference](https://github.com/lan17/DialCache/blob/main/docs/api.md)
+[**Read the documentation →**](https://lan17.github.io/DialCache/)
+· [Getting started](https://lan17.github.io/DialCache/getting-started.html)
+· [API reference](https://lan17.github.io/DialCache/api.html)
 
 ## Why DialCache?
 
@@ -86,7 +86,7 @@ layer for every key inside the scope. The LRU holds at most 10,000 entries by
 default. In a service, place `enable()` around a read-request handler so nested
 readers inherit the same asynchronous scope.
 
-Prefer an inline loader? [`getOrLoad()`](https://github.com/lan17/DialCache/blob/main/docs/api.md#getorload)
+Prefer an inline loader? [`getOrLoad()`](https://lan17.github.io/DialCache/api.html#getorload)
 uses the same behavior with a direct key:
 
 ```ts
@@ -100,7 +100,7 @@ const user = await dialcache.enable(() =>
 );
 ```
 
-[Continue the getting-started guide →](https://github.com/lan17/DialCache/blob/main/docs/getting-started.md)
+[Continue the getting-started guide →](https://lan17.github.io/DialCache/getting-started.html)
 
 ## One reader, three cache layers
 
@@ -122,7 +122,7 @@ from the lower chain can be memoized within the request. Tracked Redis reads
 have additional publication rules to keep a fallback from bypassing an
 invalidation fence.
 
-[Understand the read path and freshness boundaries →](https://github.com/lan17/DialCache/blob/main/docs/concepts.md)
+[Understand the read path and freshness boundaries →](https://lan17.github.io/DialCache/concepts.html)
 
 ## Turn the dial while your service runs
 
@@ -166,8 +166,8 @@ sample reads and fills in shadow mode before allowing Redis to serve callers.
 Turning serving off does not stop shadow work; `disabled()` disables both for
 new invocations.
 
-[Runtime configuration](https://github.com/lan17/DialCache/blob/main/docs/configuration.md)
-· [Shadow validation](https://github.com/lan17/DialCache/blob/main/docs/shadow-validation.md)
+[Runtime configuration](https://lan17.github.io/DialCache/configuration.html)
+· [Shadow validation](https://lan17.github.io/DialCache/shadow-validation.html)
 
 ## Freshness is a policy you choose
 
@@ -187,25 +187,27 @@ Good cache keys include every input that affects the result. Cached objects are
 shared references: treat them as immutable. Cache access fails open, while
 explicit invalidation failures reject so your application can handle them.
 
-[Invalidation](https://github.com/lan17/DialCache/blob/main/docs/invalidation.md)
-· [Stale-on-error](https://github.com/lan17/DialCache/blob/main/docs/stale-on-error.md)
-· [Key design](https://github.com/lan17/DialCache/blob/main/docs/configuration.md#keys-ids-and-extra-dimensions)
+[Invalidation](https://lan17.github.io/DialCache/invalidation.html)
+· [Stale-on-error](https://lan17.github.io/DialCache/stale-on-error.html)
+· [Key design](https://lan17.github.io/DialCache/configuration.html#keys-ids-and-extra-dimensions)
 
 ## Explore the reference
 
-The [documentation home](https://github.com/lan17/DialCache/blob/main/docs/index.md)
+The [documentation home](https://lan17.github.io/DialCache/)
 provides a guided reading order and a topic map. Each feature guide starts with
 its purpose and setup, then explains execution, edge cases, and API details.
 
 | I want to… | Read |
 | --- | --- |
-| Add caching to a service | [Getting started](https://github.com/lan17/DialCache/blob/main/docs/getting-started.md) |
-| Understand what runs on a hit, miss, or error | [How DialCache works](https://github.com/lan17/DialCache/blob/main/docs/concepts.md) |
-| Look up methods, options, and exports | [API reference](https://github.com/lan17/DialCache/blob/main/docs/api.md) |
-| Set keys, layers, TTLs, and rollout policy | [Configuration](https://github.com/lan17/DialCache/blob/main/docs/configuration.md) |
-| Connect Redis or Valkey; customize serialization | [Redis and Valkey](https://github.com/lan17/DialCache/blob/main/docs/redis.md) |
-| Understand shared work and deadlines | [Coalescing and liveness](https://github.com/lan17/DialCache/blob/main/docs/coalescing.md) |
-| Build dashboards and diagnose misses | [Observability](https://github.com/lan17/DialCache/blob/main/docs/observability.md) |
-| Upgrade, validate, or contribute | [Upgrading](https://github.com/lan17/DialCache/blob/main/docs/upgrading.md) · [Maintainer guide](https://github.com/lan17/DialCache/blob/main/docs/maintainers.md) |
+| Add caching to a service | [Getting started](https://lan17.github.io/DialCache/getting-started.html) |
+| Understand what runs on a hit, miss, or error | [How DialCache works](https://lan17.github.io/DialCache/concepts.html) |
+| Look up methods, options, and exports | [API reference](https://lan17.github.io/DialCache/api.html) |
+| Set keys, layers, TTLs, and rollout policy | [Configuration](https://lan17.github.io/DialCache/configuration.html) |
+| Connect Redis or Valkey; customize serialization | [Redis and Valkey](https://lan17.github.io/DialCache/redis.html) |
+| Understand shared work and deadlines | [Coalescing and liveness](https://lan17.github.io/DialCache/coalescing.html) |
+| Build dashboards and diagnose misses | [Observability](https://lan17.github.io/DialCache/observability.html) |
+| Upgrade, validate, or contribute | [Upgrading](https://lan17.github.io/DialCache/upgrading.html) · [Maintainer guide](https://lan17.github.io/DialCache/maintainers.html) |
+
+[Browse the reference as Markdown](https://github.com/lan17/DialCache/tree/main/docs).
 
 MIT licensed. See [LICENSE](https://github.com/lan17/DialCache/blob/main/LICENSE).

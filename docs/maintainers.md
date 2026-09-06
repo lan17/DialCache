@@ -12,6 +12,7 @@ Use the repository's pinned pnpm through Corepack:
 ```bash
 corepack pnpm install --frozen-lockfile
 corepack pnpm check
+corepack pnpm docs:build
 corepack pnpm test:integration
 ```
 
@@ -42,11 +43,54 @@ PR. Check defaults and bounds against source, and include any rollout or
 compatibility implications in `docs/upgrading.md`. Keep examples explicit about
 application-provided dependencies.
 
-The npm tarball contains `README.md` but not `docs/`. README links to repository
-files therefore use absolute GitHub URLs. Reference pages use relative Markdown
-links so they work in a checkout, on GitHub, and in a static documentation build.
+The npm tarball contains `README.md` but not `docs/`. README links to the hosted
+reference therefore use absolute URLs. Reference pages use relative Markdown
+links so they work in a checkout, on GitHub, and in the documentation site.
 Before publishing, check file/anchor targets and parse TypeScript examples;
 execute the self-contained getting-started example as well.
+
+### Run the documentation site
+
+VitePress renders the Markdown in `docs/` with grouped navigation, page outlines,
+syntax highlighting, and local search. Search runs in the browser using an index
+built with the site; it needs no external service or credentials.
+
+```bash
+corepack pnpm docs:dev
+```
+
+To check the production output, run:
+
+```bash
+corepack pnpm docs:build
+corepack pnpm docs:preview
+```
+
+Open the `/DialCache/` URL printed by the server. The build writes to
+`docs/.vitepress/dist/` and fails on broken internal page links. Generated output
+and the local build cache are ignored by Git. When adding a page, include it in
+`docs/index.md` and the sidebar in `docs/.vitepress/config.mts`.
+
+The dependency overrides keep stable VitePress on patched Vite 6.4.x. The config
+uses a Safari 14.1 target for builds and dependency optimization to remain
+compatible with the repository's patched esbuild. Revisit this scoped override
+and the targets when upgrading VitePress.
+
+### Publish to GitHub Pages
+
+The site is hosted at [lan17.github.io/DialCache](https://lan17.github.io/DialCache/).
+In the repository's **Settings → Pages**, select **GitHub Actions** as the build
+source. Keep `base: "/DialCache/"` in the VitePress config so links and assets work
+under the project URL.
+
+The `Documentation` workflow builds every pull request. A push to `main` builds
+and publishes the site through the `github-pages` environment; the workflow can
+also be run manually from `main` to republish. Pull requests and manual runs from
+other branches cannot upload a Pages artifact or deploy. The deployment job uses
+GitHub's short-lived token and OIDC; no deployment secret is needed.
+
+The published reference follows `main` independently of npm releases. Use the
+Markdown at a release tag when reading about an older installed version.
 
 ## Cache-path benchmark
 
