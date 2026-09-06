@@ -4,9 +4,9 @@
 
 By default, DialCache shares same-key in-flight work within a request or a
 `DialCache` instance, according to the active layers. A per-use-case policy can
-disable that sharing. Each active remote read has a finite deadline, and a
-separate default deadline begins
-when an initially enabled invocation starts its fallback loader.
+disable that sharing. Each active remote read has a finite deadline. A separate
+default deadline begins when an initially enabled invocation starts its fallback
+loader.
 
 These mechanisms reduce duplicate source work. Their deadlines help flights
 settle, but eventual cleanup still requires finite application-owned budgets
@@ -255,8 +255,8 @@ The timer starts only when the fallback begins:
 
 ### Application-owned budgets
 
-The source deadline is not a total-call timeout. An enabled miss can pass through
-each of these stages before returning:
+The source deadline is not a total-call timeout. Each operation has its own
+settlement boundary:
 
 | Stage | Settlement budget |
 | --- | --- |
