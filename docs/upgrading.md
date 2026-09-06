@@ -108,8 +108,8 @@ Legacy binary output can collide with envelope markers:
 
 - A legacy `0x01`/`0x02` prefix whose remaining bytes happen to be valid zstd can
   be decoded as compressed data.
-- A legacy payload whose first two bytes are in `0x00`–`0x02` can lose its first
-  byte to the escape rule.
+- A legacy payload beginning with `0x00` followed by `0x00`, `0x01`, or `0x02`
+  can lose its first byte to the escape rule.
 - New writers escape colliding raw binary prefixes even with compression off.
 
 Version an identity dimension, such as the use case, when a custom binary
