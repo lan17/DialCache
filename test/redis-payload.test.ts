@@ -1,13 +1,15 @@
+import type { CacheMissReason } from "../src/index.js";
 import {
-  decodeRedisFrame,
-  decodeTrackedRedisFrame,
+  decodeRedisReadResult,
+  decodeTrackedRedisReadResult,
   encodeRedisFrame,
-  encodeTrackedRedisPlaceholder,
+  isRedisReadMiss,
 } from "../src/redis-protocol.js";
 import {
   DialCacheRedisPayloadEncodingError,
   DialCacheRedisPayloadError,
 } from "../src/redis-client.js";
+import { isValidRedisTimestampMs } from "../src/internal/redis-payload.js";
 
 function encodeFrame(
   payload: string | Buffer,
@@ -26,29 +28,51 @@ function encodeFrame(
 }
 
 describe("Redis frame decoding", () => {
-  it("decodes UTF-8 and binary payloads without copying binary data", () => {
-    expect(decodeRedisFrame(encodeFrame("cached"))).toBe("cached");
-
-    const frame = encodeFrame(Buffer.from([0, 0xff, 0x80]), 1);
-    const decoded = decodeRedisFrame(frame);
-    expect(decoded).toEqual(Buffer.from([0, 0xff, 0x80]));
-    expect(Buffer.isBuffer(decoded)).toBe(true);
-    if (!Buffer.isBuffer(decoded)) {
-      throw new Error("Expected a binary Redis payload");
+  it("shares one nonnegative safe-integer timestamp domain without coercing values", () => {
+    for (const timestamp of [0, 1, Number.MAX_SAFE_INTEGER]) {
+      expect(isValidRedisTimestampMs(timestamp)).toBe(true);
     }
-    expect(decoded.buffer).toBe(frame.buffer);
-    expect(decoded.byteOffset).toBe(frame.byteOffset + 10);
-    expect(decoded.byteLength).toBe(frame.byteLength - 10);
+    for (const value of [-1, 0.5, Number.NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, "0", 1n, null, undefined, {}]) {
+      expect(isValidRedisTimestampMs(value)).toBe(false);
+    }
   });
 
-  it("treats missing, short, and unsupported frames as misses", () => {
-    expect(decodeRedisFrame(null)).toBeNull();
-    expect(decodeRedisFrame(Buffer.alloc(9))).toBeNull();
-    expect(decodeRedisFrame(encodeFrame("cached", 0, 1_000, 2))).toBeNull();
+  it("decodes UTF-8 and binary payloads without copying binary data", () => {
+    expect(decodeRedisReadResult(encodeFrame("cached"))).toEqual({
+      payload: "cached",
+      createdAtMs: 1_000,
+    });
+
+    const frame = encodeFrame(Buffer.from([0, 0xff, 0x80]), 1, 2_000);
+    const decoded = decodeRedisReadResult(frame);
+    expect(decoded).toEqual({ payload: Buffer.from([0, 0xff, 0x80]), createdAtMs: 2_000 });
+    if (isRedisReadMiss(decoded)) {
+      throw new Error("Expected a decoded Redis frame");
+    }
+    const { payload } = decoded;
+    expect(Buffer.isBuffer(payload)).toBe(true);
+    if (!Buffer.isBuffer(payload)) {
+      throw new Error("Expected a binary Redis payload");
+    }
+    expect(payload.buffer).toBe(frame.buffer);
+    expect(payload.byteOffset).toBe(frame.byteOffset + 10);
+    expect(payload.byteLength).toBe(frame.byteLength - 10);
+  });
+
+  it("classifies untracked absence separately from short and unsupported frames", () => {
+    expect(decodeRedisReadResult(null)).toEqual({ kind: "miss", reason: "value_absent" });
+    expect(decodeRedisReadResult(Buffer.alloc(9))).toEqual({
+      kind: "miss",
+      reason: "unclassified",
+    });
+    expect(decodeRedisReadResult(encodeFrame("cached", 0, 1_000, 2))).toEqual({
+      kind: "miss",
+      reason: "unclassified",
+    });
   });
 
   it("rejects unsupported payload encodings after validating the frame", () => {
-    expect(() => decodeRedisFrame(encodeFrame("cached", 2))).toThrow(
+    expect(() => decodeRedisReadResult(encodeFrame("cached", 2))).toThrow(
       DialCacheRedisPayloadEncodingError,
     );
   });
@@ -57,46 +81,172 @@ describe("Redis frame decoding", () => {
     const invalidReplies: readonly unknown[] = [undefined, "not-bytes", 0, {}, []];
 
     for (const reply of invalidReplies) {
-      expect(() => decodeRedisFrame(reply)).toThrow(DialCacheRedisPayloadError);
-      expect(() => decodeTrackedRedisFrame(reply, null)).toThrow(DialCacheRedisPayloadError);
-      expect(() => decodeTrackedRedisFrame(null, reply)).toThrow(DialCacheRedisPayloadError);
+      expect(() => decodeRedisReadResult(reply)).toThrow(DialCacheRedisPayloadError);
+      expect(() => decodeTrackedRedisReadResult(reply, null)).toThrow(
+        DialCacheRedisPayloadError,
+      );
+      expect(() => decodeTrackedRedisReadResult(null, reply)).toThrow(
+        DialCacheRedisPayloadError,
+      );
     }
   });
 
-  it("validates tracked frames against integer and fractional watermarks", () => {
+  it("validates tracked frames against safe-integer watermarks", () => {
     const frame = encodeFrame("cached", 0, 1_000);
+    const decoded = { payload: "cached", createdAtMs: 1_000 };
 
-    expect(decodeTrackedRedisFrame(frame, Buffer.from("999"))).toBe("cached");
-    expect(decodeTrackedRedisFrame(frame, Buffer.from("999.5"))).toBe("cached");
-    expect(decodeTrackedRedisFrame(frame, Buffer.from("1000"))).toBeNull();
-    expect(decodeTrackedRedisFrame(frame, Buffer.from("1000.5"))).toBeNull();
+    expect(decodeTrackedRedisReadResult(frame, Buffer.from("999"))).toEqual(decoded);
+    expect(decodeTrackedRedisReadResult(frame, Buffer.from("1000"))).toEqual({
+      kind: "miss",
+      reason: "watermark_fenced",
+      observedWatermarkMs: 1_000,
+    });
+
+    const latestFrame = encodeFrame("latest", 0, Number.MAX_SAFE_INTEGER);
+    expect(
+      decodeTrackedRedisReadResult(
+        latestFrame,
+        Buffer.from(String(Number.MAX_SAFE_INTEGER - 1)),
+      ),
+    ).toEqual({ payload: "latest", createdAtMs: Number.MAX_SAFE_INTEGER });
+    expect(
+      decodeTrackedRedisReadResult(latestFrame, Buffer.from(String(Number.MAX_SAFE_INTEGER))),
+    ).toEqual({
+      kind: "miss",
+      reason: "watermark_fenced",
+      observedWatermarkMs: Number.MAX_SAFE_INTEGER,
+    });
   });
 
-  it("treats missing, malformed, and non-finite watermarks as misses", () => {
+  it("classifies tracked misses while preserving a valid observed watermark independently", () => {
+    const watermark = Buffer.from("1000");
+
+    const cases: ReadonlyArray<readonly [unknown, CacheMissReason]> = [
+      [null, "value_absent"],
+      [Buffer.alloc(9), "unclassified"],
+      [encodeFrame("unsupported", 0, 2_000, 2), "unclassified"],
+      [encodeFrame("fenced", 0, 1_000), "watermark_fenced"],
+    ];
+    for (const [frame, reason] of cases) {
+      const result = decodeTrackedRedisReadResult(frame, watermark);
+      expect(result).toEqual({ kind: "miss", reason, observedWatermarkMs: 1_000 });
+      expect(isRedisReadMiss(result)).toBe(true);
+    }
+  });
+
+  it("classifies nil before malformed or absent watermark metadata", () => {
+    for (const watermark of [null, Buffer.from("invalid")]) {
+      expect(decodeTrackedRedisReadResult(null, watermark)).toEqual({
+        kind: "miss",
+        reason: "value_absent",
+      });
+      expect(decodeTrackedRedisReadResult(Buffer.alloc(9), watermark)).toEqual({
+        kind: "miss",
+        reason: "unclassified",
+      });
+      expect(decodeTrackedRedisReadResult(
+        encodeFrame("unsupported", 0, 2_000, 2),
+        watermark,
+      )).toEqual({ kind: "miss", reason: "unclassified" });
+    }
+  });
+
+  it("returns the same undiscriminated hit shape on both read paths", () => {
+    const frame = encodeFrame("cached", 0, 1_001);
+    const decoded = { payload: "cached", createdAtMs: 1_001 };
+
+    const untracked = decodeRedisReadResult(frame);
+    expect(untracked).toEqual(decoded);
+    expect(isRedisReadMiss(untracked)).toBe(false);
+    for (const watermark of [null, Buffer.from("1000")]) {
+      const tracked = decodeTrackedRedisReadResult(frame, watermark);
+      expect(tracked).toEqual(decoded);
+      expect(isRedisReadMiss(tracked)).toBe(false);
+    }
+  });
+
+  it("preserves unsafe timestamps for core validation after decoding the payload", () => {
+    const createdAtMs = Number.MAX_SAFE_INTEGER + 1;
+    const frame = encodeFrame("cached", 0, createdAtMs);
+    const decoded = { payload: "cached", createdAtMs };
+
+    expect(decodeRedisReadResult(frame)).toEqual(decoded);
+    for (const watermark of [null, Buffer.from("1000")]) {
+      expect(decodeTrackedRedisReadResult(frame, watermark)).toEqual(decoded);
+    }
+  });
+
+  it("preserves payload encoding errors for frames with unsafe timestamps", () => {
+    const frame = encodeFrame("cached", 2, Number.MAX_SAFE_INTEGER + 1);
+
+    expect(() => decodeRedisReadResult(frame)).toThrow(DialCacheRedisPayloadEncodingError);
+    for (const watermark of [null, Buffer.from("1000")]) {
+      expect(() => decodeTrackedRedisReadResult(frame, watermark)).toThrow(
+        DialCacheRedisPayloadEncodingError,
+      );
+    }
+  });
+
+  it("treats a missing watermark as the zero baseline", () => {
+    const frame = encodeFrame("cached", 0, 1_000);
+
+    expect(decodeTrackedRedisReadResult(frame, null)).toEqual({
+      payload: "cached",
+      createdAtMs: 1_000,
+    });
+  });
+
+  it("treats malformed and non-finite watermarks as unclassified tracked misses", () => {
     const frame = encodeFrame("cached", 0, 1_000);
 
     for (const watermark of [
-      null,
       Buffer.from(""),
       Buffer.from("-1"),
       Buffer.from("1."),
       Buffer.from(".1"),
       Buffer.from("1e2"),
       Buffer.from("1\n"),
+      Buffer.from("999.5"),
+      Buffer.from(String(Number.MAX_SAFE_INTEGER + 1)),
       Buffer.from("9".repeat(400)),
     ]) {
-      expect(decodeTrackedRedisFrame(frame, watermark)).toBeNull();
+      expect(decodeTrackedRedisReadResult(frame, watermark)).toEqual({
+        kind: "miss",
+        reason: "unclassified",
+      });
+      expect(decodeTrackedRedisReadResult(null, watermark)).toEqual({
+        kind: "miss",
+        reason: "value_absent",
+      });
     }
   });
 
   it("validates tracked frame and watermark state before payload encoding", () => {
     const malformedPayload = encodeFrame("cached", 2, 1_000);
 
-    expect(decodeTrackedRedisFrame(null, Buffer.from("0"))).toBeNull();
-    expect(decodeTrackedRedisFrame(Buffer.alloc(9), Buffer.from("0"))).toBeNull();
-    expect(decodeTrackedRedisFrame(malformedPayload, null)).toBeNull();
-    expect(decodeTrackedRedisFrame(malformedPayload, Buffer.from("1000"))).toBeNull();
-    expect(() => decodeTrackedRedisFrame(malformedPayload, Buffer.from("999"))).toThrow(
+    expect(decodeTrackedRedisReadResult(null, Buffer.from("0"))).toEqual({
+      kind: "miss",
+      reason: "value_absent",
+      observedWatermarkMs: 0,
+    });
+    expect(decodeTrackedRedisReadResult(Buffer.alloc(9), Buffer.from("0"))).toEqual({
+      kind: "miss",
+      reason: "unclassified",
+      observedWatermarkMs: 0,
+    });
+    expect(() => decodeTrackedRedisReadResult(malformedPayload, null)).toThrow(
+      DialCacheRedisPayloadEncodingError,
+    );
+    expect(decodeTrackedRedisReadResult(malformedPayload, Buffer.from("invalid"))).toEqual({
+      kind: "miss",
+      reason: "unclassified",
+    });
+    expect(decodeTrackedRedisReadResult(malformedPayload, Buffer.from("1000"))).toEqual({
+      kind: "miss",
+      reason: "watermark_fenced",
+      observedWatermarkMs: 1_000,
+    });
+    expect(() => decodeTrackedRedisReadResult(malformedPayload, Buffer.from("999"))).toThrow(
       DialCacheRedisPayloadEncodingError,
     );
   });
@@ -106,67 +256,53 @@ describe("Redis frame decoding", () => {
     expect(utf8[0]).toBe(1);
     expect(Number(utf8.readBigUInt64BE(1))).toBe(1_000);
     expect(utf8[9]).toBe(0);
-    expect(decodeRedisFrame(utf8)).toBe("cachéd ✓");
-    expect(decodeTrackedRedisFrame(utf8, Buffer.from("999"))).toBe("cachéd ✓");
+    expect(decodeRedisReadResult(utf8)).toEqual({ payload: "cachéd ✓", createdAtMs: 1_000 });
+    expect(decodeTrackedRedisReadResult(utf8, Buffer.from("999"))).toEqual({
+      payload: "cachéd ✓",
+      createdAtMs: 1_000,
+    });
 
     const binaryPayload = Buffer.from([0, 0xff, 0x80]);
     const binary = encodeRedisFrame(binaryPayload, 2_000);
     expect(binary[9]).toBe(1);
     expect(binary).toEqual(encodeFrame(binaryPayload, 1, 2_000));
-    expect(decodeRedisFrame(binary)).toEqual(binaryPayload);
+    expect(decodeRedisReadResult(binary)).toEqual({ payload: binaryPayload, createdAtMs: 2_000 });
 
     const empty = encodeRedisFrame("", 1);
     expect(empty.byteLength).toBe(10);
-    expect(decodeRedisFrame(empty)).toBe("");
+    expect(decodeRedisReadResult(empty)).toEqual({ payload: "", createdAtMs: 1 });
   });
 
   it("keeps zero-stamped version-1 frames unreadable on the tracked path", () => {
     const zeroStamped = encodeRedisFrame("pending", 0);
 
-    expect(decodeTrackedRedisFrame(zeroStamped, null)).toBeNull();
-    expect(decodeTrackedRedisFrame(zeroStamped, Buffer.from("0"))).toBeNull();
-    expect(decodeTrackedRedisFrame(zeroStamped, Buffer.from("1"))).toBeNull();
-    expect(decodeRedisFrame(zeroStamped)).toBe("pending");
+    expect(decodeTrackedRedisReadResult(zeroStamped, null)).toEqual({
+      kind: "miss",
+      reason: "unclassified",
+    });
+    expect(decodeTrackedRedisReadResult(zeroStamped, Buffer.from("0"))).toEqual({
+      kind: "miss",
+      reason: "unclassified",
+      observedWatermarkMs: 0,
+    });
+    expect(decodeTrackedRedisReadResult(zeroStamped, Buffer.from("1"))).toEqual({
+      kind: "miss",
+      reason: "unclassified",
+      observedWatermarkMs: 1,
+    });
+    expect(decodeRedisReadResult(zeroStamped)).toEqual({ payload: "pending", createdAtMs: 0 });
   });
 
-  it("encodes tracked placeholders that no read path serves", () => {
-    const { frame, nonce } = encodeTrackedRedisPlaceholder("pending");
-
-    expect(frame[0]).toBe(0);
-    expect(nonce.byteLength).toBe(8);
-    expect(frame.subarray(1, 9)).toEqual(nonce);
-    expect(frame[9]).toBe(0);
-    expect(frame.subarray(10).toString("utf8")).toBe("pending");
-    expect(decodeRedisFrame(frame)).toBeNull();
-    expect(decodeTrackedRedisFrame(frame, null)).toBeNull();
-    expect(decodeTrackedRedisFrame(frame, Buffer.from("0"))).toBeNull();
-    expect(decodeTrackedRedisFrame(frame, Buffer.from("1"))).toBeNull();
-
-    const binary = encodeTrackedRedisPlaceholder(Buffer.from([0, 0xff]));
-    expect(binary.frame[9]).toBe(1);
-    expect(decodeRedisFrame(binary.frame)).toBeNull();
-  });
-
-  it("mints a distinct nonce for every placeholder", () => {
-    // The stamp promotes only the placeholder carrying its own nonce, so
-    // nonce uniqueness is what keeps concurrent same-key writes disjoint.
-    const mints = Array.from({ length: 32 }, () => encodeTrackedRedisPlaceholder("pending"));
-    const nonces = new Set(mints.map(({ nonce }) => nonce.toString("hex")));
-
-    expect(nonces.size).toBe(32);
-    for (const { frame, nonce } of mints) {
-      expect(frame.subarray(1, 9)).toEqual(nonce);
-    }
-  });
-
-  it("gates serving on the version byte even for hostile placeholder nonces", () => {
-    // A nonce that would decode as a huge timestamp must never beat the
-    // watermark: version 0 alone keeps the frame a miss on both paths.
+  it("gates serving on the version byte even for hostile header bytes", () => {
     const hostile = encodeFrame("pending", 0, 1, 0);
     hostile.fill(0xff, 1, 9);
 
-    expect(decodeRedisFrame(hostile)).toBeNull();
-    expect(decodeTrackedRedisFrame(hostile, Buffer.from("1"))).toBeNull();
+    expect(decodeRedisReadResult(hostile)).toEqual({ kind: "miss", reason: "unclassified" });
+    expect(decodeTrackedRedisReadResult(hostile, Buffer.from("1"))).toEqual({
+      kind: "miss",
+      reason: "unclassified",
+      observedWatermarkMs: 1,
+    });
   });
 
   it("rejects unencodable createdAt timestamps", () => {

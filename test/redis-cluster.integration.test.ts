@@ -7,10 +7,18 @@ import {
   type StartedTestContainer,
   Wait,
 } from "testcontainers";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { CacheLayer, DialCache, DialCacheKeyConfig, type DialCacheRedisClient } from "../src/index.js";
-import { createNodeRedisDialCacheClient, dialcacheRedisScripts } from "../src/node-redis.js";
+import {
+  CacheLayer,
+  type DecodedRedisFrame,
+  DialCache,
+  DialCacheKeyConfig,
+  type DialCacheRedisClient,
+  isRedisReadMiss,
+  type RedisReadResult,
+} from "../src/index.js";
+import { createNodeRedisDialCacheClient } from "../src/node-redis.js";
 import { createValkeyGlideDialCacheClient } from "../src/valkey-glide.js";
 
 const remoteOnly = new DialCacheKeyConfig({
@@ -18,11 +26,15 @@ const remoteOnly = new DialCacheKeyConfig({
   ramp: { [CacheLayer.REMOTE]: 100 },
 });
 
-const createTestCluster = (options: RedisClusterOptions) =>
-  createCluster({
-    ...options,
-    scripts: dialcacheRedisScripts,
-  });
+/** Narrow an adapter read to its decoded frame, failing loudly on any miss. */
+function expectFrame(result: RedisReadResult): DecodedRedisFrame {
+  if (isRedisReadMiss(result)) {
+    throw new Error(`expected a decoded frame but read a miss: ${JSON.stringify(result)}`);
+  }
+  return result;
+}
+
+const createTestCluster = (options: RedisClusterOptions) => createCluster(options);
 
 async function waitForCluster(container: StartedTestContainer): Promise<void> {
   for (let attempt = 0; attempt < 50; attempt += 1) {
@@ -137,7 +149,7 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
     await network?.stop();
   });
 
-  it("routes cache operations across slots and reloads mutation scripts per node", async () => {
+  it("routes cache operations across slots and reloads invalidation scripts per node", async () => {
     if (cluster === undefined) {
       throw new Error("Redis Cluster did not start");
     }
@@ -153,8 +165,6 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
       keyType: "item_id",
       useCase: "ClusterSlots",
       cacheKey: (id) => id,
-      // Tracked, so the pre-flush pass loads the stamp script on every master
-      // and the post-flush pass proves a genuine per-node NOSCRIPT reload.
       trackForInvalidation: true,
       defaultConfig: remoteOnly,
     });
@@ -172,18 +182,8 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
         await client.scriptFlush();
       }),
     );
-    const recoveryDialcache = new DialCache({
-      namespace: "cluster-cache-recovery",
-      redis: { client: scriptClient, readTimeoutMs: 10_000 },
-    });
-    const recoverValue = recoveryDialcache.cached(async (id: string) => ({ id, calls: ++calls }), {
-      keyType: "item_id",
-      useCase: "ClusterSlots",
-      cacheKey: (id) => id,
-      trackForInvalidation: true,
-      defaultConfig: remoteOnly,
-    });
-    const second = await recoveryDialcache.enable(async () => await Promise.all(ids.map(recoverValue)));
+    await Promise.all(ids.map(async (id) => await dialcache.invalidateRemote("item_id", id)));
+    const second = await dialcache.enable(async () => await Promise.all(ids.map(getValue)));
     const sizesAfterRecovery = await Promise.all(
       activeCluster.masters.map(async (master) => {
         const client = await activeCluster.nodeClient(master);
@@ -191,7 +191,7 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
       }),
     );
     const callsAfterRecovery = calls;
-    const third = await recoveryDialcache.enable(async () => await Promise.all(ids.map(recoverValue)));
+    const third = await dialcache.enable(async () => await Promise.all(ids.map(getValue)));
 
     expect(first.map(({ id }) => id)).toEqual(ids);
     expect(sizesBeforeFlush.every((size) => size > 0)).toBe(true);
@@ -208,7 +208,6 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
     if (cluster === undefined) {
       throw new Error("Redis Cluster did not start");
     }
-    expect(dialcacheRedisScripts.dialcacheWriteTrackedStamp.SHA1).not.toBe(dialcacheRedisScripts.dialcacheInvalidate.SHA1);
     const scriptClient: DialCacheRedisClient = createNodeRedisDialCacheClient(cluster);
     const dialcache = new DialCache({
       namespace: "cluster-cache",
@@ -239,14 +238,6 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
         watermarkKey: "{slot-b}:watermark",
       }),
     ).rejects.toThrow(/CROSSSLOT/);
-    await expect(
-      scriptClient.write({
-        valueKey: "{slot-a}:value",
-        watermarkKey: "{slot-b}:watermark",
-        cacheTtlMs: 60_000,
-        value: "cross",
-      }),
-    ).rejects.toThrow(/CROSSSLOT/);
   });
 
   it("round-trips binary payloads through cluster routing", async () => {
@@ -257,8 +248,10 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
     const valueKey = "binary-cluster:{item:untracked}:value";
     const payload = Buffer.from(Array.from({ length: 256 }, (_, index) => index));
 
-    expect(await scriptClient.write({ valueKey, cacheTtlMs: 60_000, value: payload })).toBe(true);
-    expect(await scriptClient.read({ valueKey })).toEqual(payload);
+    await expect(scriptClient.write({ valueKey, cacheTtlMs: 60_000, value: payload })).resolves.toBeUndefined();
+    const untrackedRead = expectFrame(await scriptClient.read({ valueKey }));
+    expect(untrackedRead.payload).toEqual(payload);
+    expect(untrackedRead.createdAtMs).toBeGreaterThan(0);
 
     const stored = await cluster.get(commandOptions({ returnBuffers: true }), valueKey);
     expect(stored?.length).toBe(10 + payload.length);
@@ -268,50 +261,71 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
     const trackedValueKey = "binary-cluster:{item:tracked}:value";
     const watermarkKey = "binary-cluster:{item:tracked}:watermark";
     const trackedPayload = Buffer.from([0, 0xff, 0xc3, 0x28, 0x80]);
-    expect(
-      await scriptClient.write({
-        valueKey: trackedValueKey,
-        watermarkKey,
-        cacheTtlMs: 60_000,
-        value: trackedPayload,
-      }),
-    ).toBe(true);
-    expect(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey })).toEqual(trackedPayload);
+    const trackedCreatedAtMs = 1_700_000_000_123;
+    const now = vi.spyOn(Date, "now").mockReturnValue(trackedCreatedAtMs);
+    try {
+      await expect(
+        scriptClient.write({
+          valueKey: trackedValueKey,
+          cacheTtlMs: 60_000,
+          value: trackedPayload,
+        }),
+      ).resolves.toBeUndefined();
+    } finally {
+      now.mockRestore();
+    }
+    const trackedRead = expectFrame(await scriptClient.read({ valueKey: trackedValueKey, watermarkKey }));
+    expect(trackedRead.payload).toEqual(trackedPayload);
+    expect(trackedRead.createdAtMs).toBe(trackedCreatedAtMs);
   });
 
   it("runs GLIDE tracked mutations against the real cluster", async (ctx) => {
     if (glideCluster === undefined) {
       return ctx.skip();
     }
+    if (cluster === undefined) {
+      throw new Error("Redis Cluster did not start");
+    }
     const adapter = createValkeyGlideDialCacheClient(glideCluster, valkeyGlide);
     const valueKey = "glide-cluster:{item:tracked}:value";
     const watermarkKey = "glide-cluster:{item:tracked}:watermark";
 
-    expect(
-      await adapter.write({ valueKey, watermarkKey, cacheTtlMs: 60_000, value: "glide" }),
-    ).toBe(true);
-    expect(await adapter.read({ valueKey, watermarkKey })).toBe("glide");
+    const createdAtMs = 1_700_000_000_456;
+    const now = vi.spyOn(Date, "now").mockReturnValue(createdAtMs);
+    try {
+      await expect(
+        adapter.write({ valueKey, cacheTtlMs: 60_000, value: "glide" }),
+      ).resolves.toBeUndefined();
+    } finally {
+      now.mockRestore();
+    }
+    expect(await adapter.read({ valueKey, watermarkKey })).toMatchObject({
+      payload: "glide",
+      createdAtMs,
+    });
 
     await adapter.invalidate({ watermarkKey, futureBufferMs: 0 });
-    // The follow-up write's stamp is fenced unless server time passes the
-    // zero-buffer watermark; the read-null below holds at any margin.
+    // The existing value remains fenced until a later client-stamped frame is
+    // written past the zero-buffer watermark.
     await new Promise((resolve) => setTimeout(resolve, 25));
-    expect(await adapter.read({ valueKey, watermarkKey })).toBeNull();
-    expect(
-      await adapter.write({ valueKey, watermarkKey, cacheTtlMs: 60_000, value: "glide-2" }),
-    ).toBe(true);
-    expect(await adapter.read({ valueKey, watermarkKey })).toBe("glide-2");
+    const observedWatermark = await cluster.get(watermarkKey);
+    expect(observedWatermark).not.toBeNull();
+    expect(await adapter.read({ valueKey, watermarkKey })).toEqual({
+      kind: "miss",
+      reason: "watermark_fenced",
+      observedWatermarkMs: Number(observedWatermark),
+    });
+    await expect(
+      adapter.write({ valueKey, cacheTtlMs: 60_000, value: "glide-2" }),
+    ).resolves.toBeUndefined();
+    expect(expectFrame(await adapter.read({ valueKey, watermarkKey })).payload).toBe("glide-2");
 
     const untrackedKey = "glide-cluster:{item:untracked}:value";
-    expect(await adapter.write({ valueKey: untrackedKey, cacheTtlMs: 60_000, value: "plain" })).toBe(true);
-    expect(await adapter.read({ valueKey: untrackedKey })).toBe("plain");
+    await expect(
+      adapter.write({ valueKey: untrackedKey, cacheTtlMs: 60_000, value: "plain" }),
+    ).resolves.toBeUndefined();
+    expect(expectFrame(await adapter.read({ valueKey: untrackedKey })).payload).toBe("plain");
 
-    await expect(adapter.write({
-      valueKey: "{glide-a}:value",
-      watermarkKey: "{glide-b}:watermark",
-      cacheTtlMs: 60_000,
-      value: "cross",
-    })).rejects.toThrow(/CROSSSLOT/i);
   });
 
   it("recovers GLIDE cluster mutations after SCRIPT FLUSH on every master", async (ctx) => {
@@ -332,13 +346,19 @@ describe("DialCache Redis protocol on Redis Cluster", () => {
     const watermarkKey = "glide-flush:{item:tracked}:watermark";
 
     await flushAllMasters();
-    expect(
-      await adapter.write({ valueKey, watermarkKey, cacheTtlMs: 60_000, value: "recovered" }),
-    ).toBe(true);
-    expect(await adapter.read({ valueKey, watermarkKey })).toBe("recovered");
+    await expect(
+      adapter.write({ valueKey, cacheTtlMs: 60_000, value: "recovered" }),
+    ).resolves.toBeUndefined();
+    expect(expectFrame(await adapter.read({ valueKey, watermarkKey })).payload).toBe("recovered");
 
     await flushAllMasters();
     await expect(adapter.invalidate({ watermarkKey, futureBufferMs: 0 })).resolves.toBeUndefined();
-    expect(await adapter.read({ valueKey, watermarkKey })).toBeNull();
+    const observedWatermark = await cluster.get(watermarkKey);
+    expect(observedWatermark).not.toBeNull();
+    expect(await adapter.read({ valueKey, watermarkKey })).toEqual({
+      kind: "miss",
+      reason: "watermark_fenced",
+      observedWatermarkMs: Number(observedWatermark),
+    });
   });
 });

@@ -1,8 +1,16 @@
 export { CacheLayer, DialCacheKeyConfig } from "./config.js";
-export type { CacheConfigProvider, DialCacheConfig, LayerConfig, Logger, ShadowConfig } from "./config.js";
+export type {
+  CacheConfigProvider,
+  DialCacheConfig,
+  LayerConfig,
+  Logger,
+  ShadowConfig,
+  StaleRecoveryPredicate,
+} from "./config.js";
 export { DialCacheContext } from "./context.js";
 export type {
   CacheMetricLabels,
+  CacheMissReason,
   CoalescedMetricLabels,
   CoalescingScope,
   CompressionMetricLabels,
@@ -15,9 +23,12 @@ export type {
   InvalidationMetricLabels,
   MetricErrorKind,
   MetricLayer,
+  MissMetricLabels,
   SerializationMetricLabels,
   ShadowValidationMetricLabels,
   ShadowValidationOutcome,
+  StaleRecoveryMetricLabels,
+  StaleRecoveryOutcome,
 } from "./metrics.js";
 export {
   DialCacheError,
@@ -42,18 +53,21 @@ export type { DialCacheKeyInit } from "./key.js";
 export {
   DialCacheRedisPayloadEncodingError,
   DialCacheRedisPayloadError,
-  DialCacheRedisPlaceholderLostError,
   DialCacheRedisProtocolError,
 } from "./redis-client.js";
 export type { CompressionConfig } from "./internal/compression.js";
 export type { RedisConfig } from "./internal/redis-cache.js";
 export type {
+  DecodedRedisFrame,
   DialCacheRedisClient,
   RedisCachePayload,
   RedisInvalidationRequest,
   RedisReadContext,
+  RedisReadMiss,
   RedisReadRequest,
+  RedisReadResult,
   RedisWriteRequest,
 } from "./redis-client.js";
+export { isRedisReadMiss } from "./redis-client.js";
 export { JsonSerializer } from "./serializer.js";
 export type { Serializer } from "./serializer.js";

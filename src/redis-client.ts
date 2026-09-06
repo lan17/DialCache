@@ -1,9 +1,9 @@
 import type { Awaitable } from "./config.js";
+import type { CacheMissReason } from "./metrics.js";
 
 const redisPayloadErrorBrand = Symbol.for("dialcache.DialCacheRedisPayloadError");
 const redisPayloadEncodingErrorBrand = Symbol.for("dialcache.DialCacheRedisPayloadEncodingError");
 const redisProtocolErrorBrand = Symbol.for("dialcache.DialCacheRedisProtocolError");
-const redisPlaceholderLostErrorBrand = Symbol.for("dialcache.DialCacheRedisPlaceholderLostError");
 
 export class DialCacheRedisPayloadError extends Error {
   static [Symbol.hasInstance](value: unknown): boolean {
@@ -59,47 +59,70 @@ export class DialCacheRedisProtocolError extends Error {
   }
 }
 
-/**
- * A tracked write's stamp found no placeholder carrying its nonce: the paired
- * SET was rejected, overwritten by a concurrent writer, expired, or removed
- * by a fenced write. The value was not published, and DialCache suppresses the
- * corresponding process-local publication. Same-key write contention produces
- * a benign floor of these, concentrated on hot keys at TTL expiry.
- */
-export class DialCacheRedisPlaceholderLostError extends Error {
-  static [Symbol.hasInstance](value: unknown): boolean {
-    if (this !== DialCacheRedisPlaceholderLostError) {
-      return Function.prototype[Symbol.hasInstance].call(this, value);
-    }
-    return typeof value === "object"
-      && value !== null
-      && Object.getOwnPropertyDescriptor(value, redisPlaceholderLostErrorBrand)?.value === true;
-  }
-
-  constructor(message: string) {
-    super(message);
-    this.name = "DialCacheRedisPlaceholderLostError";
-    // CJS adapter subpaths are separate bundles; a global symbol preserves root-export instanceof checks.
-    Object.defineProperty(this, redisPlaceholderLostErrorBrand, { value: true });
-  }
-}
-
 /** Serialized cache data, independent of any Redis client or wire framing. */
 export type RedisCachePayload = string | Buffer;
+
+/**
+ * A served Redis frame: the payload bytes past the frame header plus the
+ * header's creation time. The payload is the serializer output, possibly
+ * still wrapped in a compression envelope that DialCache core interprets
+ * above the adapter (see the `dialcache/redis-protocol` module doc). All
+ * frames carry application-clock time supplied by the writer. Caller-serving
+ * reads apply their logical age ceiling and reject frames dated after the
+ * reading process's clock before deserialization; stale-on-error may retain a
+ * raw frame between its fresh and maximum ages. Confirmation reads may retain
+ * a frame solely for payload comparison. DialCache also uses `createdAtMs` for
+ * shadow and stale-recovery value-age observability. Tracked watermark fencing
+ * already happened inside the decoder.
+ */
+export interface DecodedRedisFrame {
+  readonly payload: RedisCachePayload;
+  /** Epoch milliseconds copied from the frame header. */
+  readonly createdAtMs: number;
+}
+
+/**
+ * A semantic Redis miss with its bounded cause. `observedWatermarkMs` is the
+ * valid invalidation watermark read atomically with the value on a tracked
+ * key, when one existed: a refill stamped at or before it is known to remain
+ * unreadable, so DialCache skips that write. Cause and fence are independent.
+ * An absent value can still carry a fence, and only a complete frame actually
+ * rejected by the watermark is `watermark_fenced`.
+ */
+export interface RedisReadMiss {
+  readonly kind: "miss";
+  readonly reason: CacheMissReason;
+  readonly observedWatermarkMs?: number;
+}
+
+/** Semantic Redis read result: a decoded frame or a classified miss. */
+export type RedisReadResult = DecodedRedisFrame | RedisReadMiss;
+
+/** Runtime discriminator for `RedisReadResult`. */
+export function isRedisReadMiss(result: unknown): result is RedisReadMiss {
+  return typeof result === "object" && result !== null && "kind" in result && result.kind === "miss";
+}
+
+/** Build a classified miss, attaching a fence only when one was observed. */
+export function redisReadMiss(reason: CacheMissReason, observedWatermarkMs?: number): RedisReadMiss {
+  return observedWatermarkMs === undefined
+    ? { kind: "miss", reason }
+    : { kind: "miss", reason, observedWatermarkMs };
+}
 
 interface RedisValueRequest {
   readonly valueKey: string;
 }
 
-interface TrackedRedisValueRequest extends RedisValueRequest {
+interface TrackedRedisReadRequest extends RedisValueRequest {
   readonly watermarkKey: string;
 }
 
-interface UntrackedRedisValueRequest extends RedisValueRequest {
+interface UntrackedRedisReadRequest extends RedisValueRequest {
   readonly watermarkKey?: never;
 }
 
-export type RedisReadRequest = TrackedRedisValueRequest | UntrackedRedisValueRequest;
+export type RedisReadRequest = TrackedRedisReadRequest | UntrackedRedisReadRequest;
 
 /**
  * Per-use-case read policy supplied by DialCache. Adapters may use the signal
@@ -110,16 +133,22 @@ export interface RedisReadContext {
   readonly signal: AbortSignal;
 }
 
-interface RedisWriteBase extends RedisValueRequest {
+export interface RedisWriteRequest extends RedisValueRequest {
   /** Positive integer no greater than 31,536,000,000 (365 days). */
   readonly cacheTtlMs: number;
   readonly value: RedisCachePayload;
+  /**
+   * Nonnegative safe-integer epoch milliseconds to encode in the frame.
+   * DialCache core supplies the final dispatch-adjacent sample for admitted
+   * tracked refills whose read result carried a trustworthy observed watermark.
+   * It remains optional so ordinary refills, existing direct adapter callers,
+   * and custom adapter implementations keep their established behavior. An
+   * adapter that returns a typed miss with an observed watermark must honor a
+   * supplied value exactly so the final fence decision and stored frame cannot
+   * diverge.
+   */
+  readonly createdAtMs?: number;
 }
-
-type TrackedRedisWriteRequest = RedisWriteBase & TrackedRedisValueRequest;
-type UntrackedRedisWriteRequest = RedisWriteBase & UntrackedRedisValueRequest;
-
-export type RedisWriteRequest = TrackedRedisWriteRequest | UntrackedRedisWriteRequest;
 
 export interface RedisInvalidationRequest {
   readonly watermarkKey: string;
@@ -140,72 +169,70 @@ export interface RedisInvalidationRequest {
  *
  * Tracked invalidation also requires the Redis deployment to preserve
  * watermark keys for their derived TTL. Losing a watermark through eviction,
- * failover, restore, or external deletion removes its prior publication fence.
+ * failover, restore, or external deletion removes its prior read-time
+ * invalidation fence.
  */
 export interface DialCacheRedisClient {
   /**
-   * Read a DialCache Redis frame and return its decoded serializer payload.
-   * Implementations must use `decodeRedisFrame` / `decodeTrackedRedisFrame`
-   * from `dialcache/redis-protocol`, or preserve their exact behavior.
+   * Read a DialCache Redis frame. Hits return the decoded serializer payload
+   * with the frame header's creation time. Implementations must use
+   * `decodeRedisReadResult` (untracked) or `decodeTrackedRedisReadResult`
+   * (tracked) from `dialcache/redis-protocol`, or preserve their exact behavior.
    *
    * Raw values are Redis bulk strings (`Buffer`) or null. A missing value, a
    * frame shorter than the version/timestamp/encoding header, or an
-   * unsupported frame version is a cache miss. A tracked read also misses
-   * when its watermark is missing, is not a finite unsigned decimal, or is
-   * greater than or equal to the frame's creation time. In other words,
-   * `createdAt <= watermark` is fenced. Unsupported payload encodings and
-   * non-bulk runtime replies are payload protocol errors rather than misses.
+   * unsupported frame version is a cache miss. A missing tracked watermark
+   * is the zero baseline. A tracked read misses when a present watermark is
+   * not a nonnegative safe-integer decimal or is greater than or equal to the
+   * frame's creation time. In other words, `createdAt <= watermark` is fenced.
+   * Unsupported payload encodings and non-bulk runtime replies are payload
+   * protocol errors rather than misses.
    *
    * Tracked implementations must read the value and watermark atomically from
    * one authoritative snapshot; replica lag must not hide an invalidation.
    *
-   * A non-null payload is transferred to DialCache. A returned Buffer must
-   * remain stable and must not be mutated, pooled, or reused after this method
-   * settles; DialCache may retain it beyond the request for best-effort shadow
-   * deserialization. Adapters that recycle response storage must return a
-   * dedicated Buffer.
+   * Misses are `RedisReadMiss { kind: "miss", reason, observedWatermarkMs? }`.
+   * Attach `observedWatermarkMs` only when the same tracked snapshot contained
+   * a present, valid numeric watermark. DialCache validates the fence, drops it
+   * on untracked keys, and records any unrecognized result or reason as an
+   * `unclassified` miss. Adapters that attach an observed watermark must also
+   * honor `RedisWriteRequest.createdAtMs` when supplied.
+   *
+   * A returned frame's payload is transferred to DialCache. A returned Buffer
+   * must remain stable and must not be mutated, pooled, or reused after this
+   * method settles; DialCache may retain it for source-error recovery or
+   * best-effort shadow work. Adapters that recycle response storage must
+   * return a dedicated Buffer.
    */
-  read(request: RedisReadRequest, context?: RedisReadContext): Awaitable<RedisCachePayload | null>;
+  read(request: RedisReadRequest, context?: RedisReadContext): Awaitable<RedisReadResult>;
   /**
    * Write a DialCache Redis frame using the `dialcache/redis-protocol`
    * encoders, or preserve their exact behavior.
    *
-   * Untracked writes are one native `SET valueKey frame PX cacheTtlMs` whose
-   * frame comes from `encodeRedisFrame` with an informational client-clock
-   * `createdAtMs`; untracked reads never consult it.
+   * All writes are one native `SET valueKey frame PX cacheTtlMs` whose frame
+   * comes from `encodeRedisFrame`. Honor `request.createdAtMs` exactly when it
+   * is supplied; callers that omit it may be stamped from the adapter's client
+   * clock.
+   * DialCache uses every frame's decoded `createdAtMs` for future-time
+   * rejection and logical-age enforcement, and for shadow and stale-recovery
+   * value-age observations, so writers must stamp real client time, not a
+   * constant.
    *
-   * Tracked writes issue two commands ordered on one connection without a
-   * transaction: a native `SET` of an `encodeTrackedRedisPlaceholder` frame,
-   * followed by `WRITE_TRACKED_STAMP_SCRIPT` with `KEYS = [valueKey,
-   * watermarkKey]` and `ARGV = [cacheTtlMs, nonce]`. Run `cacheTtlMs` through
-   * `ceilSupportedCacheTtlMs` (exported by `dialcache/redis-protocol`) and
-   * pass the result as both the SET's `PX` and `ARGV[1]` — `PX` rejects
-   * fractions and the watermark's lifetime is derived from `ARGV[1]` — and
-   * the nonce must be the placeholder's. The script fences against the watermark and
-   * unlinks the value (reply 0), promotes exactly the placeholder carrying
-   * its nonce to a served frame with server-time `createdAt` (reply 1), or
-   * reports the placeholder gone (reply 2); it maintains the watermark's
-   * existence and TTL in the non-fenced cases. Placeholders are unreadable on
-   * both read paths, so an interleaved or lost stamp degrades to a miss
-   * bounded by the value TTL — including briefly blanking a previously
-   * readable key the write replaces — while a delayed stamp of its own
-   * placeholder remains subject to the invalidation future buffer, like any
-   * in-flight write.
-   *
-   * Implementations must not reorder the pair, must mint one placeholder per
-   * logical write so client-level retries stay paired with their stamp, and
-   * must surface a SET failure as the write error even when the stamp settled
-   * (in that case the stamp may have promoted the landed SET, leaving the
-   * value readable despite the reported failure). Reply 2 must fail the write
-   * with `DialCacheRedisPlaceholderLostError` so split pairs stay observable;
-   * after reply 2 the key holds another writer's frame or an unreadable
-   * placeholder, never this write's value. False means invalidation blocked
-   * the write.
+   * Tracked and untracked writes use the same complete-frame SET. Core caps a
+   * tracked value's physical TTL at one hour. Under the documented clock-skew
+   * and in-flight-work bounds, invalidation markers outlive every value they
+   * fence, so writers never read, create, or extend watermarks.
    */
-  write(request: RedisWriteRequest): Awaitable<boolean>;
+  write(request: RedisWriteRequest): Awaitable<void>;
   /**
    * Advance the watermark monotonically after the source mutation commits.
-   * Its TTL is derived from the future buffer and any longer existing TTL.
+   * The adapter supplies a nonnegative safe-integer `Date.now()` sample to
+   * `INVALIDATE_CACHE_SCRIPT` as `ARGV[2]`; `futureBufferMs` is `ARGV[1]`.
+   * Reuse that sample through retries within one adapter invocation.
+   * Its TTL is at least two hours and otherwise derived to outlive the future
+   * buffer plus the maximum tracked-value TTL. Longer or persistent existing
+   * markers are preserved. A wrong-type watermark is repaired; any other Redis
+   * read error surfaces without replacing prior state.
    */
   invalidate(request: RedisInvalidationRequest): Awaitable<void>;
 }

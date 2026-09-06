@@ -7,8 +7,10 @@ import type {
   DisabledMetricLabels,
   ErrorMetricLabels,
   InvalidationMetricLabels,
+  MissMetricLabels,
   SerializationMetricLabels,
   ShadowValidationMetricLabels,
+  StaleRecoveryMetricLabels,
 } from "./metrics.js";
 
 export type DatadogObservationMetricType = "histogram" | "distribution";
@@ -34,6 +36,7 @@ export interface DatadogMetricsOptions {
 
 type CacheTag = "cache_namespace" | "use_case" | "key_type" | "layer";
 type DatadogTags = Record<string, string>;
+type OutcomeMetricLabels = ShadowValidationMetricLabels | StaleRecoveryMetricLabels;
 type Observation = (name: string, value: number, tags: DatadogTags) => void;
 
 const DEFAULT_NAMESPACE = "dialcache";
@@ -48,6 +51,10 @@ const METRIC_SUFFIXES = {
   invalidation: "invalidation.count",
   coalesced: "coalesced.count",
   shadowValidation: "shadow.count",
+  shadowValueAge: "shadow.value_age",
+  futureTimestampOffset: "future_timestamp_offset",
+  staleRecovery: "stale_recovery.count",
+  staleRecoveryValueAge: "stale_recovery.value_age",
   compression: "compression.count",
   get: "get.duration",
   fallback: "fallback.duration",
@@ -86,8 +93,8 @@ export class DatadogDialCacheMetrics implements DialCacheMetricsAdapter {
     this.increment(this.metricNames.request, cacheTags(labels));
   }
 
-  miss(labels: CacheMetricLabels): void {
-    this.increment(this.metricNames.miss, cacheTags(labels));
+  miss(labels: MissMetricLabels): void {
+    this.increment(this.metricNames.miss, { ...cacheTags(labels), reason: labels.reason });
   }
 
   disabled(labels: DisabledMetricLabels): void {
@@ -120,12 +127,23 @@ export class DatadogDialCacheMetrics implements DialCacheMetricsAdapter {
   }
 
   shadowValidation(labels: ShadowValidationMetricLabels): void {
-    return this.increment(this.metricNames.shadowValidation, {
-      cache_namespace: labels.cacheNamespace,
-      use_case: labels.useCase,
-      key_type: labels.keyType,
-      outcome: labels.outcome,
-    });
+    return this.increment(this.metricNames.shadowValidation, outcomeTags(labels));
+  }
+
+  observeShadowValueAge(labels: ShadowValidationMetricLabels, seconds: number): void {
+    this.observe(this.metricNames.shadowValueAge, seconds, outcomeTags(labels));
+  }
+
+  observeFutureTimestampOffset(labels: CacheMetricLabels, seconds: number): void {
+    this.observe(this.metricNames.futureTimestampOffset, seconds, cacheTags(labels));
+  }
+
+  staleRecovery(labels: StaleRecoveryMetricLabels): void {
+    return this.increment(this.metricNames.staleRecovery, outcomeTags(labels));
+  }
+
+  observeStaleRecoveryValueAge(labels: StaleRecoveryMetricLabels, seconds: number): void {
+    this.observe(this.metricNames.staleRecoveryValueAge, seconds, outcomeTags(labels));
   }
 
   compression(labels: CompressionMetricLabels): void {
@@ -181,6 +199,15 @@ function cacheTags(labels: CacheMetricLabels): Record<CacheTag, string> {
     use_case: labels.useCase,
     key_type: labels.keyType,
     layer: labels.layer,
+  };
+}
+
+function outcomeTags(labels: OutcomeMetricLabels): DatadogTags {
+  return {
+    cache_namespace: labels.cacheNamespace,
+    use_case: labels.useCase,
+    key_type: labels.keyType,
+    outcome: labels.outcome,
   };
 }
 

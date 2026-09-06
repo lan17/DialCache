@@ -9,8 +9,10 @@ import type {
   DisabledMetricLabels,
   ErrorMetricLabels,
   InvalidationMetricLabels,
+  MissMetricLabels,
   SerializationMetricLabels,
   ShadowValidationMetricLabels,
+  StaleRecoveryMetricLabels,
 } from "./metrics.js";
 
 export interface PrometheusMetricsOptions {
@@ -21,12 +23,14 @@ export interface PrometheusMetricsOptions {
 type PrometheusRegistry = Registry | Registry<OpenMetricsContentType>;
 
 type CounterLabels = "cache_namespace" | "use_case" | "key_type" | "layer";
+type MissLabels = CounterLabels | "reason";
 type DisabledLabels = CounterLabels | "reason";
 type ErrorLabels = CounterLabels | "error" | "in_fallback";
 type SerializationLabels = CounterLabels | "operation";
 type InvalidationLabels = "cache_namespace" | "key_type" | "layer";
 type CoalescedLabels = "cache_namespace" | "use_case" | "key_type" | "scope";
-type ShadowValidationLabels = "cache_namespace" | "use_case" | "key_type" | "outcome";
+type OutcomeLabels = "cache_namespace" | "use_case" | "key_type" | "outcome";
+type OutcomeMetricLabels = ShadowValidationMetricLabels | StaleRecoveryMetricLabels;
 type CompressionLabels = CounterLabels | "outcome";
 
 interface BaseCollectorConfig<T extends string> {
@@ -58,15 +62,40 @@ interface CollectorShape {
 const TIMER_BUCKETS = [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
 const SIZE_BUCKETS = [100, 1_000, 10_000, 100_000, 1_000_000, 10_000_000];
 const RATIO_BUCKETS = [0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 1];
+// Value ages span seconds to the 365-day TTL ceiling: 1s..15m, then 1h, 3h, 12h, 1d, 3d, 7d.
+const VALUE_AGE_BUCKETS = [1, 5, 15, 60, 300, 900, 3_600, 10_800, 43_200, 86_400, 259_200, 604_800];
+const FUTURE_TIMESTAMP_OFFSET_BUCKETS = [
+  0.001,
+  0.005,
+  0.01,
+  0.025,
+  0.05,
+  0.1,
+  0.25,
+  0.5,
+  1,
+  5,
+  15,
+  60,
+  300,
+  900,
+  3_600,
+  10_800,
+  43_200,
+];
 
 export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
   private readonly requestCounter: Counter<CounterLabels>;
-  private readonly missCounter: Counter<CounterLabels>;
+  private readonly missCounter: Counter<MissLabels>;
   private readonly disabledCounter: Counter<DisabledLabels>;
   private readonly errorCounter: Counter<ErrorLabels>;
   private readonly invalidationCounter: Counter<InvalidationLabels>;
   private readonly coalescedCounter: Counter<CoalescedLabels>;
-  private readonly shadowValidationCounter: Counter<ShadowValidationLabels>;
+  private readonly shadowValidationCounter: Counter<OutcomeLabels>;
+  private readonly shadowValueAgeHistogram: Histogram<OutcomeLabels>;
+  private readonly futureTimestampOffsetHistogram: Histogram<CounterLabels>;
+  private readonly staleRecoveryCounter: Counter<OutcomeLabels>;
+  private readonly staleRecoveryValueAgeHistogram: Histogram<OutcomeLabels>;
   private readonly compressionCounter: Counter<CompressionLabels>;
   private readonly getTimer: Histogram<CounterLabels>;
   private readonly fallbackTimer: Histogram<CounterLabels>;
@@ -89,6 +118,10 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
     this.invalidationCounter = counter(registry, collectors.invalidationCounter);
     this.coalescedCounter = counter(registry, collectors.coalescedCounter);
     this.shadowValidationCounter = counter(registry, collectors.shadowValidationCounter);
+    this.shadowValueAgeHistogram = histogram(registry, collectors.shadowValueAgeHistogram);
+    this.futureTimestampOffsetHistogram = histogram(registry, collectors.futureTimestampOffsetHistogram);
+    this.staleRecoveryCounter = counter(registry, collectors.staleRecoveryCounter);
+    this.staleRecoveryValueAgeHistogram = histogram(registry, collectors.staleRecoveryValueAgeHistogram);
     this.compressionCounter = counter(registry, collectors.compressionCounter);
     this.getTimer = histogram(registry, collectors.getTimer);
     this.fallbackTimer = histogram(registry, collectors.fallbackTimer);
@@ -103,8 +136,8 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
     this.requestCounter.inc(cacheLabels(labels));
   }
 
-  miss(labels: CacheMetricLabels): void {
-    this.missCounter.inc(cacheLabels(labels));
+  miss(labels: MissMetricLabels): void {
+    this.missCounter.inc({ ...cacheLabels(labels), reason: labels.reason });
   }
 
   disabled(labels: DisabledMetricLabels): void {
@@ -137,12 +170,26 @@ export class PrometheusDialCacheMetrics implements DialCacheMetricsAdapter {
   }
 
   shadowValidation(labels: ShadowValidationMetricLabels): void {
-    this.shadowValidationCounter.inc({
-      cache_namespace: labels.cacheNamespace,
-      use_case: labels.useCase,
-      key_type: labels.keyType,
-      outcome: labels.outcome,
-    });
+    this.shadowValidationCounter.inc(outcomeLabels(labels));
+  }
+
+  observeShadowValueAge(labels: ShadowValidationMetricLabels, seconds: number): void {
+    this.shadowValueAgeHistogram.observe(outcomeLabels(labels), seconds);
+  }
+
+  observeFutureTimestampOffset(labels: CacheMetricLabels, seconds: number): void {
+    if (!Number.isFinite(seconds) || seconds <= 0) {
+      return;
+    }
+    this.futureTimestampOffsetHistogram.observe(cacheLabels(labels), seconds);
+  }
+
+  staleRecovery(labels: StaleRecoveryMetricLabels): void {
+    this.staleRecoveryCounter.inc(outcomeLabels(labels));
+  }
+
+  observeStaleRecoveryValueAge(labels: StaleRecoveryMetricLabels, seconds: number): void {
+    this.staleRecoveryValueAgeHistogram.observe(outcomeLabels(labels), seconds);
   }
 
   compression(labels: CompressionMetricLabels): void {
@@ -191,6 +238,15 @@ function cacheLabels(labels: CacheMetricLabels): Record<CounterLabels, string> {
   };
 }
 
+function outcomeLabels(labels: OutcomeMetricLabels): Record<OutcomeLabels, string> {
+  return {
+    cache_namespace: labels.cacheNamespace,
+    use_case: labels.useCase,
+    key_type: labels.keyType,
+    outcome: labels.outcome,
+  };
+}
+
 function collectorConfigs(prefix: string) {
   return {
     disabledCounter: {
@@ -203,7 +259,7 @@ function collectorConfigs(prefix: string) {
       type: "counter",
       name: `${prefix}dialcache_miss_counter`,
       help: "DialCache cache misses.",
-      labelNames: ["cache_namespace", "use_case", "key_type", "layer"],
+      labelNames: ["cache_namespace", "use_case", "key_type", "layer", "reason"],
     },
     requestCounter: {
       type: "counter",
@@ -234,6 +290,33 @@ function collectorConfigs(prefix: string) {
       name: `${prefix}dialcache_shadow_validation_counter`,
       help: "Sampled DialCache Redis shadow-validation outcomes.",
       labelNames: ["cache_namespace", "use_case", "key_type", "outcome"],
+    },
+    shadowValueAgeHistogram: {
+      type: "histogram",
+      name: `${prefix}dialcache_shadow_value_age_histogram`,
+      help: "Age in seconds of the validated Redis value at DialCache shadow verdict time.",
+      labelNames: ["cache_namespace", "use_case", "key_type", "outcome"],
+      buckets: VALUE_AGE_BUCKETS,
+    },
+    futureTimestampOffsetHistogram: {
+      type: "histogram",
+      name: `${prefix}dialcache_future_timestamp_offset_histogram`,
+      help: "Positive offset in seconds of Redis frames dated after the observing DialCache process clock.",
+      labelNames: ["cache_namespace", "use_case", "key_type", "layer"],
+      buckets: FUTURE_TIMESTAMP_OFFSET_BUCKETS,
+    },
+    staleRecoveryCounter: {
+      type: "counter",
+      name: `${prefix}dialcache_stale_recovery_counter`,
+      help: "DialCache stale-on-error Redis recovery outcomes.",
+      labelNames: ["cache_namespace", "use_case", "key_type", "outcome"],
+    },
+    staleRecoveryValueAgeHistogram: {
+      type: "histogram",
+      name: `${prefix}dialcache_stale_recovery_value_age_histogram`,
+      help: "Age in seconds of Redis values served by DialCache stale-on-error recovery.",
+      labelNames: ["cache_namespace", "use_case", "key_type", "outcome"],
+      buckets: VALUE_AGE_BUCKETS,
     },
     compressionCounter: {
       type: "counter",

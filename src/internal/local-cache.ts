@@ -2,18 +2,15 @@ import { performance } from "node:perf_hooks";
 
 import { LRUCache } from "lru-cache";
 
-import { CacheLayer, type CacheConfigProvider, type DialCacheKeyConfig } from "../config.js";
+import { CacheLayer, type DialCacheKeyConfig } from "../config.js";
 import type { DialCacheKey } from "../key.js";
 import type { CacheGetResult } from "./cache-result.js";
 import { cacheTtlSecToMs } from "./duration.js";
 import {
-  fetchKeyConfig,
   resolveLayerConfigResult,
   type LayerConfigResolution,
   type ResolvedLayerConfig,
 } from "./runtime-config.js";
-
-export type Fallback<T> = () => Promise<T>;
 
 interface LocalEntry<T> {
   readonly value: T;
@@ -22,10 +19,7 @@ interface LocalEntry<T> {
 export class LocalCache {
   private readonly cache: LRUCache<string, LocalEntry<unknown>> | null;
 
-  constructor(
-    private readonly configProvider: CacheConfigProvider,
-    maxSize: number,
-  ) {
+  constructor(maxSize: number) {
     this.cache =
       maxSize === 0
         ? null
@@ -40,33 +34,6 @@ export class LocalCache {
           });
   }
 
-  async get<T>(key: DialCacheKey, fallback: Fallback<T>): Promise<T> {
-    const result = await this.getIfPresentResult<T>(key);
-    if (result.status === "hit") {
-      return result.value;
-    }
-
-    const value = await fallback();
-    if (result.status === "miss") {
-      await this.put(key, value, result.config);
-    }
-    return value;
-  }
-
-  async getIfPresent<T>(key: DialCacheKey): Promise<T | undefined> {
-    const result = await this.getIfPresentResult<T>(key);
-    return result.status === "hit" ? result.value : undefined;
-  }
-
-  async getIfPresentResult<T>(key: DialCacheKey, keyConfig?: DialCacheKeyConfig | null): Promise<CacheGetResult<T>> {
-    const layerConfig = await this.resolveLayerConfig(key, keyConfig);
-    if (layerConfig.status === "disabled") {
-      return layerConfig;
-    }
-
-    return this.getWithResolvedConfig<T>(key, layerConfig.config);
-  }
-
   getWithResolvedConfig<T>(key: DialCacheKey, layerConfig: ResolvedLayerConfig): CacheGetResult<T> {
     const hit = this.cache?.get(key.urn) as LocalEntry<T> | undefined;
 
@@ -77,33 +44,21 @@ export class LocalCache {
     return { status: "miss", config: layerConfig };
   }
 
-  async resolveLayerConfig(
+  resolveLayerConfig(
     key: DialCacheKey,
-    keyConfig?: DialCacheKeyConfig | null,
-  ): Promise<LayerConfigResolution> {
-    // Chain callers pass the once-resolved config; standalone callers omit it and we fetch.
-    const config = keyConfig === undefined ? await fetchKeyConfig(this.configProvider, key) : keyConfig;
+    keyConfig: DialCacheKeyConfig | null,
+  ): LayerConfigResolution {
     return resolveLayerConfigResult({
-      config,
+      config: keyConfig,
       key,
       layer: CacheLayer.LOCAL,
     });
   }
 
-  async put<T>(key: DialCacheKey, value: T, config?: { readonly ttlSec: number }): Promise<void> {
-    const ttlSec = config?.ttlSec ?? await this.resolveLocalTtlSec(key);
-    if (ttlSec === null) {
-      return;
-    }
-
+  put<T>(key: DialCacheKey, value: T, config: { readonly ttlSec: number }): void {
     // lru-cache expires when age > ttl, while DialCache historically expired
     // when its integer-millisecond clock reached the configured boundary.
-    const ttlMs = cacheTtlSecToMs(ttlSec) - 1;
+    const ttlMs = cacheTtlSecToMs(config.ttlSec) - 1;
     this.cache?.set(key.urn, { value }, { size: 1, ttl: ttlMs });
-  }
-
-  private async resolveLocalTtlSec(key: DialCacheKey): Promise<number | null> {
-    const layerConfig = await this.resolveLayerConfig(key);
-    return layerConfig.status === "enabled" ? layerConfig.config.ttlSec : null;
   }
 }

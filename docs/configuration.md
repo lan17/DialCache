@@ -1,12 +1,20 @@
 # Configuration and cache layers
 
-[Back to the README](../README.md)
+[Documentation](index.md) · [API reference](api.md)
 
-This guide covers reusable cached functions, one-shot inline loaders, cache
-identity, runtime policy, coalescing policy, request-local and process-local
-behavior, Redis payload-compression configuration, and cached-value ownership.
-For the complete shared remote-layer contract, see
-[Redis and Valkey](redis.md).
+Configure DialCache at three levels: instance resources, operation defaults,
+and a runtime overlay. An enabled scope permits caching; the resolved policy
+decides which layers participate.
+
+| Level | Configure here | Lifetime |
+| --- | --- | --- |
+| Instance | Namespace, Redis client, LRU capacity, telemetry, shadow capacity | One `DialCache` instance |
+| Operation | Key, serializer, invalidation tracking, deadlines, policy defaults | One registered reader or inline invocation |
+| Runtime | Layer TTLs and ramps, request-local, coalescing, shadow, recovery age | One enabled invocation |
+
+Start with the [read-path overview](concepts.md) if these layers are new to you.
+The [API reference](api.md) collects the public signatures and defaults;
+[Redis and Valkey](redis.md) covers the remote layer in detail.
 
 ## Defining cache operations
 
@@ -24,6 +32,7 @@ parameters and always returns a `Promise`.
 | `serializer` | when the return type is not statically JSON-compatible | Selects a per-function `Serializer<T>` for Redis values; see [Serialization](redis.md#serialization). |
 | `shadowComparator` | no | Defines synchronous application-level equality for [shadow validation](shadow-validation.md); Node strict deep equality is the default. |
 | `trackForInvalidation` | no; default `false` | Opts this use case's Redis entries into watermark-based [targeted invalidation](invalidation.md). |
+| `shouldAttemptStaleRecovery` | no; instance policy | Synchronous source-error classifier for [stale-on-error](stale-on-error.md); replaces the lower-precedence policy. |
 | `fallbackTimeoutMs` | no; default `60_000` | Sets the fallback deadline in milliseconds, up to 2,147,483,647. `null` disables it; see [Fallback deadlines](coalescing.md#fallback-deadlines). |
 
 `useCase` is validated when the function is registered. A duplicate within one
@@ -35,8 +44,8 @@ name `watermark` throws `UseCaseNameIsReservedError`.
 `getOrLoad(load, options)` runs one zero-argument synchronous or asynchronous
 loader through the same cache layers, runtime policy, coalescing, invalidation,
 metrics, serialization, and deadline behavior as `cached()`. Cache-plumbing
-failures fall through to the loader; loader failures still reject and clear
-their tracked flight:
+failures fall through to the loader. A loader failure rejects unless an opted-in
+[stale-on-error policy](stale-on-error.md) can serve a retained snapshot:
 
 ```ts
 const profile = await dialcache.enable(() =>
@@ -56,8 +65,8 @@ const profile = await dialcache.enable(() =>
 ```
 
 The options match `cached()` except that the direct `key` replaces the
-`cacheKey` selector. `defaultConfig` and `fallbackTimeoutMs` are validated and
-snapshotted for each invocation. Outside an enabled scope, DialCache calls
+`cacheKey` selector. `defaultConfig`, `fallbackTimeoutMs`, the comparator, and the selected
+stale-recovery classifier are validated and captured for each invocation. Outside an enabled scope, DialCache calls
 `load` directly without constructing a key or resolving runtime policy.
 
 `getOrLoad()` does not register its `useCase` or detect duplicates, but it still
@@ -231,12 +240,14 @@ Instance-wide behavior is set through the `DialCache` constructor:
 | `localMaxSize` | `10_000` | Global process-local entry cap. `0` disables process-local storage. Must be a nonnegative safe integer. |
 | `cacheConfigProvider` | none | Resolves runtime config per enabled invocation as a sparse overlay on the operation's `defaultConfig`; `null` applies no overrides. |
 | `shadowMaxInFlight` | `1` | Maximum scheduled or running shadow jobs per instance. Must be a positive safe integer. There is no queue; excess jobs are dropped and measured. |
+| `shouldAttemptStaleRecovery` | only `FallbackTimeoutError` | Synchronous instance-default source-error classifier; an operation override replaces it. |
 | `metrics` | disabled | A `DialCacheMetricsAdapter`; see [Observability](observability.md). |
 | `logger` | `console` | Receives operational cache failures and opted-in confirmed shadow mismatch warnings through `debug`, `warn`, and `error`. |
 
 Per-invocation policy is a `DialCacheKeyConfig`: per-layer `ttlSec` and `ramp`
 maps keyed by `CacheLayer.LOCAL` and `CacheLayer.REMOTE`, `requestLocal` and
-`coalesce` booleans, an optional `remoteReadTimeoutMs`, and an optional
+`coalesce` booleans, optional `remoteReadTimeoutMs` and
+`staleOnErrorMaxAgeSec` fields, and an optional
 `shadow` group. The root-exported `ShadowConfig` type defines that group's
 independent `ramp` and default-off `logMismatches` leaves.
 
@@ -282,7 +293,7 @@ An empty `DialCacheKeyConfig` and omitted runtime fields also inherit the
 baseline.
 
 Overlay merging is sparse at each leaf. Top-level `requestLocal`, `coalesce`,
-and `remoteReadTimeoutMs` leaves merge independently. The local and remote
+`remoteReadTimeoutMs`, and `staleOnErrorMaxAgeSec` leaves merge independently. The local and remote
 entries inside `ttlSec` and `ramp` also merge independently.
 
 The `shadow.ramp` and `shadow.logMismatches` leaves follow the same rule. For
@@ -293,11 +304,12 @@ suppresses warnings without changing the inherited shadow cohort.
 Use explicit values to replace inherited policy:
 
 - `requestLocal: false` disables request-local caching;
+- `staleOnErrorMaxAgeSec: 0` disables inherited stale recovery;
 - `coalesce: false` gives each caller its own active layer reads, fallback
   deadline, fallback execution, and cache writes;
 - a process-local or remote ramp of `0` disables that serving layer;
 - `shadow: { ramp: 0 }` disables new shadow work; and
-- `DialCacheKeyConfig.disabled()` turns request-local and shadow work off and
+- `DialCacheKeyConfig.disabled()` turns request-local, stale recovery, and shadow work off and
   ramps both serving layers to `0`.
 
 The remote serving and shadow cohorts are independent. A remote ramp of `0`
@@ -305,7 +317,7 @@ does not override an inherited nonzero `shadow.ramp`; set both to `0` when the
 runtime policy must stop new invocation-driven Redis reads and fills.
 
 `DialCacheKeyConfig.disabled()` returns the complete cache-path overlay
-explicitly: `requestLocal: false`, both serving ramps at `0`,
+explicitly: `requestLocal: false`, `staleOnErrorMaxAgeSec: 0`, both serving ramps at `0`,
 `shadow.ramp: 0`, and `shadow.logMismatches: false`. It intentionally leaves
 `coalesce` unset.
 
@@ -328,7 +340,9 @@ whenever `getOrLoad()` is invoked:
 - `requestLocal`, `coalesce`, and `shadow.logMismatches` must be booleans when
   present; and
 - remote-read deadlines must be positive safe integers no greater than
-  2,147,483,647 milliseconds.
+  2,147,483,647 milliseconds; and
+- positive stale-recovery maximum ages must exceed the remote TTL and be at
+  most `31_536_000` seconds. Zero explicitly disables recovery.
 
 Invalid instance `redis.readTimeoutMs` or `redis.compression` values throw
 during `DialCache` construction, as does an invalid `shadowMaxInFlight`.
@@ -358,14 +372,24 @@ DialCache records
 `config_resolution`, marks the no-layer path `config_error`, and runs the
 fallback without a Redis read or write.
 
+An invalid runtime `staleOnErrorMaxAgeSec` records `config_resolution` and
+disables recovery while preserving a valid ordinary remote layer. A positive
+recovery age without a remote TTL is also a configuration error. Validation is
+traversal-dependent: an earlier hit can avoid evaluation of lower-layer leaves.
+
+Unknown top-level and layer-map fields are generally ignored during runtime
+merging. Do not depend on unknown-field rejection to catch a misspelling such
+as `ramp.remtoe`; validate externally supplied policy against your schema.
+Explicitly removed fields such as `shadowRamp` have dedicated rejection paths.
+
 Runtime shadow leaves are isolated from caller-serving policy:
 
 - An invalid `shadow.ramp` records remote `config_resolution` and skips shadow
   work when an otherwise eligible Redis path evaluates it. DialCache does not
   clamp the value or disable valid serving layers.
-- An invalid `shadow.logMismatches` preserves the cache result, shadow work,
-  and terminal shadow metric, but suppresses the warning and records remote
-  `config_resolution`. This diagnostic leaf is evaluated only after the
+- An invalid `shadow.logMismatches` falls back to the default-off logging
+  policy while preserving the cache result and shadow work, and records one
+  remote `config_resolution` error for the admitted job. This diagnostic leaf is evaluated only after the
   metrics hook, cohort, and capacity gates admit the job.
 
 Static invalid shadow leaves remain definition-time errors for `cached()` and
@@ -481,8 +505,9 @@ With it off, concurrent same-key callers each perform their own active layer
 reads, receive a full independent remote-read and fallback budget, run their
 own loader after a miss, and attempt their own writes.
 Settled request-local memoization still serves later sequential calls.
-Process-local and untracked Redis writes remain last-writer-wins, while tracked
-Redis writes retain their watermark fence.
+Publication remains last-writer-wins. All Redis writes use one complete-frame
+`SET`; tracked reads subsequently apply their watermark fence. A tracked path
+that reached Redis suppresses direct process-local fallback publication.
 
 Opt out when callers sharing one identity must not inherit another caller's
 loader failure, timeout, or cancellation behavior. Doing so reintroduces

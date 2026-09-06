@@ -1,11 +1,18 @@
 import type {
   DialCacheRedisClient,
-  RedisCachePayload,
   RedisInvalidationRequest,
+  RedisReadResult,
   RedisReadRequest,
   RedisWriteRequest,
 } from "../src/index.js";
-import { DialCacheRedisPayloadEncodingError } from "../src/redis-client.js";
+import { MAX_TRACKED_REDIS_VALUE_TTL_MS } from "../src/internal/duration.js";
+import { MIN_WATERMARK_TTL_MS } from "../src/internal/redis-scripts.js";
+import {
+  ceilSupportedCacheTtlMs,
+  decodeRedisReadResult,
+  decodeTrackedRedisReadResult,
+  encodeRedisFrame,
+} from "../src/redis-protocol.js";
 
 const FRAME_VERSION = 1;
 const ENCODING_OFFSET = 9;
@@ -27,7 +34,7 @@ export class FakeRedis implements DialCacheRedisClient {
   failWatermarkGet = false;
   getGate: Promise<void> | null = null;
 
-  async read({ valueKey, watermarkKey }: RedisReadRequest): Promise<RedisCachePayload | null> {
+  async read({ valueKey, watermarkKey }: RedisReadRequest): Promise<RedisReadResult> {
     if (watermarkKey === undefined) {
       this.getCalls += 1;
     } else {
@@ -40,29 +47,23 @@ export class FakeRedis implements DialCacheRedisClient {
 
   async write({
     valueKey,
-    watermarkKey,
     cacheTtlMs,
     value,
-  }: RedisWriteRequest): Promise<boolean> {
+    createdAtMs,
+  }: RedisWriteRequest): Promise<void> {
+    const validatedTtlMs = ceilSupportedCacheTtlMs(cacheTtlMs);
+    const storedAtMs = Date.now();
+    const frame = encodeRedisFrame(value, createdAtMs === undefined ? storedAtMs : createdAtMs);
     this.setCalls += 1;
     this.throwIfWriteFails();
-    if (watermarkKey !== undefined) {
-      const watermark = this.readWatermark(watermarkKey) ?? 0;
-      if (watermark >= Date.now()) {
-        return false;
-      }
-      this.storeFrame(valueKey, cacheTtlMs, value);
-      const currentTtlMs = this.remainingTtlMs(watermarkKey);
-      const desiredTtlMs = Math.max(currentTtlMs, cacheTtlMs + WATERMARK_TTL_MARGIN_MS);
-      this.storeWatermark(watermarkKey, watermark, desiredTtlMs);
-      return true;
-    }
-
-    this.storeFrame(valueKey, cacheTtlMs, value);
-    return true;
+    this.values.set(valueKey, {
+      value: frame,
+      expiresAtMs: storedAtMs + validatedTtlMs,
+    });
   }
 
   async invalidate({ watermarkKey, futureBufferMs }: RedisInvalidationRequest): Promise<void> {
+    const invalidatedAtMs = Date.now();
     this.setCalls += 1;
     this.throwIfWriteFails();
     let current = 0;
@@ -71,12 +72,12 @@ export class FakeRedis implements DialCacheRedisClient {
     } catch {
       current = 0;
     }
-    const watermark = Math.max(current, Date.now() + futureBufferMs);
+    const watermark = Math.max(current, invalidatedAtMs + futureBufferMs);
     const currentTtlMs = this.remainingTtlMs(watermarkKey);
     const desiredTtlMs = Math.max(
       currentTtlMs,
-      futureBufferMs + WATERMARK_TTL_MARGIN_MS,
-      watermark - Date.now() + WATERMARK_TTL_MARGIN_MS,
+      MIN_WATERMARK_TTL_MS,
+      watermark - invalidatedAtMs + MAX_TRACKED_REDIS_VALUE_TTL_MS + WATERMARK_TTL_MARGIN_MS,
     );
     this.storeWatermark(watermarkKey, watermark, desiredTtlMs);
   }
@@ -122,50 +123,18 @@ export class FakeRedis implements DialCacheRedisClient {
     }
   }
 
-  private readPayload(valueKey: string, watermarkKey: string | null): RedisCachePayload | null {
-    const raw = this.readRaw(valueKey);
-    if (raw === null || raw.length < PAYLOAD_OFFSET || raw[0] !== FRAME_VERSION) {
-      return null;
-    }
-
-    if (watermarkKey !== null) {
-      let watermark: number | null;
-      try {
-        watermark = this.readWatermark(watermarkKey);
-      } catch {
-        return null;
-      }
-      if (watermark === null || Number(readTimestamp(raw)) <= watermark) {
-        return null;
-      }
-    }
-
-    const encoding = raw[ENCODING_OFFSET];
-    if (encoding === 0) {
-      return raw.subarray(PAYLOAD_OFFSET).toString("utf8");
-    }
-    if (encoding === 1) {
-      return Buffer.from(raw.subarray(PAYLOAD_OFFSET));
-    }
-    throw new DialCacheRedisPayloadEncodingError("Invalid DialCache Redis payload encoding");
-  }
-
-  private storeFrame(key: string, ttlMs: number, payload: RedisCachePayload): void {
-    const timestamp = Buffer.alloc(8);
-    timestamp.writeBigUInt64BE(BigInt(Date.now()));
-    this.values.set(key, {
-      value: Buffer.concat([
-        Buffer.from([FRAME_VERSION]),
-        timestamp,
-        Buffer.from([Buffer.isBuffer(payload) ? 1 : 0]),
-        Buffer.from(payload),
-      ]),
-      expiresAtMs: Date.now() + ttlMs,
-    });
+  private readPayload(valueKey: string, watermarkKey: string | null): RedisReadResult {
+    const stored = this.readRaw(valueKey);
+    // Real clients transfer a reply buffer; do not let a test caller mutate the
+    // fake's retained frame through the decoder's zero-copy binary payload.
+    const raw = stored === null ? null : Buffer.from(stored);
+    return watermarkKey === null
+      ? decodeRedisReadResult(raw)
+      : decodeTrackedRedisReadResult(raw, this.readRaw(watermarkKey));
   }
 
   private storeWatermark(key: string, watermark: number, ttlMs: number): void {
-    this.values.set(key, { value: Buffer.from(String(Math.floor(watermark))), expiresAtMs: Date.now() + ttlMs });
+    this.values.set(key, { value: Buffer.from(String(Math.ceil(watermark))), expiresAtMs: Date.now() + ttlMs });
   }
 
   private readWatermark(key: string): number | null {
@@ -174,14 +143,14 @@ export class FakeRedis implements DialCacheRedisClient {
       return null;
     }
     const text = raw.toString("utf8");
-    if (!/^\d+(?:\.\d+)?$/.test(text)) {
+    if (!/^\d+$/.test(text)) {
       throw new Error("Invalid DialCache watermark");
     }
-    const legacy = Number(text);
-    if (!Number.isFinite(legacy) || legacy < 0) {
+    const watermark = Number(text);
+    if (watermark > Number.MAX_SAFE_INTEGER) {
       throw new Error("Invalid DialCache watermark");
     }
-    return legacy;
+    return watermark;
   }
 
   private readRaw(key: string): Buffer | null {

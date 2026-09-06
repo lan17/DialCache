@@ -8,11 +8,13 @@ import {
   DialCacheKey,
   DialCacheKeyConfig,
   type CacheMetricLabels,
+  type DecodedRedisFrame,
   type DialCacheConfig,
   type DialCacheMetricsAdapter,
   type DisabledMetricLabels,
   type ErrorMetricLabels,
   type InvalidationMetricLabels,
+  type RedisReadResult,
   type SerializationMetricLabels,
   type Serializer,
   type ShadowValidationMetricLabels,
@@ -20,8 +22,24 @@ import {
 import { deterministicShadowRampSample } from "../src/internal/ramp.js";
 import { encodeFrame, FakeRedis } from "./fake-redis.js";
 
+interface ShadowAgeEvent {
+  readonly labels: ShadowValidationMetricLabels;
+  readonly seconds: number;
+}
+
+interface FutureTimestampEvent {
+  readonly labels: CacheMetricLabels;
+  readonly seconds: number;
+}
+
+function isDecodedRedisFrame(result: RedisReadResult): result is DecodedRedisFrame {
+  return result !== null && "payload" in result && "createdAtMs" in result;
+}
+
 class RecordingMetrics implements DialCacheMetricsAdapter {
   readonly shadowEvents: ShadowValidationMetricLabels[] = [];
+  readonly shadowAgeEvents: ShadowAgeEvent[] = [];
+  readonly futureTimestampEvents: FutureTimestampEvent[] = [];
   readonly errorEvents: ErrorMetricLabels[] = [];
 
   request(_labels: CacheMetricLabels): void {}
@@ -36,6 +54,14 @@ class RecordingMetrics implements DialCacheMetricsAdapter {
 
   shadowValidation(labels: ShadowValidationMetricLabels): void {
     this.shadowEvents.push({ ...labels });
+  }
+
+  observeShadowValueAge(labels: ShadowValidationMetricLabels, seconds: number): void {
+    this.shadowAgeEvents.push({ labels: { ...labels }, seconds });
+  }
+
+  observeFutureTimestampOffset(labels: CacheMetricLabels, seconds: number): void {
+    this.futureTimestampEvents.push({ labels: { ...labels }, seconds });
   }
 
   observeGet(_labels: CacheMetricLabels, _seconds: number): void {}
@@ -90,6 +116,7 @@ function seedRedis(
     readonly useCase: string;
     readonly payload: string | Buffer;
     readonly tracked?: boolean;
+    readonly createdAtMs?: number;
   },
 ): DialCacheKey {
   const key = new DialCacheKey({
@@ -100,7 +127,7 @@ function seedRedis(
   });
   redis.setRaw(
     `${key.urn}:dialcache-frame-v1`,
-    encodeFrame(options.payload, Date.now(), Buffer.isBuffer(options.payload) ? 1 : 0),
+    encodeFrame(options.payload, options.createdAtMs ?? Date.now(), Buffer.isBuffer(options.payload) ? 1 : 0),
   );
   if (key.trackForInvalidation) {
     redis.setRaw(`${key.prefix}#watermark`, "0");
@@ -261,6 +288,245 @@ describe("DialCache Redis shadow validation", () => {
 
     expect(metrics.shadowEvents[0]?.outcome).toBe("mismatch");
     expect(redis.setCalls).toBe(0);
+  });
+
+  it("records the validated value age alongside a match verdict", async () => {
+    const nowMs = 1_700_000_000_000;
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(nowMs);
+    try {
+      const redis = new FakeRedis();
+      const metrics = new RecordingMetrics();
+      const useCase = "ShadowValueAgeMatch";
+      const cachedValue = { id: "123", version: 1 };
+      seedRedis(redis, {
+        id: "123",
+        useCase,
+        payload: JSON.stringify(cachedValue),
+        createdAtMs: nowMs - 45_000,
+      });
+      const dialcache = createShadowCache(redis, metrics);
+      const getUser = dialcache.cached(async () => cachedValue, {
+        ...trackedRemoteDefaults(useCase),
+        cacheKey: () => "123",
+      });
+
+      expect(await dialcache.enable(async () => await getUser())).toEqual(cachedValue);
+      await waitForShadowEvents(metrics, 1);
+
+      expect(metrics.shadowEvents[0]?.outcome).toBe("match");
+      expect(metrics.shadowAgeEvents).toHaveLength(1);
+      expect(metrics.shadowAgeEvents[0]?.seconds).toBe(45);
+      expect(metrics.shadowAgeEvents[0]?.labels).toMatchObject({
+        useCase,
+        keyType: "user_id",
+        outcome: "match",
+      });
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it("records the mismatched value age from the retained frame's creation time", async () => {
+    const nowMs = 1_700_000_000_000;
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(nowMs);
+    try {
+      const redis = new FakeRedis();
+      const metrics = new RecordingMetrics();
+      const useCase = "ShadowValueAgeMismatch";
+      seedRedis(redis, {
+        id: "123",
+        useCase,
+        payload: JSON.stringify({ id: "123", version: 1 }),
+        createdAtMs: nowMs - 50_000,
+      });
+      const dialcache = createShadowCache(redis, metrics);
+      const getUser = dialcache.cached(async () => ({ id: "123", version: 2 }), {
+        ...trackedRemoteDefaults(useCase),
+        cacheKey: () => "123",
+      });
+
+      expect(await dialcache.enable(async () => await getUser())).toEqual({ id: "123", version: 1 });
+      await waitForShadowEvents(metrics, 1);
+
+      expect(metrics.shadowEvents[0]?.outcome).toBe("mismatch");
+      expect(metrics.shadowAgeEvents).toHaveLength(1);
+      expect(metrics.shadowAgeEvents[0]?.seconds).toBe(50);
+      expect(metrics.shadowAgeEvents[0]?.labels).toMatchObject({ useCase, outcome: "mismatch" });
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it("clamps value age to zero when the reader clock steps backward after accepting the frame", async () => {
+    const nowMs = 1_700_000_000_000;
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(nowMs);
+    try {
+      const redis = new FakeRedis();
+      const metrics = new RecordingMetrics();
+      const useCase = "ShadowValueAgeClockRollback";
+      const cachedValue = { id: "123" };
+      seedRedis(redis, {
+        id: "123",
+        useCase,
+        payload: JSON.stringify(cachedValue),
+        createdAtMs: nowMs,
+      });
+      const sourceStarted = deferred<void>();
+      const sourceGate = deferred<typeof cachedValue>();
+      const dialcache = createShadowCache(redis, metrics);
+      const getUser = dialcache.cached(async () => {
+        sourceStarted.resolve(undefined);
+        return await sourceGate.promise;
+      }, {
+        ...trackedRemoteDefaults(useCase),
+        cacheKey: () => "123",
+      });
+
+      expect(await dialcache.enable(async () => await getUser())).toEqual(cachedValue);
+      await sourceStarted.promise;
+      nowSpy.mockReturnValue(nowMs - 60_000);
+      sourceGate.resolve(cachedValue);
+      await waitForShadowEvents(metrics, 1);
+
+      expect(metrics.shadowEvents[0]?.outcome).toBe("match");
+      expect(metrics.shadowAgeEvents).toHaveLength(1);
+      expect(metrics.shadowAgeEvents[0]?.seconds).toBe(0);
+      expect(metrics.futureTimestampEvents).toEqual([]);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it("preserves ordinary shadow fills after a tracked frame is rejected as future-dated", async () => {
+    const nowMs = 1_700_000_000_000;
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(nowMs);
+    try {
+      const redis = new FakeRedis();
+      const write = vi.spyOn(redis, "write");
+      const metrics = new RecordingMetrics();
+      const miss = vi.spyOn(metrics, "miss");
+      const useCase = "ShadowFutureFrameOrdinaryRefill";
+      const key = seedRedis(redis, {
+        id: "123",
+        useCase,
+        payload: JSON.stringify({ source: "redis" }),
+        createdAtMs: nowMs + 2_000,
+      });
+      redis.setRaw(`${key.prefix}#watermark`, String(nowMs + 1_000));
+      const dialcache = createShadowCache(redis, metrics);
+      const getUser = dialcache.cached(async () => ({ source: "fallback" }), {
+        keyType: "user_id",
+        useCase,
+        cacheKey: () => "123",
+        trackForInvalidation: true,
+        defaultConfig: new DialCacheKeyConfig({
+          ttlSec: { [CacheLayer.REMOTE]: 60 },
+          ramp: { [CacheLayer.REMOTE]: 0 },
+          shadow: { ramp: 100 },
+        }),
+      });
+
+      await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ source: "fallback" });
+      await waitForShadowEvents(metrics, 1);
+
+      expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["filled"]);
+      expect(miss).toHaveBeenCalledOnce();
+      expect(miss).toHaveBeenCalledWith({
+        cacheNamespace: "urn",
+        useCase,
+        keyType: "user_id",
+        layer: "remote_shadow",
+        reason: "unclassified",
+      });
+      expect(write).toHaveBeenCalledOnce();
+      expect(write.mock.calls[0]?.[0]).not.toHaveProperty("createdAtMs");
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it("records an expired remote_shadow miss and refills when the C0 frame reaches the logical TTL", async () => {
+    const nowMs = 1_700_000_000_000;
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(nowMs);
+    try {
+      const redis = new FakeRedis();
+      const write = vi.spyOn(redis, "write");
+      const metrics = new RecordingMetrics();
+      const miss = vi.spyOn(metrics, "miss");
+      const useCase = "ShadowExpiredFrameRefill";
+      seedRedis(redis, {
+        id: "123",
+        useCase,
+        payload: JSON.stringify({ source: "redis" }),
+        createdAtMs: nowMs - 60_000,
+      });
+      const dialcache = createShadowCache(redis, metrics);
+      const getUser = dialcache.cached(async () => ({ source: "fallback" }), {
+        keyType: "user_id",
+        useCase,
+        cacheKey: () => "123",
+        trackForInvalidation: true,
+        defaultConfig: new DialCacheKeyConfig({
+          ttlSec: { [CacheLayer.REMOTE]: 60 },
+          ramp: { [CacheLayer.REMOTE]: 0 },
+          shadow: { ramp: 100 },
+        }),
+      });
+
+      await expect(dialcache.enable(async () => await getUser())).resolves.toEqual({ source: "fallback" });
+      await waitForShadowEvents(metrics, 1);
+
+      expect(metrics.shadowEvents.map(({ outcome }) => outcome)).toEqual(["filled"]);
+      expect(miss).toHaveBeenCalledOnce();
+      expect(miss).toHaveBeenCalledWith({
+        cacheNamespace: "urn",
+        useCase,
+        keyType: "user_id",
+        layer: "remote_shadow",
+        reason: "expired",
+      });
+      expect(write).toHaveBeenCalledOnce();
+      expect(write.mock.calls[0]?.[0]).not.toHaveProperty("createdAtMs");
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it("rejects a non-finite untracked timestamp before shadow validation", async () => {
+    const redis = new FakeRedis();
+    const metrics = new RecordingMetrics();
+    const useCase = "ShadowNonFiniteValueAge";
+    const cachedValue = { id: "123", version: 1 };
+    seedRedis(redis, {
+      id: "123",
+      useCase,
+      payload: JSON.stringify(cachedValue),
+      tracked: false,
+    });
+    const originalRead = redis.read.bind(redis);
+    vi.spyOn(redis, "read").mockImplementation(async (request) => {
+      const frame = await originalRead(request);
+      return !isDecodedRedisFrame(frame)
+        ? frame
+        : { ...frame, createdAtMs: Number.POSITIVE_INFINITY };
+    });
+    const dialcache = createShadowCache(redis, metrics);
+    const source = vi.fn(async () => cachedValue);
+    const getUser = dialcache.cached(source, {
+      keyType: "user_id",
+      useCase,
+      cacheKey: () => "123",
+      defaultConfig: remoteOnly(100),
+    });
+
+    expect(await dialcache.enable(async () => await getUser())).toEqual(cachedValue);
+    await nextImmediate();
+
+    expect(source).toHaveBeenCalledOnce();
+    expect(metrics.shadowEvents).toEqual([]);
+    expect(metrics.shadowAgeEvents).toEqual([]);
+    expect(metrics.futureTimestampEvents).toEqual([]);
+    expect(redis.setCalls).toBe(1);
   });
 
   it("re-deserializes the retained payload instead of comparing a caller-mutated hit", async () => {

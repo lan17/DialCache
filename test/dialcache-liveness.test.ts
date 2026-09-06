@@ -11,6 +11,7 @@ import {
   type CachedOptions,
   type DialCacheMetricsAdapter,
   type DialCacheRedisClient,
+  type RedisReadMiss,
   type Serializer,
 } from "../src/index.js";
 import { FakeRedis } from "./fake-redis.js";
@@ -538,7 +539,7 @@ describe("DialCache fallback liveness", () => {
   });
 
   it("uses a separate remote-read deadline instead of the fallback deadline", async () => {
-    const readGate = deferred<null>();
+    const readGate = deferred<RedisReadMiss>();
     const readStarted = deferred<void>();
     const fallback = vi.fn(async () => "value");
     const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
@@ -547,7 +548,7 @@ describe("DialCache fallback liveness", () => {
         readStarted.resolve();
         return await readGate.promise;
       },
-      write: async () => true,
+      write: async () => {},
       invalidate: async () => undefined,
     };
     const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 200 } });
@@ -568,7 +569,7 @@ describe("DialCache fallback liveness", () => {
     expect(vi.getTimerCount()).toBe(1);
     expect(dialcache.getCoalescingState().process.activeLeaders).toBe(1);
 
-    readGate.resolve(null);
+    readGate.resolve({ kind: "miss", reason: "value_absent" });
     await expect(result).resolves.toBe("value");
     expect(fallback).toHaveBeenCalledTimes(1);
     expect(dialcache.getCoalescingState().process.activeLeaders).toBe(0);
@@ -588,8 +589,8 @@ describe("DialCache fallback liveness", () => {
       },
     };
     const redis: DialCacheRedisClient = {
-      read: async () => "stored",
-      write: async () => true,
+      read: async () => ({ payload: "stored", createdAtMs: Date.now() }),
+      write: async () => {},
       invalidate: async () => undefined,
     };
     const dialcache = new DialCache({ redis: { client: redis }, metrics });
@@ -621,7 +622,7 @@ describe("DialCache fallback liveness", () => {
   it("does not apply a completed fallback's deadline to serializer dump or Redis write", async () => {
     const dumpGate = deferred<string>();
     const dumpStarted = deferred<void>();
-    const writeGate = deferred<boolean>();
+    const writeGate = deferred<void>();
     const writeStarted = deferred<void>();
     const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
     const serializer: Serializer<string> = {
@@ -632,7 +633,7 @@ describe("DialCache fallback liveness", () => {
       load: (value) => value.toString(),
     };
     const redis: DialCacheRedisClient = {
-      read: async () => null,
+      read: async (): Promise<RedisReadMiss> => ({ kind: "miss", reason: "value_absent" }),
       write: async () => {
         writeStarted.resolve();
         return await writeGate.promise;
@@ -673,7 +674,7 @@ describe("DialCache fallback liveness", () => {
     expect(settled).toBe(false);
     expect(dialcache.getCoalescingState().process.activeLeaders).toBe(1);
 
-    writeGate.resolve(true);
+    writeGate.resolve();
     await expect(result).resolves.toBe("value");
     expect(dialcache.getCoalescingState().process.activeLeaders).toBe(0);
   });

@@ -11,9 +11,10 @@ import {
   type CachedOptions,
   type DialCacheMetricsAdapter,
   type DialCacheRedisClient,
-  type RedisCachePayload,
   type RedisConfig,
   type RedisReadContext,
+  type RedisReadMiss,
+  type RedisReadResult,
 } from "../src/index.js";
 
 interface Deferred<T> {
@@ -42,6 +43,8 @@ const localAndRemoteConfig = new DialCacheKeyConfig({
   ramp: { [CacheLayer.LOCAL]: 100, [CacheLayer.REMOTE]: 100 },
 });
 
+const valueAbsent: RedisReadMiss = { kind: "miss", reason: "value_absent" };
+
 function metricsWithError(error: DialCacheMetricsAdapter["error"]): DialCacheMetricsAdapter {
   return {
     request: vi.fn(),
@@ -62,7 +65,7 @@ function redisClient(read: DialCacheRedisClient["read"]): {
   readonly write: ReturnType<typeof vi.fn<DialCacheRedisClient["write"]>>;
 } {
   const readMock = vi.fn<DialCacheRedisClient["read"]>(read);
-  const write = vi.fn<DialCacheRedisClient["write"]>(async () => true);
+  const write = vi.fn<DialCacheRedisClient["write"]>(async () => {});
   return {
     client: {
       read: readMock,
@@ -97,7 +100,7 @@ describe("DialCache Redis read deadlines", () => {
         throw new Error("missing read context");
       }
       contexts.push(context);
-      return null;
+      return valueAbsent;
     });
     const libraryDefault = new DialCache({ redis: { client: redis.client } });
     const defaulted = libraryDefault.cached(async () => "defaulted", {
@@ -150,7 +153,7 @@ describe("DialCache Redis read deadlines", () => {
   });
 
   it("accepts an omitted instance default and rejects invalid explicit values", () => {
-    const client = redisClient(async () => null).client;
+    const client = redisClient(async () => valueAbsent).client;
     expect(() => new DialCache({ redis: { client } })).not.toThrow();
 
     const invalidValues: readonly unknown[] = [
@@ -180,8 +183,92 @@ describe("DialCache Redis read deadlines", () => {
     ).not.toThrow();
   });
 
+  it.each([
+    {
+      name: "forward clock step",
+      dispatchNowMs: 1_000,
+      settledNowMs: 1_200,
+      frameCreatedAtMs: 1_100,
+      expectedSource: "redis",
+      expectedOffsetSeconds: null,
+    },
+    {
+      name: "backward clock step",
+      dispatchNowMs: 1_200,
+      settledNowMs: 1_000,
+      frameCreatedAtMs: 1_100,
+      expectedSource: "fallback",
+      expectedOffsetSeconds: 0.1,
+    },
+  ])("samples the reader clock after a bounded read settles across a $name", async ({
+    dispatchNowMs,
+    settledNowMs,
+    frameCreatedAtMs,
+    expectedSource,
+    expectedOffsetSeconds,
+  }) => {
+    vi.mocked(performance.now).mockReturnValue(0);
+    let readerNowMs = dispatchNowMs;
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => readerNowMs);
+    const readStarted = deferred<void>();
+    const readGate = deferred<RedisReadResult>();
+    const redis = redisClient(async () => {
+      readStarted.resolve(undefined);
+      return await readGate.promise;
+    });
+    const observeFutureTimestampOffset = vi.fn<
+      NonNullable<DialCacheMetricsAdapter["observeFutureTimestampOffset"]>
+    >();
+    const metrics = {
+      ...metricsWithError(vi.fn()),
+      observeFutureTimestampOffset,
+    };
+    const dialcache = new DialCache({
+      redis: { client: redis.client, readTimeoutMs: 100 },
+      metrics,
+    });
+    const fallback = vi.fn(async () => ({ source: "fallback" }));
+    const load = dialcache.cached(fallback, {
+      keyType: "id",
+      useCase: "RedisReadSettledClockSample",
+      cacheKey: () => "123",
+      trackForInvalidation: true,
+      defaultConfig: remoteConfig,
+    });
+
+    const result = dialcache.enable(async () => await load());
+    await readStarted.promise;
+    expect(nowSpy).not.toHaveBeenCalled();
+    readerNowMs = settledNowMs;
+    readGate.resolve({
+      payload: JSON.stringify({ source: "redis" }),
+      createdAtMs: frameCreatedAtMs,
+    });
+
+    await expect(result).resolves.toEqual({ source: expectedSource });
+
+    expect(nowSpy).toHaveBeenCalledTimes(1);
+    expect(fallback).toHaveBeenCalledTimes(expectedSource === "fallback" ? 1 : 0);
+    if (expectedOffsetSeconds === null) {
+      expect(observeFutureTimestampOffset).not.toHaveBeenCalled();
+      expect(redis.write).not.toHaveBeenCalled();
+    } else {
+      expect(observeFutureTimestampOffset).toHaveBeenCalledOnce();
+      expect(observeFutureTimestampOffset).toHaveBeenCalledWith(
+        {
+          cacheNamespace: "urn",
+          useCase: "RedisReadSettledClockSample",
+          keyType: "id",
+          layer: CacheLayer.REMOTE,
+        },
+        expectedOffsetSeconds,
+      );
+      expect(redis.write).toHaveBeenCalledOnce();
+    }
+  });
+
   it("rejects invalid static use-case overrides before reserving the use-case name", () => {
-    const client = redisClient(async () => null).client;
+    const client = redisClient(async () => valueAbsent).client;
     const invalidValues: readonly unknown[] = [
       null,
       0,
@@ -233,7 +320,7 @@ describe("DialCache Redis read deadlines", () => {
   });
 
   it("fails open before Redis when an explicit runtime timeout is invalid", async () => {
-    const redis = redisClient(async () => null);
+    const redis = redisClient(async () => valueAbsent);
     const error = vi.fn<DialCacheMetricsAdapter["error"]>();
     const metrics = metricsWithError(error);
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -286,7 +373,7 @@ describe("DialCache Redis read deadlines", () => {
         if (settlement === "throw") {
           throw new Error("late synchronous Redis failure");
         }
-        return null;
+        return valueAbsent;
       });
       const error = vi.fn<DialCacheMetricsAdapter["error"]>();
       const metrics = metricsWithError(error);
@@ -327,8 +414,8 @@ describe("DialCache Redis read deadlines", () => {
     const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
     const redis = redisClient(
       vi.fn()
-        .mockResolvedValueOnce(JSON.stringify({ source: "redis" }))
-        .mockResolvedValueOnce(null),
+        .mockResolvedValueOnce({ payload: JSON.stringify({ source: "redis" }), createdAtMs: Date.now() })
+        .mockResolvedValueOnce(valueAbsent),
     );
     const dialcache = new DialCache({ redis: { client: redis.client, readTimeoutMs: 100 } });
     const hit = dialcache.cached(async () => ({ source: "fallback" }), {
@@ -363,7 +450,7 @@ describe("DialCache Redis read deadlines", () => {
       }
       contexts.push(context);
       readStarted.resolve();
-      return await new Promise<null>(() => undefined);
+      return await new Promise<RedisReadResult>(() => undefined);
     });
     const error = vi.fn<DialCacheMetricsAdapter["error"]>();
     const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -464,7 +551,7 @@ describe("DialCache Redis read deadlines", () => {
           throw new Error("missing read context");
         }
         contexts.push(context);
-        return await new Promise<null>(() => undefined);
+        return await new Promise<RedisReadResult>(() => undefined);
       });
       const dialcache = new DialCache({
         redis: { client: redis.client, readTimeoutMs: 100 },
@@ -503,7 +590,7 @@ describe("DialCache Redis read deadlines", () => {
     const readStarted = deferred<void>();
     const redis = redisClient(async () => {
       readStarted.resolve();
-      return await new Promise<null>(() => undefined);
+      return await new Promise<RedisReadResult>(() => undefined);
     });
     const dialcache = new DialCache({ redis: { client: redis.client, readTimeoutMs: 10 } });
     const fallback = vi.fn(async () => "fallback");
@@ -532,7 +619,7 @@ describe("DialCache Redis read deadlines", () => {
     const readStarted = deferred<void>();
     const redis = redisClient(async () => {
       readStarted.resolve();
-      return await new Promise<null>(() => undefined);
+      return await new Promise<RedisReadResult>(() => undefined);
     });
     const dialcache = new DialCache({ redis: { client: redis.client, readTimeoutMs: 10 } });
     const fallback = vi.fn(async () => "fallback");
@@ -576,7 +663,7 @@ describe("DialCache Redis read deadlines", () => {
     const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
     const redis = redisClient(async () => {
       readStarted.resolve();
-      return await new Promise<null>(() => undefined);
+      return await new Promise<RedisReadResult>(() => undefined);
     });
     const dialcache = new DialCache({ redis: { client: redis.client, readTimeoutMs: 10 } });
     const fallback = vi.fn(async () => "fallback");
@@ -605,19 +692,25 @@ describe("DialCache Redis read deadlines", () => {
   it.each(["fulfillment", "rejection"] as const)(
     "consumes late read %s and lets a later invocation recover",
     async (settlement) => {
-      const firstRead = deferred<RedisCachePayload | null>();
+      const firstRead = deferred<RedisReadResult>();
       let readCalls = 0;
       const redis = redisClient(async () => {
         readCalls += 1;
         return readCalls === 1
           ? await firstRead.promise
-          : JSON.stringify({ source: "redis" });
+          : { payload: JSON.stringify({ source: "redis" }), createdAtMs: Date.now() };
       });
       const error = vi.fn<DialCacheMetricsAdapter["error"]>();
+      const observeFutureTimestampOffset = vi.fn<
+        NonNullable<DialCacheMetricsAdapter["observeFutureTimestampOffset"]>
+      >();
       const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
       const dialcache = new DialCache({
         redis: { client: redis.client, readTimeoutMs: 10 },
-        metrics: metricsWithError(error),
+        metrics: {
+          ...metricsWithError(error),
+          observeFutureTimestampOffset,
+        },
         logger,
       });
       const fallback = vi.fn(async () => ({ source: "fallback" }));
@@ -634,7 +727,7 @@ describe("DialCache Redis read deadlines", () => {
       await expect(dialcache.enable(async () => await load())).resolves.toEqual({ source: "redis" });
 
       if (settlement === "fulfillment") {
-        firstRead.resolve(JSON.stringify({ source: "late" }));
+        firstRead.resolve({ payload: JSON.stringify({ source: "late" }), createdAtMs: Date.now() + 1_000 });
       } else {
         firstRead.reject(new Error("late Redis failure"));
       }
@@ -645,6 +738,7 @@ describe("DialCache Redis read deadlines", () => {
       expect(fallback).toHaveBeenCalledTimes(1);
       expect(logger.warn).toHaveBeenCalledTimes(1);
       expect(error).toHaveBeenCalledTimes(1);
+      expect(observeFutureTimestampOffset).not.toHaveBeenCalled();
     },
   );
 
@@ -661,7 +755,7 @@ describe("DialCache Redis read deadlines", () => {
           ? async () => {
               throw new Error("Redis unavailable");
             }
-          : async () => await new Promise<null>(() => undefined),
+          : async () => await new Promise<RedisReadResult>(() => undefined),
       );
       const dialcache = new DialCache({
         redis: { client: redis.client, readTimeoutMs: 10 },
@@ -697,7 +791,7 @@ describe("DialCache Redis read deadlines", () => {
 
   it("allocates no read timer for disabled calls, ramped-out Redis, or local hits", async () => {
     const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
-    const redis = redisClient(async () => null);
+    const redis = redisClient(async () => valueAbsent);
     const dialcache = new DialCache({ redis: { client: redis.client, readTimeoutMs: 100 } });
     const disabled = dialcache.cached(async () => "disabled", {
       keyType: "id",

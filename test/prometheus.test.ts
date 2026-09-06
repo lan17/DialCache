@@ -12,10 +12,12 @@ import {
   CacheLayer,
   DialCache,
   DialCacheKeyConfig,
+  type CacheMissReason,
   type CompressionOutcome,
   type DisabledReason,
   type MetricErrorKind,
   type ShadowValidationOutcome,
+  type StaleRecoveryOutcome,
 } from "../src/index.js";
 import { PrometheusDialCacheMetrics, createPrometheusDialCacheMetrics } from "../src/prometheus.js";
 import { FakeRedis } from "./fake-redis.js";
@@ -43,6 +45,7 @@ const METRIC_ERROR_KINDS: Readonly<Record<MetricErrorKind, true>> = {
   cache_read: true,
   cache_read_timeout: true,
   cache_write: true,
+  tracked_ttl_clamped: true,
   serialization_load: true,
   serialization_dump: true,
   compression: true,
@@ -58,6 +61,12 @@ const DISABLED_REASONS: Readonly<Record<DisabledReason, true>> = {
   ramped_down: true,
   config_error: true,
 };
+const MISS_REASONS: Readonly<Record<CacheMissReason, true>> = {
+  value_absent: true,
+  expired: true,
+  watermark_fenced: true,
+  unclassified: true,
+};
 const COMPRESSION_OUTCOMES: Readonly<Record<CompressionOutcome, true>> = {
   compressed: true,
   below_threshold: true,
@@ -72,7 +81,7 @@ const SHADOW_VALIDATION_OUTCOMES: Readonly<Record<ShadowValidationOutcome, true>
   mismatch: true,
   superseded: true,
   filled: true,
-  fill_blocked: true,
+  fill_fenced: true,
   fill_error: true,
   redis_error: true,
   source_error: true,
@@ -81,6 +90,11 @@ const SHADOW_VALIDATION_OUTCOMES: Readonly<Record<ShadowValidationOutcome, true>
   confirmation_error: true,
   timeout: true,
   dropped: true,
+};
+const STALE_RECOVERY_OUTCOMES: Readonly<Record<StaleRecoveryOutcome, true>> = {
+  served: true,
+  miss: true,
+  deserialization_error: true,
 };
 
 interface IncompatibleCollectorCase {
@@ -166,7 +180,7 @@ describe("Prometheus metrics adapter", () => {
     } as const;
 
     metrics.request(labels);
-    metrics.miss(labels);
+    metrics.miss({ ...labels, reason: "value_absent" });
     metrics.disabled({ ...labels, reason: "context" });
     metrics.error({ ...labels, error: "cache_read", inFallback: false });
     metrics.invalidation({ cacheNamespace: labels.cacheNamespace, keyType: labels.keyType, layer: labels.layer });
@@ -182,6 +196,31 @@ describe("Prometheus metrics adapter", () => {
       keyType: labels.keyType,
       outcome: "match",
     });
+    metrics.staleRecovery({
+      cacheNamespace: labels.cacheNamespace,
+      useCase: labels.useCase,
+      keyType: labels.keyType,
+      outcome: "served",
+    });
+    metrics.observeStaleRecoveryValueAge(
+      {
+        cacheNamespace: labels.cacheNamespace,
+        useCase: labels.useCase,
+        keyType: labels.keyType,
+        outcome: "served",
+      },
+      90,
+    );
+    metrics.observeShadowValueAge(
+      {
+        cacheNamespace: labels.cacheNamespace,
+        useCase: labels.useCase,
+        keyType: labels.keyType,
+        outcome: "match",
+      },
+      42,
+    );
+    metrics.observeFutureTimestampOffset(labels, 0.007);
     metrics.compression({ ...labels, outcome: "compressed" });
     metrics.observeGet(labels, 0.05);
     metrics.observeFallback(labels, 0.05);
@@ -224,9 +263,14 @@ describe("Prometheus metrics adapter", () => {
         "in_fallback",
       ]),
       histogramSchema("schema_dialcache_fallback_timer", ["cache_namespace", "use_case", "key_type", "layer"], TIMER_BUCKETS),
+      histogramSchema(
+        "schema_dialcache_future_timestamp_offset_histogram",
+        ["cache_namespace", "use_case", "key_type", "layer"],
+        FUTURE_TIMESTAMP_OFFSET_BUCKETS,
+      ),
       histogramSchema("schema_dialcache_get_timer", ["cache_namespace", "use_case", "key_type", "layer"], TIMER_BUCKETS),
       counterSchema("schema_dialcache_invalidation_counter", ["cache_namespace", "key_type", "layer"]),
-      counterSchema("schema_dialcache_miss_counter", ["cache_namespace", "use_case", "key_type", "layer"]),
+      counterSchema("schema_dialcache_miss_counter", ["cache_namespace", "use_case", "key_type", "layer", "reason"]),
       counterSchema("schema_dialcache_request_counter", ["cache_namespace", "use_case", "key_type", "layer"]),
       histogramSchema(
         "schema_dialcache_serialization_timer",
@@ -237,13 +281,67 @@ describe("Prometheus metrics adapter", () => {
         "schema_dialcache_shadow_validation_counter",
         ["cache_namespace", "use_case", "key_type", "outcome"],
       ),
+      histogramSchema(
+        "schema_dialcache_shadow_value_age_histogram",
+        ["cache_namespace", "use_case", "key_type", "outcome"],
+        VALUE_AGE_BUCKETS,
+      ),
       histogramSchema("schema_dialcache_size_histogram", ["cache_namespace", "use_case", "key_type", "layer"], SIZE_BUCKETS),
+      counterSchema(
+        "schema_dialcache_stale_recovery_counter",
+        ["cache_namespace", "use_case", "key_type", "outcome"],
+      ),
+      histogramSchema(
+        "schema_dialcache_stale_recovery_value_age_histogram",
+        ["cache_namespace", "use_case", "key_type", "outcome"],
+        VALUE_AGE_BUCKETS,
+      ),
       histogramSchema(
         "schema_dialcache_stored_size_histogram",
         ["cache_namespace", "use_case", "key_type", "layer"],
         SIZE_BUCKETS,
       ),
     ]);
+
+    const shadowValueAge = families.find(({ name }) => name === "schema_dialcache_shadow_value_age_histogram");
+    const shadowValueAgeSum = shadowValueAge?.values.find(
+      ({ metricName }) => metricName === "schema_dialcache_shadow_value_age_histogram_sum",
+    );
+    expect(shadowValueAgeSum?.value).toBe(42);
+    expect(shadowValueAgeSum?.labels).toEqual({
+      cache_namespace: labels.cacheNamespace,
+      use_case: labels.useCase,
+      key_type: labels.keyType,
+      outcome: "match",
+    });
+
+    const staleRecoveryValueAge = families.find(
+      ({ name }) => name === "schema_dialcache_stale_recovery_value_age_histogram",
+    );
+    const staleRecoveryValueAgeSum = staleRecoveryValueAge?.values.find(
+      ({ metricName }) => metricName === "schema_dialcache_stale_recovery_value_age_histogram_sum",
+    );
+    expect(staleRecoveryValueAgeSum?.value).toBe(90);
+    expect(staleRecoveryValueAgeSum?.labels).toEqual({
+      cache_namespace: labels.cacheNamespace,
+      use_case: labels.useCase,
+      key_type: labels.keyType,
+      outcome: "served",
+    });
+
+    const futureTimestampOffset = families.find(
+      ({ name }) => name === "schema_dialcache_future_timestamp_offset_histogram",
+    );
+    const futureTimestampOffsetSum = futureTimestampOffset?.values.find(
+      ({ metricName }) => metricName === "schema_dialcache_future_timestamp_offset_histogram_sum",
+    );
+    expect(futureTimestampOffsetSum?.value).toBe(0.007);
+    expect(futureTimestampOffsetSum?.labels).toEqual({
+      cache_namespace: labels.cacheNamespace,
+      use_case: labels.useCase,
+      key_type: labels.keyType,
+      layer: labels.layer,
+    });
 
     const serialization = families.find(({ name }) => name === "schema_dialcache_serialization_timer");
     const serializationLabels = serialization?.values
@@ -265,6 +363,31 @@ describe("Prometheus metrics adapter", () => {
         operation: "load",
       },
     ]);
+  });
+
+  it("ignores non-finite and non-positive future timestamp offsets", async () => {
+    const registry = new Registry();
+    const metrics = new PrometheusDialCacheMetrics({ registry, prefix: "finite_skew_" });
+    const labels = {
+      cacheNamespace: "users",
+      useCase: "PrometheusFiniteFutureOffset",
+      keyType: "user_id",
+      layer: CacheLayer.REMOTE,
+    } as const;
+
+    metrics.observeFutureTimestampOffset(labels, 0.25);
+    for (const invalid of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, 0, -1]) {
+      metrics.observeFutureTimestampOffset(labels, invalid);
+    }
+
+    const families = (await registry.getMetricsAsJSON()) as unknown as MetricFamily[];
+    const family = families.find(({ name }) => name === "finite_skew_dialcache_future_timestamp_offset_histogram");
+    expect(family?.values.find(({ metricName }) =>
+      metricName === "finite_skew_dialcache_future_timestamp_offset_histogram_count"
+    )?.value).toBe(1);
+    expect(family?.values.find(({ metricName }) =>
+      metricName === "finite_skew_dialcache_future_timestamp_offset_histogram_sum"
+    )?.value).toBe(0.25);
   });
 
   it("exports every bounded error category without rewriting labels", async () => {
@@ -324,6 +447,34 @@ describe("Prometheus metrics adapter", () => {
     }
   });
 
+  it("exports every bounded miss reason without rewriting labels", async () => {
+    const registry = new Registry();
+    const metrics = new PrometheusDialCacheMetrics({ registry, prefix: "miss_reason_" });
+    const labels = {
+      cacheNamespace: "users",
+      useCase: "PrometheusMissReasons",
+      keyType: "user_id",
+      layer: CacheLayer.REMOTE,
+    } as const;
+    const missReasons = Object.keys(MISS_REASONS) as CacheMissReason[];
+
+    for (const reason of missReasons) {
+      metrics.miss({ ...labels, reason });
+    }
+
+    for (const reason of missReasons) {
+      await expect(
+        sumMetric(registry, "miss_reason_dialcache_miss_counter", {
+          cache_namespace: labels.cacheNamespace,
+          use_case: labels.useCase,
+          key_type: labels.keyType,
+          layer: labels.layer,
+          reason,
+        }),
+      ).resolves.toBe(1);
+    }
+  });
+
   it("exports every bounded shadow-validation outcome without adding cache identity or layer labels", async () => {
     const registry = new Registry();
     const metrics = new PrometheusDialCacheMetrics({ registry, prefix: "shadow_" });
@@ -351,6 +502,39 @@ describe("Prometheus metrics adapter", () => {
 
     const family = ((await registry.getMetricsAsJSON()) as unknown as MetricFamily[]).find(
       ({ name }) => name === "shadow_dialcache_shadow_validation_counter",
+    );
+    expect(family?.values.map(({ labels: emitted }) => Object.keys(emitted))).toEqual(
+      outcomes.map(() => ["cache_namespace", "use_case", "key_type", "outcome"]),
+    );
+  });
+
+  it("exports every bounded stale-recovery outcome without adding cache identity or layer labels", async () => {
+    const registry = new Registry();
+    const metrics = new PrometheusDialCacheMetrics({ registry, prefix: "stale_" });
+    const labels = {
+      cacheNamespace: "users",
+      useCase: "PrometheusStaleRecovery",
+      keyType: "user_id",
+    } as const;
+    const outcomes = Object.keys(STALE_RECOVERY_OUTCOMES) as StaleRecoveryOutcome[];
+
+    for (const outcome of outcomes) {
+      metrics.staleRecovery({ ...labels, outcome });
+    }
+
+    for (const outcome of outcomes) {
+      await expect(
+        sumMetric(registry, "stale_dialcache_stale_recovery_counter", {
+          cache_namespace: labels.cacheNamespace,
+          use_case: labels.useCase,
+          key_type: labels.keyType,
+          outcome,
+        }),
+      ).resolves.toBe(1);
+    }
+
+    const family = ((await registry.getMetricsAsJSON()) as unknown as MetricFamily[]).find(
+      ({ name }) => name === "stale_dialcache_stale_recovery_counter",
     );
     expect(family?.values.map(({ labels: emitted }) => Object.keys(emitted))).toEqual(
       outcomes.map(() => ["cache_namespace", "use_case", "key_type", "outcome"]),
@@ -396,7 +580,7 @@ describe("Prometheus metrics adapter", () => {
     } as const;
 
     metrics.request(labels);
-    metrics.miss(labels);
+    metrics.miss({ ...labels, reason: "unclassified" });
     metrics.observeGet(labels, 0.01);
 
     await expect(
@@ -413,6 +597,7 @@ describe("Prometheus metrics adapter", () => {
         use_case: labels.useCase,
         key_type: labels.keyType,
         layer: labels.layer,
+        reason: "unclassified",
       }),
     ).resolves.toBe(1);
   });
@@ -441,6 +626,55 @@ describe("Prometheus metrics adapter", () => {
     await expect(registry.getSingleMetricAsString("dialcache_request_counter")).resolves.toContain(
       "dialcache_request_counter",
     );
+  });
+
+  it("rejects a pre-registered legacy miss collector before registering anything", () => {
+    const registry = new Registry();
+    const prefix = "legacy_miss_";
+    const metricName = `${prefix}dialcache_miss_counter`;
+    new Counter({
+      name: metricName,
+      help: "DialCache cache misses.",
+      labelNames: ["cache_namespace", "use_case", "key_type", "layer"],
+      registers: [registry],
+    });
+
+    expect(() => new PrometheusDialCacheMetrics({ registry, prefix })).toThrowError(
+      `Prometheus collector "${metricName}" already exists with an incompatible schema. ` +
+        "Use a unique prefix or a separate Registry.",
+    );
+    expect(registry.getMetricsAsArray().map(({ name }) => name)).toEqual([metricName]);
+  });
+
+  it("reuses a pre-registered current-schema miss collector", async () => {
+    const registry = new Registry();
+    const prefix = "current_miss_";
+    const metricName = `${prefix}dialcache_miss_counter`;
+    new Counter({
+      name: metricName,
+      help: "DialCache cache misses.",
+      labelNames: ["cache_namespace", "use_case", "key_type", "layer", "reason"],
+      registers: [registry],
+    });
+    const metrics = new PrometheusDialCacheMetrics({ registry, prefix });
+
+    metrics.miss({
+      cacheNamespace: "users",
+      useCase: "CurrentMissCollector",
+      keyType: "user_id",
+      layer: CacheLayer.REMOTE,
+      reason: "watermark_fenced",
+    });
+
+    await expect(
+      sumMetric(registry, metricName, {
+        cache_namespace: "users",
+        use_case: "CurrentMissCollector",
+        key_type: "user_id",
+        layer: "remote",
+        reason: "watermark_fenced",
+      }),
+    ).resolves.toBe(1);
   });
 
   for (const { schemaPart, register } of incompatibleCollectorCases) {
@@ -525,7 +759,7 @@ describe("Prometheus metrics adapter", () => {
     expect(second).toEqual({ userId: "123", calls: 1 });
     const labels = { cache_namespace: "metrics-cache", use_case: "PrometheusMetricExport", layer: "remote" };
     await expect(sumMetric(registry, "test_dialcache_request_counter", labels)).resolves.toBe(2);
-    await expect(sumMetric(registry, "test_dialcache_miss_counter", labels)).resolves.toBe(1);
+    await expect(sumMetric(registry, "test_dialcache_miss_counter", { ...labels, reason: "value_absent" })).resolves.toBe(1);
     await expect(sumMetric(registry, "test_dialcache_get_timer", labels)).resolves.toBeGreaterThan(0);
     await expect(sumMetric(registry, "test_dialcache_fallback_timer", labels)).resolves.toBeGreaterThan(0);
     await expect(
@@ -644,12 +878,34 @@ describe("Prometheus metrics adapter", () => {
 });
 
 const TIMER_BUCKETS = [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, "+Inf"];
+const FUTURE_TIMESTAMP_OFFSET_BUCKETS = [
+  0.001,
+  0.005,
+  0.01,
+  0.025,
+  0.05,
+  0.1,
+  0.25,
+  0.5,
+  1,
+  5,
+  15,
+  60,
+  300,
+  900,
+  3_600,
+  10_800,
+  43_200,
+  "+Inf",
+];
 const SIZE_BUCKETS = [100, 1_000, 10_000, 100_000, 1_000_000, 10_000_000, "+Inf"];
 const RATIO_BUCKETS = [0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 1, "+Inf"];
+const VALUE_AGE_BUCKETS = [1, 5, 15, 60, 300, 900, 3_600, 10_800, 43_200, 86_400, 259_200, 604_800, "+Inf"];
 
 interface MetricValue {
   readonly metricName?: string;
   readonly labels: Record<string, string | number>;
+  readonly value?: number;
 }
 
 interface MetricFamily {

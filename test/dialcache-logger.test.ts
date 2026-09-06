@@ -7,6 +7,7 @@ import {
   DialCacheKeyConfig,
   type DialCacheRedisClient,
   type Logger,
+  type RedisReadMiss,
 } from "../src/index.js";
 import { FakeRedis } from "./fake-redis.js";
 
@@ -119,10 +120,12 @@ describe("DialCache logger isolation", () => {
     const dialcache = new DialCache({ logger });
     const localCache = (dialcache as unknown as {
       readonly localCache: {
-        put: (key: DialCacheKey, value: unknown, config?: { readonly ttlSec: number }) => Promise<void>;
+        put: (key: DialCacheKey, value: unknown, config: { readonly ttlSec: number }) => void;
       };
     }).localCache;
-    vi.spyOn(localCache, "put").mockRejectedValueOnce(new Error("local write failed"));
+    vi.spyOn(localCache, "put").mockImplementationOnce(() => {
+      throw new Error("local write failed");
+    });
     const getUser = dialcache.cached(async () => ({ source: "fallback" }), {
       keyType: "user_id",
       useCase: "ThrowingLoggerLocalWrite",
@@ -159,8 +162,8 @@ describe("DialCache logger isolation", () => {
     const logger = throwingLogger();
     const invalidationError = new Error("invalidation failed");
     const redis = {
-      read: vi.fn(async () => null),
-      write: vi.fn(async () => true),
+      read: vi.fn(async (): Promise<RedisReadMiss> => ({ kind: "miss", reason: "value_absent" })),
+      write: vi.fn(async () => {}),
       invalidate: vi.fn(async () => {
         throw invalidationError;
       }),

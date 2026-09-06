@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { zstdCompressSync } from "node:zlib";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   CacheLayer,
@@ -38,6 +38,7 @@ class RecordingMetrics implements DialCacheMetricsAdapter {
   readonly sizeCalls: Array<{ readonly labels: CacheMetricLabels; readonly bytes: number }> = [];
   readonly storedSizeCalls: Array<{ readonly labels: CacheMetricLabels; readonly bytes: number }> = [];
   readonly durationCalls: CompressionOperationMetricLabels[] = [];
+  readonly serializationCalls: SerializationMetricLabels[] = [];
 
   request(): void {}
   miss(): void {}
@@ -46,7 +47,9 @@ class RecordingMetrics implements DialCacheMetricsAdapter {
   invalidation(): void {}
   observeGet(): void {}
   observeFallback(): void {}
-  observeSerialization(_labels: SerializationMetricLabels, _seconds: number): void {}
+  observeSerialization(labels: SerializationMetricLabels, _seconds: number): void {
+    this.serializationCalls.push(labels);
+  }
 
   compression(labels: CompressionMetricLabels): void {
     this.compressionCalls.push(labels);
@@ -70,6 +73,49 @@ class RecordingMetrics implements DialCacheMetricsAdapter {
 }
 
 describe("DialCache Redis payload compression", () => {
+  it("skips a fenced large tracked refill before serialization and compression", async () => {
+    const redis = new FakeRedis();
+    const key = new DialCacheKey({
+      keyType: "user_id",
+      id: "123",
+      useCase: "CompressionFencedRefill",
+      trackForInvalidation: true,
+    });
+    redis.setRaw(`${key.prefix}#watermark`, String(Date.now() + 60_000));
+    const metrics = new RecordingMetrics();
+    const dump = vi.fn((): string => {
+      throw new Error("fenced refill must not serialize");
+    });
+    const serializer: Serializer<ReturnType<typeof largeValue>> = {
+      dump,
+      load: () => {
+        throw new Error("missing value must not deserialize");
+      },
+    };
+    const dialcache = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 }, metrics });
+    const getUser = dialcache.cached(async (userId: string) => largeValue(userId), {
+      keyType: "user_id",
+      useCase: "CompressionFencedRefill",
+      cacheKey: (userId) => userId,
+      trackForInvalidation: true,
+      defaultConfig: remoteOnly(),
+      serializer,
+    });
+
+    const value = await dialcache.enable(async () => await getUser("123"));
+
+    expect(value).toEqual(largeValue("123"));
+    expect(dump).not.toHaveBeenCalled();
+    expect(redis.setCalls).toBe(0);
+    expect(redis.values.has(`${key.urn}:dialcache-frame-v1`)).toBe(false);
+    expect(metrics.serializationCalls).toEqual([]);
+    expect(metrics.compressionCalls).toEqual([]);
+    expect(metrics.durationCalls).toEqual([]);
+    expect(metrics.sizeCalls).toEqual([]);
+    expect(metrics.storedSizeCalls).toEqual([]);
+    expect(metrics.ratioCalls).toEqual([]);
+  });
+
   it("compresses large values transparently and reads them back across processes", async () => {
     const redis = new FakeRedis();
     const writer = new DialCache({ redis: { client: redis, readTimeoutMs: 1_000 } });

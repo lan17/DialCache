@@ -16,7 +16,7 @@ export type ShadowValidationOutcome =
   | "mismatch"
   | "superseded"
   | "filled"
-  | "fill_blocked"
+  | "fill_fenced"
   | "fill_error"
   | "redis_error"
   | "source_error"
@@ -25,6 +25,11 @@ export type ShadowValidationOutcome =
   | "confirmation_error"
   | "timeout"
   | "dropped";
+/** Bounded terminal outcomes for an attempted stale-on-error Redis recovery. */
+export type StaleRecoveryOutcome =
+  | "served"
+  | "miss"
+  | "deserialization_error";
 /**
  * Bounded compression outcomes. Writes record compressed, below_threshold,
  * not_smaller, or write_over_limit (serialized form exceeds the decompression
@@ -43,13 +48,14 @@ export type CompressionOutcome =
   | "read_over_limit";
 /** Bounded reasons for skipping cache work; policy_disabled means a shared layer has no effective TTL. */
 export type DisabledReason = "context" | "policy_disabled" | "invalid_ttl" | "invalid_ramp" | "ramped_down" | "config_error";
-/** Stable failure sites used instead of backend- or application-defined error names. */
+/** Stable failure sites and configuration signals; never backend- or application-defined names. */
 export type MetricErrorKind =
   | "key_construction"
   | "config_resolution"
   | "cache_read"
   | "cache_read_timeout"
   | "cache_write"
+  | "tracked_ttl_clamped"
   | "serialization_load"
   | "serialization_dump"
   | "compression"
@@ -63,6 +69,27 @@ export interface CacheMetricLabels {
   readonly useCase: string;
   readonly keyType: string;
   readonly layer: MetricLayer;
+}
+
+/**
+ * Bounded causes for cache misses. `value_absent`: the layer had no
+ * retrievable value. `expired`: a complete, valid frame was present but its
+ * logical age reached the effective remote TTL, including stale-on-error
+ * retained candidates. `watermark_fenced`: a tracked frame was rejected by an
+ * invalidation watermark. `unclassified`: a real miss with no decisive cause
+ * (unrecognized adapter results, malformed frames or metadata, invalid or future timestamps,
+ * deserialization failures).
+ */
+export const CACHE_MISS_REASONS = ["value_absent", "expired", "watermark_fenced", "unclassified"] as const;
+export type CacheMissReason = (typeof CACHE_MISS_REASONS)[number];
+
+/** Package-private guard for reasons supplied by custom Redis adapters. */
+export function isCacheMissReason(value: unknown): value is CacheMissReason {
+  return typeof value === "string" && (CACHE_MISS_REASONS as readonly string[]).includes(value);
+}
+
+export interface MissMetricLabels extends CacheMetricLabels {
+  readonly reason: CacheMissReason;
 }
 
 export interface DisabledMetricLabels extends CacheMetricLabels {
@@ -106,9 +133,16 @@ export interface ShadowValidationMetricLabels {
   readonly outcome: ShadowValidationOutcome;
 }
 
+export interface StaleRecoveryMetricLabels {
+  readonly cacheNamespace: string;
+  readonly useCase: string;
+  readonly keyType: string;
+  readonly outcome: StaleRecoveryOutcome;
+}
+
 export interface DialCacheMetricsAdapter {
   request(labels: CacheMetricLabels): void;
-  miss(labels: CacheMetricLabels): void;
+  miss(labels: MissMetricLabels): void;
   disabled(labels: DisabledMetricLabels): void;
   error(labels: ErrorMetricLabels): void;
   invalidation(labels: InvalidationMetricLabels): void;
@@ -116,6 +150,37 @@ export interface DialCacheMetricsAdapter {
   coalesced?(labels: CoalescedMetricLabels): void;
   // Optional so existing custom adapters keep compiling without changes.
   shadowValidation?(labels: ShadowValidationMetricLabels): void;
+  /**
+   * Age in seconds of the validated Redis value at shadow verdict time (for
+   * a mismatch, after the confirming re-read): the observing process's epoch
+   * clock minus the validated frame's `createdAtMs`, clamped at zero.
+   * Emitted only alongside terminal `match` and `mismatch` outcomes; other
+   * outcomes deliver no verdict on a retained value. Frames are stamped with
+   * the writer application's epoch clock, so cross-process skew still makes
+   * this coarse operational evidence rather than a precise measurement.
+   * Optional so existing custom adapters keep compiling without changes.
+   */
+  observeShadowValueAge?(labels: ShadowValidationMetricLabels, seconds: number): void;
+  /**
+   * Positive offset in seconds when a decoded Redis frame is dated after the
+   * observing process's epoch clock. Serving and initial shadow reads fail
+   * closed as misses; a shadow confirmation retains the frame solely for
+   * payload comparison. This is a workload-shaped diagnostic, not proof of
+   * clock skew. Optional so existing custom adapters keep compiling.
+   */
+  observeFutureTimestampOffset?(labels: CacheMetricLabels, seconds: number): void;
+  // Optional so existing custom adapters keep compiling without changes.
+  staleRecovery?(labels: StaleRecoveryMetricLabels): void;
+  /**
+   * Age in seconds of the Redis value when stale-on-error recovery serves it:
+   * the observing process's epoch clock minus the retained frame's
+   * `createdAtMs`, clamped at zero. Emitted only alongside the terminal
+   * `served` outcome. Frames are stamped with the writer application's epoch
+   * clock, so cross-process skew makes this coarse operational evidence rather
+   * than a precise measurement. Optional so existing custom adapters keep
+   * compiling without changes.
+   */
+  observeStaleRecoveryValueAge?(labels: StaleRecoveryMetricLabels, seconds: number): void;
   // Optional so existing custom adapters keep compiling without changes.
   compression?(labels: CompressionMetricLabels): void;
   observeGet(labels: CacheMetricLabels, seconds: number): void;

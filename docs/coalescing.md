@@ -1,6 +1,6 @@
 # Coalescing and fallback liveness
 
-[Back to the README](../README.md)
+[Documentation](index.md) · [API reference](api.md)
 
 By default, DialCache shares same-key in-flight work within the lifetime of the
 first active cache layer. A per-use-case policy can disable that sharing. Each
@@ -89,7 +89,8 @@ Concurrent same-key callers then each perform:
 - their own cache writes after a miss.
 
 Request-local and process-local publication is last-writer-wins. Each Redis
-write keeps its ordinary TTL-based or watermark-fenced semantics. A settled
+write is a complete-frame last-writer-wins `SET`; tracked reads apply the
+watermark fence afterward. A settled
 request-local value can still serve a later sequential call in the same outer
 scope; the policy disables in-flight sharing, not memoization or cache hits.
 
@@ -105,12 +106,13 @@ the whole invocation: DialCache warns, records `config_resolution` and
 `config_error`, and executes the fallback uncached without touching Redis.
 
 Use the opt-out when executions with the same value identity must not inherit a
-leader's failure, cancellation behavior, or `FallbackTimeoutError`. It does not
+leader's failure, cancellation behavior, `FallbackTimeoutError`, or stale-recovery
+result. It does not
 make an incomplete cache key safe: if an input changes the returned value, put
 it in the key or disable the affected cache layers. Disabling coalescing
 reintroduces thundering-herd exposure, independent Redis load, and write races.
 
-No metric or state surface is added. An opted-out use case emits no
+An opted-out use case emits no
 `coalesced` event, records request, miss, and latency observations once per
 caller rather than once per flight, and does not register process state in
 `getCoalescingState()`.
@@ -159,6 +161,14 @@ instance, independently of request-local and process-scoped flights. See
 [Shadow validation and Redis bootstrap](shadow-validation.md) for the full
 admission and lifecycle contract.
 
+## Stale recovery shares the flight
+
+An opted-in [stale-on-error](stale-on-error.md) path stays inside the same flight:
+one initial Redis read, one retained candidate, one source attempt, and one
+recovery decision. Followers share either the recovered value or original
+rejection. With `coalesce: false`, each caller has an independent snapshot and
+source deadline.
+
 ## Fallback deadlines
 
 Once an initially enabled invocation begins its wrapped fallback, DialCache
@@ -201,9 +211,8 @@ try {
 The timer starts only when the fallback begins:
 
 - same-key followers share the request-local or process leader's remaining
-  budget and receive its `FallbackTimeoutError`;
-- callers with `coalesce: false` start independent fallback timers and receive
-  independent errors;
+  budget and source outcome, including any authorized stale recovery;
+- callers with `coalesce: false` start independent fallback timers;
 - a remote read failure or timeout starts the fallback timer only when the
   source loader begins;
 - enabled pass-through invocations where every layer is disabled have
@@ -237,13 +246,14 @@ shutdown requirements.
 
 ### Timeout does not cancel the source
 
-Timing out:
+Timing out rejects the source attempt with `FallbackTimeoutError`. The chain
+can then serve an authorized retained Redis candidate; otherwise it rejects
+with that exact error. Its flight clears normally when the chain settles.
 
-1. rejects the DialCache chain;
-2. clears its coalescing flight normally, when one exists;
-3. ignores a later fallback resolution; and
-4. prevents that invocation from proceeding to serializer, Redis, or local
-   publication.
+A later source resolution is ignored. It cannot become an accepted shadow fill
+value or proceed to ordinary serialization, Redis writes, or local publication.
+Recovery may deserialize retained bytes and memoize its result request-locally;
+it never publishes a new shared value.
 
 The underlying loader is not canceled and may continue its own I/O or side
 effects. Give the source operation a native timeout or `AbortSignal` whenever
