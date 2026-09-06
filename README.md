@@ -96,6 +96,10 @@ layer for every key inside the scope. The LRU holds at most 10,000 entries by
 default. In a service, place `enable()` around a read-request handler so nested
 readers inherit the same asynchronous scope.
 
+Results containing `Date`, `bigint`, or other non-JSON-compatible values need an
+explicit [typed serializer](https://lan17.github.io/DialCache/redis.html#typed-serializer-requirement),
+even when you cache only in memory.
+
 Prefer an inline loader? [`getOrLoad()`](https://lan17.github.io/DialCache/api.html#getorload)
 uses the same behavior with a direct key:
 

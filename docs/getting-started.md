@@ -68,6 +68,11 @@ that otherwise uses CommonJS. The flag removes TypeScript annotations; use your
 project's TypeScript compiler for typechecking. Replace `fetchUser` with the
 real read when integrating the example into your service.
 
+If that read returns `Date`, `bigint`, or other non-JSON-compatible values,
+provide a [typed serializer](redis.md#typed-serializer-requirement). This is
+required even when caching only in local memory; the linked example shows how
+to preserve a `Date` through serialization.
+
 The wrapper preserves the input parameters and always returns a `Promise`.
 `keyType` identifies the entity kind; `useCase` identifies the operation.
 `cacheKey` selects the result's identity. Include every input that can change
