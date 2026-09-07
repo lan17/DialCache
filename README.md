@@ -4,17 +4,21 @@
 [![Codecov](https://codecov.io/gh/lan17/DialCache/branch/main/graph/badge.svg)](https://codecov.io/gh/lan17/DialCache)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/lan17/DialCache/badge)](https://scorecard.dev/viewer/?uri=github.com/lan17/DialCache)
 
-DialCache is a TypeScript caching library for Node.js services. Use it for
-database lookups, service reads, and other work whose results can be reused.
+DialCache is a read-through cache for TypeScript functions in Node.js services.
+Use it for database lookups, service reads, and other work whose results can be
+reused.
 
-It wraps a function and caches its result within a request, in a process-local
-LRU, or in a shared Redis or Valkey cache. You configure cache policy separately
-from the loader, so you can change TTLs or gradually enable caching while the
-service is running.
+You wrap the function that reads from the source, and DialCache decides on each
+call whether to return a cached result or run it. Results can be cached within a
+request, in a process-local LRU, or in a shared Redis or Valkey cache. Cache
+policy lives apart from the function itself, so you can change TTLs or enable
+caching for a growing share of keys while the service runs.
 
-Caching is off by default. Outside an `enable()` scope, the wrapped function
-just calls its loader. Inside the scope, each use case's configuration decides
-which cache layers to use.
+A cache changes more than latency. It changes how often your source runs, what
+concurrent callers share, and how soon a read sees a write. DialCache makes each
+of those a per-use-case setting, and caching is off by default: outside an
+`enable()` scope the wrapped function just calls through, so a write path never
+fills a cache unless you enable it there.
 
 [Documentation](https://lan17.github.io/DialCache/)
 · [Getting started](https://lan17.github.io/DialCache/getting-started.html)
@@ -29,8 +33,7 @@ npm install dialcache
 Requires Node.js `>=22.15.0 <23.0.0 || >=23.8.0`.
 Redis and telemetry clients are optional; install them separately as needed.
 
-Save this as `example.mts`. It creates one `DialCache` instance and reuses the
-wrapped reader:
+Save this as `example.mts`:
 
 ```ts
 import { CacheLayer, DialCache, DialCacheKeyConfig } from "dialcache";
@@ -69,23 +72,29 @@ node --experimental-strip-types example.mts
 This prints `Loading from source: 123` twice: once for the first enabled read,
 then again for the uncached call. The second enabled read reuses the value.
 
-The example uses only the process-local layer. A TTL with no ramp enables that
-layer for every key inside the scope. The LRU holds at most 10,000 entries by
-default. In a service, place `enable()` around a request's reads so nested
-readers inherit the same asynchronous scope.
+`fetchUser` is the loader, the function that reads from the source. `getUser` is
+the cached function that DialCache returns; call it wherever you would have
+called `fetchUser`. The `keyType`, `useCase`, and `cacheKey` options make up the
+cache key, so include every input that changes the result.
+
+The example caches only in process memory. A TTL with no ramp turns that layer
+on for every key inside the scope, and the LRU holds 10,000 entries by default.
+In a service, wrap each request's reads in one `enable()` call; every cached
+function called inside it shares that scope.
 
 Results containing `Date`, `bigint`, or other non-JSON-compatible values need an
 explicit [typed serializer](https://lan17.github.io/DialCache/redis.html#typed-serializer-requirement),
 even when you cache only in memory.
 
-For a loader defined at the call site, `getOrLoad()` uses the same cache behavior
-without registering a reusable reader. See the
+When the loader is a one-off calculation rather than a reusable function,
+`getOrLoad()` takes it inline with a direct key and uses the same cache
+behavior. See the
 [inline example](https://lan17.github.io/DialCache/getting-started.html#keep-a-calculation-inline).
 
 ## Cache layers
 
-When an enabled call reaches an active layer, a hit returns immediately. A miss
-continues down the chain:
+Inside `enable()`, a call checks each active layer in order and stops at the
+first hit. A miss at every layer runs the loader:
 
 ```text
 request-local → process-local → Redis / Valkey → your loader
@@ -97,23 +106,26 @@ request-local → process-local → Redis / Valkey → your loader
 | Process-local | Requests using one `DialCache` instance | TTL, bounded by LRU capacity | Avoid repeated reads between requests |
 | Remote | Application instances using the same Redis keyspace | TTL, with optional invalidation tracking | Reuse reads across processes |
 
-Use any combination. Redis hits can warm an active process-local cache; results
-from the lower chain can be memoized within the request. Tracked Redis reads
-have additional publication rules to keep a fallback from bypassing an
-invalidation fence. The [read-path guide](https://lan17.github.io/DialCache/concepts.html)
-describes what gets stored after each kind of hit or miss.
+Layers combine. A Redis hit warms the process-local cache, and a request-local
+layer memoizes whatever the layers below it return. The
+[read-path guide](https://lan17.github.io/DialCache/concepts.html) lists exactly
+what is stored after each kind of hit or miss.
 
-When a cache layer is active, concurrent calls with the same key share in-flight
-work by default. That sharing is scoped to a request or a `DialCache` instance,
-depending on the active layers. Use `coalesce: false` when callers need
-independent executions. The [coalescing guide](https://lan17.github.io/DialCache/coalescing.html)
-covers which results, errors, and deadlines a follower inherits.
+When a layer is active, concurrent calls for the same key share one in-progress
+call by default. Ten callers asking for the same user at the same moment cause
+at most one read of the source, and the other nine receive that result. Sharing
+is scoped to the request or to the process, depending on which layers are
+active. Set `coalesce: false` when callers must not share. The
+[coalescing guide](https://lan17.github.io/DialCache/coalescing.html) explains
+what a waiting caller inherits, including errors and deadlines.
 
-## Runtime configuration
+## Changing policy at runtime
 
-A reader's `defaultConfig` is its baseline. `cacheConfigProvider` can override
-individual fields on each enabled invocation. For example, register a reader
-with local caching ramped to zero, then change the ramp while the instance runs:
+A cached function's `defaultConfig` is its baseline. A `cacheConfigProvider` on
+the instance can override individual fields on every enabled call, so you can
+roll a cache out, tune it, or turn it off without touching the function. This
+example registers a cached function with its local cache ramped to zero, then
+opens it to a 10% cohort of keys:
 
 ```ts
 const policies = new Map<string, DialCacheKeyConfig>();
@@ -142,41 +154,43 @@ await cache.enable(() => readUser("123"));
 policies.set("ReadUser", DialCacheKeyConfig.disabled());
 ```
 
-The map can be populated from your application's existing configuration system.
-A ramp selects a stable set of keys, so a 10% cohort can account for more or
-less than 10% of traffic. Increasing a ramp adds keys to the same cohort.
-Decreasing it removes keys without reshuffling the rest.
+In a service, your configuration system feeds the map. A ramp selects a stable
+set of keys rather than a share of traffic, so a 10% cohort can serve more or
+less than 10% of calls. Raising the ramp adds keys to the cohort. Lowering it
+removes keys without reshuffling the rest.
 
-With Redis configured, shadow validation can sample reads, compare cached values
-with the source, and fill misses while Redis serving is off. Serving and shadow
-ramps are independent: turning serving off does not stop shadow work.
-`disabled()` disables both for new invocations.
+Policy changes apply to new calls. They do not evict cached values or cancel
+calls already in progress, and a shorter TTL affects local and Redis entries
+differently. Read [how TTL changes affect each layer](https://lan17.github.io/DialCache/configuration.html#changing-policy-on-a-running-service)
+before using a runtime change to tighten freshness.
 
-Policy changes govern new invocations; they do not evict existing values or
-cancel shared work. The reference explains
-[how TTL changes affect each layer](https://lan17.github.io/DialCache/configuration.html#changing-policy-on-a-running-service).
+With Redis configured, shadow validation can compare cached values with the
+source on a sample of reads, and fill misses, before Redis serves any caller.
+Serving and shadow ramps are independent, so turning serving off does not stop
+shadow work. `disabled()` stops both for new calls.
 
 [Runtime configuration](https://lan17.github.io/DialCache/configuration.html)
 · [Shadow validation](https://lan17.github.io/DialCache/shadow-validation.html)
 
 ## Freshness and invalidation
 
-For mutable data, a reader can track Redis invalidation by entity. Advance the
-entity's watermark with `invalidateRemote()` after the source mutation commits.
-A tracked Redis read checks the value and watermark together. In-memory hits
-and coalesced callers can reuse an earlier observation. The
+By default a cached value lives until its TTL expires. For data that changes, a
+cached function can opt into tracked invalidation. After a write commits, call
+`invalidateRemote()` for the entity. Tracked Redis reads of that entity then
+reject values written before the invalidation, extended by a buffer you choose
+to cover clock skew and in-progress writes. Values already in process memory,
+and callers already waiting on an in-progress read, can still return the
+earlier value. The
 [invalidation guide](https://lan17.github.io/DialCache/invalidation.html#independent-fence-checks)
-shows how to give each invocation its own fence check.
+shows how to give every call its own check.
 
-Stale-on-error can return a retained Redis snapshot after selected source
-failures, subject to a maximum age. It is off by default. When enabled, its
-built-in error policy accepts only `FallbackTimeoutError`; applications can
-supply a different classifier. Later invalidation does not revoke a snapshot
-already retained for recovery.
+Stale-on-error makes the opposite trade. When the source fails, it can return
+the value Redis still holds even though that value's TTL has passed, up to a
+maximum age you set. It is off by default. Its built-in policy treats only
+`FallbackTimeoutError` as recoverable; you can supply your own classifier. A
+value retained for recovery is not revoked by a later invalidation.
 
-Include every input that affects the result in the cache key. In-memory values
-and coalesced results are shared references, so copy an object before modifying
-it.
+Cached objects are shared references. Copy one before you modify it.
 
 [Invalidation](https://lan17.github.io/DialCache/invalidation.html)
 · [Stale-on-error](https://lan17.github.io/DialCache/stale-on-error.html)
@@ -184,14 +198,14 @@ it.
 
 ## Failures
 
-Cache access fails open. A failed Redis read falls back to the loader; a failed
-cache write does not discard a successful loader result. Source errors still
-reject unless stale recovery serves a value. Explicit invalidation failures
-also reject.
+Cache access fails open. If a Redis read fails, the call runs the loader. If a
+cache write fails, the loader's result is still returned. Loader errors reject
+unless stale-on-error serves a value. `invalidateRemote()` failures reject, so
+your application knows the invalidation did not happen.
 
-Redis reads and source fallbacks have separate deadlines. Configuration
-providers, serializers, Redis writes, and invalidation need finite
-application-owned time limits; see
+DialCache puts separate deadlines on Redis reads and on the loader. It does not
+time out configuration providers, serializers, Redis writes, or invalidation;
+give those their own limits. See
 [liveness](https://lan17.github.io/DialCache/coalescing.html#application-owned-budgets).
 
 ## Metrics
