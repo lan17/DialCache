@@ -80,13 +80,27 @@ app.get("/metrics", async (_req, res) => {
 
 The adapter requires a caller-owned `Registry`. It never uses the global
 default registry, and it does not clear or otherwise own the registry
-lifecycle.
+lifecycle. `prefix` defaults to `""` and is concatenated literally with each
+metric name; include any desired separator yourself.
 
 Multiple adapters with the same registry and prefix reuse existing collectors
 when their type, help, labels, histogram buckets, and exemplar mode match.
 Adapter construction fails before registering anything if a same-name
 collector has an incompatible schema. Use a unique prefix or separate registry
-to resolve a collision.
+to resolve a collision. DialCache's collectors do not enable exemplars, so an
+exemplar-enabled collector with the same name is incompatible.
+
+### Histogram buckets
+
+Bucket boundaries are fixed; the adapter has no bucket customization option:
+
+| Metric family | Unit | Finite bucket boundaries |
+| --- | --- | --- |
+| All timers | Seconds | `0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10` |
+| Serialized and stored sizes | Bytes | `100, 1000, 10000, 100000, 1000000, 10000000` |
+| Compression ratio | Ratio | `0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 1` |
+| Shadow and recovery value ages | Seconds | `1, 5, 15, 60, 300, 900, 3600, 10800, 43200, 86400, 259200, 604800` |
+| Future timestamp offsets | Seconds | `0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 5, 15, 60, 300, 900, 3600, 10800, 43200` |
 
 ### Prometheus metrics
 
@@ -191,7 +205,9 @@ function shutdown(): void {
 ```
 
 `hot-shots` is the supported and tested client, but the adapter depends only on
-the exported `DatadogDogStatsDClient` structural interface.
+the exported `DatadogDogStatsDClient` structural interface. Construction requires
+all three methods, `increment`, `histogram`, and `distribution`, to be functions,
+regardless of the selected observation mode.
 
 DialCache does not:
 
@@ -269,11 +285,13 @@ and bytes without unit conversion:
 | `dialcache.compression.ratio` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer` | Compressed-to-original payload size ratio for compressed writes |
 | `dialcache.compression.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer`, `operation` | Payload compression and decompression latency in seconds |
 
-Client throws and rejected returned thenables are isolated by DialCache's
-fire-and-forget observer boundary. Buffered transport failures that happen
-after the client call returns remain outside that boundary. Configure the
-DogStatsD client's error handling and shutdown behavior as part of application
-ownership.
+Synchronous client throws are isolated when DialCache invokes the adapter.
+Core also consumes thenables returned by adapter hooks, but this adapter does
+not forward every client return value: only `shadowValidation` and
+`staleRecovery` return the counter call's result. A custom DogStatsD client must
+handle its own asynchronous delivery failures, including rejected promises.
+Direct adapter calls do not have core's observer guard. Configure client error
+handling and shutdown as part of application ownership.
 
 ## Shadow outcomes
 
@@ -324,11 +342,19 @@ emits no recovery outcome. See [Stale-on-error](stale-on-error.md).
 Shadow value age is reported only for `match` and confirmed `mismatch`, at verdict
 time. Recovery age is reported only for `served`, at return time. Both use the
 observing application's epoch clock minus the frame's writer timestamp.
+Shadow age uses the original `C0` timestamp, even if confirmation finds identical
+payload bytes with a newer timestamp. It clamps to zero after clock rollback and
+skips nonfinite age observations.
 
 The future-offset histogram records a positive offset for valid decoded frames
 ahead of the observer clock. Ordinary and initial-shadow reads then miss;
 confirmation can retain the frame only for comparison. Invalid timestamps never
 enter histogram sums. Repeated reads can observe the same future frame.
+
+For direct adapter callers, Prometheus additionally discards nonfinite or
+nonpositive `observeFutureTimestampOffset` values. Datadog forwards those
+observations without that extra guard; normal core calls supply positive finite
+offsets to both.
 
 Use external fleet clock monitoring as well: workload observations cannot detect
 every skew direction or determine which node is wrong. Its dedicated histogram
@@ -435,11 +461,17 @@ invalidation attempt: DialCache records `dialcache_invalidation_counter` (or
 `error="invalidation"`, and rejects with the original focused `TypeError`.
 Invalid `futureBufferMs` input is rejected before these observers run.
 
-Remote-read timeouts use `layer="remote"` and `in_fallback="false"`. They are
+Caller-serving remote-read timeouts use `layer="remote"` and
+`in_fallback="false"`. They are
 errors rather than misses, and the remote get-duration observation includes
 the wait. Coalesced followers do not multiply the timeout error. Deadline
 details remain out of labels and are available on the logged
 `RedisReadTimeoutError`.
+
+Detached initial and confirmation reads attribute their operational metrics to
+`remote_shadow`. Read failures, including read timeouts, can report `redis_error`
+or `confirmation_error` without a matching error log. The overall shadow deadline
+instead reports `timeout`; see [Shadow outcomes](#shadow-outcomes).
 
 Raw thrown values, error names, messages, cache ids, arguments, and Redis keys
 are never included in labels. When DialCache logs a cache-plumbing failure, the
@@ -498,8 +530,10 @@ Metrics and logger methods are typed `void` and invoked as fire-and-forget
 observers. DialCache also defensively consumes, but never awaits, a thenable
 returned at runtime.
 
-Synchronous throws and asynchronous rejections are isolated so telemetry
-cannot change cache correctness, fallback results, or shadow outcomes.
+Synchronous throws and rejections of those returned thenables are isolated so
+telemetry cannot change cache correctness, fallback results, or shadow outcomes.
+This guard applies when core invokes the observer, not to direct calls to an
+adapter or to asynchronous work whose promise the hook does not return.
 
 A custom adapter may buffer or transmit asynchronously, but it owns delivery,
 flushing, resources, and shutdown after the call returns. Keep

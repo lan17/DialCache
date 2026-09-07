@@ -67,8 +67,10 @@ a remote TTL and an enabled scope. See [client setup](redis.md),
 
 Callbacks may return synchronously or asynchronously. Scope state is per
 instance and asynchronous call chain. Nested scopes restore prior state. The
-outermost `enable()` owns request-local state; detached work becomes pass-through
-after that scope closes.
+outermost `enable()` owns request-local state. New invocations become pass-through
+after it closes; already admitted work can finish. An invocation still awaiting
+its configuration provider bypasses caching after closure but retains its enabled
+fallback deadline. See [Scope lifetime](configuration.md#enable-and-disable-scopes).
 
 `DialCacheContext` is the lower-level root export with `enable`, `disable`, and
 `isEnabled`. A separately constructed context does not enable another
@@ -128,8 +130,11 @@ uncached.
 values are string, number, bigint, boolean, `null`, or `undefined`; undefined
 arguments are omitted. See [Key design](configuration.md#keys-ids-and-extra-dimensions).
 
-Static defaults, fallback timeout, comparator, and stale-recovery classifier are
-validated/captured when registering `cached()` or invoking `getOrLoad()`.
+Static defaults, fallback timeout, and stale-recovery classifier are validated
+and captured when registering `cached()` or invoking `getOrLoad()`.
+The comparator is captured then; its execution and synchronous boolean result
+are checked only when shadow comparison runs, with failures reported as
+`comparison_error`.
 Runtime policy is resolved per enabled invocation. These guarantees do not make
 the entire caller-owned options object deeply immutable; keep definitions stable.
 
@@ -145,7 +150,7 @@ overlay. Omission inherits; it does not turn an inherited field off.
 | `requestLocal` | `false` | Boolean; no TTL or ramp |
 | `coalesce` | `true` | Boolean; affects request-local and process flights |
 | `remoteReadTimeoutMs` | Instance setting, then `50` | Positive safe-integer milliseconds, at most `2_147_483_647`; cannot be unbounded |
-| `staleOnErrorMaxAgeSec` | Off | `0` disables; positive maximum age must exceed remote TTL and be at most `31_536_000` seconds |
+| `staleOnErrorMaxAgeSec` | Off | Nonnegative safe-integer seconds; `0` disables; positive age must exceed remote TTL and be at most `31_536_000` |
 | `shadow.ramp` | Off | Independent finite percentage from `0` through `100` |
 | `shadow.logMismatches` | `false` | Boolean; controls diagnostic warning output |
 
@@ -198,17 +203,18 @@ See [Coalescing state](coalescing.md#inspecting-process-scoped-flights).
 
 | Export | Purpose |
 | --- | --- |
-| `DialCacheKey`, `DialCacheKeyInit` | Construct the read-only identity passed to configuration providers |
+| `DialCacheKey`, `DialCacheKeyInit` | Construct an identity from string components and ordered string argument pairs; `toString()` returns its precomputed `urn` |
 | `normalizeArgs(record)` | Drop undefined arguments, stringify scalar values, and sort names |
-| `invalidationPrefix(namespace, keyType, id)` | Build an encoded tracked-entity prefix |
-| `redisClusterHashTag(value)` | Validate and wrap a Redis Cluster hash tag |
+| `invalidationPrefix(namespace, keyType, id)` | Build an encoded tracked-entity prefix without braces |
+| `redisClusterHashTag(value)` | Reject embedded braces and wrap the value in braces without encoding |
 | `Serializer<T>` | `dump(value)` returns `string \| Buffer`; `load(payload)` returns `T`; either may return a Promise |
-| `JsonSerializer<T>` | Default JSON codec, including top-level undefined support |
+| `JsonSerializer<T>` | Default JSON codec, including top-level undefined support; both methods return Promises |
 
 `CachedValue<Fn>` exposes a function's resolved result type. `ShadowComparator<T>`
 and `StaleRecoveryPredicate` name the corresponding synchronous callbacks.
-See [Serialization](redis.md#serialization) for the compile-time guard and
-runtime round-trip limitations.
+See [Direct key construction](configuration.md#constructing-keys-directly) for
+defaults, encoding, and validation, and [Serialization](redis.md#serialization)
+for direct codec behavior, the compile-time guard, and round-trip limitations.
 
 ## Errors
 
@@ -218,7 +224,7 @@ runtime round-trip limitations.
 | `UseCaseIsAlreadyRegisteredError` | Duplicate `cached()` registration on an instance |
 | `UseCaseNameIsReservedError` | Either operation API uses `"watermark"` |
 | `FallbackTimeoutError` | Enabled source deadline; exposes `useCase` and `timeoutMs` |
-| `RedisReadTimeoutError` | Remote wait deadline; logged/counted before falling back; exposes `useCase` and `timeoutMs` |
+| `RedisReadTimeoutError` | Remote wait deadline; exposes `useCase` and `timeoutMs`; serving reads log/count it before fallback, while shadow reads report a job outcome |
 | `DialCacheRedisPayloadError` | Invalid raw Redis reply shape |
 | `DialCacheRedisPayloadEncodingError` | Unsupported payload encoding in a frame |
 | `DialCacheRedisProtocolError` | Invalid semantic mutation reply |

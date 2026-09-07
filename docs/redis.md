@@ -228,6 +228,13 @@ be omitted; undefined array elements and non-finite numbers can become `null`.
 Dates lose their type, maps and sets lose their structure, and bigint or cycles
 can fail serialization. Reference sharing and prototypes are not preserved.
 
+Direct `JsonSerializer.dump(value)` calls return `Promise<string>`;
+`load(string | Buffer)` returns `Promise<T>`, decoding Buffer input as UTF-8.
+Malformed JSON rejects with `SyntaxError`. Top-level functions or symbols reject
+with `Error` because native JSON produces no payload; bigint and cycles normally
+reject with native `TypeError`. The generic `T` is a caller assertion, not schema
+validation.
+
 A fresh frame whose `load` fails becomes a refreshable miss: core records
 `serialization_load`, calls the source, and attempts replacement. The default
 codec validates JSON syntax, not your application schema. For incompatible
@@ -305,10 +312,13 @@ levels trade CPU and latency for size reduction. Use the size, ratio, and
 duration [metrics](observability.md#compression-metrics) to evaluate that tradeoff.
 
 Decompressed output is capped at 512 MiB. Writes above the same ceiling remain
-raw (`write_over_limit`). Corrupt marked input or output above the read limit
-is handed to the serializer as raw input (`fallback_raw` or `read_over_limit`);
-a permissive custom binary serializer must not mistake that data for a valid
-application value. A compression exception fails the write open.
+raw (`write_over_limit`). When native zstd rejects marked input, core hands the
+original bytes to the serializer (`fallback_raw`, or `read_over_limit` when the
+output limit caused rejection). Native decoder acceptance is not corruption
+validation: it can accept empty or truncated bodies as empty output and ignore
+trailing bytes. A custom serializer must validate the application value it
+receives, whether decompressed or raw. A compression exception fails the write
+open.
 
 See [Upgrading](upgrading.md#compression-and-value-schemas) for legacy binary
 collisions and readers-first deployment of the envelope.
@@ -355,16 +365,16 @@ write/invalidation deadlines.
 
 The protocol subpath exports:
 
-| Export | Role |
+| Export | Contract |
 | --- | --- |
-| `encodeRedisFrame(payload, createdAtMs)` | Encode a complete version-1 frame |
-| `decodeRedisReadResult(raw)` | Decode an untracked bulk-string reply into a frame or classified miss |
-| `decodeTrackedRedisReadResult(raw, rawWatermark)` | Decode the atomic tracked pair and preserve a valid observed fence on misses |
-| `isRedisReadMiss(result)` | Discriminate a semantic miss |
-| `INVALIDATE_CACHE_SCRIPT` | Source of the only Lua operation |
-| `validateRedisSetReply(reply)` | Accept the native `OK` reply domain |
-| `validateRedisScriptInvalidationReply(reply)` | Require integer `1` |
-| `ceilSupportedCacheTtlMs(value)` | Round a positive fractional millisecond TTL up, rejecting unsupported values |
+| `encodeRedisFrame(payload, createdAtMs)` | Copy a `string \| Buffer` into a new version-1 Buffer; timestamp must be a nonnegative safe-integer number or it throws `RangeError` |
+| `decodeRedisReadResult(raw)` | Decode one `Buffer \| null` reply into a frame or classified miss |
+| `decodeTrackedRedisReadResult(raw, rawWatermark)` | Decode an atomic pair of `Buffer \| null` replies and preserve a valid observed fence on misses |
+| `isRedisReadMiss(result)` | Test for a non-null object with `kind === "miss"`; does not validate its reason or watermark |
+| `INVALIDATE_CACHE_SCRIPT` | Lua source; one watermark key and arguments `[futureBufferMs, invalidatedAtMs]`; returns numeric `1` |
+| `validateRedisSetReply(reply)` | Accept exactly `"OK"` or a Buffer decoding to `"OK"`; return void, otherwise throw `DialCacheRedisProtocolError` |
+| `validateRedisScriptInvalidationReply(reply)` | Accept and return numeric `1` only; otherwise throw `DialCacheRedisProtocolError` |
+| `ceilSupportedCacheTtlMs(value)` | Accept a number whose ceiling is in `1..31_536_000_000` ms; return that ceiling, otherwise throw `RangeError` |
 
 `CacheMissReason`, `DecodedRedisFrame`, `RedisReadMiss`, and `RedisReadResult`
 are also exported as types from this subpath.
@@ -374,15 +384,44 @@ A stored value has a ten-byte header followed by payload:
 | Bytes | Meaning |
 | --- | --- |
 | `0` | Version `1` |
-| `1..8` | Big-endian unsigned 64-bit application epoch timestamp, within the JavaScript safe-integer domain |
+| `1..8` | Big-endian unsigned 64-bit application epoch timestamp; writers must stay within the JavaScript safe-integer domain |
 | `9` | Encoding: `0` UTF-8 string, `1` binary |
 | `10..` | Payload, possibly a compression envelope |
 
-Short or unsupported frames miss. Invalid bulk-string reply types and
-unsupported payload encodings are typed errors. For tracked values, missing
-watermarks mean zero; malformed present watermark metadata makes a present
-frame an `unclassified` miss. Only an otherwise supported positive-timestamp
-frame rejected at or below a valid watermark is `watermark_fenced`.
+### Read decoding and validation order
+
+Both decoders reject invalid raw reply types, including JavaScript strings, with
+`DialCacheRedisPayloadError`. The tracked decoder validates both reply types
+before classifying either value. Binary payloads are views into the input frame;
+copy them if the backing Buffer may be mutated or reused.
+
+After reply validation, a null value is `value_absent`; a short frame or unknown
+version is `unclassified`. Either tracked miss can preserve a valid paired
+watermark. Watermark text must contain decimal digits only and represent a value
+from zero through `Number.MAX_SAFE_INTEGER`. Zero and leading zeros are accepted;
+signs, whitespace, fractions, and exponent notation are not. A missing watermark
+uses a zero baseline and does not attach `observedWatermarkMs`.
+
+For a supported tracked frame, malformed present watermark text produces
+`unclassified`. A zero frame timestamp also produces `unclassified`. A positive
+timestamp at or below a valid watermark produces `watermark_fenced`. These
+checks precede payload decoding, so even an unknown encoding can be hidden by
+one of these misses. An otherwise eligible frame with an unsupported encoding
+throws `DialCacheRedisPayloadEncodingError`.
+
+The untracked decoder accepts a zero timestamp. Both decoders convert the raw
+uint64 to a JavaScript number without rejecting unsafe values, which can lose
+precision. Core separately rejects unsafe timestamps and applies its
+[age and clock rules](observability.md#value-ages-and-clock-offsets); the codecs
+alone do not establish that a decoded frame is fresh or safe to serve.
+
+### Invalidation script and payload envelope
+
+The script requires digit-only decimal arguments in the nonnegative safe-integer
+domain. The buffer must be at most `31_536_000_000` ms, and timestamp plus buffer
+must remain safe. Invalid arguments return Redis errors before any mutation.
+Its repair and retention rules are covered under
+[Watermark lifetime](invalidation.md#watermark-lifetime).
 
 The binary payload envelope uses `0x00` to escape raw marker-prefixed bytes,
 `0x01` for compressed string output, and `0x02` for compressed binary output.

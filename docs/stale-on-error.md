@@ -50,8 +50,9 @@ rejection. The built-in classifier accepts `FallbackTimeoutError` only.
 | `M` | `staleOnErrorMaxAgeSec` | Exclusive recovery age ceiling, measured from the same frame timestamp |
 
 `M` is total age, not extra time after `F`. Positive configuration must satisfy
-`0 < F < M <= 31_536_000` seconds. Omission leaves recovery off, or inherits it
-in a sparse runtime overlay. Explicit `0` disables inherited recovery.
+`0 < F < M <= 31_536_000` seconds. Both ages must be safe-integer numbers.
+Omission leaves recovery off, or inherits it in a sparse runtime overlay.
+Explicit `0` disables inherited recovery.
 
 Invalid static defaults throw. Invalid runtime recovery policy records
 `config_resolution`, disables only recovery, and preserves valid ordinary Redis

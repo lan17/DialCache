@@ -44,6 +44,23 @@ are part of this protocol relationship. Raising the cap or shrinking the floor
 requires another coordinated transition because old markers cannot be extended
 by deploying new constants alone.
 
+## Removed configuration fields
+
+Remove these legacy properties entirely; construction rejects their own-property
+presence even when the value is `undefined`:
+
+| Older field | Replacement |
+| --- | --- |
+| `DialCacheConfig.urnPrefix`, `DialCacheKeyInit.urnPrefix` | `namespace` |
+| `DialCacheConfig.rampSampler` | Built-in deterministic key-and-layer ramp assignment; no injected sampler |
+| `DialCacheKeyConfig.shadowRamp` | `shadow.ramp` |
+| `RedisConfig.keyPrefix` | The instance's `namespace` |
+| `RedisConfig.createClient` | Create and connect the client in the application, then pass the semantic `client` |
+| `RedisConfig.watermarkTtlSec` | Remove it; DialCache derives watermark retention |
+
+See [Runtime validation](configuration.md#validation-and-snapshots) for how an
+obsolete field in a provider result differs from invalid static configuration.
+
 ## Custom Redis adapters
 
 Migrate against the current [semantic interface](redis.md#custom-client-contract):
@@ -106,8 +123,9 @@ misinterpret foreign bytes instead of rejecting them.
 
 Legacy binary output can collide with envelope markers:
 
-- A legacy `0x01`/`0x02` prefix whose remaining bytes happen to be valid zstd can
-  be decoded as compressed data.
+- A legacy `0x01`/`0x02` prefix whose remaining bytes are accepted by native zstd
+  can be decoded as compressed data. Acceptance does not guarantee a complete
+  valid stream; empty/truncated bodies or trailing bytes may also be accepted.
 - A legacy payload beginning with `0x00` followed by `0x00`, `0x01`, or `0x02`
   can lose its first byte to the escape rule.
 - New writers escape colliding raw binary prefixes even with compression off.

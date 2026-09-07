@@ -209,10 +209,15 @@ max(existing remaining TTL,
     watermark − invalidatedAtMs + 1 hour + 1 minute)
 ```
 
-An existing persistent watermark stays persistent. Reads and value writes do
-not extend it. Under the clock and in-flight-work contract, the marker outlives
+An existing persistent string watermark stays persistent. Reads and value writes
+do not extend it. Under the clock and in-flight-work contract, the marker outlives
 every value it can fence. The fixed minute is retention slack; it does not
 replace a complete `Dmax` bound.
+
+Invalidation repairs malformed string watermarks from a zero baseline while
+preserving a longer remaining TTL or persistence. A wrong-type key is instead
+treated as absent and replaced with a finite, derived TTL, even if that key was
+persistent. Other Redis read errors surface without replacing the prior state.
 
 Changing the tracked-value cap or watermark floor requires another coordinated
 protocol transition: new constants cannot extend markers an older invalidator
@@ -237,7 +242,8 @@ rethrown. The operation metric uses `keyType` and namespace; it does not attach
 an entity id to labels.
 
 Adapter retries reuse the original invalidation timestamp, preserve monotonicity,
-and cannot shorten a longer/persistent marker. A rejected dispatched mutation
+and cannot shorten a longer/persistent string marker. Wrong-type repair follows
+the exception above. A rejected dispatched mutation
 can have executed, so an error does not prove absence of a watermark change.
 See [Redis retries](redis.md#invalidation-retries-and-ambiguity).
 

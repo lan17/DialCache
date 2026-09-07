@@ -22,6 +22,8 @@ Use `cached(fn, options)` to register a reusable reader once per instance.
 The wrapper preserves its parameters and always returns a `Promise`. Each
 registration needs a unique `useCase`; duplicates throw
 `UseCaseIsAlreadyRegisteredError`.
+Invalid static defaults or source timeouts fail before registration, so fixing
+them and retrying can reuse the same name.
 
 Use `getOrLoad(load, options)` for a zero-argument loader that belongs at one call
 site. It runs through the same cache path, but accepts a direct `key` instead
@@ -66,9 +68,13 @@ restore the previous state when their callbacks settle, and a nested
 `enable()` inside `disable()` can opt a smaller read region back in.
 
 Enabled state follows Node's `AsyncLocalStorage`; it is not a process-global
-flag. Once the outermost `enable()` callback settles, detached asynchronous work
-that inherited the old context becomes pass-through and cannot repopulate its
-closed request-local state.
+flag. Once the outermost `enable()` callback settles, new invocations in detached
+work that inherited the old context are pass-through. Closure does not cancel
+already admitted cache operations: they can finish and publish to shared layers
+under their normal policy and deadline rules, but cannot repopulate the closed
+request-local state. An invocation still awaiting its configuration provider
+when the scope closes skips cache lookup and runs its loader with the fallback
+deadline it acquired while enabled.
 
 The root-exported `DialCacheContext` exposes the lower-level
 `enable()`, `disable()`, and `isEnabled()` context primitive. It does not attach
@@ -143,6 +149,12 @@ characters for Redis Cluster hash tags.
   request-local or process-local entries.
 - **`args` are part of the cache key.** Different arguments produce different
   entries, but targeted invalidation is by id rather than by argument.
+- **Components are encoded with `encodeURIComponent`.** Delimiters inside an
+  id, argument, or use case do not become structural separators. Namespace braces
+  always throw `TypeError`; tracked `keyType` and `id` also reject `{` and `}`
+  with `Error`. Untracked `keyType` and `id` may contain braces, which are encoded.
+  Automatic key-construction failures follow the normal
+  [fail-open path](concepts.md#fail-open-and-liveness).
 - **Scalar equality is string-based.** For matching surrounding dimensions:
   - numeric `1`, string `"1"`, and bigint `1n` identify the same key; and
   - argument values `null` and `"null"` match, `-0` matches `0`, and an
@@ -161,6 +173,50 @@ characters for Redis Cluster hash tags.
 - **Methods need a receiver.** Pass `obj.method.bind(obj)` or
   `(...args) => obj.method(...args)`; a bare `obj.method` reference loses
   `this`.
+
+### Constructing keys directly
+
+`cached()` and `getOrLoad()` stringify ids and normalize argument records for
+you. Custom integrations can construct the same public shape with
+`new DialCacheKey(init)`:
+
+| `DialCacheKeyInit` field | Default or requirement |
+| --- | --- |
+| `keyType`, `id`, `useCase` | Required strings |
+| `namespace` | `"urn"` |
+| `args` | Empty array; otherwise ordered, read-only `[string, string]` pairs |
+| `defaultConfig`, `serializer` | `null` |
+| `trackForInvalidation` | `false` |
+
+The direct constructor uses argument pairs in the supplied order. It does not
+normalize or sort them. Use `normalizeArgs(record)` to omit undefined values,
+convert the remaining scalar values with `String`, and sort names by JavaScript
+string comparison:
+
+```ts
+import { DialCacheKey, normalizeArgs } from "dialcache";
+
+const key = new DialCacheKey({
+  namespace: "app:prod",
+  keyType: "user_id",
+  id: "a/b",
+  useCase: "Read#User",
+  args: normalizeArgs({ z: 2, a: 1, omitted: undefined }),
+  trackForInvalidation: true,
+});
+
+key.prefix;     // "{app%3Aprod:user_id:a%2Fb}"
+key.toString(); // "{app%3Aprod:user_id:a%2Fb}?a=1&z=2#Read%23User"
+```
+
+`prefix` and `urn` are computed once; `toString()` returns `urn`. The constructor
+retains supplied argument, config, and serializer references. Read-only types
+do not deep-freeze these inputs; treat the key and its inputs as immutable.
+
+`invalidationPrefix(namespace, keyType, id)` validates the same tracked identity
+components and returns the encoded prefix **without** braces.
+`redisClusterHashTag(value)` rejects embedded braces and adds a literal pair of
+braces; it does not encode the value. Neither helper adds arguments or a use case.
 
 ### Changing a namespace
 
@@ -242,6 +298,12 @@ config resolution, deserialization, the source call, or Redis writes; see
 Invalid instance options throw during construction. Invalid `defaultConfig`
 leaves throw when `cached()` registers a definition or `getOrLoad()` is invoked.
 The [API reference](api.md#dialcachekeyconfig) lists field types and bounds.
+
+`new DialCacheKeyConfig(...)` first validates object/map/group shapes,
+`requestLocal`, `coalesce`, and `remoteReadTimeoutMs`, and copies the supplied
+maps and shadow group. TTL, ramp, recovery-age, and shadow leaves are validated
+later, at static-default capture or runtime resolution. Constructing a config
+object alone therefore does not establish that all its leaves are valid.
 
 Each registration or inline invocation captures an immutable baseline snapshot,
 including nested maps and shadow policy. Mutating the original config later
@@ -396,19 +458,9 @@ Use the identity fields to select policy; do not derive policy names or metric
 dimensions from unbounded user input. The provider result remains a sparse
 overlay and must not mutate the key.
 
-Most applications do not construct keys directly. Custom integrations can use
-the root exports:
-
-- `new DialCacheKey(init)` to build the same public key shape;
-- `normalizeArgs(record)` to omit `undefined`, stringify scalar values, and
-  sort argument names;
-- `invalidationPrefix(namespace, keyType, id)` to build the encoded tracked
-  identity; and
-- `redisClusterHashTag(value)` to wrap a validated value in a Redis Cluster hash
-  tag.
-
-The namespace and hash-tag components reject `{` and `}` as described under
-[Identity rules](#identity-rules).
+See [Constructing keys directly](#constructing-keys-directly) for the public
+helpers and the difference between normalized provider keys and manually
+supplied argument pairs.
 
 ## Redis payload compression
 
@@ -483,7 +535,10 @@ retaining each entry's insertion TTL. Reading an entry updates its LRU
 position but does not extend its TTL.
 
 Set `localMaxSize` to a nonnegative safe integer to change the global entry cap.
-`0` disables process-local storage:
+`0` disables process-local storage. With a valid local TTL and selected ramp,
+that path still records misses and can coalesce concurrent calls within the
+instance; sequential calls still miss this layer. Set the local ramp to `0` to
+bypass the layer, or use `coalesce: false` to prevent in-flight sharing:
 
 ```ts
 const dialcache = new DialCache({ localMaxSize: 25_000 });

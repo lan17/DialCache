@@ -169,6 +169,10 @@ Coalescing applies only when at least one cache layer is active and the resolved
 An initially enabled all-disabled call still receives the fallback deadline
 described below.
 
+Layer activity follows resolved TTL/ramp policy. `localMaxSize: 0` disables
+storage but does not bypass an otherwise active local layer, so concurrent calls
+can still share a process flight. See [Process-local cache](configuration.md#process-local-cache).
+
 The full constructed cache key always defines cached-value identity. Include
 locale, auth context, or any other input that can change the returned value,
 regardless of the coalescing policy.

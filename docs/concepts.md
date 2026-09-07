@@ -60,6 +60,10 @@ Successful results travel back through the layers that participated:
 | Redis read failure or timeout | Calls the loader without a Redis refill; only untracked keys can publish the fallback locally |
 | Stale-on-error recovery | Returns the retained snapshot without Redis or process-local publication |
 
+Successful `null`, `undefined`, `false`, `0`, and `""` results are cacheable values
+in every layer, not misses. Redis still requires a serializer that can round-trip
+the value; the default JSON codec supports all five.
+
 Tracked refills can be skipped when the initial read observed a watermark that
 already fences the replacement timestamp. That optimization still returns the
 loader result. It is explained in [Targeted invalidation](invalidation.md).
@@ -104,6 +108,11 @@ Leave recovery disabled when that behavior is unsuitable for the data.
 Cache-key, configuration, and cache I/O failures generally fall through to the
 loader. Loader errors still reject unless an opted-in stale-recovery policy can
 serve a retained value. Explicit `invalidateRemote()` failures reject.
+
+Synchronous loader throws and rejected loader promises are not memoized. Once a
+failed flight settles, a later invocation can retry, including within the same
+request-local scope. Successful stale recovery is the exception: it supplies a
+value that can be memoized as described above.
 
 Fail-open describes error handling; it does not provide a deadline for every
 dependency. DialCache bounds semantic Redis reads and enabled source fallbacks

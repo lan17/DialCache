@@ -82,12 +82,15 @@ capacity, lifetime, and earlier-hit gates still apply.
 
 On a served hit, core retains the serialized frame that supplied the caller as
 `C0`, returns the normal decoded result, then starts detached source work.
-The comparator later receives an independently deserialized cached value.
+That loader runs with caching disabled for this `DialCache` instance, so nested
+readers through the instance bypass caching. The comparator later receives an
+independently deserialized cached value.
 
 On a ramped-down path, the caller starts and awaits its normal source loader
 exactly once. Detached work reads `C0` and shares that caller-accepted source
 result, `S`; it does not launch another loader. A source rejection or timeout
-never becomes an accepted fill value.
+never becomes an accepted fill value. This foreground loader retains the caller's
+context; it is not rerun inside the served-hit branch's disabled scope.
 
 ## The `C0` / `S` / `C1` algorithm
 
@@ -247,8 +250,9 @@ serving layers are disabled.
 ## Confirmed mismatch logging
 
 `shadow.logMismatches: true` adds one warning only after confirmed `mismatch`.
-It is default-off and independent of sampling. The warning includes namespace,
-use case, key type, outcome, and three bounded fields:
+It is default-off and independent of sampling. The logger receives the message
+`"DialCache shadow validation mismatch"` and an object with `cacheNamespace`,
+`useCase`, `keyType`, `outcome: "mismatch"`, and three bounded detail fields:
 
 | Field | Content | UTF-8 cap |
 | --- | --- | --- |
@@ -258,7 +262,9 @@ use case, key type, outcome, and three bounded fields:
 
 Clipped fields end with `...[truncated]` inside the cap. JSON failure or undefined
 output makes that side `null`; the other side is still attempted. Logging does
-not compute a diff or reuse the Redis serializer.
+not compute a diff or reuse the Redis serializer. If detail construction fails,
+core still attempts the warning with the four metadata fields; all three detail
+fields can be absent.
 
 Truncation is not redaction. Keys and values can include sensitive application
 data. Native JSON may execute getters or `toJSON`, and the byte caps apply only
