@@ -230,9 +230,10 @@ can fail serialization. Reference sharing and prototypes are not preserved.
 
 Direct `JsonSerializer.dump(value)` calls return `Promise<string>`;
 `load(string | Buffer)` returns `Promise<T>`, decoding Buffer input as UTF-8.
-Malformed JSON rejects with `SyntaxError`. Top-level functions or symbols reject
-with `Error` because native JSON produces no payload; bigint and cycles normally
-reject with native `TypeError`. The generic `T` is a caller assertion, not schema
+Malformed JSON rejects with `SyntaxError`. After handling top-level `undefined`,
+`dump` rejects with `Error` when `JSON.stringify` returns undefined, as it does
+for ordinary top-level functions or symbols. Bigint and cycles normally reject
+with native `TypeError`. The generic `T` is a caller assertion, not schema
 validation.
 
 A fresh frame whose `load` fails becomes a refreshable miss: core records
