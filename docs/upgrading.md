@@ -151,7 +151,7 @@ partial registration. Use a separate registry or prefix where needed.
 During a mixed-fleet rollout, aggregate away `reason` when comparing total misses
 with total requests. For example:
 
-```promql
+```text
 sum by (cache_namespace, use_case, key_type, layer) (
   rate(dialcache_miss_counter[5m])
 )

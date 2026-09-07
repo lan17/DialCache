@@ -106,7 +106,7 @@ deserialization. An invalidated large value therefore still consumes transfer
 bandwidth until it expires or is replaced.
 
 The adapter returns either `DecodedRedisFrame { payload, createdAtMs }` or
-`RedisReadMiss { kind: "miss", reason, observedWatermarkMs? }`. Core then checks
+`RedisReadMiss { kind: "miss", reason, observedWatermarkMs? }`. DialCache then checks
 logical age against the operation's effective TTL. Future-dated or invalid
 frames miss before deserialization. With recovery enabled, the initial read
 may retain expired bytes while the source runs; see [Stale-on-error](stale-on-error.md).
@@ -129,11 +129,11 @@ write script, placeholder, transaction, or watermark mutation. Same-key writes
 are last-writer-wins; tracked **reads** enforce invalidation.
 
 Physical TTL is normally the remote TTL. With stale-on-error it is the maximum
-recovery age instead. Core separately caps tracked values at one hour and emits
+recovery age instead. DialCache separately caps tracked values at one hour and emits
 `tracked_ttl_clamped` for each dispatched write whose requested TTL exceeds the
 cap. Untracked values retain their configured TTL, up to 365 days.
 
-A tracked miss can carry a valid observed watermark. Core skips a replacement
+A tracked miss can carry a valid observed watermark. DialCache skips a replacement
 already known to be fenced, checking once before payload preparation and again
 immediately before dispatch. An admitted write uses the final timestamp exactly.
 Misses without that fence let the adapter sample `Date.now()` before dispatch.
@@ -149,7 +149,7 @@ Invalid reply-domain values are errors and are not retried.
 
 If the retry also fails, GLIDE attaches the original error as `cause` when
 possible. Node-redis surfaces the retry rejection unmodified because some
-client errors are shared objects. A healed retry looks like success to core
+client errors are shared objects. A healed retry looks like success to DialCache
 metrics; server command statistics expose unexpected `EVAL` activity.
 
 A rejected or timed-out dispatched mutation does not prove that Redis remained
@@ -179,7 +179,7 @@ runtime remoteReadTimeoutMs → defaultConfig.remoteReadTimeoutMs
 Values are positive safe integers through `2_147_483_647` milliseconds. A
 remote read cannot be configured as unbounded.
 
-When the wait expires, core aborts `RedisReadContext.signal`, logs a
+When the wait expires, DialCache aborts `RedisReadContext.signal`, logs a
 `RedisReadTimeoutError`, records `cache_read_timeout`, and invokes the source.
 Late read outcomes are consumed and ignored. A read error or timeout does not
 trigger a Redis refill or stale recovery. An active untracked local layer may
@@ -191,16 +191,16 @@ remaining budget. The source deadline begins separately when fallback starts.
 Recovery reuses the initial snapshot and creates no second read budget.
 
 Node-redis passes a cooperative signal to native reads where supported. GLIDE
-uses its configured native request budget. Core still bounds its own wait;
+uses its configured native request budget. DialCache still bounds its own wait;
 neither mechanism promises server-side cancellation or bounds all underlying
 client work. See [Coalescing and liveness](coalescing.md).
 
 ## Lifecycle ownership
 
 Before shutdown, stop new work and await public cache-operation and invalidation
-promises, including loaders that may later write Redis. A read whose core wait
-expired can still be active in the client. Use client-native controls to drain
-or terminate that work before closing the connection.
+promises, including loaders that may later write Redis. A read that DialCache
+stopped waiting for can still be active in the client. Use client-native
+controls to drain or terminate that work before closing the connection.
 
 Close node-redis with `await redisClient.quit()` or close GLIDE with
 `glideClient.close()` after draining application work. The adapters own no
@@ -236,7 +236,7 @@ for ordinary top-level functions or symbols. Bigint and cycles normally reject
 with native `TypeError`. The generic `T` is a caller assertion, not schema
 validation.
 
-A fresh frame whose `load` fails becomes a refreshable miss: core records
+A fresh frame whose `load` fails becomes a refreshable miss: DialCache records
 `serialization_load`, calls the source, and attempts replacement. The default
 codec validates JSON syntax, not your application schema. For incompatible
 value changes, use a validating serializer or change an identity dimension such
@@ -318,7 +318,7 @@ duration [metrics](observability.md#compression-metrics) to evaluate that tradeo
 Decompressed output is capped at 512 MiB. Writes above the same ceiling remain
 raw. With compression enabled, `below_threshold` takes precedence;
 `write_over_limit` records an oversized payload that also reaches the threshold.
-When native zstd rejects marked input, core hands the original bytes to the
+When native zstd rejects marked input, DialCache hands the original bytes to the
 serializer (`fallback_raw`, or `read_over_limit` when the output limit caused
 rejection). Native decoder acceptance is not corruption
 validation: it can accept empty or truncated bodies as empty output and ignore
@@ -342,14 +342,14 @@ Implement the three methods of `DialCacheRedisClient` and pass the object in
 
 `read` receives `valueKey` and, only for tracked reads, `watermarkKey`.
 `RedisReadContext` supplies `timeoutMs` and an `AbortSignal` for cooperative
-cancellation. Returned payload bytes transfer to core and must remain stable
+cancellation. Returned payload bytes transfer to DialCache and must remain stable
 while retained for shadow or recovery; return a dedicated Buffer if the client
 pools or reuses response storage.
 
 Use `decodeRedisReadResult` or `decodeTrackedRedisReadResult` from
 `dialcache/redis-protocol`, or preserve their behavior exactly. Attach an
 `observedWatermarkMs` only from the same valid tracked snapshot. Cause and fence
-are independent: an absent value can carry a fence. Core validates the fence,
+are independent: an absent value can carry a fence. DialCache validates the fence,
 discards it for untracked keys, and maps unknown results/reasons to
 `unclassified` misses. A `watermark_fenced` claim also becomes `unclassified` if
 its observation is absent, invalid, or discarded for an untracked key.
@@ -357,7 +357,7 @@ Normalizing an unknown reason does not discard an otherwise valid tracked
 observation. Use `isRedisReadMiss(result)` instead of a null comparison.
 
 `write` receives `valueKey`, `value`, `cacheTtlMs`, and optional `createdAtMs`.
-If present, that timestamp is the final value core admitted against an observed
+If present, that timestamp is the final value DialCache admitted against an observed
 fence: honor it exactly. Otherwise sample real client time before dispatch.
 A constant timestamp is incompatible with logical age enforcement.
 
@@ -367,7 +367,7 @@ that logical operation. The public script takes `[futureBufferMs,
 invalidatedAtMs]` as its arguments and returns integer `1`.
 
 Bound connection, queue, dispatch, retry, reconnect, and response lifetimes.
-Core bounds read waits but does not own the client's resource lifecycle or add
+DialCache bounds read waits but does not own the client's resource lifecycle or add
 write/invalidation deadlines.
 
 ## Advanced wire protocol
@@ -420,7 +420,7 @@ throws `DialCacheRedisPayloadEncodingError`.
 
 The untracked decoder accepts a zero timestamp. Both decoders convert the raw
 uint64 to a JavaScript number without rejecting unsafe values, which can lose
-precision. Core separately rejects unsafe timestamps and applies its
+precision. DialCache separately rejects unsafe timestamps and applies its
 [age and clock rules](observability.md#value-ages-and-clock-offsets); the codecs
 alone do not establish that a decoded frame is fresh or safe to serve.
 
@@ -434,7 +434,7 @@ Its repair and retention rules are covered under
 
 The binary payload envelope uses `0x00` to escape raw marker-prefixed bytes,
 `0x01` for compressed string output, and `0x02` for compressed binary output.
-Adapters treat the payload as opaque: core interprets this envelope above them.
+Adapters treat the payload as opaque: DialCache interprets this envelope above them.
 The physical value key appends `:dialcache-frame-v1` to the logical key.
 
 Read [Upgrading](upgrading.md) before migrating an older adapter or namespace.

@@ -62,7 +62,7 @@ recovery.
 ## Follow one invocation
 
 The initial read uses one invocation snapshot of `F`, `M`, and the read deadline.
-Core classifies the returned frame before normal deserialization:
+DialCache classifies the returned frame before normal deserialization:
 
 | Age when the initial read settles | Behavior |
 | --- | --- |
@@ -75,10 +75,10 @@ A read error or timeout never enters recovery. A fresh frame that failed ordinar
 deserialization is not reconsidered as a stale candidate.
 
 If the source succeeds, normal refill rules apply; the retained candidate is not
-deserialized. If the source rejects, core calls the selected classifier. An
+deserialized. If the source rejects, DialCache calls the selected classifier. An
 accepted rejection authorizes a recovery check, even when no candidate exists.
 
-With a candidate, core checks `0 <= age < M`, deserializes/decompresses lazily,
+With a candidate, DialCache checks `0 <= age < M`, deserializes/decompresses lazily,
 and checks the age again before returning. Crossing `M` during asynchronous
 `load` prevents serving. A missing, expired, or undecodable candidate preserves
 the **exact original source rejection**.

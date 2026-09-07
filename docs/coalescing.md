@@ -1,4 +1,4 @@
-# Coalescing and fallback liveness
+# Coalescing and liveness
 
 [Documentation](index.md) · [API reference](api.md)
 
@@ -222,7 +222,7 @@ it to `null` only when the application intentionally accepts an unbounded
 fallback:
 
 ```ts
-import { FallbackTimeoutError } from "dialcache";
+import { DialCacheKeyConfig, FallbackTimeoutError } from "dialcache";
 
 const getUser = dialcache.cached(
   (userId: string) => db.fetchUser(userId),

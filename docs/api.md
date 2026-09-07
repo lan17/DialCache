@@ -146,7 +146,7 @@ overlay. Omission inherits; it does not turn an inherited field off.
 | Field | Effective default | Values |
 | --- | --- | --- |
 | `ttlSec.local`, `ttlSec.remote` | No TTL: layer off | Positive safe-integer seconds, at most `31_536_000` (365 days) |
-| `ramp.local`, `ramp.remote` | `100` when a TTL exists | Finite percentage from `0` through `100`; `0` bypasses serving |
+| `ramp.local`, `ramp.remote` | `100` when a TTL exists | Key-selection threshold from `0` through `100`, not a share of traffic; `0` bypasses serving |
 | `requestLocal` | `false` | Boolean; no TTL or ramp |
 | `coalesce` | `true` | Boolean; affects request-local and process flights |
 | `remoteReadTimeoutMs` | Instance setting, then `50` | Positive safe-integer milliseconds, at most `2_147_483_647`; cannot be unbounded |
@@ -196,7 +196,8 @@ process.oldestLeaderAgeMs;   // Monotonic age, or null when idle.
 ```
 
 The nested shape is `ProcessCoalescingState`. Request-local flights are excluded.
-There is no public flight cap, cancellation, cache clear, or shutdown method.
+There is no method to clear a cache, cancel in-flight loads, cap coalesced
+flights, or shut an instance down.
 See [Coalescing state](coalescing.md#inspecting-process-scoped-flights).
 
 ## Keys and serializers

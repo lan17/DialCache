@@ -1,4 +1,4 @@
-# Redis shadow validation
+# Shadow validation
 
 [Documentation](index.md) · [Observability](observability.md#shadow-outcomes)
 
@@ -80,7 +80,7 @@ capacity, lifetime, and earlier-hit gates still apply.
 
 ## Serving-hit and ramped-down paths
 
-On a served hit, core retains the serialized frame that supplied the caller as
+On a served hit, DialCache retains the serialized frame that supplied the caller as
 `C0`, returns the normal decoded result, then starts detached source work.
 That loader runs with caching disabled for this `DialCache` instance, so nested
 readers through the instance bypass caching. The comparator later receives an
@@ -109,7 +109,7 @@ C0 present → compare S
 ### Clean-miss fill
 
 A semantic `C0` miss can be filled from `S`. For a tracked miss carrying a valid
-`observedWatermarkMs`, core checks the application timestamp before serialization
+`observedWatermarkMs`, DialCache checks the application timestamp before serialization
 and again immediately before dispatch. A timestamp at or below that observation
 skips the fill and emits `fill_fenced`. Preflight suppression also avoids
 serialization, compression, and frame allocation.
@@ -132,7 +132,7 @@ observed fence; another operation may still change Redis.
 
 ### Comparison and confirmation
 
-For present `C0`, core deserializes an independent cached snapshot after the
+For present `C0`, DialCache deserializes an independent cached snapshot after the
 source result is available. Equal values report `match`. A disagreement triggers
 one direct Redis `C1` read in the same tracked or untracked mode.
 
@@ -142,7 +142,7 @@ Confirmation failure or read timeout produces `confirmation_error`.
 
 Confirmation bypasses logical age solely for supersession comparison. A
 future-dated `C1` records its offset but can be retained for comparing bytes; it
-cannot serve the caller. Core does not deserialize `C1`, compare it with `S`, or
+cannot serve the caller. DialCache does not deserialize `C1`, compare it with `S`, or
 chase another version. Strings compare exactly, Buffers by bytes, and mixed
 string/Buffer payloads by UTF-8 bytes.
 
@@ -186,7 +186,7 @@ A sampled served hit runs the serializer's `load` again in detached work. It
 must be repeatable, non-mutating, and return independently usable values.
 Returned Redis payload bytes must remain stable after the adapter read settles.
 
-Core retains the original `cached()` argument references or `getOrLoad()`
+DialCache retains the original `cached()` argument references or `getOrLoad()`
 closure. It cannot generically clone source-selection state. Keep arguments,
 captured state, and accepted source values immutable, or snapshot before the
 invocation, so detached work still refers to the key that was selected.
@@ -207,7 +207,7 @@ read separately has the effective remote-read deadline.
 
 Served-hit timing starts with the detached callback. Ramped-down timing starts
 immediately before the caller's source invocation, including its synchronous
-prefix. On abandonment, core releases retained `C0` and stops later phases.
+prefix. On abandonment, DialCache releases retained `C0` and stops later phases.
 Already-started shadow-owned work keeps capacity until it settles, even after
 its DialCache deadline. A shared caller-owned loader can continue without
 holding the shadow slot after timeout.
@@ -216,7 +216,7 @@ Scheduling and shadow deadline timers are unreferenced. They do not keep an
 otherwise idle process alive. Detachment uses the Node event loop, not a worker;
 synchronous loader, serializer, comparator, or logger work still consumes it.
 Underlying I/O is not generally cancellable. Give dependencies finite native
-budgets, including commands that may settle after a core timeout.
+budgets, including commands that may settle after a DialCache timeout.
 
 ## Consistency modes and race boundaries
 
@@ -263,7 +263,7 @@ It is default-off and independent of sampling. The logger receives the message
 Clipped fields end with `...[truncated]` inside the cap. JSON failure or undefined
 output makes that side `null`; the other side is still attempted. Logging does
 not compute a diff or reuse the Redis serializer. If detail construction fails,
-core still attempts the warning with the four metadata fields; all three detail
+DialCache still attempts the warning with the four metadata fields; all three detail
 fields can be absent.
 
 Truncation is not redaction. Keys and values can include sensitive application

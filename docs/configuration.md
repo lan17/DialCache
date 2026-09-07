@@ -1,4 +1,4 @@
-# Configuration and cache layers
+# Configuration
 
 [Documentation](index.md) · [API reference](api.md)
 

@@ -199,7 +199,8 @@ const dialcache = new DialCache({
 });
 
 function shutdown(): void {
-  // Drain outstanding cache operations before application shutdown.
+  // Close the client yourself once outstanding DialCache calls have settled.
+  // DialCache never flushes or closes it.
   dogStatsD.close();
 }
 ```
@@ -286,11 +287,11 @@ and bytes without unit conversion:
 | `dialcache.compression.duration` | Distribution or histogram | `cache_namespace`, `use_case`, `key_type`, `layer`, `operation` | Payload compression and decompression latency in seconds |
 
 Synchronous client throws are isolated when DialCache invokes the adapter.
-Core also consumes thenables returned by adapter hooks, but this adapter does
+DialCache also consumes thenables returned by adapter hooks, but this adapter does
 not forward every client return value: only `shadowValidation` and
 `staleRecovery` return the counter call's result. A custom DogStatsD client must
 handle its own asynchronous delivery failures, including rejected promises.
-Direct adapter calls do not have core's observer guard. Configure client error
+Direct adapter calls do not have DialCache's observer guard. Configure client error
 handling and shutdown as part of application ownership.
 
 ## Shadow outcomes
@@ -353,7 +354,7 @@ enter histogram sums. Repeated reads can observe the same future frame.
 
 For direct adapter callers, Prometheus additionally discards nonfinite or
 nonpositive `observeFutureTimestampOffset` values. Datadog forwards those
-observations without that extra guard; normal core calls supply positive finite
+observations without that extra guard; normal DialCache calls supply positive finite
 offsets to both.
 
 Use external fleet clock monitoring as well: workload observations cannot detect
@@ -454,8 +455,7 @@ thrown value's class or `Error.name`:
 | `fallback` | The source loader failed or exceeded its DialCache deadline |
 | `unknown` | Reserved for a future failure site that cannot be classified otherwise |
 
-These values are defined by the backend-neutral core and are identical for
-every adapter.
+DialCache defines these values itself, so they are identical for every adapter.
 
 A valid `invalidateRemote()` call without a configured Redis client is still an
 invalidation attempt: DialCache records `dialcache_invalidation_counter` (or
@@ -534,7 +534,7 @@ returned at runtime.
 
 Synchronous throws and rejections of those returned thenables are isolated so
 telemetry cannot change cache correctness, fallback results, or shadow outcomes.
-This guard applies when core invokes the observer, not to direct calls to an
+This guard applies when DialCache invokes the observer, not to direct calls to an
 adapter or to asynchronous work whose promise the hook does not return.
 
 A custom adapter may buffer or transmit asynchronously, but it owns delivery,

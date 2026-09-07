@@ -34,7 +34,8 @@ const getUser = dialcache.cached(
     trackForInvalidation: true,
     defaultConfig: new DialCacheKeyConfig({
       ttlSec: { [CacheLayer.REMOTE]: 300 },
-      coalesce: false, // Each invocation performs its own tracked read.
+      // No local layers here, so each invocation performs its own tracked read.
+      coalesce: false,
     }),
   },
 );
@@ -79,7 +80,7 @@ read-time fencing supplies that distinction.
 ### Conditional refills
 
 An adapter-level tracked miss may carry `observedWatermarkMs` from the same
-atomic read. After a successful fallback, core uses that observation to avoid
+atomic read. After a successful fallback, DialCache uses that observation to avoid
 writing a replacement already known to be fenced:
 
 1. Sample the application clock before serialization. If the sample is at or
@@ -197,7 +198,7 @@ in-flight operations, or stop an already-dispatched write.
 
 ## Watermark lifetime
 
-Core caps tracked Redis value retention at **one hour**. Each dispatched write
+DialCache caps tracked Redis value retention at **one hour**. Each dispatched write
 configured above that cap records `tracked_ttl_clamped`; its logical policy is
 not rewritten. Invalidation alone creates and updates watermarks.
 
