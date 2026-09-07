@@ -4,13 +4,17 @@
 [![Codecov](https://codecov.io/gh/lan17/DialCache/branch/main/graph/badge.svg)](https://codecov.io/gh/lan17/DialCache)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/lan17/DialCache/badge)](https://scorecard.dev/viewer/?uri=github.com/lan17/DialCache)
 
-DialCache is a TypeScript caching library for Node.js. It wraps a function and
-caches its result within a request, in a process-local LRU, or in Redis or Valkey.
+DialCache is a TypeScript caching library for Node.js services. Use it for
+database lookups, service reads, and other work whose results can be reused.
+
+It wraps a function and caches its result within a request, in a process-local
+LRU, or in a shared Redis or Valkey cache. You configure cache policy separately
+from the loader, so you can change TTLs or gradually enable caching while the
+service is running.
 
 Caching is off by default. Outside an `enable()` scope, the wrapped function
 just calls its loader. Inside the scope, each use case's configuration decides
-which cache layers to use. TTLs and rollout settings can change at runtime
-without rewriting the reader.
+which cache layers to use.
 
 [Documentation](https://lan17.github.io/DialCache/)
 · [Getting started](https://lan17.github.io/DialCache/getting-started.html)
@@ -23,7 +27,7 @@ npm install dialcache
 ```
 
 Requires Node.js `>=22.15.0 <23.0.0 || >=23.8.0`.
-Redis and telemetry clients are installed separately if you use them.
+Redis and telemetry clients are optional; install them separately as needed.
 
 Save this as `example.mts`. It creates one `DialCache` instance and reuses the
 wrapped reader:
@@ -65,7 +69,7 @@ node --experimental-strip-types example.mts
 This prints `Loading from source: 123` twice: once for the first enabled read,
 then again for the uncached call. The second enabled read reuses the value.
 
-This example uses only the process-local layer. A TTL with no ramp enables that
+The example uses only the process-local layer. A TTL with no ramp enables that
 layer for every key inside the scope. The LRU holds at most 10,000 entries by
 default. In a service, place `enable()` around a request's reads so nested
 readers inherit the same asynchronous scope.
@@ -74,10 +78,9 @@ Results containing `Date`, `bigint`, or other non-JSON-compatible values need an
 explicit [typed serializer](https://lan17.github.io/DialCache/redis.html#typed-serializer-requirement),
 even when you cache only in memory.
 
-For a loader defined at the call site,
-[`getOrLoad()`](https://lan17.github.io/DialCache/api.html#getorload) takes a
-zero-argument function and a direct key. It uses the same cache behavior without
-registering a reusable reader.
+For a loader defined at the call site, `getOrLoad()` uses the same cache behavior
+without registering a reusable reader. See the
+[inline example](https://lan17.github.io/DialCache/getting-started.html#keep-a-calculation-inline).
 
 ## Cache layers
 
@@ -102,10 +105,9 @@ describes what gets stored after each kind of hit or miss.
 
 When a cache layer is active, concurrent calls with the same key share in-flight
 work by default. That sharing is scoped to a request or a `DialCache` instance,
-depending on the active layers.
-Use `coalesce: false` when callers need independent executions. The
-[coalescing guide](https://lan17.github.io/DialCache/coalescing.html) covers which
-results, errors, and deadlines a follower inherits.
+depending on the active layers. Use `coalesce: false` when callers need
+independent executions. The [coalescing guide](https://lan17.github.io/DialCache/coalescing.html)
+covers which results, errors, and deadlines a follower inherits.
 
 ## Runtime configuration
 
@@ -180,20 +182,23 @@ it.
 · [Stale-on-error](https://lan17.github.io/DialCache/stale-on-error.html)
 · [Key design](https://lan17.github.io/DialCache/configuration.html#keys-ids-and-extra-dimensions)
 
-## Failures and metrics
+## Failures
 
 Cache access fails open. A failed Redis read falls back to the loader; a failed
 cache write does not discard a successful loader result. Source errors still
 reject unless stale recovery serves a value. Explicit invalidation failures
 also reject.
 
-Redis reads and source fallbacks have separate deadlines. Providers, serializers,
-writes, and the underlying clients need application-owned time limits; see
+Redis reads and source fallbacks have separate deadlines. Configuration
+providers, serializers, Redis writes, and invalidation need finite
+application-owned time limits; see
 [liveness](https://lan17.github.io/DialCache/coalescing.html#application-owned-budgets).
 
+## Metrics
+
 Metrics are optional. The [Prometheus and Datadog adapters](https://lan17.github.io/DialCache/observability.html)
-report requests, miss reasons, errors, latency, and shadow and recovery outcomes.
-Custom backends can implement the same adapter interface.
+report requests, miss reasons, errors, latency, and outcomes for shadow validation
+and stale recovery. Custom backends can implement the same adapter interface.
 
 ## Reference
 
@@ -201,7 +206,7 @@ The [reference](https://lan17.github.io/DialCache/) covers setup, behavior, APIs
 and operational details. It can also be
 [read as Markdown on GitHub](https://github.com/lan17/DialCache/tree/main/docs).
 
-| Topic | Guide |
+| Task | Guide |
 | --- | --- |
 | Add caching to a service | [Getting started](https://lan17.github.io/DialCache/getting-started.html) |
 | Understand what runs on a hit, miss, or error | [How DialCache works](https://lan17.github.io/DialCache/concepts.html) |
