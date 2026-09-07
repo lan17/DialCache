@@ -4,21 +4,27 @@
 [![Codecov](https://codecov.io/gh/lan17/DialCache/branch/main/graph/badge.svg)](https://codecov.io/gh/lan17/DialCache)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/lan17/DialCache/badge)](https://scorecard.dev/viewer/?uri=github.com/lan17/DialCache)
 
-DialCache is a read-through cache for TypeScript functions in Node.js services.
-Use it for database lookups, service reads, and other work whose results can be
-reused.
+DialCache is a read-through cache for TypeScript services on Node.js. Use it for
+database lookups, service reads, and other work whose results can be reused.
+Give it a key and a loader, either by wrapping a function with `cached()` or
+inline with `getOrLoad()`, and it returns a cached result or runs the loader.
 
-You wrap the function that reads from the source, and DialCache decides on each
-call whether to return a cached result or run it. Results can be cached within a
-request, in a process-local LRU, or in a shared Redis or Valkey cache. Cache
-policy lives apart from the function itself, so you can change TTLs or enable
-caching for a growing share of keys while the service runs.
+- Three layers: request-local memoization, a process-local LRU, and Redis or
+  Valkey.
+- Per-use-case policy: layers, TTLs, and rollout ramps, changeable at runtime
+  through a configuration provider.
+- Keys organized by entity, such as `urn:user_id:123#GetUser`, so one
+  `invalidateRemote()` call invalidates every tracked Redis result for that
+  entity.
+- By default, concurrent same-key calls share one in-progress read, and cache
+  failures fall back to the loader.
+- Opt-in: stale-on-error serves a retained Redis value when the source fails
+  with an error you allow; shadow validation checks Redis values against the
+  source and can warm Redis before it serves callers.
+- Prometheus and Datadog adapters report requests, misses by reason, errors,
+  and latency.
 
-A cache changes more than latency. It changes how often your source runs, what
-concurrent callers share, and how soon a read sees a write. DialCache makes each
-of those a per-use-case setting, and caching is off by default: outside an
-`enable()` scope the wrapped function just calls through, so a write path never
-fills a cache unless you enable it there.
+Caching is off by default and runs only inside an `enable()` scope.
 
 [Documentation](https://lan17.github.io/DialCache/)
 · [Getting started](https://lan17.github.io/DialCache/getting-started.html)
@@ -58,6 +64,16 @@ const getUser = dialcache.cached(fetchUser, {
 await dialcache.enable(async () => {
   await getUser("123"); // Loads from source and caches the result.
   await getUser("123"); // Reuses the value for up to 60 seconds.
+
+  // Same cache, inline: a key and a loader instead of a wrapped function.
+  const inline = {
+    keyType: "user_id",
+    useCase: "GetUserInline",
+    key: "456",
+    defaultConfig: new DialCacheKeyConfig({ ttlSec: { [CacheLayer.LOCAL]: 60 } }),
+  };
+  await dialcache.getOrLoad(() => fetchUser("456"), inline); // Loads from source.
+  await dialcache.getOrLoad(() => fetchUser("456"), inline); // Reuses the value.
 });
 
 await getUser("123"); // Outside enable(): loads from source again.
@@ -69,13 +85,18 @@ Run it directly with Node:
 node --experimental-strip-types example.mts
 ```
 
-This prints `Loading from source: 123` twice: once for the first enabled read,
-then again for the uncached call. The second enabled read reuses the value.
+This prints three `Loading from source` lines: user 123 for the first enabled
+read, user 456 for the first inline read, and user 123 again for the call
+outside `enable()`. The repeated reads inside the scope reuse cached values.
 
 `fetchUser` is the loader, the function that reads from the source. `getUser` is
 the cached function that DialCache returns; call it wherever you would have
-called `fetchUser`. The `keyType`, `useCase`, and `cacheKey` options make up the
-cache key, so include every input that changes the result.
+called `fetchUser`. `getOrLoad()` takes the same kind of loader inline with a
+direct `key` and does not register a use case, so any number of call sites can
+share one name, and calls that share a key share cached entries. In both forms,
+`keyType`, `useCase`, and the key make up the cache identity, so include every
+input that changes the result. The getting-started guide covers
+[when to prefer each form](https://lan17.github.io/DialCache/getting-started.html#keep-a-calculation-inline).
 
 The example caches only in process memory. A TTL with no ramp turns that layer
 on for every key inside the scope, and the LRU holds 10,000 entries by default.
@@ -85,11 +106,6 @@ function called inside it shares that scope.
 Results containing `Date`, `bigint`, or other non-JSON-compatible values need an
 explicit [typed serializer](https://lan17.github.io/DialCache/redis.html#typed-serializer-requirement),
 even when you cache only in memory.
-
-When the loader is a one-off calculation rather than a reusable function,
-`getOrLoad()` takes it inline with a direct key and uses the same cache
-behavior. See the
-[inline example](https://lan17.github.io/DialCache/getting-started.html#keep-a-calculation-inline).
 
 ## Cache layers
 
@@ -121,7 +137,7 @@ what a waiting caller inherits, including errors and deadlines.
 
 ## Changing policy at runtime
 
-A cached function's `defaultConfig` is its baseline. A `cacheConfigProvider` on
+Each use case's `defaultConfig` is its baseline. A `cacheConfigProvider` on
 the instance can override individual fields on every enabled call, so you can
 roll a cache out, tune it, or turn it off without touching the function. This
 example registers a cached function with its local cache ramped to zero, then
@@ -175,7 +191,7 @@ shadow work. `disabled()` stops both for new calls.
 ## Freshness and invalidation
 
 By default a cached value lives until its TTL expires. For data that changes, a
-cached function can opt into tracked invalidation. After a write commits, call
+use case can opt into tracked invalidation. After a write commits, call
 `invalidateRemote()` for the entity. Tracked Redis reads of that entity then
 reject values written before the invalidation, extended by a buffer you choose
 to cover clock skew and in-progress writes. Values already in process memory,
