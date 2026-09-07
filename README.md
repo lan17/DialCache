@@ -4,27 +4,28 @@
 [![Codecov](https://codecov.io/gh/lan17/DialCache/branch/main/graph/badge.svg)](https://codecov.io/gh/lan17/DialCache)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/lan17/DialCache/badge)](https://scorecard.dev/viewer/?uri=github.com/lan17/DialCache)
 
-DialCache is a read-through cache for TypeScript services on Node.js. Use it for
-database lookups, service reads, and other work whose results can be reused.
-Give it a key and a loader, either by wrapping a function with `cached()` or
-inline with `getOrLoad()`, and it returns a cached result or runs the loader.
+DialCache is a caching library for TypeScript on Node.js. Caching a function is
+as simple as wrapping it with `cached()`, or calling `getOrLoad()` inline with a
+key and a loader, and you keep fine-grained control over every use case. Behind
+the scenes, it handles the parts that usually go wrong.
 
-- Three layers: request-local memoization, a process-local LRU, and Redis or
-  Valkey.
-- Per-use-case policy: layers, TTLs, and rollout ramps, changeable at runtime
-  through a configuration provider.
-- Keys organized by entity, such as `urn:user_id:123#GetUser`, so one
-  `invalidateRemote()` call invalidates every tracked Redis result for that
-  entity.
-- By default, concurrent same-key calls share one in-progress read, and cache
-  failures fall back to the loader.
-- Opt-in: stale-on-error serves a retained Redis value when the source fails
-  with an error you allow; shadow validation checks Redis values against the
-  source and can warm Redis before it serves callers.
-- Prometheus and Datadog adapters report requests, misses by reason, errors,
-  and latency.
+- **Multi-layer:** request-local memoization, a process-local LRU, and Redis or
+  Valkey, in any combination.
+- **Runtime policies per use case:** layers, TTLs, and rollout ramps, changeable
+  while the service runs through a configuration provider.
+- **Targeted invalidation:** keys are organized by entity, such as
+  `urn:user_id:123#GetUser`, so one `invalidateRemote()` call invalidates every
+  tracked Redis result for that entity.
+- **Coalescing and fail-open by default:** concurrent same-key calls share one
+  in-progress read, and cache failures fall back to the loader.
+- **Opt-in resilience:** stale-on-error serves a retained Redis value when the
+  source fails with an error you allow; shadow validation checks Redis against
+  the source and can warm it before it serves callers.
+- **Observability:** Prometheus and Datadog adapters report requests, misses by
+  reason, errors, and latency.
 
-Caching is off by default and runs only inside an `enable()` scope.
+Caching is off until you turn it on. It runs only inside an `enable()` scope, so
+a write path never fills a cache unless you enable it there.
 
 [Documentation](https://lan17.github.io/DialCache/)
 · [Getting started](https://lan17.github.io/DialCache/getting-started.html)
