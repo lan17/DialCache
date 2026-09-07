@@ -282,6 +282,9 @@ The guard rejects known incompatible shapes including `Date`, `Map`, `Set`,
 bigint, functions, symbols, Buffers, typed arrays, method-bearing classes,
 required nested undefined, `unknown`, and `any`. It is conservative and cannot
 prove runtime data has no cycles, non-finite numbers, getters, or `toJSON` hooks.
+The structural check stops at eight property/array-element steps, so deeply
+nested or recursive JSON types can also require a serializer. When ordinary JSON
+correctly round-trips those values, supply an explicit `new JsonSerializer<T>()`.
 Supplying a typed serializer is a trusted assertion, not an extra round-trip
 validation performed by DialCache.
 
@@ -312,9 +315,11 @@ levels trade CPU and latency for size reduction. Use the size, ratio, and
 duration [metrics](observability.md#compression-metrics) to evaluate that tradeoff.
 
 Decompressed output is capped at 512 MiB. Writes above the same ceiling remain
-raw (`write_over_limit`). When native zstd rejects marked input, core hands the
-original bytes to the serializer (`fallback_raw`, or `read_over_limit` when the
-output limit caused rejection). Native decoder acceptance is not corruption
+raw. With compression enabled, `below_threshold` takes precedence;
+`write_over_limit` records an oversized payload that also reaches the threshold.
+When native zstd rejects marked input, core hands the original bytes to the
+serializer (`fallback_raw`, or `read_over_limit` when the output limit caused
+rejection). Native decoder acceptance is not corruption
 validation: it can accept empty or truncated bodies as empty output and ignore
 trailing bytes. A custom serializer must validate the application value it
 receives, whether decompressed or raw. A compression exception fails the write
@@ -345,7 +350,10 @@ Use `decodeRedisReadResult` or `decodeTrackedRedisReadResult` from
 `observedWatermarkMs` only from the same valid tracked snapshot. Cause and fence
 are independent: an absent value can carry a fence. Core validates the fence,
 discards it for untracked keys, and maps unknown results/reasons to
-`unclassified` misses. Use `isRedisReadMiss(result)` instead of a null comparison.
+`unclassified` misses. A `watermark_fenced` claim also becomes `unclassified` if
+its observation is absent, invalid, or discarded for an untracked key.
+Normalizing an unknown reason does not discard an otherwise valid tracked
+observation. Use `isRedisReadMiss(result)` instead of a null comparison.
 
 `write` receives `valueKey`, `value`, `cacheTtlMs`, and optional `createdAtMs`.
 If present, that timestamp is the final value core admitted against an observed

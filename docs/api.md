@@ -120,7 +120,7 @@ uncached.
 | `useCase` | Required | Stable operation name, cache-key component, and metric label; `"watermark"` is reserved |
 | `cacheKey` / `key` | Required | Selector for `cached`, direct value for `getOrLoad`; returns/accepts `CacheKeySpec` |
 | `defaultConfig` | Absent | Baseline `DialCacheKeyConfig`, snapshotted at registration or inline invocation |
-| `serializer` | Effective JSON default | Typed `Serializer<Value>` required for statically non-JSON-compatible results, even for local-only declarations |
+| `serializer` | Effective JSON default | Typed `Serializer<Value>` required when the [JSON type guard](redis.md#typed-serializer-requirement) cannot establish compatibility, even for local-only declarations |
 | `trackForInvalidation` | `false` | Use watermark-aware Redis reads for this operation |
 | `fallbackTimeoutMs` | `60_000` | Positive safe integer up to `2_147_483_647` ms; `null` disables the source deadline |
 | `shadowComparator` | Node strict deep equality | Synchronous, bounded `(cached, source) => boolean`; must not mutate its inputs |

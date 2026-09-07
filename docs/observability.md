@@ -370,18 +370,18 @@ Write-side outcomes are:
 - `compressed`: zstd plus its envelope was smaller and selected for the
   prepared Redis payload;
 - `below_threshold`: the serialized payload did not reach the configured
-  threshold;
+  threshold; this check runs before the size ceiling;
 - `not_smaller`: compression ran, but the marked result was not smaller than
   the raw stored form; and
-- `write_over_limit`: the serialized value exceeded the 512 MiB decompression
-  ceiling and was kept raw for the attempted write. This is a capacity signal,
-  not an error.
+- `write_over_limit`: the serialized value reached the threshold but exceeded
+  the 512 MiB decompression ceiling and was kept raw for the attempted write.
+  This is a capacity signal, not an error.
 
 Read-side outcomes are:
 
 - `decompressed`: a marked zstd payload was restored;
-- `fallback_raw`: a marked payload was not valid zstd and was passed unchanged
-  to the serializer; and
+- `fallback_raw`: native zstd rejected a marked payload for a reason other than
+  the output limit, so it was passed unchanged to the serializer; and
 - `read_over_limit`: decompression would exceed the 512 MiB ceiling, so the
   stored bytes were passed unchanged to the serializer. Treat this as a
   corruption or integrity signal.
@@ -405,9 +405,11 @@ marked payload that produces a read-side outcome.
 
 A zstd exception while preparing a write records `error="compression"` and
 the cache write fails open. Decompression rejects neither the cache call nor
-the observer path directly: an unreadable payload reaches the configured
-serializer, whose rejection follows the existing refreshable-miss path and
-records `serialization_load`.
+the observer path directly: rejected marked bytes reach the configured
+serializer. If `load` rejects, it records `serialization_load`. An ordinary fresh
+read becomes a refreshable miss; shadow comparison reports
+`deserialization_error` without repair, and retained recovery preserves the
+original source rejection. See [Serialization](redis.md#serialization).
 
 zstd work is synchronous on the Node.js event loop. Use the duration, ratio,
 and pre/post-size series together when changing the threshold or level; a good
