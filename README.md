@@ -8,21 +8,15 @@ DialCache is a TypeScript library that organizes caching into use cases, offers
 runtime control and observability for each one, and provides a set of features
 behind the scenes.
 
+- **Off by default:** caching runs only inside an `enable()` scope.
 - **Multi-layer:** request-local → process-local → Redis.
-- **Runtime policies per use case:** layers, TTLs, and rollout ramps, changeable
-  while the service runs through a configuration provider.
-- **Targeted invalidation:** keys are organized by entity, such as
-  `urn:user_id:123#GetUser`, so one `invalidateRemote()` call invalidates every
-  tracked Redis result for that entity.
-- **Coalescing and fail-open by default:** concurrent same-key calls share one
-  in-progress read, and cache failures fall back to the loader.
-- **Opt-in resilience:** stale-on-error serves a retained Redis value when the
-  source fails with an error classified as recoverable; shadow validation checks
-  Redis against the source and can warm it before it serves callers.
-- **Observability:** Prometheus and Datadog adapters report requests, misses by
-  reason, errors, and latency.
-
-Caching is **off by default** and runs only inside an `enable()` scope.
+- **Runtime policies per use case:** layers, TTLs, and rollout ramps.
+- **Targeted invalidation:** one call per entity, across all its use cases.
+- **Coalescing:** concurrent same-key calls share one read.
+- **Fail-open:** cache failures fall back to the loader.
+- **Stale-on-error (opt-in):** serves a retained Redis value when the source fails.
+- **Shadow validation (opt-in):** checks and warms Redis before it serves callers.
+- **Observability:** Prometheus and Datadog metrics, including miss reasons.
 
 [Documentation](https://lan17.github.io/DialCache/)
 · [Getting started](https://lan17.github.io/DialCache/getting-started.html)
