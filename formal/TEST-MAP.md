@@ -6,36 +6,38 @@ This file maps each formal slice to the existing tests that most directly exerci
 
 ## Coverage matrix
 
-“Model” means an abstraction of the named rules, not every case in the linked test file. “Core” means generated TypeScript replay via `dialcache-conformance.qnt`; it does not imply replay of the seven verification models. A dash means no portable coverage of that kind yet. All model runs are bounded samples.
+“Model” means an abstraction of the named rules, not every case in the linked test file. “Core” and “Effects” are the two generated ITF profiles; they do not imply direct replay of the seven verification models. “Scenarios” means the committed language-neutral `behavioral-scenarios.json` corpus executed against TypeScript. A dash means no portable coverage of that kind. All model runs are bounded samples.
 
-| Behavior | Ordinary implementation evidence | Verification model | Generated replay | Protocol vectors | Remaining boundary/gap |
-| --- | --- | --- | --- | --- | --- |
-| Disabled pass-through, layer traversal/publication | `dialcache-local`, `dialcache-redis` | Core | Core: outside calls and individual local/remote layers | — | Generated multi-layer precedence, read/write/serialization failures |
-| Request-local lifetime and memoization | `dialcache-request-local` | Core: scope open/close and publication | Core: sequential pair in a fresh scope | — | Nested enable/disable, rejected-flight retry, detached work not generated; nesting/disable not modeled explicitly |
-| Process-local persistence and TTL | `dialcache-local`, `dialcache-config-ramp` | Core/policy: presence and insertion TTL bookkeeping | Core: repeated calls across scopes | — | Expiration/eviction and active policy changes need stronger model properties and replay |
-| Coalescing and isolation | `dialcache-coalescing` | Coalescing: admission/followers | Core: two overlapping same-key local calls | — | Multiple keys/instances, request/process interaction, follower races not generated |
-| Loader deadlines and abandoned work | `dialcache-liveness` | Coalescing: timeout, late settlement, accepted publication | — | — | Generated controlled settlement/deadlines; no fairness/eventual-progress proof |
-| Remote-read deadlines, application-owned phases | `dialcache-liveness`, `dialcache-redis` | Coalescing: read phase separate from fallback; publication outside deadline | — | — | Explicit read-timer states and async decoding/publication replay |
-| Runtime/default policy and snapshots | `dialcache-config-ramp`, `dialcache-coalescing` | Policy: selected valid sparse overlays/defaults | — | — | Invalid configs, arbitrary leaves/combinations, changes during pending invocations |
-| Tracked invalidation and snapshots | `dialcache-invalidation`, `dialcache-coalescing`, real/cluster integrations | Tracked: delayed writes, fences, acquired snapshots | Core: sequential invalidate/read/refill | Tracked keys and decoder fencing | Generated delayed writes, future buffers, clock lead, acquired-snapshot races |
-| Redis read failure and refill suppression | `dialcache-redis` | Core | Core: injected read error then later calls | — | Write failures and more transport outcomes not generated |
-| Stale recovery F/M and retained snapshots | `dialcache-stale-on-error`, `dialcache-stale-recovery-policy`, `dialcache-liveness` | Recovery: retention, async decode age, authorization, no shared publication | — | — | Generated recovery profile; all classifier failure modes remain ordinary tests |
-| Shadow C0/S/C1 and diagnostic behavior | `dialcache-shadow-validation`, `dialcache-shadow-confirmation`, `dialcache-invalidation` | Shadow: admission, compare/confirm/fill | — | — | Generated shadow profile; detached-source rejection/deadlines not fully modeled |
-| Key identity and argument normalization | `dialcache-local`, `dialcache-config-ramp` | — | Fixed keys only | Key/normalization examples | More scalar/Unicode edge vectors; no exhaustive input claim |
-| Frame bytes, timestamp/fence/encoding classification | `redis-payload`, adapter tests, real/cluster integrations | Protocol: abstract classification precedence | Semantic fake adapter only | Frame/decode examples | More invalid timestamps, binary decoding, untracked cases |
-| Compression and serializer combinations | `compression*`, `dialcache-compression` | — | — | — | Portable envelopes/marker cases missing; compression algorithms intentionally external |
-| Metrics, logs, telemetry timing | `dialcache-metrics`, `datadog`, `prometheus`, `shadow-log-json` | Only shadow admission hook | — | — | Intentionally outside primary safety scope |
-| Redis internals, TCP, connection lifecycle | Adapter tests and integrations | External assumptions only | Fake semantic adapter | Wire examples only | External system internals intentionally not formalized |
+| Behavior | Ordinary implementation evidence | Verification model | Generated MBT | Portable scenarios | Protocol vectors | Remaining boundary/gap |
+| --- | --- | --- | --- | --- | --- | --- |
+| Disabled pass-through, traversal/publication | `dialcache-local`, `dialcache-redis` | Core | Core: outside and individual layers; Effects: remote flights | Disabled skips provider; untracked source fills layers; tracked source suppresses local until a Redis hit | — | More multi-layer/failure interleavings |
+| Request-local lifetime and memoization | `dialcache-request-local` | Core: nested/disabled scopes and publication ownership | Core: sequential pair | Nested re-enable/disable and siblings, rejected-flight retry, undefined, scope isolation, closure/replacement, delayed policy resolution | — | Arbitrary context trees and cross-instance/process-flight combinations |
+| Process-local persistence, TTL, LRU | `dialcache-local`, `dialcache-config-ramp` | Core/policy: insertion identity and TTL history | Core: repeated calls | Exact TTL boundary, LRU capacity, preserved insertion TTL/ramp changes | — | Clock rollback and zero-capacity behavior have ordinary tests; no LRU model |
+| Coalescing and isolation | `dialcache-coalescing` | Coalescing: admission/followers | Core: pair; Effects: pending followers and cleanup | Different keys, coalescing off, shared source/timeout identity, request retries | — | Generated multiple keys/instances and layered flight interaction |
+| Loader deadlines and abandoned work | `dialcache-liveness` | Coalescing: timeout/late settlement/publication | Effects: abandonment overlap, late resolve/reject, publication beyond deadline | Shared error identity, retry while old loader runs, late settlement before timer delivery | — | No fairness/eventual-progress proof; more cancellation/clock combinations |
+| Remote-read deadlines, application-owned phases | `dialcache-liveness`, `dialcache-redis` | Coalescing: distinct read/fallback/publication phases | Effects: held writes after accepted source | Read deadline before fallback deadline, late read ignored, held serializer/write outlive fallback deadline | — | Generated independent read/decode deadlines |
+| Runtime/default policy and snapshots | `dialcache-config-ramp`, `dialcache-coalescing` | Policy: eight independently changing leaves, captured snapshots, preserved insertion/physical TTL | — | Sparse overrides, invalid ramp/provider failure, pending snapshots, old physical TTL/new logical freshness | Stable serving/shadow cohorts | Full invalid-config matrix and feature-product interactions |
+| Tracked invalidation and acquired snapshots | `dialcache-invalidation`, `dialcache-coalescing`, real/cluster integrations | Tracked: delayed writes/fences/acquired snapshots | Core: sequential; Effects: delayed writes, future fences, followers | Delayed writes, acquired decode/stale snapshots, suppressed serialization, local survival, explicit maintenance errors | Tracked keys and decoder fencing | Writer-clock skew combinations, watermark loss/retention guarantees remain external assumptions |
+| Cache errors and refill authorization | `dialcache-redis` | Core/recovery | Core: read failure; Effects: source rejection | Read/write/dump/load/provider errors, no refill after failed read, explicit invalidation failure | Malformed frame classifications | More mixed failure schedules and adapter outcomes |
+| Stale recovery F/M and retained bytes | `dialcache-stale-on-error`, `dialcache-stale-recovery-policy`, `dialcache-liveness` | Recovery: age checks, authorization, no shared publication, failed-read skip | — | F, M-1, M, future; source success/denial; age crossing before/after decode; invalidation/replacement/expiry; timeout/late source; request memo; decode/read errors | Frame timestamp boundaries | Generated recovery interleavings; classifier throw/thenable and all policy combinations remain ordinary tests |
+| Shadow C0/S/C1 and diagnostic behavior | `dialcache-shadow-validation`, `dialcache-shadow-confirmation` | Shadow: dark-read/source overlap, admission, compare/confirm/fill, source errors/deadlines | — | Match/mismatch/superseded, independent C0 decode, source/confirmation error, no ordinary-miss job, dark fill/fence, duplicate drop, timed-out work retaining capacity | Independent shadow cohorts | Generated shadow interleavings; comparator failures, logging, and all capacity/transport combinations |
+| Key identity and normalization | `dialcache-local`, `dialcache-config-ramp` | — | Fixed keys only | Multiple logical IDs | Escaping/punctuation/Unicode, UTF-16 ordering, scalars/bigints, number-format edges, caller-owned pair order | Invalid API input combinations and every Unicode/number case |
+| Frame bytes and decoder classifications | `redis-payload`, adapters, real/cluster integrations | Protocol: explicit validation/fencing precedence; fault-detection witnesses | Semantic fake adapter | Future/unsafe/unsupported frames rejected before deserialization | UTF-8/binary/empty, safe ceiling/zero, tracked/untracked, malformed watermarks, fencing/encoding precedence | Full uint64 conversion/runtime reply-type matrix remains ordinary tests |
+| Compression/serializer interoperability | `compression*`, `dialcache-compression` | External compressor outcomes | — | Serializer failures and asynchronous load/dump | Escape markers, legacy raw bytes, fixed zstd string/binary decoding | Compressor byte identity intentionally unspecified; resource-exhaustion cases remain implementation tests |
+| Metrics, logs, telemetry timing | `dialcache-metrics`, `datadog`, `prometheus`, `shadow-log-json` | Shadow admission hook only | — | Terminal shadow/recovery diagnostic outcomes only | — | Other instrumentation intentionally outside primary scope |
+| Redis internals, TCP, connections | Adapter tests and integrations | External assumptions | Controlled semantic adapter | Held reads/writes, physical expiry and failures | Wire examples | Redis implementation internals intentionally not modeled |
 
 Test basenames above refer to `test/*.test.ts`; real/cluster evidence includes `redis-real.integration.test.ts`, `redis-cluster.integration.test.ts`, and adapter integration suites. The detailed mappings below identify the relevant assertions. Coverage is qualitative and deliberately does not report a misleading percentage of all DialCache behavior.
 
-## Generated core replay and harness checks
+## Executable implementation coverage
 
-- [`CONFORMANCE.md`](./CONFORMANCE.md) defines each action and its portable observation boundary.
-- `formal/generate-traces.sh` exports 32 seeded ITF traces; `test/formal-conformance.test.ts` replays every action through public DialCache calls and compares actual return values, loader invocations, and Redis operation counts.
-- Model cache-presence/value fields predict later behavior but are excluded from implementation projection. Negative checks disable local caching/coalescing or make the fake lose writes/invalidation to prove later public calls expose the divergence.
-- The committed `conformance-smoke.itf.json` runs in normal TypeScript CI through the same parser. Parser regressions reject empty input, unknown/misplaced actions, unsupported arguments, missing fields, and unsafe integers.
-- CI artifacts retain model counterexamples and generated replay inputs. Failure messages include file/step/action and both observations; shrinking is not implemented.
+- [`CONFORMANCE.md`](./CONFORMANCE.md) defines the original core profile. [`BEHAVIOR.md`](./BEHAVIOR.md) defines the shared portable scenario/effects driver, action boundaries, clocks, and independently observed outputs.
+- `formal/generate-traces.sh` exports 32 core and 32 pending-effect ITF traces. The two replay tests execute every action through public calls. Effects CI requires all named actions and four race witnesses, rather than relying on trace count alone.
+- The 64 portable scenarios cover 12 behavior families. After every input, the driver compares all outputs/effect counts against assertion-side expected patches. Expected fields never enter execution.
+- Model cache-presence, fence, and flight fields predict later behavior but are excluded from implementation projection. Negative checks remove local caching/coalescing/recovery or acknowledge lost writes/invalidation and require an observable failure.
+- Both committed ITF smokes, all feature scenarios, and all protocol vectors run in ordinary TypeScript CI without Quint. Parser checks reject empty/unknown/misplaced traces, missing choices/observations, unsupported arguments, and unsafe integers.
+- CI artifacts retain model counterexamples and generated replay inputs. Failures include file/scenario, step/action, and both observations. Automatic shrinking is not implemented.
+- Deterministic model tests exercise previously weak assertions: changing an existing TTL or reversing fence/encoding precedence must violate its invariant. Reachability witnesses also cover policy mutation during a pending invocation, replacement request scopes, and dark reads before source acceptance.
 
 ## `dialcache-core.qnt`
 
@@ -74,7 +76,7 @@ A successful lower result can memoize request-local only while the outer scope r
 
 ## `dialcache-runtime-policy.qnt`
 
-Core contract: runtime/default/library precedence and immutable per-invocation snapshots.
+Core contract: runtime/default/library precedence across all eight modeled leaves, immutable per-invocation snapshots, and preserved insertion/physical TTLs. Runtime policy may change while an invocation remains pending; assertions refer to its captured inputs rather than the current policy.
 
 Primary evidence:
 
@@ -95,7 +97,7 @@ Existing-entry behavior is documented in `docs/configuration.md`: changing polic
 
 ## `dialcache-coalescing-liveness.qnt`
 
-Core contract: flight admission, follower inheritance, fallback deadline ownership, and late-result suppression.
+Core contract: flight admission, follower inheritance, fallback deadline ownership, and late-result suppression. The separate effects conformance profile connects controlled settlement/publication races to the implementation.
 
 Primary evidence:
 

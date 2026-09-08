@@ -5,6 +5,7 @@ import { performance } from "node:perf_hooks";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CacheLayer, DialCache, DialCacheKeyConfig, type DialCacheConfig } from "../src/index.js";
+import { record, itfInteger } from "./formal/itf.js";
 import { FakeRedis } from "./fake-redis.js";
 
 const actionNames = [
@@ -232,24 +233,6 @@ function deferred<T>(): Deferred<T> {
     resolve = res;
   });
   return { promise, resolve };
-}
-
-function record(value: unknown, context: string): Record<string, unknown> {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${context}: expected a record`);
-  }
-  return value as Record<string, unknown>;
-}
-
-function itfInteger(value: unknown, context: string): number {
-  // This profile uses nonnegative safe integers. Reject precision loss rather
-  // than silently rounding ITF's unbounded integers into JavaScript numbers.
-  const text = record(value, context)["#bigint"];
-  if (typeof text !== "string" || !/^(0|[1-9][0-9]*)$/.test(text)
-    || !Number.isSafeInteger(Number(text))) {
-    throw new Error(`${context}: expected a nonnegative safe ITF integer`);
-  }
-  return Number(text);
 }
 
 function parseItfTrace(value: unknown, path: string): Trace {

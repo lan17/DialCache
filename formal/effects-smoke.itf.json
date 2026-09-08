@@ -1,0 +1,2138 @@
+{
+  "#meta": {
+    "format": "ITF",
+    "format-description": "https://apalache-mc.org/docs/adr/015adr-trace.html",
+    "source": "formal/dialcache-effects-conformance.qnt",
+    "status": "ok",
+    "description": "Created by Quint on Tue Sep 08 2026 16:26:31 GMT-0700 (Pacific Daylight Time)",
+    "timestamp": 1788909991610
+  },
+  "vars": [
+    "mbt::actionTaken",
+    "mbt::nondetPicks",
+    "s",
+    "mbt::actionTaken",
+    "mbt::nondetPicks"
+  ],
+  "states": [
+    {
+      "#meta": {
+        "index": 0
+      },
+      "mbt::actionTaken": "init",
+      "mbt::nondetPicks": {
+        "loader": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "activeLoader": {
+          "#bigint": "0"
+        },
+        "calls": [],
+        "deadline": {
+          "#bigint": "0"
+        },
+        "dumps": {
+          "#bigint": "0"
+        },
+        "invalidations": {
+          "#bigint": "0"
+        },
+        "loaders": {
+          "#bigint": "0"
+        },
+        "loads": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "1"
+        },
+        "observedFence": {
+          "#bigint": "0"
+        },
+        "phase": {
+          "#bigint": "0"
+        },
+        "policyCalls": {
+          "#bigint": "0"
+        },
+        "reads": {
+          "#bigint": "0"
+        },
+        "sources": [],
+        "storedTimestamp": {
+          "#bigint": "0"
+        },
+        "watermark": {
+          "#bigint": "0"
+        },
+        "writeTimestamp": {
+          "#bigint": "0"
+        },
+        "writes": {
+          "#bigint": "0"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 1
+      },
+      "mbt::actionTaken": "tick",
+      "mbt::nondetPicks": {
+        "loader": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "activeLoader": {
+          "#bigint": "0"
+        },
+        "calls": [],
+        "deadline": {
+          "#bigint": "0"
+        },
+        "dumps": {
+          "#bigint": "0"
+        },
+        "invalidations": {
+          "#bigint": "0"
+        },
+        "loaders": {
+          "#bigint": "0"
+        },
+        "loads": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "11"
+        },
+        "observedFence": {
+          "#bigint": "0"
+        },
+        "phase": {
+          "#bigint": "0"
+        },
+        "policyCalls": {
+          "#bigint": "0"
+        },
+        "reads": {
+          "#bigint": "0"
+        },
+        "sources": [],
+        "storedTimestamp": {
+          "#bigint": "0"
+        },
+        "watermark": {
+          "#bigint": "0"
+        },
+        "writeTimestamp": {
+          "#bigint": "0"
+        },
+        "writes": {
+          "#bigint": "0"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 2
+      },
+      "mbt::actionTaken": "tick",
+      "mbt::nondetPicks": {
+        "loader": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "activeLoader": {
+          "#bigint": "0"
+        },
+        "calls": [],
+        "deadline": {
+          "#bigint": "0"
+        },
+        "dumps": {
+          "#bigint": "0"
+        },
+        "invalidations": {
+          "#bigint": "0"
+        },
+        "loaders": {
+          "#bigint": "0"
+        },
+        "loads": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "21"
+        },
+        "observedFence": {
+          "#bigint": "0"
+        },
+        "phase": {
+          "#bigint": "0"
+        },
+        "policyCalls": {
+          "#bigint": "0"
+        },
+        "reads": {
+          "#bigint": "0"
+        },
+        "sources": [],
+        "storedTimestamp": {
+          "#bigint": "0"
+        },
+        "watermark": {
+          "#bigint": "0"
+        },
+        "writeTimestamp": {
+          "#bigint": "0"
+        },
+        "writes": {
+          "#bigint": "0"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 3
+      },
+      "mbt::actionTaken": "tick",
+      "mbt::nondetPicks": {
+        "loader": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "activeLoader": {
+          "#bigint": "0"
+        },
+        "calls": [],
+        "deadline": {
+          "#bigint": "0"
+        },
+        "dumps": {
+          "#bigint": "0"
+        },
+        "invalidations": {
+          "#bigint": "0"
+        },
+        "loaders": {
+          "#bigint": "0"
+        },
+        "loads": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "31"
+        },
+        "observedFence": {
+          "#bigint": "0"
+        },
+        "phase": {
+          "#bigint": "0"
+        },
+        "policyCalls": {
+          "#bigint": "0"
+        },
+        "reads": {
+          "#bigint": "0"
+        },
+        "sources": [],
+        "storedTimestamp": {
+          "#bigint": "0"
+        },
+        "watermark": {
+          "#bigint": "0"
+        },
+        "writeTimestamp": {
+          "#bigint": "0"
+        },
+        "writes": {
+          "#bigint": "0"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 4
+      },
+      "mbt::actionTaken": "tick",
+      "mbt::nondetPicks": {
+        "loader": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "activeLoader": {
+          "#bigint": "0"
+        },
+        "calls": [],
+        "deadline": {
+          "#bigint": "0"
+        },
+        "dumps": {
+          "#bigint": "0"
+        },
+        "invalidations": {
+          "#bigint": "0"
+        },
+        "loaders": {
+          "#bigint": "0"
+        },
+        "loads": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "41"
+        },
+        "observedFence": {
+          "#bigint": "0"
+        },
+        "phase": {
+          "#bigint": "0"
+        },
+        "policyCalls": {
+          "#bigint": "0"
+        },
+        "reads": {
+          "#bigint": "0"
+        },
+        "sources": [],
+        "storedTimestamp": {
+          "#bigint": "0"
+        },
+        "watermark": {
+          "#bigint": "0"
+        },
+        "writeTimestamp": {
+          "#bigint": "0"
+        },
+        "writes": {
+          "#bigint": "0"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 5
+      },
+      "mbt::actionTaken": "beginCall",
+      "mbt::nondetPicks": {
+        "loader": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "activeLoader": {
+          "#bigint": "0"
+        },
+        "calls": [
+          {
+            "#bigint": "0"
+          }
+        ],
+        "deadline": {
+          "#bigint": "51"
+        },
+        "dumps": {
+          "#bigint": "0"
+        },
+        "invalidations": {
+          "#bigint": "0"
+        },
+        "loaders": {
+          "#bigint": "1"
+        },
+        "loads": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "41"
+        },
+        "observedFence": {
+          "#bigint": "0"
+        },
+        "phase": {
+          "#bigint": "1"
+        },
+        "policyCalls": {
+          "#bigint": "1"
+        },
+        "reads": {
+          "#bigint": "1"
+        },
+        "sources": [
+          {
+            "#bigint": "0"
+          }
+        ],
+        "storedTimestamp": {
+          "#bigint": "0"
+        },
+        "watermark": {
+          "#bigint": "0"
+        },
+        "writeTimestamp": {
+          "#bigint": "0"
+        },
+        "writes": {
+          "#bigint": "0"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 6
+      },
+      "mbt::actionTaken": "resolveLoader",
+      "mbt::nondetPicks": {
+        "loader": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "s": {
+        "activeLoader": {
+          "#bigint": "0"
+        },
+        "calls": [
+          {
+            "#bigint": "0"
+          }
+        ],
+        "deadline": {
+          "#bigint": "51"
+        },
+        "dumps": {
+          "#bigint": "1"
+        },
+        "invalidations": {
+          "#bigint": "0"
+        },
+        "loaders": {
+          "#bigint": "1"
+        },
+        "loads": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "41"
+        },
+        "observedFence": {
+          "#bigint": "0"
+        },
+        "phase": {
+          "#bigint": "2"
+        },
+        "policyCalls": {
+          "#bigint": "1"
+        },
+        "reads": {
+          "#bigint": "1"
+        },
+        "sources": [
+          {
+            "#bigint": "2"
+          }
+        ],
+        "storedTimestamp": {
+          "#bigint": "0"
+        },
+        "watermark": {
+          "#bigint": "0"
+        },
+        "writeTimestamp": {
+          "#bigint": "41"
+        },
+        "writes": {
+          "#bigint": "1"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 7
+      },
+      "mbt::actionTaken": "beginCall",
+      "mbt::nondetPicks": {
+        "loader": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "activeLoader": {
+          "#bigint": "0"
+        },
+        "calls": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "deadline": {
+          "#bigint": "51"
+        },
+        "dumps": {
+          "#bigint": "1"
+        },
+        "invalidations": {
+          "#bigint": "0"
+        },
+        "loaders": {
+          "#bigint": "1"
+        },
+        "loads": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "41"
+        },
+        "observedFence": {
+          "#bigint": "0"
+        },
+        "phase": {
+          "#bigint": "2"
+        },
+        "policyCalls": {
+          "#bigint": "2"
+        },
+        "reads": {
+          "#bigint": "1"
+        },
+        "sources": [
+          {
+            "#bigint": "2"
+          }
+        ],
+        "storedTimestamp": {
+          "#bigint": "0"
+        },
+        "watermark": {
+          "#bigint": "0"
+        },
+        "writeTimestamp": {
+          "#bigint": "41"
+        },
+        "writes": {
+          "#bigint": "1"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 8
+      },
+      "mbt::actionTaken": "jumpClock",
+      "mbt::nondetPicks": {
+        "loader": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "activeLoader": {
+          "#bigint": "0"
+        },
+        "calls": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "deadline": {
+          "#bigint": "51"
+        },
+        "dumps": {
+          "#bigint": "1"
+        },
+        "invalidations": {
+          "#bigint": "0"
+        },
+        "loaders": {
+          "#bigint": "1"
+        },
+        "loads": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "51"
+        },
+        "observedFence": {
+          "#bigint": "0"
+        },
+        "phase": {
+          "#bigint": "2"
+        },
+        "policyCalls": {
+          "#bigint": "2"
+        },
+        "reads": {
+          "#bigint": "1"
+        },
+        "sources": [
+          {
+            "#bigint": "2"
+          }
+        ],
+        "storedTimestamp": {
+          "#bigint": "0"
+        },
+        "watermark": {
+          "#bigint": "0"
+        },
+        "writeTimestamp": {
+          "#bigint": "41"
+        },
+        "writes": {
+          "#bigint": "1"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 9
+      },
+      "mbt::actionTaken": "futureFence",
+      "mbt::nondetPicks": {
+        "loader": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "activeLoader": {
+          "#bigint": "0"
+        },
+        "calls": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "deadline": {
+          "#bigint": "51"
+        },
+        "dumps": {
+          "#bigint": "1"
+        },
+        "invalidations": {
+          "#bigint": "1"
+        },
+        "loaders": {
+          "#bigint": "1"
+        },
+        "loads": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "51"
+        },
+        "observedFence": {
+          "#bigint": "0"
+        },
+        "phase": {
+          "#bigint": "2"
+        },
+        "policyCalls": {
+          "#bigint": "2"
+        },
+        "reads": {
+          "#bigint": "1"
+        },
+        "sources": [
+          {
+            "#bigint": "2"
+          }
+        ],
+        "storedTimestamp": {
+          "#bigint": "0"
+        },
+        "watermark": {
+          "#bigint": "71"
+        },
+        "writeTimestamp": {
+          "#bigint": "41"
+        },
+        "writes": {
+          "#bigint": "1"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 10
+      },
+      "mbt::actionTaken": "releaseWrite",
+      "mbt::nondetPicks": {
+        "loader": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "activeLoader": {
+          "#bigint": "0"
+        },
+        "calls": [
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "1"
+          }
+        ],
+        "deadline": {
+          "#bigint": "51"
+        },
+        "dumps": {
+          "#bigint": "1"
+        },
+        "invalidations": {
+          "#bigint": "1"
+        },
+        "loaders": {
+          "#bigint": "1"
+        },
+        "loads": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "51"
+        },
+        "observedFence": {
+          "#bigint": "0"
+        },
+        "phase": {
+          "#bigint": "0"
+        },
+        "policyCalls": {
+          "#bigint": "2"
+        },
+        "reads": {
+          "#bigint": "1"
+        },
+        "sources": [
+          {
+            "#bigint": "2"
+          }
+        ],
+        "storedTimestamp": {
+          "#bigint": "41"
+        },
+        "watermark": {
+          "#bigint": "71"
+        },
+        "writeTimestamp": {
+          "#bigint": "41"
+        },
+        "writes": {
+          "#bigint": "1"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 11
+      },
+      "mbt::actionTaken": "futureFence",
+      "mbt::nondetPicks": {
+        "loader": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "activeLoader": {
+          "#bigint": "0"
+        },
+        "calls": [
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "1"
+          }
+        ],
+        "deadline": {
+          "#bigint": "51"
+        },
+        "dumps": {
+          "#bigint": "1"
+        },
+        "invalidations": {
+          "#bigint": "2"
+        },
+        "loaders": {
+          "#bigint": "1"
+        },
+        "loads": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "51"
+        },
+        "observedFence": {
+          "#bigint": "0"
+        },
+        "phase": {
+          "#bigint": "0"
+        },
+        "policyCalls": {
+          "#bigint": "2"
+        },
+        "reads": {
+          "#bigint": "1"
+        },
+        "sources": [
+          {
+            "#bigint": "2"
+          }
+        ],
+        "storedTimestamp": {
+          "#bigint": "41"
+        },
+        "watermark": {
+          "#bigint": "71"
+        },
+        "writeTimestamp": {
+          "#bigint": "41"
+        },
+        "writes": {
+          "#bigint": "1"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 12
+      },
+      "mbt::actionTaken": "futureFence",
+      "mbt::nondetPicks": {
+        "loader": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "activeLoader": {
+          "#bigint": "0"
+        },
+        "calls": [
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "1"
+          }
+        ],
+        "deadline": {
+          "#bigint": "51"
+        },
+        "dumps": {
+          "#bigint": "1"
+        },
+        "invalidations": {
+          "#bigint": "3"
+        },
+        "loaders": {
+          "#bigint": "1"
+        },
+        "loads": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "51"
+        },
+        "observedFence": {
+          "#bigint": "0"
+        },
+        "phase": {
+          "#bigint": "0"
+        },
+        "policyCalls": {
+          "#bigint": "2"
+        },
+        "reads": {
+          "#bigint": "1"
+        },
+        "sources": [
+          {
+            "#bigint": "2"
+          }
+        ],
+        "storedTimestamp": {
+          "#bigint": "41"
+        },
+        "watermark": {
+          "#bigint": "71"
+        },
+        "writeTimestamp": {
+          "#bigint": "41"
+        },
+        "writes": {
+          "#bigint": "1"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 13
+      },
+      "mbt::actionTaken": "invalidate",
+      "mbt::nondetPicks": {
+        "loader": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "activeLoader": {
+          "#bigint": "0"
+        },
+        "calls": [
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "1"
+          }
+        ],
+        "deadline": {
+          "#bigint": "51"
+        },
+        "dumps": {
+          "#bigint": "1"
+        },
+        "invalidations": {
+          "#bigint": "4"
+        },
+        "loaders": {
+          "#bigint": "1"
+        },
+        "loads": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "51"
+        },
+        "observedFence": {
+          "#bigint": "0"
+        },
+        "phase": {
+          "#bigint": "0"
+        },
+        "policyCalls": {
+          "#bigint": "2"
+        },
+        "reads": {
+          "#bigint": "1"
+        },
+        "sources": [
+          {
+            "#bigint": "2"
+          }
+        ],
+        "storedTimestamp": {
+          "#bigint": "41"
+        },
+        "watermark": {
+          "#bigint": "71"
+        },
+        "writeTimestamp": {
+          "#bigint": "41"
+        },
+        "writes": {
+          "#bigint": "1"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 14
+      },
+      "mbt::actionTaken": "jumpClock",
+      "mbt::nondetPicks": {
+        "loader": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "activeLoader": {
+          "#bigint": "0"
+        },
+        "calls": [
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "1"
+          }
+        ],
+        "deadline": {
+          "#bigint": "51"
+        },
+        "dumps": {
+          "#bigint": "1"
+        },
+        "invalidations": {
+          "#bigint": "4"
+        },
+        "loaders": {
+          "#bigint": "1"
+        },
+        "loads": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "61"
+        },
+        "observedFence": {
+          "#bigint": "0"
+        },
+        "phase": {
+          "#bigint": "0"
+        },
+        "policyCalls": {
+          "#bigint": "2"
+        },
+        "reads": {
+          "#bigint": "1"
+        },
+        "sources": [
+          {
+            "#bigint": "2"
+          }
+        ],
+        "storedTimestamp": {
+          "#bigint": "41"
+        },
+        "watermark": {
+          "#bigint": "71"
+        },
+        "writeTimestamp": {
+          "#bigint": "41"
+        },
+        "writes": {
+          "#bigint": "1"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 15
+      },
+      "mbt::actionTaken": "futureFence",
+      "mbt::nondetPicks": {
+        "loader": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "activeLoader": {
+          "#bigint": "0"
+        },
+        "calls": [
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "1"
+          }
+        ],
+        "deadline": {
+          "#bigint": "51"
+        },
+        "dumps": {
+          "#bigint": "1"
+        },
+        "invalidations": {
+          "#bigint": "5"
+        },
+        "loaders": {
+          "#bigint": "1"
+        },
+        "loads": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "61"
+        },
+        "observedFence": {
+          "#bigint": "0"
+        },
+        "phase": {
+          "#bigint": "0"
+        },
+        "policyCalls": {
+          "#bigint": "2"
+        },
+        "reads": {
+          "#bigint": "1"
+        },
+        "sources": [
+          {
+            "#bigint": "2"
+          }
+        ],
+        "storedTimestamp": {
+          "#bigint": "41"
+        },
+        "watermark": {
+          "#bigint": "81"
+        },
+        "writeTimestamp": {
+          "#bigint": "41"
+        },
+        "writes": {
+          "#bigint": "1"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 16
+      },
+      "mbt::actionTaken": "beginCall",
+      "mbt::nondetPicks": {
+        "loader": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "activeLoader": {
+          "#bigint": "1"
+        },
+        "calls": [
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "deadline": {
+          "#bigint": "71"
+        },
+        "dumps": {
+          "#bigint": "1"
+        },
+        "invalidations": {
+          "#bigint": "5"
+        },
+        "loaders": {
+          "#bigint": "2"
+        },
+        "loads": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "61"
+        },
+        "observedFence": {
+          "#bigint": "81"
+        },
+        "phase": {
+          "#bigint": "1"
+        },
+        "policyCalls": {
+          "#bigint": "3"
+        },
+        "reads": {
+          "#bigint": "2"
+        },
+        "sources": [
+          {
+            "#bigint": "2"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "storedTimestamp": {
+          "#bigint": "41"
+        },
+        "watermark": {
+          "#bigint": "81"
+        },
+        "writeTimestamp": {
+          "#bigint": "41"
+        },
+        "writes": {
+          "#bigint": "1"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 17
+      },
+      "mbt::actionTaken": "jumpClock",
+      "mbt::nondetPicks": {
+        "loader": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "activeLoader": {
+          "#bigint": "1"
+        },
+        "calls": [
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "deadline": {
+          "#bigint": "71"
+        },
+        "dumps": {
+          "#bigint": "1"
+        },
+        "invalidations": {
+          "#bigint": "5"
+        },
+        "loaders": {
+          "#bigint": "2"
+        },
+        "loads": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "71"
+        },
+        "observedFence": {
+          "#bigint": "81"
+        },
+        "phase": {
+          "#bigint": "1"
+        },
+        "policyCalls": {
+          "#bigint": "3"
+        },
+        "reads": {
+          "#bigint": "2"
+        },
+        "sources": [
+          {
+            "#bigint": "2"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "storedTimestamp": {
+          "#bigint": "41"
+        },
+        "watermark": {
+          "#bigint": "81"
+        },
+        "writeTimestamp": {
+          "#bigint": "41"
+        },
+        "writes": {
+          "#bigint": "1"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 18
+      },
+      "mbt::actionTaken": "invalidate",
+      "mbt::nondetPicks": {
+        "loader": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "activeLoader": {
+          "#bigint": "1"
+        },
+        "calls": [
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "deadline": {
+          "#bigint": "71"
+        },
+        "dumps": {
+          "#bigint": "1"
+        },
+        "invalidations": {
+          "#bigint": "6"
+        },
+        "loaders": {
+          "#bigint": "2"
+        },
+        "loads": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "71"
+        },
+        "observedFence": {
+          "#bigint": "81"
+        },
+        "phase": {
+          "#bigint": "1"
+        },
+        "policyCalls": {
+          "#bigint": "3"
+        },
+        "reads": {
+          "#bigint": "2"
+        },
+        "sources": [
+          {
+            "#bigint": "2"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "storedTimestamp": {
+          "#bigint": "41"
+        },
+        "watermark": {
+          "#bigint": "81"
+        },
+        "writeTimestamp": {
+          "#bigint": "41"
+        },
+        "writes": {
+          "#bigint": "1"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 19
+      },
+      "mbt::actionTaken": "invalidate",
+      "mbt::nondetPicks": {
+        "loader": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "activeLoader": {
+          "#bigint": "1"
+        },
+        "calls": [
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "deadline": {
+          "#bigint": "71"
+        },
+        "dumps": {
+          "#bigint": "1"
+        },
+        "invalidations": {
+          "#bigint": "7"
+        },
+        "loaders": {
+          "#bigint": "2"
+        },
+        "loads": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "71"
+        },
+        "observedFence": {
+          "#bigint": "81"
+        },
+        "phase": {
+          "#bigint": "1"
+        },
+        "policyCalls": {
+          "#bigint": "3"
+        },
+        "reads": {
+          "#bigint": "2"
+        },
+        "sources": [
+          {
+            "#bigint": "2"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "storedTimestamp": {
+          "#bigint": "41"
+        },
+        "watermark": {
+          "#bigint": "81"
+        },
+        "writeTimestamp": {
+          "#bigint": "41"
+        },
+        "writes": {
+          "#bigint": "1"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 20
+      },
+      "mbt::actionTaken": "resolveLoader",
+      "mbt::nondetPicks": {
+        "loader": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
+      },
+      "s": {
+        "activeLoader": {
+          "#bigint": "1"
+        },
+        "calls": [
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "3"
+          }
+        ],
+        "deadline": {
+          "#bigint": "71"
+        },
+        "dumps": {
+          "#bigint": "1"
+        },
+        "invalidations": {
+          "#bigint": "7"
+        },
+        "loaders": {
+          "#bigint": "2"
+        },
+        "loads": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "71"
+        },
+        "observedFence": {
+          "#bigint": "81"
+        },
+        "phase": {
+          "#bigint": "0"
+        },
+        "policyCalls": {
+          "#bigint": "3"
+        },
+        "reads": {
+          "#bigint": "2"
+        },
+        "sources": [
+          {
+            "#bigint": "2"
+          },
+          {
+            "#bigint": "2"
+          }
+        ],
+        "storedTimestamp": {
+          "#bigint": "41"
+        },
+        "watermark": {
+          "#bigint": "81"
+        },
+        "writeTimestamp": {
+          "#bigint": "41"
+        },
+        "writes": {
+          "#bigint": "1"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 21
+      },
+      "mbt::actionTaken": "jumpClock",
+      "mbt::nondetPicks": {
+        "loader": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "activeLoader": {
+          "#bigint": "1"
+        },
+        "calls": [
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "3"
+          }
+        ],
+        "deadline": {
+          "#bigint": "71"
+        },
+        "dumps": {
+          "#bigint": "1"
+        },
+        "invalidations": {
+          "#bigint": "7"
+        },
+        "loaders": {
+          "#bigint": "2"
+        },
+        "loads": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "81"
+        },
+        "observedFence": {
+          "#bigint": "81"
+        },
+        "phase": {
+          "#bigint": "0"
+        },
+        "policyCalls": {
+          "#bigint": "3"
+        },
+        "reads": {
+          "#bigint": "2"
+        },
+        "sources": [
+          {
+            "#bigint": "2"
+          },
+          {
+            "#bigint": "2"
+          }
+        ],
+        "storedTimestamp": {
+          "#bigint": "41"
+        },
+        "watermark": {
+          "#bigint": "81"
+        },
+        "writeTimestamp": {
+          "#bigint": "41"
+        },
+        "writes": {
+          "#bigint": "1"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 22
+      },
+      "mbt::actionTaken": "beginCall",
+      "mbt::nondetPicks": {
+        "loader": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "activeLoader": {
+          "#bigint": "2"
+        },
+        "calls": [
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "3"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "deadline": {
+          "#bigint": "91"
+        },
+        "dumps": {
+          "#bigint": "1"
+        },
+        "invalidations": {
+          "#bigint": "7"
+        },
+        "loaders": {
+          "#bigint": "3"
+        },
+        "loads": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "81"
+        },
+        "observedFence": {
+          "#bigint": "81"
+        },
+        "phase": {
+          "#bigint": "1"
+        },
+        "policyCalls": {
+          "#bigint": "4"
+        },
+        "reads": {
+          "#bigint": "3"
+        },
+        "sources": [
+          {
+            "#bigint": "2"
+          },
+          {
+            "#bigint": "2"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "storedTimestamp": {
+          "#bigint": "41"
+        },
+        "watermark": {
+          "#bigint": "81"
+        },
+        "writeTimestamp": {
+          "#bigint": "41"
+        },
+        "writes": {
+          "#bigint": "1"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 23
+      },
+      "mbt::actionTaken": "futureFence",
+      "mbt::nondetPicks": {
+        "loader": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "activeLoader": {
+          "#bigint": "2"
+        },
+        "calls": [
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "3"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "deadline": {
+          "#bigint": "91"
+        },
+        "dumps": {
+          "#bigint": "1"
+        },
+        "invalidations": {
+          "#bigint": "8"
+        },
+        "loaders": {
+          "#bigint": "3"
+        },
+        "loads": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "81"
+        },
+        "observedFence": {
+          "#bigint": "81"
+        },
+        "phase": {
+          "#bigint": "1"
+        },
+        "policyCalls": {
+          "#bigint": "4"
+        },
+        "reads": {
+          "#bigint": "3"
+        },
+        "sources": [
+          {
+            "#bigint": "2"
+          },
+          {
+            "#bigint": "2"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "storedTimestamp": {
+          "#bigint": "41"
+        },
+        "watermark": {
+          "#bigint": "101"
+        },
+        "writeTimestamp": {
+          "#bigint": "41"
+        },
+        "writes": {
+          "#bigint": "1"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 24
+      },
+      "mbt::actionTaken": "tick",
+      "mbt::nondetPicks": {
+        "loader": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "activeLoader": {
+          "#bigint": "2"
+        },
+        "calls": [
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "3"
+          },
+          {
+            "#bigint": "3"
+          }
+        ],
+        "deadline": {
+          "#bigint": "91"
+        },
+        "dumps": {
+          "#bigint": "1"
+        },
+        "invalidations": {
+          "#bigint": "8"
+        },
+        "loaders": {
+          "#bigint": "3"
+        },
+        "loads": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "91"
+        },
+        "observedFence": {
+          "#bigint": "81"
+        },
+        "phase": {
+          "#bigint": "0"
+        },
+        "policyCalls": {
+          "#bigint": "4"
+        },
+        "reads": {
+          "#bigint": "3"
+        },
+        "sources": [
+          {
+            "#bigint": "2"
+          },
+          {
+            "#bigint": "2"
+          },
+          {
+            "#bigint": "1"
+          }
+        ],
+        "storedTimestamp": {
+          "#bigint": "41"
+        },
+        "watermark": {
+          "#bigint": "101"
+        },
+        "writeTimestamp": {
+          "#bigint": "41"
+        },
+        "writes": {
+          "#bigint": "1"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 25
+      },
+      "mbt::actionTaken": "futureFence",
+      "mbt::nondetPicks": {
+        "loader": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "activeLoader": {
+          "#bigint": "2"
+        },
+        "calls": [
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "3"
+          },
+          {
+            "#bigint": "3"
+          }
+        ],
+        "deadline": {
+          "#bigint": "91"
+        },
+        "dumps": {
+          "#bigint": "1"
+        },
+        "invalidations": {
+          "#bigint": "9"
+        },
+        "loaders": {
+          "#bigint": "3"
+        },
+        "loads": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "91"
+        },
+        "observedFence": {
+          "#bigint": "81"
+        },
+        "phase": {
+          "#bigint": "0"
+        },
+        "policyCalls": {
+          "#bigint": "4"
+        },
+        "reads": {
+          "#bigint": "3"
+        },
+        "sources": [
+          {
+            "#bigint": "2"
+          },
+          {
+            "#bigint": "2"
+          },
+          {
+            "#bigint": "1"
+          }
+        ],
+        "storedTimestamp": {
+          "#bigint": "41"
+        },
+        "watermark": {
+          "#bigint": "111"
+        },
+        "writeTimestamp": {
+          "#bigint": "41"
+        },
+        "writes": {
+          "#bigint": "1"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 26
+      },
+      "mbt::actionTaken": "futureFence",
+      "mbt::nondetPicks": {
+        "loader": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "activeLoader": {
+          "#bigint": "2"
+        },
+        "calls": [
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "3"
+          },
+          {
+            "#bigint": "3"
+          }
+        ],
+        "deadline": {
+          "#bigint": "91"
+        },
+        "dumps": {
+          "#bigint": "1"
+        },
+        "invalidations": {
+          "#bigint": "10"
+        },
+        "loaders": {
+          "#bigint": "3"
+        },
+        "loads": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "91"
+        },
+        "observedFence": {
+          "#bigint": "81"
+        },
+        "phase": {
+          "#bigint": "0"
+        },
+        "policyCalls": {
+          "#bigint": "4"
+        },
+        "reads": {
+          "#bigint": "3"
+        },
+        "sources": [
+          {
+            "#bigint": "2"
+          },
+          {
+            "#bigint": "2"
+          },
+          {
+            "#bigint": "1"
+          }
+        ],
+        "storedTimestamp": {
+          "#bigint": "41"
+        },
+        "watermark": {
+          "#bigint": "111"
+        },
+        "writeTimestamp": {
+          "#bigint": "41"
+        },
+        "writes": {
+          "#bigint": "1"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 27
+      },
+      "mbt::actionTaken": "rejectLoader",
+      "mbt::nondetPicks": {
+        "loader": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "2"
+          }
+        }
+      },
+      "s": {
+        "activeLoader": {
+          "#bigint": "2"
+        },
+        "calls": [
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "3"
+          },
+          {
+            "#bigint": "3"
+          }
+        ],
+        "deadline": {
+          "#bigint": "91"
+        },
+        "dumps": {
+          "#bigint": "1"
+        },
+        "invalidations": {
+          "#bigint": "10"
+        },
+        "loaders": {
+          "#bigint": "3"
+        },
+        "loads": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "91"
+        },
+        "observedFence": {
+          "#bigint": "81"
+        },
+        "phase": {
+          "#bigint": "0"
+        },
+        "policyCalls": {
+          "#bigint": "4"
+        },
+        "reads": {
+          "#bigint": "3"
+        },
+        "sources": [
+          {
+            "#bigint": "2"
+          },
+          {
+            "#bigint": "2"
+          },
+          {
+            "#bigint": "2"
+          }
+        ],
+        "storedTimestamp": {
+          "#bigint": "41"
+        },
+        "watermark": {
+          "#bigint": "111"
+        },
+        "writeTimestamp": {
+          "#bigint": "41"
+        },
+        "writes": {
+          "#bigint": "1"
+        }
+      }
+    }
+  ]
+}

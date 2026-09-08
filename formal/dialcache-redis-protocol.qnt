@@ -157,7 +157,17 @@ module dialcache_redis_protocol {
       s.result == ValueAbsent or s.result == PayloadTypeError
 
   val fenceCanPrecedeEncodingError =
-    s.result != WatermarkFenced or s.tracked
+    s.result == PendingDecode or
+      ((s.result == WatermarkFenced) ==
+        (s.tracked and s.valueReply == BufferReply and s.frameShape == SupportedFrame and
+         s.frameTimestamp > 0 and s.watermarkReply == BufferReply and
+         s.watermarkState == ValidWatermark and s.frameTimestamp <= s.watermarkValue))
+
+  val malformedWatermarkPrecedesEncodingError =
+    s.result == PendingDecode or
+      not(s.tracked and s.valueReply == BufferReply and s.frameShape == SupportedFrame and
+          s.watermarkReply == BufferReply and s.watermarkState == MalformedWatermark) or
+      s.result == UnclassifiedMiss
 
   val trackedZeroTimestampIsNotHit =
     s.result == PendingDecode or not(s.tracked and s.frameTimestamp == 0) or
@@ -169,4 +179,17 @@ module dialcache_redis_protocol {
   val encodingErrorRequiresSupportedFrame =
     s.result != PayloadEncodingError or
       (s.valueReply == BufferReply and s.frameShape == SupportedFrame and s.encoding == UnsupportedEncoding)
+  run fencedEncodingTest = init.then(toggleTracked).then(setFencedTimestamp)
+    .then(toggleEncoding).then(toggleEncoding).then(decode)
+    .expect(s.result == WatermarkFenced and fenceCanPrecedeEncodingError)
+
+  run reversedPrecedenceIsDetectedTest = init.then(toggleTracked).then(setFencedTimestamp)
+    .then(toggleEncoding).then(toggleEncoding)
+    .then(all { s' = { result: PayloadEncodingError, ...s } })
+    .expect(not(fenceCanPrecedeEncodingError))
+
+  run malformedWatermarkTest = init.then(toggleTracked)
+    .then(cycleWatermarkState).then(cycleWatermarkState)
+    .then(toggleEncoding).then(toggleEncoding).then(decode)
+    .expect(s.result == UnclassifiedMiss and malformedWatermarkPrecedesEncodingError)
 }

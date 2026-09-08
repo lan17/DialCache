@@ -22,11 +22,14 @@ check() {
 
 check formal/dialcache-core.qnt \
   closedScopeHasNoRequestValue \
+  requestValueBelongsToCurrentScope \
   passThroughSkipsCacheMachinery \
   firstHitStopsLowerTraversal \
   remoteFailureNeverRefills \
   trackedRemoteFallbackSuppressesLocalPublication \
   onePolicySnapshotPerEnabledInvocation
+
+quint test formal/dialcache-core.qnt --backend=rust --max-samples=1
 
 check formal/dialcache-runtime-policy.qnt \
   runtimeOverlayIsLeafWise \
@@ -34,6 +37,8 @@ check formal/dialcache-runtime-policy.qnt \
   featureLibraryDefaults \
   existingLocalEntryKeepsInsertionTtl \
   existingRemoteEntryKeepsPhysicalTtl
+
+quint test formal/dialcache-runtime-policy.qnt --backend=rust --max-samples=1
 
 check formal/dialcache-coalescing-liveness.qnt \
   flightsRequireEligibleCaching \
@@ -58,12 +63,14 @@ check formal/dialcache-stale-recovery.qnt \
   staleRequiresAuthorizedSourceFailure \
   sourceSuccessDoesNotDecodeCandidate \
   recoveredStaleHasNoSharedPublication \
-  readFailureNeverRetains
+  readFailureNeverRetains \
+  readFailureNeverAttemptsRecovery
 
 quint test formal/dialcache-stale-recovery.qnt --backend=rust --max-samples=1
 
 check formal/dialcache-shadow-validation.qnt \
-  shadowNeverPrecedesCallerResult \
+  comparisonAndFillWaitForSource \
+  completedVerdictRequiresSource \
   ordinaryRemoteMissHasNoShadowJob \
   rampedDownDoesNotDuplicateSource \
   verdictsRequireSingleConfirmation \
@@ -72,14 +79,26 @@ check formal/dialcache-shadow-validation.qnt \
   fillsRequireMiss \
   fencedFillDoesNotWrite
 
+quint test formal/dialcache-shadow-validation.qnt --backend=rust --max-samples=1
+
 check formal/dialcache-redis-protocol.qnt \
   nilValueIsValueAbsent \
   fenceCanPrecedeEncodingError \
+  malformedWatermarkPrecedesEncodingError \
   trackedZeroTimestampIsNotHit \
   observedWatermarkOnlyOnTrackedReads \
   encodingErrorRequiresSupportedFrame
+
+quint test formal/dialcache-redis-protocol.qnt --backend=rust --max-samples=1
 
 check formal/dialcache-conformance.qnt \
   loaderCountsNonNegative \
   redisCountsNonNegative \
   readableRemoteHasValue
+
+check formal/dialcache-effects-conformance.qnt \
+  oneRegisteredSource \
+  registeredFlightHasPendingCalls \
+  writeRequiresAcceptedSource
+
+quint test formal/dialcache-effects-conformance.qnt --backend=rust --max-samples=1

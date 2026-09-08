@@ -12,7 +12,7 @@ Inputs use Quint 0.32.0's ITF JSON format. Each entry in `states` has:
 
 The committed smoke scenario uses the same format. Drivers reject unknown actions, unsupported arguments, missing/misplaced initialization, missing observations, and empty traces/corpora. This profile uses nonnegative safe integers; the TypeScript parser rejects out-of-range ITF integers instead of rounding them. General ITF sets/maps/variants are not needed by this profile.
 
-Execute each action against a fresh implementation instance and independently controlled environment. Await its defined completion boundary, record real outputs/effects, then compare the observation projection with `s`. Only action names enter the TypeScript driver's execution method. Expected state is consumed by the assertion layer.
+Create a fresh implementation instance and independently controlled environment per trace, preserving both across its actions. Await its defined completion boundary, record real outputs/effects, then compare the observation projection with `s`. Only action names enter the TypeScript driver's execution method. Expected state is consumed by the assertion layer.
 
 The model also keeps `localCached`, `localValue`, `coalescedCached`, `coalescedValue`, `remoteReadable`, and `remoteValue`. These predict later returns and loader counts; they are **not implementation observations**. A loader invocation does not prove cache publication, nor does an acknowledged write prove later readability. Subsequent public calls test those effects. Drivers must not read or modify private cache/flight maps to match the model.
 
@@ -70,6 +70,7 @@ All counters are cumulative within a trace. These are adapter-level operations, 
 2. Implement the environment/actions above against public operations and report the compared observations from real calls and adapter effects.
 3. Replay the committed smoke trace, then the same generated ITF corpus as TypeScript.
 4. Add profiles for additional features, with separately controlled external observations, deadlines, and loader settlement where races matter.
+   The [portable feature scenarios and pending-effect profile](./BEHAVIOR.md) already supply additional coverage for these boundaries.
 5. Record only passing profiles, the spec revision, generation seed/bounds, and backend/tool versions. Passing core does not establish stale recovery, shadow validation, runtime-policy, deadline, or delayed-invalidation conformance.
 
 Keep minimized or otherwise useful failing scenarios as regressions. Automatic shrinking is not implemented. The CI artifact and single-file replay command provide the current reproduction path.

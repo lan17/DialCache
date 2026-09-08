@@ -1,41 +1,24 @@
 module dialcache_runtime_policy {
-  // Policy merge/snapshot behavior independently from cache traversal.
-  // -1 means omitted/inherit; 0 means explicit off; positive values are policy.
-
+  // -1 is omitted/inherit, 0 is explicit off. Captured input records are
+  // history variables: policy changes may race with an active invocation,
+  // but its resolved snapshot and already inserted entries must stay stable.
   pure val OMITTED = -1
-
-  type State = {
-    baselineLocalTtl: int,
-    baselineLocalRamp: int,
-    baselineRemoteTtl: int,
-    baselineRemoteRamp: int,
-    baselineRequestLocal: int,
-    baselineCoalesce: int,
-    baselineRecoveryAge: int,
-    baselineShadowRamp: int,
-    runtimeLocalTtl: int,
-    runtimeLocalRamp: int,
-    runtimeRemoteTtl: int,
-    runtimeRemoteRamp: int,
-    runtimeRequestLocal: int,
-    runtimeCoalesce: int,
-    runtimeRecoveryAge: int,
-    runtimeShadowRamp: int,
-    snapshotTaken: bool,
-    snapLocalTtl: int,
-    snapLocalRamp: int,
-    snapRemoteTtl: int,
-    snapRemoteRamp: int,
-    snapRequestLocal: int,
-    snapCoalesce: int,
-    snapRecoveryAge: int,
-    snapShadowRamp: int,
-    localEntryPresent: bool,
-    localEntryTtlAtInsert: int,
-    remoteEntryPresent: bool,
-    remotePhysicalTtlAtInsert: int
+  type Policy = {
+    localTtl: int, localRamp: int, remoteTtl: int, remoteRamp: int,
+    requestLocal: int, coalesce: int, recoveryAge: int, shadowRamp: int
   }
-
+  pure val omitted: Policy = {
+    localTtl: OMITTED, localRamp: OMITTED, remoteTtl: OMITTED, remoteRamp: OMITTED,
+    requestLocal: OMITTED, coalesce: OMITTED, recoveryAge: OMITTED, shadowRamp: OMITTED
+  }
+  type State = {
+    baseline: Policy, runtime: Policy,
+    capturedBaseline: Policy, capturedRuntime: Policy, snapshot: Policy,
+    snapshotTaken: bool,
+    localEntryPresent: bool, localEntryTtlAtInsert: int, localInsertionTtl: int,
+    remoteEntryPresent: bool, remotePhysicalTtlAtInsert: int,
+    remoteInsertionTtl: int, remoteInsertionRecoveryAge: int
+  }
   var s: State
 
   pure def inherit(runtimeValue: int, baselineValue: int, libraryDefault: int): int =
@@ -44,167 +27,141 @@ module dialcache_runtime_policy {
     else libraryDefault
 
   pure def effectiveRamp(runtimeRamp: int, baselineRamp: int, effectiveTtl: int): int =
-    if (runtimeRamp != OMITTED) runtimeRamp
-    else if (baselineRamp != OMITTED) baselineRamp
-    else if (effectiveTtl > 0) 100
-    else 0
+    inherit(runtimeRamp, baselineRamp, if (effectiveTtl > 0) 100 else 0)
+
+  pure def resolve(runtime: Policy, baseline: Policy): Policy = {
+    localTtl: inherit(runtime.localTtl, baseline.localTtl, 0),
+    localRamp: effectiveRamp(runtime.localRamp, baseline.localRamp, inherit(runtime.localTtl, baseline.localTtl, 0)),
+    remoteTtl: inherit(runtime.remoteTtl, baseline.remoteTtl, 0),
+    remoteRamp: effectiveRamp(runtime.remoteRamp, baseline.remoteRamp, inherit(runtime.remoteTtl, baseline.remoteTtl, 0)),
+    requestLocal: inherit(runtime.requestLocal, baseline.requestLocal, 0),
+    coalesce: inherit(runtime.coalesce, baseline.coalesce, 1),
+    recoveryAge: inherit(runtime.recoveryAge, baseline.recoveryAge, 0),
+    shadowRamp: inherit(runtime.shadowRamp, baseline.shadowRamp, 0)
+  }
 
   action init = s' = {
-    baselineLocalTtl: OMITTED,
-    baselineLocalRamp: OMITTED,
-    baselineRemoteTtl: OMITTED,
-    baselineRemoteRamp: OMITTED,
-    baselineRequestLocal: OMITTED,
-    baselineCoalesce: OMITTED,
-    baselineRecoveryAge: OMITTED,
-    baselineShadowRamp: OMITTED,
-    runtimeLocalTtl: OMITTED,
-    runtimeLocalRamp: OMITTED,
-    runtimeRemoteTtl: OMITTED,
-    runtimeRemoteRamp: OMITTED,
-    runtimeRequestLocal: OMITTED,
-    runtimeCoalesce: OMITTED,
-    runtimeRecoveryAge: OMITTED,
-    runtimeShadowRamp: OMITTED,
-    snapshotTaken: false,
-    snapLocalTtl: 0,
-    snapLocalRamp: 0,
-    snapRemoteTtl: 0,
-    snapRemoteRamp: 0,
-    snapRequestLocal: 0,
-    snapCoalesce: 1,
-    snapRecoveryAge: 0,
-    snapShadowRamp: 0,
-    localEntryPresent: false,
-    localEntryTtlAtInsert: 0,
-    remoteEntryPresent: false,
-    remotePhysicalTtlAtInsert: 0
+    baseline: omitted, runtime: omitted,
+    capturedBaseline: omitted, capturedRuntime: omitted,
+    snapshot: resolve(omitted, omitted), snapshotTaken: false,
+    localEntryPresent: false, localEntryTtlAtInsert: 0, localInsertionTtl: 0,
+    remoteEntryPresent: false, remotePhysicalTtlAtInsert: 0,
+    remoteInsertionTtl: 0, remoteInsertionRecoveryAge: 0
   }
 
   action setBaselineLocal = all {
     not(s.snapshotTaken),
-    s' = {
-      baselineLocalTtl: if (s.baselineLocalTtl == OMITTED) 6 else OMITTED,
-      baselineLocalRamp: if (s.baselineLocalRamp == OMITTED) 100 else OMITTED,
-      ...s
-    },
+    s' = { baseline: { localTtl: 6, ...s.baseline }, ...s },
   }
-
   action setBaselineRemote = all {
     not(s.snapshotTaken),
-    s' = {
-      baselineRemoteTtl: if (s.baselineRemoteTtl == OMITTED) 8 else OMITTED,
-      baselineRemoteRamp: if (s.baselineRemoteRamp == OMITTED) 100 else OMITTED,
-      ...s
-    },
+    s' = { baseline: { remoteTtl: 8, ...s.baseline }, ...s },
   }
-
   action setBaselineFeatures = all {
     not(s.snapshotTaken),
-    s' = {
-      baselineRequestLocal: if (s.baselineRequestLocal == OMITTED) 1 else OMITTED,
-      baselineCoalesce: if (s.baselineCoalesce == OMITTED) 0 else OMITTED,
-      baselineRecoveryAge: if (s.baselineRecoveryAge == OMITTED) 12 else OMITTED,
-      baselineShadowRamp: if (s.baselineShadowRamp == OMITTED) 25 else OMITTED,
-      ...s
-    },
+    s' = { baseline: { requestLocal: 1, coalesce: 0, recoveryAge: 12, shadowRamp: 25, ...s.baseline }, ...s },
   }
 
-  action setRuntimeSparseLocalRamp = all {
-    not(s.snapshotTaken),
-    s' = { runtimeLocalRamp: if (s.runtimeLocalRamp == OMITTED) 0 else OMITTED, ...s },
+  // Every runtime leaf can change while an invocation is pending.
+  action setRuntimeLocalTtl = {
+    nondet ttl = Set(OMITTED, 0, 4).oneOf()
+    s' = { runtime: { localTtl: ttl, ...s.runtime }, ...s }
   }
-
-  action setRuntimeSparseRemoteTtl = all {
-    not(s.snapshotTaken),
-    s' = { runtimeRemoteTtl: if (s.runtimeRemoteTtl == OMITTED) 4 else OMITTED, ...s },
+  action setRuntimeSparseLocalRamp = {
+    nondet ramp = Set(OMITTED, 0, 50, 100).oneOf()
+    s' = { runtime: { localRamp: ramp, ...s.runtime }, ...s }
   }
-
-  action setRuntimeFeatureOverrides = all {
-    not(s.snapshotTaken),
-    s' = {
-      runtimeRequestLocal: if (s.runtimeRequestLocal == OMITTED) 0 else OMITTED,
-      runtimeCoalesce: if (s.runtimeCoalesce == OMITTED) 1 else OMITTED,
-      runtimeRecoveryAge: if (s.runtimeRecoveryAge == OMITTED) 0 else OMITTED,
-      runtimeShadowRamp: if (s.runtimeShadowRamp == OMITTED) 0 else OMITTED,
-      ...s
-    },
+  action setRuntimeSparseRemoteTtl = {
+    nondet ttl = Set(OMITTED, 0, 4).oneOf()
+    s' = { runtime: { remoteTtl: ttl, ...s.runtime }, ...s }
+  }
+  action setRuntimeRemoteRamp = {
+    nondet ramp = Set(OMITTED, 0, 50, 100).oneOf()
+    s' = { runtime: { remoteRamp: ramp, ...s.runtime }, ...s }
+  }
+  action setRuntimeRequestLocal = {
+    nondet flag = Set(OMITTED, 0, 1).oneOf()
+    s' = { runtime: { requestLocal: flag, ...s.runtime }, ...s }
+  }
+  action setRuntimeCoalesce = {
+    nondet flag = Set(OMITTED, 0, 1).oneOf()
+    s' = { runtime: { coalesce: flag, ...s.runtime }, ...s }
+  }
+  action setRuntimeRecoveryAge = {
+    nondet age = Set(OMITTED, 0, 12).oneOf()
+    s' = { runtime: { recoveryAge: age, ...s.runtime }, ...s }
+  }
+  action setRuntimeShadowRamp = {
+    nondet ramp = Set(OMITTED, 0, 25, 100).oneOf()
+    s' = { runtime: { shadowRamp: ramp, ...s.runtime }, ...s }
   }
 
   action takeSnapshot = all {
     not(s.snapshotTaken),
     s' = {
-      snapshotTaken: true,
-      snapLocalTtl: inherit(s.runtimeLocalTtl, s.baselineLocalTtl, 0),
-      snapLocalRamp: effectiveRamp(s.runtimeLocalRamp, s.baselineLocalRamp, inherit(s.runtimeLocalTtl, s.baselineLocalTtl, 0)),
-      snapRemoteTtl: inherit(s.runtimeRemoteTtl, s.baselineRemoteTtl, 0),
-      snapRemoteRamp: effectiveRamp(s.runtimeRemoteRamp, s.baselineRemoteRamp, inherit(s.runtimeRemoteTtl, s.baselineRemoteTtl, 0)),
-      snapRequestLocal: inherit(s.runtimeRequestLocal, s.baselineRequestLocal, 0),
-      snapCoalesce: inherit(s.runtimeCoalesce, s.baselineCoalesce, 1),
-      snapRecoveryAge: inherit(s.runtimeRecoveryAge, s.baselineRecoveryAge, 0),
-      snapShadowRamp: inherit(s.runtimeShadowRamp, s.baselineShadowRamp, 0),
-      ...s
+      snapshotTaken: true, capturedBaseline: s.baseline, capturedRuntime: s.runtime,
+      snapshot: resolve(s.runtime, s.baseline), ...s
     },
   }
-
   action endInvocation = all {
     s.snapshotTaken,
     s' = { snapshotTaken: false, ...s },
   }
-
   action insertLocalEntry = all {
-    s.snapshotTaken,
-    s.snapLocalTtl > 0,
-    s.snapLocalRamp > 0,
-    s' = { localEntryPresent: true, localEntryTtlAtInsert: s.snapLocalTtl, ...s },
-  }
-
-  action insertRemoteEntry = all {
-    s.snapshotTaken,
-    s.snapRemoteTtl > 0,
-    s.snapRemoteRamp > 0,
+    s.snapshotTaken, s.snapshot.localTtl > 0, s.snapshot.localRamp > 0,
     s' = {
-      remoteEntryPresent: true,
-      remotePhysicalTtlAtInsert: if (s.snapRecoveryAge > s.snapRemoteTtl) s.snapRecoveryAge else s.snapRemoteTtl,
-      ...s
+      localEntryPresent: true, localEntryTtlAtInsert: s.snapshot.localTtl,
+      localInsertionTtl: s.snapshot.localTtl, ...s
     },
   }
-
+  action insertRemoteEntry = all {
+    s.snapshotTaken, s.snapshot.remoteTtl > 0, s.snapshot.remoteRamp > 0,
+    s' = {
+      remoteEntryPresent: true,
+      remotePhysicalTtlAtInsert: if (s.snapshot.recoveryAge > s.snapshot.remoteTtl) s.snapshot.recoveryAge else s.snapshot.remoteTtl,
+      remoteInsertionTtl: s.snapshot.remoteTtl,
+      remoteInsertionRecoveryAge: s.snapshot.recoveryAge, ...s
+    },
+  }
   action step = any {
-    setBaselineLocal,
-    setBaselineRemote,
-    setBaselineFeatures,
-    setRuntimeSparseLocalRamp,
-    setRuntimeSparseRemoteTtl,
-    setRuntimeFeatureOverrides,
-    takeSnapshot,
-    endInvocation,
-    insertLocalEntry,
-    insertRemoteEntry,
+    setBaselineLocal, setBaselineRemote, setBaselineFeatures,
+    setRuntimeLocalTtl, setRuntimeSparseLocalRamp, setRuntimeSparseRemoteTtl, setRuntimeRemoteRamp,
+    setRuntimeRequestLocal, setRuntimeCoalesce, setRuntimeRecoveryAge, setRuntimeShadowRamp,
+    takeSnapshot, endInvocation, insertLocalEntry, insertRemoteEntry,
   }
 
-  val runtimeOverlayIsLeafWise = and {
-    not(s.snapshotTaken) or s.runtimeLocalRamp == OMITTED or s.snapLocalRamp == s.runtimeLocalRamp,
-    not(s.snapshotTaken) or s.runtimeRemoteTtl == OMITTED or s.snapRemoteTtl == s.runtimeRemoteTtl,
-    not(s.snapshotTaken) or s.runtimeRequestLocal == OMITTED or s.snapRequestLocal == s.runtimeRequestLocal,
-    not(s.snapshotTaken) or s.runtimeCoalesce == OMITTED or s.snapCoalesce == s.runtimeCoalesce,
-  }
-
+  val runtimeOverlayIsLeafWise =
+    not(s.snapshotTaken) or s.snapshot == resolve(s.capturedRuntime, s.capturedBaseline)
   val configuredTtlImpliesDefaultFullRamp = and {
-    not(s.snapshotTaken) or s.snapLocalTtl <= 0 or s.runtimeLocalRamp != OMITTED or s.baselineLocalRamp != OMITTED or s.snapLocalRamp == 100,
-    not(s.snapshotTaken) or s.snapRemoteTtl <= 0 or s.runtimeRemoteRamp != OMITTED or s.baselineRemoteRamp != OMITTED or s.snapRemoteRamp == 100,
+    not(s.snapshotTaken) or s.snapshot.localTtl <= 0 or s.capturedRuntime.localRamp != OMITTED or s.capturedBaseline.localRamp != OMITTED or s.snapshot.localRamp == 100,
+    not(s.snapshotTaken) or s.snapshot.remoteTtl <= 0 or s.capturedRuntime.remoteRamp != OMITTED or s.capturedBaseline.remoteRamp != OMITTED or s.snapshot.remoteRamp == 100,
   }
-
   val featureLibraryDefaults =
     not(s.snapshotTaken) or
-    ((s.runtimeRequestLocal != OMITTED or s.baselineRequestLocal != OMITTED or s.snapRequestLocal == 0) and
-     (s.runtimeRecoveryAge != OMITTED or s.baselineRecoveryAge != OMITTED or s.snapRecoveryAge == 0) and
-     (s.runtimeShadowRamp != OMITTED or s.baselineShadowRamp != OMITTED or s.snapShadowRamp == 0) and
-     (s.runtimeCoalesce != OMITTED or s.baselineCoalesce != OMITTED or s.snapCoalesce == 1))
-
+    ((s.capturedRuntime.requestLocal != OMITTED or s.capturedBaseline.requestLocal != OMITTED or s.snapshot.requestLocal == 0) and
+     (s.capturedRuntime.recoveryAge != OMITTED or s.capturedBaseline.recoveryAge != OMITTED or s.snapshot.recoveryAge == 0) and
+     (s.capturedRuntime.shadowRamp != OMITTED or s.capturedBaseline.shadowRamp != OMITTED or s.snapshot.shadowRamp == 0) and
+     (s.capturedRuntime.coalesce != OMITTED or s.capturedBaseline.coalesce != OMITTED or s.snapshot.coalesce == 1))
   val existingLocalEntryKeepsInsertionTtl =
-    not(s.localEntryPresent) or s.localEntryTtlAtInsert > 0
-
+    not(s.localEntryPresent) or (s.localEntryTtlAtInsert == s.localInsertionTtl and s.localInsertionTtl > 0)
   val existingRemoteEntryKeepsPhysicalTtl =
-    not(s.remoteEntryPresent) or s.remotePhysicalTtlAtInsert > 0
+    not(s.remoteEntryPresent) or s.remotePhysicalTtlAtInsert ==
+      (if (s.remoteInsertionRecoveryAge > s.remoteInsertionTtl) s.remoteInsertionRecoveryAge else s.remoteInsertionTtl)
+
+  run policyChangeDuringInvocationTest = init.then(setBaselineLocal).then(takeSnapshot)
+    .then(all { s' = { runtime: { localTtl: 4, ...s.runtime }, ...s } })
+    .then(insertLocalEntry)
+    .expect(s.snapshot.localTtl == 6 and s.localEntryTtlAtInsert == 6 and runtimeOverlayIsLeafWise)
+    .then(endInvocation).then(takeSnapshot)
+    .expect(s.snapshot.localTtl == 4 and s.localEntryTtlAtInsert == 6 and existingLocalEntryKeepsInsertionTtl)
+
+  run localTtlMutationIsDetectedTest = init.then(setBaselineLocal).then(takeSnapshot).then(insertLocalEntry)
+    .then(all { s' = { localEntryTtlAtInsert: 1, ...s } })
+    .expect(not(existingLocalEntryKeepsInsertionTtl))
+
+  run physicalTtlMutationIsDetectedTest = init.then(setBaselineRemote).then(setBaselineFeatures)
+    .then(takeSnapshot).then(insertRemoteEntry)
+    .expect(s.remotePhysicalTtlAtInsert == 12)
+    .then(all { s' = { remotePhysicalTtlAtInsert: 8, ...s } })
+    .expect(not(existingRemoteEntryKeepsPhysicalTtl))
 }

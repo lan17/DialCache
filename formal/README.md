@@ -5,15 +5,15 @@ This suite formalizes DialCache behavior for better implementation testing and f
 | Part | Execution | What passing establishes |
 | --- | --- | --- |
 | Verification | Seven Quint models → bounded simulation → invariant checks | No violation was found in the explored executions of those models |
-| Behavioral conformance | Dedicated Quint conformance model → ITF traces → language driver → real DialCache | The implementation produced the expected observations for the tested profile and traces |
-| Protocol interoperability | Portable JSON vectors → language implementation | Exact keys, frame bytes, and decoder results match the supplied cases |
+| Behavioral conformance | Quint core/effects models → ITF traces, plus portable feature scenarios → language driver → real DialCache | The implementation produced the expected observations for the tested profile and traces |
+| Protocol interoperability | Portable JSON vectors → language implementation | Exact keys, frames, decoder/envelope results, and rollout cohorts match the supplied cases |
 
-Passing one part does not imply the others. In particular, a model can satisfy its invariants while an implementation diverges from it. Generated replay connects the two for the currently supported core profile.
+Passing one part does not imply the others. In particular, a model can satisfy its invariants while an implementation diverges from it. Generated replay connects the two for the core and pending-effect profiles. Portable deterministic scenarios cover additional feature boundaries.
 
 ```text
-Seven verification models                 Conformance model
+Seven verification models                 Conformance models
           |                                      |
- bounded invariant checking                generated ITF traces
+ bounded invariant checking                generated ITF traces + portable scenarios
                                                  |
                                      TypeScript / Go / Rust driver
                                                  |
@@ -24,7 +24,7 @@ Seven verification models                 Conformance model
 Protocol JSON vectors ────────────────> exact key / frame / decoder checks
 ```
 
-The TypeScript driver exists today. Other language drivers and additional behavioral profiles are future work. [`TEST-MAP.md`](./TEST-MAP.md) distinguishes implemented coverage from remaining gaps; [`CONFORMANCE.md`](./CONFORMANCE.md) defines the core profile's actions, environment, observations, and porting workflow.
+The TypeScript driver exists today. Other language drivers and broader generated feature combinations are future work. [`TEST-MAP.md`](./TEST-MAP.md) distinguishes implemented coverage from remaining gaps; [`CONFORMANCE.md`](./CONFORMANCE.md) defines the core profile; [`BEHAVIOR.md`](./BEHAVIOR.md) defines the shared feature-scenario/effects driver and porting workflow.
 
 ## Verification models
 
@@ -32,12 +32,12 @@ The models are decomposed by behavioral boundary, independently of the implement
 
 | Model | Scope |
 | --- | --- |
-| [`dialcache-core.qnt`](./dialcache-core.qnt) | Enabled scopes, request/process/remote traversal, fail-open reads, publication boundaries |
-| [`dialcache-runtime-policy.qnt`](./dialcache-runtime-policy.qnt) | Sparse baseline/runtime/library overlays, invocation snapshots, entry TTL bookkeeping |
+| [`dialcache-core.qnt`](./dialcache-core.qnt) | Nested/disabled/replaced scopes, request/process/remote traversal, fail-open reads, publication boundaries |
+| [`dialcache-runtime-policy.qnt`](./dialcache-runtime-policy.qnt) | Sparse overlays across eight policy leaves, immutable pending snapshots, preserved insertion/physical TTLs |
 | [`dialcache-coalescing-liveness.qnt`](./dialcache-coalescing-liveness.qnt) | Flight admission, followers, fallback deadlines, timeout cleanup, late settlement, publication |
 | [`dialcache-tracked-invalidation.qnt`](./dialcache-tracked-invalidation.qnt) | Atomic tracked snapshots, monotonic watermarks, delayed stale writes, conditional refills |
 | [`dialcache-stale-recovery.qnt`](./dialcache-stale-recovery.qnt) | Fresh/stale age boundaries, one-read retained snapshots, authorized recovery, no shared publication |
-| [`dialcache-shadow-validation.qnt`](./dialcache-shadow-validation.qnt) | Detached C0/S/C1 comparison, confirmation, clean-miss fill, diagnostic-only mismatches |
+| [`dialcache-shadow-validation.qnt`](./dialcache-shadow-validation.qnt) | Overlapping dark reads/source work, accepted-source gating, C0/S/C1, diagnostic-only mismatches, source errors/deadlines |
 | [`dialcache-redis-protocol.qnt`](./dialcache-redis-protocol.qnt) | Frame/watermark validation and decoder classification precedence |
 
 These are abstractions, not exhaustive translations of every feature. The coalescing model explores deadline safety but does not prove eventual progress under arbitrary scheduling. The policy model represents selected valid overlays; it does not enumerate all validation failures or feature combinations.
@@ -58,9 +58,11 @@ Stale age is checked when the candidate is retained and again when recovery acce
 
 ## Protocol interoperability
 
-[`protocol-vectors.json`](./protocol-vectors.json) supplies deterministic language-neutral examples for logical/value/watermark keys, escaping and argument normalization, version-1 Redis frame bytes, timestamp/fence boundaries, and tracked decoder classification. `test/formal-protocol-vectors.test.ts` applies those vectors to the public TypeScript key/protocol exports.
+[`protocol-vectors.json`](./protocol-vectors.json) schema version 2 contains 85 deterministic cases: keys, argument normalization, frame bytes, timestamp acceptance, tracked/untracked decoding, compression envelopes, fixed zstd decoding, and deterministic serving/shadow cohorts. `test/formal-protocol-vectors.test.ts` executes them against the existing TypeScript functions. No new production exports are required.
 
-Ports should consume the same JSON. The vectors are examples of the protocol in [`docs/redis.md`](../docs/redis.md), not an exhaustive enumeration of its inputs. Compression has no canonical compressed-byte vectors: valid zstd encoders can produce different bytes. Envelope/marker compatibility and compression error/resource cases remain implementation-test coverage, with portable vectors still to be added.
+Ports consume the same JSON. Normalization preserves UTF-16 code-unit ordering and JavaScript-compatible scalar string formatting. `bigintArgs` encodes arbitrary integers as decimal strings; `specialArgs` names `-0`, `NaN`, and infinities that ordinary JSON cannot represent. URI component escaping preserves `~!*'()-._`. Decoder cases deliberately distinguish frame decoding from core timestamp validation: unsafe decoded timestamps remain visible to core, which rejects them before deserialization. The mutation encoder rejects unsafe timestamps immediately.
+
+Envelope vectors cover raw-byte escaping and reader marker behavior. Fixed compressed frames test decoding; compressor byte identity is not required because valid zstd encoders can produce different bytes. Rollout vectors use the stable FNV-1a 32-bit hash over UTF-16 units of the logical key plus the layer/shadow discriminator, divided by 2^32 and multiplied by 100. These are finite examples, not exhaustive input coverage.
 
 ## Running and reproducing checks
 
@@ -71,23 +73,27 @@ npm install --global @informalsystems/quint@0.32.0
 bash formal/check.sh
 bash formal/generate-traces.sh
 DIALCACHE_MBT_TRACE_DIR=.formal-traces/conformance \
-  corepack pnpm exec vitest run test/formal-conformance.test.ts --coverage.enabled=false
+DIALCACHE_EFFECTS_TRACE_DIR=.formal-traces/effects \
+  corepack pnpm exec vitest run test/formal-conformance.test.ts test/formal-effects.test.ts \
+  test/formal-behavior.test.ts test/formal-protocol-vectors.test.ts --coverage.enabled=false
 ```
 
-`check.sh` typechecks all seven verification models plus the conformance model and checks their listed invariants using the Rust simulator: **2,000 sampled traces per model, up to 40 transitions per trace**, seed `0xd1a1ca`, one evaluator thread. It also executes six deterministic stale-recovery/deadline regression scenarios. This is bounded sampling, not exhaustive mathematical proof.
+`check.sh` typechecks all seven verification models plus both conformance models and checks their listed invariants using the Rust simulator: **2,000 sampled traces per model, up to 40 transitions per trace**, seed `0xd1a1ca`, one evaluator thread. It also executes 21 deterministic model regressions, including witnesses that deliberately corrupt TTL or decoder outcomes and require the strengthened invariants to reject them. This is bounded sampling, not exhaustive mathematical proof.
 
-`generate-traces.sh` uses the same pinned version/backend/seed with one thread, samples 256 executions, and exports 32 traces of up to 30 transitions from `dialcache-conformance.qnt`. This follows [Quint's model-based testing interface](https://quint.sh/docs/model-based-testing). All 32 are replayed against real TypeScript DialCache. The core model is separate from the seven verification models because replayable public operations and reasoning-oriented transitions serve different purposes.
+`generate-traces.sh` uses the same pinned version/backend/seed with one thread, samples 256 executions, per profile and exports 32 traces of up to 30 transitions from `dialcache-conformance.qnt`, plus 32 of up to 40 transitions from `dialcache-effects-conformance.qnt`. This follows [Quint's model-based testing interface](https://quint.sh/docs/model-based-testing). All 64 are replayed against real TypeScript DialCache. The conformance models are separate from the seven verification models because replayable public operations and reasoning-oriented transitions serve different purposes.
 
-Both scripts accept `QUINT_SEED` for exploratory runs. The generated directory is replaced on each generation. CI runs on every PR and main push, including implementation-only changes, and uploads `.formal-traces/` as the `formal-traces` artifact for 14 days even after failure. `verification/` contains model samples or counterexamples; `conformance/` contains traces accepted by the implementation driver.
+Both scripts accept `QUINT_SEED` for exploratory runs. The generated directory is replaced on each generation. CI runs on every PR and main push, including implementation-only changes, and uploads `.formal-traces/` as the `formal-traces` artifact for 14 days even after failure. `verification/` contains model samples or counterexamples; `conformance/` and `effects/` contain the generated corpora. The effects replay also checks required race witnesses, so green cannot mean those races were never reached.
 
 A replay failure prints the trace path, step, action, expected model observation, actual implementation observation, and a reproduction command. After downloading a failing artifact, replay just the relevant conformance file:
 
 ```sh
 DIALCACHE_MBT_TRACE_FILE=.formal-traces/conformance/trace_0.itf.json \
   corepack pnpm exec vitest run test/formal-conformance.test.ts --coverage.enabled=false
+DIALCACHE_EFFECTS_TRACE_FILE=.formal-traces/effects/trace_0.itf.json \
+  corepack pnpm exec vitest run test/formal-effects.test.ts --coverage.enabled=false
 ```
 
-Without these environment variables, ordinary TypeScript tests replay the committed [`conformance-smoke.itf.json`](./conformance-smoke.itf.json) through the same parser, with no Quint installation. They also exercise malformed-trace rejection and prove the harness detects lost local caching, coalescing, Redis writes, and invalidation. Protocol-vector tests run in ordinary CI too.
+Without these environment variables, ordinary TypeScript tests replay both committed smoke traces through their generated-trace parsers, with no Quint installation. They also run all 64 portable feature scenarios. They also exercise malformed-trace rejection and prove the harness detects lost local caching, coalescing, Redis writes, and invalidation. All 85 protocol-vector cases run in ordinary CI too.
 
 Model-checker exploration is separate from CI's sampled runs. For example, `quint verify` supports a TLC backend; any reported result must include the backend/version, model bounds, assumptions, and invariant. No exhaustive result is claimed here.
 

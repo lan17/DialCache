@@ -9,6 +9,7 @@ module dialcache_core {
 
   type State = {
     scope: ScopeState,
+    scopeId: int, callScopeId: int, requestValueScope: int, scopeDepth: int, scopeDisabled: bool,
     policyRequestLocal: bool,
     policyLocal: bool,
     policyRemote: bool,
@@ -39,8 +40,11 @@ module dialcache_core {
 
   var s: State
 
+  val callScopeLive = s.scope == OpenScope and s.callScopeId == s.scopeId
+
   action init = s' = {
     scope: OutsideScope,
+    scopeId: 0, callScopeId: 0, requestValueScope: 0, scopeDepth: 0, scopeDisabled: false,
     policyRequestLocal: false,
     policyLocal: false,
     policyRemote: false,
@@ -96,18 +100,35 @@ module dialcache_core {
 
   action openScope = all {
     s.scope != OpenScope,
-    s' = { scope: OpenScope, requestHasValue: false, ...s },
+    s' = { scope: OpenScope, scopeId: s.scopeId + 1, scopeDepth: 1, scopeDisabled: false, requestHasValue: false, ...s },
   }
 
   action closeScope = all {
     s.scope == OpenScope,
-    s' = { scope: ClosedScope, requestHasValue: false, ...s },
+    s' = { scope: ClosedScope, scopeDepth: 0, scopeDisabled: false, requestHasValue: false, ...s },
+  }
+
+  action nestedEnable = all {
+    s.phase == CallIdle, s.scope == OpenScope, not(s.scopeDisabled),
+    s' = { scopeDepth: s.scopeDepth + 1, ...s },
+  }
+  action exitNestedEnable = all {
+    s.phase == CallIdle, s.scopeDepth > 1,
+    s' = { scopeDepth: s.scopeDepth - 1, ...s },
+  }
+  action disableScope = all {
+    s.phase == CallIdle, s.scope == OpenScope, not(s.scopeDisabled),
+    s' = { scopeDisabled: true, ...s },
+  }
+  action restoreScope = all {
+    s.phase == CallIdle, s.scopeDisabled,
+    s' = { scopeDisabled: false, ...s },
   }
 
   // Outside enable(), DialCache is true pass-through: no key/config/cache work.
   action startPassThrough = all {
     s.phase == CallIdle,
-    s.scope != OpenScope,
+    s.scope != OpenScope or s.scopeDisabled,
     s' = {
       callStartedEnabled: false,
       callRequestLocal: false,
@@ -134,8 +155,9 @@ module dialcache_core {
   // Runtime/default policy is snapshotted once at invocation start.
   action startEnabledCall = all {
     s.phase == CallIdle,
-    s.scope == OpenScope,
+    s.scope == OpenScope, not(s.scopeDisabled),
     s' = {
+      callScopeId: s.scopeId,
       callStartedEnabled: true,
       callRequestLocal: s.policyRequestLocal,
       callLocal: s.policyLocal,
@@ -161,9 +183,9 @@ module dialcache_core {
   action requestLookup = all {
     s.phase == RequestLookup,
     s' = {
-      requestReads: if (s.callRequestLocal and s.scope == OpenScope) s.requestReads + 1 else s.requestReads,
-      origin: if (s.callRequestLocal and s.scope == OpenScope and s.requestHasValue) RequestValue else s.origin,
-      phase: if (s.callRequestLocal and s.scope == OpenScope and s.requestHasValue) CallDone else LocalLookup,
+      requestReads: if (s.callRequestLocal and callScopeLive) s.requestReads + 1 else s.requestReads,
+      origin: if (s.callRequestLocal and callScopeLive and s.requestHasValue) RequestValue else s.origin,
+      phase: if (s.callRequestLocal and callScopeLive and s.requestHasValue) CallDone else LocalLookup,
       ...s
     },
   }
@@ -173,8 +195,9 @@ module dialcache_core {
     s' = {
       localReads: if (s.callLocal) s.localReads + 1 else s.localReads,
       origin: if (s.callLocal and s.localHasValue) LocalValue else s.origin,
-      requestHasValue: if (s.callLocal and s.localHasValue and s.callRequestLocal and s.scope == OpenScope) true else s.requestHasValue,
-      requestWrites: if (s.callLocal and s.localHasValue and s.callRequestLocal and s.scope == OpenScope) s.requestWrites + 1 else s.requestWrites,
+      requestHasValue: if (s.callLocal and s.localHasValue and s.callRequestLocal and callScopeLive) true else s.requestHasValue,
+      requestWrites: if (s.callLocal and s.localHasValue and s.callRequestLocal and callScopeLive) s.requestWrites + 1 else s.requestWrites,
+      requestValueScope: if (s.callLocal and s.localHasValue and s.callRequestLocal and callScopeLive) s.callScopeId else s.requestValueScope,
       phase: if (s.callLocal and s.localHasValue) CallDone else RemoteLookup,
       ...s
     },
@@ -189,8 +212,9 @@ module dialcache_core {
       origin: if (s.remoteHasValue) RemoteValue else s.origin,
       localHasValue: if (s.remoteHasValue and s.callLocal) true else s.localHasValue,
       localWrites: if (s.remoteHasValue and s.callLocal) s.localWrites + 1 else s.localWrites,
-      requestHasValue: if (s.remoteHasValue and s.callRequestLocal and s.scope == OpenScope) true else s.requestHasValue,
-      requestWrites: if (s.remoteHasValue and s.callRequestLocal and s.scope == OpenScope) s.requestWrites + 1 else s.requestWrites,
+      requestHasValue: if (s.remoteHasValue and s.callRequestLocal and callScopeLive) true else s.requestHasValue,
+      requestWrites: if (s.remoteHasValue and s.callRequestLocal and callScopeLive) s.requestWrites + 1 else s.requestWrites,
+      requestValueScope: if (s.remoteHasValue and s.callRequestLocal and callScopeLive) s.callScopeId else s.requestValueScope,
       remoteSemanticMiss: not(s.remoteHasValue),
       sourceCalls: if (s.remoteHasValue) s.sourceCalls else s.sourceCalls + 1,
       phase: if (s.remoteHasValue) CallDone else LoaderRunning,
@@ -239,8 +263,9 @@ module dialcache_core {
       origin: SourceValue,
       localHasValue: if (s.callLocal and not(s.callTracked)) true else s.localHasValue,
       localWrites: if (s.callLocal and not(s.callTracked)) s.localWrites + 1 else s.localWrites,
-      requestHasValue: if (s.callRequestLocal and s.scope == OpenScope) true else s.requestHasValue,
-      requestWrites: if (s.callRequestLocal and s.scope == OpenScope) s.requestWrites + 1 else s.requestWrites,
+      requestHasValue: if (s.callRequestLocal and callScopeLive) true else s.requestHasValue,
+      requestWrites: if (s.callRequestLocal and callScopeLive) s.requestWrites + 1 else s.requestWrites,
+      requestValueScope: if (s.callRequestLocal and callScopeLive) s.callScopeId else s.requestValueScope,
       phase: CallDone,
       ...s
     },
@@ -254,8 +279,9 @@ module dialcache_core {
       origin: SourceValue,
       localHasValue: if (s.callLocal) true else s.localHasValue,
       localWrites: if (s.callLocal) s.localWrites + 1 else s.localWrites,
-      requestHasValue: if (s.callRequestLocal and s.scope == OpenScope) true else s.requestHasValue,
-      requestWrites: if (s.callRequestLocal and s.scope == OpenScope) s.requestWrites + 1 else s.requestWrites,
+      requestHasValue: if (s.callRequestLocal and callScopeLive) true else s.requestHasValue,
+      requestWrites: if (s.callRequestLocal and callScopeLive) s.requestWrites + 1 else s.requestWrites,
+      requestValueScope: if (s.callRequestLocal and callScopeLive) s.callScopeId else s.requestValueScope,
       phase: CallDone,
       ...s
     },
@@ -278,8 +304,9 @@ module dialcache_core {
       remoteHasValue: true,
       localHasValue: if (s.callLocal and not(s.callTracked)) true else s.localHasValue,
       localWrites: if (s.callLocal and not(s.callTracked)) s.localWrites + 1 else s.localWrites,
-      requestHasValue: if (s.callRequestLocal and s.scope == OpenScope) true else s.requestHasValue,
-      requestWrites: if (s.callRequestLocal and s.scope == OpenScope) s.requestWrites + 1 else s.requestWrites,
+      requestHasValue: if (s.callRequestLocal and callScopeLive) true else s.requestHasValue,
+      requestWrites: if (s.callRequestLocal and callScopeLive) s.requestWrites + 1 else s.requestWrites,
+      requestValueScope: if (s.callRequestLocal and callScopeLive) s.callScopeId else s.requestValueScope,
       phase: CallDone,
       ...s
     },
@@ -297,7 +324,7 @@ module dialcache_core {
     toggleTrackedPolicy,
     toggleRedisHealth,
     openScope,
-    closeScope,
+    closeScope, nestedEnable, exitNestedEnable, disableScope, restoreScope,
     startPassThrough,
     startEnabledCall,
     requestLookup,
@@ -340,4 +367,18 @@ module dialcache_core {
       (s.configSnapshots == 1 and s.keyConstructions == 1)
     else
       (s.configSnapshots == 0 and s.keyConstructions == 0)
+  val requestValueBelongsToCurrentScope =
+    not(s.requestHasValue) or (s.scope == OpenScope and s.requestValueScope == s.scopeId)
+
+  run lateResultCannotEnterReplacementScopeTest = init.then(toggleRequestPolicy).then(openScope)
+    .then(startEnabledCall).then(requestLookup).then(localLookup).then(skipRemote)
+    .then(closeScope).then(openScope).then(loaderSuccessWithoutRemote)
+    .expect(not(s.requestHasValue) and s.requestWrites == 0)
+
+  run nestedDisablePreservesMemoTest = init.then(toggleRequestPolicy).then(openScope)
+    .then(startEnabledCall).then(requestLookup).then(localLookup).then(skipRemote)
+    .then(loaderSuccessWithoutRemote).then(resetCall).then(nestedEnable).then(exitNestedEnable)
+    .then(disableScope).then(startPassThrough).then(loaderSuccessPassThrough).then(resetCall)
+    .then(restoreScope).then(startEnabledCall).then(requestLookup)
+    .expect(s.origin == RequestValue and s.sourceCalls == 0)
 }

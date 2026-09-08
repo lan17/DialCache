@@ -169,8 +169,8 @@ module dialcache_stale_recovery {
     s.sourceState == SourceRunning,
     s' = {
       sourceState: SourceRejected,
-      recoveryState: if (s.classifierAllows) CandidateChecking else ClassifierDenied,
-      finalOutcome: if (s.classifierAllows) s.finalOutcome else RejectedSource,
+      recoveryState: if (s.initialRead == ReadFailed) RecoveryIdle else if (s.classifierAllows) CandidateChecking else ClassifierDenied,
+      finalOutcome: if (s.classifierAllows and s.initialRead != ReadFailed) s.finalOutcome else RejectedSource,
       ...s
     },
   }
@@ -296,4 +296,10 @@ module dialcache_stale_recovery {
   run futureFrameIsNotRetainedTest = init
     .then(seedFutureFrame).then(performInitialRead)
     .expect(s.initialRead == PlainMiss and not(s.candidateRetained))
+  val readFailureNeverAttemptsRecovery =
+    s.initialRead != ReadFailed or s.recoveryState == RecoveryIdle
+
+  run failedReadSkipsRecoveryTest = init.then(toggleReadHealth).then(performInitialRead)
+    .then(toggleClassifier).then(startSource).then(sourceRejects)
+    .expect(s.finalOutcome == RejectedSource and s.recoveryState == RecoveryIdle)
 }
