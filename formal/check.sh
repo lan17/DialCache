@@ -68,3 +68,8 @@ check formal/dialcache-redis-protocol.qnt \
   trackedZeroTimestampIsNotHit \
   observedWatermarkOnlyOnTrackedReads \
   encodingErrorRequiresSupportedFrame
+
+check formal/dialcache-conformance.qnt \
+  loaderCountsNonNegative \
+  redisCountsNonNegative \
+  readableRemoteHasValue
