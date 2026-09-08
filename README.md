@@ -4,12 +4,10 @@
 [![Codecov](https://codecov.io/gh/lan17/DialCache/branch/main/graph/badge.svg)](https://codecov.io/gh/lan17/DialCache)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/lan17/DialCache/badge)](https://scorecard.dev/viewer/?uri=github.com/lan17/DialCache)
 
-DialCache is a caching library for TypeScript on Node.js. Wrap a function with
-`cached()`, or hand `getOrLoad()` a key and a loader, and the result is cached.
-Policy is set per use case: where results live, for how long, and for which
-keys. It can change while the service runs. Behind the scenes, DialCache handles
-the parts that usually go wrong: hot keys, cache outages, stale data, and risky
-rollouts.
+DialCache is a TypeScript library that organizes caching into use cases, offers
+runtime control and observability for each one, and provides a set of features
+behind the scenes. Wrap a function with `cached()`, or hand `getOrLoad()` a key
+and a loader, and the result is cached.
 
 - **Multi-layer:** request-local memoization, a process-local LRU, and Redis or
   Valkey, in any combination.
