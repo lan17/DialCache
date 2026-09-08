@@ -65,7 +65,6 @@ module dialcache_stale_recovery {
     now' = now + 1,
   }
 
-  // Environment setup actions are allowed only before the initial read.
   action seedFrameNow = all {
     initialRead == ReadPending,
     redisReads == 0,
@@ -111,23 +110,30 @@ module dialcache_stale_recovery {
     initialRead == ReadPending,
     redisReads == 0,
     redisReads' = 1,
-    if (not(readHealthy))
-      initialRead' = ReadFailed
+    initialRead' = if (not(readHealthy))
+      ReadFailed
     else if (not(framePresent) or not(frameValid) or frameFenced or frameCreatedAt > now)
-      initialRead' = PlainMiss
+      PlainMiss
     else if (now - frameCreatedAt < FRESH_AGE)
-      all {
-        initialRead' = FreshHit,
-        finalOutcome' = ServedFresh,
-      }
+      FreshHit
     else if (now - frameCreatedAt < MAX_RECOVERY_AGE)
-      all {
-        initialRead' = RetainedCandidate,
-        candidateRetained' = true,
-        candidateCreatedAt' = frameCreatedAt,
-      }
+      RetainedCandidate
     else
-      initialRead' = PlainMiss,
+      PlainMiss,
+    candidateRetained' = readHealthy and framePresent and frameValid and not(frameFenced) and
+      frameCreatedAt <= now and now - frameCreatedAt >= FRESH_AGE and
+      now - frameCreatedAt < MAX_RECOVERY_AGE,
+    candidateCreatedAt' = if (readHealthy and framePresent and frameValid and not(frameFenced) and
+      frameCreatedAt <= now and now - frameCreatedAt >= FRESH_AGE and
+      now - frameCreatedAt < MAX_RECOVERY_AGE)
+      frameCreatedAt
+    else
+      candidateCreatedAt,
+    finalOutcome' = if (readHealthy and framePresent and frameValid and not(frameFenced) and
+      frameCreatedAt <= now and now - frameCreatedAt < FRESH_AGE)
+      ServedFresh
+    else
+      finalOutcome,
   }
 
   action startSource = all {
@@ -149,46 +155,44 @@ module dialcache_stale_recovery {
   action sourceRejects = all {
     sourceState == SourceRunning,
     sourceState' = SourceRejected,
-    if (classifierAllows)
-      recoveryState' = CandidateChecking
-    else
-      all {
-        recoveryState' = ClassifierDenied,
-        finalOutcome' = RejectedSource,
-      },
+    recoveryState' = if (classifierAllows) CandidateChecking else ClassifierDenied,
+    finalOutcome' = if (classifierAllows) finalOutcome else RejectedSource,
   }
 
   // Authorization does not imply a candidate exists. Recovery preserves the
   // original source rejection whenever the candidate is missing or too old.
   action checkCandidate = all {
     recoveryState == CandidateChecking,
-    if (candidateRetained and candidateCreatedAt <= now and now - candidateCreatedAt < MAX_RECOVERY_AGE)
-      recoveryState' = CandidateLoading
+    recoveryState' = if (candidateRetained and candidateCreatedAt <= now and
+      now - candidateCreatedAt < MAX_RECOVERY_AGE)
+      CandidateLoading
     else
-      all {
-        recoveryState' = RecoveryMissed,
-        finalOutcome' = RejectedSource,
-      },
+      RecoveryMissed,
+    finalOutcome' = if (candidateRetained and candidateCreatedAt <= now and
+      now - candidateCreatedAt < MAX_RECOVERY_AGE)
+      finalOutcome
+    else
+      RejectedSource,
   }
 
   // Lazy deserialization/decompression can take arbitrary application-owned
-  // time. It happens only after the source has rejected and policy allowed it.
+  // time. DialCache rechecks age after asynchronous load before returning.
   action candidateLoadSucceeds = all {
     recoveryState == CandidateLoading,
     candidateDecoded' = true,
-    // DialCache rechecks age after asynchronous load before returning.
-    if (candidateCreatedAt <= now and now - candidateCreatedAt < MAX_RECOVERY_AGE)
-      all {
-        recoveryState' = RecoveryServed,
-        finalOutcome' = ServedStale,
-        // Request-local memoization is the only permitted publication.
-        requestLocalWrites' = requestLocalWrites + 1,
-      }
+    recoveryState' = if (candidateCreatedAt <= now and now - candidateCreatedAt < MAX_RECOVERY_AGE)
+      RecoveryServed
     else
-      all {
-        recoveryState' = RecoveryMissed,
-        finalOutcome' = RejectedSource,
-      },
+      RecoveryMissed,
+    finalOutcome' = if (candidateCreatedAt <= now and now - candidateCreatedAt < MAX_RECOVERY_AGE)
+      ServedStale
+    else
+      RejectedSource,
+    // Request-local memoization is the only permitted publication.
+    requestLocalWrites' = if (candidateCreatedAt <= now and now - candidateCreatedAt < MAX_RECOVERY_AGE)
+      requestLocalWrites + 1
+    else
+      requestLocalWrites,
   }
 
   action candidateLoadFails = all {
@@ -197,8 +201,7 @@ module dialcache_stale_recovery {
     finalOutcome' = RejectedSource,
   }
 
-  // Later Redis invalidation/deletion/refresh is intentionally absent from the
-  // recovery decision: the candidate is already retained process memory.
+  // Later Redis invalidation/deletion/refresh cannot revoke retained bytes.
   action mutateRedisAfterRetention = all {
     candidateRetained,
     framePresent' = not(framePresent),
@@ -223,38 +226,28 @@ module dialcache_stale_recovery {
     mutateRedisAfterRetention,
   }
 
-  // The recovery feature adds no second caller-serving Redis read.
   val recoveryUsesSingleRedisRead =
     redisReads <= 1
 
-  // Retention exists only for a frame that was already stale but still strictly
-  // younger than M at the initial snapshot.
   val retainedCandidateWasEligible =
     not(candidateRetained) or
       (frameValid and candidateCreatedAt <= now and initialRead == RetainedCandidate)
 
-  // Exact M is excluded both before and after lazy decoding.
   val servedStaleIsStrictlyWithinMaxAge =
     finalOutcome != ServedStale or
       (candidateCreatedAt <= now and now - candidateCreatedAt < MAX_RECOVERY_AGE)
 
-  // Recovery is impossible after source success and cannot happen unless the
-  // source rejected and the classifier authorized an attempt.
   val staleRequiresAuthorizedSourceFailure =
     finalOutcome != ServedStale or
       (sourceState == SourceRejected and classifierAllows)
 
-  // A successful source never needs to decode the retained candidate.
   val sourceSuccessDoesNotDecodeCandidate =
     sourceState != SourceSucceeded or not(candidateDecoded)
 
-  // Recovered values are observation-only below request-local scope: no Redis
-  // refill, process-local publication, or shadow validation is triggered.
   val recoveredStaleHasNoSharedPublication =
     finalOutcome != ServedStale or
       (redisWrites == 0 and processLocalWrites == 0 and shadowJobs == 0)
 
-  // Read failure cannot produce a retained recovery candidate.
   val readFailureNeverRetains =
     initialRead != ReadFailed or not(candidateRetained)
 }
