@@ -1,319 +1,248 @@
 module dialcache_shadow_validation {
-  // Model one detached shadow job. C0 is the initial Redis observation, S is
-  // the accepted source result, and C1 is the single confirmation read after a
-  // disagreement. The caller result is fixed before shadow work can affect it.
+  // One detached C0/S/C1 shadow job. Caller-visible work is committed before
+  // this state machine can compare, confirm, or fill.
 
   type CallerPath = NoCallerPath | ServedRemoteHit | RemoteRampedDown | OrdinaryRemoteMiss | EarlierLayerHit
   type C0State = C0Unknown | C0Miss | C0Present | C0Undecodable
   type JobPhase = JobIdle | JobAdmitted | WaitingForSource | Comparing | Confirming | Filling | JobDone
   type ShadowOutcome = NoShadowOutcome | Match | Mismatch | Superseded | Filled | FillFenced | DeserializationError | ComparisonError | ConfirmationError | Dropped
 
-  var enabledScope: bool
-  var remotePolicyValid: bool
-  var shadowSelected: bool
-  var metricsHookPresent: bool
-  var capacityAvailable: bool
-  var duplicateKeyActive: bool
+  type State = {
+    enabledScope: bool,
+    remotePolicyValid: bool,
+    shadowSelected: bool,
+    metricsHookPresent: bool,
+    capacityAvailable: bool,
+    duplicateKeyActive: bool,
+    callerPath: CallerPath,
+    callerResultCommitted: bool,
+    callerSourceAccepted: bool,
+    detachedSourceExecutions: int,
+    c0: C0State,
+    c0EqualsSource: bool,
+    c1Present: bool,
+    c1SameBytesAsC0: bool,
+    observedFencePresent: bool,
+    fillTimestampClearsFence: bool,
+    phase: JobPhase,
+    outcome: ShadowOutcome,
+    confirmationReads: int,
+    fillWrites: int,
+    repairWritesForPresentC0: int
+  }
 
-  var callerPath: CallerPath
-  var callerResultCommitted: bool
-  var callerSourceAccepted: bool
-  var detachedSourceExecutions: int
+  var s: State
 
-  var c0: C0State
-  var c0EqualsSource: bool
-  var c1Present: bool
-  var c1SameBytesAsC0: bool
-  var observedFencePresent: bool
-  var fillTimestampClearsFence: bool
-
-  var phase: JobPhase
-  var outcome: ShadowOutcome
-  var confirmationReads: int
-  var fillWrites: int
-  var repairWritesForPresentC0: int
-
-  action init = all {
-    enabledScope' = true,
-    remotePolicyValid' = true,
-    shadowSelected' = true,
-    metricsHookPresent' = true,
-    capacityAvailable' = true,
-    duplicateKeyActive' = false,
-
-    callerPath' = NoCallerPath,
-    callerResultCommitted' = false,
-    callerSourceAccepted' = false,
-    detachedSourceExecutions' = 0,
-
-    c0' = C0Unknown,
-    c0EqualsSource' = false,
-    c1Present' = false,
-    c1SameBytesAsC0' = false,
-    observedFencePresent' = false,
-    fillTimestampClearsFence' = true,
-
-    phase' = JobIdle,
-    outcome' = NoShadowOutcome,
-    confirmationReads' = 0,
-    fillWrites' = 0,
-    repairWritesForPresentC0' = 0,
+  action init = s' = {
+    enabledScope: true,
+    remotePolicyValid: true,
+    shadowSelected: true,
+    metricsHookPresent: true,
+    capacityAvailable: true,
+    duplicateKeyActive: false,
+    callerPath: NoCallerPath,
+    callerResultCommitted: false,
+    callerSourceAccepted: false,
+    detachedSourceExecutions: 0,
+    c0: C0Unknown,
+    c0EqualsSource: false,
+    c1Present: false,
+    c1SameBytesAsC0: false,
+    observedFencePresent: false,
+    fillTimestampClearsFence: true,
+    phase: JobIdle,
+    outcome: NoShadowOutcome,
+    confirmationReads: 0,
+    fillWrites: 0,
+    repairWritesForPresentC0: 0
   }
 
   action toggleEnabled = all {
-    callerPath == NoCallerPath,
-    enabledScope' = not(enabledScope),
+    s.callerPath == NoCallerPath,
+    s' = { enabledScope: not(s.enabledScope), ...s },
   }
-
   action togglePolicy = all {
-    callerPath == NoCallerPath,
-    remotePolicyValid' = not(remotePolicyValid),
+    s.callerPath == NoCallerPath,
+    s' = { remotePolicyValid: not(s.remotePolicyValid), ...s },
   }
-
   action toggleSelection = all {
-    callerPath == NoCallerPath,
-    shadowSelected' = not(shadowSelected),
+    s.callerPath == NoCallerPath,
+    s' = { shadowSelected: not(s.shadowSelected), ...s },
   }
-
   action toggleMetricsHook = all {
-    callerPath == NoCallerPath,
-    metricsHookPresent' = not(metricsHookPresent),
+    s.callerPath == NoCallerPath,
+    s' = { metricsHookPresent: not(s.metricsHookPresent), ...s },
   }
-
   action toggleCapacity = all {
-    callerPath == NoCallerPath,
-    capacityAvailable' = not(capacityAvailable),
+    s.callerPath == NoCallerPath,
+    s' = { capacityAvailable: not(s.capacityAvailable), ...s },
   }
-
   action toggleDuplicate = all {
-    callerPath == NoCallerPath,
-    duplicateKeyActive' = not(duplicateKeyActive),
+    s.callerPath == NoCallerPath,
+    s' = { duplicateKeyActive: not(s.duplicateKeyActive), ...s },
   }
 
   action callerServedRemoteHit = all {
-    callerPath == NoCallerPath,
-    callerPath' = ServedRemoteHit,
-    callerResultCommitted' = true,
-    c0' = C0Present,
+    s.callerPath == NoCallerPath,
+    s' = { callerPath: ServedRemoteHit, callerResultCommitted: true, c0: C0Present, ...s },
   }
-
   action callerRemoteRampedDown = all {
-    callerPath == NoCallerPath,
-    callerPath' = RemoteRampedDown,
-    callerSourceAccepted' = true,
-    callerResultCommitted' = true,
+    s.callerPath == NoCallerPath,
+    s' = { callerPath: RemoteRampedDown, callerSourceAccepted: true, callerResultCommitted: true, ...s },
   }
-
   action callerOrdinaryRemoteMiss = all {
-    callerPath == NoCallerPath,
-    callerPath' = OrdinaryRemoteMiss,
-    callerSourceAccepted' = true,
-    callerResultCommitted' = true,
+    s.callerPath == NoCallerPath,
+    s' = { callerPath: OrdinaryRemoteMiss, callerSourceAccepted: true, callerResultCommitted: true, ...s },
   }
-
   action callerEarlierLayerHit = all {
-    callerPath == NoCallerPath,
-    callerPath' = EarlierLayerHit,
-    callerResultCommitted' = true,
+    s.callerPath == NoCallerPath,
+    s' = { callerPath: EarlierLayerHit, callerResultCommitted: true, ...s },
   }
 
   action admitJob = all {
-    phase == JobIdle,
-    callerPath == ServedRemoteHit or callerPath == RemoteRampedDown,
-    enabledScope,
-    remotePolicyValid,
-    shadowSelected,
-    metricsHookPresent,
-    capacityAvailable,
-    not(duplicateKeyActive),
-    phase' = JobAdmitted,
+    s.phase == JobIdle,
+    s.callerPath == ServedRemoteHit or s.callerPath == RemoteRampedDown,
+    s.enabledScope,
+    s.remotePolicyValid,
+    s.shadowSelected,
+    s.metricsHookPresent,
+    s.capacityAvailable,
+    not(s.duplicateKeyActive),
+    s' = { phase: JobAdmitted, ...s },
   }
 
   action dropJob = all {
-    phase == JobIdle,
-    callerPath == ServedRemoteHit or callerPath == RemoteRampedDown,
-    enabledScope,
-    remotePolicyValid,
-    shadowSelected,
-    metricsHookPresent,
-    not(capacityAvailable and not(duplicateKeyActive)),
-    outcome' = Dropped,
-    phase' = JobDone,
+    s.phase == JobIdle,
+    s.callerPath == ServedRemoteHit or s.callerPath == RemoteRampedDown,
+    s.enabledScope,
+    s.remotePolicyValid,
+    s.shadowSelected,
+    s.metricsHookPresent,
+    not(s.capacityAvailable and not(s.duplicateKeyActive)),
+    s' = { outcome: Dropped, phase: JobDone, ...s },
   }
 
   action servedHitStartsDetachedSource = all {
-    phase == JobAdmitted,
-    callerPath == ServedRemoteHit,
-    callerResultCommitted,
-    detachedSourceExecutions' = detachedSourceExecutions + 1,
-    phase' = WaitingForSource,
+    s.phase == JobAdmitted,
+    s.callerPath == ServedRemoteHit,
+    s.callerResultCommitted,
+    s' = { detachedSourceExecutions: s.detachedSourceExecutions + 1, phase: WaitingForSource, ...s },
   }
 
+  // Ramped-down validation reuses the caller's accepted source result.
   action rampedDownObserveMiss = all {
-    phase == JobAdmitted,
-    callerPath == RemoteRampedDown,
-    callerSourceAccepted,
-    c0' = C0Miss,
-    phase' = Filling,
+    s.phase == JobAdmitted,
+    s.callerPath == RemoteRampedDown,
+    s.callerSourceAccepted,
+    s' = { c0: C0Miss, phase: Filling, ...s },
   }
-
   action rampedDownObservePresent = all {
-    phase == JobAdmitted,
-    callerPath == RemoteRampedDown,
-    callerSourceAccepted,
-    c0' = C0Present,
-    phase' = Comparing,
+    s.phase == JobAdmitted,
+    s.callerPath == RemoteRampedDown,
+    s.callerSourceAccepted,
+    s' = { c0: C0Present, phase: Comparing, ...s },
   }
-
   action rampedDownObserveUndecodable = all {
-    phase == JobAdmitted,
-    callerPath == RemoteRampedDown,
-    callerSourceAccepted,
-    c0' = C0Undecodable,
-    outcome' = DeserializationError,
-    phase' = JobDone,
+    s.phase == JobAdmitted,
+    s.callerPath == RemoteRampedDown,
+    s.callerSourceAccepted,
+    s' = { c0: C0Undecodable, outcome: DeserializationError, phase: JobDone, ...s },
   }
 
-  // Served-hit validation compares S with an independent C0 deserialization,
-  // never with the caller's potentially mutated object reference.
   action detachedSourceReady = all {
-    phase == WaitingForSource,
-    callerPath == ServedRemoteHit,
-    c0 == C0Present,
-    phase' = Comparing,
+    s.phase == WaitingForSource,
+    s.callerPath == ServedRemoteHit,
+    s.c0 == C0Present,
+    s' = { phase: Comparing, ...s },
   }
 
   action compareEqual = all {
-    phase == Comparing,
-    c0 == C0Present,
-    c0EqualsSource' = true,
-    outcome' = Match,
-    phase' = JobDone,
+    s.phase == Comparing,
+    s.c0 == C0Present,
+    s' = { c0EqualsSource: true, outcome: Match, phase: JobDone, ...s },
   }
-
   action compareDifferent = all {
-    phase == Comparing,
-    c0 == C0Present,
-    c0EqualsSource' = false,
-    phase' = Confirming,
-    confirmationReads' = confirmationReads + 1,
+    s.phase == Comparing,
+    s.c0 == C0Present,
+    s' = { c0EqualsSource: false, phase: Confirming, confirmationReads: s.confirmationReads + 1, ...s },
   }
-
   action comparisonFails = all {
-    phase == Comparing,
-    outcome' = ComparisonError,
-    phase' = JobDone,
+    s.phase == Comparing,
+    s' = { outcome: ComparisonError, phase: JobDone, ...s },
   }
 
-  // Exactly one C1 read determines whether the C0/S disagreement was already
-  // superseded. C1 is byte-compared and is not recursively validated.
+  // One C1 byte comparison distinguishes mismatch from a superseded C0.
   action confirmationSeesChanged = all {
-    phase == Confirming,
-    c1Present' = true,
-    c1SameBytesAsC0' = false,
-    outcome' = Superseded,
-    phase' = JobDone,
+    s.phase == Confirming,
+    s' = { c1Present: true, c1SameBytesAsC0: false, outcome: Superseded, phase: JobDone, ...s },
   }
-
   action confirmationSeesAbsent = all {
-    phase == Confirming,
-    c1Present' = false,
-    outcome' = Superseded,
-    phase' = JobDone,
+    s.phase == Confirming,
+    s' = { c1Present: false, outcome: Superseded, phase: JobDone, ...s },
   }
-
   action confirmationSeesSame = all {
-    phase == Confirming,
-    c1Present' = true,
-    c1SameBytesAsC0' = true,
-    outcome' = Mismatch,
-    phase' = JobDone,
+    s.phase == Confirming,
+    s' = { c1Present: true, c1SameBytesAsC0: true, outcome: Mismatch, phase: JobDone, ...s },
   }
-
   action confirmationFails = all {
-    phase == Confirming,
-    outcome' = ConfirmationError,
-    phase' = JobDone,
+    s.phase == Confirming,
+    s' = { outcome: ConfirmationError, phase: JobDone, ...s },
   }
 
   action toggleObservedFence = all {
-    phase == Filling,
-    observedFencePresent' = not(observedFencePresent),
+    s.phase == Filling,
+    s' = { observedFencePresent: not(s.observedFencePresent), ...s },
   }
-
   action toggleFillTimestamp = all {
-    phase == Filling,
-    fillTimestampClearsFence' = not(fillTimestampClearsFence),
+    s.phase == Filling,
+    s' = { fillTimestampClearsFence: not(s.fillTimestampClearsFence), ...s },
   }
 
-  // Only a semantic C0 miss can fill. A tracked observed fence may suppress the
-  // dispatch before serialization or immediately before SET.
+  // Present/undecodable C0 is diagnostic only; only a semantic miss may fill.
   action finishFill = all {
-    phase == Filling,
-    c0 == C0Miss,
-    fillWrites' = if (observedFencePresent and not(fillTimestampClearsFence))
-      fillWrites
-    else
-      fillWrites + 1,
-    outcome' = if (observedFencePresent and not(fillTimestampClearsFence))
-      FillFenced
-    else
-      Filled,
-    phase' = JobDone,
+    s.phase == Filling,
+    s.c0 == C0Miss,
+    s' = {
+      fillWrites: if (s.observedFencePresent and not(s.fillTimestampClearsFence))
+        s.fillWrites else s.fillWrites + 1,
+      outcome: if (s.observedFencePresent and not(s.fillTimestampClearsFence))
+        FillFenced else Filled,
+      phase: JobDone,
+      ...s
+    },
   }
 
   action step = any {
-    toggleEnabled,
-    togglePolicy,
-    toggleSelection,
-    toggleMetricsHook,
-    toggleCapacity,
-    toggleDuplicate,
-    callerServedRemoteHit,
-    callerRemoteRampedDown,
-    callerOrdinaryRemoteMiss,
-    callerEarlierLayerHit,
-    admitJob,
-    dropJob,
-    servedHitStartsDetachedSource,
-    rampedDownObserveMiss,
-    rampedDownObservePresent,
-    rampedDownObserveUndecodable,
-    detachedSourceReady,
-    compareEqual,
-    compareDifferent,
-    comparisonFails,
-    confirmationSeesChanged,
-    confirmationSeesAbsent,
-    confirmationSeesSame,
-    confirmationFails,
-    toggleObservedFence,
-    toggleFillTimestamp,
-    finishFill,
+    toggleEnabled, togglePolicy, toggleSelection, toggleMetricsHook, toggleCapacity, toggleDuplicate,
+    callerServedRemoteHit, callerRemoteRampedDown, callerOrdinaryRemoteMiss, callerEarlierLayerHit,
+    admitJob, dropJob, servedHitStartsDetachedSource, rampedDownObserveMiss, rampedDownObservePresent,
+    rampedDownObserveUndecodable, detachedSourceReady, compareEqual, compareDifferent, comparisonFails,
+    confirmationSeesChanged, confirmationSeesAbsent, confirmationSeesSame, confirmationFails,
+    toggleObservedFence, toggleFillTimestamp, finishFill,
   }
 
   val shadowNeverPrecedesCallerResult =
-    phase == JobIdle or callerResultCommitted
+    s.phase == JobIdle or s.callerResultCommitted
 
   val ordinaryRemoteMissHasNoShadowJob =
-    callerPath != OrdinaryRemoteMiss or phase == JobIdle
+    s.callerPath != OrdinaryRemoteMiss or s.phase == JobIdle
 
   val rampedDownDoesNotDuplicateSource =
-    callerPath != RemoteRampedDown or detachedSourceExecutions == 0
+    s.callerPath != RemoteRampedDown or s.detachedSourceExecutions == 0
 
   val verdictsRequireSingleConfirmation =
-    (outcome != Mismatch and outcome != Superseded) or confirmationReads == 1
+    (s.outcome != Mismatch and s.outcome != Superseded) or s.confirmationReads == 1
 
   val mismatchMeansSameC1Bytes =
-    outcome != Mismatch or (c1Present and c1SameBytesAsC0)
+    s.outcome != Mismatch or (s.c1Present and s.c1SameBytesAsC0)
 
   val presentC0IsNeverRepaired =
-    repairWritesForPresentC0 == 0 and
-      (c0 != C0Present and c0 != C0Undecodable or fillWrites == 0)
+    s.repairWritesForPresentC0 == 0 and
+      (s.c0 != C0Present and s.c0 != C0Undecodable or s.fillWrites == 0)
 
   val fillsRequireMiss =
-    fillWrites == 0 or c0 == C0Miss
+    s.fillWrites == 0 or s.c0 == C0Miss
 
   val fencedFillDoesNotWrite =
-    outcome != FillFenced or fillWrites == 0
+    s.outcome != FillFenced or s.fillWrites == 0
 }
