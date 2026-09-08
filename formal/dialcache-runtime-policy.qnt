@@ -4,7 +4,6 @@ module dialcache_runtime_policy {
   // positive values are configured policy values.
 
   pure val OMITTED = -1
-  pure val DEFAULT_REMOTE_READ_TIMEOUT = 50
 
   var baselineLocalTtl: int
   var baselineLocalRamp: int
@@ -86,33 +85,40 @@ module dialcache_runtime_policy {
     remotePhysicalTtlAtInsert' = 0,
   }
 
-  // Small policy mutations stand in for static defaults and dynamic overlays.
-  // They are allowed after a snapshot too, to prove an active invocation does
-  // not change retroactively.
+  // Provider/default inputs vary between invocations. Once takeSnapshot runs,
+  // that invocation uses only snap* fields until endInvocation.
   action setBaselineLocal = all {
+    not(snapshotTaken),
     baselineLocalTtl' = if (baselineLocalTtl == OMITTED) 6 else OMITTED,
     baselineLocalRamp' = if (baselineLocalRamp == OMITTED) 100 else OMITTED,
   }
 
   action setBaselineRemote = all {
+    not(snapshotTaken),
     baselineRemoteTtl' = if (baselineRemoteTtl == OMITTED) 8 else OMITTED,
     baselineRemoteRamp' = if (baselineRemoteRamp == OMITTED) 100 else OMITTED,
   }
 
   action setBaselineFeatures = all {
+    not(snapshotTaken),
     baselineRequestLocal' = if (baselineRequestLocal == OMITTED) 1 else OMITTED,
     baselineCoalesce' = if (baselineCoalesce == OMITTED) 0 else OMITTED,
     baselineRecoveryAge' = if (baselineRecoveryAge == OMITTED) 12 else OMITTED,
     baselineShadowRamp' = if (baselineShadowRamp == OMITTED) 25 else OMITTED,
   }
 
-  action setRuntimeSparseLocalRamp =
-    runtimeLocalRamp' = if (runtimeLocalRamp == OMITTED) 0 else OMITTED
+  action setRuntimeSparseLocalRamp = all {
+    not(snapshotTaken),
+    runtimeLocalRamp' = if (runtimeLocalRamp == OMITTED) 0 else OMITTED,
+  }
 
-  action setRuntimeSparseRemoteTtl =
-    runtimeRemoteTtl' = if (runtimeRemoteTtl == OMITTED) 4 else OMITTED
+  action setRuntimeSparseRemoteTtl = all {
+    not(snapshotTaken),
+    runtimeRemoteTtl' = if (runtimeRemoteTtl == OMITTED) 4 else OMITTED,
+  }
 
   action setRuntimeFeatureOverrides = all {
+    not(snapshotTaken),
     runtimeRequestLocal' = if (runtimeRequestLocal == OMITTED) 0 else OMITTED,
     runtimeCoalesce' = if (runtimeCoalesce == OMITTED) 1 else OMITTED,
     runtimeRecoveryAge' = if (runtimeRecoveryAge == OMITTED) 0 else OMITTED,
@@ -156,8 +162,6 @@ module dialcache_runtime_policy {
     localEntryTtlAtInsert' = snapLocalTtl,
   }
 
-  // The remote physical TTL is sampled at write time from the accepted
-  // invocation policy. Later policy changes do not rewrite the key.
   action insertRemoteEntry = all {
     snapshotTaken,
     snapRemoteTtl > 0,
@@ -205,8 +209,7 @@ module dialcache_runtime_policy {
      (runtimeShadowRamp != OMITTED or baselineShadowRamp != OMITTED or snapShadowRamp == 0) and
      (runtimeCoalesce != OMITTED or baselineCoalesce != OMITTED or snapCoalesce == 1))
 
-  // Existing entry retention is insertion policy, not the current provider
-  // value. No action rewrites these fields as policy changes.
+  // Existing entry retention is insertion policy, not current provider state.
   val existingLocalEntryKeepsInsertionTtl =
     not(localEntryPresent) or localEntryTtlAtInsert > 0
 
