@@ -1,7 +1,6 @@
 module dialcache_redis_protocol {
-  // Abstract classifier for the public Redis protocol decoder. This intentionally
-  // models validation/classification ordering rather than concrete Buffer bytes;
-  // byte-for-byte interoperability belongs in portable protocol vectors.
+  // Abstract public Redis decoder classification. Exact bytes live in portable
+  // protocol vectors; this model checks validation/classification precedence.
 
   type ReplyType = NilReply | BufferReply | InvalidReply
   type FrameShape = ShortFrame | UnknownVersion | SupportedFrame
@@ -9,114 +8,136 @@ module dialcache_redis_protocol {
   type PayloadEncoding = Utf8Encoding | BinaryEncoding | UnsupportedEncoding
   type DecodeResult = PendingDecode | ValueAbsent | UnclassifiedMiss | WatermarkFenced | DecodedHit | PayloadEncodingError | PayloadTypeError
 
-  var tracked: bool
-  var valueReply: ReplyType
-  var watermarkReply: ReplyType
-  var frameShape: FrameShape
-  var frameTimestamp: int
-  var watermarkState: WatermarkState
-  var watermarkValue: int
-  var encoding: PayloadEncoding
-  var result: DecodeResult
-  var observedWatermarkAttached: bool
+  type State = {
+    tracked: bool,
+    valueReply: ReplyType,
+    watermarkReply: ReplyType,
+    frameShape: FrameShape,
+    frameTimestamp: int,
+    watermarkState: WatermarkState,
+    watermarkValue: int,
+    encoding: PayloadEncoding,
+    result: DecodeResult,
+    observedWatermarkAttached: bool
+  }
 
-  // Decoder ordering follows docs/redis.md and redis-payload.test.ts:
-  // 1. raw reply types
-  // 2. nil/short/version classification
-  // 3. tracked watermark metadata and fence
-  // 4. payload encoding
-  val classification =
-    if (valueReply == InvalidReply or (tracked and watermarkReply == InvalidReply))
+  var s: State
+
+  // Ordering mirrors redis-payload.test.ts:
+  // raw reply types -> nil/frame shape -> tracked watermark/fence -> encoding.
+  pure def classify(st: State): DecodeResult =
+    if (st.valueReply == InvalidReply or (st.tracked and st.watermarkReply == InvalidReply))
       PayloadTypeError
-    else if (valueReply == NilReply)
+    else if (st.valueReply == NilReply)
       ValueAbsent
-    else if (frameShape == ShortFrame or frameShape == UnknownVersion)
+    else if (st.frameShape == ShortFrame or st.frameShape == UnknownVersion)
       UnclassifiedMiss
-    else if (tracked and watermarkReply == BufferReply and watermarkState == MalformedWatermark)
+    else if (st.tracked and st.watermarkReply == BufferReply and st.watermarkState == MalformedWatermark)
       UnclassifiedMiss
-    else if (tracked and frameTimestamp == 0)
+    else if (st.tracked and st.frameTimestamp == 0)
       UnclassifiedMiss
-    else if (tracked and watermarkReply == BufferReply and watermarkState == ValidWatermark and frameTimestamp <= watermarkValue)
+    else if (st.tracked and st.watermarkReply == BufferReply and st.watermarkState == ValidWatermark and st.frameTimestamp <= st.watermarkValue)
       WatermarkFenced
-    else if (encoding == UnsupportedEncoding)
+    else if (st.encoding == UnsupportedEncoding)
       PayloadEncodingError
     else
       DecodedHit
 
-  action init = all {
-    tracked' = false,
-    valueReply' = BufferReply,
-    watermarkReply' = NilReply,
-    frameShape' = SupportedFrame,
-    frameTimestamp' = 1,
-    watermarkState' = MissingWatermark,
-    watermarkValue' = 0,
-    encoding' = Utf8Encoding,
-    result' = PendingDecode,
-    observedWatermarkAttached' = false,
+  action init = s' = {
+    tracked: false,
+    valueReply: BufferReply,
+    watermarkReply: NilReply,
+    frameShape: SupportedFrame,
+    frameTimestamp: 1,
+    watermarkState: MissingWatermark,
+    watermarkValue: 0,
+    encoding: Utf8Encoding,
+    result: PendingDecode,
+    observedWatermarkAttached: false
   }
 
   action toggleTracked = all {
-    result == PendingDecode,
-    tracked' = not(tracked),
+    s.result == PendingDecode,
+    s' = { tracked: not(s.tracked), ...s },
   }
 
   action cycleValueReply = all {
-    result == PendingDecode,
-    valueReply' = if (valueReply == BufferReply) NilReply
-      else if (valueReply == NilReply) InvalidReply
-      else BufferReply,
+    s.result == PendingDecode,
+    s' = {
+      valueReply: if (s.valueReply == BufferReply) NilReply
+        else if (s.valueReply == NilReply) InvalidReply
+        else BufferReply,
+      ...s
+    },
   }
 
   action cycleWatermarkReply = all {
-    result == PendingDecode,
-    watermarkReply' = if (watermarkReply == NilReply) BufferReply
-      else if (watermarkReply == BufferReply) InvalidReply
-      else NilReply,
+    s.result == PendingDecode,
+    s' = {
+      watermarkReply: if (s.watermarkReply == NilReply) BufferReply
+        else if (s.watermarkReply == BufferReply) InvalidReply
+        else NilReply,
+      ...s
+    },
   }
 
   action cycleFrameShape = all {
-    result == PendingDecode,
-    frameShape' = if (frameShape == SupportedFrame) ShortFrame
-      else if (frameShape == ShortFrame) UnknownVersion
-      else SupportedFrame,
+    s.result == PendingDecode,
+    s' = {
+      frameShape: if (s.frameShape == SupportedFrame) ShortFrame
+        else if (s.frameShape == ShortFrame) UnknownVersion
+        else SupportedFrame,
+      ...s
+    },
   }
 
   action setZeroTimestamp = all {
-    result == PendingDecode,
-    frameTimestamp' = if (frameTimestamp == 0) 1 else 0,
+    s.result == PendingDecode,
+    s' = { frameTimestamp: if (s.frameTimestamp == 0) 1 else 0, ...s },
   }
 
   action setFencedTimestamp = all {
-    result == PendingDecode,
-    frameTimestamp' = 1,
-    watermarkValue' = 1,
-    watermarkState' = ValidWatermark,
-    watermarkReply' = BufferReply,
+    s.result == PendingDecode,
+    s' = {
+      frameTimestamp: 1,
+      watermarkValue: 1,
+      watermarkState: ValidWatermark,
+      watermarkReply: BufferReply,
+      ...s
+    },
   }
 
   action cycleWatermarkState = all {
-    result == PendingDecode,
-    watermarkReply' = BufferReply,
-    watermarkState' = if (watermarkState == MissingWatermark) ValidWatermark
-      else if (watermarkState == ValidWatermark) MalformedWatermark
-      else MissingWatermark,
-    watermarkValue' = 0,
+    s.result == PendingDecode,
+    s' = {
+      watermarkReply: BufferReply,
+      watermarkState: if (s.watermarkState == MissingWatermark) ValidWatermark
+        else if (s.watermarkState == ValidWatermark) MalformedWatermark
+        else MissingWatermark,
+      watermarkValue: 0,
+      ...s
+    },
   }
 
   action toggleEncoding = all {
-    result == PendingDecode,
-    encoding' = if (encoding == Utf8Encoding) BinaryEncoding
-      else if (encoding == BinaryEncoding) UnsupportedEncoding
-      else Utf8Encoding,
+    s.result == PendingDecode,
+    s' = {
+      encoding: if (s.encoding == Utf8Encoding) BinaryEncoding
+        else if (s.encoding == BinaryEncoding) UnsupportedEncoding
+        else Utf8Encoding,
+      ...s
+    },
   }
 
   action decode = all {
-    result == PendingDecode,
-    result' = classification,
-    observedWatermarkAttached' = tracked and watermarkReply == BufferReply and
-      watermarkState == ValidWatermark and
-      (classification == ValueAbsent or classification == UnclassifiedMiss or classification == WatermarkFenced),
+    s.result == PendingDecode,
+    s' = {
+      result: classify(s),
+      observedWatermarkAttached: s.tracked and s.watermarkReply == BufferReply and
+        s.watermarkState == ValidWatermark and
+        (classify(s) == ValueAbsent or classify(s) == UnclassifiedMiss or classify(s) == WatermarkFenced),
+      ...s
+    },
   }
 
   action step = any {
@@ -131,22 +152,21 @@ module dialcache_redis_protocol {
     decode,
   }
 
-  // Null value wins over malformed/missing watermark metadata after reply type
-  // validation. An invalid raw watermark reply still fails the decoder first.
   val nilValueIsValueAbsent =
-    result == PendingDecode or valueReply != NilReply or result == ValueAbsent or result == PayloadTypeError
+    s.result == PendingDecode or s.valueReply != NilReply or
+      s.result == ValueAbsent or s.result == PayloadTypeError
 
   val fenceCanPrecedeEncodingError =
-    result != WatermarkFenced or tracked
+    s.result != WatermarkFenced or s.tracked
 
-  // Untracked decoders accept timestamp zero; tracked decoders fail closed.
   val trackedZeroTimestampIsNotHit =
-    result == PendingDecode or not(tracked and frameTimestamp == 0) or result != DecodedHit
+    s.result == PendingDecode or not(s.tracked and s.frameTimestamp == 0) or
+      s.result != DecodedHit
 
   val observedWatermarkOnlyOnTrackedReads =
-    not(observedWatermarkAttached) or tracked
+    not(s.observedWatermarkAttached) or s.tracked
 
   val encodingErrorRequiresSupportedFrame =
-    result != PayloadEncodingError or
-      (valueReply == BufferReply and frameShape == SupportedFrame and encoding == UnsupportedEncoding)
+    s.result != PayloadEncodingError or
+      (s.valueReply == BufferReply and s.frameShape == SupportedFrame and s.encoding == UnsupportedEncoding)
 }
