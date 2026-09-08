@@ -22,6 +22,8 @@ module dialcache_stale_recovery {
     initialRead: InitialRead,
     candidateRetained: bool,
     candidateCreatedAt: int,
+    candidateRetainedAt: int,
+    candidateServedAt: int,
     redisReads: int,
     sourceState: SourceState,
     classifierAllows: bool,
@@ -46,6 +48,8 @@ module dialcache_stale_recovery {
     initialRead: ReadPending,
     candidateRetained: false,
     candidateCreatedAt: 0,
+    candidateRetainedAt: 0,
+    candidateServedAt: 0,
     redisReads: 0,
     sourceState: SourceIdle,
     classifierAllows: false,
@@ -75,6 +79,12 @@ module dialcache_stale_recovery {
     s.framePresent,
     s.frameCreatedAt > 0,
     s' = { frameCreatedAt: s.frameCreatedAt - 1, ...s },
+  }
+
+  action seedFutureFrame = all {
+    s.initialRead == ReadPending,
+    s.redisReads == 0,
+    s' = { framePresent: true, frameCreatedAt: s.now + 1, ...s },
   }
 
   action toggleFrameValidity = all {
@@ -108,6 +118,7 @@ module dialcache_stale_recovery {
     s.redisReads == 0,
     s' = {
       redisReads: 1,
+      candidateRetainedAt: s.now,
       initialRead: if (not(s.readHealthy))
         ReadFailed
       else if (not(s.framePresent) or not(s.frameValid) or s.frameFenced or s.frameCreatedAt > s.now)
@@ -187,6 +198,7 @@ module dialcache_stale_recovery {
     s.recoveryState == CandidateLoading,
     s' = {
       candidateDecoded: true,
+      candidateServedAt: s.now,
       recoveryState: if (s.candidateCreatedAt <= s.now and s.now - s.candidateCreatedAt < MAX_RECOVERY_AGE)
         RecoveryServed
       else
@@ -218,6 +230,7 @@ module dialcache_stale_recovery {
   action step = any {
     advanceTime,
     seedFrameNow,
+    seedFutureFrame,
     makeFrameOlder,
     toggleFrameValidity,
     toggleFence,
@@ -238,11 +251,16 @@ module dialcache_stale_recovery {
 
   val retainedCandidateWasEligible =
     not(s.candidateRetained) or
-      (s.frameValid and s.candidateCreatedAt <= s.now and s.initialRead == RetainedCandidate)
+      (s.frameValid and s.initialRead == RetainedCandidate and
+       s.candidateRetainedAt - s.candidateCreatedAt >= FRESH_AGE and
+       s.candidateRetainedAt - s.candidateCreatedAt < MAX_RECOVERY_AGE)
 
+  // This is a property of the return event. Later time movement cannot revoke
+  // an already returned value; using `now` here incorrectly required that.
   val servedStaleIsStrictlyWithinMaxAge =
     s.finalOutcome != ServedStale or
-      (s.candidateCreatedAt <= s.now and s.now - s.candidateCreatedAt < MAX_RECOVERY_AGE)
+      (s.candidateCreatedAt <= s.candidateServedAt and
+       s.candidateServedAt - s.candidateCreatedAt < MAX_RECOVERY_AGE)
 
   val staleRequiresAuthorizedSourceFailure =
     s.finalOutcome != ServedStale or
@@ -257,4 +275,25 @@ module dialcache_stale_recovery {
 
   val readFailureNeverRetains =
     s.initialRead != ReadFailed or not(s.candidateRetained)
+
+  run servedValueCanAgeTest = init
+    .then(seedFrameNow).then(advanceTime).then(advanceTime)
+    .then(performInitialRead).then(toggleClassifier).then(startSource)
+    .then(sourceRejects).then(checkCandidate).then(candidateLoadSucceeds)
+    .expect(s.finalOutcome == ServedStale)
+    .then(advanceTime).then(advanceTime).then(advanceTime)
+    .expect(s.now - s.candidateCreatedAt == MAX_RECOVERY_AGE)
+    .expect(servedStaleIsStrictlyWithinMaxAge)
+
+  run decodingAtMaxAgeRejectsTest = init
+    .then(seedFrameNow).then(advanceTime).then(advanceTime)
+    .then(performInitialRead).then(toggleClassifier).then(startSource)
+    .then(sourceRejects).then(checkCandidate)
+    .then(advanceTime).then(advanceTime).then(advanceTime)
+    .then(candidateLoadSucceeds)
+    .expect(s.finalOutcome == RejectedSource and s.requestLocalWrites == 0)
+
+  run futureFrameIsNotRetainedTest = init
+    .then(seedFutureFrame).then(performInitialRead)
+    .expect(s.initialRead == PlainMiss and not(s.candidateRetained))
 }

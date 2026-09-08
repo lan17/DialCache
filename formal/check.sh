@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Keep both successful samples and failing counterexamples for local/CI replay.
+mkdir -p .formal-traces/verification
+
 check() {
   local spec="$1"
   shift
@@ -10,7 +13,10 @@ check() {
   echo "::endgroup::"
 
   echo "::group::quint run ${spec}"
-  quint run "${spec}" --max-samples=2000 --max-steps=40 --invariants "$@"
+  quint run "${spec}" --backend=rust --n-threads=1 \
+    --seed="${QUINT_SEED:-0xd1a1ca}" --max-samples=2000 --max-steps=40 \
+    --out-itf=".formal-traces/verification/$(basename "${spec}" .qnt).itf.json" \
+    --verbosity=1 --invariants "$@"
   echo "::endgroup::"
 }
 
@@ -38,6 +44,8 @@ check formal/dialcache-coalescing-liveness.qnt \
   noFlightWhenCoalescingIneligible \
   abandonedSourceIsNotAFlight
 
+quint test formal/dialcache-coalescing-liveness.qnt --backend=rust --max-samples=1
+
 check formal/dialcache-tracked-invalidation.qnt \
   servedSnapshotClearedObservedFence \
   staleValueAfterInvalidationIsFenced \
@@ -51,6 +59,8 @@ check formal/dialcache-stale-recovery.qnt \
   sourceSuccessDoesNotDecodeCandidate \
   recoveredStaleHasNoSharedPublication \
   readFailureNeverRetains
+
+quint test formal/dialcache-stale-recovery.qnt --backend=rust --max-samples=1
 
 check formal/dialcache-shadow-validation.qnt \
   shadowNeverPrecedesCallerResult \

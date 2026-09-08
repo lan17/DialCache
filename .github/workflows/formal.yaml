@@ -3,17 +3,7 @@ name: Formal specification
 on:
   push:
     branches: [main]
-    paths:
-      - "formal/**"
-      - "test/formal-protocol-vectors.test.ts"
-      - "test/formal-conformance.test.ts"
-      - ".github/workflows/formal.yaml"
   pull_request:
-    paths:
-      - "formal/**"
-      - "test/formal-protocol-vectors.test.ts"
-      - "test/formal-conformance.test.ts"
-      - ".github/workflows/formal.yaml"
 
 permissions:
   contents: read
@@ -25,6 +15,7 @@ concurrency:
 jobs:
   quint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
@@ -40,18 +31,17 @@ jobs:
       - name: Check executable specifications
         run: bash formal/check.sh
       - name: Generate model-based conformance traces
-        run: |
-          rm -rf .formal-traces
-          mkdir -p .formal-traces
-          quint run formal/dialcache-conformance.qnt \
-            --mbt \
-            --backend=rust \
-            --seed=0xd1a1ca \
-            --max-samples=256 \
-            --max-steps=30 \
-            --n-traces=32 \
-            --out-itf='.formal-traces/trace_{seq}.itf.json'
+        run: bash formal/generate-traces.sh
       - name: Replay generated traces against TypeScript
         env:
-          DIALCACHE_MBT_TRACE_DIR: .formal-traces
+          DIALCACHE_MBT_TRACE_DIR: .formal-traces/conformance
         run: pnpm exec vitest run test/formal-conformance.test.ts --coverage.enabled=false
+      - name: Preserve formal traces and counterexamples
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: formal-traces
+          path: .formal-traces/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14

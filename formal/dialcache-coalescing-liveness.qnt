@@ -142,11 +142,28 @@ module dialcache_coalescing_liveness {
   action sourceRejects = all {
     s.phase == FallbackRunning,
     s.activeSourceRunning,
+    s.now < s.fallbackDeadline,
     s' = {
       activeSourceRunning: false,
       acceptedSourceResult: false,
       outcome: SourceFailure,
       phase: FlightDone,
+      ...s
+    },
+  }
+
+  // A late success or rejection can reach DialCache before the timer callback.
+  // Settlement still checks the monotonic deadline and returns a timeout.
+  action sourceSettlesAfterDeadline = all {
+    s.phase == FallbackRunning,
+    s.activeSourceRunning,
+    s.now >= s.fallbackDeadline,
+    s' = {
+      activeSourceRunning: false,
+      acceptedSourceResult: false,
+      outcome: SourceTimeout,
+      phase: FlightDone,
+      flightScope: NoFlight,
       ...s
     },
   }
@@ -213,6 +230,7 @@ module dialcache_coalescing_liveness {
     cacheMissStartsFallback,
     sourceSucceedsBeforeDeadline,
     sourceRejects,
+    sourceSettlesAfterDeadline,
     fallbackTimesOut,
     abandonedSourceSettles,
     dispatchPublication,
@@ -244,4 +262,29 @@ module dialcache_coalescing_liveness {
   // Abandoned work is explicitly not represented as an active registered source.
   val abandonedSourceIsNotAFlight =
     s.abandonedSources == 0 or not(s.activeSourceRunning) or s.phase == FallbackRunning
+
+  run lateSettlementBeforeTimerTest = init
+    .then(toggleEnabled).then(toggleSharedLayer).then(startLeader)
+    .then(cacheMissStartsFallback)
+    .then(advanceTime).then(advanceTime).then(advanceTime)
+    .then(sourceSettlesAfterDeadline)
+    .expect(s.outcome == SourceTimeout and s.flightScope == NoFlight)
+    .expect(timedOutSourceCannotPublish)
+
+  run abandonedSourceMayOverlapNewFlightTest = init
+    .then(toggleEnabled).then(toggleSharedLayer).then(startLeader)
+    .then(cacheMissStartsFallback)
+    .then(advanceTime).then(advanceTime).then(advanceTime)
+    .then(fallbackTimesOut).then(resetFlight).then(startLeader)
+    .then(cacheMissStartsFallback)
+    .expect(s.abandonedSources == 1 and s.activeSourceRunning)
+    .then(abandonedSourceSettles)
+    .expect(s.activeSourceRunning and s.sourceExecutions == 1)
+
+  run acceptedPublicationOutlivesDeadlineTest = init
+    .then(toggleEnabled).then(toggleSharedLayer).then(startLeader)
+    .then(cacheMissStartsFallback).then(sourceSucceedsBeforeDeadline)
+    .then(advanceTime).then(advanceTime).then(advanceTime)
+    .then(dispatchPublication)
+    .expect(s.publicationDispatched and s.outcome == SourceSuccess)
 }

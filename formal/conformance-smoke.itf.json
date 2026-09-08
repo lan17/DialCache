@@ -1,0 +1,734 @@
+{
+  "#meta": {
+    "format": "ITF",
+    "source": "formal/dialcache-conformance.qnt",
+    "description": "Portable core smoke scenario; same ITF input format as generated traces."
+  },
+  "vars": [
+    "s",
+    "mbt::actionTaken",
+    "mbt::nondetPicks"
+  ],
+  "states": [
+    {
+      "#meta": {
+        "index": 0
+      },
+      "mbt::actionTaken": "init",
+      "mbt::nondetPicks": {},
+      "s": {
+        "sourceVersion": {
+          "#bigint": "1"
+        },
+        "lastResult": {
+          "#bigint": "0"
+        },
+        "outsideLoaderCalls": {
+          "#bigint": "0"
+        },
+        "requestLoaderCalls": {
+          "#bigint": "0"
+        },
+        "localLoaderCalls": {
+          "#bigint": "0"
+        },
+        "coalescedLoaderCalls": {
+          "#bigint": "0"
+        },
+        "remoteLoaderCalls": {
+          "#bigint": "0"
+        },
+        "localCached": false,
+        "localValue": {
+          "#bigint": "0"
+        },
+        "coalescedCached": false,
+        "coalescedValue": {
+          "#bigint": "0"
+        },
+        "remoteReadable": false,
+        "remoteValue": {
+          "#bigint": "0"
+        },
+        "redisReads": {
+          "#bigint": "0"
+        },
+        "redisWrites": {
+          "#bigint": "0"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 1
+      },
+      "mbt::actionTaken": "outsideCall",
+      "mbt::nondetPicks": {},
+      "s": {
+        "sourceVersion": {
+          "#bigint": "1"
+        },
+        "lastResult": {
+          "#bigint": "1"
+        },
+        "outsideLoaderCalls": {
+          "#bigint": "1"
+        },
+        "requestLoaderCalls": {
+          "#bigint": "0"
+        },
+        "localLoaderCalls": {
+          "#bigint": "0"
+        },
+        "coalescedLoaderCalls": {
+          "#bigint": "0"
+        },
+        "remoteLoaderCalls": {
+          "#bigint": "0"
+        },
+        "localCached": false,
+        "localValue": {
+          "#bigint": "0"
+        },
+        "coalescedCached": false,
+        "coalescedValue": {
+          "#bigint": "0"
+        },
+        "remoteReadable": false,
+        "remoteValue": {
+          "#bigint": "0"
+        },
+        "redisReads": {
+          "#bigint": "0"
+        },
+        "redisWrites": {
+          "#bigint": "0"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 2
+      },
+      "mbt::actionTaken": "requestLocalPair",
+      "mbt::nondetPicks": {},
+      "s": {
+        "sourceVersion": {
+          "#bigint": "1"
+        },
+        "lastResult": {
+          "#bigint": "1"
+        },
+        "outsideLoaderCalls": {
+          "#bigint": "1"
+        },
+        "requestLoaderCalls": {
+          "#bigint": "1"
+        },
+        "localLoaderCalls": {
+          "#bigint": "0"
+        },
+        "coalescedLoaderCalls": {
+          "#bigint": "0"
+        },
+        "remoteLoaderCalls": {
+          "#bigint": "0"
+        },
+        "localCached": false,
+        "localValue": {
+          "#bigint": "0"
+        },
+        "coalescedCached": false,
+        "coalescedValue": {
+          "#bigint": "0"
+        },
+        "remoteReadable": false,
+        "remoteValue": {
+          "#bigint": "0"
+        },
+        "redisReads": {
+          "#bigint": "0"
+        },
+        "redisWrites": {
+          "#bigint": "0"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 3
+      },
+      "mbt::actionTaken": "localCall",
+      "mbt::nondetPicks": {},
+      "s": {
+        "sourceVersion": {
+          "#bigint": "1"
+        },
+        "lastResult": {
+          "#bigint": "1"
+        },
+        "outsideLoaderCalls": {
+          "#bigint": "1"
+        },
+        "requestLoaderCalls": {
+          "#bigint": "1"
+        },
+        "localLoaderCalls": {
+          "#bigint": "1"
+        },
+        "coalescedLoaderCalls": {
+          "#bigint": "0"
+        },
+        "remoteLoaderCalls": {
+          "#bigint": "0"
+        },
+        "localCached": true,
+        "localValue": {
+          "#bigint": "1"
+        },
+        "coalescedCached": false,
+        "coalescedValue": {
+          "#bigint": "0"
+        },
+        "remoteReadable": false,
+        "remoteValue": {
+          "#bigint": "0"
+        },
+        "redisReads": {
+          "#bigint": "0"
+        },
+        "redisWrites": {
+          "#bigint": "0"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 4
+      },
+      "mbt::actionTaken": "bumpSource",
+      "mbt::nondetPicks": {},
+      "s": {
+        "sourceVersion": {
+          "#bigint": "2"
+        },
+        "lastResult": {
+          "#bigint": "1"
+        },
+        "outsideLoaderCalls": {
+          "#bigint": "1"
+        },
+        "requestLoaderCalls": {
+          "#bigint": "1"
+        },
+        "localLoaderCalls": {
+          "#bigint": "1"
+        },
+        "coalescedLoaderCalls": {
+          "#bigint": "0"
+        },
+        "remoteLoaderCalls": {
+          "#bigint": "0"
+        },
+        "localCached": true,
+        "localValue": {
+          "#bigint": "1"
+        },
+        "coalescedCached": false,
+        "coalescedValue": {
+          "#bigint": "0"
+        },
+        "remoteReadable": false,
+        "remoteValue": {
+          "#bigint": "0"
+        },
+        "redisReads": {
+          "#bigint": "0"
+        },
+        "redisWrites": {
+          "#bigint": "0"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 5
+      },
+      "mbt::actionTaken": "localCall",
+      "mbt::nondetPicks": {},
+      "s": {
+        "sourceVersion": {
+          "#bigint": "2"
+        },
+        "lastResult": {
+          "#bigint": "1"
+        },
+        "outsideLoaderCalls": {
+          "#bigint": "1"
+        },
+        "requestLoaderCalls": {
+          "#bigint": "1"
+        },
+        "localLoaderCalls": {
+          "#bigint": "1"
+        },
+        "coalescedLoaderCalls": {
+          "#bigint": "0"
+        },
+        "remoteLoaderCalls": {
+          "#bigint": "0"
+        },
+        "localCached": true,
+        "localValue": {
+          "#bigint": "1"
+        },
+        "coalescedCached": false,
+        "coalescedValue": {
+          "#bigint": "0"
+        },
+        "remoteReadable": false,
+        "remoteValue": {
+          "#bigint": "0"
+        },
+        "redisReads": {
+          "#bigint": "0"
+        },
+        "redisWrites": {
+          "#bigint": "0"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 6
+      },
+      "mbt::actionTaken": "coalescedLocalPair",
+      "mbt::nondetPicks": {},
+      "s": {
+        "sourceVersion": {
+          "#bigint": "2"
+        },
+        "lastResult": {
+          "#bigint": "2"
+        },
+        "outsideLoaderCalls": {
+          "#bigint": "1"
+        },
+        "requestLoaderCalls": {
+          "#bigint": "1"
+        },
+        "localLoaderCalls": {
+          "#bigint": "1"
+        },
+        "coalescedLoaderCalls": {
+          "#bigint": "1"
+        },
+        "remoteLoaderCalls": {
+          "#bigint": "0"
+        },
+        "localCached": true,
+        "localValue": {
+          "#bigint": "1"
+        },
+        "coalescedCached": true,
+        "coalescedValue": {
+          "#bigint": "2"
+        },
+        "remoteReadable": false,
+        "remoteValue": {
+          "#bigint": "0"
+        },
+        "redisReads": {
+          "#bigint": "0"
+        },
+        "redisWrites": {
+          "#bigint": "0"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 7
+      },
+      "mbt::actionTaken": "remoteCall",
+      "mbt::nondetPicks": {},
+      "s": {
+        "sourceVersion": {
+          "#bigint": "2"
+        },
+        "lastResult": {
+          "#bigint": "2"
+        },
+        "outsideLoaderCalls": {
+          "#bigint": "1"
+        },
+        "requestLoaderCalls": {
+          "#bigint": "1"
+        },
+        "localLoaderCalls": {
+          "#bigint": "1"
+        },
+        "coalescedLoaderCalls": {
+          "#bigint": "1"
+        },
+        "remoteLoaderCalls": {
+          "#bigint": "1"
+        },
+        "localCached": true,
+        "localValue": {
+          "#bigint": "1"
+        },
+        "coalescedCached": true,
+        "coalescedValue": {
+          "#bigint": "2"
+        },
+        "remoteReadable": true,
+        "remoteValue": {
+          "#bigint": "2"
+        },
+        "redisReads": {
+          "#bigint": "1"
+        },
+        "redisWrites": {
+          "#bigint": "1"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 8
+      },
+      "mbt::actionTaken": "bumpSource",
+      "mbt::nondetPicks": {},
+      "s": {
+        "sourceVersion": {
+          "#bigint": "3"
+        },
+        "lastResult": {
+          "#bigint": "2"
+        },
+        "outsideLoaderCalls": {
+          "#bigint": "1"
+        },
+        "requestLoaderCalls": {
+          "#bigint": "1"
+        },
+        "localLoaderCalls": {
+          "#bigint": "1"
+        },
+        "coalescedLoaderCalls": {
+          "#bigint": "1"
+        },
+        "remoteLoaderCalls": {
+          "#bigint": "1"
+        },
+        "localCached": true,
+        "localValue": {
+          "#bigint": "1"
+        },
+        "coalescedCached": true,
+        "coalescedValue": {
+          "#bigint": "2"
+        },
+        "remoteReadable": true,
+        "remoteValue": {
+          "#bigint": "2"
+        },
+        "redisReads": {
+          "#bigint": "1"
+        },
+        "redisWrites": {
+          "#bigint": "1"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 9
+      },
+      "mbt::actionTaken": "remoteCall",
+      "mbt::nondetPicks": {},
+      "s": {
+        "sourceVersion": {
+          "#bigint": "3"
+        },
+        "lastResult": {
+          "#bigint": "2"
+        },
+        "outsideLoaderCalls": {
+          "#bigint": "1"
+        },
+        "requestLoaderCalls": {
+          "#bigint": "1"
+        },
+        "localLoaderCalls": {
+          "#bigint": "1"
+        },
+        "coalescedLoaderCalls": {
+          "#bigint": "1"
+        },
+        "remoteLoaderCalls": {
+          "#bigint": "1"
+        },
+        "localCached": true,
+        "localValue": {
+          "#bigint": "1"
+        },
+        "coalescedCached": true,
+        "coalescedValue": {
+          "#bigint": "2"
+        },
+        "remoteReadable": true,
+        "remoteValue": {
+          "#bigint": "2"
+        },
+        "redisReads": {
+          "#bigint": "2"
+        },
+        "redisWrites": {
+          "#bigint": "1"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 10
+      },
+      "mbt::actionTaken": "invalidateRemote",
+      "mbt::nondetPicks": {},
+      "s": {
+        "sourceVersion": {
+          "#bigint": "3"
+        },
+        "lastResult": {
+          "#bigint": "2"
+        },
+        "outsideLoaderCalls": {
+          "#bigint": "1"
+        },
+        "requestLoaderCalls": {
+          "#bigint": "1"
+        },
+        "localLoaderCalls": {
+          "#bigint": "1"
+        },
+        "coalescedLoaderCalls": {
+          "#bigint": "1"
+        },
+        "remoteLoaderCalls": {
+          "#bigint": "1"
+        },
+        "localCached": true,
+        "localValue": {
+          "#bigint": "1"
+        },
+        "coalescedCached": true,
+        "coalescedValue": {
+          "#bigint": "2"
+        },
+        "remoteReadable": false,
+        "remoteValue": {
+          "#bigint": "2"
+        },
+        "redisReads": {
+          "#bigint": "2"
+        },
+        "redisWrites": {
+          "#bigint": "2"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 11
+      },
+      "mbt::actionTaken": "remoteCall",
+      "mbt::nondetPicks": {},
+      "s": {
+        "sourceVersion": {
+          "#bigint": "3"
+        },
+        "lastResult": {
+          "#bigint": "3"
+        },
+        "outsideLoaderCalls": {
+          "#bigint": "1"
+        },
+        "requestLoaderCalls": {
+          "#bigint": "1"
+        },
+        "localLoaderCalls": {
+          "#bigint": "1"
+        },
+        "coalescedLoaderCalls": {
+          "#bigint": "1"
+        },
+        "remoteLoaderCalls": {
+          "#bigint": "2"
+        },
+        "localCached": true,
+        "localValue": {
+          "#bigint": "1"
+        },
+        "coalescedCached": true,
+        "coalescedValue": {
+          "#bigint": "2"
+        },
+        "remoteReadable": true,
+        "remoteValue": {
+          "#bigint": "3"
+        },
+        "redisReads": {
+          "#bigint": "3"
+        },
+        "redisWrites": {
+          "#bigint": "3"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 12
+      },
+      "mbt::actionTaken": "bumpSource",
+      "mbt::nondetPicks": {},
+      "s": {
+        "sourceVersion": {
+          "#bigint": "4"
+        },
+        "lastResult": {
+          "#bigint": "3"
+        },
+        "outsideLoaderCalls": {
+          "#bigint": "1"
+        },
+        "requestLoaderCalls": {
+          "#bigint": "1"
+        },
+        "localLoaderCalls": {
+          "#bigint": "1"
+        },
+        "coalescedLoaderCalls": {
+          "#bigint": "1"
+        },
+        "remoteLoaderCalls": {
+          "#bigint": "2"
+        },
+        "localCached": true,
+        "localValue": {
+          "#bigint": "1"
+        },
+        "coalescedCached": true,
+        "coalescedValue": {
+          "#bigint": "2"
+        },
+        "remoteReadable": true,
+        "remoteValue": {
+          "#bigint": "3"
+        },
+        "redisReads": {
+          "#bigint": "3"
+        },
+        "redisWrites": {
+          "#bigint": "3"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 13
+      },
+      "mbt::actionTaken": "remoteReadFailureCall",
+      "mbt::nondetPicks": {},
+      "s": {
+        "sourceVersion": {
+          "#bigint": "4"
+        },
+        "lastResult": {
+          "#bigint": "4"
+        },
+        "outsideLoaderCalls": {
+          "#bigint": "1"
+        },
+        "requestLoaderCalls": {
+          "#bigint": "1"
+        },
+        "localLoaderCalls": {
+          "#bigint": "1"
+        },
+        "coalescedLoaderCalls": {
+          "#bigint": "1"
+        },
+        "remoteLoaderCalls": {
+          "#bigint": "3"
+        },
+        "localCached": true,
+        "localValue": {
+          "#bigint": "1"
+        },
+        "coalescedCached": true,
+        "coalescedValue": {
+          "#bigint": "2"
+        },
+        "remoteReadable": true,
+        "remoteValue": {
+          "#bigint": "3"
+        },
+        "redisReads": {
+          "#bigint": "4"
+        },
+        "redisWrites": {
+          "#bigint": "3"
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 14
+      },
+      "mbt::actionTaken": "requestLocalPair",
+      "mbt::nondetPicks": {},
+      "s": {
+        "sourceVersion": {
+          "#bigint": "4"
+        },
+        "lastResult": {
+          "#bigint": "4"
+        },
+        "outsideLoaderCalls": {
+          "#bigint": "1"
+        },
+        "requestLoaderCalls": {
+          "#bigint": "2"
+        },
+        "localLoaderCalls": {
+          "#bigint": "1"
+        },
+        "coalescedLoaderCalls": {
+          "#bigint": "1"
+        },
+        "remoteLoaderCalls": {
+          "#bigint": "3"
+        },
+        "localCached": true,
+        "localValue": {
+          "#bigint": "1"
+        },
+        "coalescedCached": true,
+        "coalescedValue": {
+          "#bigint": "2"
+        },
+        "remoteReadable": true,
+        "remoteValue": {
+          "#bigint": "3"
+        },
+        "redisReads": {
+          "#bigint": "4"
+        },
+        "redisWrites": {
+          "#bigint": "3"
+        }
+      }
+    }
+  ]
+}
