@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "keyVectors": [
+    {
+      "name": "default untracked key",
+      "input": {
+        "namespace": "urn",
+        "keyType": "user_id",
+        "id": "123",
+        "useCase": "GetUser",
+        "trackForInvalidation": false,
+        "args": []
+      },
+      "logicalKey": "urn:user_id:123#GetUser",
+      "valueKey": "urn:user_id:123#GetUser:dialcache-frame-v1",
+      "watermarkKey": null
+    },
+    {
+      "name": "tracked key with sorted argument",
+      "input": {
+        "namespace": "users-api",
+        "keyType": "user_id",
+        "id": "123",
+        "useCase": "GetUser",
+        "trackForInvalidation": true,
+        "args": [["locale", "en"]]
+      },
+      "logicalKey": "{users-api:user_id:123}?locale=en#GetUser",
+      "valueKey": "{users-api:user_id:123}?locale=en#GetUser:dialcache-frame-v1",
+      "watermarkKey": "{users-api:user_id:123}#watermark"
+    },
+    {
+      "name": "delimiter-safe components",
+      "input": {
+        "namespace": "users api",
+        "keyType": "user/id",
+        "id": "123?filter=active",
+        "useCase": "Get#User",
+        "trackForInvalidation": false,
+        "args": [["a&b", "x=y"]]
+      },
+      "logicalKey": "users%20api:user%2Fid:123%3Ffilter%3Dactive?a%26b=x%3Dy#Get%23User",
+      "valueKey": "users%20api:user%2Fid:123%3Ffilter%3Dactive?a%26b=x%3Dy#Get%23User:dialcache-frame-v1",
+      "watermarkKey": null
+    }
+  ],
+  "normalizeArgsVectors": [
+    {
+      "name": "sort and omit undefined",
+      "input": { "z": "last", "missing": "__UNDEFINED__", "a": 1, "nil": null, "flag": false },
+      "undefinedSentinel": "__UNDEFINED__",
+      "expected": [["a", "1"], ["flag", "false"], ["nil", "null"], ["z", "last"]]
+    },
+    {
+      "name": "scalar string normalization",
+      "input": { "negativeZero": 0, "number": 1, "text": "1" },
+      "expected": [["negativeZero", "0"], ["number", "1"], ["text", "1"]]
+    }
+  ],
+  "frameVectors": [
+    {
+      "name": "utf8 cached at 1000",
+      "createdAtMs": 1000,
+      "payloadType": "string",
+      "payloadUtf8": "cached",
+      "frameHex": "0100000000000003e800636163686564"
+    },
+    {
+      "name": "binary payload at 2000",
+      "createdAtMs": 2000,
+      "payloadType": "binary",
+      "payloadHex": "00ff80",
+      "frameHex": "0100000000000007d00100ff80"
+    }
+  ],
+  "trackedDecodeVectors": [
+    {
+      "name": "missing value",
+      "frameHex": null,
+      "watermarkUtf8": "1000",
+      "expected": { "kind": "miss", "reason": "value_absent", "observedWatermarkMs": 1000 }
+    },
+    {
+      "name": "strictly newer than watermark",
+      "frameHex": "0100000000000003e900636163686564",
+      "watermarkUtf8": "1000",
+      "expected": { "kind": "hit", "createdAtMs": 1001, "payloadType": "string", "payloadUtf8": "cached" }
+    },
+    {
+      "name": "equal timestamp is fenced",
+      "frameHex": "0100000000000003e800636163686564",
+      "watermarkUtf8": "1000",
+      "expected": { "kind": "miss", "reason": "watermark_fenced", "observedWatermarkMs": 1000 }
+    },
+    {
+      "name": "missing watermark uses zero baseline",
+      "frameHex": "0100000000000003e800636163686564",
+      "watermarkUtf8": null,
+      "expected": { "kind": "hit", "createdAtMs": 1000, "payloadType": "string", "payloadUtf8": "cached" }
+    },
+    {
+      "name": "malformed watermark hides unsupported encoding",
+      "frameHex": "0100000000000003e802636163686564",
+      "watermarkUtf8": "invalid",
+      "expected": { "kind": "miss", "reason": "unclassified" }
+    },
+    {
+      "name": "fence hides unsupported encoding",
+      "frameHex": "0100000000000003e802636163686564",
+      "watermarkUtf8": "1000",
+      "expected": { "kind": "miss", "reason": "watermark_fenced", "observedWatermarkMs": 1000 }
+    },
+    {
+      "name": "eligible unsupported encoding is an error",
+      "frameHex": "0100000000000003e902636163686564",
+      "watermarkUtf8": "1000",
+      "expected": { "kind": "payload_encoding_error" }
+    }
+  ]
+}
