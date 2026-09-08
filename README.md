@@ -170,9 +170,9 @@ earlier value; the
 shows how to give every call its own check.
 
 Stale-on-error, off by default, returns the value Redis still holds past its TTL
-when the source fails with an error classified as recoverable, up to a configured
-maximum age. The built-in policy accepts only `FallbackTimeoutError`. A value retained for
-recovery is not revoked by a later invalidation.
+when the source fails with an error classified as recoverable, up to a
+configured maximum age. The built-in policy accepts only `FallbackTimeoutError`.
+A value retained for recovery is not revoked by a later invalidation.
 
 Cached objects are shared references. Copy before modifying.
 
