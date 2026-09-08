@@ -2,9 +2,11 @@
 
 [Documentation](index.md) · [Observability](observability.md#shadow-outcomes)
 
-Shadow validation checks cached values against the source without serving a
-shadow result to the caller. It can also fill Redis misses while remote serving
-is ramped down, giving you a way to observe and warm a cache before enabling it.
+Shadow validation checks cache coherence by comparing sampled Redis values
+with the source, without serving a shadow result to the caller.
+
+It can also fill Redis misses while remote serving is ramped down, giving you
+a way to warm a cache before enabling it.
 
 Shadow work is opt-in, sampled by key, and detached. Configure its own ramp and
 a metrics adapter with `shadowValidation` support. The caller does not await

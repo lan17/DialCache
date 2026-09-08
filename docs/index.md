@@ -21,7 +21,7 @@ it, then individual APIs and integration contracts.
 | [Redis and Valkey](redis.md) | Connect clients, understand native reads and writes, choose serializers and compression, and implement an adapter |
 | [Targeted invalidation](invalidation.md) | Refresh tracked entities, size the future buffer, and understand clocks, watermarks, and local-cache boundaries |
 | [Stale-on-error](stale-on-error.md) | Retain a Redis snapshot for selected source failures, choose age limits, and understand recovery races |
-| [Shadow validation](shadow-validation.md) | Compare Redis with the source and fill misses without serving shadow results |
+| [Shadow validation](shadow-validation.md) | Validate cache coherence by comparing sampled Redis values with the source |
 | [Coalescing and liveness](coalescing.md) | Share same-key work, configure deadlines, and inspect in-flight state |
 | [Observability](observability.md) | Set up Prometheus or Datadog, interpret metrics, and implement custom telemetry |
 

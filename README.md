@@ -14,7 +14,7 @@ runtime control and observability for each one.
 - **Coalescing:** same-key reads share work when a cache layer is active.
 - **Fail-open:** cache failures fall back to the loader.
 - **Stale-on-error (opt-in):** retained Redis values for selected source errors.
-- **Shadow validation (opt-in):** background Redis checks and warming.
+- **Shadow validation (opt-in):** cache coherence checks through sampling.
 - **Observability:** Prometheus and Datadog metrics, including miss reasons.
 
 [Documentation](https://lan17.github.io/DialCache/)
@@ -174,10 +174,11 @@ keys to the cohort, and lowering it removes keys without reshuffling the rest.
 Policy changes apply to new calls only. They do not evict cached values, and
 [a shorter TTL affects local and Redis entries differently](https://lan17.github.io/DialCache/configuration.html#changing-policy-on-a-running-service).
 
-Shadow validation checks sampled Redis values against the source in the
-background and can fill misses while remote serving is ramped down. Callers do
-not wait for these checks or fills. Serving and shadow ramps are independent;
-`disabled()` stops both for new calls without cancelling work already admitted.
+Shadow validation uses sampling to check cache coherence: it compares Redis
+values with the source in the background. It can also fill misses while remote
+serving is ramped down. Callers do not wait for these checks or fills. Serving
+and shadow ramps are independent; `disabled()` stops both for new calls without
+cancelling work already admitted.
 
 [Runtime configuration](https://lan17.github.io/DialCache/configuration.html)
 · [Shadow validation](https://lan17.github.io/DialCache/shadow-validation.html)
@@ -197,7 +198,7 @@ and operational details. It can also be
 | Connect Redis or Valkey; customize serialization | [Redis and Valkey](https://lan17.github.io/DialCache/redis.html) |
 | Invalidate cached results when an entity changes | [Targeted invalidation](https://lan17.github.io/DialCache/invalidation.html) |
 | Serve a retained value when the source fails | [Stale-on-error](https://lan17.github.io/DialCache/stale-on-error.html) |
-| Check Redis against the source and warm misses | [Shadow validation](https://lan17.github.io/DialCache/shadow-validation.html) |
+| Validate cache coherence through sampling | [Shadow validation](https://lan17.github.io/DialCache/shadow-validation.html) |
 | Understand shared work and deadlines | [Coalescing and liveness](https://lan17.github.io/DialCache/coalescing.html) |
 | Build dashboards and diagnose misses | [Observability](https://lan17.github.io/DialCache/observability.html) |
 | Upgrade, validate, or contribute | [Upgrading](https://lan17.github.io/DialCache/upgrading.html) · [Maintainer guide](https://lan17.github.io/DialCache/maintainers.html) |
