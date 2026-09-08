@@ -22,8 +22,7 @@ behind the scenes.
 - **Observability:** Prometheus and Datadog adapters report requests, misses by
   reason, errors, and latency.
 
-Caching is off until enabled. It runs only inside an `enable()` scope, so write
-paths stay uncached unless wrapped in one.
+Caching is **off by default** and runs only inside an `enable()` scope.
 
 [Documentation](https://lan17.github.io/DialCache/)
 · [Getting started](https://lan17.github.io/DialCache/getting-started.html)
@@ -93,7 +92,28 @@ await getUser("123"); // Outside enable(): loads from source again.
 
 Results containing `Date`, `bigint`, or other non-JSON-compatible values need an
 explicit [typed serializer](https://lan17.github.io/DialCache/redis.html#typed-serializer-requirement),
-even when caching only in memory.
+even when caching only in memory. Cached objects are shared references; copy
+before modifying.
+
+## Enabled scope
+
+Caching is **off by default**. Outside an `enable()` scope, `cached()` and
+`getOrLoad()` just run the loader. **Enable once at the request boundary**, such
+as a middleware around read handlers, so call sites need no changes, and wrap
+mutation handlers in `disable()` so a write path cannot cache a read it is about
+to make stale:
+
+```ts
+await dialcache.enable(async () => {
+  await getUser("123"); // Cached.
+
+  await dialcache.disable(async () => {
+    await updateUser("123", patch); // Reads in here go to the source.
+  });
+
+  await getUser("123"); // Cached again; disable() evicts nothing.
+});
+```
 
 ## Cache layers
 
@@ -115,8 +135,7 @@ layer memoizes whatever the layers below return. The
 [read-path guide](https://lan17.github.io/DialCache/concepts.html) lists what is
 stored after each kind of hit or miss.
 
-Concurrent calls for the same key share one in-progress read by default, so ten
-callers asking for the same user at once cause at most one source read. Set
+Concurrent calls for the same key share one in-progress read by default; set
 `coalesce: false` to opt out. The
 [coalescing guide](https://lan17.github.io/DialCache/coalescing.html) covers what
 a waiting caller inherits, including errors and deadlines.
@@ -167,44 +186,6 @@ and shadow ramps are independent; `disabled()` stops both.
 [Runtime configuration](https://lan17.github.io/DialCache/configuration.html)
 · [Shadow validation](https://lan17.github.io/DialCache/shadow-validation.html)
 
-## Freshness and invalidation
-
-A cached value lives until its TTL expires. For data that changes, a use case
-can opt into tracked invalidation: after a write commits, call
-`invalidateRemote()` for the entity, and tracked Redis reads reject values
-written before it. In-memory hits and in-progress reads can still return the
-earlier value; the
-[invalidation guide](https://lan17.github.io/DialCache/invalidation.html#independent-fence-checks)
-shows how to give every call its own check.
-
-Stale-on-error, off by default, returns the value Redis still holds past its TTL
-when the source fails with an error classified as recoverable, up to a
-configured maximum age. The built-in policy accepts only `FallbackTimeoutError`.
-A value retained for recovery is not revoked by a later invalidation.
-
-Cached objects are shared references. Copy before modifying.
-
-[Invalidation](https://lan17.github.io/DialCache/invalidation.html)
-· [Stale-on-error](https://lan17.github.io/DialCache/stale-on-error.html)
-· [Key design](https://lan17.github.io/DialCache/configuration.html#keys-ids-and-extra-dimensions)
-
-## Failures
-
-Cache access fails open: a failed Redis read runs the loader, and a failed cache
-write still returns the loader's result. Loader errors reject unless
-stale-on-error serves a value, and `invalidateRemote()` failures always reject.
-
-DialCache puts separate deadlines on Redis reads and on the loader. It does not
-time out configuration providers, serializers, Redis writes, or invalidation;
-see [liveness](https://lan17.github.io/DialCache/coalescing.html#application-owned-budgets).
-
-## Metrics
-
-Optional [Prometheus and Datadog adapters](https://lan17.github.io/DialCache/observability.html)
-report requests, misses by reason, errors, latency, and outcomes for shadow
-validation and stale recovery. Custom backends implement the same adapter
-interface.
-
 ## Reference
 
 The [reference](https://lan17.github.io/DialCache/) covers setup, behavior, APIs,
@@ -218,6 +199,9 @@ and operational details. It can also be
 | Look up methods, options, and exports | [API reference](https://lan17.github.io/DialCache/api.html) |
 | Set keys, layers, TTLs, and rollout policy | [Configuration](https://lan17.github.io/DialCache/configuration.html) |
 | Connect Redis or Valkey; customize serialization | [Redis and Valkey](https://lan17.github.io/DialCache/redis.html) |
+| Invalidate cached results when an entity changes | [Targeted invalidation](https://lan17.github.io/DialCache/invalidation.html) |
+| Serve a retained value when the source fails | [Stale-on-error](https://lan17.github.io/DialCache/stale-on-error.html) |
+| Compare Redis with the source before serving it | [Shadow validation](https://lan17.github.io/DialCache/shadow-validation.html) |
 | Understand shared work and deadlines | [Coalescing and liveness](https://lan17.github.io/DialCache/coalescing.html) |
 | Build dashboards and diagnose misses | [Observability](https://lan17.github.io/DialCache/observability.html) |
 | Upgrade, validate, or contribute | [Upgrading](https://lan17.github.io/DialCache/upgrading.html) · [Maintainer guide](https://lan17.github.io/DialCache/maintainers.html) |

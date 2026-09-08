@@ -1,7 +1,7 @@
 {
   "name": "dialcache",
   "version": "0.23.2",
-  "description": "Fine-grained TypeScript caching with explicit local and Redis controls.",
+  "description": "A TypeScript library that organizes caching into use cases, with runtime control and observability for each one.",
   "license": "MIT",
   "sideEffects": false,
   "type": "module",

@@ -7,7 +7,7 @@ const browserTargets = ["es2020", "chrome87", "edge88", "firefox78", "safari14.1
 export default defineConfig({
   title: "DialCache",
   description:
-    "Request-local, in-process, and Redis caching for TypeScript services. Learn the read path, configure runtime policies, and explore the API.",
+    "DialCache organizes caching into use cases, with runtime control and observability for each one. Reference for the read path, runtime policies, and the API.",
   lang: "en-US",
   base: "/DialCache/",
   vite: {

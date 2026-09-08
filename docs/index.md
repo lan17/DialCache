@@ -1,9 +1,9 @@
 # DialCache documentation
 
-DialCache adds configurable read-through caching to TypeScript functions in
-Node.js services. This reference explains the system from the outside in:
-first the read path, then the policies that control it, then individual APIs
-and integration contracts.
+DialCache is a TypeScript library that organizes caching into use cases, with
+runtime control and observability for each one. This reference explains the
+system from the outside in: first the read path, then the policies that control
+it, then individual APIs and integration contracts.
 
 ## Start here
 
