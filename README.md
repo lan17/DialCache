@@ -6,8 +6,7 @@
 
 DialCache is a TypeScript library that organizes caching into use cases, offers
 runtime control and observability for each one, and provides a set of features
-behind the scenes. Wrap a function with `cached()`, or hand `getOrLoad()` a key
-and a loader, and the result is cached.
+behind the scenes.
 
 - **Multi-layer:** request-local memoization, a process-local LRU, and Redis or
   Valkey, in any combination.
