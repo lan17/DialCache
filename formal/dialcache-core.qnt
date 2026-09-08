@@ -181,42 +181,24 @@ module dialcache_core {
 
   action requestLookup = all {
     phase == RequestLookup,
-    if (callRequestLocal and scope == OpenScope)
-      all {
-        requestReads' = requestReads + 1,
-        if (requestHasValue)
-          all {
-            origin' = RequestValue,
-            phase' = CallDone,
-          }
-        else
-          phase' = LocalLookup,
-      }
-    else
-      phase' = LocalLookup,
+    requestReads' = if (callRequestLocal and scope == OpenScope) requestReads + 1 else requestReads,
+    origin' = if (callRequestLocal and scope == OpenScope and requestHasValue) RequestValue else origin,
+    phase' = if (callRequestLocal and scope == OpenScope and requestHasValue) CallDone else LocalLookup,
   }
 
   action localLookup = all {
     phase == LocalLookup,
-    if (callLocal)
-      all {
-        localReads' = localReads + 1,
-        if (localHasValue)
-          all {
-            origin' = LocalValue,
-            if (callRequestLocal and scope == OpenScope)
-              all {
-                requestHasValue' = true,
-                requestWrites' = requestWrites + 1,
-              }
-            else true,
-            phase' = CallDone,
-          }
-        else
-          phase' = RemoteLookup,
-      }
+    localReads' = if (callLocal) localReads + 1 else localReads,
+    origin' = if (callLocal and localHasValue) LocalValue else origin,
+    requestHasValue' = if (callLocal and localHasValue and callRequestLocal and scope == OpenScope)
+      true
     else
-      phase' = RemoteLookup,
+      requestHasValue,
+    requestWrites' = if (callLocal and localHasValue and callRequestLocal and scope == OpenScope)
+      requestWrites + 1
+    else
+      requestWrites,
+    phase' = if (callLocal and localHasValue) CallDone else RemoteLookup,
   }
 
   // A healthy semantic Redis read is either a hit or miss. A hit can warm the
@@ -226,29 +208,20 @@ module dialcache_core {
     callRemote,
     remoteReadHealthy,
     remoteReads' = remoteReads + 1,
-    if (remoteHasValue)
-      all {
-        origin' = RemoteValue,
-        if (callLocal)
-          all {
-            localHasValue' = true,
-            localWrites' = localWrites + 1,
-          }
-        else true,
-        if (callRequestLocal and scope == OpenScope)
-          all {
-            requestHasValue' = true,
-            requestWrites' = requestWrites + 1,
-          }
-        else true,
-        phase' = CallDone,
-      }
+    origin' = if (remoteHasValue) RemoteValue else origin,
+    localHasValue' = if (remoteHasValue and callLocal) true else localHasValue,
+    localWrites' = if (remoteHasValue and callLocal) localWrites + 1 else localWrites,
+    requestHasValue' = if (remoteHasValue and callRequestLocal and scope == OpenScope)
+      true
     else
-      all {
-        remoteSemanticMiss' = true,
-        sourceCalls' = sourceCalls + 1,
-        phase' = LoaderRunning,
-      },
+      requestHasValue,
+    requestWrites' = if (remoteHasValue and callRequestLocal and scope == OpenScope)
+      requestWrites + 1
+    else
+      requestWrites,
+    remoteSemanticMiss' = not(remoteHasValue),
+    sourceCalls' = if (remoteHasValue) sourceCalls else sourceCalls + 1,
+    phase' = if (remoteHasValue) CallDone else LoaderRunning,
   }
 
   // Redis I/O is fail-open for a cached invocation. It authorizes no Redis
@@ -296,18 +269,10 @@ module dialcache_core {
     callStartedEnabled,
     remoteReadFailed,
     origin' = SourceValue,
-    if (callLocal and not(callTracked))
-      all {
-        localHasValue' = true,
-        localWrites' = localWrites + 1,
-      }
-    else true,
-    if (callRequestLocal and scope == OpenScope)
-      all {
-        requestHasValue' = true,
-        requestWrites' = requestWrites + 1,
-      }
-    else true,
+    localHasValue' = if (callLocal and not(callTracked)) true else localHasValue,
+    localWrites' = if (callLocal and not(callTracked)) localWrites + 1 else localWrites,
+    requestHasValue' = if (callRequestLocal and scope == OpenScope) true else requestHasValue,
+    requestWrites' = if (callRequestLocal and scope == OpenScope) requestWrites + 1 else requestWrites,
     phase' = CallDone,
   }
 
@@ -317,18 +282,10 @@ module dialcache_core {
     callStartedEnabled,
     not(callRemote),
     origin' = SourceValue,
-    if (callLocal)
-      all {
-        localHasValue' = true,
-        localWrites' = localWrites + 1,
-      }
-    else true,
-    if (callRequestLocal and scope == OpenScope)
-      all {
-        requestHasValue' = true,
-        requestWrites' = requestWrites + 1,
-      }
-    else true,
+    localHasValue' = if (callLocal) true else localHasValue,
+    localWrites' = if (callLocal) localWrites + 1 else localWrites,
+    requestHasValue' = if (callRequestLocal and scope == OpenScope) true else requestHasValue,
+    requestWrites' = if (callRequestLocal and scope == OpenScope) requestWrites + 1 else requestWrites,
     phase' = CallDone,
   }
 
@@ -341,25 +298,17 @@ module dialcache_core {
     origin' = NoResult,
   }
 
-  // Redis writes are fail-open. The model does not distinguish write success
-  // from failure because either way the caller returns the accepted source
-  // value. remoteWrites counts dispatch attempts.
+  // This transition represents a successful Redis publication. A separate
+  // implementation test covers write-fail-open behavior; the safety properties
+  // here concern which layers are eligible to publish after the source result.
   action finishRemotePublication = all {
     phase == RemotePublishing,
     remoteWrites' = remoteWrites + 1,
     remoteHasValue' = true,
-    if (callLocal and not(callTracked))
-      all {
-        localHasValue' = true,
-        localWrites' = localWrites + 1,
-      }
-    else true,
-    if (callRequestLocal and scope == OpenScope)
-      all {
-        requestHasValue' = true,
-        requestWrites' = requestWrites + 1,
-      }
-    else true,
+    localHasValue' = if (callLocal and not(callTracked)) true else localHasValue,
+    localWrites' = if (callLocal and not(callTracked)) localWrites + 1 else localWrites,
+    requestHasValue' = if (callRequestLocal and scope == OpenScope) true else requestHasValue,
+    requestWrites' = if (callRequestLocal and scope == OpenScope) requestWrites + 1 else requestWrites,
     phase' = CallDone,
   }
 
