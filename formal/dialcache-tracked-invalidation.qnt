@@ -1,5 +1,5 @@
 module dialcache_tracked_invalidation {
-  // First-pass model of the tracked Redis invalidation protocol.
+  // Model of the tracked Redis invalidation protocol.
   //
   // Scope:
   //   - one invalidation entity / one tracked value key
@@ -7,21 +7,14 @@ module dialcache_tracked_invalidation {
   //   - one pre-mutation load that may complete after invalidation
   //   - conditional refill using the watermark observed by the read
   //   - bounded writer delay / clock lead assumptions
-  //
-  // Deliberately out of scope for this model:
-  //   local caches, request scopes, coalescing, stale-on-error, shadow reads,
-  //   serialization/compression, Redis failures, retries, and TTL expiry.
 
   type ReadPhase = ReadIdle | ReadAcquired | ReadServed | ReadMissed
 
-  // Small finite bounds keep random simulation and explicit-state checking useful.
   pure val MAX_TIME = 8
   pure val FUTURE_BUFFER_MS = 4
   pure val MAX_STALE_WRITE_DELAY_MS = 3
   pure val MAX_WRITER_CLOCK_LEAD_MS = 1
 
-  // The deployment assumption documented by DialCache:
-  // futureBufferMs must cover delayed stale work plus writer clock lead.
   pure val bufferCoversStaleWrites =
     FUTURE_BUFFER_MS >= MAX_STALE_WRITE_DELAY_MS + MAX_WRITER_CLOCK_LEAD_MS
 
@@ -65,24 +58,19 @@ module dialcache_tracked_invalidation {
     snapshotWatermark' = 0,
   }
 
-  // Time is intentionally discrete and bounded. The model is about ordering and
-  // fence inequalities, not real millisecond magnitudes.
   action advanceTime = all {
     now < MAX_TIME,
     now' = now + 1,
   }
 
-  // A source read captures the version that was authoritative when it began.
-  // Starting it before commit models stale work that can finish afterwards.
   action startLoad = all {
     not(loadInFlight),
     loadInFlight' = true,
     loadSourceVersion' = sourceVersion,
   }
 
-  // Mutation commit and remote invalidation are collapsed into one transition.
-  // DialCache requires invalidateRemote() after source commit; the watermark is
-  // monotonic and proposed as invalidator time + futureBufferMs.
+  // Mutation commit and invalidation are collapsed into one transition. The
+  // proposal is monotonic and includes the configured future buffer.
   action commitAndInvalidate = all {
     not(mutationCommitted),
     mutationCommitted' = true,
@@ -94,9 +82,8 @@ module dialcache_tracked_invalidation {
       now + FUTURE_BUFFER_MS,
   }
 
-  // Complete a loader and dispatch the Redis SET. A pre-mutation load completing
-  // after invalidation is constrained by the documented Dmax assumption.
-  // We conservatively stamp with the maximum allowed writer clock lead.
+  // A pre-mutation load can finish after invalidation, but only within the
+  // deployment's bounded stale-work assumption.
   action completeLoadWrite = all {
     loadInFlight,
     or {
@@ -113,8 +100,8 @@ module dialcache_tracked_invalidation {
     loadInFlight' = false,
   }
 
-  // Tracked reads atomically observe the value and watermark. Later invalidation
-  // must not retroactively mutate this acquired snapshot.
+  // Tracked reads atomically acquire value and watermark. Later invalidation
+  // cannot mutate this already-acquired snapshot.
   action acquireTrackedRead = all {
     readPhase == ReadIdle,
     snapshotPresent' = valuePresent,
@@ -124,8 +111,6 @@ module dialcache_tracked_invalidation {
     readPhase' = ReadAcquired,
   }
 
-  // DialCache's tracked acceptance rule is strict: createdAtMs > watermarkMs.
-  // We omit age/payload checks here; those belong to later model slices.
   action finishTrackedRead = all {
     readPhase == ReadAcquired,
     readPhase' = if (snapshotPresent and snapshotCreatedAt > snapshotWatermark)
@@ -134,28 +119,31 @@ module dialcache_tracked_invalidation {
       ReadMissed,
   }
 
-  // Start another independent read after the previous result has been observed.
   action resetRead = all {
     readPhase != ReadIdle,
     readPhase != ReadAcquired,
     readPhase' = ReadIdle,
   }
 
-  // Model the conditional-refill check after a tracked miss. The refill uses the
-  // watermark observed by that same atomic read; it does not issue another read.
-  // If the dispatch timestamp cannot clear that observed fence, DialCache skips it.
+  // Conditional refill uses only the fence observed by the original atomic
+  // miss. Both the pre-serialization and pre-dispatch checks abstract to this
+  // timestamp predicate; neither performs another Redis read.
   action conditionalRefill = all {
     readPhase == ReadMissed,
     not(loadInFlight),
-    if (now + MAX_WRITER_CLOCK_LEAD_MS <= snapshotWatermark)
-      readPhase' = ReadIdle
+    valuePresent' = if (now + MAX_WRITER_CLOCK_LEAD_MS <= snapshotWatermark)
+      valuePresent
     else
-      all {
-        valuePresent' = true,
-        valueCreatedAt' = now + MAX_WRITER_CLOCK_LEAD_MS,
-        valueSourceVersion' = sourceVersion,
-        readPhase' = ReadIdle,
-      },
+      true,
+    valueCreatedAt' = if (now + MAX_WRITER_CLOCK_LEAD_MS <= snapshotWatermark)
+      valueCreatedAt
+    else
+      now + MAX_WRITER_CLOCK_LEAD_MS,
+    valueSourceVersion' = if (now + MAX_WRITER_CLOCK_LEAD_MS <= snapshotWatermark)
+      valueSourceVersion
+    else
+      sourceVersion,
+    readPhase' = ReadIdle,
   }
 
   action step = any {
@@ -169,15 +157,14 @@ module dialcache_tracked_invalidation {
     conditionalRefill,
   }
 
-  // Every served result was accepted against the watermark captured in the same
-  // atomic Redis snapshot. It need not be newer than the *current* watermark,
-  // because invalidation after acquisition does not revoke an existing snapshot.
+  // Every served result cleared the watermark captured in the same atomic
+  // snapshot. It need not clear the current watermark after later invalidation.
   val servedSnapshotClearedObservedFence =
     readPhase != ReadServed or
       (snapshotPresent and snapshotCreatedAt > snapshotWatermark)
 
-  // Under the Dmax + clock-lead assumption, a stale pre-mutation write that lands
-  // after invalidation is fenced by the watermark and cannot pass a later read.
+  // Under the documented delay/skew bound, stale pre-mutation work remains
+  // fenced even when its SET lands after invalidation.
   val staleValueAfterInvalidationIsFenced =
     not(bufferCoversStaleWrites) or
     not(mutationCommitted) or
@@ -185,8 +172,9 @@ module dialcache_tracked_invalidation {
     valueSourceVersion >= sourceVersion or
     valueCreatedAt <= watermark
 
-  // A read acquired after invalidation cannot serve a stale source version.
-  // Reads acquired before invalidation are intentionally allowed to finish later.
+  // A read that acquired the current invalidation snapshot cannot serve an old
+  // source version. A pre-invalidation snapshot is intentionally allowed to
+  // finish later.
   val acquiredAfterInvalidationDoesNotServeStale =
     readPhase != ReadServed or
     snapshotWatermark < watermark or
