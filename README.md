@@ -14,8 +14,8 @@ behind the scenes.
 - **Targeted invalidation:** one call per entity, across all its use cases.
 - **Coalescing:** concurrent same-key calls share one read.
 - **Fail-open:** cache failures fall back to the loader.
-- **Stale-on-error (opt-in):** serves a retained Redis value when the source fails.
-- **Shadow validation (opt-in):** checks and warms Redis before it serves callers.
+- **Stale-on-error (opt-in):** a retained Redis value when the source fails.
+- **Shadow validation (opt-in):** checks and warms Redis before it serves.
 - **Observability:** Prometheus and Datadog metrics, including miss reasons.
 
 [Documentation](https://lan17.github.io/DialCache/)
