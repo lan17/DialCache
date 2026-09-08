@@ -1,0 +1,34 @@
+name: Formal specification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "formal/**"
+      - "test/formal-protocol-vectors.test.ts"
+      - ".github/workflows/formal.yaml"
+  pull_request:
+    paths:
+      - "formal/**"
+      - "test/formal-protocol-vectors.test.ts"
+      - ".github/workflows/formal.yaml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: formal-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+      - name: Install Quint
+        run: npm install --global @informalsystems/quint@0.32.0
+      - name: Check executable specifications
+        run: bash formal/check.sh
