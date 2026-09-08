@@ -4,18 +4,17 @@
 [![Codecov](https://codecov.io/gh/lan17/DialCache/branch/main/graph/badge.svg)](https://codecov.io/gh/lan17/DialCache)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/lan17/DialCache/badge)](https://scorecard.dev/viewer/?uri=github.com/lan17/DialCache)
 
-DialCache is a TypeScript library that organizes caching into use cases, offers
-runtime control and observability for each one, and provides a set of features
-behind the scenes.
+DialCache is a TypeScript library that organizes caching into use cases, with
+runtime control and observability for each one.
 
 - **Off by default:** caching runs only inside an `enable()` scope.
 - **Multi-layer:** request-local → process-local → Redis.
 - **Runtime policies per use case:** layers, TTLs, and rollout ramps.
-- **Targeted invalidation:** one call per entity, across all its use cases.
-- **Coalescing:** concurrent same-key calls share one read.
+- **Targeted invalidation:** one call per entity for its tracked Redis results.
+- **Coalescing:** same-key reads share work when a cache layer is active.
 - **Fail-open:** cache failures fall back to the loader.
-- **Stale-on-error (opt-in):** a retained Redis value when the source fails.
-- **Shadow validation (opt-in):** checks and warms Redis before it serves.
+- **Stale-on-error (opt-in):** retained Redis values for selected source errors.
+- **Shadow validation (opt-in):** background Redis checks and warming.
 - **Observability:** Prometheus and Datadog metrics, including miss reasons.
 
 [Documentation](https://lan17.github.io/DialCache/)
@@ -124,15 +123,17 @@ request-local → process-local → Redis / Valkey → loader
 | Process-local | Requests using one `DialCache` instance | TTL, bounded by LRU capacity | Avoid repeated reads between requests |
 | Remote | Application instances using the same Redis keyspace | TTL, with optional invalidation tracking | Reuse reads across processes |
 
-Layers combine: a Redis hit warms the process-local cache, and the request-local
-layer memoizes whatever the layers below return. The
+Layers combine: a Redis hit can warm an active process-local cache, and an
+active request-local layer memoizes what the layers below return. The
 [read-path guide](https://lan17.github.io/DialCache/concepts.html) lists what is
 stored after each kind of hit or miss.
 
-Concurrent calls for the same key share one in-progress read by default; set
-`coalesce: false` to opt out. The
-[coalescing guide](https://lan17.github.io/DialCache/coalescing.html) covers what
-a waiting caller inherits, including errors and deadlines.
+When a cache layer is active, concurrent calls for the same key share work by
+default. Request-local caching shares work within the outer `enable()` scope;
+process-local and remote caching share it within one `DialCache` instance.
+Set `coalesce: false` to opt out. The
+[coalescing guide](https://lan17.github.io/DialCache/coalescing.html) covers the
+results, errors, and deadlines a waiting caller inherits.
 
 ## Changing policy at runtime
 
@@ -173,9 +174,10 @@ keys to the cohort, and lowering it removes keys without reshuffling the rest.
 Policy changes apply to new calls only. They do not evict cached values, and
 [a shorter TTL affects local and Redis entries differently](https://lan17.github.io/DialCache/configuration.html#changing-policy-on-a-running-service).
 
-With Redis configured, shadow validation compares cached values with the source
-on a sample of reads and fills misses before Redis serves any caller. Serving
-and shadow ramps are independent; `disabled()` stops both.
+Shadow validation checks sampled Redis values against the source in the
+background and can fill misses while remote serving is ramped down. Callers do
+not wait for these checks or fills. Serving and shadow ramps are independent;
+`disabled()` stops both for new calls without cancelling work already admitted.
 
 [Runtime configuration](https://lan17.github.io/DialCache/configuration.html)
 · [Shadow validation](https://lan17.github.io/DialCache/shadow-validation.html)
@@ -195,7 +197,7 @@ and operational details. It can also be
 | Connect Redis or Valkey; customize serialization | [Redis and Valkey](https://lan17.github.io/DialCache/redis.html) |
 | Invalidate cached results when an entity changes | [Targeted invalidation](https://lan17.github.io/DialCache/invalidation.html) |
 | Serve a retained value when the source fails | [Stale-on-error](https://lan17.github.io/DialCache/stale-on-error.html) |
-| Compare Redis with the source before serving it | [Shadow validation](https://lan17.github.io/DialCache/shadow-validation.html) |
+| Check Redis against the source and warm misses | [Shadow validation](https://lan17.github.io/DialCache/shadow-validation.html) |
 | Understand shared work and deadlines | [Coalescing and liveness](https://lan17.github.io/DialCache/coalescing.html) |
 | Build dashboards and diagnose misses | [Observability](https://lan17.github.io/DialCache/observability.html) |
 | Upgrade, validate, or contribute | [Upgrading](https://lan17.github.io/DialCache/upgrading.html) · [Maintainer guide](https://lan17.github.io/DialCache/maintainers.html) |
