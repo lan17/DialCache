@@ -6,10 +6,10 @@
 
 DialCache is a caching library for TypeScript on Node.js. Wrap a function with
 `cached()`, or hand `getOrLoad()` a key and a loader, and the result is cached.
-You decide, per use case, where results live, for how long, and for which keys.
-Those decisions can change while the service runs. Behind the scenes, DialCache
-handles the parts that usually go wrong: hot keys, cache outages, stale data,
-and risky rollouts.
+Policy is set per use case: where results live, for how long, and for which
+keys. It can change while the service runs. Behind the scenes, DialCache handles
+the parts that usually go wrong: hot keys, cache outages, stale data, and risky
+rollouts.
 
 - **Multi-layer:** request-local memoization, a process-local LRU, and Redis or
   Valkey, in any combination.
@@ -21,13 +21,13 @@ and risky rollouts.
 - **Coalescing and fail-open by default:** concurrent same-key calls share one
   in-progress read, and cache failures fall back to the loader.
 - **Opt-in resilience:** stale-on-error serves a retained Redis value when the
-  source fails with an error you allow; shadow validation checks Redis against
-  the source and can warm it before it serves callers.
+  source fails with an error classified as recoverable; shadow validation checks
+  Redis against the source and can warm it before it serves callers.
 - **Observability:** Prometheus and Datadog adapters report requests, misses by
   reason, errors, and latency.
 
-Caching is off until you turn it on. It runs only inside an `enable()` scope, so
-a write path never fills a cache unless you enable it there.
+Caching is off until enabled. It runs only inside an `enable()` scope, so write
+paths stay uncached unless wrapped in one.
 
 [Documentation](https://lan17.github.io/DialCache/)
 · [Getting started](https://lan17.github.io/DialCache/getting-started.html)
@@ -47,13 +47,13 @@ import { CacheLayer, DialCache, DialCacheKeyConfig } from "dialcache";
 
 const dialcache = new DialCache();
 
-// The loader: your database or service read.
+// The loader: the database or service read.
 async function fetchUser(userId: string) {
   console.log("Loading from source:", userId);
   return { id: userId, name: "Ada" };
 }
 
-// The cached function. Call it wherever you would call fetchUser.
+// The cached function. A drop-in replacement for fetchUser.
 const getUser = dialcache.cached(fetchUser, {
   keyType: "user_id", // Entity kind; with the id, the unit of invalidation.
   useCase: "GetUser", // Operation name; part of the key and metric labels.
@@ -85,7 +85,7 @@ await getUser("123"); // Outside enable(): loads from source again.
 
 Results containing `Date`, `bigint`, or other non-JSON-compatible values need an
 explicit [typed serializer](https://lan17.github.io/DialCache/redis.html#typed-serializer-requirement),
-even when you cache only in memory.
+even when caching only in memory.
 
 ## Cache layers
 
@@ -93,7 +93,7 @@ Inside `enable()`, a call checks each active layer in order and stops at the
 first hit. A miss at every layer runs the loader:
 
 ```text
-request-local → process-local → Redis / Valkey → your loader
+request-local → process-local → Redis / Valkey → loader
 ```
 
 | Layer | Shares values across | Lifetime | Typical use |
@@ -120,7 +120,7 @@ instance overrides individual fields on every enabled call. This example starts
 with local caching ramped to zero, then opens it to a 10% cohort of keys:
 
 ```ts
-// Your configuration system feeds this map.
+// The application's configuration system feeds this map.
 const policies = new Map<string, DialCacheKeyConfig>();
 const cache = new DialCache({
   cacheConfigProvider: (key) => policies.get(key.useCase) ?? null,
@@ -170,11 +170,11 @@ earlier value; the
 shows how to give every call its own check.
 
 Stale-on-error, off by default, returns the value Redis still holds past its TTL
-when the source fails with an error you allow, up to a maximum age you set. The
-built-in policy accepts only `FallbackTimeoutError`. A value retained for
+when the source fails with an error classified as recoverable, up to a configured
+maximum age. The built-in policy accepts only `FallbackTimeoutError`. A value retained for
 recovery is not revoked by a later invalidation.
 
-Cached objects are shared references. Copy one before you modify it.
+Cached objects are shared references. Copy before modifying.
 
 [Invalidation](https://lan17.github.io/DialCache/invalidation.html)
 · [Stale-on-error](https://lan17.github.io/DialCache/stale-on-error.html)
