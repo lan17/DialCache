@@ -65,6 +65,12 @@ class ConformanceDriver {
   localLoaderCalls = 0;
   coalescedLoaderCalls = 0;
   remoteLoaderCalls = 0;
+  localCached = false;
+  localValue = 0;
+  coalescedCached = false;
+  coalescedValue = 0;
+  remoteReadable = false;
+  remoteValue = 0;
 
   private wallClockMs = Date.parse("2026-09-08T12:00:00.000Z");
 
@@ -82,7 +88,10 @@ class ConformanceDriver {
         return;
       case "outsideCall":
         this.lastResult = await this.dialcache.getOrLoad(
-          async () => ++this.outsideLoaderCalls && this.sourceVersion,
+          async () => {
+            this.outsideLoaderCalls += 1;
+            return this.sourceVersion;
+          },
           {
             keyType: "user_id",
             useCase: "ConformanceOutside",
@@ -117,6 +126,8 @@ class ConformanceDriver {
         this.lastResult = await this.dialcache.enable(async () =>
           await this.dialcache.getOrLoad(async () => {
             this.localLoaderCalls += 1;
+            this.localCached = true;
+            this.localValue = this.sourceVersion;
             return this.sourceVersion;
           }, {
             keyType: "user_id",
@@ -137,6 +148,8 @@ class ConformanceDriver {
         const values = await this.dialcache.enable(async () => {
           const leader = this.dialcache.getOrLoad(async () => {
             this.coalescedLoaderCalls += 1;
+            this.coalescedCached = true;
+            this.coalescedValue = this.sourceVersion;
             await gate.promise;
             return this.sourceVersion;
           }, options);
@@ -157,6 +170,7 @@ class ConformanceDriver {
         return;
       case "invalidateRemote":
         await this.dialcache.invalidateRemote("user_id", "123");
+        this.remoteReadable = false;
         return;
       case "remoteReadFailureCall":
         this.redis.failGet = true;
@@ -169,10 +183,7 @@ class ConformanceDriver {
     }
   }
 
-  snapshot(expected: Snapshot): Snapshot {
-    // Cache readability/value are model-level abstractions. Infer them from
-    // caller-visible behavior/counters rather than reaching into DialCache's
-    // private LRU or Redis protocol internals.
+  snapshot(): Snapshot {
     return {
       sourceVersion: this.sourceVersion,
       lastResult: this.lastResult,
@@ -181,12 +192,12 @@ class ConformanceDriver {
       localLoaderCalls: this.localLoaderCalls,
       coalescedLoaderCalls: this.coalescedLoaderCalls,
       remoteLoaderCalls: this.remoteLoaderCalls,
-      localCached: expected.localCached,
-      localValue: expected.localValue,
-      coalescedCached: expected.coalescedCached,
-      coalescedValue: expected.coalescedValue,
-      remoteReadable: expected.remoteReadable,
-      remoteValue: expected.remoteValue,
+      localCached: this.localCached,
+      localValue: this.localValue,
+      coalescedCached: this.coalescedCached,
+      coalescedValue: this.coalescedValue,
+      remoteReadable: this.remoteReadable,
+      remoteValue: this.remoteValue,
       redisReads: this.redis.mGetCalls,
       redisWrites: this.redis.setCalls,
     };
@@ -194,6 +205,7 @@ class ConformanceDriver {
 
   private async remoteCall(expectReadFailure: boolean): Promise<number> {
     const beforeWrites = this.redis.setCalls;
+    const beforeLoaders = this.remoteLoaderCalls;
     const result = await this.dialcache.enable(async () =>
       await this.dialcache.getOrLoad(async () => {
         this.remoteLoaderCalls += 1;
@@ -206,8 +218,18 @@ class ConformanceDriver {
         defaultConfig: remoteOnly(),
       }),
     );
+
     if (expectReadFailure) {
       expect(this.redis.setCalls).toBe(beforeWrites);
+      return result;
+    }
+
+    if (this.redis.setCalls > beforeWrites) {
+      this.remoteReadable = true;
+      this.remoteValue = result;
+    } else if (this.remoteLoaderCalls === beforeLoaders) {
+      // A source-free tracked read was an accepted remote hit.
+      this.remoteReadable = true;
     }
     return result;
   }
@@ -283,7 +305,7 @@ describe("Quint model-based conformance", () => {
       for (const [stepIndex, step] of trace.entries()) {
         await driver.apply(step.action);
         expect(
-          driver.snapshot(step.state),
+          driver.snapshot(),
           `trace ${traceIndex} step ${stepIndex} action ${step.action}`,
         ).toEqual(step.state);
       }
