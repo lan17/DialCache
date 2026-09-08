@@ -1,7 +1,7 @@
 module dialcache_stale_recovery {
-  // Model stale-on-error for one Redis frame and one caller/coalesced flight.
-  // F and M are exclusive age ceilings. The retained candidate comes only from
-  // the initial Redis read; there is deliberately no second-read transition.
+  // Stale-on-error for one Redis frame and one caller/coalesced flight.
+  // F is the fresh ceiling; M is the exclusive recovery ceiling. Recovery uses
+  // retained bytes from the initial read and deliberately has no second read.
 
   type InitialRead = ReadPending | FreshHit | RetainedCandidate | PlainMiss | ReadFailed
   type SourceState = SourceIdle | SourceRunning | SourceSucceeded | SourceRejected
@@ -12,200 +12,207 @@ module dialcache_stale_recovery {
   pure val MAX_RECOVERY_AGE = 5
   pure val MAX_TIME = 8
 
-  var now: int
-  var framePresent: bool
-  var frameCreatedAt: int
-  var frameValid: bool
-  var frameFenced: bool
-  var readHealthy: bool
+  type State = {
+    now: int,
+    framePresent: bool,
+    frameCreatedAt: int,
+    frameValid: bool,
+    frameFenced: bool,
+    readHealthy: bool,
+    initialRead: InitialRead,
+    candidateRetained: bool,
+    candidateCreatedAt: int,
+    redisReads: int,
+    sourceState: SourceState,
+    classifierAllows: bool,
+    recoveryState: RecoveryState,
+    candidateDecoded: bool,
+    redisWrites: int,
+    processLocalWrites: int,
+    requestLocalWrites: int,
+    shadowJobs: int,
+    finalOutcome: FinalOutcome
+  }
 
-  var initialRead: InitialRead
-  var candidateRetained: bool
-  var candidateCreatedAt: int
-  var redisReads: int
+  var s: State
 
-  var sourceState: SourceState
-  var classifierAllows: bool
-  var recoveryState: RecoveryState
-  var candidateDecoded: bool
-
-  var redisWrites: int
-  var processLocalWrites: int
-  var requestLocalWrites: int
-  var shadowJobs: int
-  var finalOutcome: FinalOutcome
-
-  action init = all {
-    now' = 0,
-    framePresent' = false,
-    frameCreatedAt' = 0,
-    frameValid' = true,
-    frameFenced' = false,
-    readHealthy' = true,
-
-    initialRead' = ReadPending,
-    candidateRetained' = false,
-    candidateCreatedAt' = 0,
-    redisReads' = 0,
-
-    sourceState' = SourceIdle,
-    classifierAllows' = false,
-    recoveryState' = RecoveryIdle,
-    candidateDecoded' = false,
-
-    redisWrites' = 0,
-    processLocalWrites' = 0,
-    requestLocalWrites' = 0,
-    shadowJobs' = 0,
-    finalOutcome' = PendingOutcome,
+  action init = s' = {
+    now: 0,
+    framePresent: false,
+    frameCreatedAt: 0,
+    frameValid: true,
+    frameFenced: false,
+    readHealthy: true,
+    initialRead: ReadPending,
+    candidateRetained: false,
+    candidateCreatedAt: 0,
+    redisReads: 0,
+    sourceState: SourceIdle,
+    classifierAllows: false,
+    recoveryState: RecoveryIdle,
+    candidateDecoded: false,
+    redisWrites: 0,
+    processLocalWrites: 0,
+    requestLocalWrites: 0,
+    shadowJobs: 0,
+    finalOutcome: PendingOutcome
   }
 
   action advanceTime = all {
-    now < MAX_TIME,
-    now' = now + 1,
+    s.now < MAX_TIME,
+    s' = { now: s.now + 1, ...s },
   }
 
   action seedFrameNow = all {
-    initialRead == ReadPending,
-    redisReads == 0,
-    framePresent' = true,
-    frameCreatedAt' = now,
+    s.initialRead == ReadPending,
+    s.redisReads == 0,
+    s' = { framePresent: true, frameCreatedAt: s.now, ...s },
   }
 
   action makeFrameOlder = all {
-    initialRead == ReadPending,
-    redisReads == 0,
-    framePresent,
-    frameCreatedAt > 0,
-    frameCreatedAt' = frameCreatedAt - 1,
+    s.initialRead == ReadPending,
+    s.redisReads == 0,
+    s.framePresent,
+    s.frameCreatedAt > 0,
+    s' = { frameCreatedAt: s.frameCreatedAt - 1, ...s },
   }
 
   action toggleFrameValidity = all {
-    initialRead == ReadPending,
-    redisReads == 0,
-    frameValid' = not(frameValid),
+    s.initialRead == ReadPending,
+    s.redisReads == 0,
+    s' = { frameValid: not(s.frameValid), ...s },
   }
 
   action toggleFence = all {
-    initialRead == ReadPending,
-    redisReads == 0,
-    frameFenced' = not(frameFenced),
+    s.initialRead == ReadPending,
+    s.redisReads == 0,
+    s' = { frameFenced: not(s.frameFenced), ...s },
   }
 
   action toggleReadHealth = all {
-    initialRead == ReadPending,
-    redisReads == 0,
-    readHealthy' = not(readHealthy),
+    s.initialRead == ReadPending,
+    s.redisReads == 0,
+    s' = { readHealthy: not(s.readHealthy), ...s },
   }
 
   action toggleClassifier = all {
-    sourceState != SourceSucceeded,
-    recoveryState == RecoveryIdle,
-    classifierAllows' = not(classifierAllows),
+    s.sourceState != SourceSucceeded,
+    s.recoveryState == RecoveryIdle,
+    s' = { classifierAllows: not(s.classifierAllows), ...s },
   }
 
-  // One caller-serving Redis read classifies freshness before ordinary
-  // deserialization. Invalid/future/fenced/absent frames cannot be candidates.
+  // Freshness is classified before ordinary deserialization. Only a valid,
+  // unfenced, non-future frame with F <= age < M is retained as a candidate.
   action performInitialRead = all {
-    initialRead == ReadPending,
-    redisReads == 0,
-    redisReads' = 1,
-    initialRead' = if (not(readHealthy))
-      ReadFailed
-    else if (not(framePresent) or not(frameValid) or frameFenced or frameCreatedAt > now)
-      PlainMiss
-    else if (now - frameCreatedAt < FRESH_AGE)
-      FreshHit
-    else if (now - frameCreatedAt < MAX_RECOVERY_AGE)
-      RetainedCandidate
-    else
-      PlainMiss,
-    candidateRetained' = readHealthy and framePresent and frameValid and not(frameFenced) and
-      frameCreatedAt <= now and now - frameCreatedAt >= FRESH_AGE and
-      now - frameCreatedAt < MAX_RECOVERY_AGE,
-    candidateCreatedAt' = if (readHealthy and framePresent and frameValid and not(frameFenced) and
-      frameCreatedAt <= now and now - frameCreatedAt >= FRESH_AGE and
-      now - frameCreatedAt < MAX_RECOVERY_AGE)
-      frameCreatedAt
-    else
-      candidateCreatedAt,
-    finalOutcome' = if (readHealthy and framePresent and frameValid and not(frameFenced) and
-      frameCreatedAt <= now and now - frameCreatedAt < FRESH_AGE)
-      ServedFresh
-    else
-      finalOutcome,
+    s.initialRead == ReadPending,
+    s.redisReads == 0,
+    s' = {
+      redisReads: 1,
+      initialRead: if (not(s.readHealthy))
+        ReadFailed
+      else if (not(s.framePresent) or not(s.frameValid) or s.frameFenced or s.frameCreatedAt > s.now)
+        PlainMiss
+      else if (s.now - s.frameCreatedAt < FRESH_AGE)
+        FreshHit
+      else if (s.now - s.frameCreatedAt < MAX_RECOVERY_AGE)
+        RetainedCandidate
+      else
+        PlainMiss,
+      candidateRetained: s.readHealthy and s.framePresent and s.frameValid and not(s.frameFenced) and
+        s.frameCreatedAt <= s.now and s.now - s.frameCreatedAt >= FRESH_AGE and
+        s.now - s.frameCreatedAt < MAX_RECOVERY_AGE,
+      candidateCreatedAt: if (s.readHealthy and s.framePresent and s.frameValid and not(s.frameFenced) and
+        s.frameCreatedAt <= s.now and s.now - s.frameCreatedAt >= FRESH_AGE and
+        s.now - s.frameCreatedAt < MAX_RECOVERY_AGE)
+        s.frameCreatedAt
+      else
+        s.candidateCreatedAt,
+      finalOutcome: if (s.readHealthy and s.framePresent and s.frameValid and not(s.frameFenced) and
+        s.frameCreatedAt <= s.now and s.now - s.frameCreatedAt < FRESH_AGE)
+        ServedFresh
+      else
+        s.finalOutcome,
+      ...s
+    },
   }
 
   action startSource = all {
-    initialRead != ReadPending,
-    initialRead != FreshHit,
-    sourceState == SourceIdle,
-    sourceState' = SourceRunning,
+    s.initialRead != ReadPending,
+    s.initialRead != FreshHit,
+    s.sourceState == SourceIdle,
+    s' = { sourceState: SourceRunning, ...s },
   }
 
-  // Source success follows ordinary refill/publication rules. The retained raw
-  // candidate is intentionally not decoded on this path.
+  // A successful source path never needs to deserialize retained stale bytes.
   action sourceSucceeds = all {
-    sourceState == SourceRunning,
-    sourceState' = SourceSucceeded,
-    finalOutcome' = ServedSource,
-    redisWrites' = if (initialRead == ReadFailed) 0 else 1,
+    s.sourceState == SourceRunning,
+    s' = {
+      sourceState: SourceSucceeded,
+      finalOutcome: ServedSource,
+      redisWrites: if (s.initialRead == ReadFailed) 0 else 1,
+      ...s
+    },
   }
 
   action sourceRejects = all {
-    sourceState == SourceRunning,
-    sourceState' = SourceRejected,
-    recoveryState' = if (classifierAllows) CandidateChecking else ClassifierDenied,
-    finalOutcome' = if (classifierAllows) finalOutcome else RejectedSource,
+    s.sourceState == SourceRunning,
+    s' = {
+      sourceState: SourceRejected,
+      recoveryState: if (s.classifierAllows) CandidateChecking else ClassifierDenied,
+      finalOutcome: if (s.classifierAllows) s.finalOutcome else RejectedSource,
+      ...s
+    },
   }
 
-  // Authorization does not imply a candidate exists. Recovery preserves the
-  // original source rejection whenever the candidate is missing or too old.
   action checkCandidate = all {
-    recoveryState == CandidateChecking,
-    recoveryState' = if (candidateRetained and candidateCreatedAt <= now and
-      now - candidateCreatedAt < MAX_RECOVERY_AGE)
-      CandidateLoading
-    else
-      RecoveryMissed,
-    finalOutcome' = if (candidateRetained and candidateCreatedAt <= now and
-      now - candidateCreatedAt < MAX_RECOVERY_AGE)
-      finalOutcome
-    else
-      RejectedSource,
+    s.recoveryState == CandidateChecking,
+    s' = {
+      recoveryState: if (s.candidateRetained and s.candidateCreatedAt <= s.now and
+        s.now - s.candidateCreatedAt < MAX_RECOVERY_AGE)
+        CandidateLoading
+      else
+        RecoveryMissed,
+      finalOutcome: if (s.candidateRetained and s.candidateCreatedAt <= s.now and
+        s.now - s.candidateCreatedAt < MAX_RECOVERY_AGE)
+        s.finalOutcome
+      else
+        RejectedSource,
+      ...s
+    },
   }
 
-  // Lazy deserialization/decompression can take arbitrary application-owned
-  // time. DialCache rechecks age after asynchronous load before returning.
+  // Loading/decompression may take application-owned time, so age is checked
+  // again after it settles. Exact M is already too old.
   action candidateLoadSucceeds = all {
-    recoveryState == CandidateLoading,
-    candidateDecoded' = true,
-    recoveryState' = if (candidateCreatedAt <= now and now - candidateCreatedAt < MAX_RECOVERY_AGE)
-      RecoveryServed
-    else
-      RecoveryMissed,
-    finalOutcome' = if (candidateCreatedAt <= now and now - candidateCreatedAt < MAX_RECOVERY_AGE)
-      ServedStale
-    else
-      RejectedSource,
-    // Request-local memoization is the only permitted publication.
-    requestLocalWrites' = if (candidateCreatedAt <= now and now - candidateCreatedAt < MAX_RECOVERY_AGE)
-      requestLocalWrites + 1
-    else
-      requestLocalWrites,
+    s.recoveryState == CandidateLoading,
+    s' = {
+      candidateDecoded: true,
+      recoveryState: if (s.candidateCreatedAt <= s.now and s.now - s.candidateCreatedAt < MAX_RECOVERY_AGE)
+        RecoveryServed
+      else
+        RecoveryMissed,
+      finalOutcome: if (s.candidateCreatedAt <= s.now and s.now - s.candidateCreatedAt < MAX_RECOVERY_AGE)
+        ServedStale
+      else
+        RejectedSource,
+      requestLocalWrites: if (s.candidateCreatedAt <= s.now and s.now - s.candidateCreatedAt < MAX_RECOVERY_AGE)
+        s.requestLocalWrites + 1
+      else
+        s.requestLocalWrites,
+      ...s
+    },
   }
 
   action candidateLoadFails = all {
-    recoveryState == CandidateLoading,
-    recoveryState' = RecoveryMissed,
-    finalOutcome' = RejectedSource,
+    s.recoveryState == CandidateLoading,
+    s' = { recoveryState: RecoveryMissed, finalOutcome: RejectedSource, ...s },
   }
 
-  // Later Redis invalidation/deletion/refresh cannot revoke retained bytes.
+  // Retained bytes live in process memory. Later Redis deletion/invalidation
+  // cannot revoke that original candidate and recovery still performs no re-read.
   action mutateRedisAfterRetention = all {
-    candidateRetained,
-    framePresent' = not(framePresent),
-    frameFenced' = true,
+    s.candidateRetained,
+    s' = { framePresent: not(s.framePresent), frameFenced: true, ...s },
   }
 
   action step = any {
@@ -227,27 +234,27 @@ module dialcache_stale_recovery {
   }
 
   val recoveryUsesSingleRedisRead =
-    redisReads <= 1
+    s.redisReads <= 1
 
   val retainedCandidateWasEligible =
-    not(candidateRetained) or
-      (frameValid and candidateCreatedAt <= now and initialRead == RetainedCandidate)
+    not(s.candidateRetained) or
+      (s.frameValid and s.candidateCreatedAt <= s.now and s.initialRead == RetainedCandidate)
 
   val servedStaleIsStrictlyWithinMaxAge =
-    finalOutcome != ServedStale or
-      (candidateCreatedAt <= now and now - candidateCreatedAt < MAX_RECOVERY_AGE)
+    s.finalOutcome != ServedStale or
+      (s.candidateCreatedAt <= s.now and s.now - s.candidateCreatedAt < MAX_RECOVERY_AGE)
 
   val staleRequiresAuthorizedSourceFailure =
-    finalOutcome != ServedStale or
-      (sourceState == SourceRejected and classifierAllows)
+    s.finalOutcome != ServedStale or
+      (s.sourceState == SourceRejected and s.classifierAllows)
 
   val sourceSuccessDoesNotDecodeCandidate =
-    sourceState != SourceSucceeded or not(candidateDecoded)
+    s.sourceState != SourceSucceeded or not(s.candidateDecoded)
 
   val recoveredStaleHasNoSharedPublication =
-    finalOutcome != ServedStale or
-      (redisWrites == 0 and processLocalWrites == 0 and shadowJobs == 0)
+    s.finalOutcome != ServedStale or
+      (s.redisWrites == 0 and s.processLocalWrites == 0 and s.shadowJobs == 0)
 
   val readFailureNeverRetains =
-    initialRead != ReadFailed or not(candidateRetained)
+    s.initialRead != ReadFailed or not(s.candidateRetained)
 }
