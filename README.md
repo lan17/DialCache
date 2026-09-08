@@ -29,14 +29,26 @@ paths stay uncached unless wrapped in one.
 · [Getting started](https://lan17.github.io/DialCache/getting-started.html)
 · [API reference](https://lan17.github.io/DialCache/api.html)
 
-## Usage
+## Install
 
 ```bash
 npm install dialcache
+# Choose a Redis client when using the remote layer:
+npm install redis@~4.7.1
+# or
+npm install @valkey/valkey-glide@^2.0.0
+# Add a metrics client only when using its adapter:
+npm install prom-client@^15.1.3
+# or
+npm install hot-shots@^17.0.0
 ```
 
-Requires Node.js `>=22.15.0 <23.0.0 || >=23.8.0`. Redis and telemetry clients
-are optional; install them separately as needed.
+DialCache requires Node.js with zstd support in `node:zlib`: 22.15.0 or newer
+within the 22.x line, or 23.8.0 and newer (23.0–23.7 lack zstd and are
+excluded). Production deployments should use a
+[currently supported LTS release](https://nodejs.org/en/about/previous-releases).
+
+## Usage
 
 ```ts
 import { CacheLayer, DialCache, DialCacheKeyConfig } from "dialcache";
