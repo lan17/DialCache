@@ -4,20 +4,18 @@
 [![Codecov](https://codecov.io/gh/lan17/DialCache/branch/main/graph/badge.svg)](https://codecov.io/gh/lan17/DialCache)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/lan17/DialCache/badge)](https://scorecard.dev/viewer/?uri=github.com/lan17/DialCache)
 
-DialCache is a TypeScript caching library for application reads. Give a read a
-name, a key, and a policy; DialCache reuses a value or calls your loader.
+DialCache is a TypeScript library that organizes caching into use cases, with
+runtime control and observability for each one.
 
-Caching is off outside an explicit `enable()` scope. Inside it, reads can use
-request-local memory, a process-local LRU, and Redis or Valkey. Each use case has
-its own TTLs and rollout ramps, which you can change at runtime.
-
-- With an active cache layer, same-key reads share in-flight work by default,
-  within a request or one instance.
-- Targeted invalidation covers an entity's tracked Redis results.
-- Cache failures fall back to the loader. Optional stale-on-error recovery can
-  serve retained Redis values for selected source errors.
-- Shadow validation checks cache coherence through sampling.
-- Prometheus and Datadog adapters expose hits, misses, errors, and feature outcomes.
+- **Off by default:** caching runs only inside an `enable()` scope.
+- **Multi-layer:** request-local → process-local → Redis.
+- **Runtime policies per use case:** layers, TTLs, and rollout ramps.
+- **Targeted invalidation:** one call per entity for its tracked Redis results.
+- **Coalescing:** same-key reads share work when a cache layer is active.
+- **Fail-open:** cache failures fall back to the loader.
+- **Stale-on-error (opt-in):** retained Redis values for selected source errors.
+- **Shadow validation (opt-in):** cache coherence checks through sampling.
+- **Observability:** Prometheus and Datadog metrics, including miss reasons.
 
 [Documentation](https://lan17.github.io/DialCache/)
 · [Getting started](https://lan17.github.io/DialCache/getting-started.html)
