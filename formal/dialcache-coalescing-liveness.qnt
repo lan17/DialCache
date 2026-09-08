@@ -24,7 +24,10 @@ module dialcache_coalescing_liveness {
 
   var fallbackDeadline: int
   var fallbackDeadlineStarted: bool
-  var underlyingSourceRunning: bool
+  var activeSourceRunning: bool
+  // Timed-out source work is no longer part of a registered flight. It may
+  // settle later while a new flight is already running.
+  var abandonedSources: int
   var acceptedSourceResult: bool
   var publicationDispatched: bool
 
@@ -44,7 +47,8 @@ module dialcache_coalescing_liveness {
 
     fallbackDeadline' = 0,
     fallbackDeadlineStarted' = false,
-    underlyingSourceRunning' = false,
+    activeSourceRunning' = false,
+    abandonedSources' = 0,
     acceptedSourceResult' = false,
     publicationDispatched' = false,
   }
@@ -85,6 +89,7 @@ module dialcache_coalescing_liveness {
     flightScope' = if (requestLayerActive) RequestFlight else ProcessFlight,
     outcome' = NoOutcome,
     followers' = 0,
+    sourceExecutions' = 0,
     fallbackDeadlineStarted' = false,
     acceptedSourceResult' = false,
     publicationDispatched' = false,
@@ -118,7 +123,7 @@ module dialcache_coalescing_liveness {
   action cacheMissStartsFallback = all {
     phase == CacheLookup,
     sourceExecutions' = sourceExecutions + 1,
-    underlyingSourceRunning' = true,
+    activeSourceRunning' = true,
     fallbackDeadlineStarted' = true,
     fallbackDeadline' = now + FALLBACK_TIMEOUT,
     phase' = FallbackRunning,
@@ -127,7 +132,7 @@ module dialcache_coalescing_liveness {
   action sourceSucceedsBeforeDeadline = all {
     phase == FallbackRunning,
     now < fallbackDeadline,
-    underlyingSourceRunning' = false,
+    activeSourceRunning' = false,
     acceptedSourceResult' = true,
     outcome' = SourceSuccess,
     phase' = Publication,
@@ -135,31 +140,32 @@ module dialcache_coalescing_liveness {
 
   action sourceRejects = all {
     phase == FallbackRunning,
-    underlyingSourceRunning' = false,
+    activeSourceRunning' = false,
     acceptedSourceResult' = false,
     outcome' = SourceFailure,
     phase' = FlightDone,
   }
 
-  // The timer and result-settlement paths both use the monotonic boundary.
-  // Timeout clears the registered flight but does not cancel the source.
+  // Timeout clears the registered flight and abandons ownership of the source;
+  // it does not cancel the underlying operation.
   action fallbackTimesOut = all {
     phase == FallbackRunning,
     fallbackDeadlineStarted,
     now >= fallbackDeadline,
+    activeSourceRunning,
+    activeSourceRunning' = false,
+    abandonedSources' = abandonedSources + 1,
     acceptedSourceResult' = false,
     outcome' = SourceTimeout,
     phase' = FlightDone,
     flightScope' = NoFlight,
   }
 
-  // An underlying source may settle after DialCache timed out. Its value is
-  // ignored: it cannot become an accepted result or start publication.
-  action lateSourceSettlement = all {
-    phase == FlightDone,
-    outcome == SourceTimeout,
-    underlyingSourceRunning,
-    underlyingSourceRunning' = false,
+  // An abandoned source may settle during any later flight. Its value is
+  // ignored and has no path to acceptedSourceResult/publicationDispatched.
+  action abandonedSourceSettles = all {
+    abandonedSources > 0,
+    abandonedSources' = abandonedSources - 1,
   }
 
   // Serializer/write work begins only after the source result has been accepted.
@@ -178,6 +184,7 @@ module dialcache_coalescing_liveness {
     flightScope' = NoFlight,
     outcome' = NoOutcome,
     followers' = 0,
+    sourceExecutions' = 0,
     fallbackDeadlineStarted' = false,
     acceptedSourceResult' = false,
     publicationDispatched' = false,
@@ -197,38 +204,32 @@ module dialcache_coalescing_liveness {
     sourceSucceedsBeforeDeadline,
     sourceRejects,
     fallbackTimesOut,
-    lateSourceSettlement,
+    abandonedSourceSettles,
     dispatchPublication,
     resetFlight,
   }
 
-  // A registered flight exists only for enabled, coalesced work with at least
-  // one active serving layer.
   val flightsRequireEligibleCaching =
     flightScope == NoFlight or (enabled and coalesce and (requestLayerActive or sharedLayerActive))
 
-  // Followers never create additional source executions inside the shared
-  // flight. One leader owns at most one fallback source attempt.
   val oneSourcePerRegisteredFlight =
-    flightScope == NoFlight or sourceExecutions <= 1
+    sourceExecutions <= 1
 
-  // The source deadline does not exist during cache lookup or on cache hits.
   val fallbackDeadlineStartsWithFallback =
     not(fallbackDeadlineStarted) or
       phase == FallbackRunning or phase == Publication or phase == FlightDone
 
-  // A timed-out source can continue underneath DialCache, but its late value is
-  // never accepted and never dispatches publication.
   val timedOutSourceCannotPublish =
     outcome != SourceTimeout or (not(acceptedSourceResult) and not(publicationDispatched))
 
-  // Publication is reachable only from a source result accepted before its
-  // monotonic deadline.
   val publicationRequiresAcceptedSource =
     not(publicationDispatched) or acceptedSourceResult
 
-  // Coalescing-disabled/all-inactive/outside-enabled calls never register a
-  // flight; they are represented by independentExecutions instead.
   val noFlightWhenCoalescingIneligible =
     (enabled and coalesce and (requestLayerActive or sharedLayerActive)) or flightScope == NoFlight
+
+  // A timeout can leave external work behind even though DialCache has no
+  // registered leader. This encodes the non-cancellation contract directly.
+  val abandonedSourceIsNotAFlight =
+    abandonedSources == 0 or not(activeSourceRunning) or phase == FallbackRunning
 }
