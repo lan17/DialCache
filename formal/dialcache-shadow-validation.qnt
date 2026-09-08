@@ -60,7 +60,6 @@ module dialcache_shadow_validation {
     repairWritesForPresentC0' = 0,
   }
 
-  // Eligibility gates can vary before a caller path is selected.
   action toggleEnabled = all {
     callerPath == NoCallerPath,
     enabledScope' = not(enabledScope),
@@ -91,8 +90,6 @@ module dialcache_shadow_validation {
     duplicateKeyActive' = not(duplicateKeyActive),
   }
 
-  // A served Redis hit commits the caller-visible C0 result before detached
-  // validation begins. Shadow cannot delay or replace it.
   action callerServedRemoteHit = all {
     callerPath == NoCallerPath,
     callerPath' = ServedRemoteHit,
@@ -100,8 +97,6 @@ module dialcache_shadow_validation {
     c0' = C0Present,
   }
 
-  // With serving ramped down, the caller runs the source exactly once. Shadow
-  // may reuse that accepted S; it must not start another source call.
   action callerRemoteRampedDown = all {
     callerPath == NoCallerPath,
     callerPath' = RemoteRampedDown,
@@ -122,9 +117,6 @@ module dialcache_shadow_validation {
     callerResultCommitted' = true,
   }
 
-  // Eligibility is evaluated only after the ordinary caller path has reached
-  // the remote boundary. Ordinary enabled remote misses deliberately do not
-  // schedule a duplicate shadow fill.
   action admitJob = all {
     phase == JobIdle,
     callerPath == ServedRemoteHit or callerPath == RemoteRampedDown,
@@ -149,7 +141,6 @@ module dialcache_shadow_validation {
     phase' = JobDone,
   }
 
-  // Served-hit jobs launch one detached source read after caller completion.
   action servedHitStartsDetachedSource = all {
     phase == JobAdmitted,
     callerPath == ServedRemoteHit,
@@ -158,8 +149,6 @@ module dialcache_shadow_validation {
     phase' = WaitingForSource,
   }
 
-  // Ramped-down jobs use the caller's already-accepted source result and only
-  // perform the independent C0 Redis observation.
   action rampedDownObserveMiss = all {
     phase == JobAdmitted,
     callerPath == RemoteRampedDown,
@@ -185,8 +174,8 @@ module dialcache_shadow_validation {
     phase' = JobDone,
   }
 
-  // Once the served-hit detached source settles, compare against an
-  // independently deserialized copy of C0, never the caller's mutable object.
+  // Served-hit validation compares S with an independent C0 deserialization,
+  // never with the caller's potentially mutated object reference.
   action detachedSourceReady = all {
     phase == WaitingForSource,
     callerPath == ServedRemoteHit,
@@ -216,8 +205,8 @@ module dialcache_shadow_validation {
     phase' = JobDone,
   }
 
-  // There is exactly one C1 confirmation after disagreement. C1 is compared by
-  // serialized bytes and is never deserialized or chased to another version.
+  // Exactly one C1 read determines whether the C0/S disagreement was already
+  // superseded. C1 is byte-compared and is not recursively validated.
   action confirmationSeesChanged = all {
     phase == Confirming,
     c1Present' = true,
@@ -258,22 +247,19 @@ module dialcache_shadow_validation {
   }
 
   // Only a semantic C0 miss can fill. A tracked observed fence may suppress the
-  // dispatch before serialization or immediately before SET; both collapse to
-  // FillFenced here because the observable protocol result is the same.
+  // dispatch before serialization or immediately before SET.
   action finishFill = all {
     phase == Filling,
     c0 == C0Miss,
-    if (observedFencePresent and not(fillTimestampClearsFence))
-      all {
-        outcome' = FillFenced,
-        phase' = JobDone,
-      }
+    fillWrites' = if (observedFencePresent and not(fillTimestampClearsFence))
+      fillWrites
     else
-      all {
-        fillWrites' = fillWrites + 1,
-        outcome' = Filled,
-        phase' = JobDone,
-      },
+      fillWrites + 1,
+    outcome' = if (observedFencePresent and not(fillTimestampClearsFence))
+      FillFenced
+    else
+      Filled,
+    phase' = JobDone,
   }
 
   action step = any {
@@ -306,41 +292,28 @@ module dialcache_shadow_validation {
     finishFill,
   }
 
-  // Shadow processing is detached: the ordinary caller result is already
-  // committed before any admitted job performs source/compare/fill work.
   val shadowNeverPrecedesCallerResult =
     phase == JobIdle or callerResultCommitted
 
-  // The ordinary enabled remote-miss path owns its own refill and never admits
-  // a second shadow job for the same invocation.
   val ordinaryRemoteMissHasNoShadowJob =
     callerPath != OrdinaryRemoteMiss or phase == JobIdle
 
-  // Ramped-down validation reuses the caller source; only served hits execute a
-  // detached shadow-owned source call.
   val rampedDownDoesNotDuplicateSource =
     callerPath != RemoteRampedDown or detachedSourceExecutions == 0
 
-  // A disagreement requires exactly one confirmation before mismatch or
-  // superseded can be reported.
   val verdictsRequireSingleConfirmation =
     (outcome != Mismatch and outcome != Superseded) or confirmationReads == 1
 
-  // A confirmed mismatch means the original C0 payload survived C1 unchanged.
   val mismatchMeansSameC1Bytes =
     outcome != Mismatch or (c1Present and c1SameBytesAsC0)
 
-  // A present C0 is observation-only. Shadow never repairs a mismatch or an
-  // undecodable present value.
   val presentC0IsNeverRepaired =
     repairWritesForPresentC0 == 0 and
       (c0 != C0Present and c0 != C0Undecodable or fillWrites == 0)
 
-  // Fills are authorized only by a semantic C0 miss.
   val fillsRequireMiss =
     fillWrites == 0 or c0 == C0Miss
 
-  // A fence rejection is a skipped write, not a failed/ambiguous dispatch.
   val fencedFillDoesNotWrite =
     outcome != FillFenced or fillWrites == 0
 }
