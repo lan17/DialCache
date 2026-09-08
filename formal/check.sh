@@ -35,7 +35,8 @@ check formal/dialcache-coalescing-liveness.qnt \
   fallbackDeadlineStartsWithFallback \
   timedOutSourceCannotPublish \
   publicationRequiresAcceptedSource \
-  noFlightWhenCoalescingIneligible
+  noFlightWhenCoalescingIneligible \
+  abandonedSourceIsNotAFlight
 
 check formal/dialcache-tracked-invalidation.qnt \
   servedSnapshotClearedObservedFence \
