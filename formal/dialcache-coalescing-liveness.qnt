@@ -1,7 +1,4 @@
 module dialcache_coalescing_liveness {
-  // Model one cache identity and one DialCache instance. Request-local and
-  // process coalescing are represented as distinct flight scopes.
-
   type FlightScope = NoFlight | RequestFlight | ProcessFlight
   type FlightPhase = FlightIdle | CacheLookup | FallbackRunning | Publication | FlightDone
   type Outcome = NoOutcome | CacheHit | SourceSuccess | SourceFailure | SourceTimeout
@@ -9,185 +6,198 @@ module dialcache_coalescing_liveness {
   pure val MAX_TIME = 8
   pure val FALLBACK_TIMEOUT = 3
 
-  var now: int
-  var enabled: bool
-  var requestLayerActive: bool
-  var sharedLayerActive: bool
-  var coalesce: bool
+  type State = {
+    now: int,
+    scopeEnabled: bool,
+    requestLayerActive: bool,
+    sharedLayerActive: bool,
+    coalesce: bool,
+    phase: FlightPhase,
+    flightScope: FlightScope,
+    outcome: Outcome,
+    followers: int,
+    sourceExecutions: int,
+    independentExecutions: int,
+    fallbackDeadline: int,
+    fallbackDeadlineStarted: bool,
+    activeSourceRunning: bool,
+    abandonedSources: int,
+    acceptedSourceResult: bool,
+    publicationDispatched: bool
+  }
 
-  var phase: FlightPhase
-  var flightScope: FlightScope
-  var outcome: Outcome
-  var followers: int
-  var sourceExecutions: int
-  var independentExecutions: int
+  var s: State
 
-  var fallbackDeadline: int
-  var fallbackDeadlineStarted: bool
-  var activeSourceRunning: bool
-  // Timed-out source work is no longer part of a registered flight. It may
-  // settle later while a new flight is already running.
-  var abandonedSources: int
-  var acceptedSourceResult: bool
-  var publicationDispatched: bool
-
-  action init = all {
-    now' = 0,
-    enabled' = false,
-    requestLayerActive' = false,
-    sharedLayerActive' = false,
-    coalesce' = true,
-
-    phase' = FlightIdle,
-    flightScope' = NoFlight,
-    outcome' = NoOutcome,
-    followers' = 0,
-    sourceExecutions' = 0,
-    independentExecutions' = 0,
-
-    fallbackDeadline' = 0,
-    fallbackDeadlineStarted' = false,
-    activeSourceRunning' = false,
-    abandonedSources' = 0,
-    acceptedSourceResult' = false,
-    publicationDispatched' = false,
+  action init = s' = {
+    now: 0,
+    scopeEnabled: false,
+    requestLayerActive: false,
+    sharedLayerActive: false,
+    coalesce: true,
+    phase: FlightIdle,
+    flightScope: NoFlight,
+    outcome: NoOutcome,
+    followers: 0,
+    sourceExecutions: 0,
+    independentExecutions: 0,
+    fallbackDeadline: 0,
+    fallbackDeadlineStarted: false,
+    activeSourceRunning: false,
+    abandonedSources: 0,
+    acceptedSourceResult: false,
+    publicationDispatched: false
   }
 
   action advanceTime = all {
-    now < MAX_TIME,
-    now' = now + 1,
+    s.now < MAX_TIME,
+    s' = { now: s.now + 1, ...s },
   }
 
   action toggleEnabled = all {
-    phase == FlightIdle,
-    enabled' = not(enabled),
+    s.phase == FlightIdle,
+    s' = { scopeEnabled: not(s.scopeEnabled), ...s },
   }
 
   action toggleRequestLayer = all {
-    phase == FlightIdle,
-    requestLayerActive' = not(requestLayerActive),
+    s.phase == FlightIdle,
+    s' = { requestLayerActive: not(s.requestLayerActive), ...s },
   }
 
   action toggleSharedLayer = all {
-    phase == FlightIdle,
-    sharedLayerActive' = not(sharedLayerActive),
+    s.phase == FlightIdle,
+    s' = { sharedLayerActive: not(s.sharedLayerActive), ...s },
   }
 
   action toggleCoalesce = all {
-    phase == FlightIdle,
-    coalesce' = not(coalesce),
+    s.phase == FlightIdle,
+    s' = { coalesce: not(s.coalesce), ...s },
   }
 
-  // The first eligible caller creates a flight. Request-local coalescing wins
-  // before process coalescing because it wraps the request-local lookup.
+  // Request-local coalescing wraps process coalescing and therefore wins when
+  // both scopes are eligible for the same key.
   action startLeader = all {
-    phase == FlightIdle,
-    enabled,
-    coalesce,
-    requestLayerActive or sharedLayerActive,
-    phase' = CacheLookup,
-    flightScope' = if (requestLayerActive) RequestFlight else ProcessFlight,
-    outcome' = NoOutcome,
-    followers' = 0,
-    sourceExecutions' = 0,
-    fallbackDeadlineStarted' = false,
-    acceptedSourceResult' = false,
-    publicationDispatched' = false,
+    s.phase == FlightIdle,
+    s.scopeEnabled,
+    s.coalesce,
+    s.requestLayerActive or s.sharedLayerActive,
+    s' = {
+      phase: CacheLookup,
+      flightScope: if (s.requestLayerActive) RequestFlight else ProcessFlight,
+      outcome: NoOutcome,
+      followers: 0,
+      sourceExecutions: 0,
+      fallbackDeadlineStarted: false,
+      activeSourceRunning: false,
+      acceptedSourceResult: false,
+      publicationDispatched: false,
+      ...s
+    },
   }
 
-  // A later caller with the same identity joins only an existing registered
-  // flight. It inherits the leader's lookup, fallback, deadline, and outcome.
   action joinFollower = all {
-    phase != FlightIdle,
-    phase != FlightDone,
-    flightScope != NoFlight,
-    followers' = followers + 1,
+    s.phase != FlightIdle,
+    s.phase != FlightDone,
+    s.flightScope != NoFlight,
+    s' = { followers: s.followers + 1, ...s },
   }
 
-  // Outside enable(), with all serving layers inactive, or with coalescing
-  // disabled, callers execute independently and create no registered flight.
   action startIndependentCaller = all {
-    phase == FlightIdle,
-    not(enabled and coalesce and (requestLayerActive or sharedLayerActive)),
-    independentExecutions' = independentExecutions + 1,
+    s.phase == FlightIdle,
+    not(s.scopeEnabled and s.coalesce and (s.requestLayerActive or s.sharedLayerActive)),
+    s' = { independentExecutions: s.independentExecutions + 1, ...s },
   }
 
   action finishCacheHit = all {
-    phase == CacheLookup,
-    outcome' = CacheHit,
-    phase' = FlightDone,
+    s.phase == CacheLookup,
+    s' = { outcome: CacheHit, phase: FlightDone, ...s },
   }
 
-  // The fallback deadline starts only when the source starts, after cache read
-  // work has completed or failed open.
+  // Cache-read time is outside the fallback budget. The source deadline begins
+  // exactly when the leader invokes the fallback.
   action cacheMissStartsFallback = all {
-    phase == CacheLookup,
-    sourceExecutions' = sourceExecutions + 1,
-    activeSourceRunning' = true,
-    fallbackDeadlineStarted' = true,
-    fallbackDeadline' = now + FALLBACK_TIMEOUT,
-    phase' = FallbackRunning,
+    s.phase == CacheLookup,
+    s' = {
+      sourceExecutions: s.sourceExecutions + 1,
+      activeSourceRunning: true,
+      fallbackDeadlineStarted: true,
+      fallbackDeadline: s.now + FALLBACK_TIMEOUT,
+      phase: FallbackRunning,
+      ...s
+    },
   }
 
   action sourceSucceedsBeforeDeadline = all {
-    phase == FallbackRunning,
-    now < fallbackDeadline,
-    activeSourceRunning' = false,
-    acceptedSourceResult' = true,
-    outcome' = SourceSuccess,
-    phase' = Publication,
+    s.phase == FallbackRunning,
+    s.now < s.fallbackDeadline,
+    s.activeSourceRunning,
+    s' = {
+      activeSourceRunning: false,
+      acceptedSourceResult: true,
+      outcome: SourceSuccess,
+      phase: Publication,
+      ...s
+    },
   }
 
   action sourceRejects = all {
-    phase == FallbackRunning,
-    activeSourceRunning' = false,
-    acceptedSourceResult' = false,
-    outcome' = SourceFailure,
-    phase' = FlightDone,
+    s.phase == FallbackRunning,
+    s.activeSourceRunning,
+    s' = {
+      activeSourceRunning: false,
+      acceptedSourceResult: false,
+      outcome: SourceFailure,
+      phase: FlightDone,
+      ...s
+    },
   }
 
-  // Timeout clears the registered flight and abandons ownership of the source;
-  // it does not cancel the underlying operation.
+  // Timeout removes DialCache ownership immediately. The underlying operation is
+  // not cancelled; it becomes abandoned external work that may settle later.
   action fallbackTimesOut = all {
-    phase == FallbackRunning,
-    fallbackDeadlineStarted,
-    now >= fallbackDeadline,
-    activeSourceRunning,
-    activeSourceRunning' = false,
-    abandonedSources' = abandonedSources + 1,
-    acceptedSourceResult' = false,
-    outcome' = SourceTimeout,
-    phase' = FlightDone,
-    flightScope' = NoFlight,
+    s.phase == FallbackRunning,
+    s.fallbackDeadlineStarted,
+    s.now >= s.fallbackDeadline,
+    s.activeSourceRunning,
+    s' = {
+      activeSourceRunning: false,
+      abandonedSources: s.abandonedSources + 1,
+      acceptedSourceResult: false,
+      outcome: SourceTimeout,
+      phase: FlightDone,
+      flightScope: NoFlight,
+      ...s
+    },
   }
 
-  // An abandoned source may settle during any later flight. Its value is
-  // ignored and has no path to acceptedSourceResult/publicationDispatched.
+  // This can happen while another flight is already active. It cannot affect the
+  // current flight's accepted result or publication state.
   action abandonedSourceSettles = all {
-    abandonedSources > 0,
-    abandonedSources' = abandonedSources - 1,
+    s.abandonedSources > 0,
+    s' = { abandonedSources: s.abandonedSources - 1, ...s },
   }
 
-  // Serializer/write work begins only after the source result has been accepted.
-  // Its settlement is application-owned and is not constrained by the source
-  // fallback deadline.
+  // Serialization/write work begins only after a result was accepted before the
+  // fallback deadline, and is intentionally outside that deadline.
   action dispatchPublication = all {
-    phase == Publication,
-    acceptedSourceResult,
-    publicationDispatched' = true,
-    phase' = FlightDone,
+    s.phase == Publication,
+    s.acceptedSourceResult,
+    s' = { publicationDispatched: true, phase: FlightDone, ...s },
   }
 
   action resetFlight = all {
-    phase == FlightDone,
-    phase' = FlightIdle,
-    flightScope' = NoFlight,
-    outcome' = NoOutcome,
-    followers' = 0,
-    sourceExecutions' = 0,
-    fallbackDeadlineStarted' = false,
-    acceptedSourceResult' = false,
-    publicationDispatched' = false,
+    s.phase == FlightDone,
+    s' = {
+      phase: FlightIdle,
+      flightScope: NoFlight,
+      outcome: NoOutcome,
+      followers: 0,
+      sourceExecutions: 0,
+      fallbackDeadlineStarted: false,
+      activeSourceRunning: false,
+      acceptedSourceResult: false,
+      publicationDispatched: false,
+      ...s
+    },
   }
 
   action step = any {
@@ -210,26 +220,28 @@ module dialcache_coalescing_liveness {
   }
 
   val flightsRequireEligibleCaching =
-    flightScope == NoFlight or (enabled and coalesce and (requestLayerActive or sharedLayerActive))
+    s.flightScope == NoFlight or
+      (s.scopeEnabled and s.coalesce and (s.requestLayerActive or s.sharedLayerActive))
 
   val oneSourcePerRegisteredFlight =
-    sourceExecutions <= 1
+    s.sourceExecutions <= 1
 
   val fallbackDeadlineStartsWithFallback =
-    not(fallbackDeadlineStarted) or
-      phase == FallbackRunning or phase == Publication or phase == FlightDone
+    not(s.fallbackDeadlineStarted) or
+      s.phase == FallbackRunning or s.phase == Publication or s.phase == FlightDone
 
   val timedOutSourceCannotPublish =
-    outcome != SourceTimeout or (not(acceptedSourceResult) and not(publicationDispatched))
+    s.outcome != SourceTimeout or
+      (not(s.acceptedSourceResult) and not(s.publicationDispatched))
 
   val publicationRequiresAcceptedSource =
-    not(publicationDispatched) or acceptedSourceResult
+    not(s.publicationDispatched) or s.acceptedSourceResult
 
   val noFlightWhenCoalescingIneligible =
-    (enabled and coalesce and (requestLayerActive or sharedLayerActive)) or flightScope == NoFlight
+    (s.scopeEnabled and s.coalesce and (s.requestLayerActive or s.sharedLayerActive)) or
+      s.flightScope == NoFlight
 
-  // A timeout can leave external work behind even though DialCache has no
-  // registered leader. This encodes the non-cancellation contract directly.
+  // Abandoned work is explicitly not represented as an active registered source.
   val abandonedSourceIsNotAFlight =
-    abandonedSources == 0 or not(activeSourceRunning) or phase == FallbackRunning
+    s.abandonedSources == 0 or not(s.activeSourceRunning) or s.phase == FallbackRunning
 }
