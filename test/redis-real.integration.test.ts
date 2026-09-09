@@ -182,7 +182,8 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
   });
 
   // Fixture setup, the actual protocol transition, and observation share one
-  // atomic script so expiry checks are exact and do not depend on CI latency.
+  // atomic script. Redis 6.2 still advances TTL time inside Lua, so bound expiry
+  // drift by measured server time, never a fixed CI/network tolerance.
   // Only the setup/observation wrapper is test-owned; the transition is the
   // same exported Lua used by both production adapters.
   const invalidationVectors = JSON.parse(readFileSync(new URL("../formal/invalidation-vectors.json", import.meta.url), "utf8")) as {
@@ -198,6 +199,12 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       if (admin === undefined) throw new Error("Redis test client did not start");
       expect(invalidationVectors.schemaVersion).toBe(1);
       const script = `
+redis.replicate_commands()
+local function now_ms()
+  local now = redis.call("TIME")
+  return tonumber(now[1]) * 1000 + math.floor(tonumber(now[2]) / 1000)
+end
+local started_at = now_ms()
 redis.call("DEL", KEYS[1])
 if ARGV[3] == "string" then redis.call("SET", KEYS[1], ARGV[4]) end
 if ARGV[3] == "list" then redis.call("LPUSH", KEYS[1], "unrelated") end
@@ -206,14 +213,25 @@ local result = (function()
 ${INVALIDATE_CACHE_SCRIPT}
 end)()
 local status = result == 1 and "ok" or (type(result) == "table" and result.err and "error" or "unexpected_reply")
-return {status, redis.call("GET", KEYS[1]), redis.call("PTTL", KEYS[1])}
+local watermark = redis.call("GET", KEYS[1])
+local ttl_ms = redis.call("PTTL", KEYS[1])
+return {status, watermark, ttl_ms, now_ms() - started_at}
 `;
       const observed = await admin.eval(script, {
         keys: ["{portable-invalidation}#watermark"],
         arguments: [vector.futureBufferMs, vector.invalidatedAtMs, vector.existing.kind,
           vector.existing.value ?? "", String(vector.existing.ttlMs ?? -2)],
       });
-      expect(observed).toEqual([vector.expected.error ? "error" : "ok", vector.expected.watermark, vector.expected.ttlMs]);
+      expect(observed).toEqual([vector.expected.error ? "error" : "ok", vector.expected.watermark,
+        expect.any(Number), expect.any(Number)]);
+      const [, , ttlMs, elapsedMs] = observed as [string, string, number, number];
+      expect(elapsedMs).toBeGreaterThanOrEqual(0);
+      if (vector.expected.ttlMs < 0) {
+        expect(ttlMs).toBe(vector.expected.ttlMs);
+      } else {
+        expect(ttlMs).toBeGreaterThanOrEqual(Math.max(0, vector.expected.ttlMs - elapsedMs));
+        expect(ttlMs).toBeLessThanOrEqual(vector.expected.ttlMs);
+      }
     });
   }
 
