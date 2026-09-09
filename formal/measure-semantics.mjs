@@ -15,10 +15,13 @@ if (catalog.schemaVersion !== 1 || catalog.mutations.length === 0) throw new Err
 const formalTests = ['test/formal-conformance.test.ts', 'test/formal-effects.test.ts', 'test/formal-features.test.ts'];
 const portableTests = ['test/formal-behavior.test.ts', 'test/formal-protocol-vectors.test.ts'];
 const generatedPattern = 'replays |reaches every action|covers every action';
+// Fixed scenario names carry a feature prefix. Protocol schema/audit checks
+// start with "keeps"/"requires" and must not count as behavioral detections.
+const portablePattern = `${generatedPattern}|portable behavioral scenarios [\\w-]+: |formal protocol conformance vectors (?!keeps |requires )`;
 const cohorts = {
   ordinary: ['--exclude=test/formal*.test.ts'],
   generated: [...formalTests, `--testNamePattern=${generatedPattern}`],
-  portable: [...formalTests, ...portableTests, `--testNamePattern=${generatedPattern}|portable behavioral scenarios|formal protocol conformance vectors`],
+  portable: [...formalTests, ...portableTests, `--testNamePattern=${portablePattern}`],
 };
 const sourceText = new Map();
 const ids = new Set();
