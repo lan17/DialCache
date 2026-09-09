@@ -29,13 +29,13 @@ mkdir -p .formal-traces/effects
 quint run formal/dialcache-effects-conformance.qnt \
   --mbt --backend=rust --n-threads=1 \
   --seed="${QUINT_SEED:-0xd1a1ca}" \
-  --max-samples=2048 --max-steps=60 --n-traces=256 \
+  --max-samples=4096 --max-steps=60 --n-traces=512 \
   --out-itf='.formal-traces/effects/trace_{seq}.itf.json' \
   --verbosity=1 \
   --invariants oneRegisteredSource registeredFlightHasPendingCalls writeRequiresAcceptedSource registeredReadOwnsFlight effectCountsMatchRecords
 count=$(find .formal-traces/effects -name '*.itf.json' -type f | wc -l)
-if [ "${count}" -ne 256 ]; then
-  echo "Expected 256 effects traces; generated ${count}" >&2
+if [ "${count}" -ne 512 ]; then
+  echo "Expected 512 effects traces; generated ${count}" >&2
   exit 1
 fi
 
@@ -57,7 +57,7 @@ generate_feature() {
   fi
 }
 
-generate_feature recovery 128 1024 60 singleReadPerFlight pendingDecodeHasCall writesHaveRetention sourcesMatchEffects onlyRegisteredSourceOwnsDeadline
+generate_feature recovery 512 4096 60 singleReadPerFlight pendingDecodeHasCall writesHaveRetention sourcesMatchEffects onlyRegisteredSourceOwnsDeadline
 generate_feature policy 256 1024 60 writesHaveRetention hitsSkipSource callsKeepSourceOutcome sourceCountsMatchEffects registeredSourcesArePending sharedSourcesKeepRegistration
 # C1 failures/supersession require several independently controlled effects.
 # Replay also requires these outcomes; trace count alone is insufficient.

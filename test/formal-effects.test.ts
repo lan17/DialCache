@@ -3,15 +3,15 @@ import { resolve } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { BehaviorDriver, type Input } from "./formal/behavior-driver.js";
+import { BehaviorDriver, type Input, type Fixture } from "./formal/behavior-driver.js";
 import { itfInteger, record } from "./formal/itf.js";
 
-const actions = ["init", "beginCall", "resolveLoader", "rejectLoader", "releaseRead", "failRead", "releaseLoad", "failLoad", "releaseDump", "failDump", "releaseWrite", "failWrite", "seedRemote", "tick", "jumpClock", "rollbackWall", "observerFault", "invalidate", "futureFence"] as const;
+const actions = ["init", "beginCall", "resolveLoader", "rejectLoader", "releaseRead", "failRead", "releaseLoad", "failLoad", "releaseDump", "failDump", "releaseWrite", "failWrite", "seedRemote", "tick", "jumpClock", "rollbackWall", "observerFault", "readBudgetPolicy", "invalidate", "futureFence"] as const;
 type Action = typeof actions[number];
-const fields = ["now", "wall", "phase", "activeLoader", "activeRead", "deadline", "refill", "acceptedAt", "acceptedWall", "observerFailed", "readAborts", "observedFence", "writeTimestamp", "storedTimestamp", "watermark",
+const fields = ["now", "wall", "readBudget", "baseReadBudget", "phase", "activeLoader", "activeRead", "deadline", "refill", "acceptedAt", "acceptedWall", "observerFailed", "readAborts", "observedFence", "writeTimestamp", "storedTimestamp", "watermark",
   "loaders", "reads", "writes", "invalidations", "loads", "dumps", "policyCalls"] as const;
 const observedFields = ["loaders", "reads", "writes", "invalidations", "loads", "dumps", "policyCalls"] as const;
-type State = Record<typeof fields[number], number> & { calls: number[]; sources: number[]; readStates: number[] };
+type State = Record<typeof fields[number], number> & { calls: number[]; sources: number[]; readStates: number[]; readBudgets: number[] };
 interface Step { action: Action; choice?: number; state: State }
 interface Trace { path: string; steps: Step[] }
 
@@ -28,24 +28,25 @@ function parseTrace(value: unknown, path: string): Trace {
     const picks = record(step["mbt::nondetPicks"], context);
     if (Object.keys(picks).join() !== "choice") throw new Error(`${context}: unsupported choices`);
     const pick = record(picks.choice, context);
-    const settles = action === "observerFault" || action === "resolveLoader" || action === "rejectLoader" || action === "releaseRead" || action === "failRead";
+    const settles = action === "init" || action === "readBudgetPolicy" || action === "observerFault" || action === "resolveLoader" || action === "rejectLoader" || action === "releaseRead" || action === "failRead";
     let choice: number | undefined;
     if (settles) {
       if (pick.tag !== "Some") throw new Error(`${context}: missing effect choice`);
       choice = itfInteger(pick.value, context);
+      if ((action === "init" || action === "readBudgetPolicy") && choice > 4) throw new Error(`${context}: unsupported budget choice`);
       if (action === "observerFault" && choice > 1) throw new Error(`${context}: unsupported observer choice`);
     } else if (pick.tag !== "None" || JSON.stringify(pick.value) !== '{"#tup":[]}') {
       throw new Error(`${context}: unexpected effect choice`);
     }
     const rawState = record(step.s, context);
-    if (Object.keys(rawState).length !== fields.length + 3) throw new Error(`${context}: unexpected model fields`);
+    if (Object.keys(rawState).length !== fields.length + 4) throw new Error(`${context}: unexpected model fields`);
     const integers = Object.fromEntries(fields.map((field) => [field, itfInteger(rawState[field], `${context} ${field}`)])) as Record<typeof fields[number], number>;
-    const state: State = { ...integers, calls: [], sources: [], readStates: [] };
-    for (const field of ["calls", "sources", "readStates"] as const) {
+    const state: State = { ...integers, calls: [], sources: [], readStates: [], readBudgets: [] };
+    for (const field of ["calls", "sources", "readStates", "readBudgets"] as const) {
       const values = rawState[field];
       if (!Array.isArray(values)) throw new Error(`${context}: missing ${field} list`);
       state[field] = values.map((value) => itfInteger(value, `${context} ${field}`));
-      if (state[field].some((value) => value > (field === "calls" ? 3 : 2))) {
+      if (state[field].some((value) => (field === "readBudgets" ? ![10, 20, 30, 50].includes(value) : value > (field === "calls" ? 3 : 2)))) {
         throw new Error(`${context}: unsupported ${field} code`);
       }
     }
@@ -79,7 +80,7 @@ function inputsFor(step: Pick<Step, "action" | "choice">, driver: BehaviorDriver
     { op: "faults", value: { [effect]: false } },
   ];
   switch (step.action) {
-    case "init": return [];
+    case "init": return [{ op: "policy", value: step.choice === 3 ? { remoteReadTimeoutMs: 30 } : step.choice === 4 ? null : {} }];
     case "beginCall": return [{ op: "begin" }];
     case "resolveLoader": return [{ op: "resolve", loader: step.choice!, value: 1 }];
     case "rejectLoader": return [{ op: "reject", loader: step.choice! }];
@@ -94,6 +95,7 @@ function inputsFor(step: Pick<Step, "action" | "choice">, driver: BehaviorDriver
     case "seedRemote": return [{ op: "seed", value: 1 }];
     case "tick": return [{ op: "advance", ms: 10 }];
     case "jumpClock": return [{ op: "advance", ms: 10, deliverTimers: false }];
+    case "readBudgetPolicy": return [{ op: "policy", value: step.choice === 0 ? {} : { remoteReadTimeoutMs: [0, 10, 20, 30, 50][step.choice!]! } }];
     case "observerFault": return [{ op: "faults", value: { observer: step.choice === 1 } }];
     case "rollbackWall": return [{ op: "shiftWall", ms: -1000 }];
     case "invalidate": return [{ op: "invalidate" }];
@@ -109,11 +111,18 @@ function project(driver: BehaviorDriver) {
       : call.status === "value" ? (call.value === 1 ? 1 : 4)
       : call.error.startsWith("source:") ? 2 : call.error.startsWith("timeout:") ? 3 : 4),
     writeTtls: observed.writeTtls,
+    readContexts: observed.events!.filter(event => event.event === "readContext").map(({ index, timeoutMs, aborted }) => ({ index, timeoutMs, aborted })),
     readAborts: observed.events!.filter(event => event.event === "readAbort").map(event => event.index),
   };
 }
 
-async function replay(trace: Trace, driver = new BehaviorDriver({ policy: { ttlSec: { remote: 60 } }, tracked: true, readTimeoutMs: 10, observe: ["readAbort"] })) {
+function fixtureFor(mode: number): Fixture {
+  return { policy: { ttlSec: { remote: 60 }, ...(mode >= 2 ? { remoteReadTimeoutMs: 10 } : {}) },
+    tracked: true, readTimeoutMs: mode === 0 ? "default" : 20, observe: ["readContext", "readAbort"] };
+}
+async function replay(trace: Trace) {
+  // Configuration is an explicit initial input, independent of expected state.
+  const driver = new BehaviorDriver(fixtureFor(trace.steps[0]!.choice!));
   try {
     await driver.apply({ op: "faults", value: { holdReads: true, holdLoads: true, holdDumps: true, holdWrites: true } });
     const abortedReads: number[] = [];
@@ -122,7 +131,7 @@ async function replay(trace: Trace, driver = new BehaviorDriver({ policy: { ttlS
       if (previous !== undefined && step.state.readAborts > previous.readAborts) abortedReads.push(previous.activeRead);
       const context = `${trace.path} step ${index} action ${step.action}`;
       const expected = { ...Object.fromEntries(observedFields.map((field) => [field, step.state[field]])),
-        calls: step.state.calls, writeTtls: Array<number>(step.state.writes).fill(60_000), readAborts: abortedReads };
+        calls: step.state.calls, writeTtls: Array<number>(step.state.writes).fill(60_000), readAborts: abortedReads, readContexts: step.state.readBudgets.map((timeoutMs, index) => ({ index, timeoutMs, aborted: false })) };
       try {
         // Only the action/choice and independently observed effect index enter execution.
         const inputs = inputsFor({ action: step.action, ...(step.choice === undefined ? {} : { choice: step.choice }) }, driver);
@@ -143,6 +152,7 @@ describe("generated pending-effect conformance", () => {
       const seen = new Set<Action>();
       const witnesses = new Set<string>();
       for (const trace of traces) {
+        witnesses.add(`fixture:${trace.steps[0]!.choice}`);
         let delayedWriteWasFenced = false;
         let failedRead = false;
         let failedDecode = false;
@@ -152,6 +162,8 @@ describe("generated pending-effect conformance", () => {
           seen.add(step.action);
           const s = step.state;
           const previous = trace.steps[index - 1]?.state;
+          for (const budget of s.readBudgets) witnesses.add(`read-budget:${budget}`);
+          if (step.action === "beginCall" && previous?.phase === 3 && previous.readBudget !== previous.readBudgets[previous.activeRead]) witnesses.add("follower-keeps-read-budget");
           if (s.sources.includes(0) && s.sources.includes(1)) witnesses.add("abandoned-overlap");
           if (previous?.observerFailed === 1) {
             if (step.action === "releaseLoad") witnesses.add("observer-failure-hit");
@@ -199,7 +211,8 @@ describe("generated pending-effect conformance", () => {
       expect([...witnesses].sort()).toEqual(["abandoned-overlap", "publication-after-deadline", "delayed-fenced-write", "late-settlement",
         "read-timeout-starts-source", "read-late-settlement", "abandoned-read-settles", "decode-outlives-deadline",
         "acquired-hit-survives-invalidation", "failed-read-no-refill", "failed-decode-refills",
-        "dump-failure-preserves-value", "write-failure-preserves-value", "serialize-outlives-deadline", "dump-rechecks-fence-after-rollback", "observer-failure-hit", "observer-failure-publication", "observer-failure-source-error"].sort());
+        "dump-failure-preserves-value", "write-failure-preserves-value", "serialize-outlives-deadline", "dump-rechecks-fence-after-rollback", "observer-failure-hit", "observer-failure-publication", "observer-failure-source-error", "fixture:0", "fixture:1", "fixture:2", "fixture:3", "fixture:4",
+        "read-budget:10", "read-budget:20", "read-budget:30", "read-budget:50", "follower-keeps-read-budget"].sort());
     });
   }
 

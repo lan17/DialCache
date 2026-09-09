@@ -9,17 +9,20 @@ module dialcache_recovery_conformance {
   type State = {
     o: Observation, now: int, phase: int, frame: int, created: int, expires: int,
     watermark: int, candidate: int, candidateCreated: int, maxAge: int,
-    acceptedMaxAge: int, classifier: int, readFailed: bool, loadFailed: bool,
+    acceptedMaxAge: int, classifier: int, instanceClassifier: int, readFailed: bool, loadFailed: bool,
     canRecover: bool, canWrite: bool, observedFence: int,
     sources: List[int], activeLoader: int, deadline: int, sourceError: int
   }
   var s: State
-  action init = s' = {
+  action init = {
+    nondet choice = Set(0, 1, 2, 3).oneOf()
+    s' = {
     o: empty, now: 10000, phase: 0, frame: 1, created: 9000, expires: 70000,
     watermark: 0, candidate: 0, candidateCreated: 0, maxAge: 5000,
-    acceptedMaxAge: 5000, classifier: 0, readFailed: false, loadFailed: false,
+    acceptedMaxAge: 5000, classifier: 0, instanceClassifier: List(3, 0, 1, 2).nth(choice), readFailed: false, loadFailed: false,
     canRecover: false, canWrite: false, observedFence: 0,
     sources: List(), activeLoader: 0, deadline: 0, sourceError: 3
+    }
   }
   val readable = not(s.readFailed) and s.frame > 0 and s.now < s.expires and s.created > s.watermark
   val eligible = readable and s.created <= s.now and s.now - s.created < s.maxAge
@@ -35,7 +38,7 @@ module dialcache_recovery_conformance {
         o: { calls: s.o.calls.append(0), policyCalls: s.o.policyCalls + 1,
           reads: s.o.reads + 1, loads: s.o.loads + (if (fresh) 1 else 0),
           loaders: s.o.loaders + (if (fresh) 0 else 1), ...s.o },
-        phase: if (fresh) 1 else 2, classifier: choice,
+        phase: if (fresh) 1 else 2, classifier: if (choice == 3) s.instanceClassifier else choice,
         candidate: if (eligible) s.frame else 0, candidateCreated: s.created,
         acceptedMaxAge: s.maxAge, canRecover: not(s.readFailed), canWrite: not(s.readFailed),
         observedFence: if (readable) 0 else s.watermark,
@@ -133,21 +136,30 @@ module dialcache_recovery_conformance {
   run futureFrameDoesNotCarryMissFenceTest = init.then(invalidate).then(seedFutureFixture)
     .then(beginCall).then(resolveLoader).expect(s.o.writes == 1)
 
+  action defaultFixture = init.then(s' = { instanceClassifier: 3, ...s })
+  action beginInheritedFixture = beginCall.then(s' = { classifier: s.instanceClassifier, ...s })
   action timeoutFixture = s' = rejected({ now: s.deadline, sources: s.sources.replaceAt(s.activeLoader, 1), ...s }, 4, true)
   action beginDefaultFixture = beginCall.then(s' = { classifier: 3, ...s })
   action beginDenyFixture = beginCall.then(s' = { classifier: 1, ...s })
-  run defaultRecoversOwnTimeoutTest = init.then(beginDefaultFixture).then(timeoutFixture).then(releaseLoad)
+  run defaultRecoversOwnTimeoutTest = defaultFixture.then(beginDefaultFixture).then(timeoutFixture).then(releaseLoad)
     .expect(s.o.calls == List(1) and s.o.classifications == 0 and s.o.recovery == List("served"))
   run explicitDenialReplacesDefaultTest = init.then(beginDenyFixture).then(timeoutFixture)
     .expect(s.o.calls == List(4) and s.o.classifications == 1 and s.o.loads == 0)
-  run defaultRejectsOrdinaryFailureTest = init.then(beginDefaultFixture).then(rejectLoader)
+  run defaultRejectsOrdinaryFailureTest = defaultFixture.then(beginDefaultFixture).then(rejectLoader)
     .expect(s.o.calls == List(3) and s.o.classifications == 0 and s.o.loads == 0)
-  run defaultRecoversPropagatedTimeoutTest = init.then(beginDefaultFixture).then(rejectTimeout).then(releaseLoad)
+  run defaultRecoversPropagatedTimeoutTest = defaultFixture.then(beginDefaultFixture).then(rejectTimeout).then(releaseLoad)
     .expect(s.o.calls == List(1) and s.o.classifications == 0)
-  run lateSuccessCannotReplaceRecoveredValueTest = init.then(beginDefaultFixture).then(timeoutFixture)
+  run lateSuccessCannotReplaceRecoveredValueTest = defaultFixture.then(beginDefaultFixture).then(timeoutFixture)
     .then(resolveLoader).then(releaseLoad)
     .expect(s.o.calls == List(1) and s.o.writes == 0 and s.o.dumps == 0)
-  run failedRecoveryPreservesDeadlineErrorTest = init.then(beginDefaultFixture).then(timeoutFixture)
+  run failedRecoveryPreservesDeadlineErrorTest = defaultFixture.then(beginDefaultFixture).then(timeoutFixture)
     .then(s' = { loadFailed: true, ...s }).then(releaseLoad)
     .expect(s.o.calls == List(4) and s.o.recovery == List("deserialization_error"))
+  run instanceAllowReplacesTimeoutOnlyDefaultTest = init.then(s' = { instanceClassifier: 0, ...s })
+    .then(beginInheritedFixture).then(rejectLoader).then(releaseLoad)
+    .expect(s.o.calls == List(1) and s.o.classifications == 1)
+  run instanceDenialReplacesTimeoutOnlyDefaultTest = init.then(s' = { instanceClassifier: 1, ...s })
+    .then(beginInheritedFixture).then(timeoutFixture).expect(s.o.calls == List(4) and s.o.loads == 0)
+  run operationDenialReplacesInstanceAllowTest = init.then(s' = { instanceClassifier: 0, ...s })
+    .then(beginDenyFixture).then(rejectLoader).expect(s.o.calls == List(3) and s.o.loads == 0)
 }

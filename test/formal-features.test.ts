@@ -99,7 +99,9 @@ const profiles: Record<string, Profile> = {
     },
   },
   recovery: {
-    fixture: { policy: { ttlSec: { remote: 1 }, staleOnErrorMaxAgeSec: 5 }, tracked: true, fallbackTimeoutMs: 10 },
+    initChoices: [0, 1, 2, 3],
+    fixture: (choice) => ({ policy: { ttlSec: { remote: 1 }, staleOnErrorMaxAgeSec: 5 }, tracked: true, fallbackTimeoutMs: 10,
+      recovery: (["default", "allow", "deny", "error"] as const)[choice]! }),
     setup: [{ op: "seed", value: 1, ageMs: 1000 }, { op: "faults", value: { holdLoads: true } }],
     actions: {
       beginCall: { choices: [0, 1, 2, 3], input: (choice) => ({ op: "begin", ...(choice === 3 ? {} : { recovery: (["allow", "deny", "error"] as const)[choice]! }) }) },
@@ -574,7 +576,9 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
     let decoding = false;
     let c0Released = false;
     let shadowTimedOut = false;
+    if (name === "recovery") seen.add(`fixture:${trace.steps[0]!.choice}`);
     let classifier = -1;
+    let operationClassifier = -1;
     let recoveryCause = "";
     const abandoned = new Set<number>();
     let currentSource = -1;
@@ -589,7 +593,8 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
         c0Released = false; shadowTimedOut = false;
       }
       if (name === "recovery") {
-        if (step.action === "beginCall") classifier = step.choice;
+        if (step.action === "beginCall") operationClassifier = step.choice;
+        if (step.action === "beginCall") classifier = step.choice === 3 ? [3, 0, 1, 2][trace.steps[0]!.choice]! : step.choice;
         if (o.loaders > previous.loaders) {
           if (abandoned.size > 0) seen.add("recovery-abandoned-overlap");
           currentSource = o.loaders - 1; decoding = false;
@@ -599,9 +604,15 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
           (o.loads > previous.loads || o.recovery.length > previous.recovery.length || o.calls.some((c, i) => c === 4 && previous.calls[i] === 0))) {
           abandoned.add(currentSource);
           recoveryCause = "deadline";
-          if (classifier === 1 && o.calls.includes(4)) seen.add("explicit-denial-overrides-timeout");
+          if (classifier === 1 && o.calls.includes(4)) {
+            if (operationClassifier === 1) seen.add("explicit-denial-overrides-timeout");
+            if (operationClassifier === 3 && trace.steps[0]!.choice === 2) seen.add("instance-denial-overrides-timeout-default");
+          }
         }
         if (rejected && !abandoned.has(step.choice)) {
+          const instance = trace.steps[0]!.choice;
+          if (instance === 1 && operationClassifier === 1 && o.calls.some((c, j) => c === 3 && previous.calls[j] === 0)) seen.add("operation-denial-overrides-instance-allow");
+          if (instance === 3 && operationClassifier === 3 && o.calls.some((c, j) => c === 3 && previous.calls[j] === 0)) seen.add("instance-classifier-error-preserves-source");
           recoveryCause = step.action === "rejectTimeout" ? "propagated-timeout" : "source-error";
           if (classifier === 3 && step.action === "rejectLoader" && o.calls.includes(3) && o.loads === previous.loads) seen.add("default-denies-ordinary-error");
         }
@@ -609,6 +620,10 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
           seen.add("recovery-late-source-settles"); abandoned.delete(step.choice);
         }
         if (o.loads > previous.loads && step.action !== "beginCall") decoding = true;
+        if (o.recovery.length > previous.recovery.length && o.recovery.at(-1) === "served") {
+          if (trace.steps[0]!.choice === 1 && operationClassifier === 3 && recoveryCause === "source-error") seen.add("instance-allow-recovers-ordinary-error");
+          if (trace.steps[0]!.choice === 2 && operationClassifier === 0) seen.add("operation-allow-overrides-instance-denial");
+        }
         if (o.recovery.length > previous.recovery.length && o.recovery.at(-1) === "served" && classifier === 3) {
           seen.add(`default-recovers-${recoveryCause}`);
         }
@@ -653,7 +668,9 @@ const required: Record<string, string[]> = {
     "shared-rejection", "source-settles-after-close", ...[5, 6, 7, 8, 9].map(code => `memo-value:${code}`)],
   recovery: ["outcome:served", "outcome:miss", "outcome:deserialization_error", "retained-across-invalidation", "coalesced-recovery", "expired-during-decode",
     "default-denies-ordinary-error", "default-recovers-deadline", "default-recovers-propagated-timeout",
-    "explicit-denial-overrides-timeout", "recovery-abandoned-overlap", "recovery-late-source-settles", "recovery-failure-preserves-timeout"],
+    "explicit-denial-overrides-timeout", "recovery-abandoned-overlap", "recovery-late-source-settles", "recovery-failure-preserves-timeout", "fixture:0", "fixture:1", "fixture:2", "fixture:3",
+    "operation-denial-overrides-instance-allow", "instance-classifier-error-preserves-source", "instance-denial-overrides-timeout-default",
+    "instance-allow-recovers-ordinary-error", "operation-allow-overrides-instance-denial"],
   policy: ["local-hit", "remote-hit", "publication-after-policy-change", "ttl:2000", "ttl:4000", "ttl:5000",
     "cross-key-overlap", "uncoalesced-same-key-overlap", "join-after-policy-change", "reverse-source-settlement",
     "coalesced-result", "publication-during-policy-fetch", ...[5, 6, 7, 8, 9].flatMap(code => [`local-value:${code}`, `remote-value:${code}`])],

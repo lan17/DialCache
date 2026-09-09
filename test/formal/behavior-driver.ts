@@ -25,7 +25,7 @@ export interface Fixture {
   policy: Policy;
   tracked?: boolean;
   fallbackTimeoutMs?: number | null | "default";
-  readTimeoutMs?: number;
+  readTimeoutMs?: number | "default";
   localMaxSize?: number;
   shadowMaxInFlight?: number;
   recovery?: Recovery | "default";
@@ -159,7 +159,7 @@ export class BehaviorDriver {
     const fixture = this.fixture;
     const noop = () => { if (fixture.observerFailure || this.faults.observer) throw new Error("Controlled observer failure"); };
     const cache = new DialCache({
-      ...(fixture.remote === false ? {} : { redis: { client: this.redis, readTimeoutMs: fixture.readTimeoutMs ?? 50, compression: false as const } }),
+      ...(fixture.remote === false ? {} : { redis: { client: this.redis, ...(fixture.readTimeoutMs === "default" ? {} : { readTimeoutMs: fixture.readTimeoutMs ?? 50 }), compression: false as const } }),
       ...(fixture.localMaxSize === undefined ? {} : { localMaxSize: fixture.localMaxSize }),
       ...(fixture.shadowMaxInFlight === undefined ? {} : { shadowMaxInFlight: fixture.shadowMaxInFlight }),
       ...(fixture.recovery === undefined || fixture.recovery === "default" ? {}
