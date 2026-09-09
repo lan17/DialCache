@@ -22,7 +22,7 @@ See [`CONTRACTS.md`](./CONTRACTS.md) for the rule inventory, named executable ev
 | Tracked invalidation and acquired snapshots | `dialcache-invalidation`, `dialcache-coalescing`, real/cluster integrations | Tracked: delayed writes/fences/acquired snapshots | Core: sequential; Effects: delayed writes, future fences, followers; Layers: tracked warming, local/request survival, both operation variants fenced | Delayed writes, acquired decode/stale snapshots, suppressed serialization, local survival, explicit maintenance errors | Tracked keys and decoder fencing | Wall rollback and protocol retention/repair have portable cases; writer skew combinations and watermark durability remain external assumptions |
 | Cache errors and refill authorization | `dialcache-redis` | Core/recovery | Core: read failure; Effects: source rejection; Policy/Recovery/Shadow: provider, serializer, read and write failures | Read/write/dump/load/provider errors, no refill after failed read, explicit invalidation failure | Malformed frame classifications | Effects generates sixteen normalized adapter replies; larger mixed failure schedules remain bounded |
 | Stale recovery F/M and retained bytes | `dialcache-stale-on-error`, `dialcache-stale-recovery-policy`, `dialcache-liveness` | Recovery: age checks, authorization, no shared publication, failed-read skip | Recovery: F/M/future, held decode, allow/deny/failure, followers, policy/fence/clock changes | F, M-1, M, future; source success/denial; age crossing before/after decode; invalidation/replacement/expiry; timeout/late source; request memo; decode/read errors | Frame timestamp boundaries | Generated recovery includes optional request memoization in two scopes, deadline/late-source settlement, memo probes and closure; instance/operation/default classifier precedence is generated; native thenables remain binding tests |
-| Shadow C0/S/C1 and diagnostic behavior | `dialcache-shadow-validation`, `dialcache-shadow-confirmation` | Shadow: dark-read/source overlap, admission, compare/confirm/fill, source errors/deadlines | Shadow: dark C0/S/C1, custom comparisons, held fills, captured logging and verdict age; Admission: served hits, coalescing, deduplication, per-instance capacity, timeout ownership | Match/mismatch/superseded, independent C0 decode, source/confirmation error, no ordinary-miss job, dark fill/fence, duplicate drop, timed-out work retaining capacity | Independent shadow cohorts | Mixed dark/served jobs and larger capacity/resource combinations; custom comparison and captured logging are generated; exact native warning formatting remains integration |
+| Shadow C0/S/C1 and diagnostic behavior | `dialcache-shadow-validation`, `dialcache-shadow-confirmation` | Shadow: dark-read/source overlap, admission, compare/confirm/fill, source errors/deadlines | Shadow: dark C0/S/C1, hook/policy prerequisites and captured admission, custom comparisons, held fills, captured logging and verdict age; Admission: served hits, coalescing, deduplication, per-instance capacity, timeout ownership | Match/mismatch/superseded, independent C0 decode, source/confirmation error, no ordinary-miss job, dark fill/fence, duplicate drop, timed-out work retaining capacity | Independent shadow cohorts | Mixed dark/served jobs and larger capacity/resource combinations; custom comparison and captured logging are generated; exact native warning formatting remains integration |
 | Key identity and normalization | `dialcache-local`, `dialcache-config-ramp` | — | Fixed keys only | Multiple logical IDs | Escaping/punctuation/Unicode, UTF-16 ordering, scalars/bigints, number-format edges, caller-owned pair order | Invalid key identities have vectors; host API validation forms and exhaustive Unicode/number combinations remain outside this corpus |
 | Frame bytes and decoder classifications | `redis-payload`, adapters, real/cluster integrations | Protocol: explicit validation/fencing precedence; fault-detection witnesses | Semantic fake adapter | Future/unsafe/unsupported frames rejected before deserialization | UTF-8/binary/empty, safe ceiling/zero, tracked/untracked, malformed watermarks, fencing/encoding precedence | Unsafe uint64 host-number conversion and runtime reply representations remain binding tests; unsafe values must never be served |
 | Compression/serializer interoperability | `compression*`, `dialcache-compression` | External compressor outcomes | — | Serializer failures and asynchronous load/dump | Escape markers, legacy raw bytes, fixed zstd string/binary decoding | Compression threshold/type/only-when-smaller vectors added; compressor byte identity unspecified; resource limits remain implementation tests |
@@ -44,6 +44,7 @@ The fixed corpus is an oracle and a regression suite; it is not a substitute for
 | C55/C57–C59: adapter and diagnostic contracts | Effects requires all sixteen normalized reply classes, untracked fence rejection, actual ordered categories, phase durations, future offsets, and sizes before dispatch |
 | C30: observer failure isolation | Effects injects failing public metrics/logger callbacks during hits, publication, and source failure |
 | C34: post-serialization fence and timestamp | Effects separates wall/monotonic clocks and requires rollback to suppress dispatch at the second fence check |
+| C47/C60: shadow prerequisites and captured policy | Shadow requires missing-hook, disabled/invalid admission, admitted-job continuation, and both logging snapshot directions |
 | C20/C21/C29: invalid configuration and absent Redis | Policy generates invalid read budgets, layer ramps and optional policies; layers requires local reuse without a Redis adapter |
 | C03/C43: recovery with request memoization | Recovery requires later memo probes in both scopes after shared recovery and a new read after closed-scope recovery; no shared publication is permitted |
 | C41/C42/C46: timeout recovery and classifier precedence | Recovery generates own/propagated timeout, ordinary error, instance and operation allow/deny/error overrides, held recovery decode, and abandoned source completion |
@@ -68,7 +69,7 @@ The oracles are `dialcache-liveness`, `dialcache-redis`, `dialcache-invalidation
 
 ## Generated comparator and age diagnostics
 
-The shadow profile now generates eight default/custom-comparison and logging fixtures, runtime logging changes during admitted jobs, and wall rollback. Six deterministic model regressions anchor explicit equality/inequality, comparison failure, captured logging, clamped age, and original-C0 age during confirmation. Replay checks actual comparator invocation counts, all twelve job outcomes, verdict-age callbacks, and warning eligibility. Recovery checks age only after successful retained decode. Strict diagnostic parsing and corrupted-expectation tests protect this new projection. Effects additionally generates serving future-offset attribution, ordered diagnostic categories, phase durations, sizes before dispatch, and sixteen adapter reply classes. Scope/recovery/shadow also project coalescing labels and source-failure attribution, including recovered failures, request followers, disabled pass-through, and closure during policy. Exporter schemas remain integration obligations.
+The shadow profile generates nine fixtures covering default/custom comparison, logging, and a missing outcome hook. Runtime admission/logging changes interleave with pending jobs and wall rollback. Nine deterministic model regressions anchor hook/policy prerequisites, captured admission, explicit equality/inequality, comparison failure, captured logging, clamped age, and original-C0 age during confirmation. Replay checks actual comparator invocation counts, all twelve job outcomes, verdict-age callbacks, and warning eligibility. Recovery checks age only after successful retained decode. Strict diagnostic parsing and corrupted-expectation tests protect this new projection. Effects additionally generates serving future-offset attribution, ordered diagnostic categories, phase durations, sizes before dispatch, and sixteen adapter reply classes. Scope/recovery/shadow also project coalescing labels and source-failure attribution, including recovered failures, request followers, disabled pass-through, and closure during policy. Exporter schemas remain integration obligations.
 
 ## Interaction regressions
 
@@ -138,7 +139,7 @@ The source oracle is `dialcache-coalescing` (request/process admission), `dialca
 
 The generated served-hit profile adds three keys, two instances, and two shadow slots per instance. `test/dialcache-shadow-validation.test.ts` provides the oracle for coalesced admission, same-key drops, full capacity, source disablement, and timeout ownership. `test/dialcache-shadow-confirmation.test.ts` establishes retained C0/C1 comparison and raw confirmation-read ownership. The matching fixed scenarios include `coalesced remote hits admit only one shadow source`, `served shadow decode retains capacity after timeout until raw load settles`, and `shadow capacity and job deduplication are isolated per instance`.
 
-Six deterministic model regressions and eighteen generated outcome/race witnesses check these contracts against the same public driver. The committed smoke includes timeout, drop, raw completion, and readmission. See [`BEHAVIOR.md`](./BEHAVIOR.md#generated-served-hit-shadow-admission-profile) for exact mappings and bounds. Separate read deadlines, dark-fill capacity, invalid policy/hooks, and mixed local/request/shadow combinations remain fixed scenarios or other profiles; the new model does not claim every product of those features.
+Six deterministic model regressions and eighteen generated outcome/race witnesses check these contracts against the same public driver. The committed smoke includes timeout, drop, raw completion, and readmission. See [`BEHAVIOR.md`](./BEHAVIOR.md#generated-served-hit-shadow-admission-profile) for exact mappings and bounds. Separate read deadlines, dark-fill capacity, and mixed local/request/shadow combinations remain fixed scenarios or other profiles; hook/policy prerequisites are generated by the dark-shadow profile; the new model does not claim every product of those features.
 
 ## `dialcache-runtime-policy.qnt`
 
@@ -330,10 +331,42 @@ After the generated behavior expansion, fresh Vitest 4.1.10/V8 measurements use 
 | Corpus | Library lines | Library branches | Main engine lines | Main engine branches |
 | --- | --- | --- | --- | --- |
 | 660 ordinary unit tests | 97.96% | 97.06% | 96.16% | 95.35% |
-| 2,976 configured generated traces | 69.59% | 69.17% | 82.19% | 80.19% |
+| 2,976 configured generated traces | 69.66% | 69.37% | 82.37% | 80.68% |
 | 229 scenarios + 102 protocol cases + 4 schema/audit checks | 72.54% | 72.50% | 82.72% | 79.21% |
 | Generated + portable (3,311 positive tests) | 74.36% | 76.12% | 83.76% | 81.90% |
 
 The table separates generated execution from the combined generated/fixed corpus. Moving already-covered boundary rules into nondeterministic generated schedules improves reusable behavioral testing without necessarily reaching a new code branch. The formal corpus still misses 219 outcomes reached by ordinary tests (58 in the main engine), and reaches five outcomes absent from those tests. These counts describe execution paths, not bugs or semantic obligations.
 
 Coverage measures code execution, not assertion strength or the percentage of behavior formalized. Generated schedules can improve race testing while revisiting existing branches. Fixed scenarios retain broader cross-feature request-scope, multi-instance, callback-precedence, and mixed shadow-job coverage. Native adapters/exporters and TypeScript binding obligations still need ordinary tests.
+
+### Reproduce the execution coverage comparison
+
+Generate the corpus first with `bash formal/generate-traces.sh`. Run the following from the repository root after generation completes; each cohort uses the same source include/exclude settings. JSON summaries provide the percentages above, and `coverage-final.json` preserves branch locations for comparing outcomes across cohorts. Check that file and branch maps agree before comparing counts. Vitest's ordinary configuration excludes Redis integration tests.
+
+```bash
+coverage_cohort() {
+  local cohort="$1"
+  shift
+  corepack pnpm exec vitest run "$@" --coverage.enabled=true \
+    --coverage.include='src/**/*.ts' --coverage.exclude='src/index.ts' \
+    --coverage.exclude='test/**' --coverage.thresholds.lines=0 \
+    --coverage.thresholds.functions=0 --coverage.thresholds.branches=0 \
+    --coverage.thresholds.statements=0 --coverage.reporter=json-summary \
+    --coverage.reporter=json --coverage.reporter=html \
+    --coverage.reportsDirectory=".formal-traces/coverage/$cohort"
+}
+coverage_cohort existing --exclude='test/formal*.test.ts'
+export DIALCACHE_MBT_TRACE_DIR=.formal-traces/conformance
+export DIALCACHE_EFFECTS_TRACE_DIR=.formal-traces/effects
+export DIALCACHE_FEATURE_TRACE_DIR=.formal-traces/features
+coverage_cohort generated test/formal-conformance.test.ts \
+  test/formal-effects.test.ts test/formal-features.test.ts \
+  --testNamePattern='replays '
+coverage_cohort portable test/formal-behavior.test.ts \
+  test/formal-protocol-vectors.test.ts \
+  --testNamePattern='portable behavioral scenarios|formal protocol conformance vectors'
+coverage_cohort formal test/formal-conformance.test.ts \
+  test/formal-effects.test.ts test/formal-features.test.ts \
+  test/formal-behavior.test.ts test/formal-protocol-vectors.test.ts \
+  --testNamePattern='replays |portable behavioral scenarios|formal protocol conformance vectors'
+```

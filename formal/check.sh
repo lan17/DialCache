@@ -116,7 +116,7 @@ check formal/dialcache-policy-conformance.qnt \
 quint test formal/dialcache-policy-conformance.qnt --backend=rust --max-samples=1
 
 check formal/dialcache-shadow-conformance.qnt \
-  oneSourcePerCaller writesRequireMiss writesHaveRetention agesRequireVerdicts warningsRequireMismatch
+  oneSourcePerCaller writesRequireMiss writesHaveRetention agesRequireVerdicts warningsRequireMismatch missingHookHasNoShadowEffects
 quint test formal/dialcache-shadow-conformance.qnt --backend=rust --max-samples=1
 
 check formal/dialcache-scope-conformance.qnt \

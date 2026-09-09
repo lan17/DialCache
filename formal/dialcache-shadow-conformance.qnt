@@ -4,7 +4,7 @@ module dialcache_shadow_conformance {
   // C0 are independent; every external read/load/dump/write can be held.
   // Phase: 0 idle, 1 C0, 2 source, 3 decode, 4 C1, 5 dump, 6 write, 7 done.
   type State = {
-    o: Observation, d: Diagnostics, now: int, wall: int, comparator: int, log: bool, acceptedLog: bool, c0Created: int, deadline: int, phase: int, source: int,
+    o: Observation, d: Diagnostics, now: int, wall: int, comparator: int, hook: bool, shadowActive: bool, defaultLog: bool, log: bool, acceptedLog: bool, c0Created: int, deadline: int, phase: int, source: int,
     sourcePending: bool, sourceValue: int, abandoned: bool,
     frame: int, created: int, watermark: int, c0: int, fence: int, writeStamp: int,
     readFailed: bool, loadFailed: bool, dumpFailed: bool, writeFailed: bool
@@ -26,12 +26,14 @@ module dialcache_shadow_conformance {
     else { phase: 5, o: { dumps: st.o.dumps + 1, ...st.o }, ...st }
 
   // Input fixtures: default/equal/unequal/error comparator, then the same four
-  // with mismatch logging enabled. Policy changes are captured at admission.
+  // with mismatch logging enabled; fixture 8 omits the outcome hook.
+  // Policy changes are captured at admission.
   action init = {
-    nondet choice = 0.to(7).oneOf()
+    nondet choice = 0.to(8).oneOf()
     s' = {
     o: empty, d: noDiagnostics, now: 10000, wall: 100000,
-    comparator: choice % 4, log: choice >= 4, acceptedLog: false, c0Created: 0, deadline: 0, phase: 0, source: 0,
+    comparator: choice % 4, hook: choice != 8, shadowActive: choice != 8,
+    defaultLog: choice >= 4 and choice < 8, log: choice >= 4 and choice < 8, acceptedLog: false, c0Created: 0, deadline: 0, phase: 0, source: 0,
     sourcePending: false, sourceValue: 0, abandoned: false,
     frame: 0, created: 0, watermark: 0, c0: 0, fence: 0, writeStamp: 0,
     readFailed: false, loadFailed: false, dumpFailed: false, writeFailed: false
@@ -39,10 +41,10 @@ module dialcache_shadow_conformance {
   }
   action beginCall = all {
     (s.phase == 0 or s.phase == 7), not(s.sourcePending), s.o.calls.length() < 8,
-    s' = { phase: 1, source: 1, sourcePending: true, sourceValue: 0,
+    s' = { phase: if (s.shadowActive) 1 else 7, source: 1, sourcePending: true, sourceValue: 0,
       abandoned: false, deadline: s.now + 10, c0: 0, c0Created: 0, fence: 0, acceptedLog: s.log,
       o: { calls: s.o.calls.append(0), loaders: s.o.loaders + 1,
-        reads: s.o.reads + 1, policyCalls: s.o.policyCalls + 1, ...s.o }, ...s }
+        reads: s.o.reads + (if (s.shadowActive) 1 else 0), policyCalls: s.o.policyCalls + 1, ...s.o }, ...s }
   }
   action resolveLoader = { nondet choice = Set(1, 2).oneOf()
     all { s.sourcePending,
@@ -107,7 +109,10 @@ module dialcache_shadow_conformance {
   }
   action rollbackWall = s' = { wall: s.wall - 1000, ...s }
   action logPolicy = { nondet choice = Set(0, 1).oneOf()
-    s' = { log: choice == 1, ...s } }
+    s' = { log: choice == 1, shadowActive: s.hook, ...s } }
+  def shadowPolicyFor(choice: int): State = { shadowActive: s.hook and choice == 0, log: s.defaultLog, ...s }
+  action shadowPolicy = { nondet choice = Set(0, 1, 2).oneOf()
+    s' = shadowPolicyFor(choice) }
   action readFault = { nondet choice = Set(0, 1).oneOf()
     s' = { readFailed: choice == 1, ...s } }
   action loadFault = { nondet choice = Set(0, 1).oneOf()
@@ -116,20 +121,28 @@ module dialcache_shadow_conformance {
     s' = { dumpFailed: choice == 1, ...s } }
   action writeFault = { nondet choice = Set(0, 1).oneOf()
     s' = { writeFailed: choice == 1, ...s } }
-  // At C1, focus sampling on changes that distinguish mismatch from supersession.
-  action step = if (s.phase == 4) any { releaseRead, seed, invalidate, readFault, advance, rollbackWall, logPolicy } else any {
+  // At C1, favor completion and logging changes while retaining every
+  // replacement, failure, clock, and admission-policy transition.
+  action step = if (s.phase == 4) any { releaseRead, logPolicy, any { seed, invalidate, readFault, advance, rollbackWall, shadowPolicy } } else any {
     any { beginCall, resolveLoader, rejectLoader, releaseRead, releaseLoad, releaseDump, releaseWrite },
-    any { advance, seed, invalidate, readFault, loadFault, dumpFault, writeFault, rollbackWall, logPolicy }
+    any { advance, seed, invalidate, readFault, loadFault, dumpFault, writeFault, rollbackWall, logPolicy, shadowPolicy }
   }
   val oneSourcePerCaller = s.o.loaders == s.o.calls.length()
   val writesRequireMiss = s.phase != 6 or (s.c0 == 0 and s.source == 2)
   val writesHaveRetention = s.o.writes == s.o.writeTtls.length()
+  val missingHookHasNoShadowEffects = s.hook or (s.o.reads == 0 and s.o.loads == 0 and s.o.dumps == 0 and s.o.writes == 0)
   val agesRequireVerdicts = s.d.ages.length() == s.o.shadow.select(x => x == "match" or x == "mismatch").length()
   val warningsRequireMismatch = s.d.warnings <= s.o.shadow.select(x => x == "mismatch").length()
 
   // Fixed model regressions anchor the callback and captured-policy contract.
-  action compareFixture = init.then(s' = { phase: 3, c0: 1, c0Created: s.wall - 1, sourceValue: 2,
+  action compareFixture = init.then(s' = { phase: 3, hook: true, shadowActive: true, c0: 1, c0Created: s.wall - 1, sourceValue: 2,
     o: { calls: List(2), loaders: 1, reads: 1, loads: 1, ...empty }, ...s })
+  run missingHookSkipsDarkJobTest = init.then(s' = { hook: false, shadowActive: false, ...s })
+    .then(beginCall).then(resolveLoader).expect(s.o.calls.nth(0) > 0 and s.o.reads == 0 and s.o.shadow == List())
+  run invalidShadowPolicySkipsDarkJobTest = init.then(s' = shadowPolicyFor(2)).then(beginCall).then(resolveLoader)
+    .expect(s.o.calls.nth(0) > 0 and s.o.reads == 0 and s.o.shadow == List())
+  run admittedComparisonSurvivesPolicyDisableTest = compareFixture.then(s' = { comparator: 1, ...s })
+    .then(s' = shadowPolicyFor(1)).then(releaseLoad).expect(s.o.shadow == List("match"))
   run explicitEqualityOverridesValuesTest = compareFixture.then(s' = { comparator: 1, ...s }).then(releaseLoad)
     .expect(s.o.shadow == List("match") and s.o.comparisons == 1 and s.d.ages == List(1))
   run explicitInequalityRequiresConfirmationTest = compareFixture

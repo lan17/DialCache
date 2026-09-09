@@ -138,9 +138,9 @@ const profiles: Record<string, Profile> = {
     },
   },
   shadow: {
-    diagnosticAge: "shadowAge", initChoices: Array.from({ length: 8 }, (_, i) => i),
+    diagnosticAge: "shadowAge", initChoices: Array.from({ length: 9 }, (_, i) => i),
     fixture: (choice) => ({ policy: { ttlSec: { remote: 60 }, ramp: { remote: 0 },
-      shadow: { ramp: 100, ...(choice < 4 ? {} : { logMismatches: true }) } }, tracked: true,
+      shadow: { ramp: 100, ...(choice < 4 || choice === 8 ? {} : { logMismatches: true }) } }, tracked: true, shadowHook: choice !== 8,
       ...(choice % 4 === 0 ? {} : { comparator: (["equal", "unequal", "error"] as const)[choice % 4 - 1]! }),
       observe: ["shadowAge", "mismatchWarning", "coalesced", "error"] }),
     setup: [{ op: "faults", value: { holdReads: true, holdLoads: true, holdDumps: true, holdWrites: true } }],
@@ -151,6 +151,7 @@ const profiles: Record<string, Profile> = {
       invalidate: { choices: [0, 20], input: (choice) => ({ op: "invalidate", futureBufferMs: choice }) },
       readFault: fault("read"), loadFault: fault("load"), dumpFault: fault("dump"), writeFault: fault("write"),
       rollbackWall: { input: () => ({ op: "shiftWall", ms: -1000 }) },
+      shadowPolicy: { choices: [0, 1, 2], input: (choice) => ({ op: "policy", value: { shadow: { ramp: [100, 0, 101][choice]! } } }) },
       logPolicy: { choices: [0, 1], input: (choice) => ({ op: "policy", value: { shadow: { logMismatches: choice === 1 } } }) },
     },
   },
@@ -733,7 +734,9 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
     let c0Released = false;
     let shadowTimedOut = false;
     if (name === "recovery" || name === "shadow") seen.add(`fixture:${trace.steps[0]!.choice}`);
-    let logging = trace.steps[0]!.choice >= 4;
+    let logging = trace.steps[0]!.choice >= 4 && trace.steps[0]!.choice < 8;
+    const defaultLogging = logging;
+    let shadowPolicy = 0, jobAdmitted = false, changedAdmittedJob = false;
     let acceptedLogging = false;
     // Model-private values classify reached comparison schedules only; replay
     // above has already compared public callbacks/results independently.
@@ -804,11 +807,23 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
         }
       }
       if (name === "shadow") {
-        if (step.action === "beginCall") { acceptedLogging = logging; wallRolledAfterC0 = false; }
-        if (step.action === "logPolicy") logging = step.choice === 1;
+        if (step.action === "beginCall") {
+          acceptedLogging = logging; wallRolledAfterC0 = false;
+          jobAdmitted = o.reads > previous.reads; changedAdmittedJob = false;
+          if (!jobAdmitted && o.loaders > previous.loaders) {
+            if (trace.steps[0]!.choice === 8) seen.add("missing-hook-skips-job");
+            else if (shadowPolicy > 0) seen.add(`shadow-policy-skips-job:${shadowPolicy}`);
+          }
+        }
+        if (step.action === "logPolicy") { logging = step.choice === 1; shadowPolicy = 0; }
+        if (step.action === "shadowPolicy") {
+          shadowPolicy = step.choice; logging = defaultLogging;
+          if (jobAdmitted && step.choice > 0) changedAdmittedJob = true;
+        }
         if (step.action === "rollbackWall" && c0Released) wallRolledAfterC0 = true;
         if (o.shadow.length > previous.shadow.length) {
           const outcome = o.shadow.at(-1);
+          if (changedAdmittedJob && shadowPolicy > 0 && ["match", "mismatch", "filled"].includes(outcome!)) seen.add("admitted-job-keeps-shadow-policy");
           const c0Value = itfInteger(shadowStates[i - 1]!.c0, trace.path);
           const sourceValue = itfInteger(shadowStates[i - 1]!.sourceValue, trace.path);
           if (outcome === "match" && c0Value !== sourceValue && trace.steps[0]!.choice % 4 === 1) seen.add("custom-equal-overrides-values");
@@ -824,7 +839,7 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
           c0Released = true;
           if (o.calls.includes(0) && o.shadow.length === previous.shadow.length) seen.add("c0-before-source");
         }
-        if (step.action === "resolveLoader" && !c0Released && o.calls.at(-1) !== 4) seen.add("source-before-c0");
+        if (step.action === "resolveLoader" && jobAdmitted && !c0Released && previous.calls.at(-1) === 0 && [1, 2].includes(o.calls.at(-1)!)) seen.add("source-before-c0");
         if (o.shadow.length > previous.shadow.length && o.shadow.at(-1) === "timeout") shadowTimedOut = true;
         if (step.action === "releaseWrite" && shadowTimedOut) seen.add("write-completes-after-timeout");
       }
@@ -857,7 +872,7 @@ const required: Record<string, string[]> = {
     "coalesced-result", "publication-during-policy-fetch", ...[5, 6, 7, 8, 9].flatMap(code => [`local-value:${code}`, `remote-value:${code}`])],
   shadow: ["match", "mismatch", "comparison_error", "superseded", "confirmation_error", "redis_error", "source_error", "timeout", "deserialization_error", "filled", "fill_error", "fill_fenced"]
     .map((outcome) => `outcome:${outcome}`).concat(["c0-before-source", "source-before-c0", "write-completes-after-timeout",
-      ...Array.from({ length: 8 }, (_, i) => `fixture:${i}`), "custom-equal-overrides-values", "custom-unequal-confirms-equal-values",
+      ...Array.from({ length: 9 }, (_, i) => `fixture:${i}`), "missing-hook-skips-job", "shadow-policy-skips-job:1", "shadow-policy-skips-job:2", "admitted-job-keeps-shadow-policy", "custom-equal-overrides-values", "custom-unequal-confirms-equal-values",
       "captured-logging:true", "captured-logging:false", "mismatch-logging:true", "mismatch-logging:false", "age-clamped-after-rollback", "age-at-verdict"]),
 };
 
