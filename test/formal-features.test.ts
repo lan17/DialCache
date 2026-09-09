@@ -165,11 +165,12 @@ function scopeWitnesses(traces: Trace[]): Set<string> {
   for (const trace of traces) {
     const closed = new Set<number>();
     const rejected = new Set<number>();
-    const published = new Map<number, number>();
+    const published = new Map<number, { value: number; scope: number }>();
     const bypassed = new Map<number, number>();
     const sources = new Map<number, { scope: number; memoizing: boolean; shared: boolean }>();
     const scopes: number[] = [];
     let lateOuterSource = false;
+    let valueBeforeNestedClose: number | undefined;
     let policyCall = -1;
     let overlay = 0;
     const holder = (scope: number) => scope === 1 ? 1 : 0;
@@ -181,6 +182,7 @@ function scopeWitnesses(traces: Trace[]): Set<string> {
       if (step.action === "policy") overlay = step.choice;
       if (step.action === "closeScope") {
         closed.add(step.choice);
+        if (step.choice === 2) valueBeforeNestedClose = published.get(0)?.value;
         if (step.choice < 2) { published.delete(step.choice); bypassed.delete(step.choice); }
       }
       if (step.action === "beginCall") {
@@ -201,21 +203,23 @@ function scopeWitnesses(traces: Trace[]): Set<string> {
           const memoizing = active && overlay !== 1;
           if (!active) seen.add("policy-reply-after-close");
           if (memoizing) {
-            if (rejected.has(lifetime)) seen.add("rejected-flight-retry");
+            if (overlay === 0 && rejected.has(lifetime)) seen.add("rejected-flight-retry");
             if (scope === 1 && lateOuterSource) seen.add("replacement-miss-after-late-source");
             for (const source of sources.values()) {
-              if (!source.memoizing) continue;
+              if (!source.memoizing || closed.has(holder(source.scope))) continue;
               if (holder(source.scope) !== lifetime) seen.add("independent-scope-overlap");
               else if (overlay === 2) seen.add("uncoalesced-scope-overlap");
             }
           }
-          if (active && overlay === 1 && published.has(lifetime)) bypassed.set(lifetime, published.get(lifetime)!);
+          if (active && overlay === 1 && published.has(lifetime)) bypassed.set(lifetime, published.get(lifetime)!.value);
           sources.set(o.loaders - 1, { scope, memoizing, shared: memoizing && overlay === 0 });
         } else if (o.calls[policyCall] !== 0) {
           seen.add("memo-hit");
-          if (scope === 2) seen.add("nested-memo-hit");
-          if (scope === 4) seen.add("reenabled-memo-hit");
-          if (closed.has(2) && lifetime === 0) seen.add("memo-after-nested-close");
+          if (published.get(lifetime)?.scope !== scope) {
+            if (scope === 2) seen.add("nested-memo-hit");
+            if (scope === 4) seen.add("reenabled-memo-hit");
+          }
+          if (lifetime === 0 && valueBeforeNestedClose === o.calls[policyCall]) seen.add("memo-after-nested-close");
           if (bypassed.get(lifetime) === o.calls[policyCall]) seen.add("memo-after-policy-bypass");
         }
         policyCall = -1;
@@ -234,7 +238,8 @@ function scopeWitnesses(traces: Trace[]): Set<string> {
             seen.add("source-settles-after-close");
             if (lifetime === 0) lateOuterSource = true;
           } else {
-            published.set(lifetime, completed[0]!);
+            published.set(lifetime, { value: completed[0]!, scope: source.scope });
+            if (lifetime === 0) valueBeforeNestedClose = undefined;
             bypassed.delete(lifetime);
           }
         }
