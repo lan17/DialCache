@@ -118,3 +118,7 @@ check formal/dialcache-shadow-conformance.qnt \
 check formal/dialcache-scope-conformance.qnt \
   closedScopesHaveNoMemo registeredSourcesArePending callsKeepSourceOutcome sourceCountsMatchEffects
 quint test formal/dialcache-scope-conformance.qnt --backend=rust --max-samples=1
+
+check formal/dialcache-admission-conformance.qnt \
+  capacityIsPerInstance oneJobPerIdentity registeredCallsArePending callsKeepAcquiredValue jobsAreDiagnostic effectsMatchRecords
+quint test formal/dialcache-admission-conformance.qnt --backend=rust --max-samples=1

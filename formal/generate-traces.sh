@@ -63,3 +63,4 @@ generate_feature policy 128 1024 writesHaveRetention hitsSkipSource callsKeepSou
 # Replay also requires these outcomes; trace count alone is insufficient.
 generate_feature shadow 256 1024 oneSourcePerCaller writesRequireMiss writesHaveRetention
 generate_feature scope 128 1024 closedScopesHaveNoMemo registeredSourcesArePending callsKeepSourceOutcome sourceCountsMatchEffects
+generate_feature admission 128 1024 capacityIsPerInstance oneJobPerIdentity registeredCallsArePending callsKeepAcquiredValue jobsAreDiagnostic effectsMatchRecords

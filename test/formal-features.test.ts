@@ -29,6 +29,25 @@ const overlays: Policy[] = [
 ];
 const policyOverlays = overlays.concat(overlays.map((overlay) => ({ ...overlay, coalesce: false })));
 const profiles: Record<string, Profile> = {
+  admission: {
+    fixture: { policy: { ttlSec: { remote: 60 }, shadow: { ramp: 100 } }, tracked: true,
+      shadowMaxInFlight: 2, readTimeoutMs: 1000, probeSourceScope: true },
+    setup: [0, 1, 2].map((key): Input => ({ op: "seed", key: String(key), value: 1 }))
+      .concat([{ op: "faults", value: { holdReads: true, holdLoads: true } }]),
+    actions: {
+      beginCall: { choices: [0, 1, 2, 3, 4, 5], input: (choice) => ({ op: "begin",
+        key: String(choice % 3), instance: String(Math.floor(choice / 3)) }) },
+      releaseRead: { choices: Array.from({ length: 32 }, (_, i) => i), input: (choice) => ({ op: "release", effect: "read", index: choice }) },
+      releaseLoad: { choices: Array.from({ length: 32 }, (_, i) => i), input: (choice) => ({ op: "release", effect: "load", index: choice }) },
+      resolveLoader: { choices: Array.from({ length: 32 }, (_, i) => i + 1),
+        input: (choice) => ({ op: "resolve", loader: Math.floor((choice - 1) / 2), value: (choice - 1) % 2 + 1 }) },
+      rejectLoader: { choices: Array.from({ length: 16 }, (_, i) => i), input: (choice) => ({ op: "reject", loader: choice }) },
+      seed: { choices: [0, 1, 2, 3, 4, 5], input: (choice) => ({ op: "seed", key: String(Math.floor(choice / 2)), value: choice % 2 + 1 }) },
+      advance: advance([1, 10]),
+      policy: { choices: [0, 1, 2, 3], input: (choice) => ({ op: "policy",
+        value: { shadow: { ramp: choice % 2 === 0 ? 100 : 0 }, coalesce: choice < 2 } }) },
+    },
+  },
   scope: {
     fixture: { policy: { requestLocal: true }, remote: false, fallbackTimeoutMs: null, probeSourceScope: true },
     setup: [{ op: "openScope", id: "0" }, { op: "faults", value: { holdPolicies: true } }],
@@ -160,6 +179,97 @@ async function replay(profile: Profile, trace: Trace) {
 
 // These are reachability checks over replayed observations, not additional
 // implementation state. A large corpus must not pass by missing its hard paths.
+function admissionWitnesses(traces: Trace[]): Set<string> {
+  const seen = new Set<string>();
+  type Flight = { identity: number; selected: boolean; callers: number[] };
+  type Job = { identity: number; phase: "source" | "decode" | "confirmation"; deadline: number; timedOut: boolean };
+  type Effect = { flight: Flight } | { job: number };
+  for (const trace of traces) {
+    let now = 0;
+    let overlay = 0;
+    const registered = new Map<number, Flight>();
+    const jobs = new Map<number, Job>();
+    const reads = new Map<number, Effect>();
+    const loads = new Map<number, Effect>();
+    const released = new Set<number>();
+    const instance = (identity: number) => Math.floor(identity / 3);
+    const finish = (index: number) => {
+      const job = jobs.get(index)!;
+      if (job.timedOut) released.add(job.identity);
+      jobs.delete(index);
+    };
+    for (const [i, step] of trace.steps.entries()) {
+      seen.add(`action:${step.action}`);
+      const o = step.expected;
+      const previous = trace.steps[i - 1]?.expected;
+      if (previous === undefined) continue;
+      for (const outcome of o.shadow) seen.add(`outcome:${outcome}`);
+      if (step.action === "policy") overlay = step.choice;
+      if (step.action === "advance") {
+        now += step.choice;
+        for (const job of jobs.values()) if (now >= job.deadline) job.timedOut = true;
+      }
+      if (step.action === "beginCall") {
+        if (o.reads > previous.reads) {
+          const flight = { identity: step.choice, selected: overlay % 2 === 0, callers: [o.calls.length - 1] };
+          if (overlay >= 2 && registered.has(step.choice)) seen.add("uncoalesced-hit-overlap");
+          if (overlay < 2) registered.set(step.choice, flight);
+          reads.set(o.reads - 1, { flight });
+        } else {
+          const flight = registered.get(step.choice);
+          if (flight === undefined) throw new Error(`${trace.path}: no observed read for follower`);
+          flight.callers.push(o.calls.length - 1);
+        }
+      }
+      if (step.action === "releaseRead") {
+        const effect = reads.get(step.choice);
+        if (effect === undefined) throw new Error(`${trace.path}: unknown read ${step.choice}`);
+        if ("flight" in effect) loads.set(o.loads - 1, effect);
+        else finish(effect.job);
+        reads.delete(step.choice);
+      }
+      if (step.action === "releaseLoad") {
+        const effect = loads.get(step.choice);
+        if (effect === undefined) throw new Error(`${trace.path}: unknown load ${step.choice}`);
+        if ("flight" in effect) {
+          const flight = effect.flight;
+          const active = [...jobs.values()].filter((job) => instance(job.identity) === instance(flight.identity));
+          const duplicate = active.find((job) => job.identity === flight.identity);
+          if (o.loaders > previous.loaders) {
+            if (flight.callers.length > 1) seen.add("coalesced-hit-one-job");
+            if (overlay % 2 === 1) seen.add("accepted-shadow-policy");
+            if ([...jobs.values()].filter((job) => instance(job.identity) !== instance(flight.identity)).length === 2) seen.add("other-instance-full-admission");
+            if ([...jobs.values()].some((job) => job.identity % 3 === flight.identity % 3)) seen.add("per-instance-deduplication");
+            if (released.has(flight.identity)) seen.add("readmission-after-timeout-drains");
+            jobs.set(o.loaders - 1, { identity: flight.identity, phase: "source", deadline: now + 10, timedOut: false });
+          } else if (o.shadow.length > previous.shadow.length) {
+            if (duplicate && active.length < 2) seen.add("duplicate-with-free-capacity");
+            if (!duplicate && active.length === 2) seen.add("full-capacity-drop");
+            // An expired job must be a cause of this drop, not merely coexist
+            // with a different live duplicate that would already block it.
+            for (const job of duplicate ? [duplicate] : active.length === 2 ? active : []) {
+              if (job.timedOut) seen.add(`${job.phase}-timeout-keeps-slot`);
+            }
+          } else if (!flight.selected) seen.add("unselected-hit-skips-job");
+          if (registered.get(flight.identity) === flight) registered.delete(flight.identity);
+        } else if (o.reads > previous.reads) {
+          jobs.get(effect.job)!.phase = "confirmation";
+          reads.set(o.reads - 1, { job: effect.job });
+        } else finish(effect.job);
+        loads.delete(step.choice);
+      }
+      if (step.action === "resolveLoader" || step.action === "rejectLoader") {
+        const loader = step.action === "resolveLoader" ? Math.floor((step.choice - 1) / 2) : step.choice;
+        if (o.loads > previous.loads) {
+          jobs.get(loader)!.phase = "decode";
+          loads.set(o.loads - 1, { job: loader });
+        } else finish(loader);
+      }
+    }
+  }
+  return seen;
+}
+
 function scopeWitnesses(traces: Trace[]): Set<string> {
   const seen = new Set<string>();
   for (const trace of traces) {
@@ -310,6 +420,7 @@ function policyWitnesses(traces: Trace[]): Set<string> {
 }
 
 function witnesses(name: string, traces: Trace[]): Set<string> {
+  if (name === "admission") return admissionWitnesses(traces);
   if (name === "scope") return scopeWitnesses(traces);
   if (name === "policy") return policyWitnesses(traces);
   const seen = new Set<string>();
@@ -354,6 +465,11 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
   return seen;
 }
 const required: Record<string, string[]> = {
+  admission: ["outcome:match", "outcome:mismatch", "outcome:superseded", "outcome:source_error", "outcome:timeout", "outcome:dropped",
+    "coalesced-hit-one-job", "accepted-shadow-policy", "other-instance-full-admission", "per-instance-deduplication",
+    "readmission-after-timeout-drains", "duplicate-with-free-capacity", "full-capacity-drop",
+    "source-timeout-keeps-slot", "decode-timeout-keeps-slot", "confirmation-timeout-keeps-slot",
+    "unselected-hit-skips-job", "uncoalesced-hit-overlap"],
   scope: ["disabled-bypass", "detached-bypass", "policy-reply-after-close", "rejected-flight-retry",
     "replacement-miss-after-late-source", "independent-scope-overlap", "uncoalesced-scope-overlap",
     "memo-hit", "nested-memo-hit", "reenabled-memo-hit", "memo-after-nested-close", "memo-after-policy-bypass",
@@ -406,5 +522,5 @@ for (const [name, profile] of Object.entries(profiles)) {
   });
 }
 if (single !== undefined && !Object.keys(profiles).some((name) => single.includes(`/${name}/`) || single.endsWith(`${name}-smoke.itf.json`))) {
-  throw new Error("Single feature trace must be inside its scope/recovery/policy/shadow profile directory");
+  throw new Error("Single feature trace must be inside its admission/scope/recovery/policy/shadow profile directory");
 }
