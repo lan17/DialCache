@@ -168,6 +168,7 @@ Common actions reuse the scenario inputs: `releaseRead/Load/Dump/Write/Policy` r
 | Policy `beginCall` | Key is string `"0"` or `"1"` from choice 0/1 |
 | Policy `resolveLoader` | Choice 1..84 encodes source index `floor((choice - 1) / 7)` and the value at `(choice - 1) % 7` in `[1,2,absent,null,false,0,""]`; only pending sources are generated |
 | Policy `rejectLoader` | Reject the explicitly selected source index, choice 0..11; only pending sources are generated |
+| Policy `seed` | Choice 0..3 supplies key `floor(choice/2)` with value `1 + choice%2`, current wall stamp, and 5 s physical TTL |
 | Policy `advance` | Elapsed time choice 1, 1000, 2000, or 5000 ms |
 | Policy `policy` | Replace overlay using the numbered table below |
 | Shadow `init` | Choice 0..3 selects default/equal/unequal/error comparison; 4..7 selects the same comparison with mismatch logging enabled |
@@ -193,11 +194,17 @@ Policy overlay choices replace the entire runtime overlay; omitted leaves inheri
 | 7 | Recovery maximum age 2 s |
 | 8 | Both serving ramps 0 |
 | 9 | Remote TTL 4 s, recovery disabled (maximum age 0) |
-| 10..19 | Same overlay as choice minus 10, with `coalesce: false`; returning to 0..9 restores default sharing |
+| 10..19 | Same overlay as choice minus 10, with `coalesce: false`; other choices inherit default sharing |
+| 20 | Invalid remote read budget 0: bypass all caching for the invocation |
+| 21 / 22 | Invalid local / remote ramp 101: disable that layer while preserving the other |
+| 23 / 24 | Invalid recovery maximum age 1 / -1 s: normal serving remains active, writes use ordinary 1 s retention |
+| 25 | Invalid shadow ramp 101: normal fresh serving remains active |
 
-Generation exports 512 recovery traces from 4,096 samples, and 256 policy traces from 1,024 samples and 512 shadow traces from 2,048 samples, at most 60 transitions each. Actions are sampled in progress/environment groups so repeated environmental changes do not crowd out useful completion paths; C1 additionally focuses sampling on replacement, fencing, read failure, and time. This changes exploration frequency, not the allowed transition semantics.
+Five deterministic policy regressions anchor invalid budget, per-layer ramp, optional recovery retention, and fresh-hit shadow-policy behavior. The generated sample requires each boundary, including a Redis hit under invalid shadow policy and both invalid recovery retention cases. Independent Redis seeding makes external replacement/read scenarios reachable.
 
-CI requires every named action, all three recovery outcomes, recovery across invalidation, coalesced recovery, age-out during decoding, local/remote hits, changed-policy publication, physical TTLs of 2/4/5 seconds, both C0/source orders, all twelve modeled shadow outcomes, and a write completing after shadow timeout. These witness checks fail if a configured corpus misses its promised paths. They establish occurrence only. The separate verification models still reason about wider abstractions such as shadow admission, and the portable fixed corpus covers additional binding-independent boundaries.
+Generation exports 512 recovery traces from 4,096 samples, and 512 policy traces from 2,048 samples and 512 shadow traces from 2,048 samples, at most 60 transitions each. Actions are sampled in progress/environment groups so repeated environmental changes do not crowd out useful completion paths; C1 additionally focuses sampling on replacement, fencing, read failure, and time. This changes exploration frequency, not the allowed transition semantics.
+
+CI requires every named action, all three recovery outcomes, recovery across invalidation, coalesced recovery, age-out during decoding, local/remote hits, changed-policy publication, physical TTLs of 1/2/4/5 seconds, both C0/source orders, all twelve modeled shadow outcomes, and a write completing after shadow timeout. These witness checks fail if a configured corpus misses its promised paths. They establish occurrence only. The separate verification models still reason about wider abstractions such as shadow admission, and the portable fixed corpus covers additional binding-independent boundaries.
 
 Scope, recovery, and shadow also expose `s.d = { warnings, ages, coalesced, fallbackErrors }`. Ages are integer milliseconds in Quint and compared to actual callback seconds after unit conversion. The driver obtains this projection only from observed callbacks; it checks their operation/outcome labels and retains their order. Recovery records age only after successful retained decode. Shadow records original-C0 age at match/confirmed-mismatch verdict, clamped to zero after wall rollback; it emits a warning only for a confirmed mismatch whose admitted policy enabled logging. Later runtime changes do not rewrite that policy. C1 compares retained payload identity even when a replacement timestamp is future-dated. Exact native JSON warning formatting remains a binding obligation.
 
@@ -228,8 +235,9 @@ The initial **input choice**, never expected model state, selects the fresh fixt
 | 1 | Yes | 2 |
 | 2 | No | 0 |
 | 3 | Yes | 0 |
+| 4 | Adapter absent | 2 |
 
-All modes enable request-local caching and 60-second local/remote TTLs, with no source deadline. Sources are held independently; other external effects settle at their action boundary. Two instances share Redis but own their local capacity and process flights. Persistent contexts 0 and 1 belong to instance 0; context 2 belongs to instance 1. Contexts 3 and 4 mean a fresh invocation scope on instance 0 and 1 respectively. This is an input-level fixture description, not a requirement to reproduce any host context API.
+Mode 4 omits the Redis adapter, requires public local-hit reuse, and excludes invalidation inputs. All modes enable request-local caching and 60-second local/remote TTLs, with no source deadline. Sources are held independently; other external effects settle at their action boundary. Two instances share Redis but own their local capacity and process flights. Persistent contexts 0 and 1 belong to instance 0; context 2 belongs to instance 1. Contexts 3 and 4 mean a fresh invocation scope on instance 0 and 1 respectively. This is an input-level fixture description, not a requirement to reproduce any host context API.
 
 | Action | Input mapping |
 | --- | --- |
@@ -244,7 +252,7 @@ All modes enable request-local caching and 60-second local/remote TTLs, with no 
 
 At most twenty calls and eighty steps keep entries fresh throughout this profile; TTL boundaries remain in policy/scenario coverage. There are four logical identities, so a two-slot local cache can demonstrate read promotion and eviction, while request storage can exceed that capacity. Successful source completion publishes only to participating eligible layers. Tracked remote fallback skips direct local publication; an authoritative hit can warm local. Invalidation fences subsequent remote reads while acquired request/local values survive. Policy changes preserve admitted sources' publication decisions.
 
-CI exports 512 traces from 2,048 samples. Seventeen required witnesses include all four fixtures, cross-request process sharing, zero-capacity sharing/reload, uncapped request memoization, LRU promotion/eviction with later public probes, per-instance capacity, tracked read warming, local survival across invalidation, both operation variants fenced, and untracked reads ignoring markers. Private model records select reachability witnesses only; storage-related witnesses require actual replayed calls that probe their predictions. They never control the adapter or become implementation observations. Six deterministic model regressions anchor the same boundaries, and a committed generated smoke runs without Quint.
+CI exports 512 traces from 2,048 samples. Nineteen required witnesses include all five fixtures and local reuse without Redis, cross-request process sharing, zero-capacity sharing/reload, uncapped request memoization, LRU promotion/eviction with later public probes, per-instance capacity, tracked read warming, local survival across invalidation, both operation variants fenced, and untracked reads ignoring markers. Private model records select reachability witnesses only; storage-related witnesses require actual replayed calls that probe their predictions. They never control the adapter or become implementation observations. Seven deterministic model regressions anchor the same boundaries, and a committed generated smoke runs without Quint.
 
 This profile uses the same observations and public/environment inputs as the other feature profiles. It adds initial fixture choices; drivers must reject unsupported choices. Larger capacities, more scopes/instances, mixed deadline/recovery/shadow combinations, and expiry during LRU ordering are outside its generated bounds.
 

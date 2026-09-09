@@ -20,12 +20,12 @@ module dialcache_policy_conformance {
     providerFailed: false, readFailed: false, dumpFailed: false, writeFailed: false
   }
   // Choices 10..19 repeat the same sparse overlays with coalescing disabled.
-  val base = s.overlay % 10
-  val localTtl = if (s.providerFailed or Set(3, 5, 8).contains(base)) 0
+  val base = if (s.overlay < 20) s.overlay % 10 else 0
+  val localTtl = if (s.providerFailed or s.overlay == 20 or s.overlay == 21 or Set(3, 5, 8).contains(base)) 0
     else if (base == 1) 2000 else 1000
-  val remoteTtl = if (s.providerFailed or Set(4, 6, 8).contains(base)) 0
+  val remoteTtl = if (s.providerFailed or s.overlay == 20 or s.overlay == 22 or Set(4, 6, 8).contains(base)) 0
     else if (base == 2) 2000 else if (base == 9) 4000 else 1000
-  val retention = if (base == 7) 2000 else if (base == 9) 4000 else 5000
+  val retention = if (s.overlay == 23 or s.overlay == 24) 1000 else if (base == 7) 2000 else if (base == 9) 4000 else 5000
   val pendingSources = s.sources.indices().filter(i => s.sources.nth(i).result == 0)
 
   pure def begin(state: State, key: int): State = {
@@ -37,7 +37,7 @@ module dialcache_policy_conformance {
   }
   action releasePolicy = all {
     s.policyCall >= 0,
-    val shared = s.overlay < 10 and (localTtl > 0 or remoteTtl > 0)
+    val shared = (s.overlay < 10 or s.overlay >= 20) and (localTtl > 0 or remoteTtl > 0)
     val joins = shared and s.registered.nth(s.key) >= 0
     // Flight admission precedes reading the first participating cache layer.
     val localHit = not(joins) and localTtl > 0 and s.localKey == s.key and s.localValue > 0 and s.now < s.localExpires
@@ -89,10 +89,14 @@ module dialcache_policy_conformance {
   action rejectLoader = { nondet choice = pendingSources.oneOf()
     s' = settle(s, choice, 3)
   }
-  action policy = { nondet choice = 0.to(19).oneOf()
+  action policy = { nondet choice = 0.to(25).oneOf()
     s' = { overlay: choice, ...s } }
   action advance = { nondet choice = Set(1, 1000, 2000, 5000).oneOf()
     s' = { now: s.now + choice, wall: s.wall + choice, ...s } }
+  action seed = { nondet choice = 0.to(3).oneOf()
+    s' = { remoteValues: s.remoteValues.replaceAt(choice / 2, choice % 2 + 1),
+      remoteCreated: s.remoteCreated.replaceAt(choice / 2, s.wall),
+      remoteExpires: s.remoteExpires.replaceAt(choice / 2, s.now + 5000), ...s } }
   action rollbackWall = s' = { wall: s.wall - 1000, ...s }
   action providerFault = { nondet choice = Set(0, 1).oneOf()
     s' = { providerFailed: choice == 1, ...s } }
@@ -104,7 +108,7 @@ module dialcache_policy_conformance {
     s' = { writeFailed: choice == 1, ...s } }
   action step = any {
     any { beginCall, releasePolicy, resolveLoader, rejectLoader },
-    any { policy, advance, rollbackWall, providerFault, readFault, dumpFault, writeFault }
+    any { policy, seed, advance, rollbackWall, providerFault, readFault, dumpFault, writeFault }
   }
   val writesHaveRetention = s.o.writes == s.o.writeTtls.length()
   val hitsSkipSource = s.o.loaders <= s.o.calls.length()
@@ -118,6 +122,25 @@ module dialcache_policy_conformance {
   })
   val sharedSourcesKeepRegistration = pendingSources.forall(i =>
     not(s.sources.nth(i).shared) or s.registered.nth(s.sources.nth(i).key) == i)
+
+  run invalidReadBudgetBypassesAllCachingTest = init.then(s' = { overlay: 20, ...s })
+    .then(s' = begin(s, 0)).then(releasePolicy).then(s' = begin(s, 0)).then(releasePolicy)
+    .expect(s.o.loaders == 2 and s.o.reads == 0).then(s' = settle(s, 0, 1))
+    .expect(s.localValue == 0 and s.o.writes == 0)
+  run invalidLocalRampPreservesRemoteTest = init.then(s' = { overlay: 21, ...s })
+    .then(s' = begin(s, 0)).then(releasePolicy).then(s' = settle(s, 0, 1))
+    .then(s' = begin(s, 0)).then(releasePolicy).expect(s.o.reads == 2 and s.o.loads == 1 and s.localValue == 0)
+  run invalidRemoteRampPreservesLocalTest = init.then(s' = { overlay: 22, ...s })
+    .then(s' = begin(s, 0)).then(releasePolicy).then(s' = settle(s, 0, 1))
+    .then(s' = begin(s, 0)).then(releasePolicy).expect(s.o.calls == List(1, 1) and s.o.reads == 0)
+  run invalidRecoveryUsesOrdinaryRetentionTest = init.then(s' = { overlay: 23, ...s })
+    .then(s' = begin(s, 0)).then(releasePolicy).then(s' = settle(s, 0, 1))
+    .expect(s.o.writeTtls == List(1000) and s.remoteExpires == List(1000, 0))
+  run invalidShadowPreservesNormalServingTest = init.then(s' = { overlay: 25, ...s })
+    .then(s' = begin(s, 0)).then(releasePolicy).then(s' = settle(s, 0, 1))
+    .then(s' = begin(s, 1)).then(releasePolicy).then(s' = settle(s, 1, 2))
+    .then(s' = begin(s, 0)).then(releasePolicy)
+    .expect(s.o.calls == List(1, 2, 1) and s.o.loads == 1 and s.o.shadow == List())
 
   run wallRollbackDoesNotExtendLocalTtlTest = init.then(s' = { overlay: 4, ...s })
     .then(s' = begin(s, 0)).then(releasePolicy).then(s' = settle(s, 0, 1)).then(rollbackWall)

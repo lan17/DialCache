@@ -5,7 +5,7 @@ module dialcache_layers_conformance {
   // Fresh entries throughout this profile; policy/storage profiles cover expiry.
   type Source = { instance: int, key: int, local: bool, remote: bool, fence: int, result: int, shared: bool }
   type State = {
-    o: Observation, now: int, tracked: bool, capacity: int, policy: int,
+    o: Observation, now: int, tracked: bool, remoteAvailable: bool, capacity: int, policy: int,
     closed: List[bool], memo: List[int], requestFlights: List[int], processFlights: List[int],
     localValues: List[int], lru: List[List[int]], remoteValues: List[int], created: List[int], watermark: List[int],
     sources: List[Source], owners: List[int], memoSlots: List[int]
@@ -19,7 +19,7 @@ module dialcache_layers_conformance {
   // 0 all; 1 no request; 2 no local; 3 no remote; 4 request only; 5 no layers.
   pure def requestEnabled(x: State): bool = x.policy != 1 and x.policy != 5
   pure def localEnabled(x: State): bool = Set(0, 1, 3).contains(x.policy)
-  pure def remoteEnabled(x: State): bool = Set(0, 1, 2).contains(x.policy)
+  pure def remoteEnabled(x: State): bool = x.remoteAvailable and Set(0, 1, 2).contains(x.policy)
   pure def touch(order: List[int], key: int): List[int] = order.select(k => k != key).append(key)
   pure def putLocal(x: State, inst: int, key: int, value: int): State = {
     val order = touch(x.lru.nth(inst), key)
@@ -86,8 +86,8 @@ module dialcache_layers_conformance {
   }
   action init = {
     // The recorded input configures only the fresh external fixture.
-    nondet choice = Set(0, 1, 2, 3).oneOf()
-    s' = { o: empty, now: 10000, tracked: choice % 2 == 1, capacity: if (choice < 2) 2 else 0, policy: 0,
+    nondet choice = 0.to(4).oneOf()
+    s' = { o: empty, now: 10000, tracked: choice % 2 == 1, remoteAvailable: choice != 4, capacity: if (choice < 2 or choice == 4) 2 else 0, policy: 0,
       closed: List(false, false, false), memo: zeros(12), requestFlights: slots(12), processFlights: slots(8),
       localValues: zeros(8), lru: List(List(), List()), remoteValues: zeros(4), created: zeros(4), watermark: zeros(2),
       sources: List(), owners: List(), memoSlots: List() }
@@ -109,12 +109,13 @@ module dialcache_layers_conformance {
   action seed = { nondet choice = 0.to(7).oneOf()
     s' = { remoteValues: s.remoteValues.replaceAt(choice / 2, choice % 2 + 1), created: s.created.replaceAt(choice / 2, s.now), ...s } }
   action invalidate = { nondet choice = Set(0, 1).oneOf()
-    s' = { watermark: s.watermark.replaceAt(choice, s.now),
-      o: { invalidations: s.o.invalidations + 1, maintenance: s.o.maintenance.append("ok"), ...s.o }, ...s } }
+    all { s.remoteAvailable, s' = { watermark: s.watermark.replaceAt(choice, s.now),
+      o: { invalidations: s.o.invalidations + 1, maintenance: s.o.maintenance.append("ok"), ...s.o }, ...s } } }
   action tick = s' = { now: s.now + 1, ...s }
   action step = any {
     beginCall, resolveLoader, any { rejectLoader, policy, seed, invalidate, tick, any { tick, closeScope } }
   }
+  val absentRemoteHasNoAdapterEffects = s.remoteAvailable or (s.o.reads == 0 and s.o.writes == 0 and s.o.invalidations == 0)
   val sourceEffectsMatch = s.sources.length() == s.o.loaders and s.owners.length() == s.o.calls.length()
   val capacityIsPerInstance = s.lru.indices().forall(i => s.lru.nth(i).length() <= s.capacity)
   val closedScopesHaveNoMemo = s.memo.indices().forall(slot => not(s.closed.nth(slot / 4)) or s.memo.nth(slot) == 0)
@@ -128,8 +129,11 @@ module dialcache_layers_conformance {
   val localMembershipMatchesLru = s.localValues.indices().forall(i =>
     (s.localValues.nth(i) > 0) == (s.lru.nth(i / 4).select(key => key == i % 4).length() > 0))
 
-  action untrackedFixture = init.then(s' = { tracked: false, capacity: 2, ...s })
-  action trackedFixture = init.then(s' = { tracked: true, capacity: 2, ...s })
+  action untrackedFixture = init.then(s' = { tracked: false, remoteAvailable: true, capacity: 2, ...s })
+  action trackedFixture = init.then(s' = { tracked: true, remoteAvailable: true, capacity: 2, ...s })
+  run absentRemotePreservesLocalReuseTest = init.then(s' = { remoteAvailable: false, capacity: 2, ...s })
+    .then(s' = begin(s, 12)).then(s' = settle(s, 0, 1)).then(s' = begin(s, 12))
+    .expect(s.o.calls == List(1, 1) and s.o.loaders == 1 and s.o.reads == 0 and s.o.writes == 0)
   run requestMissesShareProcessAndMemoizeSeparatelyTest = untrackedFixture
     .then(s' = begin(s, 0)).then(s' = begin(s, 4)).expect(s.o.loaders == 1)
     .then(s' = settle(s, 0, 1)).then(s' = { policy: 4, ...s })

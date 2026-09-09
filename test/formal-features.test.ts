@@ -36,14 +36,17 @@ const overlays: Policy[] = [
   { staleOnErrorMaxAgeSec: 2 }, { ramp: { local: 0, remote: 0 } },
   { ttlSec: { remote: 4 }, staleOnErrorMaxAgeSec: 0 },
 ];
-const policyOverlays = overlays.concat(overlays.map((overlay) => ({ ...overlay, coalesce: false })));
+const policyOverlays = overlays.concat(overlays.map((overlay) => ({ ...overlay, coalesce: false })), [
+  { remoteReadTimeoutMs: 0 }, { ramp: { local: 101 } }, { ramp: { remote: 101 } },
+  { staleOnErrorMaxAgeSec: 1 }, { staleOnErrorMaxAgeSec: -1 }, { shadow: { ramp: 101 } },
+]);
 const layerPolicies: Policy[] = [{}, { requestLocal: false }, { ramp: { local: 0 } },
   { ramp: { remote: 0 } }, { ramp: { local: 0, remote: 0 } }, { requestLocal: false, ramp: { local: 0, remote: 0 } }];
 const profiles: Record<string, Profile> = {
   layers: {
-    initChoices: [0, 1, 2, 3],
+    initChoices: [0, 1, 2, 3, 4],
     fixture: (choice) => ({ policy: { requestLocal: true, ttlSec: { local: 60, remote: 60 } },
-      tracked: choice % 2 === 1, localMaxSize: choice < 2 ? 2 : 0, fallbackTimeoutMs: null }),
+      tracked: choice % 2 === 1, remote: choice !== 4, localMaxSize: choice < 2 || choice === 4 ? 2 : 0, fallbackTimeoutMs: null }),
     setup: [0, 1, 2].map(scope => ({ op: "openScope", id: String(scope), instance: scope === 2 ? "1" : "0" })),
     actions: {
       beginCall: { choices: Array.from({ length: 20 }, (_, i) => i), input: (choice) => {
@@ -128,6 +131,7 @@ const profiles: Record<string, Profile> = {
       releasePolicy: release("policy"),
       resolveLoader: resolveValue(12),
       rejectLoader: { choices: Array.from({ length: 12 }, (_, i) => i), input: (choice) => ({ op: "reject", loader: choice }) },
+      seed: { choices: [0, 1, 2, 3], input: (choice) => ({ op: "seed", key: String(Math.floor(choice / 2)), value: choice % 2 + 1, ttlMs: 5000 }) },
       policy: { choices: policyOverlays.map((_, i) => i), input: (choice) => ({ op: "policy", value: policyOverlays[choice]! }) },
       advance: advance([1, 1000, 2000, 5000]), rollbackWall: { input: () => ({ op: "shiftWall", ms: -1000 }) }, providerFault: fault("policy"),
       readFault: fault("read"), dumpFault: fault("dump"), writeFault: fault("write"),
@@ -329,12 +333,13 @@ function layersWitnesses(traces: Trace[]): Set<string> {
         if (!starts && !returned && calls.some((call, j) => previous.calls[j] === 0 && call.identity === identity
           && [0, 1].includes(call.context) && [0, 1].includes(context) && call.context !== context)
           && !calls.some((call, j) => previous.calls[j] === 0 && call.identity === identity && call.context === context)) seen.add("request-misses-share-process-flight");
-        if (mode >= 2 && context >= 3 && !starts && !returned && [0, 1, 2, 3].includes(policy)) seen.add("zero-capacity-still-shares");
-        if (mode >= 2 && context >= 3 && policy === 3 && starts
+        if (mode >= 2 && mode <= 3 && context >= 3 && !starts && !returned && [0, 1, 2, 3].includes(policy)) seen.add("zero-capacity-still-shares");
+        if (mode >= 2 && mode <= 3 && context >= 3 && policy === 3 && starts
           && calls.some((call, j) => call.identity === identity && previous.calls[j]! > 0)) seen.add("zero-capacity-reloads");
-        if (mode >= 2 && context < 3 && policy === 4 && returned && !starts
+        if (mode >= 2 && mode <= 3 && context < 3 && policy === 4 && returned && !starts
           && list(before.memo).slice(context * 4, context * 4 + 4).filter(v => v > 0).length > 2) seen.add("request-memo-exceeds-local-capacity");
         if (localHit) {
+          if (mode === 4) seen.add("absent-remote-preserves-local-reuse");
           if (ordersBefore[instance]!.length === 2 && ordersBefore[instance]![0] === identity) { seen.add("lru-read-promotes"); promoted.add(key); }
           if (preserved.has(key)) seen.add("promoted-value-survives-eviction");
           if (survivingOther.has(key)) seen.add("capacity-is-per-instance");
@@ -587,8 +592,8 @@ function clockWitnesses(name: "policy" | "recovery", traces: Trace[]): Set<strin
         if (name === "policy" && integer(before.localValue) > 0) rolledLocal = { key: integer(before.localKey), expires: integer(before.localExpires) };
       }
       if (name === "policy" && step.action === "releasePolicy") {
-        const key = integer(before.key), base = integer(before.overlay) % 10;
-        const local = before.providerFailed === false && ![3, 5, 8].includes(base);
+        const key = integer(before.key), overlay = integer(before.overlay), base = overlay < 20 ? overlay % 10 : 0;
+        const local = before.providerFailed === false && ![20, 21].includes(overlay) && ![3, 5, 8].includes(base);
         if (local && rolledLocal?.key === key && integer(before.localKey) === key && integer(before.localExpires) === rolledLocal.expires) {
           const result = o.calls[integer(before.policyCall)]!;
           if (integer(before.now) < rolledLocal.expires && result > 0 && o.reads === previous.reads && o.loaders === previous.loaders) seen.add("rollback-preserves-live-local");
@@ -613,7 +618,7 @@ function policyWitnesses(traces: Trace[]): Set<string> {
     let providerFailed = false;
     let pendingPolicy = -1;
     const keys: number[] = [];
-    const sources = new Map<number, { key: number; epoch: number }>();
+    const sources = new Map<number, { key: number; epoch: number; overlay: number }>();
     for (const [i, step] of trace.steps.entries()) {
       seen.add(`action:${step.action}`);
       const o = step.expected;
@@ -630,12 +635,18 @@ function policyWitnesses(traces: Trace[]): Set<string> {
       if (step.action === "providerFault") providerFailed = step.choice === 1;
       if (step.action === "releasePolicy") {
         const key = keys[pendingPolicy]!;
+        if (!providerFailed) {
+          if (overlay === 20 && o.loaders > previous.loaders && o.reads === previous.reads) seen.add("invalid-read-budget-bypasses-caching");
+          if (overlay === 21 && o.reads > previous.reads) seen.add("invalid-local-ramp-preserves-remote");
+          if (overlay === 22 && o.calls[pendingPolicy]! > 0 && o.reads === previous.reads && o.loaders === previous.loaders) seen.add("invalid-remote-ramp-preserves-local");
+          if (overlay === 25 && o.loads > previous.loads && o.loaders === previous.loaders) seen.add("invalid-shadow-preserves-serving");
+        }
         if (o.loaders > previous.loaders) {
           for (const source of sources.values()) {
             if (source.key !== key) seen.add("cross-key-overlap");
-            else if (overlay >= 10 && !providerFailed) seen.add("uncoalesced-same-key-overlap");
+            else if (overlay >= 10 && overlay < 20 && !providerFailed) seen.add("uncoalesced-same-key-overlap");
           }
-          sources.set(o.loaders - 1, { key, epoch: policyEpoch });
+          sources.set(o.loaders - 1, { key, epoch: policyEpoch, overlay });
         } else if (o.calls[pendingPolicy] === 0) {
           if ([...sources.values()].some((source) => source.key === key && source.epoch < policyEpoch)) {
             seen.add("join-after-policy-change");
@@ -653,6 +664,7 @@ function policyWitnesses(traces: Trace[]): Set<string> {
         if ([...sources.keys()].some((pending) => pending < loader)) seen.add("reverse-source-settlement");
         if (previous.calls.filter((c, index) => c === 0 && o.calls[index] !== 0).length > 1) seen.add("coalesced-result");
         if (o.writes > previous.writes) {
+          if ([23, 24].includes(source.overlay) && o.writeTtls.at(-1) === 1000) seen.add(`invalid-recovery-retention:${source.overlay}`);
           if (source.epoch < policyEpoch) seen.add("publication-after-policy-change");
           if (pendingPolicy >= 0 && o.calls[pendingPolicy] === 0) seen.add("publication-during-policy-fetch");
         }
@@ -821,7 +833,7 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
   return seen;
 }
 const required: Record<string, string[]> = {
-  layers: ["fixture:0", "fixture:1", "fixture:2", "fixture:3", "request-misses-share-process-flight",
+  layers: ["fixture:4", "absent-remote-preserves-local-reuse", "fixture:0", "fixture:1", "fixture:2", "fixture:3", "request-misses-share-process-flight",
     "zero-capacity-still-shares", "zero-capacity-reloads", "request-memo-exceeds-local-capacity", "lru-read-promotes",
     "promoted-value-survives-eviction", "capacity-is-per-instance", "validated-tracked-hit-warms-local",
     "invalidation-preserves-local-hit", "lru-eviction-probed", "tracked-refill-needs-remote-validation",
@@ -840,7 +852,7 @@ const required: Record<string, string[]> = {
     "explicit-denial-overrides-timeout", "recovery-abandoned-overlap", "recovery-late-source-settles", "recovery-failure-preserves-timeout", "fixture:0", "fixture:1", "fixture:2", "fixture:3",
     "operation-denial-overrides-instance-allow", "instance-classifier-error-preserves-source", "instance-denial-overrides-timeout-default",
     "instance-allow-recovers-ordinary-error", "operation-allow-overrides-instance-denial"],
-  policy: ["rollback-preserves-live-local", "rollback-does-not-extend-local-ttl", "rollback-rejects-future-remote", "local-hit", "remote-hit", "publication-after-policy-change", "ttl:2000", "ttl:4000", "ttl:5000",
+  policy: ["invalid-read-budget-bypasses-caching", "invalid-local-ramp-preserves-remote", "invalid-remote-ramp-preserves-local", "invalid-shadow-preserves-serving", "invalid-recovery-retention:23", "invalid-recovery-retention:24", "ttl:1000", "rollback-preserves-live-local", "rollback-does-not-extend-local-ttl", "rollback-rejects-future-remote", "local-hit", "remote-hit", "publication-after-policy-change", "ttl:2000", "ttl:4000", "ttl:5000",
     "cross-key-overlap", "uncoalesced-same-key-overlap", "join-after-policy-change", "reverse-source-settlement",
     "coalesced-result", "publication-during-policy-fetch", ...[5, 6, 7, 8, 9].flatMap(code => [`local-value:${code}`, `remote-value:${code}`])],
   shadow: ["match", "mismatch", "comparison_error", "superseded", "confirmation_error", "redis_error", "source_error", "timeout", "deserialization_error", "filled", "fill_error", "fill_fenced"]

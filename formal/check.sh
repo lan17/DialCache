@@ -128,5 +128,5 @@ check formal/dialcache-admission-conformance.qnt \
 quint test formal/dialcache-admission-conformance.qnt --backend=rust --max-samples=1
 
 check formal/dialcache-layers-conformance.qnt \
-  sourceEffectsMatch capacityIsPerInstance closedScopesHaveNoMemo registeredSourcesArePending zeroCapacityHasNoLocalValues callsKeepSourceOutcome localMembershipMatchesLru
+  sourceEffectsMatch capacityIsPerInstance closedScopesHaveNoMemo registeredSourcesArePending zeroCapacityHasNoLocalValues callsKeepSourceOutcome localMembershipMatchesLru absentRemoteHasNoAdapterEffects
 quint test formal/dialcache-layers-conformance.qnt --backend=rust --max-samples=1
