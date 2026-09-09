@@ -8,7 +8,7 @@ import { itfInteger, record } from "./formal/itf.js";
 
 type Projected = Omit<Observation, "calls"> & { calls: number[] };
 type Action = { choices?: readonly number[]; input: (choice: number, observed: Observation) => Input };
-interface Profile { diagnosticAge?: "shadowAge" | "recoveryAge"; fixture: Fixture | ((choice: number) => Fixture); initChoices?: readonly number[]; setup: Input[]; actions: Record<string, Action> }
+interface Profile { diagnosticAge?: "shadowAge" | "recoveryAge" | "none"; fixture: Fixture | ((choice: number) => Fixture); initChoices?: readonly number[]; setup: Input[]; actions: Record<string, Action> }
 const settle = (op: "resolve" | "reject"): Action => ({
   ...(op === "resolve" ? { choices: [1, 2] } : {}),
   input: (choice, o) => op === "resolve" ? { op, loader: o.loaders - 1, value: choice } : { op, loader: o.loaders - 1 },
@@ -83,7 +83,8 @@ const profiles: Record<string, Profile> = {
     },
   },
   scope: {
-    fixture: { policy: { requestLocal: true }, remote: false, fallbackTimeoutMs: null, probeSourceScope: true },
+    diagnosticAge: "none",
+    fixture: { policy: { requestLocal: true }, remote: false, fallbackTimeoutMs: null, probeSourceScope: true, observe: ["coalesced", "error"] },
     setup: [{ op: "openScope", id: "0" }, { op: "faults", value: { holdPolicies: true } }],
     actions: {
       openScope: { choices: [1, 2, 3, 4], input: (choice) => ({ op: "openScope", id: String(choice),
@@ -102,7 +103,7 @@ const profiles: Record<string, Profile> = {
     diagnosticAge: "recoveryAge",
     initChoices: [0, 1, 2, 3],
     fixture: (choice) => ({ policy: { ttlSec: { remote: 1 }, staleOnErrorMaxAgeSec: 5 }, tracked: true, fallbackTimeoutMs: 10,
-      recovery: (["default", "allow", "deny", "error"] as const)[choice]!, observe: ["recoveryAge"] }),
+      recovery: (["default", "allow", "deny", "error"] as const)[choice]!, observe: ["recoveryAge", "coalesced", "error"] }),
     setup: [{ op: "seed", value: 1, ageMs: 1000 }, { op: "faults", value: { holdLoads: true } }],
     actions: {
       beginCall: { choices: [0, 1, 2, 3], input: (choice) => ({ op: "begin", ...(choice === 3 ? {} : { recovery: (["allow", "deny", "error"] as const)[choice]! }) }) },
@@ -136,7 +137,7 @@ const profiles: Record<string, Profile> = {
     fixture: (choice) => ({ policy: { ttlSec: { remote: 60 }, ramp: { remote: 0 },
       shadow: { ramp: 100, ...(choice < 4 ? {} : { logMismatches: true }) } }, tracked: true,
       ...(choice % 4 === 0 ? {} : { comparator: (["equal", "unequal", "error"] as const)[choice % 4 - 1]! }),
-      observe: ["shadowAge", "mismatchWarning"] }),
+      observe: ["shadowAge", "mismatchWarning", "coalesced", "error"] }),
     setup: [{ op: "faults", value: { holdReads: true, holdLoads: true, holdDumps: true, holdWrites: true } }],
     actions: {
       beginCall: { input: () => ({ op: "begin" }) }, resolveLoader: settle("resolve"), rejectLoader: settle("reject"),
@@ -150,7 +151,7 @@ const profiles: Record<string, Profile> = {
   },
 };
 
-interface Diagnostics { warnings: number; ages: number[] }
+interface Diagnostics { warnings: number; ages: number[]; coalesced: string[]; fallbackErrors: string[] }
 interface Step { action: string; choice: number; expected: Projected; diagnostics?: Diagnostics }
 interface Trace { path: string; steps: Step[] }
 function observation(raw: unknown, context: string): Projected {
@@ -175,8 +176,13 @@ function observation(raw: unknown, context: string): Projected {
 }
 function diagnostics(raw: unknown, context: string): Diagnostics {
   const value = record(raw, context);
-  if (Object.keys(value).sort().join() !== "ages,warnings" || !Array.isArray(value.ages)) throw new Error(`${context}: invalid diagnostics`);
-  return { warnings: itfInteger(value.warnings, context), ages: value.ages.map(age => itfInteger(age, context) / 1000) };
+  if (Object.keys(value).sort().join() !== "ages,coalesced,fallbackErrors,warnings" || !Array.isArray(value.ages)) throw new Error(`${context}: invalid diagnostics`);
+  const labels = (items: unknown, allowed: string[]): string[] => {
+    if (!Array.isArray(items) || items.some(item => typeof item !== "string" || !allowed.includes(item))) throw new Error(`${context}: invalid diagnostic labels`);
+    return items as string[];
+  };
+  return { warnings: itfInteger(value.warnings, context), ages: value.ages.map(age => itfInteger(age, context) / 1000),
+    coalesced: labels(value.coalesced, ["process", "request_local"]), fallbackErrors: labels(value.fallbackErrors, ["noop", "local", "remote", "request_local"]) };
 }
 function parseTrace(raw: unknown, path: string, profile: Profile): Trace {
   const states = record(raw, path).states;
@@ -225,11 +231,26 @@ function projectWithDiagnostics(profile: Profile, observed: Observation) {
   if (events === undefined) throw new Error("Missing actual diagnostic observations");
   const ages: number[] = [];
   let warnings = 0;
+  const coalesced: string[] = [], fallbackErrors: string[] = [];
   const outcomes = profile.diagnosticAge === "shadowAge" ? observed.shadow.filter(x => x === "match" || x === "mismatch")
     : observed.recovery.filter(x => x === "served");
   for (const event of events) {
+    // This profile selects source failures; other error trails are specified
+    // by effects. Maintenance errors deliberately carry another use case.
+    if (event.event === "error" && event.error !== "fallback") continue;
     expect(event).toMatchObject({ cacheNamespace: "urn", useCase: "Behavior", keyType: "id" });
-    if (event.event === "mismatchWarning") { expect(event.outcome).toBe("mismatch"); warnings++; }
+    if (event.event === "coalesced") {
+      if (typeof event.scope !== "string") throw new Error("Missing coalescing scope");
+      coalesced.push(event.scope);
+    } else if (event.event === "error") {
+      // This projection selects source failures; the effects profile compares
+      // the complete cache/read/serializer error trail independently.
+      if (event.error === "fallback") {
+        expect(event.inFallback).toBe(true);
+        if (typeof event.layer !== "string") throw new Error("Missing source failure layer");
+        fallbackErrors.push(event.layer);
+      }
+    } else if (event.event === "mismatchWarning") { expect(event.outcome).toBe("mismatch"); warnings++; }
     else {
       expect(event.event).toBe(profile.diagnosticAge);
       expect(event.outcome).toBe(outcomes[ages.length]);
@@ -237,7 +258,7 @@ function projectWithDiagnostics(profile: Profile, observed: Observation) {
       ages.push(event.seconds);
     }
   }
-  return { o: project(base), d: { warnings, ages } };
+  return { o: project(base), d: { warnings, ages, coalesced, fallbackErrors } };
 }
 async function replay(profile: Profile, trace: Trace) {
   const driver = new BehaviorDriver(typeof profile.fixture === "function" ? profile.fixture(trace.steps[0]!.choice) : profile.fixture);
@@ -467,6 +488,13 @@ function scopeWitnesses(traces: Trace[]): Set<string> {
       const o = step.expected;
       const previous = trace.steps[i - 1]?.expected;
       if (previous === undefined) continue;
+      for (const layer of step.diagnostics!.fallbackErrors) seen.add(`failure-layer:${layer}`);
+      if (step.action === "rejectLoader") {
+        const failures = o.calls.filter((value, j) => value === 3 && previous.calls[j] === 0).length;
+        const added = step.diagnostics!.fallbackErrors.length - trace.steps[i - 1]!.diagnostics!.fallbackErrors.length;
+        if (failures > 1 && added === 1) seen.add("one-error-for-request-followers");
+        if (failures === 1 && added === 0) seen.add("pass-through-error-has-no-cache-trail");
+      }
       if (step.action === "policy") overlay = step.choice;
       if (step.action === "closeScope") {
         closed.add(step.choice);
@@ -658,6 +686,7 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
     let classifier = -1;
     let operationClassifier = -1;
     let recoveryCause = "";
+    let recoveryErrorCount = 0;
     const abandoned = new Set<number>();
     let currentSource = -1;
     for (const [i, step] of trace.steps.entries()) {
@@ -671,7 +700,7 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
         c0Released = false; shadowTimedOut = false;
       }
       if (name === "recovery") {
-        if (step.action === "beginCall") operationClassifier = step.choice;
+        if (step.action === "beginCall") { operationClassifier = step.choice; recoveryErrorCount = step.diagnostics!.fallbackErrors.length; }
         if (step.action === "beginCall") classifier = step.choice === 3 ? [3, 0, 1, 2][trace.steps[0]!.choice]! : step.choice;
         if (o.loaders > previous.loaders) {
           if (abandoned.size > 0) seen.add("recovery-abandoned-overlap");
@@ -699,6 +728,7 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
         }
         if (o.loads > previous.loads && step.action !== "beginCall") decoding = true;
         if (o.recovery.length > previous.recovery.length && o.recovery.at(-1) === "served") {
+          if (step.diagnostics!.fallbackErrors.length === recoveryErrorCount + 1 && step.diagnostics!.fallbackErrors.at(-1) === "remote") seen.add("recovery-keeps-source-failure-trail");
           if (trace.steps[0]!.choice === 1 && operationClassifier === 3 && recoveryCause === "source-error") seen.add("instance-allow-recovers-ordinary-error");
           if (trace.steps[0]!.choice === 2 && operationClassifier === 0) seen.add("operation-allow-overrides-instance-denial");
         }
@@ -756,11 +786,11 @@ const required: Record<string, string[]> = {
     "readmission-after-timeout-drains", "duplicate-with-free-capacity", "full-capacity-drop",
     "source-timeout-keeps-slot", "decode-timeout-keeps-slot", "confirmation-timeout-keeps-slot",
     "unselected-hit-skips-job", "uncoalesced-hit-overlap"],
-  scope: ["disabled-bypass", "detached-bypass", "policy-reply-after-close", "rejected-flight-retry",
+  scope: ["failure-layer:request_local", "failure-layer:local", "failure-layer:noop", "one-error-for-request-followers", "pass-through-error-has-no-cache-trail", "disabled-bypass", "detached-bypass", "policy-reply-after-close", "rejected-flight-retry",
     "replacement-miss-after-late-source", "independent-scope-overlap", "uncoalesced-scope-overlap",
     "memo-hit", "nested-memo-hit", "reenabled-memo-hit", "memo-after-nested-close", "memo-after-policy-bypass",
     "shared-rejection", "source-settles-after-close", ...[5, 6, 7, 8, 9].map(code => `memo-value:${code}`)],
-  recovery: ["rollback-rejects-retained-future", "outcome:served", "outcome:miss", "outcome:deserialization_error", "retained-across-invalidation", "coalesced-recovery", "expired-during-decode",
+  recovery: ["recovery-keeps-source-failure-trail", "rollback-rejects-retained-future", "outcome:served", "outcome:miss", "outcome:deserialization_error", "retained-across-invalidation", "coalesced-recovery", "expired-during-decode",
     "default-denies-ordinary-error", "default-recovers-deadline", "default-recovers-propagated-timeout",
     "explicit-denial-overrides-timeout", "recovery-abandoned-overlap", "recovery-late-source-settles", "recovery-failure-preserves-timeout", "fixture:0", "fixture:1", "fixture:2", "fixture:3",
     "operation-denial-overrides-instance-allow", "instance-classifier-error-preserves-source", "instance-denial-overrides-timeout-default",

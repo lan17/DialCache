@@ -5,8 +5,8 @@ module conformance_observations {
   // Successful values 5..9: absent, null, false, zero, empty string.
   pure val values = List(1, 2, 5, 6, 7, 8, 9)
   // Optional diagnostic projection: ages are integer milliseconds in the model.
-  type Diagnostics = { warnings: int, ages: List[int] }
-  pure val noDiagnostics: Diagnostics = { warnings: 0, ages: List() }
+  type Diagnostics = { warnings: int, ages: List[int], coalesced: List[str], fallbackErrors: List[str] }
+  pure val noDiagnostics: Diagnostics = { warnings: 0, ages: List(), coalesced: List(), fallbackErrors: List() }
   type Observation = {
     calls: List[int], loaders: int, reads: int, writes: int, invalidations: int,
     maintenance: List[str], loads: int, dumps: int, policyCalls: int,

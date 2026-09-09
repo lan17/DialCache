@@ -50,12 +50,14 @@ module dialcache_recovery_conformance {
   }
   action joinCall = all {
     s.phase != 0, s.o.calls.length() < 8,
-    s' = { o: { calls: s.o.calls.append(0), policyCalls: s.o.policyCalls + 1, ...s.o }, ...s }
+    s' = { d: { coalesced: s.d.coalesced.append("process"), ...s.d },
+      o: { calls: s.o.calls.append(0), policyCalls: s.o.policyCalls + 1, ...s.o }, ...s }
   }
   pure def rejected(x: State, error: int, timeout: bool): State = {
     val attempt = x.canRecover and (x.classifier == 0 or (x.classifier == 3 and timeout))
     val decode = attempt and candidateValid(x)
-    { phase: if (decode) 3 else 0, sourceError: error,
+    { d: { fallbackErrors: x.d.fallbackErrors.append("remote"), ...x.d },
+      phase: if (decode) 3 else 0, sourceError: error,
       o: { classifications: x.o.classifications + (if (x.canRecover and x.classifier != 3) 1 else 0),
         loads: x.o.loads + (if (decode) 1 else 0),
         recovery: if (attempt and not(decode)) x.o.recovery.append("miss") else x.o.recovery,

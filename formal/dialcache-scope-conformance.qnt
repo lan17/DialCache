@@ -4,15 +4,15 @@ module dialcache_scope_conformance {
   // Handles 2/3 nest enabled/disabled under 0; 4 reenables inside 3.
   // Completed handles remain usable for detached work. Only an outer close
   // ends its memo lifetime. No language-specific executor ordering is modeled.
-  type Source = { slot: int, shared: bool, result: int }
+  type Source = { slot: int, shared: bool, result: int, metricLayer: str }
   type State = {
-    o: Observation, opened: List[bool], completed: List[bool],
+    o: Observation, d: Diagnostics, opened: List[bool], completed: List[bool],
     memo: List[int], registered: List[int], sources: List[Source], owners: List[int],
     policyCall: int, scope: int, overlay: int
   }
   var s: State
   action init = s' = {
-    o: empty, opened: List(true, false, false, false, false),
+    o: empty, d: noDiagnostics, opened: List(true, false, false, false, false),
     completed: List(false, false, false, false, false), memo: List(0, 0),
     registered: List(-1, -1), sources: List(), owners: List(),
     policyCall: -1, scope: 0, overlay: 0
@@ -20,9 +20,9 @@ module dialcache_scope_conformance {
   pure def holder(scope: int): int = if (scope == 1) 1 else 0
   pure def activeScope(state: State, scope: int): bool =
     scope < 5 and scope != 3 and not(state.completed.nth(holder(scope)))
-  pure def source(state: State, call: int, slot: int, shared: bool, active: bool): State = {
+  pure def source(state: State, call: int, slot: int, shared: bool, active: bool, metricLayer: str): State = {
     owners: state.owners.replaceAt(call, state.sources.length()),
-    sources: state.sources.append({ slot: slot, shared: shared, result: 0 }),
+    sources: state.sources.append({ slot: slot, shared: shared, result: 0, metricLayer: metricLayer }),
     registered: if (shared) state.registered.replaceAt(slot, state.sources.length()) else state.registered,
     o: { loaders: state.o.loaders + 1, sourceScopes: state.o.sourceScopes.append(active), ...state.o }, ...state
   }
@@ -31,7 +31,7 @@ module dialcache_scope_conformance {
     val updated = { scope: scope, owners: state.owners.append(-1),
       policyCall: if (active) state.o.calls.length() else -1,
       o: { calls: state.o.calls.append(0), policyCalls: state.o.policyCalls + (if (active) 1 else 0), ...state.o }, ...state }
-    if (active) updated else source(updated, state.o.calls.length(), -1, false, false)
+    if (active) updated else source(updated, state.o.calls.length(), -1, false, false, "")
   }
   action beginCall = {
     // Context 5 is outside every request.
@@ -48,14 +48,16 @@ module dialcache_scope_conformance {
     val updated = { policyCall: -1, ...s }
     // Admission precedes the memo read, including when an independent call
     // has populated the memo while the registered source is still pending.
-    s' = if (owner >= 0) { owners: s.owners.replaceAt(s.policyCall, owner), ...updated }
+    s' = if (owner >= 0) { d: { coalesced: s.d.coalesced.append("request_local"), ...s.d },
+        owners: s.owners.replaceAt(s.policyCall, owner), ...updated }
       else if (value > 0) { o: { calls: s.o.calls.replaceAt(s.policyCall, value), ...s.o }, ...updated }
-      else source(updated, s.policyCall, slot, shared, active)
+      else source(updated, s.policyCall, slot, shared, active, if (not(active)) "noop" else if (slot >= 0) "request_local" else "local")
   }
   pure def settle(state: State, loader: int, result: int): State = {
     val entry = state.sources.nth(loader)
     val live = entry.slot >= 0 and not(state.completed.nth(entry.slot))
     {
+      d: { fallbackErrors: if (result == 3 and entry.metricLayer != "") state.d.fallbackErrors.append(entry.metricLayer) else state.d.fallbackErrors, ...state.d },
       sources: state.sources.replaceAt(loader, { result: result, ...entry }),
       memo: if (live and result != 3) state.memo.replaceAt(entry.slot, result) else state.memo,
       registered: if (live and state.registered.nth(entry.slot) == loader) state.registered.replaceAt(entry.slot, -1) else state.registered,
@@ -131,6 +133,13 @@ module dialcache_scope_conformance {
     .then(s' = begin(s, 0)).then(releasePolicy).then(s' = settle(s, 0, 3))
     .then(s' = begin(s, 0)).then(releasePolicy)
     .expect(s.o.calls == List(3, 3, 0) and s.o.loaders == 2)
+  run sharedFailureHasOneAttributedErrorTest = init.then(s' = begin(s, 0)).then(releasePolicy)
+    .then(s' = begin(s, 0)).then(releasePolicy).then(s' = settle(s, 0, 3))
+    .expect(s.d.coalesced == List("request_local") and s.d.fallbackErrors == List("request_local"))
+  run disabledSourceFailureHasNoCacheTrailTest = init.then(s' = begin(s, 5)).then(s' = settle(s, 0, 3))
+    .expect(s.d.fallbackErrors == List() and s.o.calls == List(3))
+  run policyClosureFailureIsAttributedWithoutCachingTest = init.then(s' = begin(s, 0)).then(s' = close(s, 0))
+    .then(releasePolicy).then(s' = settle(s, 0, 3)).expect(s.d.fallbackErrors == List("noop"))
   run absentValueIsMemoizedTest = init.then(s' = begin(s, 0)).then(releasePolicy)
     .then(s' = settle(s, 0, 5)).then(s' = begin(s, 0)).then(releasePolicy)
     .expect(s.o.calls == List(5, 5) and s.o.loaders == 1)

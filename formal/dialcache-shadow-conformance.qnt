@@ -15,7 +15,7 @@ module dialcache_shadow_conformance {
     val age = if (st.wall < st.c0Created) 0 else st.wall - st.c0Created
     { phase: 7, o: { shadow: st.o.shadow.append(outcome), ...st.o },
       d: { warnings: st.d.warnings + (if (outcome == "mismatch" and st.acceptedLog) 1 else 0),
-        ages: if (validated) st.d.ages.append(age) else st.d.ages }, ...st }
+        ages: if (validated) st.d.ages.append(age) else st.d.ages, ...st.d }, ...st }
   }
   pure def continueJob(st: State): State =
     if (st.phase != 2 or st.source == 1) st
@@ -52,7 +52,8 @@ module dialcache_shadow_conformance {
   }
   action rejectLoader = all { s.sourcePending,
     s' = continueJob({ sourcePending: false, source: if (s.source == 4) 4 else 3,
-      o: if (s.source == 4) s.o else finish(s.o, 3), ...s })
+      o: if (s.source == 4) s.o else finish(s.o, 3),
+      d: { fallbackErrors: if (s.source == 4) s.d.fallbackErrors else s.d.fallbackErrors.append("local"), ...s.d }, ...s })
   }
   action releaseRead = all {
     s.phase == 1 or s.phase == 4,
@@ -89,7 +90,8 @@ module dialcache_shadow_conformance {
     val expired = s.now + choice >= s.deadline
     val callerTimeout = s.source == 1 and expired
     val jobTimeout = s.phase > 0 and s.phase < 7 and not(s.abandoned) and expired
-    s' = { now: s.now + choice, wall: s.wall + choice, source: if (callerTimeout) 4 else s.source,
+    s' = { d: { fallbackErrors: if (callerTimeout) s.d.fallbackErrors.append("local") else s.d.fallbackErrors, ...s.d },
+      now: s.now + choice, wall: s.wall + choice, source: if (callerTimeout) 4 else s.source,
       abandoned: s.abandoned or jobTimeout,
       phase: if (jobTimeout and s.phase == 2) 7 else s.phase,
       o: { shadow: if (jobTimeout) s.o.shadow.append("timeout") else s.o.shadow,
