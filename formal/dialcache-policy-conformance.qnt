@@ -5,7 +5,7 @@ module dialcache_policy_conformance {
   // settle in either order. Every source owns its accepted publication policy.
   type Source = { key: int, localTtl: int, remoteTtl: int, retention: int, shared: bool, result: int }
   type State = {
-    o: Observation, now: int, policyCall: int, overlay: int, key: int,
+    o: Observation, now: int, wall: int, policyCall: int, overlay: int, key: int,
     localKey: int, localValue: int, localExpires: int,
     remoteValues: List[int], remoteCreated: List[int], remoteExpires: List[int],
     sources: List[Source], owners: List[int], registered: List[int],
@@ -13,7 +13,7 @@ module dialcache_policy_conformance {
   }
   var s: State
   action init = s' = {
-    o: empty, now: 0, policyCall: -1, overlay: 0, key: 0,
+    o: empty, now: 0, wall: 100000, policyCall: -1, overlay: 0, key: 0,
     localKey: 0, localValue: 0, localExpires: 0,
     remoteValues: List(0, 0), remoteCreated: List(0, 0), remoteExpires: List(0, 0),
     sources: List(), owners: List(), registered: List(-1, -1),
@@ -43,7 +43,7 @@ module dialcache_policy_conformance {
     val localHit = not(joins) and localTtl > 0 and s.localKey == s.key and s.localValue > 0 and s.now < s.localExpires
     val read = not(joins) and not(localHit) and remoteTtl > 0
     val remoteHit = read and not(s.readFailed) and s.remoteValues.nth(s.key) > 0 and
-      s.now < s.remoteExpires.nth(s.key) and s.now - s.remoteCreated.nth(s.key) < remoteTtl
+      s.now < s.remoteExpires.nth(s.key) and s.wall >= s.remoteCreated.nth(s.key) and s.wall - s.remoteCreated.nth(s.key) < remoteTtl
     val value = if (localHit) s.localValue else if (remoteHit) s.remoteValues.nth(s.key) else 0
     val starts = not(joins) and value == 0
     val owner = if (joins) s.registered.nth(s.key) else if (starts) s.sources.length() else -1
@@ -74,7 +74,7 @@ module dialcache_policy_conformance {
       localValue: if (local) value else state.localValue,
       localExpires: if (local) state.now + source.localTtl else state.localExpires,
       remoteValues: if (stored) state.remoteValues.replaceAt(source.key, value) else state.remoteValues,
-      remoteCreated: if (stored) state.remoteCreated.replaceAt(source.key, state.now) else state.remoteCreated,
+      remoteCreated: if (stored) state.remoteCreated.replaceAt(source.key, state.wall) else state.remoteCreated,
       remoteExpires: if (stored) state.remoteExpires.replaceAt(source.key, state.now + source.retention) else state.remoteExpires,
       o: { calls: state.o.calls.foldl(List(), (out, result) => out.append(if (state.owners.nth(out.length()) == loader) value else result)),
         dumps: state.o.dumps + (if (dump) 1 else 0), writes: state.o.writes + (if (write) 1 else 0),
@@ -92,7 +92,8 @@ module dialcache_policy_conformance {
   action policy = { nondet choice = 0.to(19).oneOf()
     s' = { overlay: choice, ...s } }
   action advance = { nondet choice = Set(1, 1000, 2000, 5000).oneOf()
-    s' = { now: s.now + choice, ...s } }
+    s' = { now: s.now + choice, wall: s.wall + choice, ...s } }
+  action rollbackWall = s' = { wall: s.wall - 1000, ...s }
   action providerFault = { nondet choice = Set(0, 1).oneOf()
     s' = { providerFailed: choice == 1, ...s } }
   action readFault = { nondet choice = Set(0, 1).oneOf()
@@ -103,7 +104,7 @@ module dialcache_policy_conformance {
     s' = { writeFailed: choice == 1, ...s } }
   action step = any {
     any { beginCall, releasePolicy, resolveLoader, rejectLoader },
-    any { policy, advance, providerFault, readFault, dumpFault, writeFault }
+    any { policy, advance, rollbackWall, providerFault, readFault, dumpFault, writeFault }
   }
   val writesHaveRetention = s.o.writes == s.o.writeTtls.length()
   val hitsSkipSource = s.o.loaders <= s.o.calls.length()
@@ -117,6 +118,15 @@ module dialcache_policy_conformance {
   })
   val sharedSourcesKeepRegistration = pendingSources.forall(i =>
     not(s.sources.nth(i).shared) or s.registered.nth(s.sources.nth(i).key) == i)
+
+  run wallRollbackDoesNotExtendLocalTtlTest = init.then(s' = { overlay: 4, ...s })
+    .then(s' = begin(s, 0)).then(releasePolicy).then(s' = settle(s, 0, 1)).then(rollbackWall)
+    .then(s' = begin(s, 0)).then(releasePolicy).expect(s.o.calls == List(1, 1))
+    .then(s' = { now: s.now + 1000, wall: s.wall + 1000, ...s })
+    .then(s' = begin(s, 0)).then(releasePolicy).expect(s.o.calls == List(1, 1, 0) and s.o.loaders == 2)
+  run wallRollbackRejectsFutureRemoteFrameTest = init.then(s' = { overlay: 3, ...s })
+    .then(s' = begin(s, 0)).then(releasePolicy).then(s' = settle(s, 0, 1)).then(rollbackWall)
+    .then(s' = begin(s, 0)).then(releasePolicy).expect(s.o.calls == List(1, 0) and s.o.loaders == 2)
 
   run independentCompletionKeepsRegisteredLeaderTest = init
     .then(s' = begin(s, 0)).then(releasePolicy)

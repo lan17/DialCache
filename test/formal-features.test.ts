@@ -113,7 +113,7 @@ const profiles: Record<string, Profile> = {
       releaseLoad: release("load"),
       seed: { choices: [0, 1, 2, 3, 4, 5, 6], input: (choice) => ({ op: "seed", value: choice === 6 ? 2 : 1,
         ageMs: [0, 999, 1000, 4999, 5000, -1, 1000][choice]! }) },
-      advance: advance([1, 10, 1000, 4000]), invalidate: { input: () => ({ op: "invalidate" }) },
+      advance: advance([1, 10, 1000, 4000]), rollbackWall: { input: () => ({ op: "shiftWall", ms: -1000 }) }, invalidate: { input: () => ({ op: "invalidate" }) },
       policy: { choices: [2000, 5000], input: (choice) => ({ op: "policy", value: { staleOnErrorMaxAgeSec: choice / 1000 } }) },
       readFault: fault("read"), loadFault: fault("load"),
     },
@@ -127,7 +127,7 @@ const profiles: Record<string, Profile> = {
       resolveLoader: resolveValue(12),
       rejectLoader: { choices: Array.from({ length: 12 }, (_, i) => i), input: (choice) => ({ op: "reject", loader: choice }) },
       policy: { choices: policyOverlays.map((_, i) => i), input: (choice) => ({ op: "policy", value: policyOverlays[choice]! }) },
-      advance: advance([1, 1000, 2000, 5000]), providerFault: fault("policy"),
+      advance: advance([1, 1000, 2000, 5000]), rollbackWall: { input: () => ({ op: "shiftWall", ms: -1000 }) }, providerFault: fault("policy"),
       readFault: fault("read"), dumpFault: fault("dump"), writeFault: fault("write"),
     },
   },
@@ -539,8 +539,45 @@ function scopeWitnesses(traces: Trace[]): Set<string> {
   return seen;
 }
 
-function policyWitnesses(traces: Trace[]): Set<string> {
+// Private clock/cache predictions classify only schedules subsequently probed
+// by real replay. They never enter driver inputs or implementation projection.
+function clockWitnesses(name: "policy" | "recovery", traces: Trace[]): Set<string> {
   const seen = new Set<string>();
+  for (const trace of traces) {
+    const states = (JSON.parse(readFileSync(trace.path, "utf8")).states as unknown[]).map(state => record(record(state, trace.path).s, trace.path));
+    let rolledLocal: { key: number; expires: number } | undefined;
+    let rolled = false;
+    const integer = (value: unknown) => itfInteger(value, trace.path);
+    for (const [i, step] of trace.steps.entries()) {
+      if (i === 0) continue;
+      const before = states[i - 1]!;
+      const previous = trace.steps[i - 1]!.expected;
+      const o = step.expected;
+      if (step.action === "rollbackWall") {
+        rolled = true;
+        if (name === "policy" && integer(before.localValue) > 0) rolledLocal = { key: integer(before.localKey), expires: integer(before.localExpires) };
+      }
+      if (name === "policy" && step.action === "releasePolicy") {
+        const key = integer(before.key), base = integer(before.overlay) % 10;
+        const local = before.providerFailed === false && ![3, 5, 8].includes(base);
+        if (local && rolledLocal?.key === key && integer(before.localKey) === key && integer(before.localExpires) === rolledLocal.expires) {
+          const result = o.calls[integer(before.policyCall)]!;
+          if (integer(before.now) < rolledLocal.expires && result > 0 && o.reads === previous.reads && o.loaders === previous.loaders) seen.add("rollback-preserves-live-local");
+          if (integer(before.now) >= rolledLocal.expires && (o.reads > previous.reads || o.loaders > previous.loaders)) seen.add("rollback-does-not-extend-local-ttl");
+        }
+        if (rolled && before.readFailed === false && integer((before.remoteValues as unknown[])[key]) > 0 &&
+          integer(before.now) < integer((before.remoteExpires as unknown[])[key]) && integer((before.remoteCreated as unknown[])[key]) > integer(before.wall) &&
+          o.reads > previous.reads && o.loads === previous.loads && o.loaders > previous.loaders) seen.add("rollback-rejects-future-remote");
+      }
+      if (name === "recovery" && step.action === "releaseLoad" && integer(before.phase) === 3 && before.loadFailed === false &&
+        integer(before.wall) < integer(before.candidateCreated) && o.recovery.length > previous.recovery.length && o.recovery.at(-1) === "miss") seen.add("rollback-rejects-retained-future");
+    }
+  }
+  return seen;
+}
+
+function policyWitnesses(traces: Trace[]): Set<string> {
+  const seen = clockWitnesses("policy", traces);
   for (const trace of traces) {
     let policyEpoch = 0;
     let overlay = 0;
@@ -603,7 +640,7 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
   if (name === "admission") return admissionWitnesses(traces);
   if (name === "scope") return scopeWitnesses(traces);
   if (name === "policy") return policyWitnesses(traces);
-  const seen = new Set<string>();
+  const seen = name === "recovery" ? clockWitnesses("recovery", traces) : new Set<string>();
   for (const trace of traces) {
     let invalidatedDuringFlight = false;
     let advancedDuringDecode = false;
@@ -723,12 +760,12 @@ const required: Record<string, string[]> = {
     "replacement-miss-after-late-source", "independent-scope-overlap", "uncoalesced-scope-overlap",
     "memo-hit", "nested-memo-hit", "reenabled-memo-hit", "memo-after-nested-close", "memo-after-policy-bypass",
     "shared-rejection", "source-settles-after-close", ...[5, 6, 7, 8, 9].map(code => `memo-value:${code}`)],
-  recovery: ["outcome:served", "outcome:miss", "outcome:deserialization_error", "retained-across-invalidation", "coalesced-recovery", "expired-during-decode",
+  recovery: ["rollback-rejects-retained-future", "outcome:served", "outcome:miss", "outcome:deserialization_error", "retained-across-invalidation", "coalesced-recovery", "expired-during-decode",
     "default-denies-ordinary-error", "default-recovers-deadline", "default-recovers-propagated-timeout",
     "explicit-denial-overrides-timeout", "recovery-abandoned-overlap", "recovery-late-source-settles", "recovery-failure-preserves-timeout", "fixture:0", "fixture:1", "fixture:2", "fixture:3",
     "operation-denial-overrides-instance-allow", "instance-classifier-error-preserves-source", "instance-denial-overrides-timeout-default",
     "instance-allow-recovers-ordinary-error", "operation-allow-overrides-instance-denial"],
-  policy: ["local-hit", "remote-hit", "publication-after-policy-change", "ttl:2000", "ttl:4000", "ttl:5000",
+  policy: ["rollback-preserves-live-local", "rollback-does-not-extend-local-ttl", "rollback-rejects-future-remote", "local-hit", "remote-hit", "publication-after-policy-change", "ttl:2000", "ttl:4000", "ttl:5000",
     "cross-key-overlap", "uncoalesced-same-key-overlap", "join-after-policy-change", "reverse-source-settlement",
     "coalesced-result", "publication-during-policy-fetch", ...[5, 6, 7, 8, 9].flatMap(code => [`local-value:${code}`, `remote-value:${code}`])],
   shadow: ["match", "mismatch", "comparison_error", "superseded", "confirmation_error", "redis_error", "source_error", "timeout", "deserialization_error", "filled", "fill_error", "fill_fenced"]

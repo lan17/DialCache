@@ -7,7 +7,7 @@ module dialcache_recovery_conformance {
   // Sources: 0 registered, 1 abandoned externally, 2 settled.
   // Phase: 0 idle, 1 fresh decode, 2 source, 3 retained decode.
   type State = {
-    o: Observation, d: Diagnostics, now: int, phase: int, frame: int, created: int, expires: int,
+    o: Observation, d: Diagnostics, now: int, wall: int, phase: int, frame: int, created: int, expires: int,
     watermark: int, candidate: int, candidateCreated: int, maxAge: int,
     acceptedMaxAge: int, classifier: int, instanceClassifier: int, readFailed: bool, loadFailed: bool,
     canRecover: bool, canWrite: bool, observedFence: int,
@@ -17,7 +17,7 @@ module dialcache_recovery_conformance {
   action init = {
     nondet choice = Set(0, 1, 2, 3).oneOf()
     s' = {
-    o: empty, d: noDiagnostics, now: 10000, phase: 0, frame: 1, created: 9000, expires: 70000,
+    o: empty, d: noDiagnostics, now: 10000, wall: 100000, phase: 0, frame: 1, created: 99000, expires: 70000,
     watermark: 0, candidate: 0, candidateCreated: 0, maxAge: 5000,
     acceptedMaxAge: 5000, classifier: 0, instanceClassifier: List(3, 0, 1, 2).nth(choice), readFailed: false, loadFailed: false,
     canRecover: false, canWrite: false, observedFence: 0,
@@ -25,10 +25,10 @@ module dialcache_recovery_conformance {
     }
   }
   val readable = not(s.readFailed) and s.frame > 0 and s.now < s.expires and s.created > s.watermark
-  val eligible = readable and s.created <= s.now and s.now - s.created < s.maxAge
-  val fresh = eligible and s.now - s.created < 1000
-  pure def candidateValid(x: State): bool = x.candidate > 0 and x.candidateCreated <= x.now and
-    x.now - x.candidateCreated < x.acceptedMaxAge
+  val eligible = readable and s.created <= s.wall and s.wall - s.created < s.maxAge
+  val fresh = eligible and s.wall - s.created < 1000
+  pure def candidateValid(x: State): bool = x.candidate > 0 and x.candidateCreated <= x.wall and
+    x.wall - x.candidateCreated < x.acceptedMaxAge
 
   action beginCall = {
     nondet choice = Set(0, 1, 2, 3).oneOf()
@@ -63,14 +63,14 @@ module dialcache_recovery_conformance {
   }
   def settled(index: int, failure: int): State = {
     val x = { sources: s.sources.replaceAt(index, 2), ...s }
-    val write = s.canWrite and s.now > s.observedFence
+    val write = s.canWrite and s.wall > s.observedFence
     if (s.sources.nth(index) == 1) x
     else if (failure > 0) rejected(x, 3, failure == 2)
     else { phase: 0,
       o: { dumps: s.o.dumps + (if (write) 1 else 0), writes: s.o.writes + (if (write) 1 else 0),
         writeTtls: if (write) s.o.writeTtls.append(s.acceptedMaxAge) else s.o.writeTtls,
         ...finish(s.o, 2) },
-      frame: if (write) 2 else s.frame, created: if (write) s.now else s.created,
+      frame: if (write) 2 else s.frame, created: if (write) s.wall else s.created,
       expires: if (write) s.now + s.acceptedMaxAge else s.expires, ...x }
   }
   action resolveLoader = {
@@ -89,7 +89,7 @@ module dialcache_recovery_conformance {
     s.phase == 1 or s.phase == 3,
     val recovered = not(s.loadFailed) and candidateValid(s)
     val retry = s.phase == 1 and s.loadFailed
-    s' = { d: if (s.phase == 3 and recovered) { ages: s.d.ages.append(s.now - s.candidateCreated), ...s.d } else s.d,
+    s' = { d: if (s.phase == 3 and recovered) { ages: s.d.ages.append(s.wall - s.candidateCreated), ...s.d } else s.d,
       phase: if (retry) 2 else 0, canRecover: if (retry) false else s.canRecover,
       sources: if (retry) s.sources.append(0) else s.sources,
       activeLoader: if (retry) s.sources.length() else s.activeLoader,
@@ -102,17 +102,18 @@ module dialcache_recovery_conformance {
   action seed = {
     nondet choice = 0.to(6).oneOf()
     val age = List(0, 999, 1000, 4999, 5000, -1, 1000).nth(choice)
-    s' = { frame: if (choice == 6) 2 else 1, created: s.now - age, expires: s.now + 60000, ...s }
+    s' = { frame: if (choice == 6) 2 else 1, created: s.wall - age, expires: s.now + 60000, ...s }
   }
   action advance = {
     nondet choice = Set(1, 10, 1000, 4000).oneOf()
     val timedOut = if (s.phase == 2 and s.now + choice >= s.deadline)
-      rejected({ now: s.deadline, sources: s.sources.replaceAt(s.activeLoader, 1), ...s }, 4, true)
+      rejected({ now: s.deadline, wall: s.wall + s.deadline - s.now, sources: s.sources.replaceAt(s.activeLoader, 1), ...s }, 4, true)
       else s
-    s' = { now: s.now + choice, ...timedOut }
+    s' = { now: s.now + choice, wall: s.wall + choice, ...timedOut }
   }
-  action invalidate = s' = { watermark: s.now,
+  action invalidate = s' = { watermark: if (s.wall > s.watermark) s.wall else s.watermark,
     o: { invalidations: s.o.invalidations + 1, maintenance: s.o.maintenance.append("ok"), ...s.o }, ...s }
+  action rollbackWall = s' = { wall: s.wall - 1000, ...s }
   action policy = {
     nondet choice = Set(2000, 5000).oneOf()
     s' = { maxAge: choice, ...s }
@@ -123,7 +124,7 @@ module dialcache_recovery_conformance {
     s' = { loadFailed: choice == 1, ...s } }
   action step = any {
     any { beginCall, joinCall, resolveLoader, any { rejectLoader, rejectTimeout }, releaseLoad },
-    any { seed, advance, invalidate, policy, readFault, loadFault }
+    any { seed, advance, rollbackWall, invalidate, policy, readFault, loadFault }
   }
   val singleReadPerFlight = s.o.reads <= s.o.calls.length()
   val pendingDecodeHasCall = s.phase != 3 or s.o.calls.select(c => c == 0).length() > 0
@@ -134,13 +135,13 @@ module dialcache_recovery_conformance {
   val onlyRegisteredSourceOwnsDeadline = s.phase != 2 or s.sources.nth(s.activeLoader) == 0
 
   // A codec hit rejected for future age is a logical miss without a refill fence.
-  action seedFutureFixture = s' = { frame: 1, created: s.now + 1, expires: s.now + 60000, ...s }
+  action seedFutureFixture = s' = { frame: 1, created: s.wall + 1, expires: s.now + 60000, ...s }
   run futureFrameDoesNotCarryMissFenceTest = init.then(invalidate).then(seedFutureFixture)
     .then(beginCall).then(resolveLoader).expect(s.o.writes == 1)
 
   action defaultFixture = init.then(s' = { instanceClassifier: 3, ...s })
   action beginInheritedFixture = beginCall.then(s' = { classifier: s.instanceClassifier, ...s })
-  action timeoutFixture = s' = rejected({ now: s.deadline, sources: s.sources.replaceAt(s.activeLoader, 1), ...s }, 4, true)
+  action timeoutFixture = s' = rejected({ now: s.deadline, wall: s.wall + s.deadline - s.now, sources: s.sources.replaceAt(s.activeLoader, 1), ...s }, 4, true)
   action beginDefaultFixture = beginCall.then(s' = { classifier: 3, ...s })
   action beginDenyFixture = beginCall.then(s' = { classifier: 1, ...s })
   run defaultRecoversOwnTimeoutTest = defaultFixture.then(beginDefaultFixture).then(timeoutFixture).then(releaseLoad)
@@ -157,6 +158,11 @@ module dialcache_recovery_conformance {
   run failedRecoveryPreservesDeadlineErrorTest = defaultFixture.then(beginDefaultFixture).then(timeoutFixture)
     .then(s' = { loadFailed: true, ...s }).then(releaseLoad)
     .expect(s.o.calls == List(4) and s.o.recovery == List("deserialization_error"))
+  run rollbackCannotLowerInvalidationWatermarkTest = defaultFixture.then(invalidate).then(rollbackWall).then(invalidate)
+    .expect(s.watermark == 100000)
+  run rollbackDuringRetainedDecodeRejectsFutureSnapshotTest = defaultFixture.then(beginDefaultFixture)
+    .then(timeoutFixture).then(rollbackWall).then(rollbackWall).then(releaseLoad)
+    .expect(s.o.calls == List(4) and s.o.recovery == List("miss") and s.d.ages == List())
   run instanceAllowReplacesTimeoutOnlyDefaultTest = init.then(s' = { instanceClassifier: 0, ...s })
     .then(beginInheritedFixture).then(rejectLoader).then(releaseLoad)
     .expect(s.o.calls == List(1) and s.o.classifications == 1)
