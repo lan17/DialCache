@@ -15,4 +15,3 @@ export function itfInteger(value: unknown, context: string): number {
   }
   return Number(text);
 }
-
