@@ -107,7 +107,7 @@ check formal/dialcache-effects-conformance.qnt \
 quint test formal/dialcache-effects-conformance.qnt --backend=rust --max-samples=1
 
 check formal/dialcache-recovery-conformance.qnt \
-  singleReadPerFlight pendingDecodeHasCall writesHaveRetention sourcesMatchEffects onlyRegisteredSourceOwnsDeadline
+  singleReadPerFlight pendingDecodeHasCall writesHaveRetention sourcesMatchEffects onlyRegisteredSourceOwnsDeadline agesRequireRecovery
 quint test formal/dialcache-recovery-conformance.qnt --backend=rust --max-samples=1
 
 check formal/dialcache-policy-conformance.qnt \
@@ -116,7 +116,8 @@ check formal/dialcache-policy-conformance.qnt \
 quint test formal/dialcache-policy-conformance.qnt --backend=rust --max-samples=1
 
 check formal/dialcache-shadow-conformance.qnt \
-  oneSourcePerCaller writesRequireMiss writesHaveRetention
+  oneSourcePerCaller writesRequireMiss writesHaveRetention agesRequireVerdicts warningsRequireMismatch
+quint test formal/dialcache-shadow-conformance.qnt --backend=rust --max-samples=1
 
 check formal/dialcache-scope-conformance.qnt \
   closedScopesHaveNoMemo registeredSourcesArePending callsKeepSourceOutcome sourceCountsMatchEffects

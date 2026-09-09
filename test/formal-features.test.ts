@@ -8,7 +8,7 @@ import { itfInteger, record } from "./formal/itf.js";
 
 type Projected = Omit<Observation, "calls"> & { calls: number[] };
 type Action = { choices?: readonly number[]; input: (choice: number, observed: Observation) => Input };
-interface Profile { fixture: Fixture | ((choice: number) => Fixture); initChoices?: readonly number[]; setup: Input[]; actions: Record<string, Action> }
+interface Profile { diagnosticAge?: "shadowAge" | "recoveryAge"; fixture: Fixture | ((choice: number) => Fixture); initChoices?: readonly number[]; setup: Input[]; actions: Record<string, Action> }
 const settle = (op: "resolve" | "reject"): Action => ({
   ...(op === "resolve" ? { choices: [1, 2] } : {}),
   input: (choice, o) => op === "resolve" ? { op, loader: o.loaders - 1, value: choice } : { op, loader: o.loaders - 1 },
@@ -99,9 +99,10 @@ const profiles: Record<string, Profile> = {
     },
   },
   recovery: {
+    diagnosticAge: "recoveryAge",
     initChoices: [0, 1, 2, 3],
     fixture: (choice) => ({ policy: { ttlSec: { remote: 1 }, staleOnErrorMaxAgeSec: 5 }, tracked: true, fallbackTimeoutMs: 10,
-      recovery: (["default", "allow", "deny", "error"] as const)[choice]! }),
+      recovery: (["default", "allow", "deny", "error"] as const)[choice]!, observe: ["recoveryAge"] }),
     setup: [{ op: "seed", value: 1, ageMs: 1000 }, { op: "faults", value: { holdLoads: true } }],
     actions: {
       beginCall: { choices: [0, 1, 2, 3], input: (choice) => ({ op: "begin", ...(choice === 3 ? {} : { recovery: (["allow", "deny", "error"] as const)[choice]! }) }) },
@@ -131,7 +132,11 @@ const profiles: Record<string, Profile> = {
     },
   },
   shadow: {
-    fixture: { policy: { ttlSec: { remote: 60 }, ramp: { remote: 0 }, shadow: { ramp: 100 } }, tracked: true },
+    diagnosticAge: "shadowAge", initChoices: Array.from({ length: 8 }, (_, i) => i),
+    fixture: (choice) => ({ policy: { ttlSec: { remote: 60 }, ramp: { remote: 0 },
+      shadow: { ramp: 100, ...(choice < 4 ? {} : { logMismatches: true }) } }, tracked: true,
+      ...(choice % 4 === 0 ? {} : { comparator: (["equal", "unequal", "error"] as const)[choice % 4 - 1]! }),
+      observe: ["shadowAge", "mismatchWarning"] }),
     setup: [{ op: "faults", value: { holdReads: true, holdLoads: true, holdDumps: true, holdWrites: true } }],
     actions: {
       beginCall: { input: () => ({ op: "begin" }) }, resolveLoader: settle("resolve"), rejectLoader: settle("reject"),
@@ -139,11 +144,14 @@ const profiles: Record<string, Profile> = {
       advance: advance([1, 10]), seed: { choices: [1, 2], input: (choice) => ({ op: "seed", value: choice }) },
       invalidate: { choices: [0, 20], input: (choice) => ({ op: "invalidate", futureBufferMs: choice }) },
       readFault: fault("read"), loadFault: fault("load"), dumpFault: fault("dump"), writeFault: fault("write"),
+      rollbackWall: { input: () => ({ op: "shiftWall", ms: -1000 }) },
+      logPolicy: { choices: [0, 1], input: (choice) => ({ op: "policy", value: { shadow: { logMismatches: choice === 1 } } }) },
     },
   },
 };
 
-interface Step { action: string; choice: number; expected: Projected }
+interface Diagnostics { warnings: number; ages: number[] }
+interface Step { action: string; choice: number; expected: Projected; diagnostics?: Diagnostics }
 interface Trace { path: string; steps: Step[] }
 function observation(raw: unknown, context: string): Projected {
   const value = record(raw, context);
@@ -164,6 +172,11 @@ function observation(raw: unknown, context: string): Projected {
     })];
   }));
   return result as Projected;
+}
+function diagnostics(raw: unknown, context: string): Diagnostics {
+  const value = record(raw, context);
+  if (Object.keys(value).sort().join() !== "ages,warnings" || !Array.isArray(value.ages)) throw new Error(`${context}: invalid diagnostics`);
+  return { warnings: itfInteger(value.warnings, context), ages: value.ages.map(age => itfInteger(age, context) / 1000) };
 }
 function parseTrace(raw: unknown, path: string, profile: Profile): Trace {
   const states = record(raw, path).states;
@@ -187,7 +200,8 @@ function parseTrace(raw: unknown, path: string, profile: Profile): Trace {
     } else if (pick.tag !== "None" || JSON.stringify(pick.value) !== '{"#tup":[]}') {
       throw new Error(`${context}: unexpected choice`);
     }
-    return { action, choice, expected: observation(record(state.s, context).o, context) };
+    return { action, choice, expected: observation(record(state.s, context).o, context),
+      ...(profile.diagnosticAge === undefined ? {} : { diagnostics: diagnostics(record(state.s, context).d, context) }) };
   }) };
 }
 function valueCode(value: Observation["calls"][number] & { status: "value" }): number {
@@ -205,6 +219,26 @@ function project(o: Observation): Projected {
     : c.status === "value" ? valueCode(c)
     : c.error.startsWith("source:") ? 3 : c.error.startsWith("timeout:") ? 4 : 10) };
 }
+function projectWithDiagnostics(profile: Profile, observed: Observation) {
+  if (profile.diagnosticAge === undefined) return { o: project(observed) };
+  const { events, ...base } = observed;
+  if (events === undefined) throw new Error("Missing actual diagnostic observations");
+  const ages: number[] = [];
+  let warnings = 0;
+  const outcomes = profile.diagnosticAge === "shadowAge" ? observed.shadow.filter(x => x === "match" || x === "mismatch")
+    : observed.recovery.filter(x => x === "served");
+  for (const event of events) {
+    expect(event).toMatchObject({ cacheNamespace: "urn", useCase: "Behavior", keyType: "id" });
+    if (event.event === "mismatchWarning") { expect(event.outcome).toBe("mismatch"); warnings++; }
+    else {
+      expect(event.event).toBe(profile.diagnosticAge);
+      expect(event.outcome).toBe(outcomes[ages.length]);
+      if (typeof event.seconds !== "number") throw new Error("Missing actual diagnostic age");
+      ages.push(event.seconds);
+    }
+  }
+  return { o: project(base), d: { warnings, ages } };
+}
 async function replay(profile: Profile, trace: Trace) {
   const driver = new BehaviorDriver(typeof profile.fixture === "function" ? profile.fixture(trace.steps[0]!.choice) : profile.fixture);
   try {
@@ -215,9 +249,9 @@ async function replay(profile: Profile, trace: Trace) {
         // Only named actions/choices and actual effect IDs enter the driver.
         // The model observation and its private state cannot control execution.
         if (action !== "init") await driver.apply(profile.actions[action]!.input(choice, driver.snapshot()));
-        expect(project(driver.snapshot())).toEqual(step.expected);
+        expect(projectWithDiagnostics(profile, driver.snapshot())).toEqual({ o: step.expected, ...(step.diagnostics === undefined ? {} : { d: step.diagnostics }) });
       } catch (cause) {
-        throw new Error(`${trace.path} step ${i} action ${action} choice ${choice}\nexpected: ${JSON.stringify(step.expected)}\nactual: ${JSON.stringify(project(driver.snapshot()))}\nreplay: DIALCACHE_FEATURE_TRACE_FILE=${JSON.stringify(trace.path)} corepack pnpm exec vitest run test/formal-features.test.ts --coverage.enabled=false`, { cause });
+        throw new Error(`${trace.path} step ${i} action ${action} choice ${choice}\nexpected: ${JSON.stringify({ o: step.expected, d: step.diagnostics })}\nactual: ${JSON.stringify(driver.snapshot())}\nreplay: DIALCACHE_FEATURE_TRACE_FILE=${JSON.stringify(trace.path)} corepack pnpm exec vitest run test/formal-features.test.ts --coverage.enabled=false`, { cause });
       }
     }
   } finally { await driver.dispose(); }
@@ -576,7 +610,14 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
     let decoding = false;
     let c0Released = false;
     let shadowTimedOut = false;
-    if (name === "recovery") seen.add(`fixture:${trace.steps[0]!.choice}`);
+    if (name === "recovery" || name === "shadow") seen.add(`fixture:${trace.steps[0]!.choice}`);
+    let logging = trace.steps[0]!.choice >= 4;
+    let acceptedLogging = false;
+    // Model-private values classify reached comparison schedules only; replay
+    // above has already compared public callbacks/results independently.
+    const shadowStates = name === "shadow" ? (JSON.parse(readFileSync(trace.path, "utf8")).states as unknown[])
+      .map(state => record(record(state, trace.path).s, trace.path)) : [];
+    let wallRolledAfterC0 = false;
     let classifier = -1;
     let operationClassifier = -1;
     let recoveryCause = "";
@@ -639,6 +680,22 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
         }
       }
       if (name === "shadow") {
+        if (step.action === "beginCall") { acceptedLogging = logging; wallRolledAfterC0 = false; }
+        if (step.action === "logPolicy") logging = step.choice === 1;
+        if (step.action === "rollbackWall" && c0Released) wallRolledAfterC0 = true;
+        if (o.shadow.length > previous.shadow.length) {
+          const outcome = o.shadow.at(-1);
+          const c0Value = itfInteger(shadowStates[i - 1]!.c0, trace.path);
+          const sourceValue = itfInteger(shadowStates[i - 1]!.sourceValue, trace.path);
+          if (outcome === "match" && c0Value !== sourceValue && trace.steps[0]!.choice % 4 === 1) seen.add("custom-equal-overrides-values");
+          if (outcome === "mismatch" && c0Value === sourceValue && trace.steps[0]!.choice % 4 === 2) seen.add("custom-unequal-confirms-equal-values");
+          if (outcome === "mismatch" && acceptedLogging !== logging) seen.add(`captured-logging:${acceptedLogging}`);
+          if (outcome === "mismatch") seen.add(`mismatch-logging:${acceptedLogging}`);
+          if (step.diagnostics!.ages.length > trace.steps[i - 1]!.diagnostics!.ages.length) {
+            if (wallRolledAfterC0 && step.diagnostics!.ages.at(-1) === 0) seen.add("age-clamped-after-rollback");
+            if (step.diagnostics!.ages.at(-1)! > 0) seen.add("age-at-verdict");
+          }
+        }
         if (step.action === "releaseRead") {
           c0Released = true;
           if (o.calls.includes(0) && o.shadow.length === previous.shadow.length) seen.add("c0-before-source");
@@ -674,8 +731,10 @@ const required: Record<string, string[]> = {
   policy: ["local-hit", "remote-hit", "publication-after-policy-change", "ttl:2000", "ttl:4000", "ttl:5000",
     "cross-key-overlap", "uncoalesced-same-key-overlap", "join-after-policy-change", "reverse-source-settlement",
     "coalesced-result", "publication-during-policy-fetch", ...[5, 6, 7, 8, 9].flatMap(code => [`local-value:${code}`, `remote-value:${code}`])],
-  shadow: ["match", "mismatch", "superseded", "confirmation_error", "redis_error", "source_error", "timeout", "deserialization_error", "filled", "fill_error", "fill_fenced"]
-    .map((outcome) => `outcome:${outcome}`).concat(["c0-before-source", "source-before-c0", "write-completes-after-timeout"]),
+  shadow: ["match", "mismatch", "comparison_error", "superseded", "confirmation_error", "redis_error", "source_error", "timeout", "deserialization_error", "filled", "fill_error", "fill_fenced"]
+    .map((outcome) => `outcome:${outcome}`).concat(["c0-before-source", "source-before-c0", "write-completes-after-timeout",
+      ...Array.from({ length: 8 }, (_, i) => `fixture:${i}`), "custom-equal-overrides-values", "custom-unequal-confirms-equal-values",
+      "captured-logging:true", "captured-logging:false", "mismatch-logging:true", "mismatch-logging:false", "age-clamped-after-rollback", "age-at-verdict"]),
 };
 
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date("2026-09-08T12:00:00Z")); });
@@ -708,6 +767,14 @@ for (const [name, profile] of Object.entries(profiles)) {
         raw.states[1]["mbt::actionTaken"] = Object.keys(profile.actions).find((action) => profile.actions[action]!.choices !== undefined)!;
         raw.states[1]["mbt::nondetPicks"].choice = { tag: "Some", value: { "#bigint": "9007199254740993" } };
         expect(() => parseTrace(raw, "unsafe-choice", profile)).toThrow(/safe ITF integer/);
+      });
+      if (profile.diagnosticAge !== undefined) it("rejects missing diagnostics and detects corrupted diagnostic expectations", async () => {
+        const raw = JSON.parse(readFileSync(traces[0]!.path, "utf8"));
+        delete raw.states[0].s.d;
+        expect(() => parseTrace(raw, "missing-diagnostics", profile)).toThrow();
+        const trace = structuredClone(traces[0]!);
+        trace.steps[1]!.diagnostics!.ages.push(123);
+        await expect(replay(profile, trace)).rejects.toThrow(/step 1 action.*\nexpected:.*\nactual:/s);
       });
       it("detects a corrupted model observation without changing execution", async () => {
         const trace = structuredClone(traces[0]!);

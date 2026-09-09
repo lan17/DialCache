@@ -27,7 +27,7 @@ Every scenario/trace gets a fresh default cache instance and empty Redis environ
 
 ## Optional observed events
 
-`fixture.observe` is a list of event names to include in an additional `events` observation array. Ports record actual callbacks/adapter observations in occurrence order; they must not consult expected patches. Unselected events are excluded by the fixture, and the generated profiles omit this optional field. This keeps diagnostic checks separate from claims about all executor schedules.
+`fixture.observe` is a list of event names to include in an additional `events` observation array. Ports record actual callbacks/adapter observations in occurrence order; they must not consult expected patches. Unselected events are excluded by the fixture, and generated profiles select only the observations they specify. This keeps diagnostic checks separate from claims about all executor schedules.
 
 - `readContext`: the adapter's actual read `index`, effective `timeoutMs`, and initial `aborted` state. `readAbort` records the index when cooperative cancellation is requested; the held raw read remains independently releasable.
 - `request`, `miss`, `disabled`, `error`, `coalesced`, `invalidation`: public bounded metadata. Operational events use `cacheNamespace`, `useCase`, `keyType`, and `layer` as applicable; miss/disabled events add `reason`, errors add `error`/`inFallback`, and coalescing uses `scope`.
@@ -155,6 +155,9 @@ Common actions reuse the scenario inputs: `releaseRead/Load/Dump/Write/Policy` r
 | Policy `rejectLoader` | Reject the explicitly selected source index, choice 0..11; only pending sources are generated |
 | Policy `advance` | Elapsed time choice 1, 1000, 2000, or 5000 ms |
 | Policy `policy` | Replace overlay using the numbered table below |
+| Shadow `init` | Choice 0..3 selects default/equal/unequal/error comparison; 4..7 selects the same comparison with mismatch logging enabled |
+| Shadow `rollbackWall` | Move the wall clock back 1,000 ms without changing elapsed time |
+| Shadow `logPolicy` | Choice 0/1 disables/enables logging for newly admitted jobs |
 | Shadow `beginCall` | Plain `begin` |
 | Shadow `resolveLoader` | Resolve latest loader with choice 1/2 |
 | Shadow `seed` | Seed value choice 1/2 at current wall time |
@@ -177,9 +180,13 @@ Policy overlay choices replace the entire runtime overlay; omitted leaves inheri
 | 9 | Remote TTL 4 s, recovery disabled (maximum age 0) |
 | 10..19 | Same overlay as choice minus 10, with `coalesce: false`; returning to 0..9 restores default sharing |
 
-Generation exports 512 recovery traces from 4,096 samples, and 256 policy / 256 shadow traces from 1,024 samples each, at most 60 transitions each. Actions are sampled in progress/environment groups so repeated environmental changes do not crowd out useful completion paths; C1 additionally focuses sampling on replacement, fencing, read failure, and time. This changes exploration frequency, not the allowed transition semantics.
+Generation exports 512 recovery traces from 4,096 samples, and 256 policy traces from 1,024 samples and 512 shadow traces from 2,048 samples, at most 60 transitions each. Actions are sampled in progress/environment groups so repeated environmental changes do not crowd out useful completion paths; C1 additionally focuses sampling on replacement, fencing, read failure, and time. This changes exploration frequency, not the allowed transition semantics.
 
-CI requires every named action, all three recovery outcomes, recovery across invalidation, coalesced recovery, age-out during decoding, local/remote hits, changed-policy publication, physical TTLs of 2/4/5 seconds, both C0/source orders, all eleven modeled shadow outcomes, and a write completing after shadow timeout. These witness checks fail if a configured corpus misses its promised paths. They establish occurrence only. The separate verification models still reason about wider abstractions such as shadow admission, and the portable fixed corpus covers additional binding-independent boundaries.
+CI requires every named action, all three recovery outcomes, recovery across invalidation, coalesced recovery, age-out during decoding, local/remote hits, changed-policy publication, physical TTLs of 2/4/5 seconds, both C0/source orders, all twelve modeled shadow outcomes, and a write completing after shadow timeout. These witness checks fail if a configured corpus misses its promised paths. They establish occurrence only. The separate verification models still reason about wider abstractions such as shadow admission, and the portable fixed corpus covers additional binding-independent boundaries.
+
+Recovery and shadow also expose `s.d = { warnings, ages }`. Ages are integer milliseconds in Quint and compared to actual callback seconds after unit conversion. The driver obtains this projection only from observed callbacks; it checks their operation/outcome labels and retains their order. Recovery records age only after successful retained decode. Shadow records original-C0 age at match/confirmed-mismatch verdict, clamped to zero after wall rollback; it emits a warning only for a confirmed mismatch whose admitted policy enabled logging. Later runtime changes do not rewrite that policy. C1 compares retained payload identity even when a replacement timestamp is future-dated. Exact native JSON warning formatting remains a binding obligation.
+
+Eight shadow fixtures, both custom comparison overrides, comparison failure, both captured-logging directions, logging on/off, clamped age, and positive verdict age are required witnesses. Six deterministic shadow regressions anchor these rules. Missing or corrupted diagnostic expectations must fail harness checks.
 
 `test/formal-features.test.ts` replays these traces and checks parser/assertion trust boundaries. Ordinary CI uses the committed `recovery-smoke.itf.json`, `policy-smoke.itf.json`, and `shadow-smoke.itf.json` without Quint. Formal CI replays every generated trace. To replay a downloaded artifact:
 

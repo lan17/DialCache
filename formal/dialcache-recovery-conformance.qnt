@@ -7,7 +7,7 @@ module dialcache_recovery_conformance {
   // Sources: 0 registered, 1 abandoned externally, 2 settled.
   // Phase: 0 idle, 1 fresh decode, 2 source, 3 retained decode.
   type State = {
-    o: Observation, now: int, phase: int, frame: int, created: int, expires: int,
+    o: Observation, d: Diagnostics, now: int, phase: int, frame: int, created: int, expires: int,
     watermark: int, candidate: int, candidateCreated: int, maxAge: int,
     acceptedMaxAge: int, classifier: int, instanceClassifier: int, readFailed: bool, loadFailed: bool,
     canRecover: bool, canWrite: bool, observedFence: int,
@@ -17,7 +17,7 @@ module dialcache_recovery_conformance {
   action init = {
     nondet choice = Set(0, 1, 2, 3).oneOf()
     s' = {
-    o: empty, now: 10000, phase: 0, frame: 1, created: 9000, expires: 70000,
+    o: empty, d: noDiagnostics, now: 10000, phase: 0, frame: 1, created: 9000, expires: 70000,
     watermark: 0, candidate: 0, candidateCreated: 0, maxAge: 5000,
     acceptedMaxAge: 5000, classifier: 0, instanceClassifier: List(3, 0, 1, 2).nth(choice), readFailed: false, loadFailed: false,
     canRecover: false, canWrite: false, observedFence: 0,
@@ -89,7 +89,8 @@ module dialcache_recovery_conformance {
     s.phase == 1 or s.phase == 3,
     val recovered = not(s.loadFailed) and candidateValid(s)
     val retry = s.phase == 1 and s.loadFailed
-    s' = { phase: if (retry) 2 else 0, canRecover: if (retry) false else s.canRecover,
+    s' = { d: if (s.phase == 3 and recovered) { ages: s.d.ages.append(s.now - s.candidateCreated), ...s.d } else s.d,
+      phase: if (retry) 2 else 0, canRecover: if (retry) false else s.canRecover,
       sources: if (retry) s.sources.append(0) else s.sources,
       activeLoader: if (retry) s.sources.length() else s.activeLoader,
       deadline: if (retry) s.now + 10 else s.deadline,
@@ -128,6 +129,7 @@ module dialcache_recovery_conformance {
   val pendingDecodeHasCall = s.phase != 3 or s.o.calls.select(c => c == 0).length() > 0
   val writesHaveRetention = s.o.writes == s.o.writeTtls.length()
 
+  val agesRequireRecovery = s.d.ages.length() == s.o.recovery.select(x => x == "served").length()
   val sourcesMatchEffects = s.sources.length() == s.o.loaders
   val onlyRegisteredSourceOwnsDeadline = s.phase != 2 or s.sources.nth(s.activeLoader) == 0
 
