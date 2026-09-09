@@ -9,6 +9,11 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const output = resolve(root, '.formal-traces/semantic');
 const read = path => readFileSync(resolve(root, path), 'utf8');
 const started = Date.now();
+// Invalidate any previous completed report even if preflight fails before an
+// isolated workspace can be created (for example, a stale mutation anchor).
+mkdirSync(output, { recursive: true });
+writeFileSync(resolve(output, 'report.json'), JSON.stringify({ schemaVersion: 1, complete: false, startedAt: new Date(started).toISOString() }) + '\n');
+rmSync(resolve(output, 'report.md'), { force: true });
 const declaredCoverage = checkSemanticCoverage();
 const catalog = JSON.parse(read('formal/semantic-mutations.json'));
 if (catalog.schemaVersion !== 1 || catalog.mutations.length === 0) throw new Error('Expected semantic mutation catalog');
@@ -34,7 +39,6 @@ for (const mutation of catalog.mutations) {
   if (!mutation.requiredDetections.every(c => Object.hasOwn(cohorts, c))) throw new Error(`Unknown cohort: ${mutation.id}`);
   sourceText.set(mutation.path, original);
 }
-mkdirSync(output, { recursive: true });
 const workspace = mkdtempSync(resolve(output, 'work-'));
 const report = {
   schemaVersion: 1,
@@ -89,7 +93,7 @@ function run(label, cohort, baseline) {
   const failed = assertions.filter(test => test.status === 'failed');
   const passed = assertions.filter(test => test.status === 'passed').length;
   const timedOut = failed.some(test => test.failureMessages.some(message => /(?:Test|Hook) timed out in/.test(message)));
-  if (!['passed', 'failed'].includes(execution.reason) || execution.collectionErrors.length || execution.unhandledErrors.length || assertions.length === 0 ||
+  if (execution.reason !== (failed.length ? 'failed' : 'passed') || execution.collectionErrors.length || execution.unhandledErrors.length || passed + failed === 0 ||
       timedOut ||
       (result.status !== 0 && failed.length === 0) || (result.status === 0 && failed.length > 0)) {
     throw new Error(`${label}/${cohort}: infrastructure/import error, not evidence of detection (exit=${result.status}, passed=${passed}, failed=${failed.length})`);
@@ -104,7 +108,6 @@ function save() {
   writeFileSync(resolve(output, 'report.json'), JSON.stringify(report, null, 2) + '\n');
 }
 save();
-rmSync(resolve(output, 'report.md'), { force: true });
 try {
   for (const path of ['src', 'test', 'formal', 'docs', 'README.md', 'package.json', 'tsconfig.json', 'vitest.config.ts']) {
     cpSync(resolve(root, path), resolve(workspace, path), { recursive: true, filter: source => !source.includes('/docs/.vitepress/cache') && !source.includes('/docs/.vitepress/dist') });
