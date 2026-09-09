@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "keyVectors": [
     {
       "name": "default untracked key",
@@ -1051,6 +1051,133 @@
       },
       "layer": "shadow",
       "sample": 52.120728115551174
+    }
+  ],
+  "compressionWriteVectors": [
+    {
+      "name": "string below threshold",
+      "payloadType": "string",
+      "payloadUtf8": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "thresholdBytes": 100,
+      "outcome": "below_threshold"
+    },
+    {
+      "name": "string at threshold",
+      "payloadType": "string",
+      "payloadUtf8": "dialcache dialcache dialcache dialcache dialcache dialcache dialcache dialcache dialcache dialcache dialcache dialcache dialcache dialcache dialcache dialcache ",
+      "thresholdBytes": 160,
+      "outcome": "compressed"
+    },
+    {
+      "name": "threshold measures UTF8 bytes",
+      "payloadType": "string",
+      "payloadUtf8": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "thresholdBytes": 100,
+      "outcome": "compressed"
+    },
+    {
+      "name": "binary compression preserves byte type",
+      "payloadType": "binary",
+      "payloadHex": "6469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c63616368656469616c6361636865",
+      "thresholdBytes": 64,
+      "outcome": "compressed"
+    },
+    {
+      "name": "tiny payload cannot grow under compression",
+      "payloadType": "string",
+      "payloadUtf8": "x",
+      "thresholdBytes": 1,
+      "outcome": "not_smaller"
+    },
+    {
+      "name": "below threshold binary marker is escaped",
+      "payloadType": "binary",
+      "payloadHex": "0173686f7274",
+      "thresholdBytes": 100,
+      "outcome": "below_threshold"
+    }
+  ],
+  "durationVectors": [
+    {
+      "name": "one millisecond",
+      "input": 1,
+      "expected": 1
+    },
+    {
+      "name": "round up fraction",
+      "input": 1.1,
+      "expected": 2
+    },
+    {
+      "name": "submillisecond round up",
+      "input": 0.1,
+      "expected": 1
+    },
+    {
+      "name": "maximum duration",
+      "input": 31536000000,
+      "expected": 31536000000
+    },
+    {
+      "name": "zero rejected",
+      "input": 0,
+      "expected": null
+    },
+    {
+      "name": "negative rejected",
+      "input": -1,
+      "expected": null
+    },
+    {
+      "name": "over maximum rejected",
+      "input": 31536000000.1,
+      "expected": null
+    }
+  ],
+  "invalidKeyVectors": [
+    {
+      "name": "namespace rejects bad{namespace",
+      "input": {
+        "namespace": "bad{namespace",
+        "keyType": "user_id",
+        "id": "123",
+        "useCase": "GetUser",
+        "trackForInvalidation": true,
+        "args": []
+      }
+    },
+    {
+      "name": "namespace rejects bad}namespace",
+      "input": {
+        "namespace": "bad}namespace",
+        "keyType": "user_id",
+        "id": "123",
+        "useCase": "GetUser",
+        "trackForInvalidation": true,
+        "args": []
+      }
+    },
+    {
+      "name": "keyType rejects bad{type",
+      "input": {
+        "namespace": "urn",
+        "keyType": "bad{type",
+        "id": "123",
+        "useCase": "GetUser",
+        "trackForInvalidation": true,
+        "args": []
+      }
+    },
+    {
+      "name": "id rejects bad}id",
+      "input": {
+        "namespace": "urn",
+        "keyType": "user_id",
+        "id": "bad}id",
+        "useCase": "GetUser",
+        "trackForInvalidation": true,
+        "args": []
+      }
     }
   ]
 }

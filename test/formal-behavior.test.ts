@@ -1,5 +1,4 @@
 import { readFileSync } from "node:fs";
-import { performance } from "node:perf_hooks";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -19,8 +18,6 @@ const corpus = JSON.parse(readFileSync(new URL("../formal/behavioral-scenarios.j
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-09-08T12:00:00Z"));
-  const origin = Date.now();
-  vi.spyOn(performance, "now").mockImplementation(() => Date.now() - origin);
 });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
@@ -44,7 +41,7 @@ async function replay(scenario: Scenario, driver = new BehaviorDriver(scenario.f
 
 describe("portable behavioral scenarios", () => {
   it("has a nonempty versioned corpus and unique names", () => {
-    expect(corpus.schemaVersion).toBe(1);
+    expect(corpus.schemaVersion).toBe(2);
     expect(corpus.scenarios.length).toBeGreaterThan(0);
     expect(new Set(corpus.scenarios.map(({ name }) => name)).size).toBe(corpus.scenarios.length);
     expect([...new Set(corpus.scenarios.map(({ feature }) => feature))].sort()).toEqual([

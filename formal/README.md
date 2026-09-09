@@ -6,7 +6,7 @@ This suite formalizes DialCache behavior for better implementation testing and f
 | --- | --- | --- |
 | Verification | Seven Quint models → bounded simulation → invariant checks | No violation was found in the explored executions of those models |
 | Behavioral conformance | Quint core/effects models → ITF traces, plus portable feature scenarios → language driver → real DialCache | The implementation produced the expected observations for the tested profile and traces |
-| Protocol interoperability | Portable JSON vectors → language implementation | Exact keys, frames, decoder/envelope results, and rollout cohorts match the supplied cases |
+| Protocol interoperability | Portable JSON vectors → language implementation | Keys, frames, decoder/envelope results, cohorts, and invalidation transitions match the supplied cases |
 
 Passing one part does not imply the others. In particular, a model can satisfy its invariants while an implementation diverges from it. Generated replay connects the two for the core and pending-effect profiles. Portable deterministic scenarios cover additional feature boundaries.
 
@@ -25,6 +25,12 @@ Protocol JSON vectors ────────────────> exact ke
 ```
 
 The TypeScript driver exists today. Other language drivers and broader generated feature combinations are future work. [`TEST-MAP.md`](./TEST-MAP.md) distinguishes implemented coverage from remaining gaps; [`CONFORMANCE.md`](./CONFORMANCE.md) defines the core profile; [`BEHAVIOR.md`](./BEHAVIOR.md) defines the shared feature-scenario/effects driver and porting workflow.
+
+## Portable scope
+
+[`CONTRACTS.md`](./CONTRACTS.md) inventories the rules derived from current docs and tests, with named executable evidence and a source index. It separates portable behavior, protocol interoperability, language binding, and external assumptions. Exact instrumentation and resource limits are explicitly outside the current profiles. Registration APIs, native object identity, and Promise mechanics are not requirements for other languages.
+
+One logical call operation is enough to exercise the shared cache path. The feature corpus also controls classifier/comparator outcomes, multiple instances/scopes/operation identities, and independent wall-clock changes. A port supplies its own public API adapter; expected results never enter execution. Every cacheable result, including an absent fixture value, is distinct from a cache miss.
 
 ## Verification models
 
@@ -58,11 +64,15 @@ Stale age is checked when the candidate is retained and again when recovery acce
 
 ## Protocol interoperability
 
-[`protocol-vectors.json`](./protocol-vectors.json) schema version 2 contains 85 deterministic cases: keys, argument normalization, frame bytes, timestamp acceptance, tracked/untracked decoding, compression envelopes, fixed zstd decoding, and deterministic serving/shadow cohorts. `test/formal-protocol-vectors.test.ts` executes them against the existing TypeScript functions. No new production exports are required.
+[`protocol-vectors.json`](./protocol-vectors.json) schema version 3 contains 102 deterministic cases: keys, argument normalization, frame bytes, timestamp acceptance, tracked/untracked decoding, compression envelopes, fixed zstd decoding, deterministic serving/shadow cohorts, invalid key identities, physical-duration bounds, and compression representation selection. `test/formal-protocol-vectors.test.ts` executes them against the existing TypeScript functions. No new production exports are required.
 
 Ports consume the same JSON. Normalization preserves UTF-16 code-unit ordering and JavaScript-compatible scalar string formatting. `bigintArgs` encodes arbitrary integers as decimal strings; `specialArgs` names `-0`, `NaN`, and infinities that ordinary JSON cannot represent. URI component escaping preserves `~!*'()-._`. Decoder cases deliberately distinguish frame decoding from core timestamp validation: unsafe decoded timestamps remain visible to core, which rejects them before deserialization. The mutation encoder rejects unsafe timestamps immediately.
 
-Envelope vectors cover raw-byte escaping and reader marker behavior. Fixed compressed frames test decoding; compressor byte identity is not required because valid zstd encoders can produce different bytes. Rollout vectors use the stable FNV-1a 32-bit hash over UTF-16 units of the logical key plus the layer/shadow discriminator, divided by 2^32 and multiplied by 100. These are finite examples, not exhaustive input coverage.
+Envelope vectors cover raw-byte escaping and reader marker behavior. Compression-write vectors check UTF-8 byte thresholds, only-when-smaller selection, marker type, and round-trip preservation without prescribing exact compressed bytes. Fixed compressed frames test decoding; compressor byte identity is not required because valid zstd encoders can produce different bytes. Rollout vectors use the stable FNV-1a 32-bit hash over UTF-16 units of the logical key plus the layer/shadow discriminator, divided by 2^32 and multiplied by 100. These are finite examples, not exhaustive input coverage.
+
+[`invalidation-vectors.json`](./invalidation-vectors.json) schema version 1 adds 19 portable state transitions for absent/valid/malformed/wrong-type markers, monotonicity, persistence, retention, safe numeric limits, and rejection before mutation. `test/redis-real.integration.test.ts` runs the actual exported invalidation protocol on Redis 6.2 and Valkey 8. Fixture setup, transition, and observation run atomically so exact TTL assertions do not depend on test latency. These vectors check DialCache's protocol, not Redis implementation correctness. A port using another implementation of the transition must produce the same resulting state.
+
+Invalidation vectors specify `existing.kind` (`absent`, `string`, or an unrelated `list`), optional string `value`, and `ttlMs` (`-1` means persistent). `futureBufferMs` and `invalidatedAtMs` are raw argument text so invalid numeric spellings can be tested without host coercion. Expected state contains the resulting decimal watermark and remaining TTL; `error: true` requires rejection with that original state preserved. Successful transitions return numeric `1`. The integration fixture freezes expiry during the transition/observation, not throughout real production operation.
 
 ## Running and reproducing checks
 
@@ -93,10 +103,10 @@ DIALCACHE_EFFECTS_TRACE_FILE=.formal-traces/effects/trace_0.itf.json \
   corepack pnpm exec vitest run test/formal-effects.test.ts --coverage.enabled=false
 ```
 
-Without these environment variables, ordinary TypeScript tests replay both committed smoke traces through their generated-trace parsers, with no Quint installation. They also run all 64 portable feature scenarios. They also exercise malformed-trace rejection and prove the harness detects lost local caching, coalescing, Redis writes, and invalidation. All 85 protocol-vector cases run in ordinary CI too.
+Without these environment variables, ordinary TypeScript tests replay both committed smoke traces through their generated-trace parsers, with no Quint installation. They also run all 144 portable feature scenarios. They also exercise malformed-trace rejection and prove the harness detects lost local caching, coalescing, Redis writes, and invalidation. All 102 key/frame/codec/cohort/compression cases run in ordinary CI too. The 19 invalidation vectors run on both engines via `corepack pnpm test:integration` in the regular CI job.
 
 Model-checker exploration is separate from CI's sampled runs. For example, `quint verify` supports a TLC backend; any reported result must include the backend/version, model bounds, assumptions, and invariant. No exhaustive result is claimed here.
 
 ## Maintenance
 
-A model is not authoritative merely because it is formal. Resolve disagreements against the intended contract, existing focused tests, and implementation. Update the affected model, ordinary tests, portable traces/vectors, and documentation together. Keep the driver independent: expected model state belongs in assertions, never in the code that executes the implementation or records its observations.
+For every changed rule, update the classification and evidence in `CONTRACTS.md` and its coverage summary in `TEST-MAP.md`. A model is not authoritative merely because it is formal. Resolve disagreements against the intended contract, existing focused tests, and implementation. Update the affected model, ordinary tests, portable traces/vectors, and documentation together. Keep the driver independent: expected model state belongs in assertions, never in the code that executes the implementation or records its observations.

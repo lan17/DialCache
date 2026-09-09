@@ -30,7 +30,7 @@ Redis supplies the semantic adapter contract: atomic tracked reads, stored seria
 
 ## Actions
 
-All calls execute through the public `getOrLoad`/`enable`/`invalidateRemote` equivalents. The loader increments its associated counter and returns the current source version. An action completes before the next action starts, except for the two overlapping calls explicitly contained in `coalescedLocalPair`.
+All calls execute through public logical call/scope/invalidation equivalents. The TypeScript binding uses `getOrLoad`/`enable`/`invalidateRemote`; ports do not need those names or a `cached()` registration API. See [the contract boundary](./CONTRACTS.md#where-the-boundary-lies). The loader increments its associated counter and returns the current source version. An action completes before the next action starts, except for the two overlapping calls explicitly contained in `coalescedLocalPair`.
 
 | Action | Driver operation and completion boundary |
 | --- | --- |

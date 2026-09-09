@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "scenarios": [
     {
       "name": "disabled calls bypass policy and caches",
@@ -65,8 +65,8 @@
       "steps": [
         {"input": {"op": "openScope","id": "r"},"expect": {}},
         {"input": {"op": "begin","scope": "r"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
-        {"input": {"op": "resolve","loader": 0},"expect": {"calls": [{"status": "value","value": "undefined"}]}},
-        {"input": {"op": "begin","scope": "r"},"expect": {"calls": [{"status": "value","value": "undefined"},{"status": "value","value": "undefined"}],"policyCalls": 2}}
+        {"input": {"op": "resolve","loader": 0},"expect": {"calls": [{"status": "value","value": {"absent": true}}]}},
+        {"input": {"op": "begin","scope": "r"},"expect": {"calls": [{"status": "value","value": {"absent": true}},{"status": "value","value": {"absent": true}}],"policyCalls": 2}}
       ]
     },
     {
@@ -436,7 +436,7 @@
       "steps": [
         {"input": {"op": "seed","value": 1,"ageMs": 1000},"expect": {}},
         {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"reads": 1,"policyCalls": 1}},
-        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "value","value": 1}],"loads": 1,"recovery": ["served"]}},
+        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "value","value": 1}],"loads": 1,"recovery": ["served"],"classifications": 1}},
         {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "pending"}],"loaders": 2,"reads": 2,"policyCalls": 2}}
       ]
     },
@@ -447,7 +447,7 @@
       "steps": [
         {"input": {"op": "seed","value": 1,"ageMs": 5000},"expect": {}},
         {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"reads": 1,"policyCalls": 1}},
-        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "error","error": "source:0"}],"recovery": ["miss"]}}
+        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "error","error": "source:0"}],"recovery": ["miss"],"classifications": 1}}
       ]
     },
     {
@@ -457,7 +457,7 @@
       "steps": [
         {"input": {"op": "seed","value": 1,"ageMs": -1},"expect": {}},
         {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"reads": 1,"policyCalls": 1}},
-        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "error","error": "source:0"}],"recovery": ["miss"]}}
+        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "error","error": "source:0"}],"recovery": ["miss"],"classifications": 1}}
       ]
     },
     {
@@ -477,7 +477,7 @@
       "steps": [
         {"input": {"op": "seed","value": 1,"ageMs": 1000},"expect": {}},
         {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"reads": 1,"policyCalls": 1}},
-        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "error","error": "source:0"}]}}
+        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "error","error": "source:0"}],"classifications": 1}}
       ]
     },
     {
@@ -488,7 +488,7 @@
         {"input": {"op": "seed","value": 1,"ageMs": 1000},"expect": {}},
         {"input": {"op": "faults","value": {"holdLoads": true}},"expect": {}},
         {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"reads": 1,"policyCalls": 1}},
-        {"input": {"op": "reject","loader": 0},"expect": {"loads": 1}},
+        {"input": {"op": "reject","loader": 0},"expect": {"loads": 1,"classifications": 1}},
         {"input": {"op": "advance","ms": 4000},"expect": {}},
         {"input": {"op": "release","effect": "load","index": 0},"expect": {"calls": [{"status": "error","error": "source:0"}],"recovery": ["miss"]}}
       ]
@@ -501,7 +501,7 @@
         {"input": {"op": "seed","value": 1,"ageMs": 1000},"expect": {}},
         {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"reads": 1,"policyCalls": 1}},
         {"input": {"op": "advance","ms": 4000},"expect": {}},
-        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "error","error": "source:0"}],"recovery": ["miss"]}}
+        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "error","error": "source:0"}],"recovery": ["miss"],"classifications": 1}}
       ]
     },
     {
@@ -513,7 +513,7 @@
         {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"reads": 1,"policyCalls": 1}},
         {"input": {"op": "invalidate"},"expect": {"invalidations": 1,"maintenance": ["ok"]}},
         {"input": {"op": "seed","value": 2},"expect": {}},
-        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "value","value": 1}],"loads": 1,"recovery": ["served"]}}
+        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "value","value": 1}],"loads": 1,"recovery": ["served"],"classifications": 1}}
       ]
     },
     {
@@ -535,7 +535,7 @@
         {"input": {"op": "openScope","id": "r"},"expect": {}},
         {"input": {"op": "seed","value": 1,"ageMs": 1000},"expect": {}},
         {"input": {"op": "begin","scope": "r"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"reads": 1,"policyCalls": 1}},
-        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "value","value": 1}],"loads": 1,"recovery": ["served"]}},
+        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "value","value": 1}],"loads": 1,"recovery": ["served"],"classifications": 1}},
         {"input": {"op": "begin","scope": "r"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1}],"policyCalls": 2}},
         {"input": {"op": "closeScope","id": "r"},"expect": {}},
         {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1},{"status": "pending"}],"reads": 2,"loaders": 2,"policyCalls": 3}}
@@ -549,7 +549,7 @@
         {"input": {"op": "seed","value": 1,"ageMs": 1000},"expect": {}},
         {"input": {"op": "faults","value": {"load": true}},"expect": {}},
         {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"reads": 1,"policyCalls": 1}},
-        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "error","error": "source:0"}],"loads": 1,"recovery": ["deserialization_error"]}}
+        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "error","error": "source:0"}],"loads": 1,"recovery": ["deserialization_error"],"classifications": 1}}
       ]
     },
     {
@@ -730,7 +730,7 @@
       "steps": [
         {"input": {"op": "seed","value": 1,"ageMs": 4999},"expect": {}},
         {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"reads": 1,"policyCalls": 1}},
-        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "value","value": 1}],"loads": 1,"recovery": ["served"]}}
+        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "value","value": 1}],"loads": 1,"recovery": ["served"],"classifications": 1}}
       ]
     },
     {
@@ -741,7 +741,7 @@
         {"input": {"op": "seed","value": 1,"ageMs": 1000,"ttlMs": 1},"expect": {}},
         {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"reads": 1,"policyCalls": 1}},
         {"input": {"op": "advance","ms": 1},"expect": {}},
-        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "value","value": 1}],"loads": 1,"recovery": ["served"]}}
+        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "value","value": 1}],"loads": 1,"recovery": ["served"],"classifications": 1}}
       ]
     },
     {
@@ -757,6 +757,923 @@
         {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {}},
         {"input": {"op": "begin","key": "b"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1},{"status": "value","value": 1}],"reads": 3,"loads": 3,"loaders": 2,"policyCalls": 3}},
         {"input": {"op": "resolve","loader": 1,"value": 1},"expect": {"loads": 4,"shadow": ["timeout","dropped","match"]}}
+      ]
+    },
+    {
+      "name": "null remains a value in request cache",
+      "feature": "traversal",
+      "fixture": {"policy": {"requestLocal": true}},
+      "steps": [
+        {"input": {"op": "openScope","id": "r"},"expect": {}},
+        {"input": {"op": "begin","scope": "r"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": null},"expect": {"calls": [{"status": "value","value": null}]}},
+        {"input": {"op": "begin","scope": "r"},"expect": {"calls": [{"status": "value","value": null},{"status": "value","value": null}],"policyCalls": 2}}
+      ]
+    },
+    {
+      "name": "null remains a value in local cache",
+      "feature": "traversal",
+      "fixture": {"policy": {"ttlSec": {"local": 1}}},
+      "steps": [
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": null},"expect": {"calls": [{"status": "value","value": null}]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": null},{"status": "value","value": null}],"policyCalls": 2}}
+      ]
+    },
+    {
+      "name": "null remains a value in remote cache",
+      "feature": "traversal",
+      "fixture": {"policy": {"ttlSec": {"remote": 1}}},
+      "steps": [
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1,"reads": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": null},"expect": {"calls": [{"status": "value","value": null}],"writes": 1,"dumps": 1,"writeTtls": [1000]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": null},{"status": "value","value": null}],"policyCalls": 2,"reads": 2,"loads": 1}}
+      ]
+    },
+    {
+      "name": "false remains a value in request cache",
+      "feature": "traversal",
+      "fixture": {"policy": {"requestLocal": true}},
+      "steps": [
+        {"input": {"op": "openScope","id": "r"},"expect": {}},
+        {"input": {"op": "begin","scope": "r"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": false},"expect": {"calls": [{"status": "value","value": false}]}},
+        {"input": {"op": "begin","scope": "r"},"expect": {"calls": [{"status": "value","value": false},{"status": "value","value": false}],"policyCalls": 2}}
+      ]
+    },
+    {
+      "name": "false remains a value in local cache",
+      "feature": "traversal",
+      "fixture": {"policy": {"ttlSec": {"local": 1}}},
+      "steps": [
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": false},"expect": {"calls": [{"status": "value","value": false}]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": false},{"status": "value","value": false}],"policyCalls": 2}}
+      ]
+    },
+    {
+      "name": "false remains a value in remote cache",
+      "feature": "traversal",
+      "fixture": {"policy": {"ttlSec": {"remote": 1}}},
+      "steps": [
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1,"reads": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": false},"expect": {"calls": [{"status": "value","value": false}],"writes": 1,"dumps": 1,"writeTtls": [1000]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": false},{"status": "value","value": false}],"policyCalls": 2,"reads": 2,"loads": 1}}
+      ]
+    },
+    {
+      "name": "zero remains a value in request cache",
+      "feature": "traversal",
+      "fixture": {"policy": {"requestLocal": true}},
+      "steps": [
+        {"input": {"op": "openScope","id": "r"},"expect": {}},
+        {"input": {"op": "begin","scope": "r"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 0},"expect": {"calls": [{"status": "value","value": 0}]}},
+        {"input": {"op": "begin","scope": "r"},"expect": {"calls": [{"status": "value","value": 0},{"status": "value","value": 0}],"policyCalls": 2}}
+      ]
+    },
+    {
+      "name": "zero remains a value in local cache",
+      "feature": "traversal",
+      "fixture": {"policy": {"ttlSec": {"local": 1}}},
+      "steps": [
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 0},"expect": {"calls": [{"status": "value","value": 0}]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 0},{"status": "value","value": 0}],"policyCalls": 2}}
+      ]
+    },
+    {
+      "name": "zero remains a value in remote cache",
+      "feature": "traversal",
+      "fixture": {"policy": {"ttlSec": {"remote": 1}}},
+      "steps": [
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1,"reads": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 0},"expect": {"calls": [{"status": "value","value": 0}],"writes": 1,"dumps": 1,"writeTtls": [1000]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 0},{"status": "value","value": 0}],"policyCalls": 2,"reads": 2,"loads": 1}}
+      ]
+    },
+    {
+      "name": "empty string remains a value in request cache",
+      "feature": "traversal",
+      "fixture": {"policy": {"requestLocal": true}},
+      "steps": [
+        {"input": {"op": "openScope","id": "r"},"expect": {}},
+        {"input": {"op": "begin","scope": "r"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": ""},"expect": {"calls": [{"status": "value","value": ""}]}},
+        {"input": {"op": "begin","scope": "r"},"expect": {"calls": [{"status": "value","value": ""},{"status": "value","value": ""}],"policyCalls": 2}}
+      ]
+    },
+    {
+      "name": "empty string remains a value in local cache",
+      "feature": "traversal",
+      "fixture": {"policy": {"ttlSec": {"local": 1}}},
+      "steps": [
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": ""},"expect": {"calls": [{"status": "value","value": ""}]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": ""},{"status": "value","value": ""}],"policyCalls": 2}}
+      ]
+    },
+    {
+      "name": "empty string remains a value in remote cache",
+      "feature": "traversal",
+      "fixture": {"policy": {"ttlSec": {"remote": 1}}},
+      "steps": [
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1,"reads": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": ""},"expect": {"calls": [{"status": "value","value": ""}],"writes": 1,"dumps": 1,"writeTtls": [1000]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": ""},{"status": "value","value": ""}],"policyCalls": 2,"reads": 2,"loads": 1}}
+      ]
+    },
+    {
+      "name": "zero local capacity retains coalescing but no settled value",
+      "feature": "local-cache",
+      "fixture": {"policy": {"ttlSec": {"local": 1}},"localMaxSize": 0},
+      "steps": [
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"},{"status": "pending"}],"policyCalls": 2}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1}]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1},{"status": "pending"}],"loaders": 2,"policyCalls": 3}}
+      ]
+    },
+    {
+      "name": "request memo has no process local capacity cap",
+      "feature": "request-local",
+      "fixture": {"policy": {"requestLocal": true},"localMaxSize": 0},
+      "steps": [
+        {"input": {"op": "openScope","id": "r"},"expect": {}},
+        {"input": {"op": "begin","scope": "r","key": "a"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1}]}},
+        {"input": {"op": "begin","scope": "r","key": "b"},"expect": {"calls": [{"status": "value","value": 1},{"status": "pending"}],"loaders": 2,"policyCalls": 2}},
+        {"input": {"op": "resolve","loader": 1,"value": 2},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2}]}},
+        {"input": {"op": "begin","scope": "r","key": "a"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "value","value": 1}],"policyCalls": 3}}
+      ]
+    },
+    {
+      "name": "request misses join one process flight then memoize separately",
+      "feature": "coalescing",
+      "fixture": {"policy": {"ttlSec": {"local": 1},"requestLocal": true}},
+      "steps": [
+        {"input": {"op": "openScope","id": "a"},"expect": {}},
+        {"input": {"op": "openScope","id": "b"},"expect": {}},
+        {"input": {"op": "begin","scope": "a"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "begin","scope": "b"},"expect": {"calls": [{"status": "pending"},{"status": "pending"}],"policyCalls": 2}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1}]}},
+        {"input": {"op": "policy","value": {"ramp": {"local": 0}}},"expect": {}},
+        {"input": {"op": "begin","scope": "a"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1},{"status": "value","value": 1}],"policyCalls": 3}},
+        {"input": {"op": "begin","scope": "b"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1},{"status": "value","value": 1},{"status": "value","value": 1}],"policyCalls": 4}}
+      ]
+    },
+    {
+      "name": "instances isolate local storage and registered flights",
+      "feature": "coalescing",
+      "fixture": {"policy": {"ttlSec": {"local": 1}}},
+      "steps": [
+        {"input": {"op": "begin","instance": "a"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "begin","instance": "b"},"expect": {"calls": [{"status": "pending"},{"status": "pending"}],"loaders": 2,"policyCalls": 2}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1},{"status": "pending"}]}},
+        {"input": {"op": "resolve","loader": 1,"value": 2},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2}]}},
+        {"input": {"op": "begin","instance": "a"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "value","value": 1}],"policyCalls": 3}},
+        {"input": {"op": "begin","instance": "b"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "value","value": 1},{"status": "value","value": 2}],"policyCalls": 4}}
+      ]
+    },
+    {
+      "name": "shared local capacity spans operation identities",
+      "feature": "local-cache",
+      "fixture": {"policy": {"ttlSec": {"local": 1}},"localMaxSize": 1},
+      "steps": [
+        {"input": {"op": "begin","useCase": "A"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1}]}},
+        {"input": {"op": "begin","useCase": "B"},"expect": {"calls": [{"status": "value","value": 1},{"status": "pending"}],"loaders": 2,"policyCalls": 2}},
+        {"input": {"op": "resolve","loader": 1,"value": 2},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2}]}},
+        {"input": {"op": "begin","useCase": "A"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "pending"}],"loaders": 3,"policyCalls": 3}}
+      ]
+    },
+    {
+      "name": "one invalidation fences all tracked operation variants only for its entity",
+      "feature": "invalidation",
+      "fixture": {"policy": {"ttlSec": {"remote": 1}},"tracked": true},
+      "steps": [
+        {"input": {"op": "seed","useCase": "A","value": 1},"expect": {}},
+        {"input": {"op": "seed","useCase": "B","value": 2},"expect": {}},
+        {"input": {"op": "seed","key": "other","value": 3},"expect": {}},
+        {"input": {"op": "invalidate"},"expect": {"invalidations": 1,"maintenance": ["ok"]}},
+        {"input": {"op": "begin","useCase": "A"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1,"reads": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 4},"expect": {"calls": [{"status": "value","value": 4}]}},
+        {"input": {"op": "begin","useCase": "B"},"expect": {"calls": [{"status": "value","value": 4},{"status": "pending"}],"loaders": 2,"policyCalls": 2,"reads": 2}},
+        {"input": {"op": "resolve","loader": 1,"value": 5},"expect": {"calls": [{"status": "value","value": 4},{"status": "value","value": 5}]}},
+        {"input": {"op": "begin","key": "other"},"expect": {"calls": [{"status": "value","value": 4},{"status": "value","value": 5},{"status": "value","value": 3}],"policyCalls": 3,"reads": 3,"loads": 1}}
+      ]
+    },
+    {
+      "name": "request policy bypass retains memo for later reenabling",
+      "feature": "runtime-policy",
+      "fixture": {"policy": {"requestLocal": true}},
+      "steps": [
+        {"input": {"op": "openScope","id": "r"},"expect": {}},
+        {"input": {"op": "begin","scope": "r"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1}]}},
+        {"input": {"op": "policy","value": {"requestLocal": false}},"expect": {}},
+        {"input": {"op": "begin","scope": "r"},"expect": {"calls": [{"status": "value","value": 1},{"status": "pending"}],"loaders": 2,"policyCalls": 2}},
+        {"input": {"op": "resolve","loader": 1,"value": 2},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2}]}},
+        {"input": {"op": "policy","value": {}},"expect": {}},
+        {"input": {"op": "begin","scope": "r"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "value","value": 1}],"policyCalls": 3}}
+      ]
+    },
+    {
+      "name": "library read deadline precedence",
+      "feature": "deadlines",
+      "fixture": {"policy": {"ttlSec": {"remote": 1}}},
+      "steps": [
+        {"input": {"op": "faults","value": {"holdReads": true}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"policyCalls": 1}},
+        {"input": {"op": "advance","ms": 49},"expect": {}},
+        {"input": {"op": "advance","ms": 1},"expect": {"loaders": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1}]}},
+        {"input": {"op": "release","effect": "read","index": 0},"expect": {}}
+      ]
+    },
+    {
+      "name": "instance read deadline precedence",
+      "feature": "deadlines",
+      "fixture": {"policy": {"ttlSec": {"remote": 1}},"readTimeoutMs": 8},
+      "steps": [
+        {"input": {"op": "faults","value": {"holdReads": true}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"policyCalls": 1}},
+        {"input": {"op": "advance","ms": 7},"expect": {}},
+        {"input": {"op": "advance","ms": 1},"expect": {"loaders": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1}]}},
+        {"input": {"op": "release","effect": "read","index": 0},"expect": {}}
+      ]
+    },
+    {
+      "name": "operation read deadline precedence",
+      "feature": "deadlines",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"remoteReadTimeoutMs": 7},"readTimeoutMs": 8},
+      "steps": [
+        {"input": {"op": "faults","value": {"holdReads": true}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"policyCalls": 1}},
+        {"input": {"op": "advance","ms": 6},"expect": {}},
+        {"input": {"op": "advance","ms": 1},"expect": {"loaders": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1}]}},
+        {"input": {"op": "release","effect": "read","index": 0},"expect": {}}
+      ]
+    },
+    {
+      "name": "runtime read deadline precedence",
+      "feature": "deadlines",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"remoteReadTimeoutMs": 7},"readTimeoutMs": 8},
+      "steps": [
+        {"input": {"op": "policy","value": {"remoteReadTimeoutMs": 6}},"expect": {}},
+        {"input": {"op": "faults","value": {"holdReads": true}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"policyCalls": 1}},
+        {"input": {"op": "advance","ms": 5},"expect": {}},
+        {"input": {"op": "advance","ms": 1},"expect": {"loaders": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1}]}},
+        {"input": {"op": "release","effect": "read","index": 0},"expect": {}}
+      ]
+    },
+    {
+      "name": "late follower inherits remaining read deadline",
+      "feature": "deadlines",
+      "fixture": {"policy": {"ttlSec": {"remote": 1}},"readTimeoutMs": 10},
+      "steps": [
+        {"input": {"op": "faults","value": {"holdReads": true}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"policyCalls": 1,"reads": 1}},
+        {"input": {"op": "advance","ms": 6},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"},{"status": "pending"}],"policyCalls": 2}},
+        {"input": {"op": "advance","ms": 3},"expect": {}},
+        {"input": {"op": "advance","ms": 1},"expect": {"loaders": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1}]}}
+      ]
+    },
+    {
+      "name": "late follower inherits remaining fallback deadline",
+      "feature": "deadlines",
+      "fixture": {"policy": {"ttlSec": {"local": 1}},"readTimeoutMs": 10},
+      "steps": [
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"policyCalls": 1,"loaders": 1}},
+        {"input": {"op": "advance","ms": 6},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"},{"status": "pending"}],"policyCalls": 2}},
+        {"input": {"op": "advance","ms": 3},"expect": {}},
+        {"input": {"op": "advance","ms": 1},"expect": {"calls": [{"status": "error","error": "timeout:0"},{"status": "error","error": "timeout:0"}]}}
+      ]
+    },
+    {
+      "name": "disabled fallback deadline accepts later source settlement",
+      "feature": "deadlines",
+      "fixture": {"policy": {"ttlSec": {"local": 1}},"fallbackTimeoutMs": null},
+      "steps": [
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "advance","ms": 60001},"expect": {}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1}]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1}],"policyCalls": 2}}
+      ]
+    },
+    {
+      "name": "outside calls have no fallback deadline or sharing",
+      "feature": "enablement",
+      "fixture": {"policy": {"ttlSec": {"local": 1}}},
+      "steps": [
+        {"input": {"op": "begin","outside": true},"expect": {"calls": [{"status": "pending"}],"loaders": 1}},
+        {"input": {"op": "begin","outside": true},"expect": {"calls": [{"status": "pending"},{"status": "pending"}],"loaders": 2}},
+        {"input": {"op": "advance","ms": 100},"expect": {}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1},{"status": "pending"}]}}
+      ]
+    },
+    {
+      "name": "null provider inherits operation defaults",
+      "feature": "runtime-policy",
+      "fixture": {"policy": {"ttlSec": {"local": 1}}},
+      "steps": [
+        {"input": {"op": "policy","value": null},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1}]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1}],"policyCalls": 2}}
+      ]
+    },
+    {
+      "name": "invalid runtime coalesce bypasses all cache layers",
+      "feature": "runtime-policy",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"requestLocal": true}},
+      "steps": [
+        {"input": {"op": "policy","value": {"coalesce": "invalid"}},"expect": {}},
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 2},"expect": {"calls": [{"status": "value","value": 2}]}}
+      ]
+    },
+    {
+      "name": "invalid runtime requestLocal bypasses all cache layers",
+      "feature": "runtime-policy",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"requestLocal": true}},
+      "steps": [
+        {"input": {"op": "policy","value": {"requestLocal": "invalid"}},"expect": {}},
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 2},"expect": {"calls": [{"status": "value","value": 2}]}}
+      ]
+    },
+    {
+      "name": "invalid runtime remoteReadTimeoutMs bypasses all cache layers",
+      "feature": "runtime-policy",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"requestLocal": true}},
+      "steps": [
+        {"input": {"op": "policy","value": {"remoteReadTimeoutMs": 0}},"expect": {}},
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 2},"expect": {"calls": [{"status": "value","value": 2}]}}
+      ]
+    },
+    {
+      "name": "invalid local TTL leaves valid remote serving available",
+      "feature": "runtime-policy",
+      "fixture": {"policy": {"ttlSec": {"local": 1,"remote": 1}}},
+      "steps": [
+        {"input": {"op": "policy","value": {"ttlSec": {"local": -1}}},"expect": {}},
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1}],"reads": 1,"loads": 1,"policyCalls": 1}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1}],"reads": 2,"loads": 2,"policyCalls": 2}}
+      ]
+    },
+    {
+      "name": "invalid optional staleOnErrorMaxAgeSec preserves fresh remote serving",
+      "feature": "runtime-policy",
+      "fixture": {"policy": {"ttlSec": {"remote": 1}}},
+      "steps": [
+        {"input": {"op": "policy","value": {"staleOnErrorMaxAgeSec": 1}},"expect": {}},
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1}],"reads": 1,"loads": 1,"policyCalls": 1}}
+      ]
+    },
+    {
+      "name": "invalid optional shadow preserves fresh remote serving",
+      "feature": "runtime-policy",
+      "fixture": {"policy": {"ttlSec": {"remote": 1}}},
+      "steps": [
+        {"input": {"op": "policy","value": {"shadow": {"ramp": 101}}},"expect": {}},
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1}],"reads": 1,"loads": 1,"policyCalls": 1}}
+      ]
+    },
+    {
+      "name": "recovery allow overrides deny policy safely",
+      "feature": "stale-recovery",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"staleOnErrorMaxAgeSec": 5},"recovery": "deny"},
+      "steps": [
+        {"input": {"op": "seed","value": 1,"ageMs": 1000},"expect": {}},
+        {"input": {"op": "begin","recovery": "allow"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "value","value": 1}],"classifications": 1,"loads": 1,"recovery": ["served"]}}
+      ]
+    },
+    {
+      "name": "recovery deny overrides allow policy safely",
+      "feature": "stale-recovery",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"staleOnErrorMaxAgeSec": 5},"recovery": "allow"},
+      "steps": [
+        {"input": {"op": "seed","value": 1,"ageMs": 1000},"expect": {}},
+        {"input": {"op": "begin","recovery": "deny"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "error","error": "source:0"}],"classifications": 1}}
+      ]
+    },
+    {
+      "name": "recovery error overrides allow policy safely",
+      "feature": "stale-recovery",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"staleOnErrorMaxAgeSec": 5},"recovery": "allow"},
+      "steps": [
+        {"input": {"op": "seed","value": 1,"ageMs": 1000},"expect": {}},
+        {"input": {"op": "begin","recovery": "error"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "error","error": "source:0"}],"classifications": 1}}
+      ]
+    },
+    {
+      "name": "recovery error overrides error policy safely",
+      "feature": "stale-recovery",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"staleOnErrorMaxAgeSec": 5},"recovery": "error"},
+      "steps": [
+        {"input": {"op": "seed","value": 1,"ageMs": 1000},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "error","error": "source:0"}],"classifications": 1}}
+      ]
+    },
+    {
+      "name": "default classifier rejects ordinary errors",
+      "feature": "stale-recovery",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"staleOnErrorMaxAgeSec": 5}},
+      "steps": [
+        {"input": {"op": "seed","value": 1,"ageMs": 1000},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "error","error": "source:0"}]}}
+      ]
+    },
+    {
+      "name": "default classifier accepts a timeout propagated by source",
+      "feature": "stale-recovery",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"staleOnErrorMaxAgeSec": 5}},
+      "steps": [
+        {"input": {"op": "seed","value": 1,"ageMs": 1000},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "reject","loader": 0,"error": "timeout"},"expect": {"calls": [{"status": "value","value": 1}],"loads": 1,"recovery": ["served"]}}
+      ]
+    },
+    {
+      "name": "explicit denial replaces default timeout recovery",
+      "feature": "stale-recovery",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"staleOnErrorMaxAgeSec": 5},"recovery": "deny"},
+      "steps": [
+        {"input": {"op": "seed","value": 1,"ageMs": 1000},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "advance","ms": 10},"expect": {"calls": [{"status": "error","error": "timeout:0"}],"classifications": 1}}
+      ]
+    },
+    {
+      "name": "coalesced recovery classifies and decodes once",
+      "feature": "stale-recovery",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"staleOnErrorMaxAgeSec": 5},"recovery": "allow"},
+      "steps": [
+        {"input": {"op": "seed","value": 1,"ageMs": 1000},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"},{"status": "pending"}],"policyCalls": 2}},
+        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1}],"classifications": 1,"loads": 1,"recovery": ["served"]}}
+      ]
+    },
+    {
+      "name": "pending recovery keeps its age snapshot while later calls use new policy",
+      "feature": "stale-recovery",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"staleOnErrorMaxAgeSec": 5},"recovery": "allow"},
+      "steps": [
+        {"input": {"op": "seed","value": 1,"ageMs": 3000},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "policy","value": {"staleOnErrorMaxAgeSec": 2}},"expect": {}},
+        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "value","value": 1}],"classifications": 1,"loads": 1,"recovery": ["served"]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "pending"}],"reads": 2,"loaders": 2,"policyCalls": 2}},
+        {"input": {"op": "reject","loader": 1},"expect": {"calls": [{"status": "value","value": 1},{"status": "error","error": "source:1"}],"classifications": 2,"recovery": ["served","miss"]}}
+      ]
+    },
+    {
+      "name": "tracked stale retention cap does not clamp logical recovery age",
+      "feature": "stale-recovery",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"staleOnErrorMaxAgeSec": 7200},"tracked": true,"recovery": "allow"},
+      "steps": [
+        {"input": {"op": "seed","value": 1,"ageMs": 3600001},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "value","value": 1}],"classifications": 1,"loads": 1,"recovery": ["served"]}}
+      ]
+    },
+    {
+      "name": "shadow comparator equal outcome is diagnostic",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 60},"shadow": {"ramp": 100}},"comparator": "equal"},
+      "steps": [
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1}],"reads": 1,"loads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 2},"expect": {"loads": 2,"reads": 1,"comparisons": 1,"shadow": ["match"]}}
+      ]
+    },
+    {
+      "name": "shadow comparator unequal outcome is diagnostic",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 60},"shadow": {"ramp": 100}},"comparator": "unequal"},
+      "steps": [
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1}],"reads": 1,"loads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"loads": 2,"reads": 2,"comparisons": 1,"shadow": ["mismatch"]}}
+      ]
+    },
+    {
+      "name": "shadow comparator error outcome is diagnostic",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 60},"shadow": {"ramp": 100}},"comparator": "error"},
+      "steps": [
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1}],"reads": 1,"loads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"loads": 2,"reads": 1,"comparisons": 1,"shadow": ["comparison_error"]}}
+      ]
+    },
+    {
+      "name": "shadow requires an outcome observer",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 60},"shadow": {"ramp": 100}},"shadowHook": false},
+      "steps": [
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1}],"reads": 1,"loads": 1,"policyCalls": 1}}
+      ]
+    },
+    {
+      "name": "shadow global capacity drops another key instead of queueing",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 60},"shadow": {"ramp": 100}},"shadowMaxInFlight": 1},
+      "steps": [
+        {"input": {"op": "seed","key": "a","value": 1},"expect": {}},
+        {"input": {"op": "seed","key": "b","value": 2},"expect": {}},
+        {"input": {"op": "begin","key": "a"},"expect": {"calls": [{"status": "value","value": 1}],"reads": 1,"loads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "begin","key": "b"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2}],"reads": 2,"loads": 2,"policyCalls": 2,"shadow": ["dropped"]}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"loads": 3,"shadow": ["dropped","match"]}}
+      ]
+    },
+    {
+      "name": "shadow confirmation compares payload bytes after C0 freshness expires",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"shadow": {"ramp": 100}},"fallbackTimeoutMs": 5000},
+      "steps": [
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1}],"reads": 1,"loads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "advance","ms": 1000},"expect": {}},
+        {"input": {"op": "resolve","loader": 0,"value": 2},"expect": {"loads": 2,"reads": 2,"shadow": ["mismatch"]}}
+      ]
+    },
+    {
+      "name": "dark read does not delay caller source result",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 60},"shadow": {"ramp": 100},"ramp": {"remote": 0}}},
+      "steps": [
+        {"input": {"op": "faults","value": {"holdReads": true}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1}]}},
+        {"input": {"op": "release","effect": "read","index": 0},"expect": {"writes": 1,"dumps": 1,"writeTtls": [60000],"shadow": ["filled"]}}
+      ]
+    },
+    {
+      "name": "dark present undecodable value is never repaired",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 60},"shadow": {"ramp": 100},"ramp": {"remote": 0}}},
+      "steps": [
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "faults","value": {"load": true}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 2},"expect": {"calls": [{"status": "value","value": 2}],"loads": 1,"shadow": ["deserialization_error"]}}
+      ]
+    },
+    {
+      "name": "local expiry uses monotonic time across application wall rollback",
+      "feature": "local-cache",
+      "fixture": {"policy": {"ttlSec": {"local": 1}}},
+      "steps": [
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1}]}},
+        {"input": {"op": "advance","ms": 999},"expect": {}},
+        {"input": {"op": "shiftWall","ms": -5000},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1}],"policyCalls": 2}},
+        {"input": {"op": "advance","ms": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1},{"status": "pending"}],"loaders": 2,"policyCalls": 3}}
+      ]
+    },
+    {
+      "name": "tracked refill rechecks clock after serialization",
+      "feature": "invalidation",
+      "fixture": {"policy": {"ttlSec": {"remote": 1}},"tracked": true},
+      "steps": [
+        {"input": {"op": "invalidate"},"expect": {"invalidations": 1,"maintenance": ["ok"]}},
+        {"input": {"op": "advance","ms": 1},"expect": {}},
+        {"input": {"op": "faults","value": {"holdDumps": true}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"dumps": 1}},
+        {"input": {"op": "shiftWall","ms": -1},"expect": {}},
+        {"input": {"op": "release","effect": "dump","index": 0},"expect": {"calls": [{"status": "value","value": 1}]}}
+      ]
+    },
+    {
+      "name": "untracked read failure still permits active local publication",
+      "feature": "fail-open",
+      "fixture": {"policy": {"ttlSec": {"local": 1,"remote": 1}}},
+      "steps": [
+        {"input": {"op": "faults","value": {"read": true}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1}]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1}],"policyCalls": 2}}
+      ]
+    },
+    {
+      "name": "observer failures cannot change cache or source outcomes",
+      "feature": "fail-open",
+      "fixture": {"policy": {"ttlSec": {"remote": 1}},"observerFailure": true},
+      "steps": [
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1}],"writes": 1,"dumps": 1,"writeTtls": [1000]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1}],"policyCalls": 2,"reads": 2,"loads": 1}},
+        {"input": {"op": "faults","value": {"write": true}},"expect": {}},
+        {"input": {"op": "invalidate"},"expect": {"invalidations": 1,"maintenance": ["mutation_error"]}}
+      ]
+    },
+    {
+      "name": "key construction failure runs source with its enabled deadline",
+      "feature": "fail-open",
+      "fixture": {"policy": {"ttlSec": {"remote": 1}},"tracked": true},
+      "steps": [
+        {"input": {"op": "begin","key": "{invalid}"},"expect": {"calls": [{"status": "pending"}],"loaders": 1}},
+        {"input": {"op": "advance","ms": 10},"expect": {"calls": [{"status": "error","error": "timeout:0"}]}}
+      ]
+    },
+    {
+      "name": "missing remote adapter leaves valid local serving available",
+      "feature": "traversal",
+      "fixture": {"policy": {"ttlSec": {"local": 1,"remote": 1}},"remote": false},
+      "steps": [
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1}]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1}],"policyCalls": 2}}
+      ]
+    },
+    {
+      "name": "shadow source observes disabled caching scope",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 60},"shadow": {"ramp": 100}},"probeSourceScope": true},
+      "steps": [
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1}],"reads": 1,"loads": 1,"loaders": 1,"policyCalls": 1,"sourceScopes": [false]}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"loads": 2,"shadow": ["match"]}}
+      ]
+    },
+    {
+      "name": "independent local publication is last writer wins",
+      "feature": "coalescing",
+      "fixture": {"policy": {"ttlSec": {"local": 1},"coalesce": false}},
+      "steps": [
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"},{"status": "pending"}],"loaders": 2,"policyCalls": 2}},
+        {"input": {"op": "resolve","loader": 1,"value": 2},"expect": {"calls": [{"status": "pending"},{"status": "value","value": 2}]}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2}]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "value","value": 1}],"policyCalls": 3}}
+      ]
+    },
+    {
+      "name": "independent remote publication is last writer wins",
+      "feature": "coalescing",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"coalesce": false}},
+      "steps": [
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1,"reads": 1}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"},{"status": "pending"}],"loaders": 2,"policyCalls": 2,"reads": 2}},
+        {"input": {"op": "resolve","loader": 1,"value": 2},"expect": {"calls": [{"status": "pending"},{"status": "value","value": 2}],"writes": 1,"dumps": 1,"writeTtls": [1000]}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2}],"writes": 2,"dumps": 2,"writeTtls": [1000,1000]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "value","value": 1}],"policyCalls": 3,"reads": 3,"loads": 1}}
+      ]
+    },
+    {
+      "name": "inactive serving layers do not coalesce",
+      "feature": "coalescing",
+      "fixture": {"policy": {"ttlSec": {"local": 1,"remote": 1},"ramp": {"local": 0,"remote": 0}}},
+      "steps": [
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"},{"status": "pending"}],"loaders": 2,"policyCalls": 2}}
+      ]
+    },
+    {
+      "name": "shadow confirmation retains future dated payload for comparison",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 60},"shadow": {"ramp": 100}}},
+      "steps": [
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1}],"reads": 1,"loads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "seed","value": 1,"ageMs": -100},"expect": {}},
+        {"input": {"op": "resolve","loader": 0,"value": 2},"expect": {"reads": 2,"loads": 2,"shadow": ["mismatch"]}}
+      ]
+    },
+    {
+      "name": "local hit stops new shadow work",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"local": 60,"remote": 60},"shadow": {"ramp": 100}}},
+      "steps": [
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1}],"reads": 1,"loads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"loads": 2,"shadow": ["match"]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1}],"policyCalls": 2}}
+      ]
+    },
+    {
+      "name": "shadow timeout retains held dump capacity and ignores late completion",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 60},"shadow": {"ramp": 100},"ramp": {"remote": 0}}},
+      "steps": [
+        {"input": {"op": "faults","value": {"holdDumps": true}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1}],"dumps": 1}},
+        {"input": {"op": "advance","ms": 10},"expect": {"shadow": ["timeout"]}},
+        {"input": {"op": "begin","key": "b"},"expect": {"calls": [{"status": "value","value": 1},{"status": "pending"}],"loaders": 2,"policyCalls": 2,"shadow": ["timeout","dropped"]}},
+        {"input": {"op": "resolve","loader": 1,"value": 2},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2}]}},
+        {"input": {"op": "release","effect": "dump","index": 0},"expect": {}},
+        {"input": {"op": "faults","value": {"holdDumps": false,"holdWrites": false}},"expect": {}},
+        {"input": {"op": "begin","key": "b"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "pending"}],"loaders": 3,"reads": 2,"policyCalls": 3}},
+        {"input": {"op": "resolve","loader": 2,"value": 3},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "value","value": 3}],"dumps": 2,"writes": 1,"writeTtls": [60000],"shadow": ["timeout","dropped","filled"]}}
+      ]
+    },
+    {
+      "name": "shadow timeout retains held write capacity and ignores late completion",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 60},"shadow": {"ramp": 100},"ramp": {"remote": 0}}},
+      "steps": [
+        {"input": {"op": "faults","value": {"holdWrites": true}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1}],"dumps": 1,"writes": 1,"writeTtls": [60000]}},
+        {"input": {"op": "advance","ms": 10},"expect": {"shadow": ["timeout"]}},
+        {"input": {"op": "begin","key": "b"},"expect": {"calls": [{"status": "value","value": 1},{"status": "pending"}],"loaders": 2,"policyCalls": 2,"shadow": ["timeout","dropped"]}},
+        {"input": {"op": "resolve","loader": 1,"value": 2},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2}]}},
+        {"input": {"op": "release","effect": "write","index": 0},"expect": {}},
+        {"input": {"op": "faults","value": {"holdDumps": false,"holdWrites": false}},"expect": {}},
+        {"input": {"op": "begin","key": "b"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "pending"}],"loaders": 3,"reads": 2,"policyCalls": 3}},
+        {"input": {"op": "resolve","loader": 2,"value": 3},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "value","value": 3}],"dumps": 2,"writes": 2,"writeTtls": [60000,60000],"shadow": ["timeout","dropped","filled"]}}
+      ]
+    },
+    {
+      "name": "shadow read timeout retains raw read capacity",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 60},"shadow": {"ramp": 100},"ramp": {"remote": 0}},"readTimeoutMs": 5,"fallbackTimeoutMs": 100},
+      "steps": [
+        {"input": {"op": "faults","value": {"holdReads": true}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"reads": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1}]}},
+        {"input": {"op": "advance","ms": 5},"expect": {"shadow": ["redis_error"]}},
+        {"input": {"op": "begin","key": "b"},"expect": {"calls": [{"status": "value","value": 1},{"status": "pending"}],"loaders": 2,"policyCalls": 2,"shadow": ["redis_error","dropped"]}},
+        {"input": {"op": "resolve","loader": 1,"value": 2},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2}]}},
+        {"input": {"op": "release","effect": "read","index": 0},"expect": {}},
+        {"input": {"op": "faults","value": {"holdReads": false}},"expect": {}},
+        {"input": {"op": "begin","key": "b"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "pending"}],"loaders": 3,"reads": 2,"policyCalls": 3}},
+        {"input": {"op": "resolve","loader": 2,"value": 3},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "value","value": 3}],"dumps": 1,"writes": 1,"writeTtls": [60000],"shadow": ["redis_error","dropped","filled"]}}
+      ]
+    },
+    {
+      "name": "admitted tracked refill timestamps after serialization",
+      "feature": "invalidation",
+      "fixture": {"policy": {"ttlSec": {"remote": 1}},"tracked": true,"fallbackTimeoutMs": null},
+      "steps": [
+        {"input": {"op": "invalidate"},"expect": {"invalidations": 1,"maintenance": ["ok"]}},
+        {"input": {"op": "advance","ms": 1},"expect": {}},
+        {"input": {"op": "faults","value": {"holdDumps": true}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"dumps": 1}},
+        {"input": {"op": "advance","ms": 1000},"expect": {}},
+        {"input": {"op": "release","effect": "dump","index": 0},"expect": {"calls": [{"status": "value","value": 1}],"writes": 1,"writeTtls": [1000]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1}],"policyCalls": 2,"reads": 2,"loads": 1}}
+      ]
+    },
+    {
+      "name": "untracked Redis values ignore invalidation markers",
+      "feature": "invalidation",
+      "fixture": {"policy": {"ttlSec": {"remote": 1}}},
+      "steps": [
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "invalidate","futureBufferMs": 100},"expect": {"invalidations": 1,"maintenance": ["ok"]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1}],"policyCalls": 1,"reads": 1,"loads": 1}}
+      ]
+    },
+    {
+      "name": "absent result remains cacheable in local storage",
+      "feature": "traversal",
+      "fixture": {"policy": {"ttlSec": {"local": 1}}},
+      "steps": [
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0},"expect": {"calls": [{"status": "value","value": {"absent": true}}]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": {"absent": true}},{"status": "value","value": {"absent": true}}],"policyCalls": 2}}
+      ]
+    },
+    {
+      "name": "absent result remains cacheable in remote storage",
+      "feature": "traversal",
+      "fixture": {"policy": {"ttlSec": {"remote": 1}}},
+      "steps": [
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1,"reads": 1}},
+        {"input": {"op": "resolve","loader": 0},"expect": {"calls": [{"status": "value","value": {"absent": true}}],"writes": 1,"dumps": 1,"writeTtls": [1000]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": {"absent": true}},{"status": "value","value": {"absent": true}}],"policyCalls": 2,"reads": 2,"loads": 1}}
+      ]
+    },
+    {
+      "name": "literal undefined string is distinct from absent result",
+      "feature": "traversal",
+      "fixture": {"policy": {"ttlSec": {"local": 1}}},
+      "steps": [
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": "undefined"},"expect": {"calls": [{"status": "value","value": "undefined"}]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": "undefined"},{"status": "value","value": "undefined"}],"policyCalls": 2}}
+      ]
+    },
+    {
+      "name": "invalidation preserves acquired local value",
+      "feature": "invalidation",
+      "fixture": {"policy": {"ttlSec": {"local": 60,"remote": 60}},"tracked": true},
+      "steps": [
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1}],"reads": 1,"loads": 1,"policyCalls": 1}},
+        {"input": {"op": "invalidate"},"expect": {"invalidations": 1,"maintenance": ["ok"]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1}],"policyCalls": 2}}
+      ]
+    },
+    {
+      "name": "invalidation preserves acquired request value",
+      "feature": "invalidation",
+      "fixture": {"policy": {"ttlSec": {"remote": 60},"requestLocal": true},"tracked": true},
+      "steps": [
+        {"input": {"op": "openScope","id": "r"},"expect": {}},
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin","scope": "r"},"expect": {"calls": [{"status": "value","value": 1}],"reads": 1,"loads": 1,"policyCalls": 1}},
+        {"input": {"op": "invalidate"},"expect": {"invalidations": 1,"maintenance": ["ok"]}},
+        {"input": {"op": "begin","scope": "r"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1}],"policyCalls": 2}}
+      ]
+    },
+    {
+      "name": "uncoalesced callers have independent source deadlines",
+      "feature": "deadlines",
+      "fixture": {"policy": {"ttlSec": {"local": 1},"coalesce": false}},
+      "steps": [
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "advance","ms": 6},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"},{"status": "pending"}],"loaders": 2,"policyCalls": 2}},
+        {"input": {"op": "advance","ms": 4},"expect": {"calls": [{"status": "error","error": "timeout:0"},{"status": "pending"}]}},
+        {"input": {"op": "resolve","loader": 1,"value": 2},"expect": {"calls": [{"status": "error","error": "timeout:0"},{"status": "value","value": 2}]}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {}}
+      ]
+    },
+    {
+      "name": "policy resolution does not spend the source deadline",
+      "feature": "deadlines",
+      "fixture": {"policy": {"ttlSec": {"local": 1}}},
+      "steps": [
+        {"input": {"op": "faults","value": {"holdPolicies": true}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"policyCalls": 1}},
+        {"input": {"op": "advance","ms": 100},"expect": {}},
+        {"input": {"op": "release","effect": "policy","index": 0},"expect": {"loaders": 1}},
+        {"input": {"op": "advance","ms": 9},"expect": {}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1}]}}
+      ]
+    },
+    {
+      "name": "fresh decoding is outside the source deadline",
+      "feature": "deadlines",
+      "fixture": {"policy": {"ttlSec": {"remote": 1}}},
+      "steps": [
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "faults","value": {"holdLoads": true}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"policyCalls": 1,"reads": 1,"loads": 1}},
+        {"input": {"op": "advance","ms": 100},"expect": {}},
+        {"input": {"op": "release","effect": "load","index": 0},"expect": {"calls": [{"status": "value","value": 1}]}}
+      ]
+    },
+    {
+      "name": "observer failures preserve original source rejection",
+      "feature": "fail-open",
+      "fixture": {"policy": {"ttlSec": {"remote": 1}},"observerFailure": true},
+      "steps": [
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"policyCalls": 1,"reads": 1,"loaders": 1}},
+        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "error","error": "source:0"}]}}
+      ]
+    },
+    {
+      "name": "library source deadline defaults to sixty seconds",
+      "feature": "deadlines",
+      "fixture": {"policy": {"ttlSec": {"local": 1}},"fallbackTimeoutMs": "default"},
+      "steps": [
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"policyCalls": 1,"loaders": 1}},
+        {"input": {"op": "advance","ms": 59999},"expect": {}},
+        {"input": {"op": "advance","ms": 1},"expect": {"calls": [{"status": "error","error": "timeout:0"}]}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {}}
+      ]
+    },
+    {
+      "name": "shadow remains bounded when source deadline is disabled",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 60},"shadow": {"ramp": 100}},"fallbackTimeoutMs": null},
+      "steps": [
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1}],"policyCalls": 1,"reads": 1,"loads": 1,"loaders": 1}},
+        {"input": {"op": "advance","ms": 59999},"expect": {}},
+        {"input": {"op": "advance","ms": 1},"expect": {"shadow": ["timeout"]}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {}}
       ]
     }
   ]

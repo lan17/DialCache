@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 
 import * as valkeyGlide from "@valkey/valkey-glide";
 import { commandOptions, createClient } from "redis";
@@ -179,6 +180,42 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
     await admin?.quit();
     await container?.stop();
   });
+
+  // Fixture setup, the actual protocol transition, and observation share one
+  // atomic script so expiry checks are exact and do not depend on CI latency.
+  // Only the setup/observation wrapper is test-owned; the transition is the
+  // same exported Lua used by both production adapters.
+  const invalidationVectors = JSON.parse(readFileSync(new URL("../formal/invalidation-vectors.json", import.meta.url), "utf8")) as {
+    schemaVersion: number;
+    vectors: Array<{
+      name: string; existing: { kind: "absent" | "string" | "list"; value?: string; ttlMs?: number };
+      futureBufferMs: string; invalidatedAtMs: string;
+      expected: { error?: boolean; watermark: string; ttlMs: number };
+    }>;
+  };
+  for (const vector of invalidationVectors.vectors) {
+    it(`portable invalidation: ${vector.name}`, async () => {
+      if (admin === undefined) throw new Error("Redis test client did not start");
+      expect(invalidationVectors.schemaVersion).toBe(1);
+      const script = `
+redis.call("DEL", KEYS[1])
+if ARGV[3] == "string" then redis.call("SET", KEYS[1], ARGV[4]) end
+if ARGV[3] == "list" then redis.call("LPUSH", KEYS[1], "unrelated") end
+if tonumber(ARGV[5]) > 0 then redis.call("PEXPIRE", KEYS[1], ARGV[5]) end
+local result = (function()
+${INVALIDATE_CACHE_SCRIPT}
+end)()
+local status = result == 1 and "ok" or (type(result) == "table" and result.err and "error" or "unexpected_reply")
+return {status, redis.call("GET", KEYS[1]), redis.call("PTTL", KEYS[1])}
+`;
+      const observed = await admin.eval(script, {
+        keys: ["{portable-invalidation}#watermark"],
+        arguments: [vector.futureBufferMs, vector.invalidatedAtMs, vector.existing.kind,
+          vector.existing.value ?? "", String(vector.existing.ttlMs ?? -2)],
+      });
+      expect(observed).toEqual([vector.expected.error ? "error" : "ok", vector.expected.watermark, vector.expected.ttlMs]);
+    });
+  }
 
   describe.each(adapterKinds)("with $name", ({ kind }) => {
     let client: RedisAdapterHarness | undefined;

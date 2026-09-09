@@ -1,6 +1,5 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { performance } from "node:perf_hooks";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -69,8 +68,6 @@ const traces = loadTraces();
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-09-08T12:00:00Z"));
-  const origin = Date.now();
-  vi.spyOn(performance, "now").mockImplementation(() => Date.now() - origin);
 });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 

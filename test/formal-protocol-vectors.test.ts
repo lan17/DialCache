@@ -13,9 +13,10 @@ import {
   decodeTrackedRedisReadResult,
   encodeRedisFrame,
   isRedisReadMiss,
+  ceilSupportedCacheTtlMs,
 } from "../src/redis-protocol.js";
 
-import { decompressPayload, escapeRawPayload } from "../src/internal/compression.js";
+import { compressPayload, decompressPayload, escapeRawPayload } from "../src/internal/compression.js";
 import { deterministicRampSample, deterministicShadowRampSample } from "../src/internal/ramp.js";
 
 interface KeyVector {
@@ -64,6 +65,12 @@ interface DecodeVector {
 interface ProtocolVectors {
   readonly schemaVersion: number;
   readonly keyVectors: readonly KeyVector[];
+  readonly invalidKeyVectors: ReadonlyArray<{ name: string; input: KeyVector["input"] }>;
+  readonly durationVectors: ReadonlyArray<{ name: string; input: number; expected: number | null }>;
+  readonly compressionWriteVectors: ReadonlyArray<{
+    name: string; payloadType: "string" | "binary"; payloadUtf8?: string; payloadHex?: string;
+    thresholdBytes: number; outcome: string;
+  }>;
   readonly normalizeArgsVectors: readonly NormalizeArgsVector[];
   readonly frameVectors: readonly FrameVector[];
   readonly trackedDecodeVectors: readonly DecodeVector[];
@@ -86,8 +93,42 @@ const vectors = JSON.parse(
 
 describe("formal protocol conformance vectors", () => {
   it("keeps the vector schema version explicit", () => {
-    expect(vectors.schemaVersion).toBe(2);
+    expect(vectors.schemaVersion).toBe(3);
   });
+
+  it("requires a nonempty versioned invalidation corpus for integration replay", () => {
+    const corpus = JSON.parse(readFileSync(new URL("../formal/invalidation-vectors.json", import.meta.url), "utf8")) as {
+      schemaVersion: number; vectors: Array<{ name: string }>;
+    };
+    expect(corpus.schemaVersion).toBe(1);
+    expect(corpus.vectors.length).toBeGreaterThan(0);
+    expect(new Set(corpus.vectors.map(({ name }) => name)).size).toBe(corpus.vectors.length);
+  });
+
+  for (const vector of vectors.invalidKeyVectors) {
+    it(`rejects invalid identity: ${vector.name}`, () => {
+      expect(() => new DialCacheKey(vector.input)).toThrow();
+    });
+  }
+  for (const vector of vectors.durationVectors) {
+    it(`bounds physical duration: ${vector.name}`, () => {
+      if (vector.expected === null) expect(() => ceilSupportedCacheTtlMs(vector.input)).toThrow();
+      else expect(ceilSupportedCacheTtlMs(vector.input)).toBe(vector.expected);
+    });
+  }
+  for (const vector of vectors.compressionWriteVectors) {
+    it(`selects compression representation: ${vector.name}`, () => {
+      const raw = vector.payloadType === "string" ? vector.payloadUtf8! : Buffer.from(vector.payloadHex!, "hex");
+      const result = compressPayload(raw, { thresholdBytes: vector.thresholdBytes, level: 3 });
+      expect(result.outcome).toBe(vector.outcome);
+      expect(decompressPayload(result.payload).payload).toEqual(raw);
+      if (vector.outcome === "compressed") {
+        expect(result.storedBytes).toBeLessThan(result.originalBytes);
+        expect(Buffer.isBuffer(result.payload)).toBe(true);
+        expect(result.payload[0]).toBe(vector.payloadType === "string" ? 1 : 2);
+      } else expect(result.payload).toEqual(escapeRawPayload(raw));
+    });
+  }
 
   for (const vector of vectors.keyVectors) {
     it(`constructs ${vector.name}`, () => {
