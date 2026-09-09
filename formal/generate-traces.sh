@@ -40,14 +40,14 @@ if [ "${count}" -ne 256 ]; then
 fi
 
 generate_feature() {
-  local profile="$1" traces="$2" samples="$3"
-  shift 3
+  local profile="$1" traces="$2" samples="$3" steps="$4"
+  shift 4
   local output=".formal-traces/features/${profile}"
   rm -rf "${output}"
   mkdir -p "${output}"
   quint run "formal/dialcache-${profile}-conformance.qnt" \
     --mbt --backend=rust --n-threads=1 --seed="${QUINT_SEED:-0xd1a1ca}" \
-    --max-samples="${samples}" --max-steps=60 --n-traces="${traces}" \
+    --max-samples="${samples}" --max-steps="${steps}" --n-traces="${traces}" \
     --out-itf="${output}/trace_{seq}.itf.json" --verbosity=1 --invariants "$@"
   local count
   count=$(find "${output}" -name '*.itf.json' -type f | wc -l)
@@ -57,10 +57,11 @@ generate_feature() {
   fi
 }
 
-generate_feature recovery 128 1024 singleReadPerFlight pendingDecodeHasCall writesHaveRetention sourcesMatchEffects onlyRegisteredSourceOwnsDeadline
-generate_feature policy 256 1024 writesHaveRetention hitsSkipSource callsKeepSourceOutcome sourceCountsMatchEffects registeredSourcesArePending sharedSourcesKeepRegistration
+generate_feature recovery 128 1024 60 singleReadPerFlight pendingDecodeHasCall writesHaveRetention sourcesMatchEffects onlyRegisteredSourceOwnsDeadline
+generate_feature policy 256 1024 60 writesHaveRetention hitsSkipSource callsKeepSourceOutcome sourceCountsMatchEffects registeredSourcesArePending sharedSourcesKeepRegistration
 # C1 failures/supersession require several independently controlled effects.
 # Replay also requires these outcomes; trace count alone is insufficient.
-generate_feature shadow 256 1024 oneSourcePerCaller writesRequireMiss writesHaveRetention
-generate_feature scope 256 1024 closedScopesHaveNoMemo registeredSourcesArePending callsKeepSourceOutcome sourceCountsMatchEffects
-generate_feature admission 128 1024 capacityIsPerInstance oneJobPerIdentity registeredCallsArePending callsKeepAcquiredValue jobsAreDiagnostic effectsMatchRecords
+generate_feature shadow 256 1024 60 oneSourcePerCaller writesRequireMiss writesHaveRetention
+generate_feature scope 256 1024 60 closedScopesHaveNoMemo registeredSourcesArePending callsKeepSourceOutcome sourceCountsMatchEffects
+generate_feature admission 128 1024 60 capacityIsPerInstance oneJobPerIdentity registeredCallsArePending callsKeepAcquiredValue jobsAreDiagnostic effectsMatchRecords
+generate_feature layers 512 2048 80 sourceEffectsMatch capacityIsPerInstance closedScopesHaveNoMemo registeredSourcesArePending zeroCapacityHasNoLocalValues callsKeepSourceOutcome localMembershipMatchesLru

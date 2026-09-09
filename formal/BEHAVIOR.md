@@ -109,7 +109,7 @@ After every step, replay compares actual caller outcomes, loader/read/write/inva
 
 CI exports 256 traces from 2,048 samples, up to 60 transitions, and requires all actions plus eighteen witnesses covering abandoned source/read settlement, independent budgets, late settlement guards, application-owned phases, acquired snapshots across invalidation, failure-specific publication, clock rollback at the second fence check, and observer failure isolation. Thirteen deterministic model regressions anchor those rules. Sampling favors the narrow rollback-during-publication boundary as well as unrestricted clock changes; it does not restrict that behavior to the favored schedule.
 
-All seven generated profiles run on every PR alongside ordinary tests. Committed ITF smokes run without Quint. Failure diagnostics include trace, step, action, and both observations. The effects choice/state schema and scope/policy value choices changed with this specification revision; ports must select a matching revision and reject unsupported actions or choices. Behavioral scenario schema 2 is unchanged.
+All eight generated profiles run on every PR alongside ordinary tests. Committed ITF smokes run without Quint. Failure diagnostics include trace, step, action, and both observations. The effects choice/state schema and scope/policy value choices changed with this specification revision; ports must select a matching revision and reject unsupported actions or choices. Behavioral scenario schema 2 is unchanged.
 
 ## Generated feature profiles
 
@@ -119,6 +119,7 @@ Call observations encode pending as 0, fixture values 1/2 as 1/2, source errors 
 
 | Profile | Fixture and bounds | Generated coverage |
 | --- | --- | --- |
+| [Layers](./dialcache-layers-conformance.qnt) | Two instances, three persistent contexts, four identities, tracked/untracked and capacity 0/2 fixtures, twenty calls | Request/process sharing, layer precedence, LRU promotion/eviction, per-instance capacity, tracked local warming and operation-group invalidation |
 | [Admission](./dialcache-admission-conformance.qnt) | Tracked served remote hits, three keys, two instances, two shadow slots per instance, held reads/decodes, 10 ms job deadline, up to sixteen callers | Same-key deduplication, capacity drops, instance isolation, coalesced hits, policy snapshots, disabled detached sources, match/mismatch/supersession, capacity retained through timed-out source/decode/C1 work |
 | [Scope](./dialcache-scope-conformance.qnt) | Request-only, one key, two outer lifetimes, three nested contexts, one held provider reply, independently settled sources, no deadline, up to sixteen callers | Scope isolation/closure/replacement; nested and disabled contexts; reenablement; pending policy at closure; shared rejection/retry; request/coalescing policy changes; late source settlement |
 | [Recovery](./dialcache-recovery-conformance.qnt) | Tracked remote-only, F=1 s, M initially 5 s, 10 ms source deadline, held decoding, up to eight callers | Fresh/stale/future frames; F/M boundaries; allow/deny/failing classifier; coalesced followers; source success versus rejection/deadline; default timeout-only classification and explicit overrides; abandoned source settlement; age checks around decode; invalidation/replacement; read/decode failures; captured recovery policy |
@@ -178,7 +179,39 @@ DIALCACHE_FEATURE_TRACE_FILE=.formal-traces/features/recovery/trace_0.itf.json \
 
 Policy CI requires six additional concurrency witnesses: cross-key overlap, uncoalesced same-key overlap, a join after policy changes, reverse source settlement, one source settling multiple callers, and publication while another provider reply is held. Its committed smoke is a generated prefix containing a shared rejection and a later independent settlement; it also runs without Quint. Policy settlement choices changed with the concurrent profile, so replay these traces with the matching specification revision.
 
-The parent `scope/`, `recovery/`, `policy/`, `shadow/`, or `admission/` directory identifies the fixture. To replay a whole generated feature corpus, set `DIALCACHE_FEATURE_TRACE_DIR=.formal-traces/features` instead. Keep a failing trace with its profile directory when copying it.
+The parent `layers/`, `scope/`, `recovery/`, `policy/`, `shadow/`, or `admission/` directory identifies the fixture. To replay a whole generated feature corpus, set `DIALCACHE_FEATURE_TRACE_DIR=.formal-traces/features` instead. Keep a failing trace with its profile directory when copying it.
+
+## Generated layer-composition profile
+
+[`dialcache-layers-conformance.qnt`](./dialcache-layers-conformance.qnt) connects request memoization, process flights, local storage, Redis, and source publication. The separate scope and policy profiles isolate lifetime and policy history; composition is needed to test a request miss joining a process flight, per-instance storage shared across operations, and the publication consequences of tracked reads.
+
+The initial **input choice**, never expected model state, selects the fresh fixture:
+
+| `init` choice | Tracked Redis | Local capacity per instance |
+| --- | --- | --- |
+| 0 | No | 2 |
+| 1 | Yes | 2 |
+| 2 | No | 0 |
+| 3 | Yes | 0 |
+
+All modes enable request-local caching and 60-second local/remote TTLs, with no source deadline. Sources are held independently; other external effects settle at their action boundary. Two instances share Redis but own their local capacity and process flights. Persistent contexts 0 and 1 belong to instance 0; context 2 belongs to instance 1. Contexts 3 and 4 mean a fresh invocation scope on instance 0 and 1 respectively. This is an input-level fixture description, not a requirement to reproduce any host context API.
+
+| Action | Input mapping |
+| --- | --- |
+| `beginCall` | Choice 0..19: context `floor(choice/4)`, identity `choice%4`; identity maps to entity `floor(identity/2)` and operation `Layers0`/`Layers1` from `identity%2` |
+| `resolveLoader` | Choice 1..40 selects source `floor((choice-1)/2)` and value `1+(choice-1)%2` |
+| `rejectLoader` | Explicit pending source index 0..19 |
+| `closeScope` | Persistent context 0..2; captured handles remain usable for detached calls |
+| `policy` | 0 all layers; 1 disable request; 2 disable local; 3 disable remote; 4 request only; 5 no serving layers |
+| `seed` | Choice 0..7 selects identity `floor(choice/2)` and value `1+choice%2` |
+| `invalidate` | Entity 0/1, affecting both tracked operation variants |
+| `tick` | Advance 1 ms |
+
+At most twenty calls and eighty steps keep entries fresh throughout this profile; TTL boundaries remain in policy/scenario coverage. There are four logical identities, so a two-slot local cache can demonstrate read promotion and eviction, while request storage can exceed that capacity. Successful source completion publishes only to participating eligible layers. Tracked remote fallback skips direct local publication; an authoritative hit can warm local. Invalidation fences subsequent remote reads while acquired request/local values survive. Policy changes preserve admitted sources' publication decisions.
+
+CI exports 512 traces from 2,048 samples. Seventeen required witnesses include all four fixtures, cross-request process sharing, zero-capacity sharing/reload, uncapped request memoization, LRU promotion/eviction with later public probes, per-instance capacity, tracked read warming, local survival across invalidation, both operation variants fenced, and untracked reads ignoring markers. Private model records select reachability witnesses only; storage-related witnesses require actual replayed calls that probe their predictions. They never control the adapter or become implementation observations. Six deterministic model regressions anchor the same boundaries, and a committed generated smoke runs without Quint.
+
+This profile uses the same observations and public/environment inputs as the other feature profiles. It adds initial fixture choices; drivers must reject unsupported choices. Larger capacities, more scopes/instances, mixed deadline/recovery/shadow combinations, and expiry during LRU ordering are outside its generated bounds.
 
 ## Generated request-scope profile
 
@@ -232,7 +265,7 @@ The committed `admission-smoke.itf.json` retains actions, choices, and observati
 1. Implement the protocol/key/normalization/envelope vectors and the invalidation-transition vectors against the actual remote adapter/protocol.
 2. Implement these fixture operations using public cache operations and controlled external adapters.
 3. Run the committed scenarios and smoke traces.
-4. Replay the same core, pending-effect, scope, recovery, policy, shadow, and admission ITF corpora used by TypeScript.
+4. Replay the same core, pending-effect, scope, recovery, policy, shadow, admission, and layers ITF corpora used by TypeScript.
 5. Report passing behavior families, specification revision, seed, bounds, and tool versions.
 
 Passing covers the supplied observations and scenarios. It does not establish every feature interaction, fairness/liveness, arbitrary resource limits, or all external failures. A second-language driver has not yet validated the portability of this interface. See [`TEST-MAP.md`](./TEST-MAP.md) for the remaining boundaries.

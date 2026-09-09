@@ -8,7 +8,7 @@ import { itfInteger, record } from "./formal/itf.js";
 
 type Projected = Omit<Observation, "calls"> & { calls: number[] };
 type Action = { choices?: readonly number[]; input: (choice: number, observed: Observation) => Input };
-interface Profile { fixture: Fixture; setup: Input[]; actions: Record<string, Action> }
+interface Profile { fixture: Fixture | ((choice: number) => Fixture); initChoices?: readonly number[]; setup: Input[]; actions: Record<string, Action> }
 const settle = (op: "resolve" | "reject"): Action => ({
   ...(op === "resolve" ? { choices: [1, 2] } : {}),
   input: (choice, o) => op === "resolve" ? { op, loader: o.loaders - 1, value: choice } : { op, loader: o.loaders - 1 },
@@ -37,7 +37,32 @@ const overlays: Policy[] = [
   { ttlSec: { remote: 4 }, staleOnErrorMaxAgeSec: 0 },
 ];
 const policyOverlays = overlays.concat(overlays.map((overlay) => ({ ...overlay, coalesce: false })));
+const layerPolicies: Policy[] = [{}, { requestLocal: false }, { ramp: { local: 0 } },
+  { ramp: { remote: 0 } }, { ramp: { local: 0, remote: 0 } }, { requestLocal: false, ramp: { local: 0, remote: 0 } }];
 const profiles: Record<string, Profile> = {
+  layers: {
+    initChoices: [0, 1, 2, 3],
+    fixture: (choice) => ({ policy: { requestLocal: true, ttlSec: { local: 60, remote: 60 } },
+      tracked: choice % 2 === 1, localMaxSize: choice < 2 ? 2 : 0, fallbackTimeoutMs: null }),
+    setup: [0, 1, 2].map(scope => ({ op: "openScope", id: String(scope), instance: scope === 2 ? "1" : "0" })),
+    actions: {
+      beginCall: { choices: Array.from({ length: 20 }, (_, i) => i), input: (choice) => {
+        const context = Math.floor(choice / 4);
+        const identity = choice % 4;
+        return { op: "begin", key: String(Math.floor(identity / 2)), useCase: `Layers${identity % 2}`,
+          ...(context < 3 ? { scope: String(context) } : { instance: context === 4 ? "1" : "0" }) };
+      } },
+      resolveLoader: { choices: Array.from({ length: 40 }, (_, i) => i + 1),
+        input: (choice) => ({ op: "resolve", loader: Math.floor((choice - 1) / 2), value: (choice - 1) % 2 + 1 }) },
+      rejectLoader: { choices: Array.from({ length: 20 }, (_, i) => i), input: (choice) => ({ op: "reject", loader: choice }) },
+      closeScope: { choices: [0, 1, 2], input: (choice) => ({ op: "closeScope", id: String(choice) }) },
+      policy: { choices: [0, 1, 2, 3, 4, 5], input: (choice) => ({ op: "policy", value: layerPolicies[choice]! }) },
+      seed: { choices: [0, 1, 2, 3, 4, 5, 6, 7], input: (choice) => ({ op: "seed",
+        key: String(Math.floor(choice / 4)), useCase: `Layers${Math.floor(choice / 2) % 2}`, value: choice % 2 + 1 }) },
+      invalidate: { choices: [0, 1], input: (choice) => ({ op: "invalidate", key: String(choice) }) },
+      tick: { input: () => ({ op: "advance", ms: 1 }) },
+    },
+  },
   admission: {
     fixture: { policy: { ttlSec: { remote: 60 }, shadow: { ramp: 100 } }, tracked: true,
       shadowMaxInFlight: 2, readTimeoutMs: 1000, probeSourceScope: true },
@@ -151,7 +176,7 @@ function parseTrace(raw: unknown, path: string, profile: Profile): Trace {
     const picks = record(state["mbt::nondetPicks"], context);
     if (Object.keys(picks).join() !== "choice") throw new Error(`${context}: unsupported choices`);
     const pick = record(picks.choice, context);
-    const choices = profile.actions[action]?.choices;
+    const choices = action === "init" ? profile.initChoices : profile.actions[action]?.choices;
     let choice = 0;
     if (choices !== undefined) {
       if (pick.tag !== "Some") throw new Error(`${context}: missing choice`);
@@ -179,7 +204,7 @@ function project(o: Observation): Projected {
     : c.error.startsWith("source:") ? 3 : c.error.startsWith("timeout:") ? 4 : 10) };
 }
 async function replay(profile: Profile, trace: Trace) {
-  const driver = new BehaviorDriver(profile.fixture);
+  const driver = new BehaviorDriver(typeof profile.fixture === "function" ? profile.fixture(trace.steps[0]!.choice) : profile.fixture);
   try {
     for (const input of profile.setup) await driver.apply(input);
     for (const [i, step] of trace.steps.entries()) {
@@ -198,6 +223,104 @@ async function replay(profile: Profile, trace: Trace) {
 
 // These are reachability checks over replayed observations, not additional
 // implementation state. A large corpus must not pass by missing its hard paths.
+// Private predictions identify the schedules we sampled. A witness involving
+// stored state is counted only when a later public call probes that prediction.
+function layersWitnesses(traces: Trace[]): Set<string> {
+  const seen = new Set<string>();
+  const integer = (v: unknown) => itfInteger(v, "layers witness");
+  const list = (v: unknown): number[] => {
+    if (!Array.isArray(v)) throw new Error("Missing layers witness list");
+    return v.map(integer);
+  };
+  for (const trace of traces) {
+    const raw: unknown = JSON.parse(readFileSync(trace.path, "utf8"));
+    const states = record(raw, trace.path).states;
+    if (!Array.isArray(states)) throw new Error("Missing layers states");
+    const predictions = states.map(step => record(record(step, trace.path).s, trace.path));
+    const mode = trace.steps[0]!.choice;
+    seen.add(`fixture:${mode}`);
+    const calls: Array<{ context: number; identity: number }> = [];
+    const evicted = new Set<number>();
+    const promoted = new Set<number>();
+    const preserved = new Set<number>();
+    const published = new Set<number>();
+    const validated = new Set<number>();
+    const invalidated = new Set<number>();
+    const fenced = new Map<number, Set<number>>();
+    const survivingOther = new Set<number>();
+    for (const [i, step] of trace.steps.entries()) {
+      seen.add(`action:${step.action}`);
+      const previous = trace.steps[i - 1]?.expected;
+      if (previous === undefined) continue;
+      const o = step.expected;
+      const before = predictions[i - 1]!;
+      const after = predictions[i]!;
+      const ordersBefore = (before.lru as unknown[]).map(list);
+      const ordersAfter = (after.lru as unknown[]).map(list);
+      if (step.action === "invalidate") { invalidated.add(step.choice); fenced.set(step.choice, new Set()); }
+      if (step.action === "beginCall") {
+        const context = Math.floor(step.choice / 4), identity = step.choice % 4;
+        const instance = context === 2 || context === 4 ? 1 : 0;
+        const key = instance * 4 + identity;
+        const policy = integer(before.policy);
+        const returned = o.calls.at(-1)! > 0;
+        const starts = o.loaders > previous.loaders;
+        const read = o.reads > previous.reads;
+        const remoteHit = o.loads > previous.loads;
+        const localHit = context >= 3 && returned && !read && !starts && [0, 1, 3].includes(policy);
+        if (!starts && !returned && calls.some((call, j) => previous.calls[j] === 0 && call.identity === identity
+          && [0, 1].includes(call.context) && [0, 1].includes(context) && call.context !== context)
+          && !calls.some((call, j) => previous.calls[j] === 0 && call.identity === identity && call.context === context)) seen.add("request-misses-share-process-flight");
+        if (mode >= 2 && context >= 3 && !starts && !returned && [0, 1, 2, 3].includes(policy)) seen.add("zero-capacity-still-shares");
+        if (mode >= 2 && context >= 3 && policy === 3 && starts
+          && calls.some((call, j) => call.identity === identity && previous.calls[j]! > 0)) seen.add("zero-capacity-reloads");
+        if (mode >= 2 && context < 3 && policy === 4 && returned && !starts
+          && list(before.memo).slice(context * 4, context * 4 + 4).filter(v => v > 0).length > 2) seen.add("request-memo-exceeds-local-capacity");
+        if (localHit) {
+          if (ordersBefore[instance]!.length === 2 && ordersBefore[instance]![0] === identity) { seen.add("lru-read-promotes"); promoted.add(key); }
+          if (preserved.has(key)) seen.add("promoted-value-survives-eviction");
+          if (survivingOther.has(key)) seen.add("capacity-is-per-instance");
+          if (validated.has(key)) seen.add("validated-tracked-hit-warms-local");
+          if (mode % 2 === 1 && invalidated.has(Math.floor(identity / 2))) seen.add("invalidation-preserves-local-hit");
+        }
+        if (context >= 3 && policy === 3 && starts && evicted.has(key)) seen.add("lru-eviction-probed");
+        if (remoteHit && mode % 2 === 1 && published.has(key)) { seen.add("tracked-refill-needs-remote-validation"); validated.add(key); }
+        const entity = Math.floor(identity / 2);
+        const fencedBytes = list(before.remoteValues)[identity]! > 0 && list(before.created)[identity]! <= list(before.watermark)[entity]!;
+        if (fencedBytes && read && mode % 2 === 0 && remoteHit) seen.add("untracked-ignores-watermark");
+        if (fencedBytes && read && mode % 2 === 1 && starts) {
+          const variants = fenced.get(entity);
+          variants?.add(identity);
+          if (variants?.size === 2) seen.add("invalidation-fences-both-operations");
+        }
+        if (remoteHit) { survivingOther.delete(key); promoted.delete(key); preserved.delete(key); }
+        for (const pending of published) if (Math.floor(pending / 4) === instance) published.delete(pending);
+        calls.push({ context, identity });
+      }
+      if (step.action === "resolveLoader") {
+        const source = record((before.sources as unknown[])[Math.floor((step.choice - 1) / 2)], trace.path);
+        const key = integer(source.instance) * 4 + integer(source.key);
+        if (source.local === true) { survivingOther.delete(key); promoted.delete(key); preserved.delete(key); validated.delete(key); }
+        for (const pending of published) if (Math.floor(pending / 4) === integer(source.instance)) published.delete(pending);
+      }
+      if (step.action === "resolveLoader" && mode % 2 === 1 && o.writes > previous.writes) {
+        const source = record((before.sources as unknown[])[Math.floor((step.choice - 1) / 2)], trace.path);
+        const key = integer(source.instance) * 4 + integer(source.key);
+        if (list(before.localValues)[key] === 0) published.add(key);
+      }
+      for (const instance of [0, 1]) {
+        for (const key of ordersBefore[instance]!) if (!ordersAfter[instance]!.includes(key)) {
+          evicted.add(instance * 4 + key); promoted.delete(instance * 4 + key); preserved.delete(instance * 4 + key); validated.delete(instance * 4 + key);
+          for (const other of ordersBefore[1 - instance]!) survivingOther.add((1 - instance) * 4 + other);
+          for (const kept of ordersAfter[instance]!) if (promoted.has(instance * 4 + kept)) preserved.add(instance * 4 + kept);
+        }
+        for (const key of ordersAfter[instance]!) evicted.delete(instance * 4 + key);
+      }
+    }
+  }
+  return seen;
+}
+
 function admissionWitnesses(traces: Trace[]): Set<string> {
   const seen = new Set<string>();
   type Flight = { identity: number; selected: boolean; callers: number[] };
@@ -440,6 +563,7 @@ function policyWitnesses(traces: Trace[]): Set<string> {
 }
 
 function witnesses(name: string, traces: Trace[]): Set<string> {
+  if (name === "layers") return layersWitnesses(traces);
   if (name === "admission") return admissionWitnesses(traces);
   if (name === "scope") return scopeWitnesses(traces);
   if (name === "policy") return policyWitnesses(traces);
@@ -513,6 +637,11 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
   return seen;
 }
 const required: Record<string, string[]> = {
+  layers: ["fixture:0", "fixture:1", "fixture:2", "fixture:3", "request-misses-share-process-flight",
+    "zero-capacity-still-shares", "zero-capacity-reloads", "request-memo-exceeds-local-capacity", "lru-read-promotes",
+    "promoted-value-survives-eviction", "capacity-is-per-instance", "validated-tracked-hit-warms-local",
+    "invalidation-preserves-local-hit", "lru-eviction-probed", "tracked-refill-needs-remote-validation",
+    "untracked-ignores-watermark", "invalidation-fences-both-operations"],
   admission: ["outcome:match", "outcome:mismatch", "outcome:superseded", "outcome:source_error", "outcome:timeout", "outcome:dropped",
     "coalesced-hit-one-job", "accepted-shadow-policy", "other-instance-full-admission", "per-instance-deduplication",
     "readmission-after-timeout-drains", "duplicate-with-free-capacity", "full-capacity-drop",
@@ -572,5 +701,5 @@ for (const [name, profile] of Object.entries(profiles)) {
   });
 }
 if (single !== undefined && !Object.keys(profiles).some((name) => single.includes(`/${name}/`) || single.endsWith(`${name}-smoke.itf.json`))) {
-  throw new Error("Single feature trace must be inside its admission/scope/recovery/policy/shadow profile directory");
+  throw new Error("Single feature trace must be inside its layers/admission/scope/recovery/policy/shadow profile directory");
 }
