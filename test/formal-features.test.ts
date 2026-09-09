@@ -27,6 +27,7 @@ const overlays: Policy[] = [
   { staleOnErrorMaxAgeSec: 2 }, { ramp: { local: 0, remote: 0 } },
   { ttlSec: { remote: 4 }, staleOnErrorMaxAgeSec: 0 },
 ];
+const policyOverlays = overlays.concat(overlays.map((overlay) => ({ ...overlay, coalesce: false })));
 const profiles: Record<string, Profile> = {
   recovery: {
     fixture: { policy: { ttlSec: { remote: 1 }, staleOnErrorMaxAgeSec: 5 }, tracked: true, fallbackTimeoutMs: null },
@@ -48,8 +49,11 @@ const profiles: Record<string, Profile> = {
     setup: [{ op: "faults", value: { holdPolicies: true } }],
     actions: {
       beginCall: { choices: [0, 1], input: (choice) => ({ op: "begin", key: String(choice) }) },
-      releasePolicy: release("policy"), resolveLoader: settle("resolve"), rejectLoader: settle("reject"),
-      policy: { choices: overlays.map((_, i) => i), input: (choice) => ({ op: "policy", value: overlays[choice]! }) },
+      releasePolicy: release("policy"),
+      resolveLoader: { choices: Array.from({ length: 24 }, (_, i) => i + 1),
+        input: (choice) => ({ op: "resolve", loader: Math.floor((choice - 1) / 2), value: (choice - 1) % 2 + 1 }) },
+      rejectLoader: { choices: Array.from({ length: 12 }, (_, i) => i), input: (choice) => ({ op: "reject", loader: choice }) },
+      policy: { choices: policyOverlays.map((_, i) => i), input: (choice) => ({ op: "policy", value: policyOverlays[choice]! }) },
       advance: advance([1, 1000, 2000, 5000]), providerFault: fault("policy"),
       readFault: fault("read"), dumpFault: fault("dump"), writeFault: fault("write"),
     },
@@ -139,15 +143,73 @@ async function replay(profile: Profile, trace: Trace) {
 
 // These are reachability checks over replayed observations, not additional
 // implementation state. A large corpus must not pass by missing its hard paths.
+function policyWitnesses(traces: Trace[]): Set<string> {
+  const seen = new Set<string>();
+  for (const trace of traces) {
+    let policyEpoch = 0;
+    let overlay = 0;
+    let providerFailed = false;
+    let pendingPolicy = -1;
+    const keys: number[] = [];
+    const sources = new Map<number, { key: number; epoch: number }>();
+    for (const [i, step] of trace.steps.entries()) {
+      seen.add(`action:${step.action}`);
+      const o = step.expected;
+      const previous = trace.steps[i - 1]?.expected;
+      if (previous === undefined) continue;
+      if (step.action === "beginCall") {
+        keys.push(step.choice);
+        pendingPolicy = o.calls.length - 1;
+      }
+      if (step.action === "policy") {
+        if (overlay !== step.choice) policyEpoch++;
+        overlay = step.choice;
+      }
+      if (step.action === "providerFault") providerFailed = step.choice === 1;
+      if (step.action === "releasePolicy") {
+        const key = keys[pendingPolicy]!;
+        if (o.loaders > previous.loaders) {
+          for (const source of sources.values()) {
+            if (source.key !== key) seen.add("cross-key-overlap");
+            else if (overlay >= 10 && !providerFailed) seen.add("uncoalesced-same-key-overlap");
+          }
+          sources.set(o.loaders - 1, { key, epoch: policyEpoch });
+        } else if (o.calls[pendingPolicy] === 0) {
+          if ([...sources.values()].some((source) => source.key === key && source.epoch < policyEpoch)) {
+            seen.add("join-after-policy-change");
+          }
+        } else {
+          if (o.loads > previous.loads) seen.add("remote-hit");
+          if (o.reads === previous.reads) seen.add("local-hit");
+        }
+        pendingPolicy = -1;
+      }
+      if (step.action === "resolveLoader" || step.action === "rejectLoader") {
+        const loader = step.action === "resolveLoader" ? Math.floor((step.choice - 1) / 2) : step.choice;
+        const source = sources.get(loader);
+        if (source === undefined) throw new Error(`${trace.path}: missing accepted source ${loader}`);
+        if ([...sources.keys()].some((pending) => pending < loader)) seen.add("reverse-source-settlement");
+        if (previous.calls.filter((c, index) => c === 0 && o.calls[index] !== 0).length > 1) seen.add("coalesced-result");
+        if (o.writes > previous.writes) {
+          if (source.epoch < policyEpoch) seen.add("publication-after-policy-change");
+          if (pendingPolicy >= 0 && o.calls[pendingPolicy] === 0) seen.add("publication-during-policy-fetch");
+        }
+        sources.delete(loader);
+      }
+      for (const ttl of o.writeTtls) seen.add(`ttl:${ttl}`);
+    }
+  }
+  return seen;
+}
+
 function witnesses(name: string, traces: Trace[]): Set<string> {
+  if (name === "policy") return policyWitnesses(traces);
   const seen = new Set<string>();
   for (const trace of traces) {
     let invalidatedDuringFlight = false;
     let advancedDuringDecode = false;
     let decoding = false;
     let c0Released = false;
-    let changedPendingPolicy = false;
-    let sourcePending = false;
     let shadowTimedOut = false;
     for (const [i, step] of trace.steps.entries()) {
       seen.add(`action:${step.action}`);
@@ -157,7 +219,7 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
       for (const outcome of o.recovery.concat(o.shadow)) seen.add(`outcome:${outcome}`);
       if (step.action === "beginCall") {
         invalidatedDuringFlight = false; advancedDuringDecode = false; decoding = false;
-        c0Released = false; changedPendingPolicy = false; sourcePending = false; shadowTimedOut = false;
+        c0Released = false; shadowTimedOut = false;
       }
       if (name === "recovery") {
         if (step.action === "invalidate" && o.calls.includes(0)) invalidatedDuringFlight = true;
@@ -169,16 +231,6 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
           if (outcome === "served" && previous.calls.filter((c) => c === 0).length > 1) seen.add("coalesced-recovery");
           if (outcome === "miss" && step.action === "releaseLoad" && advancedDuringDecode) seen.add("expired-during-decode");
         }
-      }
-      if (name === "policy") {
-        if (step.action === "releasePolicy") {
-          sourcePending = o.loaders > previous.loaders;
-          if (o.loads > previous.loads) seen.add("remote-hit");
-          if (o.reads === previous.reads && o.loaders === previous.loaders) seen.add("local-hit");
-        }
-        if (step.action === "policy" && sourcePending) changedPendingPolicy = true;
-        if (step.action === "resolveLoader" && changedPendingPolicy && o.writes > previous.writes) seen.add("publication-after-policy-change");
-        for (const ttl of o.writeTtls) seen.add(`ttl:${ttl}`);
       }
       if (name === "shadow") {
         if (step.action === "releaseRead") {
@@ -195,7 +247,9 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
 }
 const required: Record<string, string[]> = {
   recovery: ["outcome:served", "outcome:miss", "outcome:deserialization_error", "retained-across-invalidation", "coalesced-recovery", "expired-during-decode"],
-  policy: ["local-hit", "remote-hit", "publication-after-policy-change", "ttl:2000", "ttl:4000", "ttl:5000"],
+  policy: ["local-hit", "remote-hit", "publication-after-policy-change", "ttl:2000", "ttl:4000", "ttl:5000",
+    "cross-key-overlap", "uncoalesced-same-key-overlap", "join-after-policy-change", "reverse-source-settlement",
+    "coalesced-result", "publication-during-policy-fetch"],
   shadow: ["match", "mismatch", "superseded", "confirmation_error", "redis_error", "source_error", "timeout", "deserialization_error", "filled", "fill_error", "fill_fenced"]
     .map((outcome) => `outcome:${outcome}`).concat(["c0-before-source", "source-before-c0", "write-completes-after-timeout"]),
 };

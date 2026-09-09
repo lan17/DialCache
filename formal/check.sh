@@ -108,7 +108,9 @@ check formal/dialcache-recovery-conformance.qnt \
 quint test formal/dialcache-recovery-conformance.qnt --backend=rust --max-samples=1
 
 check formal/dialcache-policy-conformance.qnt \
-  writesHaveRetention hitsSkipSource pendingCallHasPhase
+  writesHaveRetention hitsSkipSource callsKeepSourceOutcome sourceCountsMatchEffects registeredSourcesArePending sharedSourcesKeepRegistration
+
+quint test formal/dialcache-policy-conformance.qnt --backend=rust --max-samples=1
 
 check formal/dialcache-shadow-conformance.qnt \
   oneSourcePerCaller writesRequireMiss writesHaveRetention

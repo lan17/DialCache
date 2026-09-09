@@ -94,17 +94,17 @@ Schema version 2 adds scalar/absent value distinction, callback observations, in
 
 Three additional models share the existing driver and a common [observation record](./conformance-observations.qnt). Their ITF states contain `s.o` as the expected observation, `mbt::actionTaken`, and `mbt::nondetPicks.choice`. State outside `s.o` is model-private prediction, not an implementation observation. The choice is `Some` with a nonnegative ITF integer only on actions with choices below; otherwise it is `None` with the empty tuple. Reject unknown actions, unsupported choices, missing observation fields, and integer precision loss.
 
-Call observations encode pending as 0, fixture values 1/2 as 1/2, source errors as 3, and deadline errors as 4. Other outcomes fail replay. These profiles compare error categories; the fixed scenarios compare logical error identity. All other observation fields use the scenario vocabulary directly, including zero/empty fields. A driver must derive effect indices from its actual invocation counts. It must never use expected counters, phases, cached values, or fences to select an input or fabricate an observation.
+Call observations encode pending as 0, fixture values 1/2 as 1/2, source errors as 3, and deadline errors as 4. Other outcomes fail replay. These profiles compare error categories; the fixed scenarios compare logical error identity. All other observation fields use the scenario vocabulary directly, including zero/empty fields. A driver must use explicit action choices for selected source indices and its actual invocation counts for actions targeting the latest effect. It must never use expected counters, phases, cached values, or fences to select an input or fabricate an observation.
 
 | Profile | Fixture and bounds | Generated coverage |
 | --- | --- | --- |
 | [Recovery](./dialcache-recovery-conformance.qnt) | Tracked remote-only, F=1 s, M initially 5 s, no source deadline, held decoding, up to eight callers | Fresh/stale/future frames; F/M boundaries; allow/deny/failing classifier; coalesced followers; source success versus rejection; age checks around decode; invalidation/replacement; read/decode failures; captured recovery policy |
-| [Policy](./dialcache-policy-conformance.qnt) | Untracked local+remote, both TTLs initially 1 s, M=5 s, local capacity one, two keys, held provider, no source deadline, up to twelve callers | Independent runtime leaves; invalid local/remote TTL; provider/read/dump/write failure; policy acquisition and pending publication; local eviction/insertion TTL; logical Redis freshness versus physical retention |
+| [Policy](./dialcache-policy-conformance.qnt) | Untracked local+remote, both TTLs initially 1 s, M=5 s, local capacity one, two keys, one held provider reply, independently settled sources, no source deadline, up to twelve callers | Runtime coalescing on/off, per-source policy snapshots, shared versus independent same-key work, cross-key overlap and reverse settlement; independent runtime leaves; invalid local/remote TTL; provider/read/dump/write failure; policy acquisition and pending publication; local eviction/insertion TTL; logical Redis freshness versus physical retention |
 | [Shadow](./dialcache-shadow-conformance.qnt) | Tracked remote TTL=60 s, serving ramp=0, shadow ramp=100, caller/job deadline=10 ms, all read/load/dump/write effects held, up to eight callers | Independent dark C0/source settlement; captured payload decode; match/mismatch/C1 supersession; confirmation failure; conditional fills; source/read/decode/dump/write failure; deadline during held effects; late work cannot change emitted outcomes |
 
-Recovery begins with value 1 seeded at age 1,000 ms. Policy and shadow begin with empty storage. Every trace gets a fresh fixture. Shadow permits another call once its preceding source and owned job work have settled; cross-key capacity/drop behavior remains covered by fixed scenarios. Recovery leaves source time unbounded to explore age changes in seconds; timeout recovery and request memoization remain fixed scenarios. Policy serializes invocations while permitting changes during held provider/source work; cross-flight policy interactions retain scenario coverage.
+Recovery begins with value 1 seeded at age 1,000 ms. Policy and shadow begin with empty storage. Every trace gets a fresh fixture. Shadow permits another call once its preceding source and owned job work have settled; cross-key capacity/drop behavior remains covered by fixed scenarios. Recovery leaves source time unbounded to explore age changes in seconds; timeout recovery and request memoization remain fixed scenarios. Policy admits another invocation after the preceding provider reply is released, even while its source remains pending. Sources can settle in any order; same-key followers join only while their current policy permits sharing. A shared leader remains registered when an independent source publishes or fails. Request-scope combinations and held publication remain outside this policy profile.
 
-Common actions reuse the scenario inputs: `releaseRead/Load/Dump/Write/Policy` releases the most recently observed corresponding external effect; `readFault/loadFault/dumpFault/writeFault/providerFault` sets that failure flag from choice 0/1 (provider uses `faults.policy`). `rejectLoader` rejects the latest actual loader. No action reads or mutates the cache's internal state.
+Common actions reuse the scenario inputs: `releaseRead/Load/Dump/Write/Policy` releases the most recently observed corresponding external effect; `readFault/loadFault/dumpFault/writeFault/providerFault` sets that failure flag from choice 0/1 (provider uses `faults.policy`). Recovery/shadow `rejectLoader` rejects the latest actual loader; policy settlement selects an explicit source index. No action reads or mutates the cache's internal state.
 
 | Profile/action | Input mapping and allowed choices |
 | --- | --- |
@@ -116,7 +116,8 @@ Common actions reuse the scenario inputs: `releaseRead/Load/Dump/Write/Policy` r
 | Recovery `invalidate` | Public invalidation with zero future buffer |
 | Recovery `policy` | Set `staleOnErrorMaxAgeSec` to choice 2000/5000 divided by 1000 |
 | Policy `beginCall` | Key is string `"0"` or `"1"` from choice 0/1 |
-| Policy `resolveLoader` | Resolve latest loader with choice 1/2 |
+| Policy `resolveLoader` | Choice 1..24 encodes source index `floor((choice - 1) / 2)` and value `1 + (choice - 1) % 2`; only pending sources are generated |
+| Policy `rejectLoader` | Reject the explicitly selected source index, choice 0..11; only pending sources are generated |
 | Policy `advance` | Elapsed time choice 1, 1000, 2000, or 5000 ms |
 | Policy `policy` | Replace overlay using the numbered table below |
 | Shadow `beginCall` | Plain `begin` |
@@ -139,8 +140,9 @@ Policy overlay choices replace the entire runtime overlay; omitted leaves inheri
 | 7 | Recovery maximum age 2 s |
 | 8 | Both serving ramps 0 |
 | 9 | Remote TTL 4 s, recovery disabled (maximum age 0) |
+| 10..19 | Same overlay as choice minus 10, with `coalesce: false`; returning to 0..9 restores default sharing |
 
-Generation exports 64 recovery and 64 policy traces from 512 samples each, and 256 shadow traces from 1,024 samples, at most 60 transitions each. Actions are sampled in progress/environment groups so repeated environmental changes do not crowd out useful completion paths; C1 additionally focuses sampling on replacement, fencing, read failure, and time. This changes exploration frequency, not the allowed transition semantics.
+Generation exports 64 recovery traces from 512 samples, 128 policy traces from 1,024 samples, and 256 shadow traces from 1,024 samples, at most 60 transitions each. Actions are sampled in progress/environment groups so repeated environmental changes do not crowd out useful completion paths; C1 additionally focuses sampling on replacement, fencing, read failure, and time. This changes exploration frequency, not the allowed transition semantics.
 
 CI requires every named action, all three recovery outcomes, recovery across invalidation, coalesced recovery, age-out during decoding, local/remote hits, changed-policy publication, physical TTLs of 2/4/5 seconds, both C0/source orders, all eleven modeled shadow outcomes, and a write completing after shadow timeout. These witness checks fail if a configured corpus misses its promised paths. They establish occurrence only. The separate verification models still reason about wider abstractions such as shadow admission, and the portable fixed corpus covers additional binding-independent boundaries.
 
@@ -150,6 +152,8 @@ CI requires every named action, all three recovery outcomes, recovery across inv
 DIALCACHE_FEATURE_TRACE_FILE=.formal-traces/features/recovery/trace_0.itf.json \
   corepack pnpm exec vitest run test/formal-features.test.ts --coverage.enabled=false
 ```
+
+Policy CI requires six additional concurrency witnesses: cross-key overlap, uncoalesced same-key overlap, a join after policy changes, reverse source settlement, one source settling multiple callers, and publication while another provider reply is held. Its committed smoke is a generated prefix containing a shared rejection and a later independent settlement; it also runs without Quint. Policy settlement choices changed with the concurrent profile, so replay these traces with the matching specification revision.
 
 The parent `recovery/`, `policy/`, or `shadow/` directory identifies the fixture. To replay a whole generated feature corpus, set `DIALCACHE_FEATURE_TRACE_DIR=.formal-traces/features` instead. Keep a failing trace with its profile directory when copying it.
 

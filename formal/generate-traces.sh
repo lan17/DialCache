@@ -58,7 +58,7 @@ generate_feature() {
 }
 
 generate_feature recovery 64 512 singleReadPerFlight pendingDecodeHasCall writesHaveRetention
-generate_feature policy 64 512 writesHaveRetention hitsSkipSource pendingCallHasPhase
+generate_feature policy 128 1024 writesHaveRetention hitsSkipSource callsKeepSourceOutcome sourceCountsMatchEffects registeredSourcesArePending sharedSourcesKeepRegistration
 # C1 failures/supersession require several independently controlled effects.
 # Replay also requires these outcomes; trace count alone is insufficient.
 generate_feature shadow 256 1024 oneSourcePerCaller writesRequireMiss writesHaveRetention
