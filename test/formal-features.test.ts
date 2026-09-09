@@ -101,13 +101,14 @@ const profiles: Record<string, Profile> = {
   },
   recovery: {
     diagnosticAge: "recoveryAge",
-    initChoices: [0, 1, 2, 3],
-    fixture: (choice) => ({ policy: { ttlSec: { remote: 1 }, staleOnErrorMaxAgeSec: 5 }, tracked: true, fallbackTimeoutMs: 10,
-      recovery: (["default", "allow", "deny", "error"] as const)[choice]!, observe: ["recoveryAge", "coalesced", "error"] }),
-    setup: [{ op: "seed", value: 1, ageMs: 1000 }, { op: "faults", value: { holdLoads: true } }],
+    initChoices: Array.from({ length: 8 }, (_, i) => i),
+    fixture: (choice) => ({ policy: { ttlSec: { remote: 1 }, staleOnErrorMaxAgeSec: 5, requestLocal: choice >= 4 }, tracked: true, fallbackTimeoutMs: 10,
+      recovery: (["default", "allow", "deny", "error"] as const)[choice % 4]!, observe: ["recoveryAge", "coalesced", "error"] }),
+    setup: [{ op: "openScope", id: "0" }, { op: "openScope", id: "1" }, { op: "seed", value: 1, ageMs: 1000 }, { op: "faults", value: { holdLoads: true } }],
     actions: {
-      beginCall: { choices: [0, 1, 2, 3], input: (choice) => ({ op: "begin", ...(choice === 3 ? {} : { recovery: (["allow", "deny", "error"] as const)[choice]! }) }) },
-      joinCall: { input: () => ({ op: "begin" }) },
+      beginCall: { choices: Array.from({ length: 8 }, (_, i) => i), input: (choice) => ({ op: "begin", scope: String(Math.floor(choice / 4)), ...(choice % 4 === 3 ? {} : { recovery: (["allow", "deny", "error"] as const)[choice % 4]! }) }) },
+      joinCall: { choices: [0, 1], input: (choice) => ({ op: "begin", scope: String(choice) }) },
+      closeScope: { choices: [0, 1], input: (choice) => ({ op: "closeScope", id: String(choice) }) },
       resolveLoader: { choices: [0, 1, 2, 3, 4, 5, 6, 7], input: (choice) => ({ op: "resolve", loader: choice, value: 2 }) },
       rejectLoader: { choices: [0, 1, 2, 3, 4, 5, 6, 7], input: (choice) => ({ op: "reject", loader: choice }) },
       rejectTimeout: { choices: [0, 1, 2, 3, 4, 5, 6, 7], input: (choice) => ({ op: "reject", loader: choice, error: "timeout" }) },
@@ -663,12 +664,56 @@ function policyWitnesses(traces: Trace[]): Set<string> {
   return seen;
 }
 
+function recoveryScopeWitnesses(traces: Trace[]): Set<string> {
+  const seen = new Set<string>();
+  for (const trace of traces) {
+    const states = (JSON.parse(readFileSync(trace.path, "utf8")).states as unknown[]).map(state => record(record(state, trace.path).s, trace.path));
+    const memo = new Map<number, { value: number; group: number }>();
+    const probes = new Map<number, Set<number>>();
+    let closedDuringDecode = false, probeAfterClosedRecovery = false;
+    const integer = (value: unknown) => itfInteger(value, trace.path);
+    for (const [i, step] of trace.steps.entries()) {
+      if (i === 0 || trace.steps[0]!.choice < 4) continue;
+      const before = states[i - 1]!, after = states[i]!;
+      const previous = trace.steps[i - 1]!.expected, o = step.expected;
+      if (step.action === "closeScope") {
+        memo.delete(step.choice);
+        if (integer(before.phase) === 3 && (before.attached as boolean[])[step.choice]) closedDuringDecode = true;
+      }
+      if (step.action === "releaseLoad" && o.recovery.length > previous.recovery.length && o.recovery.at(-1) === "served") {
+        const group = o.recovery.length;
+        for (const scope of [0, 1]) if ((before.attached as boolean[])[scope] && !(before.closed as boolean[])[scope]) {
+          memo.set(scope, { value: integer((after.memo as unknown[])[scope]), group });
+        }
+        if (closedDuringDecode) probeAfterClosedRecovery = true;
+        closedDuringDecode = false;
+      } else if (step.action === "releaseLoad" || (step.action === "resolveLoader" && o.calls.some((v, j) => v > 0 && previous.calls[j] === 0))) {
+        for (const scope of [0, 1]) if ((before.attached as boolean[])[scope]) memo.delete(scope);
+      }
+      if (step.action === "releaseLoad") closedDuringDecode = false;
+      if (step.action === "beginCall" || step.action === "joinCall") {
+        const scope = step.action === "beginCall" ? Math.floor(step.choice / 4) : step.choice;
+        const recovered = memo.get(scope);
+        if (recovered !== undefined && o.calls.at(-1) === recovered.value && o.reads === previous.reads && o.loaders === previous.loaders) {
+          seen.add("recovered-value-request-hit");
+          const groupProbes = probes.get(recovered.group) ?? new Set<number>();
+          groupProbes.add(scope); probes.set(recovered.group, groupProbes);
+          if (groupProbes.size === 2) seen.add("recovery-memoizes-both-requests");
+        }
+        if (probeAfterClosedRecovery && o.reads > previous.reads) { seen.add("closed-recovery-does-not-memoize-another-scope"); probeAfterClosedRecovery = false; }
+      }
+      if (step.action === "joinCall" && step.diagnostics!.coalesced.length > trace.steps[i - 1]!.diagnostics!.coalesced.length && step.diagnostics!.coalesced.at(-1) === "request_local") seen.add("request-follower-shares-recovery-flight");
+    }
+  }
+  return seen;
+}
+
 function witnesses(name: string, traces: Trace[]): Set<string> {
   if (name === "layers") return layersWitnesses(traces);
   if (name === "admission") return admissionWitnesses(traces);
   if (name === "scope") return scopeWitnesses(traces);
   if (name === "policy") return policyWitnesses(traces);
-  const seen = name === "recovery" ? clockWitnesses("recovery", traces) : new Set<string>();
+  const seen = name === "recovery" ? new Set([...clockWitnesses("recovery", traces), ...recoveryScopeWitnesses(traces)]) : new Set<string>();
   for (const trace of traces) {
     let invalidatedDuringFlight = false;
     let advancedDuringDecode = false;
@@ -700,8 +745,8 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
         c0Released = false; shadowTimedOut = false;
       }
       if (name === "recovery") {
-        if (step.action === "beginCall") { operationClassifier = step.choice; recoveryErrorCount = step.diagnostics!.fallbackErrors.length; }
-        if (step.action === "beginCall") classifier = step.choice === 3 ? [3, 0, 1, 2][trace.steps[0]!.choice]! : step.choice;
+        if (step.action === "beginCall") { operationClassifier = step.choice % 4; recoveryErrorCount = step.diagnostics!.fallbackErrors.length; }
+        if (step.action === "beginCall") classifier = step.choice % 4 === 3 ? [3, 0, 1, 2][trace.steps[0]!.choice % 4]! : step.choice % 4;
         if (o.loaders > previous.loaders) {
           if (abandoned.size > 0) seen.add("recovery-abandoned-overlap");
           currentSource = o.loaders - 1; decoding = false;
@@ -713,11 +758,11 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
           recoveryCause = "deadline";
           if (classifier === 1 && o.calls.includes(4)) {
             if (operationClassifier === 1) seen.add("explicit-denial-overrides-timeout");
-            if (operationClassifier === 3 && trace.steps[0]!.choice === 2) seen.add("instance-denial-overrides-timeout-default");
+            if (operationClassifier === 3 && trace.steps[0]!.choice % 4 === 2) seen.add("instance-denial-overrides-timeout-default");
           }
         }
         if (rejected && !abandoned.has(step.choice)) {
-          const instance = trace.steps[0]!.choice;
+          const instance = trace.steps[0]!.choice % 4;
           if (instance === 1 && operationClassifier === 1 && o.calls.some((c, j) => c === 3 && previous.calls[j] === 0)) seen.add("operation-denial-overrides-instance-allow");
           if (instance === 3 && operationClassifier === 3 && o.calls.some((c, j) => c === 3 && previous.calls[j] === 0)) seen.add("instance-classifier-error-preserves-source");
           recoveryCause = step.action === "rejectTimeout" ? "propagated-timeout" : "source-error";
@@ -729,8 +774,8 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
         if (o.loads > previous.loads && step.action !== "beginCall") decoding = true;
         if (o.recovery.length > previous.recovery.length && o.recovery.at(-1) === "served") {
           if (step.diagnostics!.fallbackErrors.length === recoveryErrorCount + 1 && step.diagnostics!.fallbackErrors.at(-1) === "remote") seen.add("recovery-keeps-source-failure-trail");
-          if (trace.steps[0]!.choice === 1 && operationClassifier === 3 && recoveryCause === "source-error") seen.add("instance-allow-recovers-ordinary-error");
-          if (trace.steps[0]!.choice === 2 && operationClassifier === 0) seen.add("operation-allow-overrides-instance-denial");
+          if (trace.steps[0]!.choice % 4 === 1 && operationClassifier === 3 && recoveryCause === "source-error") seen.add("instance-allow-recovers-ordinary-error");
+          if (trace.steps[0]!.choice % 4 === 2 && operationClassifier === 0) seen.add("operation-allow-overrides-instance-denial");
         }
         if (o.recovery.length > previous.recovery.length && o.recovery.at(-1) === "served" && classifier === 3) {
           seen.add(`default-recovers-${recoveryCause}`);
@@ -790,7 +835,7 @@ const required: Record<string, string[]> = {
     "replacement-miss-after-late-source", "independent-scope-overlap", "uncoalesced-scope-overlap",
     "memo-hit", "nested-memo-hit", "reenabled-memo-hit", "memo-after-nested-close", "memo-after-policy-bypass",
     "shared-rejection", "source-settles-after-close", ...[5, 6, 7, 8, 9].map(code => `memo-value:${code}`)],
-  recovery: ["recovery-keeps-source-failure-trail", "rollback-rejects-retained-future", "outcome:served", "outcome:miss", "outcome:deserialization_error", "retained-across-invalidation", "coalesced-recovery", "expired-during-decode",
+  recovery: ["fixture:4", "fixture:5", "fixture:6", "fixture:7", "recovered-value-request-hit", "recovery-memoizes-both-requests", "closed-recovery-does-not-memoize-another-scope", "request-follower-shares-recovery-flight", "recovery-keeps-source-failure-trail", "rollback-rejects-retained-future", "outcome:served", "outcome:miss", "outcome:deserialization_error", "retained-across-invalidation", "coalesced-recovery", "expired-during-decode",
     "default-denies-ordinary-error", "default-recovers-deadline", "default-recovers-propagated-timeout",
     "explicit-denial-overrides-timeout", "recovery-abandoned-overlap", "recovery-late-source-settles", "recovery-failure-preserves-timeout", "fixture:0", "fixture:1", "fixture:2", "fixture:3",
     "operation-denial-overrides-instance-allow", "instance-classifier-error-preserves-source", "instance-denial-overrides-timeout-default",
