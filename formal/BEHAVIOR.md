@@ -86,25 +86,26 @@ ITF contains `mbt::actionTaken`, expected state `s`, and `mbt::nondetPicks.loade
 
 After every step, replay compares actual caller outcomes, loader/read/write/invalidation/serializer/provider counts, and physical write TTLs. Model caller codes are 0 pending, 1 value 1, 2 original source error, 3 timeout. Error identity is checked by the deterministic scenarios. CI also requires every action and four witnesses in the generated corpus: abandoned loader/new-flight overlap, accepted publication after deadline, a delayed fenced write, and settlement after deadline before timer delivery. These checks establish occurrence, not exhaustive schedule coverage.
 
-All five generated profiles run on every PR alongside ordinary tests. Normal CI replays the committed [`effects-smoke.itf.json`](./effects-smoke.itf.json) without installing Quint. Failure diagnostics include scenario/trace, step, input/action, and both observations.
+All six generated profiles run on every PR alongside ordinary tests. Normal CI replays the committed [`effects-smoke.itf.json`](./effects-smoke.itf.json) without installing Quint. Failure diagnostics include scenario/trace, step, input/action, and both observations.
 
-Schema version 2 adds scalar/absent value distinction, callback observations, instance/operation identities, and independent wall-clock steps. Old drivers must reject this unsupported schema rather than ignoring inputs. The core/effects ITF schemas are unchanged; their projected observations exclude these additional fixture probes. The new feature profiles compare the entire observation using the call encoding below. See [`CONTRACTS.md`](./CONTRACTS.md) for the portable/binding boundary.
+Schema version 2 adds scalar/absent value distinction, callback observations, instance/operation identities, and independent wall-clock steps. Old drivers must reject this unsupported schema rather than ignoring inputs. The core/effects ITF schemas are unchanged; their projected observations exclude these additional fixture probes. The feature profiles compare the entire observation using the call encoding below. See [`CONTRACTS.md`](./CONTRACTS.md) for the portable/binding boundary.
 
-## Generated recovery, policy, and shadow profiles
+## Generated scope, recovery, policy, and shadow profiles
 
-Three additional models share the existing driver and a common [observation record](./conformance-observations.qnt). Their ITF states contain `s.o` as the expected observation, `mbt::actionTaken`, and `mbt::nondetPicks.choice`. State outside `s.o` is model-private prediction, not an implementation observation. The choice is `Some` with a nonnegative ITF integer only on actions with choices below; otherwise it is `None` with the empty tuple. Reject unknown actions, unsupported choices, missing observation fields, and integer precision loss.
+Four additional models share the existing driver and a common [observation record](./conformance-observations.qnt). Their ITF states contain `s.o` as the expected observation, `mbt::actionTaken`, and `mbt::nondetPicks.choice`. State outside `s.o` is model-private prediction, not an implementation observation. The choice is `Some` with a nonnegative ITF integer only on actions with choices below; otherwise it is `None` with the empty tuple. Reject unknown actions, unsupported choices, missing observation fields, and integer precision loss.
 
 Call observations encode pending as 0, fixture values 1/2 as 1/2, source errors as 3, and deadline errors as 4. Other outcomes fail replay. These profiles compare error categories; the fixed scenarios compare logical error identity. All other observation fields use the scenario vocabulary directly, including zero/empty fields. A driver must use explicit action choices for selected source indices and its actual invocation counts for actions targeting the latest effect. It must never use expected counters, phases, cached values, or fences to select an input or fabricate an observation.
 
 | Profile | Fixture and bounds | Generated coverage |
 | --- | --- | --- |
+| [Scope](./dialcache-scope-conformance.qnt) | Request-only, one key, two outer lifetimes, three nested contexts, one held provider reply, independently settled sources, no deadline, up to sixteen callers | Scope isolation/closure/replacement; nested and disabled contexts; reenablement; pending policy at closure; shared rejection/retry; request/coalescing policy changes; late source settlement |
 | [Recovery](./dialcache-recovery-conformance.qnt) | Tracked remote-only, F=1 s, M initially 5 s, no source deadline, held decoding, up to eight callers | Fresh/stale/future frames; F/M boundaries; allow/deny/failing classifier; coalesced followers; source success versus rejection; age checks around decode; invalidation/replacement; read/decode failures; captured recovery policy |
 | [Policy](./dialcache-policy-conformance.qnt) | Untracked local+remote, both TTLs initially 1 s, M=5 s, local capacity one, two keys, one held provider reply, independently settled sources, no source deadline, up to twelve callers | Runtime coalescing on/off, per-source policy snapshots, shared versus independent same-key work, cross-key overlap and reverse settlement; independent runtime leaves; invalid local/remote TTL; provider/read/dump/write failure; policy acquisition and pending publication; local eviction/insertion TTL; logical Redis freshness versus physical retention |
 | [Shadow](./dialcache-shadow-conformance.qnt) | Tracked remote TTL=60 s, serving ramp=0, shadow ramp=100, caller/job deadline=10 ms, all read/load/dump/write effects held, up to eight callers | Independent dark C0/source settlement; captured payload decode; match/mismatch/C1 supersession; confirmation failure; conditional fills; source/read/decode/dump/write failure; deadline during held effects; late work cannot change emitted outcomes |
 
-Recovery begins with value 1 seeded at age 1,000 ms. Policy and shadow begin with empty storage. Every trace gets a fresh fixture. Shadow permits another call once its preceding source and owned job work have settled; cross-key capacity/drop behavior remains covered by fixed scenarios. Recovery leaves source time unbounded to explore age changes in seconds; timeout recovery and request memoization remain fixed scenarios. Policy admits another invocation after the preceding provider reply is released, even while its source remains pending. Sources can settle in any order; same-key followers join only while their current policy permits sharing. A shared leader remains registered when an independent source publishes or fails. Request-scope combinations and held publication remain outside this policy profile.
+Recovery begins with value 1 seeded at age 1,000 ms. Policy and shadow begin with empty storage. Every trace gets a fresh fixture. Shadow permits another call once its preceding source and owned job work have settled; cross-key capacity/drop behavior remains covered by fixed scenarios. Recovery leaves source time unbounded to explore age changes in seconds; timeout recovery and request memoization remain fixed scenarios. Policy admits another invocation after the preceding provider reply is released, even while its source remains pending. Sources can settle in any order; same-key followers join only while their current policy permits sharing. A shared leader remains registered when an independent source publishes or fails. Request scopes have their own generated profile; held publication remains outside this policy profile.
 
-Common actions reuse the scenario inputs: `releaseRead/Load/Dump/Write/Policy` releases the most recently observed corresponding external effect; `readFault/loadFault/dumpFault/writeFault/providerFault` sets that failure flag from choice 0/1 (provider uses `faults.policy`). Recovery/shadow `rejectLoader` rejects the latest actual loader; policy settlement selects an explicit source index. No action reads or mutates the cache's internal state.
+Common actions reuse the scenario inputs: `releaseRead/Load/Dump/Write/Policy` releases the most recently observed corresponding external effect; `readFault/loadFault/dumpFault/writeFault/providerFault` sets that failure flag from choice 0/1 (provider uses `faults.policy`). Recovery/shadow `rejectLoader` rejects the latest actual loader; scope/policy settlement selects an explicit source index. No action reads or mutates the cache's internal state.
 
 | Profile/action | Input mapping and allowed choices |
 | --- | --- |
@@ -155,14 +156,37 @@ DIALCACHE_FEATURE_TRACE_FILE=.formal-traces/features/recovery/trace_0.itf.json \
 
 Policy CI requires six additional concurrency witnesses: cross-key overlap, uncoalesced same-key overlap, a join after policy changes, reverse source settlement, one source settling multiple callers, and publication while another provider reply is held. Its committed smoke is a generated prefix containing a shared rejection and a later independent settlement; it also runs without Quint. Policy settlement choices changed with the concurrent profile, so replay these traces with the matching specification revision.
 
-The parent `recovery/`, `policy/`, or `shadow/` directory identifies the fixture. To replay a whole generated feature corpus, set `DIALCACHE_FEATURE_TRACE_DIR=.formal-traces/features` instead. Keep a failing trace with its profile directory when copying it.
+The parent `scope/`, `recovery/`, `policy/`, or `shadow/` directory identifies the fixture. To replay a whole generated feature corpus, set `DIALCACHE_FEATURE_TRACE_DIR=.formal-traces/features` instead. Keep a failing trace with its profile directory when copying it.
+
+## Generated request-scope profile
+
+The scope profile reuses the same `openScope`, `closeScope`, `begin`, policy, and source-settlement inputs. It adds no public API or driver mechanism. It starts with enabled outer context `0`, held provider replies, request-local caching on, no shared storage, and the source-scope probe enabled. Its single key isolates request-lifetime semantics from the storage/TTL state in the policy profile.
+
+| Context choice | Meaning |
+| --- | --- |
+| 0 | Initially open outer request |
+| 1 | A separately opened outer request; it may overlap or replace 0 |
+| 2 | Enabled context nested under 0 |
+| 3 | Disabled context nested under 0 |
+| 4 | Enabled context nested under 3, reusing 0's live memo lifetime |
+| 5 | Outside every request; only usable by `beginCall` |
+
+`openScope` chooses 1..4, each at most once. Nested contexts open only while outer 0 is live, and 4 requires 3 to exist. `closeScope` chooses any opened, unfinished context 0..4 after the first call. Closing 0/1 clears that lifetime's memo and registered flights. Closing nested contexts does not end the outer lifetime. Captured contexts remain usable by later calls: closed outer contexts are pass-through, while completed nested contexts still belong to a live outer lifetime. These are context ownership rules; ports need not reproduce AsyncLocalStorage or Promise scheduling.
+
+`beginCall` chooses context 0..5. Enabled calls wait for `releasePolicy`; disabled/detached/outside calls immediately start their own source without a provider invocation. At most one provider response is held, but any accepted sources may overlap. `policy` choice 0 inherits request caching and coalescing; 1 sets `requestLocal: false`; 2 sets `coalesce: false` while retaining memoization. Settlements select actual loader indices: `resolveLoader` choice 1..32 encodes index `floor((choice - 1) / 2)` and value `1 + (choice - 1) % 2`; `rejectLoader` chooses index 0..15. Only pending sources are generated.
+
+The model predicts memo lifetime and flight ownership. Replay observes actual caller values/errors, source enablement, and provider/source invocations; subsequent calls establish hits or misses. A late source may return to its original caller after closure, but cannot populate a replacement memo. Coalescing admission precedes reading a memo populated by another independently accepted source.
+
+Generation exports 128 traces from 1,024 samples, up to 60 transitions, with at most sixteen calls. Sampling keeps closure reachable while favoring useful call progress; no fairness or exhaustive context-tree claim is made. CI requires every action plus fourteen witnesses: disabled/detached bypass, policy reply after closure, rejection/retry, shared rejection, source settlement after closure, replacement miss after that settlement, independent scope overlap, uncoalesced same-scope overlap, memo hits, nested/reenabled hits, memo reuse after nested closure, and memo reuse after policy bypass. Four deterministic model regressions anchor closure, replacement, nested/disabled reuse, and rejection/retry.
+
+The committed `scope-smoke.itf.json` is a 22-state generated prefix with old-source settlement after closure followed by a replacement-scope miss. It runs without Quint in ordinary CI. Request deadlines, recovery, shared-process flights, arbitrary context trees, and more than two outer lifetimes remain covered separately or outside this generated profile.
 
 ## Port workflow and limits
 
 1. Implement the protocol/key/normalization/envelope vectors and the invalidation-transition vectors against the actual remote adapter/protocol.
 2. Implement these fixture operations using public cache operations and controlled external adapters.
 3. Run the committed scenarios and smoke traces.
-4. Replay the same core, pending-effect, recovery, policy, and shadow ITF corpora used by TypeScript.
+4. Replay the same core, pending-effect, scope, recovery, policy, and shadow ITF corpora used by TypeScript.
 5. Report passing behavior families, specification revision, seed, bounds, and tool versions.
 
 Passing covers the supplied observations and scenarios. It does not establish every feature interaction, fairness/liveness, arbitrary resource limits, or all external failures. A second-language driver has not yet validated the portability of this interface. See [`TEST-MAP.md`](./TEST-MAP.md) for the remaining boundaries.

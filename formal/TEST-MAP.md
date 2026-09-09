@@ -8,12 +8,12 @@ See [`CONTRACTS.md`](./CONTRACTS.md) for the rule inventory, named executable ev
 
 ## Coverage matrix
 
-“Model” means an abstraction of the named rules, not every case in the linked test file. “Core”, “Effects”, “Recovery”, “Policy”, and “Shadow” are the five generated ITF profiles; they do not imply direct replay of the seven verification models. “Scenarios” means the committed language-neutral `behavioral-scenarios.json` corpus executed against TypeScript. A dash means no portable coverage of that kind. All model runs are bounded samples.
+“Model” means an abstraction of the named rules, not every case in the linked test file. “Core”, “Effects”, “Recovery”, “Policy”, “Scope”, and “Shadow” are the six generated ITF profiles; they do not imply direct replay of the seven verification models. “Scenarios” means the committed language-neutral `behavioral-scenarios.json` corpus executed against TypeScript. A dash means no portable coverage of that kind. All model runs are bounded samples.
 
 | Behavior | Ordinary implementation evidence | Verification model | Generated MBT | Portable scenarios | Protocol vectors | Remaining boundary/gap |
 | --- | --- | --- | --- | --- | --- | --- |
 | Disabled pass-through, traversal/publication | `dialcache-local`, `dialcache-redis` | Core | Core: outside and individual layers; Effects: remote flights | Disabled skips provider; untracked source fills layers; tracked source suppresses local until a Redis hit | — | More multi-layer/failure interleavings |
-| Request-local lifetime and memoization | `dialcache-request-local` | Core: nested/disabled scopes and publication ownership | Core: sequential pair | Nested re-enable/disable and siblings, rejected-flight retry, undefined, scope isolation, closure/replacement, delayed policy resolution | — | Arbitrary context trees and cross-instance/process-flight combinations |
+| Request-local lifetime and memoization | `dialcache-request-local` | Core: nested/disabled scopes and publication ownership | Core: sequential pair; Scope: nested/disabled contexts, closure/replacement, held policy, independent sources and memo reuse | Nested re-enable/disable and siblings, rejected-flight retry, undefined, scope isolation, closure/replacement, delayed policy resolution | — | Arbitrary context trees and cross-instance/process-flight combinations |
 | Process-local persistence, TTL, LRU | `dialcache-local`, `dialcache-config-ramp` | Core/policy: insertion identity and TTL history | Core: repeated calls; Policy: two-key local eviction, insertion TTL and remote freshness | Exact TTL boundary, LRU capacity, preserved insertion TTL/ramp changes | — | Rollback, zero capacity, and cross-operation capacity have portable scenarios; generated one-slot eviction; larger LRU orderings remain fixed scenarios |
 | Coalescing and isolation | `dialcache-coalescing` | Coalescing: admission/followers | Core: pair; Effects: pending followers and cleanup; Policy: same-key sharing/bypass, cross-key overlap, reverse settlement | Different keys, coalescing off, shared source/timeout identity, request retries | — | Multiple keys/instances and layered flights have fixed scenarios; generated exploration remains narrower |
 | Loader deadlines and abandoned work | `dialcache-liveness` | Coalescing: timeout/late settlement/publication | Effects: abandonment overlap, late resolve/reject, publication beyond deadline | Shared error identity, retry while old loader runs, late settlement before timer delivery | — | No fairness/eventual-progress proof; more cancellation/clock combinations |
@@ -36,10 +36,10 @@ Test basenames above refer to `test/*.test.ts`; real/cluster evidence includes `
 - `invalidation-vectors.json` adds 19 portable state transitions exercised against the actual exported protocol on both Redis and Valkey, including watermark repair/persistence/retention and invalid-argument atomicity. This checks the requested protocol state; deployment preservation remains an assumption.
 
 - [`CONFORMANCE.md`](./CONFORMANCE.md) defines the original core profile. [`BEHAVIOR.md`](./BEHAVIOR.md) defines the shared portable scenario/feature driver, action boundaries, clocks, and independently observed outputs.
-- `formal/generate-traces.sh` exports 32 core, 32 pending-effect, 64 recovery, 128 policy, and 256 shadow ITF traces. Three replay test files execute every action through public calls. Effects and feature CI require named actions plus explicit race/outcome witnesses, rather than relying on trace count alone.
+- `formal/generate-traces.sh` exports 32 core, 32 pending-effect, 128 scope, 64 recovery, 128 policy, and 256 shadow ITF traces. Three replay test files execute every action through public calls. Effects and feature CI require named actions plus explicit race/outcome witnesses, rather than relying on trace count alone.
 - The 174 portable scenarios cover 12 behavior families. After every input, the driver compares all outputs/effect counts against assertion-side expected patches. Expected fields never enter execution.
 - Model cache-presence, fence, and flight fields predict later behavior but are excluded from implementation projection. Negative checks remove local caching/coalescing/recovery or acknowledge lost writes/invalidation and require an observable failure.
-- All five committed ITF smokes, all feature scenarios, and all protocol vectors run in ordinary TypeScript CI without Quint. Parser checks reject empty/unknown/misplaced traces, missing choices/observations, unsupported arguments, and unsafe integers.
+- All six committed ITF smokes, all feature scenarios, and all protocol vectors run in ordinary TypeScript CI without Quint. Parser checks reject empty/unknown/misplaced traces, missing choices/observations, unsupported arguments, and unsafe integers.
 - CI artifacts retain model counterexamples and generated replay inputs. Failures include file/scenario, step/action, and both observations. Automatic shrinking is not implemented.
 - Deterministic model tests exercise previously weak assertions: changing an existing TTL or reversing fence/encoding precedence must violate its invariant. Reachability witnesses also cover policy mutation during a pending invocation, replacement request scopes, and dark reads before source acceptance.
 
@@ -96,6 +96,12 @@ inside enable  -> request-local -> process-local -> Redis -> source
 ```
 
 A successful lower result can memoize request-local only while the outer scope remains live. A tracked Redis fallback does not publish directly to process-local; a Redis read failure does not authorize a Redis refill.
+
+## `dialcache-scope-conformance.qnt`
+
+Generated request-only schedules use the existing public driver, one key, two outer lifetimes, three nested contexts, and up to sixteen callers. They interleave scope closure with held policy resolution and independently settled sources, including disabled/re-enabled contexts, memo bypass, and sharing changes. CI requires all actions and fourteen observable witnesses; see [`BEHAVIOR.md`](./BEHAVIOR.md#generated-request-scope-profile) for exact input mappings and bounds.
+
+The source oracle is `test/dialcache-request-local.test.ts`, `test/dialcache-coalescing.test.ts`, `src/context.ts`, and the request-local path in `src/dialcache.ts`. Four deterministic model regressions check replacement isolation after late completion, uncached policy continuation after closure, nested closure/disabled bypass preserving the outer memo, and shared rejection followed by retry. The generated smoke retains the closure/replacement schedule. Source deadlines, request/process sharing, and recovery during scope closure retain their separate fixed-scenario coverage; arbitrary context trees are not generated.
 
 ## `dialcache-runtime-policy.qnt`
 
@@ -282,6 +288,15 @@ This prevents the formal suite from becoming a second implementation that silent
 
 ## Generated coverage measurement
 
-On this expansion, using Vitest 4.1.10/V8 with the same 26 source files and identical instrumentation maps, the original 256 four-seed core/effects traces reached 449/1,022 branches (43.93%). Adding the 384 configured recovery/policy/shadow traces reached 646/1,022 (63.20%). In `src/dialcache.ts`, generated coverage grew from 170/409 (41.56%) to 299/409 (73.10%). The expanded generated corpus also reached two post-read shadow deadline branches absent from the 660-test non-formal unit baseline.
+With the request-scope profile, fresh Vitest 4.1.10/V8 measurements use identical source files and instrumentation maps for all four cohorts. The denominator includes 26 source files, including adapters and exporters; integration/Lua execution and negative harness/parser checks are excluded.
 
-These are execution-coverage measurements for the measured corpora, not percentages of behavioral completeness. Native adapters/exporters and TypeScript binding obligations remain implementation tests. Integration/Lua execution is excluded from this V8 comparison. Fixed scenarios retain broader request-scope, multi-instance, callback-precedence, and shadow-admission coverage than the generated profiles.
+| Corpus | Library lines | Library branches | Main engine lines | Main engine branches |
+| --- | --- | --- | --- | --- |
+| 660 ordinary unit tests | 97.96% | 97.06% | 96.16% | 95.35% |
+| 640 configured generated traces | 66.43% | 65.06% | 78.35% | 75.06% |
+| 174 scenarios + 102 protocol cases + 3 schema checks | 70.78% | 70.74% | 80.80% | 77.26% |
+| Generated + portable (919 positive tests) | 72.61% | 74.26% | 81.84% | 79.95% |
+
+Before the scope profile, the 512 generated traces reached 63.79% library branches and 73.59% main-engine branches under the same instrumentation. The scope profile raises these to 65.06% and 75.06%. The combined positive formal corpus reaches five branch outcomes absent from ordinary tests: three shadow deadline outcomes and two key-name comparator outcomes. These are execution paths, not five bugs or new semantic obligations.
+
+Coverage measures code execution, not assertion strength or the percentage of behavior formalized. Generated schedules can improve race testing while revisiting existing branches. Fixed scenarios retain broader cross-feature request-scope, multi-instance, callback-precedence, and shadow-admission coverage. Native adapters/exporters and TypeScript binding obligations still need ordinary tests.

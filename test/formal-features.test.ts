@@ -29,6 +29,23 @@ const overlays: Policy[] = [
 ];
 const policyOverlays = overlays.concat(overlays.map((overlay) => ({ ...overlay, coalesce: false })));
 const profiles: Record<string, Profile> = {
+  scope: {
+    fixture: { policy: { requestLocal: true }, remote: false, fallbackTimeoutMs: null, probeSourceScope: true },
+    setup: [{ op: "openScope", id: "0" }, { op: "faults", value: { holdPolicies: true } }],
+    actions: {
+      openScope: { choices: [1, 2, 3, 4], input: (choice) => ({ op: "openScope", id: String(choice),
+        ...(choice === 1 ? {} : { parent: choice === 4 ? "3" : "0" }), ...(choice === 3 ? { disabled: true } : {}) }) },
+      closeScope: { choices: [0, 1, 2, 3, 4], input: (choice) => ({ op: "closeScope", id: String(choice) }) },
+      beginCall: { choices: [0, 1, 2, 3, 4, 5], input: (choice) => ({ op: "begin",
+        ...(choice === 5 ? { outside: true } : { scope: String(choice) }) }) },
+      releasePolicy: release("policy"),
+      resolveLoader: { choices: Array.from({ length: 32 }, (_, i) => i + 1),
+        input: (choice) => ({ op: "resolve", loader: Math.floor((choice - 1) / 2), value: (choice - 1) % 2 + 1 }) },
+      rejectLoader: { choices: Array.from({ length: 16 }, (_, i) => i), input: (choice) => ({ op: "reject", loader: choice }) },
+      policy: { choices: [0, 1, 2], input: (choice) => ({ op: "policy",
+        value: choice === 0 ? {} : choice === 1 ? { requestLocal: false } : { coalesce: false } }) },
+    },
+  },
   recovery: {
     fixture: { policy: { ttlSec: { remote: 1 }, staleOnErrorMaxAgeSec: 5 }, tracked: true, fallbackTimeoutMs: null },
     setup: [{ op: "seed", value: 1, ageMs: 1000 }, { op: "faults", value: { holdLoads: true } }],
@@ -143,6 +160,91 @@ async function replay(profile: Profile, trace: Trace) {
 
 // These are reachability checks over replayed observations, not additional
 // implementation state. A large corpus must not pass by missing its hard paths.
+function scopeWitnesses(traces: Trace[]): Set<string> {
+  const seen = new Set<string>();
+  for (const trace of traces) {
+    const closed = new Set<number>();
+    const rejected = new Set<number>();
+    const published = new Map<number, number>();
+    const bypassed = new Map<number, number>();
+    const sources = new Map<number, { scope: number; memoizing: boolean; shared: boolean }>();
+    const scopes: number[] = [];
+    let lateOuterSource = false;
+    let policyCall = -1;
+    let overlay = 0;
+    const holder = (scope: number) => scope === 1 ? 1 : 0;
+    for (const [i, step] of trace.steps.entries()) {
+      seen.add(`action:${step.action}`);
+      const o = step.expected;
+      const previous = trace.steps[i - 1]?.expected;
+      if (previous === undefined) continue;
+      if (step.action === "policy") overlay = step.choice;
+      if (step.action === "closeScope") {
+        closed.add(step.choice);
+        if (step.choice < 2) { published.delete(step.choice); bypassed.delete(step.choice); }
+      }
+      if (step.action === "beginCall") {
+        const scope = step.choice;
+        scopes.push(scope);
+        if (o.policyCalls > previous.policyCalls) policyCall = scopes.length - 1;
+        else if (o.loaders > previous.loaders) {
+          sources.set(o.loaders - 1, { scope, memoizing: false, shared: false });
+          if (scope === 3) seen.add("disabled-bypass");
+          if (scope < 5 && closed.has(holder(scope))) seen.add("detached-bypass");
+        }
+      }
+      if (step.action === "releasePolicy") {
+        const scope = scopes[policyCall]!;
+        const lifetime = holder(scope);
+        if (o.loaders > previous.loaders) {
+          const active = o.sourceScopes.at(-1)!;
+          const memoizing = active && overlay !== 1;
+          if (!active) seen.add("policy-reply-after-close");
+          if (memoizing) {
+            if (rejected.has(lifetime)) seen.add("rejected-flight-retry");
+            if (scope === 1 && lateOuterSource) seen.add("replacement-miss-after-late-source");
+            for (const source of sources.values()) {
+              if (!source.memoizing) continue;
+              if (holder(source.scope) !== lifetime) seen.add("independent-scope-overlap");
+              else if (overlay === 2) seen.add("uncoalesced-scope-overlap");
+            }
+          }
+          if (active && overlay === 1 && published.has(lifetime)) bypassed.set(lifetime, published.get(lifetime)!);
+          sources.set(o.loaders - 1, { scope, memoizing, shared: memoizing && overlay === 0 });
+        } else if (o.calls[policyCall] !== 0) {
+          seen.add("memo-hit");
+          if (scope === 2) seen.add("nested-memo-hit");
+          if (scope === 4) seen.add("reenabled-memo-hit");
+          if (closed.has(2) && lifetime === 0) seen.add("memo-after-nested-close");
+          if (bypassed.get(lifetime) === o.calls[policyCall]) seen.add("memo-after-policy-bypass");
+        }
+        policyCall = -1;
+      }
+      if (step.action === "resolveLoader" || step.action === "rejectLoader") {
+        const loader = step.action === "resolveLoader" ? Math.floor((step.choice - 1) / 2) : step.choice;
+        const source = sources.get(loader);
+        if (source === undefined) throw new Error(`${trace.path}: missing source ${loader}`);
+        const completed = o.calls.filter((value, index) => value !== 0 && previous.calls[index] === 0);
+        const lifetime = holder(source.scope);
+        if (step.action === "rejectLoader") {
+          if (source.shared) rejected.add(lifetime);
+          if (completed.length > 1) seen.add("shared-rejection");
+        } else if (source.memoizing) {
+          if (closed.has(lifetime)) {
+            seen.add("source-settles-after-close");
+            if (lifetime === 0) lateOuterSource = true;
+          } else {
+            published.set(lifetime, completed[0]!);
+            bypassed.delete(lifetime);
+          }
+        }
+        sources.delete(loader);
+      }
+    }
+  }
+  return seen;
+}
+
 function policyWitnesses(traces: Trace[]): Set<string> {
   const seen = new Set<string>();
   for (const trace of traces) {
@@ -203,6 +305,7 @@ function policyWitnesses(traces: Trace[]): Set<string> {
 }
 
 function witnesses(name: string, traces: Trace[]): Set<string> {
+  if (name === "scope") return scopeWitnesses(traces);
   if (name === "policy") return policyWitnesses(traces);
   const seen = new Set<string>();
   for (const trace of traces) {
@@ -246,6 +349,10 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
   return seen;
 }
 const required: Record<string, string[]> = {
+  scope: ["disabled-bypass", "detached-bypass", "policy-reply-after-close", "rejected-flight-retry",
+    "replacement-miss-after-late-source", "independent-scope-overlap", "uncoalesced-scope-overlap",
+    "memo-hit", "nested-memo-hit", "reenabled-memo-hit", "memo-after-nested-close", "memo-after-policy-bypass",
+    "shared-rejection", "source-settles-after-close"],
   recovery: ["outcome:served", "outcome:miss", "outcome:deserialization_error", "retained-across-invalidation", "coalesced-recovery", "expired-during-decode"],
   policy: ["local-hit", "remote-hit", "publication-after-policy-change", "ttl:2000", "ttl:4000", "ttl:5000",
     "cross-key-overlap", "uncoalesced-same-key-overlap", "join-after-policy-change", "reverse-source-settlement",
@@ -264,6 +371,7 @@ for (const [name, profile] of Object.entries(profiles)) {
     : directory === undefined ? [resolve(`formal/${name}-smoke.itf.json`)]
     : readdirSync(resolve(directory, name)).filter((file) => file.endsWith(".itf.json")).sort().map((file) => resolve(directory, name, file));
   if (single === undefined && paths.length === 0) throw new Error(`No ${name} traces found`);
+  if (paths.length === 0) continue;
   const traces = paths.map((path) => parseTrace(JSON.parse(readFileSync(path, "utf8")), path, profile));
   describe(`generated ${name} conformance`, () => {
     for (const trace of traces) it(`replays ${trace.path}`, async () => { await replay(profile, trace); });
@@ -280,7 +388,7 @@ for (const [name, profile] of Object.entries(profiles)) {
         raw.states[0].s.o.reads = { "#bigint": "0" };
         raw.states[1]["mbt::actionTaken"] = "unknown";
         expect(() => parseTrace(raw, "unknown-action", profile)).toThrow(/unknown/);
-        raw.states[1]["mbt::actionTaken"] = "advance";
+        raw.states[1]["mbt::actionTaken"] = Object.keys(profile.actions).find((action) => profile.actions[action]!.choices !== undefined)!;
         raw.states[1]["mbt::nondetPicks"].choice = { tag: "Some", value: { "#bigint": "9007199254740993" } };
         expect(() => parseTrace(raw, "unsafe-choice", profile)).toThrow(/safe ITF integer/);
       });
@@ -293,5 +401,5 @@ for (const [name, profile] of Object.entries(profiles)) {
   });
 }
 if (single !== undefined && !Object.keys(profiles).some((name) => single.includes(`/${name}/`) || single.endsWith(`${name}-smoke.itf.json`))) {
-  throw new Error("Single feature trace must be inside its recovery/policy/shadow profile directory");
+  throw new Error("Single feature trace must be inside its scope/recovery/policy/shadow profile directory");
 }

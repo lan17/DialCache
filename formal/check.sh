@@ -114,3 +114,7 @@ quint test formal/dialcache-policy-conformance.qnt --backend=rust --max-samples=
 
 check formal/dialcache-shadow-conformance.qnt \
   oneSourcePerCaller writesRequireMiss writesHaveRetention
+
+check formal/dialcache-scope-conformance.qnt \
+  closedScopesHaveNoMemo registeredSourcesArePending callsKeepSourceOutcome sourceCountsMatchEffects
+quint test formal/dialcache-scope-conformance.qnt --backend=rust --max-samples=1
