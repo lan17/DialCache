@@ -37,7 +37,7 @@ export interface Fixture {
   observe?: EventName[];
 }
 export interface Faults {
-  read: boolean; write: boolean; dump: boolean; load: boolean; policy: boolean;
+  read: boolean; write: boolean; dump: boolean; load: boolean; policy: boolean; observer: boolean;
   holdReads: boolean; holdWrites: boolean; holdDumps: boolean; holdLoads: boolean; holdPolicies: boolean;
 }
 export type Input =
@@ -105,7 +105,7 @@ export class BehaviorDriver {
   private readonly scopes = new Map<string, Scope>();
   private readonly effects = { read: new Map<number, Gate>(), write: new Map<number, Gate>(),
     dump: new Map<number, Gate>(), load: new Map<number, Gate>(), policy: new Map<number, Gate>() };
-  private readonly faults: Faults = { read: false, write: false, dump: false, load: false, policy: false,
+  private readonly faults: Faults = { read: false, write: false, dump: false, load: false, policy: false, observer: false,
     holdReads: false, holdWrites: false, holdDumps: false, holdLoads: false, holdPolicies: false };
   private runtimePolicy: Policy | null = {};
   private wallOffset = 0;
@@ -157,7 +157,7 @@ export class BehaviorDriver {
     const existing = this.instances.get(id);
     if (existing !== undefined) return existing;
     const fixture = this.fixture;
-    const noop = () => { if (fixture.observerFailure) throw new Error("Controlled observer failure"); };
+    const noop = () => { if (fixture.observerFailure || this.faults.observer) throw new Error("Controlled observer failure"); };
     const cache = new DialCache({
       ...(fixture.remote === false ? {} : { redis: { client: this.redis, readTimeoutMs: fixture.readTimeoutMs ?? 50, compression: false as const } }),
       ...(fixture.localMaxSize === undefined ? {} : { localMaxSize: fixture.localMaxSize }),

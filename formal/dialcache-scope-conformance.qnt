@@ -65,8 +65,8 @@ module dialcache_scope_conformance {
   }
   val pending = s.sources.indices().filter(i => s.sources.nth(i).result == 0)
   action resolveLoader = {
-    nondet choice = 1.to(32).filter(code => pending.contains((code - 1) / 2)).oneOf()
-    s' = settle(s, (choice - 1) / 2, (choice - 1) % 2 + 1)
+    nondet choice = 1.to(112).filter(code => pending.contains((code - 1) / 7)).oneOf()
+    s' = settle(s, (choice - 1) / 7, values.nth((choice - 1) % 7))
   }
   action rejectLoader = { nondet choice = pending.oneOf()
     s' = settle(s, choice, 3) }
@@ -131,4 +131,7 @@ module dialcache_scope_conformance {
     .then(s' = begin(s, 0)).then(releasePolicy).then(s' = settle(s, 0, 3))
     .then(s' = begin(s, 0)).then(releasePolicy)
     .expect(s.o.calls == List(3, 3, 0) and s.o.loaders == 2)
+  run absentValueIsMemoizedTest = init.then(s' = begin(s, 0)).then(releasePolicy)
+    .then(s' = settle(s, 0, 5)).then(s' = begin(s, 0)).then(releasePolicy)
+    .expect(s.o.calls == List(5, 5) and s.o.loaders == 1)
 }

@@ -83,8 +83,8 @@ module dialcache_policy_conformance {
   }
   action resolveLoader = {
     // One portable choice records both the actual source index and its value.
-    nondet choice = 1.to(24).filter(code => pendingSources.contains((code - 1) / 2)).oneOf()
-    s' = settle(s, (choice - 1) / 2, (choice - 1) % 2 + 1)
+    nondet choice = 1.to(84).filter(code => pendingSources.contains((code - 1) / 7)).oneOf()
+    s' = settle(s, (choice - 1) / 7, values.nth((choice - 1) % 7))
   }
   action rejectLoader = { nondet choice = pendingSources.oneOf()
     s' = settle(s, choice, 3)
@@ -139,4 +139,7 @@ module dialcache_policy_conformance {
     .then(s' = { overlay: 19, ...s }).then(s' = begin(s, 0)).then(releasePolicy)
     .then(s' = settle(s, 1, 2)).then(s' = settle(s, 0, 1))
     .expect(s.o.writeTtls == List(4000, 5000) and s.remoteValues == List(1, 0))
+  run absentValueIsStoredAndReusedTest = init.then(s' = begin(s, 0)).then(releasePolicy)
+    .then(s' = settle(s, 0, 5)).then(s' = begin(s, 0)).then(releasePolicy)
+    .expect(s.o.calls == List(5, 5) and s.o.loaders == 1 and s.o.writes == 1)
 }

@@ -1,114 +1,174 @@
 module dialcache_effects_conformance {
-  // Tracked remote-only calls, with independently settled loaders and native
-  // writes. Values are always 1; loader/read counts distinguish hits/refills.
-  // Calls: 0 pending, 1 returned value, 2 original source error, 3 timeout.
-  // Sources: 0 registered, 1 abandoned externally, 2 settled.
-  // Phase: 0 no registered flight, 1 fallback, 2 accepted publication.
+  // Tracked remote-only calls. Control external effects, not an event loop.
+  // Calls: 0 pending, 1 value, 2 source error, 3 timeout.
+  // Sources/reads: 0 registered, 1 abandoned externally, 2 settled.
+  // Phase: 0 idle, 1 source, 2 write, 3 read, 4 decode, 5 serialize.
   type State = {
-    now: int, phase: int, activeLoader: int, deadline: int,
-    observedFence: int, writeTimestamp: int, storedTimestamp: int, watermark: int,
-    calls: List[int], sources: List[int],
+    now: int, wall: int, phase: int, activeLoader: int, activeRead: int, deadline: int,
+    observedFence: int, refill: int, acceptedAt: int, acceptedWall: int,
+    writeTimestamp: int, storedTimestamp: int, watermark: int,
+    calls: List[int], sources: List[int], readStates: List[int],
     loaders: int, reads: int, writes: int, invalidations: int,
-    loads: int, dumps: int, policyCalls: int
+    loads: int, dumps: int, policyCalls: int, readAborts: int, observerFailed: int
   }
   var s: State
   pure def finish(calls: List[int], outcome: int): List[int] =
     calls.foldl(List(), (out, result) => out.append(if (result == 0) outcome else result))
-  val readable = s.storedTimestamp > 0 and s.storedTimestamp > s.watermark
+  pure def startSource(x: State, allowed: int, fence: int): State = {
+    phase: 1, activeLoader: x.sources.length(), deadline: x.now + 10,
+    loaders: x.loaders + 1, sources: x.sources.append(0),
+    refill: allowed, observedFence: fence, ...x
+  }
+  val unfenced = s.storedTimestamp > 0 and s.storedTimestamp > s.watermark
+  val readable = unfenced and s.wall >= s.storedTimestamp
 
   action init = s' = {
-    now: 1, phase: 0, activeLoader: 0, deadline: 0,
-    observedFence: 0, writeTimestamp: 0, storedTimestamp: 0, watermark: 0,
-    calls: List(), sources: List(),
-    loaders: 0, reads: 0, writes: 0, invalidations: 0, loads: 0, dumps: 0, policyCalls: 0
+    now: 10000, wall: 100000, phase: 0, activeLoader: 0, activeRead: 0, deadline: 0,
+    observedFence: 0, refill: 0, acceptedAt: 0, acceptedWall: 0,
+    writeTimestamp: 0, storedTimestamp: 0, watermark: 0,
+    calls: List(), sources: List(), readStates: List(),
+    loaders: 0, reads: 0, writes: 0, invalidations: 0,
+    loads: 0, dumps: 0, policyCalls: 0, readAborts: 0, observerFailed: 0
   }
 
   action beginCall = all {
-    s.calls.length() < 6,
-    s.phase != 0 or readable or s.sources.length() < 3,
+    s.calls.length() < 8,
     s' = {
-      calls: s.calls.append(if (s.phase == 0 and readable) 1 else 0),
-      policyCalls: s.policyCalls + 1,
+      calls: s.calls.append(0), policyCalls: s.policyCalls + 1,
       reads: if (s.phase == 0) s.reads + 1 else s.reads,
-      loads: if (s.phase == 0 and readable) s.loads + 1 else s.loads,
-      loaders: if (s.phase == 0 and not(readable)) s.loaders + 1 else s.loaders,
-      sources: if (s.phase == 0 and not(readable)) s.sources.append(0) else s.sources,
-      activeLoader: if (s.phase == 0 and not(readable)) s.sources.length() else s.activeLoader,
-      deadline: if (s.phase == 0 and not(readable)) s.now + 10 else s.deadline,
-      observedFence: if (s.phase == 0 and not(readable)) s.watermark else s.observedFence,
-      phase: if (s.phase == 0 and not(readable)) 1 else s.phase, ...s
-    },
+      readStates: if (s.phase == 0) s.readStates.append(0) else s.readStates,
+      activeRead: if (s.phase == 0) s.reads else s.activeRead,
+      deadline: if (s.phase == 0) s.now + 10 else s.deadline,
+      phase: if (s.phase == 0) 3 else s.phase, ...s
+    }
   }
 
+  def settledRead(index: int, failed: bool): State = {
+    val x = { readStates: s.readStates.replaceAt(index, 2), ...s }
+    if (s.readStates.nth(index) == 1) x
+    else if (s.now >= s.deadline)
+      startSource({ readAborts: s.readAborts + 1, ...x }, 0, 0)
+    else if (failed) startSource(x, 0, 0)
+    else if (readable) { phase: 4, loads: s.loads + 1, ...x }
+    else startSource(x, 1, if (unfenced) 0 else s.watermark)
+  }
+  action releaseRead = {
+    nondet choice = s.readStates.indices().filter(i => s.readStates.nth(i) != 2).oneOf()
+    s' = settledRead(choice, false)
+  }
+  action failRead = {
+    nondet choice = s.readStates.indices().filter(i => s.readStates.nth(i) != 2).oneOf()
+    s' = settledRead(choice, true)
+  }
+  action releaseLoad = all {
+    s.phase == 4,
+    // The acquired snapshot survives subsequent invalidation and time passage.
+    s' = { phase: 0, calls: finish(s.calls, 1), ...s }
+  }
+  action failLoad = all { s.phase == 4, s' = startSource(s, 1, 0) }
+
+  def settledSource(index: int, failed: bool): State = {
+    val x = { sources: s.sources.replaceAt(index, 2), ...s }
+    if (s.sources.nth(index) == 1) x
+    else if (s.now >= s.deadline) { phase: 0, calls: finish(s.calls, 3), ...x }
+    else if (failed) { phase: 0, calls: finish(s.calls, 2), ...x }
+    else if (s.refill == 0 or s.wall <= s.observedFence)
+      { phase: 0, calls: finish(s.calls, 1), ...x }
+    else { phase: 5, dumps: s.dumps + 1, acceptedAt: s.now, acceptedWall: s.wall, ...x }
+  }
   action resolveLoader = {
-    nondet loader = s.sources.indices().filter(i => s.sources.nth(i) != 2).oneOf()
-    all {
-      s' = {
-        sources: s.sources.replaceAt(loader, 2),
-        phase: if (s.sources.nth(loader) == 1) s.phase
-          else if (s.now >= s.deadline or s.now <= s.observedFence) 0 else 2,
-        calls: if (s.sources.nth(loader) == 1) s.calls
-          else if (s.now >= s.deadline) finish(s.calls, 3)
-          else if (s.now <= s.observedFence) finish(s.calls, 1) else s.calls,
-        writeTimestamp: if (s.sources.nth(loader) == 0 and s.now < s.deadline and s.now > s.observedFence) s.now else s.writeTimestamp,
-        writes: if (s.sources.nth(loader) == 0 and s.now < s.deadline and s.now > s.observedFence) s.writes + 1 else s.writes,
-        dumps: if (s.sources.nth(loader) == 0 and s.now < s.deadline and s.now > s.observedFence) s.dumps + 1 else s.dumps,
-        ...s
-      },
-    }
+    nondet choice = s.sources.indices().filter(i => s.sources.nth(i) != 2).oneOf()
+    s' = settledSource(choice, false)
   }
-
   action rejectLoader = {
-    nondet loader = s.sources.indices().filter(i => s.sources.nth(i) != 2).oneOf()
-    s' = {
-      sources: s.sources.replaceAt(loader, 2),
-      phase: if (s.sources.nth(loader) == 1) s.phase else 0,
-      calls: if (s.sources.nth(loader) == 1) s.calls
-        else finish(s.calls, if (s.now >= s.deadline) 3 else 2), ...s
-    }
+    nondet choice = s.sources.indices().filter(i => s.sources.nth(i) != 2).oneOf()
+    s' = settledSource(choice, true)
   }
-
+  action releaseDump = all {
+    s.phase == 5,
+    // The native write is stamped after serialization, not at source acceptance.
+    s' = if (s.wall <= s.observedFence) { phase: 0, calls: finish(s.calls, 1), ...s }
+      else { phase: 2, writes: s.writes + 1, writeTimestamp: s.wall, ...s }
+  }
+  action failDump = all { s.phase == 5, s' = { phase: 0, calls: finish(s.calls, 1), ...s } }
   action releaseWrite = all {
     s.phase == 2,
-    s' = { storedTimestamp: s.writeTimestamp, phase: 0, calls: finish(s.calls, 1), ...s },
+    s' = { storedTimestamp: s.writeTimestamp, phase: 0, calls: finish(s.calls, 1), ...s }
   }
+  action failWrite = all { s.phase == 2, s' = { phase: 0, calls: finish(s.calls, 1), ...s } }
 
-  // Delivering 10 ms always exhausts a pending fallback's 10 ms timer. A
-  // clock jump changes the monotonic observation without delivering that timer;
-  // the settlement path must independently reject results at/after deadline.
-  action tick = s' = {
-    now: s.now + 10,
-    phase: if (s.phase == 1) 0 else s.phase,
-    sources: if (s.phase == 1) s.sources.replaceAt(s.activeLoader, 1) else s.sources,
-    calls: if (s.phase == 1) finish(s.calls, 3) else s.calls, ...s
+  action tick = {
+    val x = { now: s.now + 10, wall: s.wall + 10, ...s }
+    s' = if (s.phase == 3)
+      startSource({ readStates: s.readStates.replaceAt(s.activeRead, 1), readAborts: s.readAborts + 1, ...x }, 0, 0)
+    else if (s.phase == 1)
+      { phase: 0, sources: s.sources.replaceAt(s.activeLoader, 1), calls: finish(s.calls, 3), ...x }
+    else x
   }
-  action jumpClock = s' = { now: s.now + 10, ...s }
-
+  // Clock observation without timer delivery also exercises settlement guards.
+  action jumpClock = s' = { now: s.now + 10, wall: s.wall + 10, ...s }
+  action rollbackWall = s' = { wall: s.wall - 1000, ...s }
+  action seedRemote = s' = { storedTimestamp: s.wall, ...s }
   action invalidate = s' = {
     invalidations: s.invalidations + 1,
-    watermark: if (s.now > s.watermark) s.now else s.watermark, ...s
+    watermark: if (s.wall > s.watermark) s.wall else s.watermark, ...s
   }
   action futureFence = s' = {
     invalidations: s.invalidations + 1,
-    watermark: if (s.now + 20 > s.watermark) s.now + 20 else s.watermark, ...s
+    watermark: if (s.wall + 20 > s.watermark) s.wall + 20 else s.watermark, ...s
   }
 
-  action step = any { beginCall, resolveLoader, rejectLoader, releaseWrite, tick, jumpClock, invalidate, futureFence }
+  action observerFault = { nondet choice = Set(0, 1).oneOf()
+    s' = { observerFailed: choice, ...s } }
+
+  action step = any {
+    beginCall,
+    any { releaseRead, releaseLoad, resolveLoader, releaseDump, releaseWrite },
+    any { failRead, failLoad, rejectLoader, failDump, failWrite },
+    // Favor the narrow second-fence check as well as unrestricted clock changes.
+    all { s.phase == 5 and s.observedFence > 0, rollbackWall },
+    any { tick, jumpClock, seedRemote, any { rollbackWall, invalidate, futureFence, observerFault } }
+  }
 
   val oneRegisteredSource = s.sources.select(state => state == 0).length() <= 1
-  val registeredFlightHasPendingCalls =
-    s.phase == 0 or s.calls.select(result => result == 0).length() > 0
-  val writeRequiresAcceptedSource =
-    s.phase != 2 or (s.sources.nth(s.activeLoader) == 2 and s.writeTimestamp < s.deadline and s.writeTimestamp > s.observedFence)
+  val registeredFlightHasPendingCalls = s.phase == 0 or s.calls.select(result => result == 0).length() > 0
+  val writeRequiresAcceptedSource = (s.phase != 2 and s.phase != 5) or
+    (s.sources.nth(s.activeLoader) == 2 and s.acceptedAt < s.deadline and s.acceptedWall > s.observedFence and s.refill == 1)
+  val registeredReadOwnsFlight =
+    s.readStates.select(state => state == 0).length() == (if (s.phase == 3) 1 else 0) and
+    (s.phase != 3 or s.readStates.nth(s.activeRead) == 0)
+  val effectCountsMatchRecords = s.reads == s.readStates.length() and s.loaders == s.sources.length()
 
-  run timedOutLoaderOverlapsNewFlightTest = init.then(beginCall).then(tick).then(beginCall)
-    .expect(s.sources == List(1, 0) and s.calls == List(3, 0))
-
-  run acceptedWriteOutlivesDeadlineTest = init.then(beginCall).then(resolveLoader).then(tick)
-    .expect(s.phase == 2 and s.calls == List(0)).then(releaseWrite)
-    .expect(s.calls == List(1))
-
-  run delayedWriteRemainsFencedTest = init.then(beginCall).then(resolveLoader).then(tick)
-    .then(invalidate).then(releaseWrite).then(beginCall)
+  run timedOutLoaderOverlapsNewFlightTest = init.then(beginCall).then(releaseRead).then(tick)
+    .then(beginCall).then(releaseRead).expect(s.sources == List(1, 0) and s.calls == List(3, 0))
+  run acceptedWriteOutlivesDeadlineTest = init.then(beginCall).then(releaseRead).then(resolveLoader)
+    .then(tick).then(releaseDump).then(tick).expect(s.phase == 2 and s.calls == List(0))
+    .then(releaseWrite).expect(s.calls == List(1))
+  run delayedWriteRemainsFencedTest = init.then(beginCall).then(releaseRead).then(resolveLoader)
+    .then(releaseDump).then(tick).then(invalidate).then(releaseWrite).then(beginCall).then(releaseRead)
     .expect(not(readable) and s.calls == List(1, 0) and s.loaders == 2)
+  run readTimeoutStartsIndependentSourceDeadlineTest = init.then(beginCall).then(beginCall).then(tick)
+    .expect(s.calls == List(0, 0) and s.deadline == 10020 and s.readAborts == 1)
+    .then(resolveLoader).expect(s.calls == List(1, 1) and s.dumps == 0 and s.writes == 0)
+  run lateReadCannotBecomeHitTest = init.then(seedRemote).then(beginCall).then(jumpClock).then(releaseRead)
+    .expect(s.loads == 0 and s.loaders == 1 and s.readAborts == 1)
+  run acquiredDecodeSurvivesInvalidationAndDeadlineTest = init.then(seedRemote).then(beginCall)
+    .then(releaseRead).then(tick).then(invalidate).then(releaseLoad)
+    .expect(s.calls == List(1) and s.loaders == 0 and s.readAborts == 0)
+  run readFailureNeverRefillsTest = init.then(beginCall).then(failRead).then(resolveLoader)
+    .expect(s.calls == List(1) and s.dumps == 0 and s.readAborts == 0)
+  run decodeFailureMayRefillTest = init.then(seedRemote).then(beginCall).then(releaseRead).then(failLoad)
+    .then(resolveLoader).then(releaseDump).then(releaseWrite)
+    .expect(s.calls == List(1) and s.loads == 1 and s.writes == 1)
+  run dumpFailurePreservesSourceTest = init.then(beginCall).then(releaseRead).then(resolveLoader).then(failDump)
+    .expect(s.calls == List(1) and s.writes == 0)
+  run writeFailurePreservesSourceTest = init.then(beginCall).then(releaseRead).then(resolveLoader)
+    .then(releaseDump).then(failWrite).expect(s.calls == List(1) and s.storedTimestamp == 0)
+  run rollbackDuringDumpRechecksObservedFenceTest = init.then(invalidate).then(tick)
+    .then(beginCall).then(releaseRead).then(resolveLoader).then(rollbackWall).then(releaseDump)
+    .expect(s.calls == List(1) and s.dumps == 1 and s.writes == 0)
+  run rollbackDoesNotExtendSourceDeadlineTest = init.then(beginCall).then(releaseRead)
+    .then(rollbackWall).then(tick).expect(s.calls == List(3))
+  run observerFailuresCannotReplaceSourceErrorTest = init.then(s' = { observerFailed: 1, ...s })
+    .then(beginCall).then(failRead).then(rejectLoader).expect(s.calls == List(2))
 }

@@ -101,12 +101,13 @@ check formal/dialcache-conformance.qnt \
 check formal/dialcache-effects-conformance.qnt \
   oneRegisteredSource \
   registeredFlightHasPendingCalls \
-  writeRequiresAcceptedSource
+  writeRequiresAcceptedSource \
+  registeredReadOwnsFlight effectCountsMatchRecords
 
 quint test formal/dialcache-effects-conformance.qnt --backend=rust --max-samples=1
 
 check formal/dialcache-recovery-conformance.qnt \
-  singleReadPerFlight pendingDecodeHasCall writesHaveRetention
+  singleReadPerFlight pendingDecodeHasCall writesHaveRetention sourcesMatchEffects onlyRegisteredSourceOwnsDeadline
 quint test formal/dialcache-recovery-conformance.qnt --backend=rust --max-samples=1
 
 check formal/dialcache-policy-conformance.qnt \

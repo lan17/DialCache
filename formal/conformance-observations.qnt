@@ -1,7 +1,9 @@
 module conformance_observations {
   // Public outcomes/effects shared by the feature profiles. Cache contents,
   // phases, policy snapshots and fences stay in each model's private state.
-  // Calls: 0 pending, 1/2 fixture value, 3 source error, 4 deadline error.
+  // Calls: 0 pending, 1/2 numeric values, 3 source error, 4 deadline error.
+  // Successful values 5..9: absent, null, false, zero, empty string.
+  pure val values = List(1, 2, 5, 6, 7, 8, 9)
   type Observation = {
     calls: List[int], loaders: int, reads: int, writes: int, invalidations: int,
     maintenance: List[str], loads: int, dumps: int, policyCalls: int,

@@ -13,6 +13,15 @@ const settle = (op: "resolve" | "reject"): Action => ({
   ...(op === "resolve" ? { choices: [1, 2] } : {}),
   input: (choice, o) => op === "resolve" ? { op, loader: o.loaders - 1, value: choice } : { op, loader: o.loaders - 1 },
 });
+// Portable success codes reserve 0/3/4 for pending/source-error/deadline.
+const successValues = [1, 2, undefined, null, false, 0, ""] as const;
+const resolveValue = (maxSources: number): Action => ({
+  choices: Array.from({ length: maxSources * successValues.length }, (_, i) => i + 1),
+  input: (choice) => {
+    const value = successValues[(choice - 1) % successValues.length];
+    return { op: "resolve", loader: Math.floor((choice - 1) / successValues.length), ...(value === undefined ? {} : { value }) };
+  },
+});
 const effectCounts = { read: "reads", load: "loads", dump: "dumps", write: "writes", policy: "policyCalls" } as const;
 const release = (effect: "read" | "load" | "dump" | "write" | "policy"): Action => ({
   input: (_, o) => ({ op: "release", effect, index: o[effectCounts[effect]] - 1 }),
@@ -58,24 +67,25 @@ const profiles: Record<string, Profile> = {
       beginCall: { choices: [0, 1, 2, 3, 4, 5], input: (choice) => ({ op: "begin",
         ...(choice === 5 ? { outside: true } : { scope: String(choice) }) }) },
       releasePolicy: release("policy"),
-      resolveLoader: { choices: Array.from({ length: 32 }, (_, i) => i + 1),
-        input: (choice) => ({ op: "resolve", loader: Math.floor((choice - 1) / 2), value: (choice - 1) % 2 + 1 }) },
+      resolveLoader: resolveValue(16),
       rejectLoader: { choices: Array.from({ length: 16 }, (_, i) => i), input: (choice) => ({ op: "reject", loader: choice }) },
       policy: { choices: [0, 1, 2], input: (choice) => ({ op: "policy",
         value: choice === 0 ? {} : choice === 1 ? { requestLocal: false } : { coalesce: false } }) },
     },
   },
   recovery: {
-    fixture: { policy: { ttlSec: { remote: 1 }, staleOnErrorMaxAgeSec: 5 }, tracked: true, fallbackTimeoutMs: null },
+    fixture: { policy: { ttlSec: { remote: 1 }, staleOnErrorMaxAgeSec: 5 }, tracked: true, fallbackTimeoutMs: 10 },
     setup: [{ op: "seed", value: 1, ageMs: 1000 }, { op: "faults", value: { holdLoads: true } }],
     actions: {
-      beginCall: { choices: [0, 1, 2], input: (choice) => ({ op: "begin", recovery: (["allow", "deny", "error"] as const)[choice]! }) },
+      beginCall: { choices: [0, 1, 2, 3], input: (choice) => ({ op: "begin", ...(choice === 3 ? {} : { recovery: (["allow", "deny", "error"] as const)[choice]! }) }) },
       joinCall: { input: () => ({ op: "begin" }) },
-      resolveLoader: { input: (_, o) => ({ op: "resolve", loader: o.loaders - 1, value: 2 }) },
-      rejectLoader: settle("reject"), releaseLoad: release("load"),
+      resolveLoader: { choices: [0, 1, 2, 3, 4, 5, 6, 7], input: (choice) => ({ op: "resolve", loader: choice, value: 2 }) },
+      rejectLoader: { choices: [0, 1, 2, 3, 4, 5, 6, 7], input: (choice) => ({ op: "reject", loader: choice }) },
+      rejectTimeout: { choices: [0, 1, 2, 3, 4, 5, 6, 7], input: (choice) => ({ op: "reject", loader: choice, error: "timeout" }) },
+      releaseLoad: release("load"),
       seed: { choices: [0, 1, 2, 3, 4, 5, 6], input: (choice) => ({ op: "seed", value: choice === 6 ? 2 : 1,
         ageMs: [0, 999, 1000, 4999, 5000, -1, 1000][choice]! }) },
-      advance: advance([1, 1000, 4000]), invalidate: { input: () => ({ op: "invalidate" }) },
+      advance: advance([1, 10, 1000, 4000]), invalidate: { input: () => ({ op: "invalidate" }) },
       policy: { choices: [2000, 5000], input: (choice) => ({ op: "policy", value: { staleOnErrorMaxAgeSec: choice / 1000 } }) },
       readFault: fault("read"), loadFault: fault("load"),
     },
@@ -86,8 +96,7 @@ const profiles: Record<string, Profile> = {
     actions: {
       beginCall: { choices: [0, 1], input: (choice) => ({ op: "begin", key: String(choice) }) },
       releasePolicy: release("policy"),
-      resolveLoader: { choices: Array.from({ length: 24 }, (_, i) => i + 1),
-        input: (choice) => ({ op: "resolve", loader: Math.floor((choice - 1) / 2), value: (choice - 1) % 2 + 1 }) },
+      resolveLoader: resolveValue(12),
       rejectLoader: { choices: Array.from({ length: 12 }, (_, i) => i), input: (choice) => ({ op: "reject", loader: choice }) },
       policy: { choices: policyOverlays.map((_, i) => i), input: (choice) => ({ op: "policy", value: policyOverlays[choice]! }) },
       advance: advance([1, 1000, 2000, 5000]), providerFault: fault("policy"),
@@ -120,7 +129,7 @@ function observation(raw: unknown, context: string): Projected {
     return [key, item.map((entry) => {
       if (key === "calls" || key === "writeTtls") {
         const integer = itfInteger(entry, context);
-        if (key === "calls" && integer > 4) throw new Error(`${context}: unsupported caller outcome`);
+        if (key === "calls" && integer > 9) throw new Error(`${context}: unsupported caller outcome`);
         return integer;
       }
       if (typeof entry !== (key === "sourceScopes" ? "boolean" : "string")) throw new Error(`${context}: invalid ${key} entry`);
@@ -154,10 +163,20 @@ function parseTrace(raw: unknown, path: string, profile: Profile): Trace {
     return { action, choice, expected: observation(record(state.s, context).o, context) };
   }) };
 }
+function valueCode(value: Observation["calls"][number] & { status: "value" }): number {
+  const v = value.value;
+  if (v === 1 || v === 2) return v;
+  if (v === null) return 6;
+  if (v === false) return 7;
+  if (v === 0) return 8;
+  if (v === "") return 9;
+  if (typeof v === "object" && v.absent === true) return 5;
+  return 10;
+}
 function project(o: Observation): Projected {
   return { ...o, calls: o.calls.map((c) => c.status === "pending" ? 0
-    : c.status === "value" ? (c.value === 1 || c.value === 2 ? c.value : 5)
-    : c.error.startsWith("source:") ? 3 : c.error.startsWith("timeout:") ? 4 : 5) };
+    : c.status === "value" ? valueCode(c)
+    : c.error.startsWith("source:") ? 3 : c.error.startsWith("timeout:") ? 4 : 10) };
 }
 async function replay(profile: Profile, trace: Trace) {
   const driver = new BehaviorDriver(profile.fixture);
@@ -325,6 +344,7 @@ function scopeWitnesses(traces: Trace[]): Set<string> {
           sources.set(o.loaders - 1, { scope, memoizing, shared: memoizing && overlay === 0 });
         } else if (o.calls[policyCall] !== 0) {
           seen.add("memo-hit");
+          seen.add(`memo-value:${o.calls[policyCall]}`);
           if (published.get(lifetime)?.scope !== scope) {
             if (scope === 2) seen.add("nested-memo-hit");
             if (scope === 4) seen.add("reenabled-memo-hit");
@@ -335,7 +355,7 @@ function scopeWitnesses(traces: Trace[]): Set<string> {
         policyCall = -1;
       }
       if (step.action === "resolveLoader" || step.action === "rejectLoader") {
-        const loader = step.action === "resolveLoader" ? Math.floor((step.choice - 1) / 2) : step.choice;
+        const loader = step.action === "resolveLoader" ? Math.floor((step.choice - 1) / successValues.length) : step.choice;
         const source = sources.get(loader);
         if (source === undefined) throw new Error(`${trace.path}: missing source ${loader}`);
         const completed = o.calls.filter((value, index) => value !== 0 && previous.calls[index] === 0);
@@ -396,13 +416,13 @@ function policyWitnesses(traces: Trace[]): Set<string> {
             seen.add("join-after-policy-change");
           }
         } else {
-          if (o.loads > previous.loads) seen.add("remote-hit");
-          if (o.reads === previous.reads) seen.add("local-hit");
+          if (o.loads > previous.loads) { seen.add("remote-hit"); seen.add(`remote-value:${o.calls[pendingPolicy]}`); }
+          if (o.reads === previous.reads) { seen.add("local-hit"); seen.add(`local-value:${o.calls[pendingPolicy]}`); }
         }
         pendingPolicy = -1;
       }
       if (step.action === "resolveLoader" || step.action === "rejectLoader") {
-        const loader = step.action === "resolveLoader" ? Math.floor((step.choice - 1) / 2) : step.choice;
+        const loader = step.action === "resolveLoader" ? Math.floor((step.choice - 1) / successValues.length) : step.choice;
         const source = sources.get(loader);
         if (source === undefined) throw new Error(`${trace.path}: missing accepted source ${loader}`);
         if ([...sources.keys()].some((pending) => pending < loader)) seen.add("reverse-source-settlement");
@@ -430,6 +450,10 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
     let decoding = false;
     let c0Released = false;
     let shadowTimedOut = false;
+    let classifier = -1;
+    let recoveryCause = "";
+    const abandoned = new Set<number>();
+    let currentSource = -1;
     for (const [i, step] of trace.steps.entries()) {
       seen.add(`action:${step.action}`);
       const o = step.expected;
@@ -441,6 +465,30 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
         c0Released = false; shadowTimedOut = false;
       }
       if (name === "recovery") {
+        if (step.action === "beginCall") classifier = step.choice;
+        if (o.loaders > previous.loaders) {
+          if (abandoned.size > 0) seen.add("recovery-abandoned-overlap");
+          currentSource = o.loaders - 1; decoding = false;
+        }
+        const rejected = step.action === "rejectLoader" || step.action === "rejectTimeout";
+        if (step.action === "advance" && currentSource >= 0 && !decoding &&
+          (o.loads > previous.loads || o.recovery.length > previous.recovery.length || o.calls.some((c, i) => c === 4 && previous.calls[i] === 0))) {
+          abandoned.add(currentSource);
+          recoveryCause = "deadline";
+          if (classifier === 1 && o.calls.includes(4)) seen.add("explicit-denial-overrides-timeout");
+        }
+        if (rejected && !abandoned.has(step.choice)) {
+          recoveryCause = step.action === "rejectTimeout" ? "propagated-timeout" : "source-error";
+          if (classifier === 3 && step.action === "rejectLoader" && o.calls.includes(3) && o.loads === previous.loads) seen.add("default-denies-ordinary-error");
+        }
+        if ((rejected || step.action === "resolveLoader") && abandoned.has(step.choice)) {
+          seen.add("recovery-late-source-settles"); abandoned.delete(step.choice);
+        }
+        if (o.loads > previous.loads && step.action !== "beginCall") decoding = true;
+        if (o.recovery.length > previous.recovery.length && o.recovery.at(-1) === "served" && classifier === 3) {
+          seen.add(`default-recovers-${recoveryCause}`);
+        }
+        if (step.action === "releaseLoad" && o.recovery.at(-1) === "deserialization_error" && o.calls.some((c, i) => c === 4 && previous.calls[i] === 0)) seen.add("recovery-failure-preserves-timeout");
         if (step.action === "invalidate" && o.calls.includes(0)) invalidatedDuringFlight = true;
         if (step.action === "rejectLoader" && o.loads > previous.loads) decoding = true;
         if (step.action === "advance" && decoding) advancedDuringDecode = true;
@@ -473,11 +521,13 @@ const required: Record<string, string[]> = {
   scope: ["disabled-bypass", "detached-bypass", "policy-reply-after-close", "rejected-flight-retry",
     "replacement-miss-after-late-source", "independent-scope-overlap", "uncoalesced-scope-overlap",
     "memo-hit", "nested-memo-hit", "reenabled-memo-hit", "memo-after-nested-close", "memo-after-policy-bypass",
-    "shared-rejection", "source-settles-after-close"],
-  recovery: ["outcome:served", "outcome:miss", "outcome:deserialization_error", "retained-across-invalidation", "coalesced-recovery", "expired-during-decode"],
+    "shared-rejection", "source-settles-after-close", ...[5, 6, 7, 8, 9].map(code => `memo-value:${code}`)],
+  recovery: ["outcome:served", "outcome:miss", "outcome:deserialization_error", "retained-across-invalidation", "coalesced-recovery", "expired-during-decode",
+    "default-denies-ordinary-error", "default-recovers-deadline", "default-recovers-propagated-timeout",
+    "explicit-denial-overrides-timeout", "recovery-abandoned-overlap", "recovery-late-source-settles", "recovery-failure-preserves-timeout"],
   policy: ["local-hit", "remote-hit", "publication-after-policy-change", "ttl:2000", "ttl:4000", "ttl:5000",
     "cross-key-overlap", "uncoalesced-same-key-overlap", "join-after-policy-change", "reverse-source-settlement",
-    "coalesced-result", "publication-during-policy-fetch"],
+    "coalesced-result", "publication-during-policy-fetch", ...[5, 6, 7, 8, 9].flatMap(code => [`local-value:${code}`, `remote-value:${code}`])],
   shadow: ["match", "mismatch", "superseded", "confirmation_error", "redis_error", "source_error", "timeout", "deserialization_error", "filled", "fill_error", "fill_fenced"]
     .map((outcome) => `outcome:${outcome}`).concat(["c0-before-source", "source-before-c0", "write-completes-after-timeout"]),
 };

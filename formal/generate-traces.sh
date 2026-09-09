@@ -29,13 +29,13 @@ mkdir -p .formal-traces/effects
 quint run formal/dialcache-effects-conformance.qnt \
   --mbt --backend=rust --n-threads=1 \
   --seed="${QUINT_SEED:-0xd1a1ca}" \
-  --max-samples=256 --max-steps=40 --n-traces=32 \
+  --max-samples=2048 --max-steps=60 --n-traces=256 \
   --out-itf='.formal-traces/effects/trace_{seq}.itf.json' \
   --verbosity=1 \
-  --invariants oneRegisteredSource registeredFlightHasPendingCalls writeRequiresAcceptedSource
+  --invariants oneRegisteredSource registeredFlightHasPendingCalls writeRequiresAcceptedSource registeredReadOwnsFlight effectCountsMatchRecords
 count=$(find .formal-traces/effects -name '*.itf.json' -type f | wc -l)
-if [ "${count}" -ne 32 ]; then
-  echo "Expected 32 effects traces; generated ${count}" >&2
+if [ "${count}" -ne 256 ]; then
+  echo "Expected 256 effects traces; generated ${count}" >&2
   exit 1
 fi
 
@@ -57,10 +57,10 @@ generate_feature() {
   fi
 }
 
-generate_feature recovery 64 512 singleReadPerFlight pendingDecodeHasCall writesHaveRetention
-generate_feature policy 128 1024 writesHaveRetention hitsSkipSource callsKeepSourceOutcome sourceCountsMatchEffects registeredSourcesArePending sharedSourcesKeepRegistration
+generate_feature recovery 128 1024 singleReadPerFlight pendingDecodeHasCall writesHaveRetention sourcesMatchEffects onlyRegisteredSourceOwnsDeadline
+generate_feature policy 256 1024 writesHaveRetention hitsSkipSource callsKeepSourceOutcome sourceCountsMatchEffects registeredSourcesArePending sharedSourcesKeepRegistration
 # C1 failures/supersession require several independently controlled effects.
 # Replay also requires these outcomes; trace count alone is insufficient.
 generate_feature shadow 256 1024 oneSourcePerCaller writesRequireMiss writesHaveRetention
-generate_feature scope 128 1024 closedScopesHaveNoMemo registeredSourcesArePending callsKeepSourceOutcome sourceCountsMatchEffects
+generate_feature scope 256 1024 closedScopesHaveNoMemo registeredSourcesArePending callsKeepSourceOutcome sourceCountsMatchEffects
 generate_feature admission 128 1024 capacityIsPerInstance oneJobPerIdentity registeredCallsArePending callsKeepAcquiredValue jobsAreDiagnostic effectsMatchRecords
