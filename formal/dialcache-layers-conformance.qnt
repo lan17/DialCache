@@ -109,8 +109,9 @@ module dialcache_layers_conformance {
   action seed = { nondet choice = 0.to(7).oneOf()
     s' = { remoteValues: s.remoteValues.replaceAt(choice / 2, choice % 2 + 1), created: s.created.replaceAt(choice / 2, s.now), ...s } }
   action invalidate = { nondet choice = Set(0, 1).oneOf()
-    all { s.remoteAvailable, s' = { watermark: s.watermark.replaceAt(choice, s.now),
-      o: { invalidations: s.o.invalidations + 1, maintenance: s.o.maintenance.append("ok"), ...s.o }, ...s } } }
+    s' = if (not(s.remoteAvailable)) { o: { maintenance: s.o.maintenance.append("missing_remote"), ...s.o }, ...s }
+      else { watermark: s.watermark.replaceAt(choice, s.now),
+        o: { invalidations: s.o.invalidations + 1, maintenance: s.o.maintenance.append("ok"), ...s.o }, ...s } }
   action tick = s' = { now: s.now + 1, ...s }
   action step = any {
     beginCall, resolveLoader, any { rejectLoader, policy, seed, invalidate, tick, any { tick, closeScope } }
@@ -131,6 +132,9 @@ module dialcache_layers_conformance {
 
   action untrackedFixture = init.then(s' = { tracked: false, remoteAvailable: true, capacity: 2, ...s })
   action trackedFixture = init.then(s' = { tracked: true, remoteAvailable: true, capacity: 2, ...s })
+  run absentRemoteMaintenancePreservesLocalReuseTest = init.then(s' = { remoteAvailable: false, capacity: 2, ...s })
+    .then(s' = begin(s, 12)).then(s' = settle(s, 0, 1)).then(invalidate).then(s' = begin(s, 12))
+    .expect(s.o.calls == List(1, 1) and s.o.maintenance == List("missing_remote") and s.o.invalidations == 0)
   run absentRemotePreservesLocalReuseTest = init.then(s' = { remoteAvailable: false, capacity: 2, ...s })
     .then(s' = begin(s, 12)).then(s' = settle(s, 0, 1)).then(s' = begin(s, 12))
     .expect(s.o.calls == List(1, 1) and s.o.loaders == 1 and s.o.reads == 0 and s.o.writes == 0)

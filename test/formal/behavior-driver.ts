@@ -30,6 +30,7 @@ export interface Fixture {
   shadowMaxInFlight?: number;
   recovery?: Recovery | "default";
   comparator?: "equal" | "unequal" | "error";
+  comparisonMs?: number;
   shadowHook?: boolean;
   observerFailure?: boolean;
   remote?: boolean;
@@ -46,12 +47,12 @@ export type Input =
   | { op: "reject"; loader: number; error?: "timeout" }
   | { op: "advance"; ms: number; deliverTimers?: boolean }
   | { op: "shiftWall"; ms: number }
-  | { op: "seed"; useCase?: string; key?: string; value?: Value; ageMs?: number; frameHex?: string; payloadHex?: string; ttlMs?: number }
+  | { op: "seed"; useCase?: string; key?: string; value?: Value; ageMs?: number; frameHex?: string; payloadText?: string; payloadHex?: string; ttlMs?: number }
   | { op: "invalidate"; key?: string; futureBufferMs?: number }
   | { op: "adapterReply"; value: AdapterReply }
   | { op: "policy"; value: Policy | null }
   | { op: "faults"; value: Partial<Faults> }
-  | { op: "release"; effect: "read" | "write" | "dump" | "load" | "policy"; index: number }
+  | { op: "release"; effect: "read" | "write" | "dump" | "load" | "policy"; index: number; fail?: boolean }
   | { op: "openScope"; id: string; parent?: string; disabled?: boolean; instance?: string }
   | { op: "closeScope"; id: string };
 
@@ -243,6 +244,9 @@ export class BehaviorDriver {
           ...(input.recovery === undefined ? {} : { shouldAttemptStaleRecovery: this.classifier(input.recovery) }),
           ...(this.fixture.comparator === undefined ? {} : { shadowComparator: () => {
             this.observed.comparisons++;
+            // Observe elapsed external comparison work without delivering timers.
+            // The implementation must recheck its deadline when work returns.
+            if (this.fixture.comparisonMs !== undefined) vi.setSystemTime(Date.now() + this.fixture.comparisonMs);
             if (this.fixture.comparator === "error") throw new Error("Controlled comparison failure");
             return this.fixture.comparator === "equal";
           } }),
@@ -279,7 +283,7 @@ export class BehaviorDriver {
       case "seed":
         this.redis.setRaw(this.valueKey(input.key, input.useCase), input.frameHex === undefined
           ? encodeFrame(input.payloadHex === undefined
-            ? input.value === undefined ? "undefined" : JSON.stringify(input.value)
+            ? input.payloadText ?? (input.value === undefined ? "undefined" : JSON.stringify(input.value))
             : Buffer.from(input.payloadHex, "hex"), Date.now() - (input.ageMs ?? 0), input.payloadHex === undefined ? 0 : 1)
           : Buffer.from(input.frameHex, "hex"), input.ttlMs ?? 60_000);
         break;
@@ -288,8 +292,9 @@ export class BehaviorDriver {
           await this.cache.invalidateRemote("id", input.key ?? "1", input.futureBufferMs ?? 0);
           this.observed.maintenance.push("ok");
         } catch (error) {
-          if (error !== this.maintenanceError) throw error;
-          this.observed.maintenance.push("mutation_error");
+          if (error === this.maintenanceError) this.observed.maintenance.push("mutation_error");
+          else if (error instanceof TypeError && error.message === "DialCache invalidateRemote requires a configured Redis client") this.observed.maintenance.push("missing_remote");
+          else throw error;
         }
         break;
       case "adapterReply":
@@ -301,7 +306,8 @@ export class BehaviorDriver {
       case "release": {
         const gate = this.effects[input.effect].get(input.index);
         if (gate === undefined) throw new Error(`No pending ${input.effect} ${input.index}`);
-        gate.resolve();
+        if (input.fail) gate.reject(new Error(`Controlled ${input.effect} failure`));
+        else gate.resolve();
         this.effects[input.effect].delete(input.index);
         break;
       }

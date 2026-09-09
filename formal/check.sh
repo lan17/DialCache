@@ -130,3 +130,7 @@ quint test formal/dialcache-admission-conformance.qnt --backend=rust --max-sampl
 check formal/dialcache-layers-conformance.qnt \
   sourceEffectsMatch capacityIsPerInstance closedScopesHaveNoMemo registeredSourcesArePending zeroCapacityHasNoLocalValues callsKeepSourceOutcome localMembershipMatchesLru absentRemoteHasNoAdapterEffects
 quint test formal/dialcache-layers-conformance.qnt --backend=rust --max-samples=1
+
+check formal/dialcache-independent-conformance.qnt \
+  oneReadPerCall effectsMatchOwners completedCallsHaveNoActiveWork retainedSnapshotsWereEligible abortsAreUnique writesKeepCapturedRetention
+quint test formal/dialcache-independent-conformance.qnt --backend=rust --max-samples=1

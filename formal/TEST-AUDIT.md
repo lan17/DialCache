@@ -25,7 +25,7 @@ Mappings cover the semantic obligations of each declaration, including assertion
 | `dialcache-liveness`, `dialcache-metrics`, `docs/observability.md` | Phase budgets were modeled but duration/size observations were not linked to those phases | Fresh decode included in remote-get duration; accepted source duration excludes later preparation/write; UTF-8 byte sizes are observed before dispatch (C59) |
 | `dialcache-shadow-confirmation`, `docs/shadow-validation.md` | Confirmed mismatch outcome did not test opt-in warning eligibility | Logging omitted/enabled with match, mismatch, and superseded verdicts (C60) |
 
-These additions total **55 fixed scenarios**, taking the corpus from 174 to **229**. They reuse the existing driver and seven generated profiles. The optional `observe` fixture selects public diagnostic/adapter events; all unselected observations and cache internals remain outside that event stream. Expected events never enter execution. A negative harness check corrupts a miss expectation and requires replay to fail.
+These additions total **55 fixed scenarios**, taking the corpus from 174 to **229**. They reuse the shared driver, now also used by nine generated profiles. The optional `observe` fixture selects public diagnostic/adapter events; all unselected observations and cache internals remain outside that event stream. Expected events never enter execution. A negative harness check corrupts a miss expectation and requires replay to fail.
 
 ## Keeping the audit current
 

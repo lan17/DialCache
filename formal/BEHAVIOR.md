@@ -42,11 +42,11 @@ Names are a trace vocabulary, not required language method names. All selected e
 
 `policy` uses the existing configuration vocabulary: `ttlSec` and `ramp` with `local`/`remote` leaves, `requestLocal`, `coalesce`, `staleOnErrorMaxAgeSec`, `remoteReadTimeoutMs`, and `shadow.ramp`. Omitted fields have DialCache's documented defaults; TTL without a ramp enables that layer fully. Runtime overlays initially omit all leaves.
 
-Other fixture fields are `tracked` (default false), `fallbackTimeoutMs` (fixture default 10, null disables, `"default"` omits the operation override to exercise the library's 60-second default), `readTimeoutMs` (fixture default 50; `"default"` omits the adapter option to exercise the library default), `localMaxSize` (default 10,000), `shadowMaxInFlight` (default 1), and `recovery` (`allow`, `deny`, `error`, or default timeout-only classification). An operation can override the instance classifier with `begin.recovery`. Optional `comparator` supplies `equal`, `unequal`, or `error`; omitted comparison uses ordinary value equality. These are controlled callback outcomes, not an expression language. `shadowHook: false` omits the required outcome observer; `observerFailure: true` makes installed observers fail; `remote: false` omits the Redis adapter. `probeSourceScope: true` records whether caching is enabled when each actual source invocation begins. Shadow/recovery hooks always record terminal diagnostic outcomes. Optional `observe` selects additional public events (see below); it does not change policy or execution. Compression writes are disabled; existing compressed entries can be seeded to check decoding and recovery. Envelope interoperability is also covered separately by protocol vectors.
+Other fixture fields are `tracked` (default false), `fallbackTimeoutMs` (fixture default 10, null disables, `"default"` omits the operation override to exercise the library's 60-second default), `readTimeoutMs` (fixture default 50; `"default"` omits the adapter option to exercise the library default), `localMaxSize` (default 10,000), `shadowMaxInFlight` (default 1), and `recovery` (`allow`, `deny`, `error`, or default timeout-only classification). An operation can override the instance classifier with `begin.recovery`. Optional `comparator` supplies `equal`, `unequal`, or `error`; omitted comparison uses ordinary value equality. Optional `comparisonMs` makes that external callback consume the specified elapsed time before returning or failing, without delivering timers. These are controlled callback outcomes, not an expression language. `shadowHook: false` omits the required outcome observer; `observerFailure: true` makes installed observers fail; `remote: false` omits the Redis adapter. `probeSourceScope: true` records whether caching is enabled when each actual source invocation begins. Shadow/recovery hooks always record terminal diagnostic outcomes. Optional `observe` selects additional public events (see below); it does not change policy or execution. Compression writes are disabled; existing compressed entries can be seeded to check decoding and recovery. Envelope interoperability is also covered separately by protocol vectors.
 
 Keys use namespace `urn`, key type `id`, use case `Behavior`, and ID `1` unless an input overrides `useCase` or `key`. The fixture value domain is JSON scalars (numbers, strings, booleans, null) plus an absent value. The test serializer uses JSON for scalars and the unquoted literal `undefined` for absence. An omitted input value denotes absence, represented in observations by `{"absent": true}`; the ordinary string `"undefined"` stays a string and cannot be mistaken for it. A port may use an option/unit value or its own fixture sentinel. This custom serializer tests cacheability without prescribing a language's JSON API or reference identity.
 
-Wall time starts at `2026-09-08T12:00:00Z`; monotonic time starts at zero. Elapsed time advances only through `advance`; `shiftWall` changes application wall time independently, preserving monotonic time and Redis physical expiry. Local entries use monotonic age; frame age and watermark proposals use application wall time. The fake Redis expiration clock advances with elapsed time independently of application wall-clock steps. Tracked reads atomically acquire a value and watermark. Watermarks remain available through the trace. A native write's frame timestamp is captured when the adapter receives it, before any held transport completion.
+Wall time starts at `2026-09-08T12:00:00Z`; monotonic time starts at zero. Elapsed time advances through `advance` or configured external comparison work; `shiftWall` changes application wall time independently, preserving monotonic time and Redis physical expiry. Local entries use monotonic age; frame age and watermark proposals use application wall time. The fake Redis expiration clock advances with elapsed time independently of application wall-clock steps. Tracked reads atomically acquire a value and watermark. Watermarks remain available through the trace. A native write's frame timestamp is captured when the adapter receives it, before any held transport completion.
 
 ## Inputs and completion boundaries
 
@@ -58,10 +58,10 @@ Wall time starts at `2026-09-08T12:00:00Z`; monotonic time starts at zero. Elaps
 | `advance` | Advance both clocks by `ms` and deliver due timers. With `deliverTimers: false`, advance clock observations without delivering pending timers; later settlement must still enforce the deadline. |
 | `shiftWall` | Shift application wall time by signed `ms`, without advancing elapsed time or changing Redis physical retention. This is a clock observation, not a timer delivery. |
 | `seed` | Environment stores a frame for `key` and optional `useCase`: `value`, `ageMs` (default 0; negative is future), optional physical `ttlMs` (default 60,000). `frameHex` instead supplies exact raw bytes. This is external setup, not a DialCache write. |
-| `invalidate` | Call public targeted invalidation for `key`, with `futureBufferMs` default 0; await completion. Record its success or controlled mutation failure. |
+| `invalidate` | Call public targeted invalidation for `key`, with `futureBufferMs` default 0; await completion. Record its success, controlled mutation failure, or missing-remote-resource error. |
 | `policy` | Replace the runtime overlay with `value` (or `null` to inherit). Existing entries and already accepted invocation snapshots retain their contracts. |
 | `faults` | Update environmental flags: `read`, `write`, `dump`, `load`, `policy`, `observer`; and gates `holdReads`, `holdWrites`, `holdDumps`, `holdLoads`, `holdPolicies`. Unmentioned flags retain their values. Flags start false. |
-| `release` | Complete a held `effect` (`read`, `write`, `dump`, `load`, `policy`) by its zero-based invocation `index`. A released read acquires the environment's current atomic snapshot. |
+| `release` | Complete a held `effect` (`read`, `write`, `dump`, `load`, `policy`) by its zero-based invocation `index`. A released read acquires the environment's current atomic snapshot. Optional `fail: true` rejects only this effect. |
 | `openScope` | Open context `id` for optional `instance`, optionally nested inside `parent` (whose instance is inherited). `disabled: true` opens a disabled context; otherwise it calls enable. Save its execution context for later inputs. |
 | `closeScope` | Complete context `id`. Retain its context handle so later `begin` inputs can exercise detached work after closure. Nested scopes reuse the outer request memo lifetime. |
 
@@ -76,7 +76,7 @@ Calls may remain pending at a scenario's end. Drivers release fixture-owned work
 - `classifications`, `comparisons`: actual invocations of the fixture-owned classifier/comparator. Built-in defaults are not instrumented.
 - `sourceScopes`: actual source-entry enablement observations when the explicit scope probe is enabled; otherwise empty.
 - `writeTtls`: actual requested physical write TTLs in milliseconds, in dispatch order.
-- `maintenance`: public invalidation outcomes, `ok` or `mutation_error`.
+- `maintenance`: public invalidation outcomes, `ok`, `mutation_error`, or `missing_remote`. The last category records the actual public error; a port need not reproduce its native class or text.
 - `shadow`, `recovery`: terminal outcomes from the public diagnostic hooks, in observed order. Exact telemetry timing and ordinary metrics are not asserted.
 
 A returned cache value, loader invocation, or acknowledged write does not prove publication. Subsequent calls test cache retention and invalidation. Negative harness tests deliberately remove recovery, local storage, and acknowledged invalidation and require a later observable divergence.
@@ -85,7 +85,7 @@ A returned cache value, loader invocation, or acknowledged write does not prove 
 
 `adapterReply` stages one JSON-shaped semantic adapter result for the next successful raw-read settlement. Only one result may be staged at a time. The driver supplies it to the real cache at the adapter boundary; it neither decodes it on behalf of DialCache nor records a predicted miss/hit. Existing held reads and read failures remain independent. Tests use invalid replies to check the core's normalization; ports whose adapter type cannot represent malformed replies can enforce that boundary when decoding external input.
 
-`seed.payloadHex` supplies raw binary serializer/envelope bytes, framed with the current wall timestamp minus `ageMs`. `seed.frameHex` remains a complete frame, including header; ordinary `seed.value` still uses the scalar fixture codec. These inputs change only the fake Redis environment.
+`seed.payloadText` supplies exact UTF-8 text serializer bytes; `seed.payloadHex` supplies raw binary serializer/envelope bytes, framed with the current wall timestamp minus `ageMs`. `seed.frameHex` remains a complete frame, including header; ordinary `seed.value` still uses the scalar fixture codec. These inputs change only the fake Redis environment.
 
 ## Generated pending-effect profile
 
@@ -139,6 +139,7 @@ Call observations encode pending as 0, fixture values 1/2 as 1/2, source errors 
 
 | Profile | Fixture and bounds | Generated coverage |
 | --- | --- | --- |
+| [Independent](./dialcache-independent-conformance.qnt) | Tracked same-key calls, coalescing disabled, six callers, independent read/source/decode gates, read budgets 5/10 ms, F=1 s and captured M=2/5 s | Per-call cancellation, late effects, refill authority, recovery snapshots/policy and original source-error identities |
 | [Layers](./dialcache-layers-conformance.qnt) | Two instances, three persistent contexts, four identities, tracked/untracked and capacity 0/2 fixtures, twenty calls | Request/process sharing, layer precedence, LRU promotion/eviction, per-instance capacity, tracked local warming and operation-group invalidation |
 | [Admission](./dialcache-admission-conformance.qnt) | Tracked served remote hits, three keys, two instances, two shadow slots per instance, held reads/decodes, 10 ms job deadline, up to sixteen callers | Same-key deduplication, capacity drops, instance isolation, coalesced hits, policy snapshots, disabled detached sources, match/mismatch/supersession, capacity retained through timed-out source/decode/C1 work |
 | [Scope](./dialcache-scope-conformance.qnt) | Request-only, one key, two outer lifetimes, three nested contexts, one held provider reply, independently settled sources, no deadline, up to sixteen callers | Scope isolation/closure/replacement; nested and disabled contexts; reenablement; pending policy at closure; shared rejection/retry; request/coalescing policy changes; late source settlement |
@@ -152,7 +153,7 @@ Policy and recovery separate wall timestamps from elapsed time. Generated public
 
 Recovery begins with value 1 seeded at age 1,000 ms. Policy and shadow begin with empty storage. Every trace gets a fresh fixture. Shadow permits another call once its preceding source and owned job work have settled; cross-key capacity/drop behavior remains covered by fixed scenarios. Recovery advances through a source deadline before the end of a larger elapsed-time step; recovery starts at that deadline and its held decode may complete later. The retained snapshot and source-error identity survive late source settlement. Recovery initial input 0/1/2/3 selects the timeout-only library default or an instance classifier that allows, denies, or throws; 4..7 selects the same classifier with request-local caching enabled. Operation choice 3 inherits that instance policy; 0/1/2 replaces it with allow/deny/error. CI requires all eight initial fixtures, both directions of operation override, instance allow on ordinary source errors, instance denial on source deadline, and classifier-error preservation of the source failure. Policy admits another invocation after the preceding provider reply is released, even while its source remains pending. Sources can settle in any order; same-key followers join only while their current policy permits sharing. A shared leader remains registered when an independent source publishes or fails. Request scopes have their own generated profile; held publication remains outside this policy profile.
 
-Common actions reuse the scenario inputs: `releaseRead/Load/Dump/Write/Policy` releases the most recently observed corresponding external effect in scope/recovery/policy/shadow; admission instead selects explicit pending read/load indices; `readFault/loadFault/dumpFault/writeFault/providerFault` sets that failure flag from choice 0/1 (provider uses `faults.policy`). Shadow `rejectLoader` rejects the latest actual loader; recovery/scope/policy/admission settlement selects an explicit source index. No action reads or mutates the cache's internal state.
+Common actions reuse the scenario inputs: `releaseRead/Load/Dump/Write/Policy` releases the most recently observed corresponding external effect in scope/recovery/policy/shadow; admission and independent instead select explicit pending read/load indices; `readFault/loadFault/dumpFault/writeFault/providerFault` sets that failure flag from choice 0/1 (provider uses `faults.policy`). Shadow `rejectLoader` rejects the latest actual loader; recovery/scope/policy/admission/independent settlement selects an explicit source index. No action reads or mutates the cache's internal state.
 
 | Profile/action | Input mapping and allowed choices |
 | --- | --- |
@@ -171,15 +172,17 @@ Common actions reuse the scenario inputs: `releaseRead/Load/Dump/Write/Policy` r
 | Policy `seed` | Choice 0..3 supplies key `floor(choice/2)` with value `1 + choice%2`, current wall stamp, and 5 s physical TTL |
 | Policy `advance` | Elapsed time choice 1, 1000, 2000, or 5000 ms |
 | Policy `policy` | Replace overlay using the numbered table below |
-| Shadow `init` | Choice 0..3 selects default/equal/unequal/error comparison; 4..7 selects the same comparison with mismatch logging enabled; 8 omits the outcome hook |
+| Shadow `init` | Choice 0..3 selects default/equal/unequal/error comparison; 4..7 selects the same comparison with mismatch logging enabled; 8 omits the outcome hook; 9/10 supplies equal/error comparison consuming 10 ms, logging initially off |
 | Shadow `rollbackWall` | Move the wall clock back 1,000 ms without changing elapsed time |
 | Shadow `logPolicy` | Choice 0/1 disables/enables logging for newly admitted jobs; omitted ramp inherits the fixture default |
 | Shadow `shadowPolicy` | Choice 0/1/2 replaces the runtime overlay with shadow ramp 100/0/101; omitted logging inherits the fixture default |
 | Shadow `beginCall` | Plain `begin` |
 | Shadow `resolveLoader` | Resolve latest loader with choice 1/2 |
-| Shadow `seed` | Seed value choice 1/2 at current wall time |
+| Shadow `seed` / `reencode` | Store the explicit payload choice below at current wall time; `reencode` chooses the alternate text/binary form of the currently stored bytes during C1 |
 | Shadow `advance` | Elapsed time choice 1/10 ms, delivering due timers |
 | Shadow `invalidate` | Public invalidation with future buffer choice 0/20 ms |
+
+Shadow payload choices 1/2 are text JSON `1`/`2`; 3/4 are binary hex `31`/`32`; 5 is binary `2031`; 6 is text ` 1`; 7 is text JSON `"café"`; 8 is binary `22636166c3a922`. Thus text and binary may share exact UTF-8 bytes, while different byte spellings may decode to the same value. Comparison uses decoded values; confirmation uses bytes. `reencode` records the replacement payload as an explicit choice, so a driver never consults expected storage. Required witnesses include both Unicode text/binary confirmation directions, equal decoded values superseded by different bytes, binary C0 decoding, and successful/failing comparison exhausting the deadline. Timer delivery is not required for elapsed-time rejection.
 
 Policy overlay choices replace the entire runtime overlay; omitted leaves inherit the fixture's defaults:
 
@@ -203,7 +206,7 @@ Policy overlay choices replace the entire runtime overlay; omitted leaves inheri
 
 Five deterministic policy regressions anchor invalid budget, per-layer ramp, optional recovery retention, and fresh-hit shadow-policy behavior. The generated sample requires each boundary, including a Redis hit under invalid shadow policy and both invalid recovery retention cases. Independent Redis seeding makes external replacement/read scenarios reachable.
 
-Generation exports 512 recovery traces from 4,096 samples, and 512 policy traces from 2,048 samples and 512 shadow traces from 2,048 samples, at most 60 transitions each. Actions are sampled in progress/environment groups so repeated environmental changes do not crowd out useful completion paths; C1 favors completion and logging changes while retaining replacement, fencing, read failure, time, and admission-policy changes. This changes exploration frequency, not the allowed transition semantics.
+Generation exports 512 recovery traces from 4,096 samples, and 512 policy traces from 2,048 samples and 1,024 shadow traces from 4,096 samples, at most 60 transitions each. Actions are sampled in progress/environment groups so repeated environmental changes do not crowd out useful completion paths; C1 favors completion and logging changes while retaining replacement, fencing, read failure, time, and admission-policy changes. This changes exploration frequency, not the allowed transition semantics.
 
 CI requires every named action, all three recovery outcomes, recovery across invalidation, coalesced recovery, age-out during decoding, local/remote hits, changed-policy publication, physical TTLs of 1/2/4/5 seconds, both C0/source orders, all twelve modeled shadow outcomes, and a write completing after shadow timeout. These witness checks fail if a configured corpus misses its promised paths. They establish occurrence only. The separate verification models still reason about wider abstractions such as shadow admission, and the portable fixed corpus covers additional binding-independent boundaries.
 
@@ -211,7 +214,7 @@ Scope, recovery, and shadow also expose `s.d = { warnings, ages, coalesced, fall
 
 `coalesced` records actual request/process scope labels; `fallbackErrors` records the source-failure layer, including failures later recovered as stale. Scope fixtures assert one trail for shared failures, no cache-error trail for disabled pass-through work, and `noop` attribution if the request closes while policy is pending. Admission-time attribution survives later scope closure. Three deterministic scope regressions and six additional required witnesses anchor these consequences. Other cache/maintenance errors are outside this feature diagnostic projection and remain checked by effects and fixed scenarios.
 
-Nine shadow fixtures, both custom comparison overrides, comparison failure, both captured-logging directions, logging on/off, clamped age, and positive verdict age are required witnesses. Nine deterministic shadow regressions anchor these rules. Required witnesses also cover no job without the outcome hook, disabled/invalid policy skipping new jobs, and an admitted job completing under its original policy. Missing or corrupted diagnostic expectations must fail harness checks.
+Eleven shadow fixtures, both custom comparison overrides, comparison failure, both captured-logging directions, logging on/off, clamped age, and positive verdict age are required witnesses. Fourteen deterministic shadow regressions anchor these rules. Required witnesses also cover no job without the outcome hook, disabled/invalid policy skipping new jobs, and an admitted job completing under its original policy. Missing or corrupted diagnostic expectations must fail harness checks.
 
 `test/formal-features.test.ts` replays these traces and checks parser/assertion trust boundaries. Ordinary CI uses the committed `recovery-smoke.itf.json`, `policy-smoke.itf.json`, and `shadow-smoke.itf.json` without Quint. Formal CI replays every generated trace. To replay a downloaded artifact:
 
@@ -222,7 +225,28 @@ DIALCACHE_FEATURE_TRACE_FILE=.formal-traces/features/recovery/trace_0.itf.json \
 
 Policy CI requires six additional concurrency witnesses: cross-key overlap, uncoalesced same-key overlap, a join after policy changes, reverse source settlement, one source settling multiple callers, and publication while another provider reply is held. Its committed smoke is a generated prefix containing a shared rejection and a later independent settlement; it also runs without Quint. Policy settlement choices changed with the concurrent profile, so replay these traces with the matching specification revision.
 
-The parent `layers/`, `scope/`, `recovery/`, `policy/`, `shadow/`, or `admission/` directory identifies the fixture. To replay a whole generated feature corpus, set `DIALCACHE_FEATURE_TRACE_DIR=.formal-traces/features` instead. Keep a failing trace with its profile directory when copying it.
+The parent `independent/`, `layers/`, `scope/`, `recovery/`, `policy/`, `shadow/`, or `admission/` directory identifies the fixture. To replay a whole generated feature corpus, set `DIALCACHE_FEATURE_TRACE_DIR=.formal-traces/features` instead. Keep a failing trace with its profile directory when copying it.
+
+## Generated independent-caller profile
+
+[`dialcache-independent-conformance.qnt`](./dialcache-independent-conformance.qnt) tests the same key with coalescing disabled. The single registered-flight models cannot express independent acquired reads and recovery chains; this companion reuses the existing driver and effect vocabulary. Six callers can each own one read, one source, and one decode. Tracked remote freshness is 1 s, initial recovery maximum age is 5 s, read budget is 5 ms, and source budget is 10 ms. Recovery classification allows ordinary errors and timeouts. Value 1 initially has age 1,000 ms and physical TTL 60,000 ms. Only raw reads and decoding are held; accepted publication completes at the source-settlement boundary.
+
+| Action | Environment/public input |
+| --- | --- |
+| `beginCall` | Begin another independent same-key call |
+| `releaseRead` / `failRead`, `releaseLoad` / `failLoad` | Complete or reject the explicitly selected actual read/decode index, 0..5 |
+| `resolveLoader` | Choice 1..12: source `floor((choice - 1) / 2)`, value `1 + (choice - 1) % 2` |
+| `rejectLoader` | Reject source index 0..5 with that source's logical error |
+| `advance` | Advance 1, 5, 10, or 1,000 ms and deliver due deadlines |
+| `seed` | Choice 0..5: values `[1,1,2,1,2,1]`, ages `[0,1000,1000,4999,0,1999]` ms, physical TTL 60,000 ms |
+| `invalidate` | Public invalidation with zero future buffer |
+| `policy` | Choice 0..3: read budget 5 ms for even choices, 10 ms for odd; recovery maximum age 5 s for 0/1, 2 s for 2/3 |
+
+Each call captures its read budget and recovery policy. Read failure or timeout cannot borrow another call's refill authority. Each recovery chain retains its own eligible bytes and original source error. Later invalidation cannot revoke an already acquired fresh decode or stale candidate; recovery still rechecks age around decode. Late raw read/source settlement cannot affect another call. The environment delivers deadlines in time order, using registration order for equal instants, including new source deadlines reached within one advance. This is the supplied schedule; other runtimes need not use the same timer implementation.
+
+Besides the common `s.o`, replay requires `s.io = { budgets, aborted, sourceErrors }`. `budgets` records actual adapter read budgets in read invocation order; `aborted` records actual cooperative cancellation indices in delivery order. `sourceErrors` has one entry per caller: zero unless the caller returned its source's ordinary error, otherwise the one-based actual source identity. The driver projects actual adapter callbacks and returned error tokens; model-private ownership records never enter execution. Parser and corrupted-budget tests protect that boundary.
+
+CI emits 512 traces from 2,048 samples, up to 60 steps, and requires every action plus fifteen witnesses covering separate budgets/deadlines, distinct recovery values/errors, captured age policy, failed-read refill suppression, acquired observations across invalidation, and late completion isolation. Six deterministic model regressions anchor these rules. The committed `independent-smoke.itf.json` replays without Quint. Coalesced recovery, scope lifetimes, wall rollback, and held publication retain separate profile coverage; this model does not combine every feature.
 
 ## Generated layer-composition profile
 
@@ -238,7 +262,7 @@ The initial **input choice**, never expected model state, selects the fresh fixt
 | 3 | Yes | 0 |
 | 4 | Adapter absent | 2 |
 
-Mode 4 omits the Redis adapter, requires public local-hit reuse, and excludes invalidation inputs. All modes enable request-local caching and 60-second local/remote TTLs, with no source deadline. Sources are held independently; other external effects settle at their action boundary. Two instances share Redis but own their local capacity and process flights. Persistent contexts 0 and 1 belong to instance 0; context 2 belongs to instance 1. Contexts 3 and 4 mean a fresh invocation scope on instance 0 and 1 respectively. This is an input-level fixture description, not a requirement to reproduce any host context API.
+Mode 4 omits the Redis adapter and requires public local-hit reuse after explicit invalidation reports `missing_remote`; no adapter mutation is dispatched. All modes enable request-local caching and 60-second local/remote TTLs, with no source deadline. Sources are held independently; other external effects settle at their action boundary. Two instances share Redis but own their local capacity and process flights. Persistent contexts 0 and 1 belong to instance 0; context 2 belongs to instance 1. Contexts 3 and 4 mean a fresh invocation scope on instance 0 and 1 respectively. This is an input-level fixture description, not a requirement to reproduce any host context API.
 
 | Action | Input mapping |
 | --- | --- |
@@ -253,7 +277,7 @@ Mode 4 omits the Redis adapter, requires public local-hit reuse, and excludes in
 
 At most twenty calls and eighty steps keep entries fresh throughout this profile; TTL boundaries remain in policy/scenario coverage. There are four logical identities, so a two-slot local cache can demonstrate read promotion and eviction, while request storage can exceed that capacity. Successful source completion publishes only to participating eligible layers. Tracked remote fallback skips direct local publication; an authoritative hit can warm local. Invalidation fences subsequent remote reads while acquired request/local values survive. Policy changes preserve admitted sources' publication decisions.
 
-CI exports 512 traces from 2,048 samples. Nineteen required witnesses include all five fixtures and local reuse without Redis, cross-request process sharing, zero-capacity sharing/reload, uncapped request memoization, LRU promotion/eviction with later public probes, per-instance capacity, tracked read warming, local survival across invalidation, both operation variants fenced, and untracked reads ignoring markers. Private model records select reachability witnesses only; storage-related witnesses require actual replayed calls that probe their predictions. They never control the adapter or become implementation observations. Seven deterministic model regressions anchor the same boundaries, and a committed generated smoke runs without Quint.
+CI exports 512 traces from 2,048 samples. Twenty required witnesses include all five fixtures and local reuse without Redis before and after a surfaced maintenance error, cross-request process sharing, zero-capacity sharing/reload, uncapped request memoization, LRU promotion/eviction with later public probes, per-instance capacity, tracked read warming, local survival across invalidation, both operation variants fenced, and untracked reads ignoring markers. Private model records select reachability witnesses only; storage-related witnesses require actual replayed calls that probe their predictions. They never control the adapter or become implementation observations. Eight deterministic model regressions anchor the same boundaries, and a committed generated smoke runs without Quint.
 
 This profile uses the same observations and public/environment inputs as the other feature profiles. It adds initial fixture choices; drivers must reject unsupported choices. Larger capacities, more scopes/instances, mixed deadline/recovery/shadow combinations, and expiry during LRU ordering are outside its generated bounds.
 
@@ -309,7 +333,7 @@ The committed `admission-smoke.itf.json` retains actions, choices, and observati
 1. Implement the protocol/key/normalization/envelope vectors and the invalidation-transition vectors against the actual remote adapter/protocol.
 2. Implement these fixture operations using public cache operations and controlled external adapters.
 3. Run the committed scenarios and smoke traces.
-4. Replay the same core, pending-effect, scope, recovery, policy, shadow, admission, and layers ITF corpora used by TypeScript.
+4. Replay the same core, pending-effect, scope, recovery, policy, shadow, admission, layers, and independent ITF corpora used by TypeScript.
 5. Report passing behavior families, specification revision, seed, bounds, and tool versions.
 
 Passing covers the supplied observations and scenarios. It does not establish every feature interaction, fairness/liveness, arbitrary resource limits, or all external failures. A second-language driver has not yet validated the portability of this interface. See [`TEST-MAP.md`](./TEST-MAP.md) for the remaining boundaries.

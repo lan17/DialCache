@@ -4,12 +4,16 @@ module dialcache_shadow_conformance {
   // C0 are independent; every external read/load/dump/write can be held.
   // Phase: 0 idle, 1 C0, 2 source, 3 decode, 4 C1, 5 dump, 6 write, 7 done.
   type State = {
-    o: Observation, d: Diagnostics, now: int, wall: int, comparator: int, hook: bool, shadowActive: bool, defaultLog: bool, log: bool, acceptedLog: bool, c0Created: int, deadline: int, phase: int, source: int,
+    o: Observation, d: Diagnostics, now: int, wall: int, comparator: int, comparisonMs: int, hook: bool, shadowActive: bool, defaultLog: bool, log: bool, acceptedLog: bool, c0Created: int, deadline: int, phase: int, source: int,
     sourcePending: bool, sourceValue: int, abandoned: bool,
     frame: int, created: int, watermark: int, c0: int, fence: int, writeStamp: int,
     readFailed: bool, loadFailed: bool, dumpFailed: bool, writeFailed: bool
   }
   var s: State
+  // Text and binary representations can share bytes; different JSON bytes
+  // can still decode to the same value. C1 uses bytes, C0/S uses decoded values.
+  pure def payloadBytes(payload: int): int = if (payload == 3) 1 else if (payload == 4) 2 else if (payload == 6) 5 else if (payload == 8) 7 else payload
+  pure def payloadValue(payload: int): int = if (payload >= 7) 3 else if (payload == 3 or payload == 5 or payload == 6) 1 else if (payload == 4) 2 else payload
   pure def done(st: State, outcome: str): State = {
     val validated = outcome == "match" or outcome == "mismatch"
     val age = if (st.wall < st.c0Created) 0 else st.wall - st.c0Created
@@ -27,12 +31,13 @@ module dialcache_shadow_conformance {
 
   // Input fixtures: default/equal/unequal/error comparator, then the same four
   // with mismatch logging enabled; fixture 8 omits the outcome hook.
+  // Fixtures 9/10 let successful/failing comparison consume the job budget.
   // Policy changes are captured at admission.
   action init = {
-    nondet choice = 0.to(8).oneOf()
+    nondet choice = 0.to(10).oneOf()
     s' = {
     o: empty, d: noDiagnostics, now: 10000, wall: 100000,
-    comparator: choice % 4, hook: choice != 8, shadowActive: choice != 8,
+    comparator: if (choice == 10) 3 else choice % 4, comparisonMs: if (choice >= 9) 10 else 0, hook: choice != 8, shadowActive: choice != 8,
     defaultLog: choice >= 4 and choice < 8, log: choice >= 4 and choice < 8, acceptedLog: false, c0Created: 0, deadline: 0, phase: 0, source: 0,
     sourcePending: false, sourceValue: 0, abandoned: false,
     frame: 0, created: 0, watermark: 0, c0: 0, fence: 0, writeStamp: 0,
@@ -63,16 +68,17 @@ module dialcache_shadow_conformance {
     val snapshot = if (readable) s.frame else 0
     s' = if (s.abandoned) { phase: 7, ...s }
       else if (s.phase == 4) done(s, if (s.readFailed) "confirmation_error"
-        else if (snapshot == s.c0) "mismatch" else "superseded")
+        else if (payloadBytes(snapshot) == payloadBytes(s.c0)) "mismatch" else "superseded")
       else if (s.readFailed) done(s, "redis_error")
       else continueJob({ phase: 2, c0: if (s.created > s.wall) 0 else snapshot, c0Created: s.created, fence: if (readable) 0 else s.watermark, ...s })
   }
   action releaseLoad = all { s.phase == 3,
-    val compared = { o: { comparisons: s.o.comparisons + (if (s.comparator == 0) 0 else 1), ...s.o }, ...s }
+    val compared = { now: s.now + s.comparisonMs, wall: s.wall + s.comparisonMs, o: { comparisons: s.o.comparisons + (if (s.comparator == 0) 0 else 1), ...s.o }, ...s }
     s' = if (s.abandoned) { phase: 7, ...s }
       else if (s.loadFailed) done(s, "deserialization_error")
+      else if (compared.now >= s.deadline) done({ abandoned: true, ...compared }, "timeout")
       else if (s.comparator == 3) done(compared, "comparison_error")
-      else if (s.comparator == 1 or (s.comparator == 0 and s.c0 == s.sourceValue)) done(compared, "match")
+      else if (s.comparator == 1 or (s.comparator == 0 and payloadValue(s.c0) == s.sourceValue)) done(compared, "match")
       else { phase: 4, o: { reads: s.o.reads + 1, ...compared.o }, ...compared }
   }
   action releaseDump = all { s.phase == 5,
@@ -99,8 +105,14 @@ module dialcache_shadow_conformance {
       o: { shadow: if (jobTimeout) s.o.shadow.append("timeout") else s.o.shadow,
         ...finish(s.o, if (callerTimeout) 4 else 0) }, ...s }
   }
-  action seed = { nondet choice = Set(1, 2).oneOf()
+  action seed = { nondet choice = 1.to(8).oneOf()
     s' = { frame: choice, created: s.wall, ...s } }
+  // External replacement with identical bytes in the other supported form.
+  // This targets confirmation's representation boundary, without fixing its outcome.
+  action reencode = {
+    nondet choice = Set(List(0, 3, 4, 1, 2, 6, 5, 8, 7).nth(s.frame)).oneOf()
+    all { s.phase == 4, s.frame > 0, s' = { frame: choice, created: s.wall, ...s } }
+  }
   action invalidate = { nondet choice = Set(0, 20).oneOf()
     s' = if (s.writeFailed) { o: { invalidations: s.o.invalidations + 1,
       maintenance: s.o.maintenance.append("mutation_error"), ...s.o }, ...s }
@@ -123,7 +135,7 @@ module dialcache_shadow_conformance {
     s' = { writeFailed: choice == 1, ...s } }
   // At C1, favor completion and logging changes while retaining every
   // replacement, failure, clock, and admission-policy transition.
-  action step = if (s.phase == 4) any { releaseRead, logPolicy, any { seed, invalidate, readFault, advance, rollbackWall, shadowPolicy } } else any {
+  action step = if (s.phase == 4) any { releaseRead, logPolicy, reencode, any { seed, invalidate, readFault, advance, rollbackWall, shadowPolicy } } else any {
     any { beginCall, resolveLoader, rejectLoader, releaseRead, releaseLoad, releaseDump, releaseWrite },
     any { advance, seed, invalidate, readFault, loadFault, dumpFault, writeFault, rollbackWall, logPolicy, shadowPolicy }
   }
@@ -135,8 +147,23 @@ module dialcache_shadow_conformance {
   val warningsRequireMismatch = s.d.warnings <= s.o.shadow.select(x => x == "mismatch").length()
 
   // Fixed model regressions anchor the callback and captured-policy contract.
-  action compareFixture = init.then(s' = { phase: 3, hook: true, shadowActive: true, c0: 1, c0Created: s.wall - 1, sourceValue: 2,
+  action compareFixture = init.then(s' = { phase: 3, deadline: s.now + 10, comparisonMs: 0, hook: true, shadowActive: true, c0: 1, c0Created: s.wall - 1, sourceValue: 2,
     o: { calls: List(2), loaders: 1, reads: 1, loads: 1, ...empty }, ...s })
+  run identicalTextAndBinaryBytesConfirmMismatchTest = compareFixture
+    .then(s' = { comparator: 2, frame: 3, created: s.wall, ...s }).then(releaseLoad).then(releaseRead)
+    .expect(s.o.shadow == List("mismatch"))
+  run sameDecodedValueWithDifferentBytesIsSupersededTest = compareFixture
+    .then(s' = { comparator: 2, frame: 5, created: s.wall, ...s }).then(releaseLoad).then(releaseRead)
+    .expect(s.o.shadow == List("superseded"))
+  run binarySnapshotComparesDecodedValueTest = compareFixture
+    .then(s' = { comparator: 0, c0: 3, sourceValue: 1, ...s }).then(releaseLoad)
+    .expect(s.o.shadow == List("match") and s.o.reads == 1)
+  run slowComparisonTimesOutBeforeConfirmationTest = compareFixture
+    .then(s' = { comparator: 2, comparisonMs: 10, ...s }).then(releaseLoad)
+    .expect(s.o.shadow == List("timeout") and s.o.reads == 1 and s.o.comparisons == 1 and s.o.calls == List(2))
+  run slowComparisonFailureStillTimesOutTest = compareFixture
+    .then(s' = { comparator: 3, comparisonMs: 10, ...s }).then(releaseLoad)
+    .expect(s.o.shadow == List("timeout") and s.o.comparisons == 1 and s.o.calls == List(2))
   run missingHookSkipsDarkJobTest = init.then(s' = { hook: false, shadowActive: false, ...s })
     .then(beginCall).then(resolveLoader).expect(s.o.calls.nth(0) > 0 and s.o.reads == 0 and s.o.shadow == List())
   run invalidShadowPolicySkipsDarkJobTest = init.then(s' = shadowPolicyFor(2)).then(beginCall).then(resolveLoader)

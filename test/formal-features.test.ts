@@ -8,7 +8,7 @@ import { itfInteger, record } from "./formal/itf.js";
 
 type Projected = Omit<Observation, "calls"> & { calls: number[] };
 type Action = { choices?: readonly number[]; input: (choice: number, observed: Observation) => Input };
-interface Profile { diagnosticAge?: "shadowAge" | "recoveryAge" | "none"; fixture: Fixture | ((choice: number) => Fixture); initChoices?: readonly number[]; setup: Input[]; actions: Record<string, Action> }
+interface Profile { readIO?: boolean; diagnosticAge?: "shadowAge" | "recoveryAge" | "none"; fixture: Fixture | ((choice: number) => Fixture); initChoices?: readonly number[]; setup: Input[]; actions: Record<string, Action> }
 const settle = (op: "resolve" | "reject"): Action => ({
   ...(op === "resolve" ? { choices: [1, 2] } : {}),
   input: (choice, o) => op === "resolve" ? { op, loader: o.loaders - 1, value: choice } : { op, loader: o.loaders - 1 },
@@ -42,7 +42,32 @@ const policyOverlays = overlays.concat(overlays.map((overlay) => ({ ...overlay, 
 ]);
 const layerPolicies: Policy[] = [{}, { requestLocal: false }, { ramp: { local: 0 } },
   { ramp: { remote: 0 } }, { ramp: { local: 0, remote: 0 } }, { requestLocal: false, ramp: { local: 0, remote: 0 } }];
+const shadowSeed: Action = { choices: [1, 2, 3, 4, 5, 6, 7, 8], input: (choice) => choice <= 2
+        ? { op: "seed", value: choice } : choice === 7 ? { op: "seed", payloadText: JSON.stringify("café") }
+        : choice === 8 ? { op: "seed", payloadHex: "22636166c3a922" } : choice === 6 ? { op: "seed", payloadText: " 1" }
+        : { op: "seed", payloadHex: choice === 3 ? "31" : choice === 4 ? "32" : "2031" } };
 const profiles: Record<string, Profile> = {
+  independent: {
+    readIO: true,
+    fixture: { policy: { ttlSec: { remote: 1 }, staleOnErrorMaxAgeSec: 5, coalesce: false },
+      tracked: true, readTimeoutMs: 5, fallbackTimeoutMs: 10, recovery: "allow", observe: ["readContext", "readAbort"] },
+    setup: [{ op: "seed", value: 1, ageMs: 1000 }, { op: "faults", value: { holdReads: true, holdLoads: true } }],
+    actions: {
+      beginCall: { input: () => ({ op: "begin" }) },
+      ...Object.fromEntries((["read", "load"] as const).flatMap(effect => [false, true].map(fail =>
+        [`${fail ? "fail" : "release"}${effect === "read" ? "Read" : "Load"}`, {
+          choices: [0, 1, 2, 3, 4, 5], input: (choice: number): Input => ({ op: "release", effect, index: choice, fail }),
+        }]))),
+      resolveLoader: { choices: Array.from({ length: 12 }, (_, i) => i + 1), input: choice => ({ op: "resolve", loader: Math.floor((choice - 1) / 2), value: (choice - 1) % 2 + 1 }) },
+      rejectLoader: { choices: [0, 1, 2, 3, 4, 5], input: choice => ({ op: "reject", loader: choice }) },
+      advance: advance([1, 5, 10, 1000]),
+      seed: { choices: [0, 1, 2, 3, 4, 5], input: choice => ({ op: "seed", value: choice === 2 || choice === 4 ? 2 : 1,
+        ageMs: choice === 0 || choice === 4 ? 0 : choice === 3 ? 4999 : choice === 5 ? 1999 : 1000 }) },
+      invalidate: { input: () => ({ op: "invalidate" }) },
+      policy: { choices: [0, 1, 2, 3], input: choice => ({ op: "policy", value: {
+        remoteReadTimeoutMs: choice % 2 === 0 ? 5 : 10, staleOnErrorMaxAgeSec: choice < 2 ? 5 : 2 } }) },
+    },
+  },
   layers: {
     initChoices: [0, 1, 2, 3, 4],
     fixture: (choice) => ({ policy: { requestLocal: true, ttlSec: { local: 60, remote: 60 } },
@@ -138,16 +163,17 @@ const profiles: Record<string, Profile> = {
     },
   },
   shadow: {
-    diagnosticAge: "shadowAge", initChoices: Array.from({ length: 9 }, (_, i) => i),
+    diagnosticAge: "shadowAge", initChoices: Array.from({ length: 11 }, (_, i) => i),
     fixture: (choice) => ({ policy: { ttlSec: { remote: 60 }, ramp: { remote: 0 },
-      shadow: { ramp: 100, ...(choice < 4 || choice === 8 ? {} : { logMismatches: true }) } }, tracked: true, shadowHook: choice !== 8,
-      ...(choice % 4 === 0 ? {} : { comparator: (["equal", "unequal", "error"] as const)[choice % 4 - 1]! }),
+      shadow: { ramp: 100, ...(choice < 4 || choice >= 8 ? {} : { logMismatches: true }) } }, tracked: true, shadowHook: choice !== 8,
+      ...(choice % 4 === 0 ? {} : { comparator: (["equal", "unequal", "error"] as const)[choice === 10 ? 2 : choice % 4 - 1]! }),
+      ...(choice >= 9 ? { comparisonMs: 10 } : {}),
       observe: ["shadowAge", "mismatchWarning", "coalesced", "error"] }),
     setup: [{ op: "faults", value: { holdReads: true, holdLoads: true, holdDumps: true, holdWrites: true } }],
     actions: {
       beginCall: { input: () => ({ op: "begin" }) }, resolveLoader: settle("resolve"), rejectLoader: settle("reject"),
       releaseRead: release("read"), releaseLoad: release("load"), releaseDump: release("dump"), releaseWrite: release("write"),
-      advance: advance([1, 10]), seed: { choices: [1, 2], input: (choice) => ({ op: "seed", value: choice }) },
+      advance: advance([1, 10]), seed: shadowSeed, reencode: shadowSeed,
       invalidate: { choices: [0, 20], input: (choice) => ({ op: "invalidate", futureBufferMs: choice }) },
       readFault: fault("read"), loadFault: fault("load"), dumpFault: fault("dump"), writeFault: fault("write"),
       rollbackWall: { input: () => ({ op: "shiftWall", ms: -1000 }) },
@@ -158,7 +184,8 @@ const profiles: Record<string, Profile> = {
 };
 
 interface Diagnostics { warnings: number; ages: number[]; coalesced: string[]; fallbackErrors: string[] }
-interface Step { action: string; choice: number; expected: Projected; diagnostics?: Diagnostics }
+interface ReadIO { budgets: number[]; aborted: number[]; sourceErrors: number[] }
+interface Step { io?: ReadIO; action: string; choice: number; expected: Projected; diagnostics?: Diagnostics }
 interface Trace { path: string; steps: Step[] }
 function observation(raw: unknown, context: string): Projected {
   const value = record(raw, context);
@@ -190,6 +217,15 @@ function diagnostics(raw: unknown, context: string): Diagnostics {
   return { warnings: itfInteger(value.warnings, context), ages: value.ages.map(age => itfInteger(age, context) / 1000),
     coalesced: labels(value.coalesced, ["process", "request_local"]), fallbackErrors: labels(value.fallbackErrors, ["noop", "local", "remote", "request_local"]) };
 }
+function readIO(raw: unknown, context: string): ReadIO {
+  const value = record(raw, context);
+  if (Object.keys(value).sort().join() !== "aborted,budgets,sourceErrors" || !Array.isArray(value.budgets) || !Array.isArray(value.aborted) || !Array.isArray(value.sourceErrors)) throw new Error(`${context}: invalid read observations`);
+  const budgets = value.budgets.map(v => itfInteger(v, context)), aborted = value.aborted.map(v => itfInteger(v, context));
+  if (budgets.some(v => v <= 0) || aborted.some(v => v >= budgets.length) || new Set(aborted).size !== aborted.length) throw new Error(`${context}: invalid read budget or cancellation`);
+  const sourceErrors = value.sourceErrors.map(v => itfInteger(v, context));
+  if (sourceErrors.length !== budgets.length) throw new Error(`${context}: missing caller error identities`);
+  return { budgets, aborted, sourceErrors };
+}
 function parseTrace(raw: unknown, path: string, profile: Profile): Trace {
   const states = record(raw, path).states;
   if (!Array.isArray(states) || states.length < 2) throw new Error(`${path}: expected a nonempty trace`);
@@ -213,6 +249,7 @@ function parseTrace(raw: unknown, path: string, profile: Profile): Trace {
       throw new Error(`${context}: unexpected choice`);
     }
     return { action, choice, expected: observation(record(state.s, context).o, context),
+      ...(profile.readIO ? { io: readIO(record(state.s, context).io, context) } : {}),
       ...(profile.diagnosticAge === undefined ? {} : { diagnostics: diagnostics(record(state.s, context).d, context) }) };
   }) };
 }
@@ -231,7 +268,28 @@ function project(o: Observation): Projected {
     : c.status === "value" ? valueCode(c)
     : c.error.startsWith("source:") ? 3 : c.error.startsWith("timeout:") ? 4 : 10) };
 }
-function projectWithDiagnostics(profile: Profile, observed: Observation) {
+function projectObservation(profile: Profile, observed: Observation) {
+  if (profile.readIO) {
+    const { events, ...base } = observed;
+    if (events === undefined) throw new Error("Missing actual read observations");
+    const io: ReadIO = { budgets: [], aborted: [], sourceErrors: observed.calls.map(call => {
+      if (call.status !== "error" || !call.error.startsWith("source:")) return 0;
+      if (!/^source:\d+$/.test(call.error)) throw new Error("Unknown actual source error identity");
+      return Number(call.error.slice("source:".length)) + 1;
+    }) };
+    for (const event of events) {
+      if (event.event === "readContext") {
+        expect(event.index).toBe(io.budgets.length);
+        expect(event.aborted).toBe(false);
+        if (typeof event.timeoutMs !== "number") throw new Error("Missing actual read budget");
+        io.budgets.push(event.timeoutMs);
+      } else if (event.event === "readAbort") {
+        if (typeof event.index !== "number") throw new Error("Missing actual cancellation identity");
+        io.aborted.push(event.index);
+      } else throw new Error("Unexpected read observation");
+    }
+    return { o: project(base), io };
+  }
   if (profile.diagnosticAge === undefined) return { o: project(observed) };
   const { events, ...base } = observed;
   if (events === undefined) throw new Error("Missing actual diagnostic observations");
@@ -276,9 +334,9 @@ async function replay(profile: Profile, trace: Trace) {
         // Only named actions/choices and actual effect IDs enter the driver.
         // The model observation and its private state cannot control execution.
         if (action !== "init") await driver.apply(profile.actions[action]!.input(choice, driver.snapshot()));
-        expect(projectWithDiagnostics(profile, driver.snapshot())).toEqual({ o: step.expected, ...(step.diagnostics === undefined ? {} : { d: step.diagnostics }) });
+        expect(projectObservation(profile, driver.snapshot())).toEqual({ o: step.expected, ...(step.diagnostics === undefined ? {} : { d: step.diagnostics }), ...(step.io === undefined ? {} : { io: step.io }) });
       } catch (cause) {
-        throw new Error(`${trace.path} step ${i} action ${action} choice ${choice}\nexpected: ${JSON.stringify({ o: step.expected, d: step.diagnostics })}\nactual: ${JSON.stringify(driver.snapshot())}\nreplay: DIALCACHE_FEATURE_TRACE_FILE=${JSON.stringify(trace.path)} corepack pnpm exec vitest run test/formal-features.test.ts --coverage.enabled=false`, { cause });
+        throw new Error(`${trace.path} step ${i} action ${action} choice ${choice}\nexpected: ${JSON.stringify({ o: step.expected, d: step.diagnostics, io: step.io })}\nactual: ${JSON.stringify(driver.snapshot())}\nreplay: DIALCACHE_FEATURE_TRACE_FILE=${JSON.stringify(trace.path)} corepack pnpm exec vitest run test/formal-features.test.ts --coverage.enabled=false`, { cause });
       }
     }
   } finally { await driver.dispose(); }
@@ -340,7 +398,10 @@ function layersWitnesses(traces: Trace[]): Set<string> {
         if (mode >= 2 && mode <= 3 && context < 3 && policy === 4 && returned && !starts
           && list(before.memo).slice(context * 4, context * 4 + 4).filter(v => v > 0).length > 2) seen.add("request-memo-exceeds-local-capacity");
         if (localHit) {
-          if (mode === 4) seen.add("absent-remote-preserves-local-reuse");
+          if (mode === 4) {
+            seen.add("absent-remote-preserves-local-reuse");
+            if (previous.maintenance.includes("missing_remote")) seen.add("absent-remote-maintenance-preserves-local");
+          }
           if (ordersBefore[instance]!.length === 2 && ordersBefore[instance]![0] === identity) { seen.add("lru-read-promotes"); promoted.add(key); }
           if (preserved.has(key)) seen.add("promoted-value-survives-eviction");
           if (survivingOther.has(key)) seen.add("capacity-is-per-instance");
@@ -348,7 +409,10 @@ function layersWitnesses(traces: Trace[]): Set<string> {
           if (mode % 2 === 1 && invalidated.has(Math.floor(identity / 2))) seen.add("invalidation-preserves-local-hit");
         }
         if (context >= 3 && policy === 3 && starts && evicted.has(key)) seen.add("lru-eviction-probed");
-        if (remoteHit && mode % 2 === 1 && published.has(key)) { seen.add("tracked-refill-needs-remote-validation"); validated.add(key); }
+        if (remoteHit && mode % 2 === 1) {
+          validated.add(key);
+          if (published.has(key)) seen.add("tracked-refill-needs-remote-validation");
+        }
         const entity = Math.floor(identity / 2);
         const fencedBytes = list(before.remoteValues)[identity]! > 0 && list(before.created)[identity]! <= list(before.watermark)[entity]!;
         if (fencedBytes && read && mode % 2 === 0 && remoteHit) seen.add("untracked-ignores-watermark");
@@ -721,7 +785,47 @@ function recoveryScopeWitnesses(traces: Trace[]): Set<string> {
   return seen;
 }
 
+function independentWitnesses(traces: Trace[]): Set<string> {
+  const seen = new Set<string>();
+  for (const trace of traces) {
+    const states = (JSON.parse(readFileSync(trace.path, "utf8")).states as Array<{ s: Record<string, unknown> }>).map(x => x.s);
+    const integer = (v: unknown) => itfInteger(v, trace.path);
+    const records = (v: unknown) => v as Record<string, unknown>[];
+    const recovered = new Map<number, number>();
+    for (const [i, step] of trace.steps.entries()) {
+      seen.add(`action:${step.action}`);
+      if (i === 0) continue;
+      const before = states[i - 1]!, previous = trace.steps[i - 1]!.expected, o = step.expected;
+      if (step.action === "beginCall" && records(states[i]!.reads).filter(r => r.active === true).length > 1) seen.add("independent-read-overlap");
+      if (new Set(step.io!.sourceErrors.filter(id => id > 0)).size >= 2) seen.add("independent-source-error-identities");
+      if (step.io!.budgets.includes(5) && step.io!.budgets.includes(10)) seen.add("independent-read-budgets");
+      if (step.io!.aborted.length > trace.steps[i - 1]!.io!.aborted.length && o.calls.includes(0) &&
+        records(states[i]!.reads).some(r => r.active === true)) seen.add("one-read-times-out-before-another");
+      if ((step.action === "releaseRead" || step.action === "failRead") && records(before.reads)[step.choice]!.active === false &&
+        previous.calls.includes(0) && JSON.stringify(o) === JSON.stringify(previous)) seen.add("late-read-does-not-affect-other-call");
+      if (step.action === "releaseLoad" || step.action === "failLoad") {
+        const load = records(before.loads)[step.choice]!, caller = integer(load.caller), call = records(before.calls)[caller]!;
+        if (load.recovery === true && o.calls[caller] === integer(load.value)) {
+          recovered.set(caller, o.calls[caller]!);
+          if (new Set(recovered.values()).size === 2) seen.add("distinct-retained-recovery-values");
+          if (integer(before.watermark) >= integer(call.created)) seen.add("acquired-recovery-survives-invalidation");
+        }
+        if (load.recovery === false && step.action === "releaseLoad" && integer(before.watermark) >= integer(call.acquiredAt)) seen.add("acquired-fresh-decode-survives-invalidation");
+        if (load.recovery === true && o.recovery.at(-1) === "miss" && records(before.calls).some(c => integer(c.maxAge) !== integer(call.maxAge) && integer(c.phase) !== 5)) seen.add("independent-recovery-age-boundary");
+      }
+      if (step.action === "resolveLoader" || step.action === "rejectLoader") {
+        const source = records(before.sources)[step.action === "rejectLoader" ? step.choice : Math.floor((step.choice - 1) / 2)]!;
+        if (source.active === false && previous.calls.includes(0) && JSON.stringify(o) === JSON.stringify(previous)) seen.add("late-source-does-not-affect-other-call");
+        if (o.writes > previous.writes && records(before.calls).some(c => integer(c.phase) === 2 && c.canWrite === false)) seen.add("refill-authority-is-per-call");
+      }
+      for (const outcome of o.recovery) seen.add(`recovery:${outcome}`);
+      if (o.calls.includes(4)) seen.add("source-deadline");
+    }
+  }
+  return seen;
+}
 function witnesses(name: string, traces: Trace[]): Set<string> {
+  if (name === "independent") return independentWitnesses(traces);
   if (name === "layers") return layersWitnesses(traces);
   if (name === "admission") return admissionWitnesses(traces);
   if (name === "scope") return scopeWitnesses(traces);
@@ -824,7 +928,17 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
         if (o.shadow.length > previous.shadow.length) {
           const outcome = o.shadow.at(-1);
           if (changedAdmittedJob && shadowPolicy > 0 && ["match", "mismatch", "filled"].includes(outcome!)) seen.add("admitted-job-keeps-shadow-policy");
-          const c0Value = itfInteger(shadowStates[i - 1]!.c0, trace.path);
+          const c0Payload = itfInteger(shadowStates[i - 1]!.c0, trace.path);
+          const frame = itfInteger(shadowStates[i - 1]!.frame, trace.path);
+          const decoded = (payload: number) => payload >= 7 ? 3 : [3, 5, 6].includes(payload) ? 1 : payload === 4 ? 2 : payload;
+          const c0Value = decoded(c0Payload);
+          const binary = (payload: number) => [3, 4, 5, 8].includes(payload);
+          if (step.action === "releaseRead" && outcome === "mismatch" && c0Payload >= 7 && frame >= 7 && binary(c0Payload) !== binary(frame)) {
+            seen.add(binary(c0Payload) ? "binary-to-text-confirmation" : "text-to-binary-confirmation");
+          }
+          if (step.action === "releaseRead" && outcome === "superseded" && frame > 0 && decoded(frame) === c0Value) seen.add("different-bytes-same-value-superseded");
+          if (step.action === "releaseLoad" && outcome === "match" && binary(c0Payload) && trace.steps[0]!.choice % 4 === 0) seen.add("binary-c0-compares-decoded-value");
+          if (step.action === "releaseLoad" && outcome === "timeout" && o.comparisons > previous.comparisons) seen.add(`comparison-crosses-deadline:${trace.steps[0]!.choice}`);
           const sourceValue = itfInteger(shadowStates[i - 1]!.sourceValue, trace.path);
           if (outcome === "match" && c0Value !== sourceValue && trace.steps[0]!.choice % 4 === 1) seen.add("custom-equal-overrides-values");
           if (outcome === "mismatch" && c0Value === sourceValue && trace.steps[0]!.choice % 4 === 2) seen.add("custom-unequal-confirms-equal-values");
@@ -848,7 +962,11 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
   return seen;
 }
 const required: Record<string, string[]> = {
-  layers: ["fixture:4", "absent-remote-preserves-local-reuse", "fixture:0", "fixture:1", "fixture:2", "fixture:3", "request-misses-share-process-flight",
+  independent: ["independent-source-error-identities", "independent-read-overlap", "independent-read-budgets", "one-read-times-out-before-another",
+    "late-read-does-not-affect-other-call", "distinct-retained-recovery-values", "acquired-recovery-survives-invalidation",
+    "acquired-fresh-decode-survives-invalidation", "independent-recovery-age-boundary", "late-source-does-not-affect-other-call",
+    "refill-authority-is-per-call", "recovery:served", "recovery:miss", "recovery:deserialization_error", "source-deadline"],
+  layers: ["absent-remote-maintenance-preserves-local", "fixture:4", "absent-remote-preserves-local-reuse", "fixture:0", "fixture:1", "fixture:2", "fixture:3", "request-misses-share-process-flight",
     "zero-capacity-still-shares", "zero-capacity-reloads", "request-memo-exceeds-local-capacity", "lru-read-promotes",
     "promoted-value-survives-eviction", "capacity-is-per-instance", "validated-tracked-hit-warms-local",
     "invalidation-preserves-local-hit", "lru-eviction-probed", "tracked-refill-needs-remote-validation",
@@ -872,7 +990,7 @@ const required: Record<string, string[]> = {
     "coalesced-result", "publication-during-policy-fetch", ...[5, 6, 7, 8, 9].flatMap(code => [`local-value:${code}`, `remote-value:${code}`])],
   shadow: ["match", "mismatch", "comparison_error", "superseded", "confirmation_error", "redis_error", "source_error", "timeout", "deserialization_error", "filled", "fill_error", "fill_fenced"]
     .map((outcome) => `outcome:${outcome}`).concat(["c0-before-source", "source-before-c0", "write-completes-after-timeout",
-      ...Array.from({ length: 9 }, (_, i) => `fixture:${i}`), "missing-hook-skips-job", "shadow-policy-skips-job:1", "shadow-policy-skips-job:2", "admitted-job-keeps-shadow-policy", "custom-equal-overrides-values", "custom-unequal-confirms-equal-values",
+      ...Array.from({ length: 11 }, (_, i) => `fixture:${i}`), "text-to-binary-confirmation", "binary-to-text-confirmation", "different-bytes-same-value-superseded", "binary-c0-compares-decoded-value", "comparison-crosses-deadline:9", "comparison-crosses-deadline:10", "missing-hook-skips-job", "shadow-policy-skips-job:1", "shadow-policy-skips-job:2", "admitted-job-keeps-shadow-policy", "custom-equal-overrides-values", "custom-unequal-confirms-equal-values",
       "captured-logging:true", "captured-logging:false", "mismatch-logging:true", "mismatch-logging:false", "age-clamped-after-rollback", "age-at-verdict"]),
 };
 
@@ -907,6 +1025,14 @@ for (const [name, profile] of Object.entries(profiles)) {
         raw.states[1]["mbt::nondetPicks"].choice = { tag: "Some", value: { "#bigint": "9007199254740993" } };
         expect(() => parseTrace(raw, "unsafe-choice", profile)).toThrow(/safe ITF integer/);
       });
+      if (profile.readIO) it("rejects missing read observations and detects corrupted budgets", async () => {
+        const raw = JSON.parse(readFileSync(traces[0]!.path, "utf8"));
+        delete raw.states[0].s.io;
+        expect(() => parseTrace(raw, "missing-read-observations", profile)).toThrow();
+        const trace = structuredClone(traces[0]!);
+        trace.steps[1]!.io!.budgets.push(999);
+        await expect(replay(profile, trace)).rejects.toThrow(/step 1 action.*\nexpected:.*\nactual:/s);
+      });
       if (profile.diagnosticAge !== undefined) it("rejects missing diagnostics and detects corrupted diagnostic expectations", async () => {
         const raw = JSON.parse(readFileSync(traces[0]!.path, "utf8"));
         delete raw.states[0].s.d;
@@ -924,5 +1050,5 @@ for (const [name, profile] of Object.entries(profiles)) {
   });
 }
 if (single !== undefined && !Object.keys(profiles).some((name) => single.includes(`/${name}/`) || single.endsWith(`${name}-smoke.itf.json`))) {
-  throw new Error("Single feature trace must be inside its layers/admission/scope/recovery/policy/shadow profile directory");
+  throw new Error("Single feature trace must be inside its independent/layers/admission/scope/recovery/policy/shadow profile directory");
 }
