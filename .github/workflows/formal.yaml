@@ -15,7 +15,7 @@ concurrency:
 jobs:
   quint:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
@@ -38,6 +38,8 @@ jobs:
           DIALCACHE_EFFECTS_TRACE_DIR: .formal-traces/effects
           DIALCACHE_FEATURE_TRACE_DIR: .formal-traces/features
         run: pnpm exec vitest run test/formal-conformance.test.ts test/formal-effects.test.ts test/formal-features.test.ts test/formal-behavior.test.ts test/formal-protocol-vectors.test.ts --coverage.enabled=false
+      - name: Measure semantic cases and retain behavioral fault detection
+        run: node formal/measure-semantics.mjs
       - name: Preserve formal traces and counterexamples
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

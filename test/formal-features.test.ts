@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BehaviorDriver, emptyObservation, type Fixture, type Input, type Observation, type Policy } from "./formal/behavior-driver.js";
 import { itfInteger, record } from "./formal/itf.js";
 
+import { recordWitnesses } from "./formal/coverage-evidence.js";
+
 type Projected = Omit<Observation, "calls"> & { calls: number[] };
 type Action = { choices?: readonly number[]; input: (choice: number, observed: Observation) => Input };
 interface Profile { readIO?: boolean; diagnosticAge?: "shadowAge" | "recoveryAge" | "none"; fixture: Fixture | ((choice: number) => Fixture); initChoices?: readonly number[]; setup: Input[]; actions: Record<string, Action> }
@@ -805,6 +807,9 @@ function independentWitnesses(traces: Trace[]): Set<string> {
         previous.calls.includes(0) && JSON.stringify(o) === JSON.stringify(previous)) seen.add("late-read-does-not-affect-other-call");
       if (step.action === "releaseLoad" || step.action === "failLoad") {
         const load = records(before.loads)[step.choice]!, caller = integer(load.caller), call = records(before.calls)[caller]!;
+        if (load.recovery === true && step.action === "failLoad" && o.calls[caller] === 3 && step.io!.sourceErrors[caller] === integer(call.source) + 1) {
+          seen.add("failed-recovery-keeps-source-error");
+        }
         if (load.recovery === true && o.calls[caller] === integer(load.value)) {
           recovered.set(caller, o.calls[caller]!);
           if (new Set(recovered.values()).size === 2) seen.add("distinct-retained-recovery-values");
@@ -961,38 +966,7 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
   }
   return seen;
 }
-const required: Record<string, string[]> = {
-  independent: ["independent-source-error-identities", "independent-read-overlap", "independent-read-budgets", "one-read-times-out-before-another",
-    "late-read-does-not-affect-other-call", "distinct-retained-recovery-values", "acquired-recovery-survives-invalidation",
-    "acquired-fresh-decode-survives-invalidation", "independent-recovery-age-boundary", "late-source-does-not-affect-other-call",
-    "refill-authority-is-per-call", "recovery:served", "recovery:miss", "recovery:deserialization_error", "source-deadline"],
-  layers: ["absent-remote-maintenance-preserves-local", "fixture:4", "absent-remote-preserves-local-reuse", "fixture:0", "fixture:1", "fixture:2", "fixture:3", "request-misses-share-process-flight",
-    "zero-capacity-still-shares", "zero-capacity-reloads", "request-memo-exceeds-local-capacity", "lru-read-promotes",
-    "promoted-value-survives-eviction", "capacity-is-per-instance", "validated-tracked-hit-warms-local",
-    "invalidation-preserves-local-hit", "lru-eviction-probed", "tracked-refill-needs-remote-validation",
-    "untracked-ignores-watermark", "invalidation-fences-both-operations"],
-  admission: ["outcome:match", "outcome:mismatch", "outcome:superseded", "outcome:source_error", "outcome:timeout", "outcome:dropped",
-    "coalesced-hit-one-job", "accepted-shadow-policy", "other-instance-full-admission", "per-instance-deduplication",
-    "readmission-after-timeout-drains", "duplicate-with-free-capacity", "full-capacity-drop",
-    "source-timeout-keeps-slot", "decode-timeout-keeps-slot", "confirmation-timeout-keeps-slot",
-    "unselected-hit-skips-job", "uncoalesced-hit-overlap"],
-  scope: ["failure-layer:request_local", "failure-layer:local", "failure-layer:noop", "one-error-for-request-followers", "pass-through-error-has-no-cache-trail", "disabled-bypass", "detached-bypass", "policy-reply-after-close", "rejected-flight-retry",
-    "replacement-miss-after-late-source", "independent-scope-overlap", "uncoalesced-scope-overlap",
-    "memo-hit", "nested-memo-hit", "reenabled-memo-hit", "memo-after-nested-close", "memo-after-policy-bypass",
-    "shared-rejection", "source-settles-after-close", ...[5, 6, 7, 8, 9].map(code => `memo-value:${code}`)],
-  recovery: ["fixture:4", "fixture:5", "fixture:6", "fixture:7", "recovered-value-request-hit", "recovery-memoizes-both-requests", "closed-recovery-does-not-memoize-another-scope", "request-follower-shares-recovery-flight", "recovery-keeps-source-failure-trail", "rollback-rejects-retained-future", "outcome:served", "outcome:miss", "outcome:deserialization_error", "retained-across-invalidation", "coalesced-recovery", "expired-during-decode",
-    "default-denies-ordinary-error", "default-recovers-deadline", "default-recovers-propagated-timeout",
-    "explicit-denial-overrides-timeout", "recovery-abandoned-overlap", "recovery-late-source-settles", "recovery-failure-preserves-timeout", "fixture:0", "fixture:1", "fixture:2", "fixture:3",
-    "operation-denial-overrides-instance-allow", "instance-classifier-error-preserves-source", "instance-denial-overrides-timeout-default",
-    "instance-allow-recovers-ordinary-error", "operation-allow-overrides-instance-denial"],
-  policy: ["invalid-read-budget-bypasses-caching", "invalid-local-ramp-preserves-remote", "invalid-remote-ramp-preserves-local", "invalid-shadow-preserves-serving", "invalid-recovery-retention:23", "invalid-recovery-retention:24", "ttl:1000", "rollback-preserves-live-local", "rollback-does-not-extend-local-ttl", "rollback-rejects-future-remote", "local-hit", "remote-hit", "publication-after-policy-change", "ttl:2000", "ttl:4000", "ttl:5000",
-    "cross-key-overlap", "uncoalesced-same-key-overlap", "join-after-policy-change", "reverse-source-settlement",
-    "coalesced-result", "publication-during-policy-fetch", ...[5, 6, 7, 8, 9].flatMap(code => [`local-value:${code}`, `remote-value:${code}`])],
-  shadow: ["match", "mismatch", "comparison_error", "superseded", "confirmation_error", "redis_error", "source_error", "timeout", "deserialization_error", "filled", "fill_error", "fill_fenced"]
-    .map((outcome) => `outcome:${outcome}`).concat(["c0-before-source", "source-before-c0", "write-completes-after-timeout",
-      ...Array.from({ length: 11 }, (_, i) => `fixture:${i}`), "text-to-binary-confirmation", "binary-to-text-confirmation", "different-bytes-same-value-superseded", "binary-c0-compares-decoded-value", "comparison-crosses-deadline:9", "comparison-crosses-deadline:10", "missing-hook-skips-job", "shadow-policy-skips-job:1", "shadow-policy-skips-job:2", "admitted-job-keeps-shadow-policy", "custom-equal-overrides-values", "custom-unequal-confirms-equal-values",
-      "captured-logging:true", "captured-logging:false", "mismatch-logging:true", "mismatch-logging:false", "age-clamped-after-rollback", "age-at-verdict"]),
-};
+const required = JSON.parse(readFileSync(new URL("../formal/coverage-witnesses.json", import.meta.url), "utf8")) as Record<string, string[]>;
 
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date("2026-09-08T12:00:00Z")); });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
@@ -1012,6 +986,7 @@ for (const [name, profile] of Object.entries(profiles)) {
       const seen = witnesses(name, traces);
       const wanted = Object.keys(profile.actions).map((action) => `action:${action}`).concat(required[name]!);
       expect(wanted.filter((witness) => !seen.has(witness)), `Missing ${name} coverage witnesses`).toEqual([]);
+      recordWitnesses(name, seen, required[name]!, traces.length);
     });
     if (traces.length > 0) {
       it("rejects missing observations, unknown actions and invalid choices", () => {

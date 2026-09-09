@@ -6,6 +6,8 @@ This file maps each formal slice to the existing tests that most directly exerci
 
 See [`CONTRACTS.md`](./CONTRACTS.md) for the rule inventory, named executable evidence, revision-pinned test/section audit, and binding/assumption/exclusion decisions. The table below is a summary; linking a test file never means every assertion in it is modeled.
 
+[`SEMANTIC-COVERAGE.md`](./SEMANTIC-COVERAGE.md) adds finer case accounting and an executable mutation comparison. Of 164 named behavioral cases, 157 cite portable execution and 108 cite required generated witnesses; five remain model-only and two lack portable executable evidence. All 21 named protocol cases cite vectors. The measured fault catalog additionally identifies fixed-only TTL-renewal detection and a protocol-ordering defect missed by ordinary tests. These denominators are reviewed cases and selected faults, not all possible behavior.
+
 ## Coverage matrix
 
 “Model” means an abstraction of the named rules, not every case in the linked test file. “Core”, “Effects”, “Recovery”, “Policy”, “Scope”, “Shadow”, “Admission”, “Layers”, and “Independent” are the nine generated ITF profiles; they do not imply direct replay of the seven verification models. “Scenarios” means the committed language-neutral `behavioral-scenarios.json` corpus executed against TypeScript. A dash means no portable coverage of that kind. All model runs are bounded samples.
@@ -139,7 +141,7 @@ The source oracle is `dialcache-coalescing` (request/process admission), `dialca
 
 ## `dialcache-independent-conformance.qnt`
 
-The oracle is `dialcache-liveness` (uncoalesced read budgets), `dialcache-coalescing` (independent read/source results), `dialcache-stale-on-error` (retained bytes and source-error preservation), and `dialcache-invalidation` (acquired snapshots). Six deterministic regressions and fifteen required generated witnesses extend these contracts to concurrent same-key callers without sharing. See the [independent profile](./BEHAVIOR.md#generated-independent-caller-profile) for exact effect indices, read observations, policy choices, and bounded deadline schedules.
+The oracle is `dialcache-liveness` (uncoalesced read budgets), `dialcache-coalescing` (independent read/source results), `dialcache-stale-on-error` (retained bytes and source-error preservation), and `dialcache-invalidation` (acquired snapshots). Six deterministic regressions and sixteen required generated witnesses extend these contracts to concurrent same-key callers without sharing. See the [independent profile](./BEHAVIOR.md#generated-independent-caller-profile) for exact effect indices, read observations, policy choices, and bounded deadline schedules.
 
 ## `dialcache-admission-conformance.qnt`
 

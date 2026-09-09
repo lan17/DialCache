@@ -26,6 +26,8 @@ Protocol JSON vectors ────────────────> exact ke
 
 The TypeScript driver exists today. Other language drivers and exhaustive feature combinations are future work. [`TEST-MAP.md`](./TEST-MAP.md) distinguishes implemented coverage from remaining gaps; [`CONFORMANCE.md`](./CONFORMANCE.md) defines the core profile; [`BEHAVIOR.md`](./BEHAVIOR.md) defines the shared feature-scenario/effects driver and porting workflow.
 
+[`SEMANTIC-COVERAGE.md`](./SEMANTIC-COVERAGE.md) measures 185 named contract cases, required generated witnesses, and detection of 13 intentional behavioral/protocol faults. CI compares ordinary Vitest, generated replay, and the positive portable suite in isolated source copies and preserves the reports. These measures expose gaps; they do not establish exhaustive semantic completeness.
+
 ## Portable scope
 
 [`CONTRACTS.md`](./CONTRACTS.md) inventories the rules derived from current docs and tests, with named executable evidence and a source index. It separates portable behavior, protocol interoperability, language binding, and external assumptions. Backend-neutral diagnostic classifications, counts, ages, phase durations, byte sizes, and mismatch-warning eligibility have selected portable scenarios. Exporter compatibility and resource ceilings remain separate integration concerns. Registration APIs, native object identity, and Promise mechanics are not requirements for other languages.
@@ -87,6 +89,7 @@ DIALCACHE_EFFECTS_TRACE_DIR=.formal-traces/effects \
 DIALCACHE_FEATURE_TRACE_DIR=.formal-traces/features \
   corepack pnpm exec vitest run test/formal-conformance.test.ts test/formal-effects.test.ts \
   test/formal-features.test.ts test/formal-behavior.test.ts test/formal-protocol-vectors.test.ts --coverage.enabled=false
+node formal/measure-semantics.mjs
 ```
 
 `check.sh` typechecks all seven verification models plus all nine conformance models and checks their listed invariants using the Rust simulator: **2,000 sampled traces per model, up to 40 transitions per trace**, seed `0xd1a1ca`, one evaluator thread. It also executes 112 deterministic model regressions, including witnesses that deliberately corrupt TTL or decoder outcomes and require the strengthened invariants to reject them. This is bounded sampling, not exhaustive mathematical proof.

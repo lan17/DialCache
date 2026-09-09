@@ -1,3 +1,5 @@
+import { recordWitnesses } from "./formal/coverage-evidence.js";
+
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -202,6 +204,7 @@ describe("generated pending-effect conformance", () => {
       const diagnosticWitnesses = new Set<string>();
       for (const trace of traces) {
         witnesses.add(`fixture:${trace.steps[0]!.choice}`);
+        let budgetChanged = false;
         let delayedWriteWasFenced = false;
         const normalizedFenceSources = new Set<number>();
         let failedRead = false;
@@ -212,6 +215,10 @@ describe("generated pending-effect conformance", () => {
           seen.add(step.action);
           const s = step.state;
           const previous = trace.steps[index - 1]?.state;
+          if (step.action === "readBudgetPolicy") budgetChanged = true;
+          if (!budgetChanged && previous?.readBudgets.length === 0 && s.readBudgets.length === 1) {
+            witnesses.add(`initial-budget:${trace.steps[0]!.choice}`);
+          }
           for (const event of s.events) {
             diagnosticWitnesses.add(`event:${event.event}`);
             if (event.event === "error" || event.event === "miss") diagnosticWitnesses.add(`${event.event}:${event.detail}`);
@@ -267,20 +274,17 @@ describe("generated pending-effect conformance", () => {
           if (delayedWriteWasFenced && step.action === "releaseRead" && previous?.phase === 3
             && s.loaders === previous.loaders + 1) witnesses.add("delayed-fenced-write");
           if (previous?.phase === 1 && previous.sources[step.choice!] === 0 && previous.now >= previous.deadline
-            && (step.action === "resolveLoader" || step.action === "rejectLoader")) witnesses.add("late-settlement");
+            && (step.action === "resolveLoader" || step.action === "rejectLoader")) {
+            witnesses.add("late-settlement");
+            witnesses.add(step.action === "resolveLoader" ? "late-resolve" : "late-reject");
+          }
         }
       }
-      const requiredDiagnostics = [...eventNames.map(event => `event:${event}`), ...Array.from({ length: 16 }, (_, i) => `reply:${i + 1}`),
-        ...["cache_read", "cache_read_timeout", "serialization_load", "serialization_dump", "cache_write", "fallback"].map(kind => `error:${kind}`),
-        ...["value_absent", "watermark_fenced", "unclassified", "expired"].map(reason => `miss:${reason}`),
-        "duration:load", "duration:dump", "untracked-demotes-fenced-reply", "normalized-fence-blocks-publication"];
-      expect(requiredDiagnostics.filter(witness => !diagnosticWitnesses.has(witness)), "Missing adapter/diagnostic witnesses").toEqual([]);
+      const required = JSON.parse(readFileSync(new URL("../formal/coverage-witnesses.json", import.meta.url), "utf8")) as Record<string, string[]>;
+      const allWitnesses = new Set([...witnesses, ...diagnosticWitnesses]);
+      expect(required.effects!.filter(witness => !allWitnesses.has(witness)), "Missing effects witnesses").toEqual([]);
       expect([...seen].sort()).toEqual([...actions].sort());
-      expect([...witnesses].sort()).toEqual(["abandoned-overlap", "publication-after-deadline", "delayed-fenced-write", "late-settlement",
-        "read-timeout-starts-source", "read-late-settlement", "abandoned-read-settles", "decode-outlives-deadline",
-        "acquired-hit-survives-invalidation", "failed-read-no-refill", "failed-decode-refills",
-        "dump-failure-preserves-value", "write-failure-preserves-value", "serialize-outlives-deadline", "dump-rechecks-fence-after-rollback", "observer-failure-hit", "observer-failure-publication", "observer-failure-source-error", "fixture:0", "fixture:1", "fixture:2", "fixture:3", "fixture:4", "fixture:5",
-        "read-budget:10", "read-budget:20", "read-budget:30", "read-budget:50", "follower-keeps-read-budget"].sort());
+      recordWitnesses("effects", allWitnesses, required.effects!, traces.length);
     });
   }
 
