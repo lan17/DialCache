@@ -1,0 +1,53 @@
+# Docs and test behavior audit
+
+[`source-audit.json`](./source-audit.json) records **564 ordinary test declarations and 172 documentation sections across 44 files**. Each entry names its source location and the obligations or boundaries in [`CONTRACTS.md`](./CONTRACTS.md). Parameterized declarations and loops count once here; Vitest expands them into more executions. This count is an inventory, not a behavioral coverage percentage.
+
+The audit separates three questions:
+
+1. What rule does the test assertion or documentation impose? Repeated examples and API variants can establish the same rule.
+2. What executable artifact captures that portable rule? The inventory points to a model, fixed behavioral scenario, protocol vector, or a combination. A verification model is not automatically implementation replay.
+3. Which assertions instead concern a binding (`B`), environment assumption (`E`), or explicitly optional integration/resource profile (`X`)? Those dispositions preserve the ordinary test requirement; they do not relabel an implementation test as formal coverage.
+
+Mappings cover the semantic obligations of each declaration, including assertions that share an obligation with another test. They do not promise one formal transition per assertion, equivalence between two test programs, exhaustive interleavings, or identical APIs in every language. Document sections often explain several related obligations; navigation, examples, installation, and release tooling use the binding/deployment dispositions.
+
+## Gaps closed by this audit
+
+| Evidence in existing tests/docs | Previously missing portable consequence | Executable addition |
+| --- | --- | --- |
+| `dialcache-local`: failed active local reads/writes; `dialcache-logger`: simultaneous observer failures | The core model lacked local storage failure outcomes despite its broad fail-open description | Core local read/write health outcomes, two invariants, four deterministic regressions; source/remote results and eligible request memo survive failed local writes |
+| `dialcache-redis`: custom frames, legacy replies, invalid tracked fences; `dialcache-metrics`: untrusted metadata; `docs/redis.md` custom-client contract | Wire decoder vectors did not test the core's separate semantic-adapter trust boundary | 16 caller-level reply scenarios, including discriminator precedence, reason/fence independence, malformed metadata, and untracked fence removal (C55) |
+| `dialcache-redis-read-deadline`: read context, cooperative abort, late settlement, independent budgets | Read timeout results were checked without observing cancellation requests at the adapter | Five schedules recording supplied budget and actual cancellation events, including late resolve/reject before timer delivery (C56) |
+| `dialcache-config-ramp`, `dialcache-shadow-validation`, `docs/configuration.md` | Hash samples had vectors, but the exact membership comparison lacked public-call evidence | Local, remote, and shadow scenarios exclude equality and admit just above the independently calculated sample (W03/C47) |
+| `dialcache-stale-on-error`: compressed retained values and corrupt envelopes | Decompression and recovery were covered separately | Valid/corrupt compressed stale candidates through the actual recovery path; no shared publication; original failure preserved (W08/C45) |
+| `dialcache-redis`: unsupported encoding; `dialcache-redis-read-deadline`: reader-clock sampling | Decoder classification needed caller-level refill/age consequences | Tracked/untracked encoding failures suppress refill; freshness is measured after a held read settles (W04/C22/C28) |
+| `dialcache-metrics`, shadow tests, `docs/observability.md` | Value age/clock diagnostics were mostly outside portable scenarios | Recovery age after decode, no age on failed recovery, original-C0 shadow age with rollback clamp, and serving/dark/confirmation future-offset attribution (C57) |
+| `dialcache-metrics`, `docs/observability.md` | Broad failure-isolation scenarios did not check stable categories or shared-execution event counts | Failure-site categories, one coalesced leader trail, request/process follower scopes, recovered source failure, and no second error from late rejection (C58) |
+| `dialcache-liveness`, `dialcache-metrics`, `docs/observability.md` | Phase budgets were modeled but duration/size observations were not linked to those phases | Fresh decode included in remote-get duration; accepted source duration excludes later preparation/write; UTF-8 byte sizes are observed before dispatch (C59) |
+| `dialcache-shadow-confirmation`, `docs/shadow-validation.md` | Confirmed mismatch outcome did not test opt-in warning eligibility | Logging omitted/enabled with match, mismatch, and superseded verdicts (C60) |
+
+These additions total **55 fixed scenarios**, taking the corpus from 174 to **229**. They reuse the existing driver and seven generated profiles. The optional `observe` fixture selects public diagnostic/adapter events; all unselected observations and cache internals remain outside that event stream. Expected events never enter execution. A negative harness check corrupts a miss expectation and requires replay to fail.
+
+## Keeping the audit current
+
+Run:
+
+```bash
+node formal/check-source-audit.mjs
+```
+
+Normal TypeScript tests run the check too, without Quint. It fails when a source file is added/removed, its contents change, a test/section is added or moved, or an entry lacks a known contract disposition. SHA-256 fingerprints include fixture and assertion changes, not just test titles. This prevents a green *stale inventory* from silently being reused after source drift; it cannot judge whether a mapping is correct.
+
+For a changed file, read the changed assertions/prose and any affected fixtures, then:
+
+- Reuse an existing obligation when it already captures the rule. Verify its named executable evidence, including negative/boundary consequences.
+- Add a scenario/vector/model and update the inventory when a portable consequence is missing. Record a specific binding/assumption/optional-profile disposition otherwise.
+- Update that source's entries and fingerprint only after the review. Do not refresh fingerprints merely to satisfy the check. `sourceSnapshot()` in the checker extracts current locations and hashes; it never assigns contract dispositions.
+- Run the focused implementation and formal checks. A mapping is evidence bookkeeping, not a substitute for those checks.
+
+The inventory covers `README.md`, every current top-level `docs/*.md` page, and ordinary `test/*.test.ts` files, including real Redis/Cluster integration declarations. The formal harness/corpora test themselves. Fixture helpers have no independent case declarations; their meaning is reviewed with the consuming tests. Packed-package checks and compile-time examples retain the public binding boundary, and continue running in normal CI.
+
+## Claim boundary
+
+All inventoried sources have an explicit disposition. This does **not** mean all Vitest assertions are formalized or every implementation branch is exercised by portable replay. Local storage exception injection currently has verification-model coverage plus ordinary TypeScript tests; it is not a public-driver capability. Exporter schemas/registries, exact JSON logging truncation, compression implementation/resource ceilings, transport/connection lifecycle, and TypeScript API/type/Promise details still use the documented B/E/X boundaries. Porting those integrations requires their own checks.
+
+Within the portable scope, the inventory now names 60 behavioral and nine protocol obligations with executable evidence. Remaining assurance work includes larger mixed-feature histories, broader generated exploration, and an independent language driver. No finite source inventory or sampled trace count proves semantic completeness.

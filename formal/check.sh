@@ -21,6 +21,8 @@ check() {
 }
 
 check formal/dialcache-core.qnt \
+  failedLocalReadSkipsReuseAndPublication \
+  failedLocalWritePreservesAcceptedResult \
   closedScopeHasNoRequestValue \
   requestValueBelongsToCurrentScope \
   passThroughSkipsCacheMachinery \

@@ -4,7 +4,7 @@ The formal suite is intentionally independent from the TypeScript implementation
 
 This file maps each formal slice to the existing tests that most directly exercise it. When behavior changes, update the implementation tests and the relevant model in the same change.
 
-See [`CONTRACTS.md`](./CONTRACTS.md) for the rule inventory, named executable evidence, complete source-family index, and binding/assumption/exclusion decisions. The table below is a summary; linking a test file never means every assertion in it is modeled.
+See [`CONTRACTS.md`](./CONTRACTS.md) for the rule inventory, named executable evidence, revision-pinned test/section audit, and binding/assumption/exclusion decisions. The table below is a summary; linking a test file never means every assertion in it is modeled.
 
 ## Coverage matrix
 
@@ -31,13 +31,17 @@ See [`CONTRACTS.md`](./CONTRACTS.md) for the rule inventory, named executable ev
 
 Test basenames above refer to `test/*.test.ts`; real/cluster evidence includes `redis-real.integration.test.ts`, `redis-cluster.integration.test.ts`, and adapter integration suites. The detailed mappings below identify the relevant assertions. Coverage is qualitative and deliberately does not report a misleading percentage of all DialCache behavior.
 
+## Source assertion audit
+
+[`TEST-AUDIT.md`](./TEST-AUDIT.md) records the follow-up to file-family accounting: 564 ordinary test declarations and 172 documentation sections have explicit dispositions in `source-audit.json`. Its CI guard checks inventory drift, not semantic equivalence. The additions close semantic adapter reply handling, cooperative cancellation, exact partial-cohort boundaries, compressed recovery, phase/age diagnostics, event attribution, and conditional mismatch warnings. Core model local read/write failure outcomes now have two invariants and four deterministic regressions; these faults have no public replay-driver injection point.
+
 ## Executable implementation coverage
 
 - `invalidation-vectors.json` adds 19 portable state transitions exercised against the actual exported protocol on both Redis and Valkey, including watermark repair/persistence/retention and invalid-argument atomicity. This checks the requested protocol state; deployment preservation remains an assumption.
 
 - [`CONFORMANCE.md`](./CONFORMANCE.md) defines the original core profile. [`BEHAVIOR.md`](./BEHAVIOR.md) defines the shared portable scenario/feature driver, action boundaries, clocks, and independently observed outputs.
 - `formal/generate-traces.sh` exports 32 core, 32 pending-effect, 128 scope, 64 recovery, 128 policy, 256 dark-shadow, and 128 served-hit admission ITF traces. Three replay test files execute every action through public calls. Effects and feature CI require named actions plus explicit race/outcome witnesses, rather than relying on trace count alone.
-- The 174 portable scenarios cover 12 behavior families. After every input, the driver compares all outputs/effect counts against assertion-side expected patches. Expected fields never enter execution.
+- The 229 portable scenarios cover 12 behavior families. After every input, the driver compares all outputs/effect counts against assertion-side expected patches. Expected fields never enter execution.
 - Model cache-presence, fence, and flight fields predict later behavior but are excluded from implementation projection. Negative checks remove local caching/coalescing/recovery or acknowledge lost writes/invalidation and require an observable failure.
 - All seven committed ITF smokes, all feature scenarios, and all protocol vectors run in ordinary TypeScript CI without Quint. Parser checks reject empty/unknown/misplaced traces, missing choices/observations, unsupported arguments, and unsafe integers.
 - CI artifacts retain model counterexamples and generated replay inputs. Failures include file/scenario, step/action, and both observations. Automatic shrinking is not implemented.
@@ -45,7 +49,7 @@ Test basenames above refer to `test/*.test.ts`; real/cluster evidence includes `
 
 ## Interaction regressions
 
-The latest audit adds 30 fixed scenarios, bringing the corpus to 174. Broad obligation rows previously had evidence for individual features but left some of their interactions untested by a portable schedule. The additions below use the existing input vocabulary and independently observed effects; they require no new production API or driver mechanism. These fixed scenarios do not by themselves increase generated scope. The policy profile now additionally generates overlapping calls and coalescing changes, as described below.
+The earlier interaction audit added 30 fixed scenarios, bringing the corpus to 174. The subsequent [declaration/section audit](./TEST-AUDIT.md) adds 55 more, for 229 total. Broad obligation rows previously had evidence for individual features but left some of their interactions untested by a portable schedule. The additions below use the existing input vocabulary and independently observed effects; they require no new production API or driver mechanism. These fixed scenarios do not by themselves increase generated scope. The policy profile now additionally generates overlapping calls and coalescing changes, as described below.
 
 | Interaction covered | Portable consequence | Existing evidence |
 | --- | --- | --- |
@@ -294,15 +298,15 @@ This prevents the formal suite from becoming a second implementation that silent
 
 ## Generated coverage measurement
 
-With the served-hit admission profile, fresh Vitest 4.1.10/V8 measurements use identical source files and instrumentation maps for all four cohorts. The denominator includes 26 source files, including adapters and exporters; integration/Lua execution and negative harness/parser checks are excluded.
+After the docs/test audit, fresh Vitest 4.1.10/V8 measurements use identical source files and instrumentation maps for all four cohorts. The denominator includes 26 source files, including adapters and exporters; integration/Lua execution and negative harness/parser checks are excluded.
 
 | Corpus | Library lines | Library branches | Main engine lines | Main engine branches |
 | --- | --- | --- | --- | --- |
 | 660 ordinary unit tests | 97.96% | 97.06% | 96.16% | 95.35% |
 | 768 configured generated traces | 66.78% | 66.14% | 79.23% | 77.50% |
-| 174 scenarios + 102 protocol cases + 3 schema checks | 70.78% | 70.74% | 80.80% | 77.26% |
-| Generated + portable (1,047 positive tests) | 72.61% | 74.26% | 81.84% | 79.95% |
+| 229 scenarios + 102 protocol cases + 4 schema/audit checks | 72.54% | 72.50% | 82.72% | 79.21% |
+| Generated + portable (1,103 positive tests) | 74.36% | 76.02% | 83.76% | 81.90% |
 
-Before the admission profile, 640 generated traces reached 65.06% library branches and 75.06% main-engine branches under the same instrumentation. The admission profile raises these to 66.14% and 77.50%. Its additional execution paths were already reached by fixed portable cases, so combined positive formal coverage is unchanged. The combined corpus still reaches five branch outcomes absent from ordinary tests: three shadow deadline outcomes and two key-name comparator outcomes. These are execution paths, not five bugs or new semantic obligations.
+The docs/test audit raises combined positive formal branch execution from 74.26% to 76.02% across the library, and from 79.95% to 81.90% in the main engine. It closes 18 branch outcomes previously reached only by ordinary tests, eight in the main engine. The formal corpus still misses 220 outcomes reached by ordinary tests (58 in the main engine), and reaches five outcomes absent from those tests: three shadow deadline outcomes and two key-name comparator outcomes. These counts describe execution paths, not bugs or semantic obligations. The generated corpus and its bounds are unchanged; this pass adds fixed witnesses and verification-model local faults.
 
 Coverage measures code execution, not assertion strength or the percentage of behavior formalized. Generated schedules can improve race testing while revisiting existing branches. Fixed scenarios retain broader cross-feature request-scope, multi-instance, callback-precedence, and mixed shadow-job coverage. Native adapters/exporters and TypeScript binding obligations still need ordinary tests.

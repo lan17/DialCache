@@ -1,6 +1,6 @@
 # Portable contract inventory
 
-This is the scope audit of the existing DialCache documentation and implementation tests. It accounts for their distinct semantic obligations, consolidating repeated assertions and API variants. The source index below accounts for every current documentation page and implementation test file; it is not a claim that each assertion has its own Quint transition or that every schedule is explored.
+This is the scope audit of the existing DialCache documentation and implementation tests. The revision-pinned [source audit](./source-audit.json) assigns every ordinary test declaration and documentation section an explicit disposition; [audit maintenance](./TEST-AUDIT.md) explains how to review changes. It accounts for their distinct semantic obligations, consolidating repeated assertions and API variants. The source index below accounts for every current documentation page and implementation test file; it is not a claim that each assertion has its own Quint transition or that every schedule is explored.
 
 ## Where the boundary lies
 
@@ -13,7 +13,7 @@ A rule belongs in the portable contract when implementations accepting the same 
 | Language binding | Keep ordinary implementation tests for wrapper registration, aliases, type guards, native exception/thenable handling, reference identity, and runtime scheduling mechanics. Preserve their portable consequence when one exists. |
 | External assumption | State what the adapter, source, executor, clocks, or deployment must provide. Integrations check the adapters against that contract; core replay assumes the controlled environment fulfills it. |
 
-Exact telemetry/exporter compatibility and resource-exhaustion limits remain optional integration concerns outside the current portable profiles. They are not intrinsically language-specific; a port must separately test them before claiming those integrations or limits.
+Exporter compatibility and resource-exhaustion limits remain optional integration concerns outside the current portable profiles. Selected backend-neutral event classifications, counts, ages, sizes, phase durations, and mismatch-warning eligibility now have portable scenarios (C57–C60). They are not intrinsically language-specific; a port must separately test them before claiming those integrations or limits.
 
 ### Applying the distinction
 
@@ -64,7 +64,7 @@ Exact telemetry/exporter compatibility and resource-exhaustion limits remain opt
 | C24 | Late followers inherit remaining read/source time and outcome; uncoalesced work owns independent budgets | S: `late follower inherits remaining read deadline`, `late follower inherits remaining fallback deadline`; coalescing model |
 | C25 | Expired source results are rejected even before timer delivery; abandoned source work can overlap a new flight | Coalescing model; generated effects; S: `late resolve loses to deadline before timer delivery`, `late reject loses to deadline before timer delivery`, `timeout releases flight while old loader continues` |
 | C26 | Explicitly unbounded source work is permitted; config, decoding, accepted serialization/write have application-owned budgets | S: `disabled fallback deadline accepts later source settlement`, `accepted serialization and write outlive fallback deadline`; coalescing model |
-| C27 | Key/config/cache/serializer/write failures fail open; source failures remain source failures | Core model; S: `key construction failure runs source with its enabled deadline`, `dump failure returns source and does not retain value`, `write failure returns source and does not retain value`; G: policy |
+| C27 | Key/config/cache/serializer/write failures fail open; failed local reads disable local publication for that invocation; source failures remain source failures | Core model; S: `key construction failure runs source with its enabled deadline`, `dump failure returns source and does not retain value`, `write failure returns source and does not retain value`; G: policy |
 | C28 | Read failure/timeout never authorizes a Redis refill; safe untracked local publication remains possible | Core model; S: `remote read timeout suppresses refill and late read`, `untracked read failure still permits active local publication`; G: policy |
 | C29 | Missing remote resources do not disable valid local serving; maintenance failure is surfaced | S: `missing remote adapter leaves valid local serving available`, `explicit invalidation surfaces mutation failure`; missing-resource validation remains a binding test; G: shadow (maintenance failure) |
 | C30 | Observer failures must not change cache results or replace the original source/maintenance failure | S: `observer failures cannot change cache or source outcomes`; logger/metrics binding tests exercise every host callback form |
@@ -98,6 +98,17 @@ Exact telemetry/exporter compatibility and resource-exhaustion limits remain opt
 | C53 | Shadow fills reuse the original fence and obey conditional publication; failures do not replace caller results | Shadow model; S: `ramped down shadow fill respects observed fence`, shadow source/comparison/confirmation failure scenarios; G: shadow |
 | C54 | Duplicate/capacity overflow drops work instead of queueing; timeout retains capacity until owned external work settles and suppresses late new work | S: `shadow admission drops duplicate work`, shadow source/read/dump/write timeout-capacity scenarios; `shadow remains bounded when source deadline is disabled`, `dark shadow releases capacity while unbounded caller source continues`, `served shadow decode retains capacity after timeout until raw load settles`, `shadow confirmation read retains capacity after its separate read deadline`; G: shadow (dark late-effect suppression), admission (served-hit capacity/deduplication and late source/decode/C1 ownership) |
 
+### Adapter boundary and diagnostic behavior
+
+| ID | Obligation | Executable evidence |
+| --- | --- | --- |
+| C55 | Interpret semantic misses by their discriminator; normalize unknown reasons; retain only valid tracked fences independently of cause; stray miss metadata does not turn a valid frame into a miss | S: all `adapter … preserves only trustworthy miss metadata` scenarios and `frame without miss discriminator ignores stray miss metadata`; source: `dialcache-redis` and `dialcache-metrics` |
+| C56 | Supply the effective read budget and a cooperative cancellation request at deadline; successful reads clear their deadlines; cancellation does not imply raw work stopped | S: `read deadline requests cooperative cancellation once for the shared execution`, `successful read does not request cancellation after its timer is cleared`, both late-read-before-timer scenarios, `uncoalesced remote reads own independent remaining budgets` |
+| C57 | Recovery age is measured after successful decode only; shadow age uses original C0 at match/confirmed-mismatch verdict, clamped at zero; future offsets are positive and attributed to the observing layer | S: recovery age/negative-outcome scenarios, shadow verdict age scenarios, serving/dark/confirmation future-offset scenarios |
+| C58 | Diagnostic categories describe the failed operation and reached layer; coalesced followers do not duplicate a leader's trail; recovered failures still count as source failures; sizes count bytes and precede dispatch | S: stable diagnostic category scenarios, `coalesced remote failure records one leader trail and one follower event`, `request followers report request scope without repeating lower traversal`, `recovered source failure remains a fallback diagnostic`, `source timeout records one failure even after a late rejection`, `accepted publication time is separate from reported source duration`; model-only local faults remain C27, exporter schemas remain X01 |
+| C59 | Ordinary remote-get duration includes fresh decode; source duration ends at accepted settlement/deadline and excludes later preparation/write; serialization duration measures its own phase | S: `remote get duration includes fresh decoding without spending a source budget`, `accepted publication time is separate from reported source duration`; these assert controlled elapsed time, not real-world timer precision or scheduler turns |
+| C60 | Mismatch logging defaults off; opting in emits one diagnostic warning only after confirmed mismatch, independently of caller return and outcome metrics | S: four `mismatch warning … verdict` scenarios; native JSON conversion, exact text truncation, and logger backend remain B03/X01 |
+
 ### Deterministic protocol obligations
 
 | ID | Obligation | Executable evidence |
@@ -124,7 +135,7 @@ Exact telemetry/exporter compatibility and resource-exhaustion limits remain opt
 | B01 | Public language binding | API names/aliases, wrapper registration, exact construction/validation timing, generics/type guards, reserved/removed option diagnostics, native error classes, exported helper shapes, and package entry points remain TypeScript tests. |
 | B02 | Host execution mechanics | Promise identity, exceptions/thenables and rejection consumption, Node timer handles, synchronous event-loop blocking, and native buffer views remain binding tests. Their deadline, failure-isolation, and retained-snapshot consequences are represented above. |
 | B03 | Native value conventions | Shared object references, constructors/prototypes, JavaScript JSON coercion/lossiness, and default Node deep equality are not universal port requirements. Each binding documents its supported value domain and codec; W01–W09 apply wherever it shares Redis. |
-| X01 | Optional observability integration | Exact metrics, labels, histograms, exporter registry compatibility, coalescing-state inspection, bounded JSON logging, and telemetry timing are covered by implementation/integration tests. Current portable claims cover diagnostic outcomes and failure isolation, not exporter compatibility. |
+| X01 | Optional observability integration | Backend metric names, histograms, exporter registry compatibility, coalescing-state inspection, bounded JSON logging, and telemetry timing precision are covered by implementation/integration tests. Current portable claims include C57–C60 diagnostic semantics and failure isolation; exact exporter schemas, buckets, registry compatibility, timing precision, and logging resource limits remain separate. |
 | X02 | Resource/algorithm implementation | Compression level tuning, native zstd availability/decoder quirks, huge payloads/512 MiB guard, decompression bombs, local allocation strategy, CPU/memory/throughput, connection lifecycle, retry APIs, and command queue limits remain implementation/integration tests. Envelope interoperability remains W06–W08. |
 
 ## Source index
@@ -151,15 +162,15 @@ Each row identifies where the source's semantic rules land. Repeated tests in di
 | `dialcache-local`, `dialcache-request-local` | C01–C10, C15/C19/C27, W01/W02; B01–B03, X02 |
 | `dialcache-get-or-load` | C01–C05, C11/C15/C18/C27/C31; B01/B03 for inline/wrapper API differences |
 | `dialcache-coalescing` | C11–C15/C18/C20/C24/C36/C43; B02/B03 |
-| `dialcache-liveness`, `dialcache-redis-read-deadline` | C23–C28/C46; B01/B02, E03, X01 |
+| `dialcache-liveness`, `dialcache-redis-read-deadline` | C23–C28/C46/C56/C59; B01/B02, E03, X01 |
 | `dialcache-config-ramp`, `dialcache-observability-internals` | C16–C22/C47, W03; B01, X01 |
 | `dialcache-invalidation` | C29–C39, W01/W09; B01, E01/E02/E05, X01 |
-| `dialcache-redis` | C05/C22/C27–C29/C31/C33/C34, W04; B01–B03, E01/E04, X01 |
+| `dialcache-redis` | C05/C22/C27–C29/C31/C33/C34/C55, W04; B01–B03, E01/E04, X01 |
 | `dialcache-stale-on-error`, `dialcache-stale-recovery-policy` | C37/C40–C46; B01–B03, X01 |
 | `dialcache-shadow-validation`, `dialcache-shadow-confirmation` | C30/C47–C54; B01–B03, X01 |
 | `redis-payload`, `duration` | W04/W05/W09; B01/B02 for native reply shapes, rounding representation, exception identity, and zero-copy views |
 | `compression`, `compression-error`, `compression-guard`, `dialcache-compression` | C06/C27/C34, W06–W08; B01/B03, X01/X02 |
-| `dialcache-logger`, `dialcache-metrics` | C20/C21/C27–C30/C33/C40–C54; B02, X01 |
+| `dialcache-logger`, `dialcache-metrics` | C20/C21/C27–C30/C33/C40–C60; B02, X01 |
 | `datadog`, `prometheus`, `shadow-log-json` | C30; B01–B03, X01 |
 | `node-redis`, `valkey-glide` | W04/W05/W09, E01–E03; B01/B02 and X02 for client-specific routing, retry, module identity, error decoration, and lifecycle |
 | `redis-real.integration`, `redis-cluster.integration` | E01/E02, W01/W04–W09, C22/C27–C39; X02; portable invalidation vectors execute here |

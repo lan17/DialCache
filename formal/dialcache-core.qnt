@@ -23,6 +23,8 @@ module dialcache_core {
     localHasValue: bool,
     remoteHasValue: bool,
     remoteReadHealthy: bool,
+    localReadHealthy: bool, localWriteHealthy: bool,
+    localWriteFailures: int,
     phase: CallPhase,
     origin: ResultOrigin,
     requestReads: int,
@@ -58,6 +60,7 @@ module dialcache_core {
     localHasValue: false,
     remoteHasValue: false,
     remoteReadHealthy: true,
+    localReadHealthy: true, localWriteHealthy: true, localWriteFailures: 0,
     phase: CallIdle,
     origin: NoResult,
     requestReads: 0,
@@ -96,6 +99,17 @@ module dialcache_core {
   action toggleRedisHealth = all {
     s.phase == CallIdle,
     s' = { remoteReadHealthy: not(s.remoteReadHealthy), ...s },
+  }
+
+  // Local storage failures are environment outcomes of DialCache-owned
+  // operations, not failures of the source. No LRU internals are modeled.
+  action toggleLocalReadHealth = all {
+    s.phase == CallIdle,
+    s' = { localReadHealthy: not(s.localReadHealthy), ...s },
+  }
+  action toggleLocalWriteHealth = all {
+    s.phase == CallIdle,
+    s' = { localWriteHealthy: not(s.localWriteHealthy), ...s },
   }
 
   action openScope = all {
@@ -143,6 +157,7 @@ module dialcache_core {
       sourceCalls: 1,
       requestWrites: 0,
       localWrites: 0,
+      localWriteFailures: 0,
       remoteWrites: 0,
       configSnapshots: 0,
       keyConstructions: 0,
@@ -171,6 +186,7 @@ module dialcache_core {
       sourceCalls: 0,
       requestWrites: 0,
       localWrites: 0,
+      localWriteFailures: 0,
       remoteWrites: 0,
       configSnapshots: 1,
       keyConstructions: 1,
@@ -194,11 +210,11 @@ module dialcache_core {
     s.phase == LocalLookup,
     s' = {
       localReads: if (s.callLocal) s.localReads + 1 else s.localReads,
-      origin: if (s.callLocal and s.localHasValue) LocalValue else s.origin,
-      requestHasValue: if (s.callLocal and s.localHasValue and s.callRequestLocal and callScopeLive) true else s.requestHasValue,
-      requestWrites: if (s.callLocal and s.localHasValue and s.callRequestLocal and callScopeLive) s.requestWrites + 1 else s.requestWrites,
-      requestValueScope: if (s.callLocal and s.localHasValue and s.callRequestLocal and callScopeLive) s.callScopeId else s.requestValueScope,
-      phase: if (s.callLocal and s.localHasValue) CallDone else RemoteLookup,
+      origin: if (s.callLocal and s.localReadHealthy and s.localHasValue) LocalValue else s.origin,
+      requestHasValue: if (s.callLocal and s.localReadHealthy and s.localHasValue and s.callRequestLocal and callScopeLive) true else s.requestHasValue,
+      requestWrites: if (s.callLocal and s.localReadHealthy and s.localHasValue and s.callRequestLocal and callScopeLive) s.requestWrites + 1 else s.requestWrites,
+      requestValueScope: if (s.callLocal and s.localReadHealthy and s.localHasValue and s.callRequestLocal and callScopeLive) s.callScopeId else s.requestValueScope,
+      phase: if (s.callLocal and s.localReadHealthy and s.localHasValue) CallDone else RemoteLookup,
       ...s
     },
   }
@@ -210,8 +226,9 @@ module dialcache_core {
     s' = {
       remoteReads: s.remoteReads + 1,
       origin: if (s.remoteHasValue) RemoteValue else s.origin,
-      localHasValue: if (s.remoteHasValue and s.callLocal) true else s.localHasValue,
-      localWrites: if (s.remoteHasValue and s.callLocal) s.localWrites + 1 else s.localWrites,
+      localWriteFailures: if (s.remoteHasValue and s.callLocal and s.localReadHealthy and not(s.localWriteHealthy)) s.localWriteFailures + 1 else s.localWriteFailures,
+      localHasValue: if (s.remoteHasValue and s.callLocal and s.localReadHealthy and s.localWriteHealthy) true else s.localHasValue,
+      localWrites: if (s.remoteHasValue and s.callLocal and s.localReadHealthy and s.localWriteHealthy) s.localWrites + 1 else s.localWrites,
       requestHasValue: if (s.remoteHasValue and s.callRequestLocal and callScopeLive) true else s.requestHasValue,
       requestWrites: if (s.remoteHasValue and s.callRequestLocal and callScopeLive) s.requestWrites + 1 else s.requestWrites,
       requestValueScope: if (s.remoteHasValue and s.callRequestLocal and callScopeLive) s.callScopeId else s.requestValueScope,
@@ -261,8 +278,9 @@ module dialcache_core {
     s.remoteReadFailed,
     s' = {
       origin: SourceValue,
-      localHasValue: if (s.callLocal and not(s.callTracked)) true else s.localHasValue,
-      localWrites: if (s.callLocal and not(s.callTracked)) s.localWrites + 1 else s.localWrites,
+      localWriteFailures: if (s.callLocal and s.localReadHealthy and not(s.callTracked) and not(s.localWriteHealthy)) s.localWriteFailures + 1 else s.localWriteFailures,
+      localHasValue: if (s.callLocal and s.localReadHealthy and not(s.callTracked) and s.localWriteHealthy) true else s.localHasValue,
+      localWrites: if (s.callLocal and s.localReadHealthy and not(s.callTracked) and s.localWriteHealthy) s.localWrites + 1 else s.localWrites,
       requestHasValue: if (s.callRequestLocal and callScopeLive) true else s.requestHasValue,
       requestWrites: if (s.callRequestLocal and callScopeLive) s.requestWrites + 1 else s.requestWrites,
       requestValueScope: if (s.callRequestLocal and callScopeLive) s.callScopeId else s.requestValueScope,
@@ -277,8 +295,9 @@ module dialcache_core {
     not(s.callRemote),
     s' = {
       origin: SourceValue,
-      localHasValue: if (s.callLocal) true else s.localHasValue,
-      localWrites: if (s.callLocal) s.localWrites + 1 else s.localWrites,
+      localWriteFailures: if (s.callLocal and s.localReadHealthy and not(s.localWriteHealthy)) s.localWriteFailures + 1 else s.localWriteFailures,
+      localHasValue: if (s.callLocal and s.localReadHealthy and s.localWriteHealthy) true else s.localHasValue,
+      localWrites: if (s.callLocal and s.localReadHealthy and s.localWriteHealthy) s.localWrites + 1 else s.localWrites,
       requestHasValue: if (s.callRequestLocal and callScopeLive) true else s.requestHasValue,
       requestWrites: if (s.callRequestLocal and callScopeLive) s.requestWrites + 1 else s.requestWrites,
       requestValueScope: if (s.callRequestLocal and callScopeLive) s.callScopeId else s.requestValueScope,
@@ -302,8 +321,9 @@ module dialcache_core {
     s' = {
       remoteWrites: s.remoteWrites + 1,
       remoteHasValue: true,
-      localHasValue: if (s.callLocal and not(s.callTracked)) true else s.localHasValue,
-      localWrites: if (s.callLocal and not(s.callTracked)) s.localWrites + 1 else s.localWrites,
+      localWriteFailures: if (s.callLocal and s.localReadHealthy and not(s.callTracked) and not(s.localWriteHealthy)) s.localWriteFailures + 1 else s.localWriteFailures,
+      localHasValue: if (s.callLocal and s.localReadHealthy and not(s.callTracked) and s.localWriteHealthy) true else s.localHasValue,
+      localWrites: if (s.callLocal and s.localReadHealthy and not(s.callTracked) and s.localWriteHealthy) s.localWrites + 1 else s.localWrites,
       requestHasValue: if (s.callRequestLocal and callScopeLive) true else s.requestHasValue,
       requestWrites: if (s.callRequestLocal and callScopeLive) s.requestWrites + 1 else s.requestWrites,
       requestValueScope: if (s.callRequestLocal and callScopeLive) s.callScopeId else s.requestValueScope,
@@ -322,7 +342,7 @@ module dialcache_core {
     toggleLocalPolicy,
     toggleRemotePolicy,
     toggleTrackedPolicy,
-    toggleRedisHealth,
+    toggleRedisHealth, toggleLocalReadHealth, toggleLocalWriteHealth,
     openScope,
     closeScope, nestedEnable, exitNestedEnable, disableScope, restoreScope,
     startPassThrough,
@@ -356,6 +376,14 @@ module dialcache_core {
     s.origin != RemoteValue or s.sourceCalls == 0,
   }
 
+  val failedLocalReadSkipsReuseAndPublication =
+    s.phase == CallIdle or s.localReadHealthy or
+      (s.origin != LocalValue and s.localWrites == 0 and s.localWriteFailures == 0)
+
+  val failedLocalWritePreservesAcceptedResult =
+    s.phase != CallDone or s.localWriteFailures == 0 or
+      (s.origin == RemoteValue or s.origin == SourceValue)
+
   val remoteFailureNeverRefills =
     not(s.remoteReadFailed) or s.remoteWrites == 0
 
@@ -381,4 +409,27 @@ module dialcache_core {
     .then(disableScope).then(startPassThrough).then(loaderSuccessPassThrough).then(resetCall)
     .then(restoreScope).then(startEnabledCall).then(requestLookup)
     .expect(s.origin == RequestValue and s.sourceCalls == 0)
+
+  run localReadFailureContinuesToRemoteTest = init.then(toggleLocalPolicy).then(toggleRemotePolicy).then(openScope)
+    .then(startEnabledCall).then(requestLookup).then(localLookup).then(remoteLookupHealthy)
+    .then(loaderSuccessAfterSemanticMiss).then(finishRemotePublication).then(resetCall)
+    .then(toggleLocalReadHealth).then(startEnabledCall).then(requestLookup).then(localLookup).then(remoteLookupHealthy)
+    .expect(s.origin == RemoteValue and s.localReads == 1 and s.remoteReads == 1 and s.sourceCalls == 0 and s.localWrites == 0)
+
+  run localWriteFailurePreservesSourceAndMemoTest = init.then(toggleLocalPolicy).then(toggleRequestPolicy)
+    .then(toggleLocalWriteHealth).then(openScope).then(startEnabledCall).then(requestLookup).then(localLookup)
+    .then(skipRemote).then(loaderSuccessWithoutRemote)
+    .expect(s.origin == SourceValue and not(s.localHasValue) and s.localWriteFailures == 1 and s.requestHasValue)
+
+  run localWriteFailurePreservesRemoteHitTest = init.then(toggleRemotePolicy).then(openScope)
+    .then(startEnabledCall).then(requestLookup).then(localLookup).then(remoteLookupHealthy)
+    .then(loaderSuccessAfterSemanticMiss).then(finishRemotePublication).then(resetCall)
+    .then(toggleLocalPolicy).then(toggleRequestPolicy).then(toggleLocalWriteHealth)
+    .then(startEnabledCall).then(requestLookup).then(localLookup).then(remoteLookupHealthy)
+    .expect(s.origin == RemoteValue and s.sourceCalls == 0 and s.localWriteFailures == 1 and s.requestHasValue)
+
+  run localReadFailureSuppressesSourcePublicationTest = init.then(toggleLocalPolicy).then(toggleLocalReadHealth)
+    .then(openScope).then(startEnabledCall).then(requestLookup).then(localLookup).then(skipRemote)
+    .then(loaderSuccessWithoutRemote)
+    .expect(s.origin == SourceValue and not(s.localHasValue) and s.localWrites == 0 and s.localWriteFailures == 0)
 }

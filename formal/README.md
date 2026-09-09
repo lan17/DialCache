@@ -28,7 +28,7 @@ The TypeScript driver exists today. Other language drivers and exhaustive featur
 
 ## Portable scope
 
-[`CONTRACTS.md`](./CONTRACTS.md) inventories the rules derived from current docs and tests, with named executable evidence and a source index. It separates portable behavior, protocol interoperability, language binding, and external assumptions. Exact instrumentation and resource limits are explicitly outside the current profiles. Registration APIs, native object identity, and Promise mechanics are not requirements for other languages.
+[`CONTRACTS.md`](./CONTRACTS.md) inventories the rules derived from current docs and tests, with named executable evidence and a source index. It separates portable behavior, protocol interoperability, language binding, and external assumptions. Backend-neutral diagnostic classifications, counts, ages, phase durations, byte sizes, and mismatch-warning eligibility have selected portable scenarios. Exporter compatibility and resource ceilings remain separate integration concerns. Registration APIs, native object identity, and Promise mechanics are not requirements for other languages.
 
 One logical call operation is enough to exercise the shared cache path. The feature corpus also controls classifier/comparator outcomes, multiple instances/scopes/operation identities, and independent wall-clock changes. A port supplies its own public API adapter; expected results never enter execution. Every cacheable result, including an absent fixture value, is distinct from a cache miss.
 
@@ -111,10 +111,14 @@ DIALCACHE_FEATURE_TRACE_FILE=.formal-traces/features/shadow/trace_0.itf.json \
   corepack pnpm exec vitest run test/formal-features.test.ts --coverage.enabled=false
 ```
 
-Without these environment variables, ordinary TypeScript tests replay all seven committed smoke traces through their generated-trace parsers, with no Quint installation. They run all 174 portable feature scenarios, reject malformed traces, and prove the harness detects lost local caching, coalescing, Redis writes, and invalidation. All 102 key/frame/codec/cohort/compression cases run in ordinary CI too. The 19 invalidation vectors run on both engines via `corepack pnpm test:integration` in the regular CI job.
+Without these environment variables, ordinary TypeScript tests replay all seven committed smoke traces through their generated-trace parsers, with no Quint installation. They run all 229 portable feature scenarios, reject malformed traces, and prove the harness detects lost local caching, coalescing, Redis writes, and invalidation. All 102 key/frame/codec/cohort/compression cases run in ordinary CI too. The 19 invalidation vectors run on both engines via `corepack pnpm test:integration` in the regular CI job.
 
 Model-checker exploration is separate from CI's sampled runs. For example, `quint verify` supports a TLC backend; any reported result must include the backend/version, model bounds, assumptions, and invariant. No exhaustive result is claimed here.
 
+## Source audit
+
+[`source-audit.json`](./source-audit.json) assigns 564 ordinary test declarations and 172 documentation sections across 44 files to explicit contract/binding/assumption dispositions. Normal CI rejects source drift until the affected audit is reviewed. [`TEST-AUDIT.md`](./TEST-AUDIT.md) explains the 55 added caller-level scenarios and local-storage failure model regressions found by this pass. This is source accounting with executable evidence, not a percentage of semantic completeness or a claim that every Vitest assertion has an equivalent formal test.
+
 ## Maintenance
 
-For every changed rule, update the classification and evidence in `CONTRACTS.md` and its coverage summary in `TEST-MAP.md`. A model is not authoritative merely because it is formal. Resolve disagreements against the intended contract, existing focused tests, and implementation. Update the affected model, ordinary tests, portable traces/vectors, and documentation together. Keep the driver independent: expected model state belongs in assertions, never in the code that executes the implementation or records its observations.
+For every changed rule, review its `source-audit.json` disposition and fingerprint, then update the classification and evidence in `CONTRACTS.md` and its coverage summary in `TEST-MAP.md`. A model is not authoritative merely because it is formal. Resolve disagreements against the intended contract, existing focused tests, and implementation. Update the affected model, ordinary tests, portable traces/vectors, and documentation together. Keep the driver independent: expected model state belongs in assertions, never in the code that executes the implementation or records its observations.

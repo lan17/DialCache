@@ -1,4 +1,6 @@
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -22,7 +24,7 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 async function replay(scenario: Scenario, driver = new BehaviorDriver(scenario.fixture)): Promise<void> {
-  let expected = emptyObservation();
+  let expected = emptyObservation(scenario.fixture);
   try {
     for (const [index, step] of scenario.steps.entries()) {
       const context = `${scenario.name} step ${index}: ${JSON.stringify(step.input)}`;
@@ -40,6 +42,9 @@ async function replay(scenario: Scenario, driver = new BehaviorDriver(scenario.f
 }
 
 describe("portable behavioral scenarios", () => {
+  it("keeps every ordinary test and documentation section in the reviewed source audit", () => {
+    execFileSync(process.execPath, [fileURLToPath(new URL("../formal/check-source-audit.mjs", import.meta.url))]);
+  });
   it("has a nonempty versioned corpus and unique names", () => {
     expect(corpus.schemaVersion).toBe(2);
     expect(corpus.scenarios.length).toBeGreaterThan(0);
@@ -52,7 +57,7 @@ describe("portable behavioral scenarios", () => {
       expect(scenario.steps.length, scenario.name).toBeGreaterThan(0);
       for (const step of scenario.steps) {
         expect(step.expect, scenario.name).toBeTypeOf("object");
-        for (const field of Object.keys(step.expect)) expect(emptyObservation(), scenario.name).toHaveProperty(field);
+        for (const field of Object.keys(step.expect)) expect(emptyObservation({ policy: {}, observe: [] }), scenario.name).toHaveProperty(field);
       }
     }
   });
@@ -68,6 +73,12 @@ function scenarioNamed(name: string): Scenario {
 }
 
 describe("behavior driver trust boundary", () => {
+  it("compares diagnostic expectations without feeding them to observers", async () => {
+    const scenario = structuredClone(scenarioNamed("adapter legacy null preserves only trustworthy miss metadata"));
+    const events = scenario.steps[1]!.expect.events!;
+    events[0]!.reason = "expired";
+    await expect(replay(scenario)).rejects.toThrow(/step 1/);
+  });
   it("detects missing recovery from actual caller results", async () => {
     const scenario = scenarioNamed("first stale age is recoverable without shared publication");
     const driver = new BehaviorDriver(scenario.fixture, { shouldAttemptStaleRecovery: () => false });

@@ -5,7 +5,7 @@ import { vi } from "vitest";
 
 import {
   DialCache, DialCacheKey, DialCacheKeyConfig, FallbackTimeoutError,
-  type DialCacheConfig, type RedisReadRequest, type RedisReadResult,
+  type DialCacheConfig, type RedisReadRequest, type RedisReadResult, type RedisReadContext,
   type RedisWriteRequest, type RedisInvalidationRequest, type Serializer,
 } from "../../src/index.js";
 import { encodeFrame, FakeRedis } from "../fake-redis.js";
@@ -13,6 +13,14 @@ import { encodeFrame, FakeRedis } from "../fake-redis.js";
 export type Policy = ConstructorParameters<typeof DialCacheKeyConfig>[0];
 export type Value = number | boolean | string | null;
 export type Recovery = "allow" | "deny" | "error";
+export type EventName = "readContext" | "readAbort" | "request" | "miss" | "disabled" | "error"
+  | "coalesced" | "invalidation" | "shadowAge" | "recoveryAge" | "futureOffset"
+  | "size" | "storedSize" | "compression" | "get" | "fallback" | "serialization"
+  | "mismatchWarning";
+export interface ObservedEvent { event: EventName; [field: string]: string | number | boolean | null }
+// JSON-shaped adapter observations deliberately include malformed replies. A
+// strongly typed port can reject these at its adapter boundary instead.
+export type AdapterReply = null | number | string | boolean | { [field: string]: unknown };
 export interface Fixture {
   policy: Policy;
   tracked?: boolean;
@@ -26,6 +34,7 @@ export interface Fixture {
   observerFailure?: boolean;
   remote?: boolean;
   probeSourceScope?: boolean;
+  observe?: EventName[];
 }
 export interface Faults {
   read: boolean; write: boolean; dump: boolean; load: boolean; policy: boolean;
@@ -37,8 +46,9 @@ export type Input =
   | { op: "reject"; loader: number; error?: "timeout" }
   | { op: "advance"; ms: number; deliverTimers?: boolean }
   | { op: "shiftWall"; ms: number }
-  | { op: "seed"; useCase?: string; key?: string; value?: Value; ageMs?: number; frameHex?: string; ttlMs?: number }
+  | { op: "seed"; useCase?: string; key?: string; value?: Value; ageMs?: number; frameHex?: string; payloadHex?: string; ttlMs?: number }
   | { op: "invalidate"; key?: string; futureBufferMs?: number }
+  | { op: "adapterReply"; value: AdapterReply }
   | { op: "policy"; value: Policy | null }
   | { op: "faults"; value: Partial<Faults> }
   | { op: "release"; effect: "read" | "write" | "dump" | "load" | "policy"; index: number }
@@ -48,6 +58,7 @@ export type Input =
 export type CallResult = { status: "pending" } | { status: "value"; value: Value | { absent: true } }
   | { status: "error"; error: string };
 export interface Observation {
+  events?: ObservedEvent[];
   calls: CallResult[];
   loaders: number;
   reads: number;
@@ -64,8 +75,8 @@ export interface Observation {
   shadow: string[];
   recovery: string[];
 }
-export function emptyObservation(): Observation {
-  return { calls: [], loaders: 0, reads: 0, writes: 0, invalidations: 0, maintenance: [],
+export function emptyObservation(fixture?: Fixture): Observation {
+  return { ...(fixture?.observe === undefined ? {} : { events: [] }), calls: [], loaders: 0, reads: 0, writes: 0, invalidations: 0, maintenance: [],
     loads: 0, dumps: 0, policyCalls: 0, classifications: 0, comparisons: 0, sourceScopes: [], writeTtls: [], shadow: [], recovery: [] };
 }
 
@@ -86,7 +97,8 @@ type Scope = { instance: string; run: <T>(fn: () => T) => T; gate: Gate; lifetim
 // Only external effects are gated. We never access DialCache's maps, flights,
 // or resolved policy, and no expected observation is passed to this class.
 export class BehaviorDriver {
-  private readonly observed = emptyObservation();
+  private readonly observed: Observation;
+  private adapterReply: { value: AdapterReply } | undefined;
   private readonly loaders: Array<ReturnType<typeof deferred<Value | undefined>>> = [];
   private readonly sourceErrors: Error[] = [];
   private readonly timeoutErrors: unknown[] = [];
@@ -103,14 +115,24 @@ export class BehaviorDriver {
   readonly cache: DialCache;
 
   constructor(private readonly fixture: Fixture, private readonly overrides: DialCacheConfig = {}) {
+    this.observed = emptyObservation(fixture);
     const origin = Date.now();
     vi.spyOn(performance, "now").mockImplementation(() => Date.now() - origin - this.wallOffset);
     const owner = this;
     this.redis = new class extends FakeRedis {
-      override async read(request: RedisReadRequest): Promise<RedisReadResult> {
+      override async read(request: RedisReadRequest, context?: RedisReadContext): Promise<RedisReadResult> {
         const index = owner.observed.reads++;
+        if (context !== undefined) {
+          owner.record("readContext", { index, timeoutMs: context.timeoutMs, aborted: context.signal.aborted });
+          context.signal.addEventListener("abort", () => owner.record("readAbort", { index }), { once: true });
+        }
         if (owner.faults.holdReads) await owner.hold("read", index);
         if (owner.faults.read) throw new Error("Controlled read failure");
+        if (owner.adapterReply !== undefined) {
+          const value = structuredClone(owner.adapterReply.value);
+          owner.adapterReply = undefined;
+          return value as unknown as RedisReadResult;
+        }
         return super.read(request);
       }
       override async write(request: RedisWriteRequest): Promise<void> {
@@ -148,11 +170,30 @@ export class BehaviorDriver {
         if (this.faults.policy) throw new Error("Controlled policy failure");
         return this.runtimePolicy === null ? null : new DialCacheKeyConfig(this.runtimePolicy);
       },
-      metrics: { request: noop, miss: noop, disabled: noop, error: noop, invalidation: noop,
-        observeGet: noop, observeFallback: noop, observeSerialization: noop, observeSize: noop,
+      metrics: {
+        request: (labels) => { this.record("request", labels); noop(); },
+        miss: (labels) => { this.record("miss", labels); noop(); },
+        disabled: (labels) => { this.record("disabled", labels); noop(); },
+        error: (labels) => { this.record("error", labels); noop(); },
+        invalidation: (labels) => { this.record("invalidation", labels); noop(); },
+        coalesced: (labels) => { this.record("coalesced", labels); noop(); },
+        observeShadowValueAge: (labels, seconds) => { this.record("shadowAge", { ...labels, seconds }); noop(); },
+        observeStaleRecoveryValueAge: (labels, seconds) => { this.record("recoveryAge", { ...labels, seconds }); noop(); },
+        observeFutureTimestampOffset: (labels, seconds) => { this.record("futureOffset", { ...labels, seconds }); noop(); },
+        observeSize: (labels, bytes) => { this.record("size", { ...labels, bytes }); noop(); },
+        observeStoredSize: (labels, bytes) => { this.record("storedSize", { ...labels, bytes }); noop(); },
+        compression: (labels) => { this.record("compression", labels); noop(); },
+        observeGet: (labels, seconds) => { this.record("get", { ...labels, seconds }); noop(); },
+        observeFallback: (labels, seconds) => { this.record("fallback", { ...labels, seconds }); noop(); },
+        observeSerialization: (labels, seconds) => { this.record("serialization", { ...labels, seconds }); noop(); },
         ...(fixture.shadowHook === false ? {} : { shadowValidation: ({ outcome }: { outcome: string }) => { this.observed.shadow.push(outcome); noop(); } }),
         staleRecovery: ({ outcome }) => { this.observed.recovery.push(outcome); noop(); } },
-      logger: { debug: noop, warn: noop, error: noop },
+      logger: { debug: noop, warn: (message, details) => {
+        if (message === "DialCache shadow validation mismatch" && typeof details === "object" && details !== null) {
+          this.record("mismatchWarning", details);
+        }
+        noop();
+      }, error: noop },
       ...this.overrides,
     });
     this.instances.set(id, cache);
@@ -236,7 +277,9 @@ export class BehaviorDriver {
         break;
       case "seed":
         this.redis.setRaw(this.valueKey(input.key, input.useCase), input.frameHex === undefined
-          ? encodeFrame(input.value === undefined ? "undefined" : JSON.stringify(input.value), Date.now() - (input.ageMs ?? 0))
+          ? encodeFrame(input.payloadHex === undefined
+            ? input.value === undefined ? "undefined" : JSON.stringify(input.value)
+            : Buffer.from(input.payloadHex, "hex"), Date.now() - (input.ageMs ?? 0), input.payloadHex === undefined ? 0 : 1)
           : Buffer.from(input.frameHex, "hex"), input.ttlMs ?? 60_000);
         break;
       case "invalidate":
@@ -247,6 +290,10 @@ export class BehaviorDriver {
           if (error !== this.maintenanceError) throw error;
           this.observed.maintenance.push("mutation_error");
         }
+        break;
+      case "adapterReply":
+        if (this.adapterReply !== undefined) throw new Error("Unconsumed adapter reply");
+        this.adapterReply = { value: input.value };
         break;
       case "policy": this.runtimePolicy = input.value; break;
       case "faults": Object.assign(this.faults, input.value); break;
@@ -287,6 +334,10 @@ export class BehaviorDriver {
     // Drain ready executor work while unresolved external gates remain held.
     // No guessed number of Promise turns and no advancing deadline time.
     await vi.advanceTimersByTimeAsync(0);
+  }
+
+  private record(event: EventName, fields: object): void {
+    if (this.fixture.observe?.includes(event)) this.observed.events!.push({ event, ...fields });
   }
 
   snapshot(): Observation { return structuredClone(this.observed); }
