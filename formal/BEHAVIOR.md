@@ -29,6 +29,7 @@ Every scenario/trace gets a fresh default cache instance and empty Redis environ
 
 `fixture.observe` is a list of event names to include in an additional `events` observation array. Ports record actual callbacks/adapter observations in occurrence order; they must not consult expected patches. Unselected events are excluded by the fixture, and generated profiles select only the observations they specify. This keeps diagnostic checks separate from claims about all executor schedules.
 
+- `writeDispatch`: actual native adapter invocation index, recorded before its controlled write gate.
 - `readContext`: the adapter's actual read `index`, effective `timeoutMs`, and initial `aborted` state. `readAbort` records the index when cooperative cancellation is requested; the held raw read remains independently releasable.
 - `request`, `miss`, `disabled`, `error`, `coalesced`, `invalidation`: public bounded metadata. Operational events use `cacheNamespace`, `useCase`, `keyType`, and `layer` as applicable; miss/disabled events add `reason`, errors add `error`/`inFallback`, and coalescing uses `scope`.
 - `shadowAge`, `recoveryAge`, `futureOffset`, `get`, `fallback`, `serialization`: actual observations with `seconds`; serialization adds `operation`, and verdict ages add `outcome`.
@@ -88,11 +89,11 @@ A returned cache value, loader invocation, or acknowledged write does not prove 
 
 ## Generated pending-effect profile
 
-The effects model fixes tracked remote-only policy to 60 seconds, a 10 ms source deadline and separately configured read budgets, and held read/decode/serialize/write effects. It bounds each trace to eight callers and eight sources; successful values are 1. Model monotonic time and application wall time are separate. No local cache, recovery, shadow work, or physical expiry is enabled in this profile.
+The effects model fixes remote-only policy to 60 seconds, a 10 ms source deadline and separately configured read budgets, and held read/decode/serialize/write effects. It bounds each trace to eight callers and eight sources; successful values are 1. Model monotonic time and application wall time are separate. No local cache, recovery, shadow work, or physical expiry is enabled in this profile.
 
 | Quint action | Driver input |
 | --- | --- |
-| `init` | Choice 0..4 configures the fresh fixture and initial policy; hold reads, loads, dumps, and writes; observe read budgets and cancellation requests |
+| `init` | Choice 0..5 configures the fresh fixture and initial policy; hold reads, loads, dumps, and writes; observe budgets, cancellation, dispatch, and portable diagnostic events |
 | `beginCall` | `begin` |
 | `resolveLoader` / `rejectLoader` | Resolve with value 1 / reject, using explicit source index `choice` |
 | `releaseRead` / `failRead` | Release the explicitly selected raw read with success / failure |
@@ -102,9 +103,10 @@ The effects model fixes tracked remote-only policy to 60 seconds, a 10 ms source
 | `rollbackWall` | Move application wall time back 1,000 ms, preserving monotonic time and Redis physical expiry |
 | `invalidate` / `futureFence` | Invalidate with a 0 / 20 ms future buffer |
 | `observerFault` | Choice 0/1 restores / fails diagnostic callbacks; cache outcomes remain unchanged |
+| `adapterReply` | Choice 1..16 supplies one next raw adapter reply; a second cannot be queued until the first is consumed |
 | `readBudgetPolicy` | Choice 0 inherits the operation/instance budget; choices 1..4 supply runtime budgets 10/20/30/50 ms |
 
-The effects initial input selects these precedence cases. Budget changes affect later reads; followers retain the registered leader's budget. Read budgets are multiples of the 10 ms clock step. Clock jumps without timer delivery are generated during 10 ms reads and source/application-owned phases; larger reads use delivered timer steps.
+Initial choices 0..4 use tracked keys; choice 5 checks untracked reply/fence behavior. The effects initial input selects these precedence cases. Budget changes affect later reads; followers retain the registered leader's budget. Read budgets are multiples of the 10 ms clock step. Clock jumps without timer delivery are generated during 10 ms reads and source/application-owned phases; larger reads use delivered timer steps.
 
 | Initial choice | Instance | Operation default | Initial runtime | Effective read budget |
 | --- | --- | --- | --- | --- |
@@ -113,14 +115,21 @@ The effects initial input selects these precedence cases. Budget changes affect 
 | 2 | 20 ms | 10 ms | Inherit | 10 ms |
 | 3 | 20 ms | 10 ms | 30 ms | 30 ms |
 | 4 | 20 ms | 10 ms | Provider returns null | 10 ms |
+| 5 | 20 ms | 10 ms | Inherit; untracked key | 10 ms |
 
-ITF contains `mbt::actionTaken`, expected state `s`, and `mbt::nondetPicks.choice`. Read/source settlement records an actual effect index; `observerFault` records 0/1; `init` and `readBudgetPolicy` record 0..4; other actions record `None`. The parser rejects missing, unexpected, or unsafe choices. Failure actions set a fixture fault, release the selected external gate, drain runnable work, and restore the fault. Model-only timestamps, fences, phase, and registration fields never enter execution or implementation projection.
+ITF contains `mbt::actionTaken`, expected state `s`, and `mbt::nondetPicks.choice`. Read/source settlement records an actual effect index; `observerFault` records 0/1; `init` records 0..5, `readBudgetPolicy` records 0..4, and `adapterReply` records 1..16; other actions record `None`. The parser rejects missing, unexpected, or unsafe choices. Failure actions set a fixture fault, release the selected external gate, drain runnable work, and restore the fault. Model-only timestamps, fences, phase, and registration fields never enter execution or implementation projection.
 
 After every step, replay compares actual caller outcomes, loader/read/write/invalidation/serializer/provider counts, physical write TTLs, actual raw-read context budgets/initial cancellation state, and ordered cancellation IDs. Model caller codes are 0 pending, 1 value 1, 2 original source error, 3 timeout. Fixed scenarios additionally compare logical error identity. A read deadline starts a fresh source budget and suppresses refill; successful raw-read completion clears that budget before application-owned decoding. Failed fresh decoding permits refill. Accepted serialization/write outlives the source budget, with the observed fence checked again after preparation.
 
 CI exports 512 traces from 4,096 samples, up to 60 transitions, and requires all actions plus twenty-eight witnesses covering abandoned source/read settlement, independent budgets, late settlement guards, application-owned phases, acquired snapshots across invalidation, failure-specific publication, clock rollback at the second fence check, and observer failure isolation. Fifteen deterministic model regressions anchor those rules. Sampling favors the narrow rollback-during-publication boundary as well as unrestricted clock changes; it does not restrict that behavior to the favored schedule.
 
 All eight generated profiles run on every PR alongside ordinary tests. Committed ITF smokes run without Quint. Failure diagnostics include trace, step, action, and both observations. The effects choice/state schema and scope/policy value choices changed with this specification revision; ports must select a matching revision and reject unsupported actions or choices. Behavioral scenario schema 2 is unchanged.
+
+The queued adapter choices are: 1 null, 2 primitive, 3 legacy watermark shape, 4 kindless metadata, 5 missing miss reason, 6 unknown reason, 7 unknown reason with valid future fence, 8 fenced reason without fence, 9 negative fence, 10 fractional fence, 11 unsafe fence, 12 absent reason with future fence, 13 expired reason with zero fence, 14 miss with stray frame fields, 15 valid frame with stray miss metadata, and 16 fenced reason with valid future fence. Future fences are the input wall clock plus 20 ms. Successful raw completion consumes the reply even when DialCache has abandoned that read; adapter failure leaves it queued. Ports with strongly typed replies may normalize these encodings at their input boundary, but must preserve the resulting miss/refill behavior.
+
+`s.events` records `{ event, location, detail, amount }`. Location identifies a reached layer or coalescing scope. Amount is an integer millisecond measurement (get, fallback, serialization, future offset), a byte size, a write-dispatch index, or zero. Replay converts model milliseconds to callback seconds and compares actual ordered events, their labels, and source-error attribution. A follower emits its coalescing event without repeating the leader's read/source trail. Fresh decoding is included in remote-get duration; source duration ends at accepted settlement/deadline; dump has its own duration. Late sources do not repeat failures. Size events precede actual adapter dispatch, including when that write remains pending. Scalar value 1 has one serialized byte here; Unicode/binary byte accounting remains covered by protocol vectors and fixed scenarios.
+
+The profile requires 29 existing fixture/race witnesses plus 43 adapter/diagnostic witnesses: every reply class consumed by an active read, untracked fence demotion, normalized fences blocking publication, every selected event kind, error/miss categories, and nonzero held load/dump durations. Seven additional deterministic regressions anchor normalization, phase timing, and late-failure suppression. Missing/corrupted diagnostic observations fail the harness.
 
 ## Generated feature profiles
 

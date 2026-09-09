@@ -102,7 +102,7 @@ check formal/dialcache-effects-conformance.qnt \
   oneRegisteredSource \
   registeredFlightHasPendingCalls \
   writeRequiresAcceptedSource \
-  registeredReadOwnsFlight effectCountsMatchRecords
+  registeredReadOwnsFlight effectCountsMatchRecords oneRequestPerRead oneSourceDurationPerSettlement measurementsAreNonnegative
 
 quint test formal/dialcache-effects-conformance.qnt --backend=rust --max-samples=1
 

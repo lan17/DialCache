@@ -32,7 +32,7 @@ quint run formal/dialcache-effects-conformance.qnt \
   --max-samples=4096 --max-steps=60 --n-traces=512 \
   --out-itf='.formal-traces/effects/trace_{seq}.itf.json' \
   --verbosity=1 \
-  --invariants oneRegisteredSource registeredFlightHasPendingCalls writeRequiresAcceptedSource registeredReadOwnsFlight effectCountsMatchRecords
+  --invariants oneRegisteredSource registeredFlightHasPendingCalls writeRequiresAcceptedSource registeredReadOwnsFlight effectCountsMatchRecords oneRequestPerRead oneSourceDurationPerSettlement measurementsAreNonnegative
 count=$(find .formal-traces/effects -name '*.itf.json' -type f | wc -l)
 if [ "${count}" -ne 512 ]; then
   echo "Expected 512 effects traces; generated ${count}" >&2

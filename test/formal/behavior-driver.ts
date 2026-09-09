@@ -16,7 +16,7 @@ export type Recovery = "allow" | "deny" | "error";
 export type EventName = "readContext" | "readAbort" | "request" | "miss" | "disabled" | "error"
   | "coalesced" | "invalidation" | "shadowAge" | "recoveryAge" | "futureOffset"
   | "size" | "storedSize" | "compression" | "get" | "fallback" | "serialization"
-  | "mismatchWarning";
+  | "mismatchWarning" | "writeDispatch";
 export interface ObservedEvent { event: EventName; [field: string]: string | number | boolean | null }
 // JSON-shaped adapter observations deliberately include malformed replies. A
 // strongly typed port can reject these at its adapter boundary instead.
@@ -137,6 +137,7 @@ export class BehaviorDriver {
       }
       override async write(request: RedisWriteRequest): Promise<void> {
         const index = owner.observed.writes++;
+        owner.record("writeDispatch", { index });
         owner.observed.writeTtls.push(request.cacheTtlMs);
         // A native adapter stamps the complete frame before its SET is delayed.
         const stamped = { ...request, createdAtMs: request.createdAtMs ?? Date.now() };
