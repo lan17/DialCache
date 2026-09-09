@@ -37,11 +37,30 @@ Test basenames above refer to `test/*.test.ts`; real/cluster evidence includes `
 
 - [`CONFORMANCE.md`](./CONFORMANCE.md) defines the original core profile. [`BEHAVIOR.md`](./BEHAVIOR.md) defines the shared portable scenario/feature driver, action boundaries, clocks, and independently observed outputs.
 - `formal/generate-traces.sh` exports 32 core, 32 pending-effect, 64 recovery, 64 policy, and 256 shadow ITF traces. Three replay test files execute every action through public calls. Effects and feature CI require named actions plus explicit race/outcome witnesses, rather than relying on trace count alone.
-- The 144 portable scenarios cover 12 behavior families. After every input, the driver compares all outputs/effect counts against assertion-side expected patches. Expected fields never enter execution.
+- The 174 portable scenarios cover 12 behavior families. After every input, the driver compares all outputs/effect counts against assertion-side expected patches. Expected fields never enter execution.
 - Model cache-presence, fence, and flight fields predict later behavior but are excluded from implementation projection. Negative checks remove local caching/coalescing/recovery or acknowledge lost writes/invalidation and require an observable failure.
 - All five committed ITF smokes, all feature scenarios, and all protocol vectors run in ordinary TypeScript CI without Quint. Parser checks reject empty/unknown/misplaced traces, missing choices/observations, unsupported arguments, and unsafe integers.
 - CI artifacts retain model counterexamples and generated replay inputs. Failures include file/scenario, step/action, and both observations. Automatic shrinking is not implemented.
 - Deterministic model tests exercise previously weak assertions: changing an existing TTL or reversing fence/encoding precedence must violate its invariant. Reachability witnesses also cover policy mutation during a pending invocation, replacement request scopes, and dark reads before source acceptance.
+
+## Interaction regressions
+
+The latest audit adds 30 fixed scenarios, bringing the corpus to 174. Broad obligation rows previously had evidence for individual features but left some of their interactions untested by a portable schedule. The additions below use the existing input vocabulary and independently observed effects; they require no new production API or driver mechanism. They do not increase the generated models' scope.
+
+| Interaction covered | Portable consequence | Existing evidence |
+| --- | --- | --- |
+| Shadow job ownership and timeouts | An unbounded caller source can continue after its dark job releases capacity. Shadow-owned decode and C1 reads retain capacity until their raw work settles, including after a separate read deadline. A source-reported timeout is `source_error`, distinct from the job's own timeout. | `dialcache-shadow-confirmation`, `dialcache-shadow-validation`; `docs/coalescing.md`, `docs/shadow-validation.md` |
+| Shadow admission and coalescing | Dark-job deduplication does not merge independent caller sources; coalesced served hits start one shadow source; capacity/deduplication are per instance. | `dialcache-shadow-confirmation`, `dialcache-shadow-validation`; `docs/shadow-validation.md` |
+| Shadow with local/request layers | Only the caller source publishes to participating local/request caches. Invalid optional shadow policy suppresses dark reads while preserving valid local publication. | `dialcache-shadow-confirmation`, `dialcache-config-ramp` |
+| Shadow policy snapshots | Admitted fills keep their TTL/retention snapshot; disabling shadow prevents new jobs while an admitted comparison completes. | `dialcache-shadow-confirmation`, `dialcache-config-ramp`; `docs/configuration.md` |
+| Shadow observations across time/replacement | Future/expired dark C0 may fill; an acquired miss is not reread after replacement; retained C0 and C1 comparison do not reapply serving freshness after age or wall-clock changes. | `dialcache-shadow-confirmation`; `docs/shadow-validation.md` |
+| Recovery with shadow | Dark serving never recovers stale; a recovered absent value never admits shadow work. | `dialcache-stale-on-error`, `dialcache-shadow-confirmation`; `docs/stale-on-error.md` |
+| Independent reads across invalidation | Uncoalesced recovery chains retain their own bytes, and independently decoding tracked readers on either side of invalidation may return different acquired values. | `dialcache-stale-on-error`, `dialcache-coalescing`, `dialcache-invalidation` |
+| Recovery decoding/lifetime | Failed fresh decoding is not retried as stale recovery. Rollback making retained bytes future-dated preserves the source error. Recovery finishing after scope closure cannot enter a replacement memo. | `dialcache-stale-on-error`, `dialcache-request-local`; `docs/stale-on-error.md` |
+| Coalescing policy and scopes | Uncoalesced request calls still memoize their last publication. Reenabled coalescing joins a registered flight before reading a newer local value. Runtime policy overrides a disabled default. Concurrent outer request scopes remain independent. | `dialcache-coalescing`, `dialcache-request-local`; `docs/coalescing.md` |
+| Remote age versus local insertion age | A nearly expired Redis hit warms local storage for its full configured insertion TTL, which may outlive the remote entry. | `dialcache-local`, `dialcache-redis`; `docs/stale-on-error.md` |
+
+Some schedules combine independently established rules rather than duplicate one existing test. Their expected results are authored from the contracts, never recorded from the driver. This closes specific portable witnesses; arbitrary feature products, larger concurrent histories, generated admission/capacity exploration, and validation by a second-language driver remain open.
 
 ## `dialcache-core.qnt`
 

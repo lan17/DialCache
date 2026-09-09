@@ -1675,6 +1675,390 @@
         {"input": {"op": "advance","ms": 1},"expect": {"shadow": ["timeout"]}},
         {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {}}
       ]
+    },
+    {
+      "name": "dark shadow releases capacity while unbounded caller source continues",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 60},"ramp": {"remote": 0},"shadow": {"ramp": 100}},"fallbackTimeoutMs": null,"tracked": true},
+      "steps": [
+        {"input": {"op": "begin","key": "a"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"reads": 1,"policyCalls": 1}},
+        {"input": {"op": "advance","ms": 60000},"expect": {"shadow": ["timeout"]}},
+        {"input": {"op": "begin","key": "b"},"expect": {"calls": [{"status": "pending"},{"status": "pending"}],"loaders": 2,"reads": 2,"policyCalls": 2}},
+        {"input": {"op": "resolve","loader": 1,"value": 2},"expect": {"calls": [{"status": "pending"},{"status": "value","value": 2}],"dumps": 1,"writes": 1,"writeTtls": [60000],"shadow": ["timeout","filled"]}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2}]}}
+      ]
+    },
+    {
+      "name": "dark shadow distinguishes source timeout from its own deadline",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 60},"ramp": {"remote": 0},"shadow": {"ramp": 100}},"tracked": true},
+      "steps": [
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"reads": 1,"policyCalls": 1}},
+        {"input": {"op": "reject","loader": 0,"error": "timeout"},"expect": {"calls": [{"status": "error","error": "source:0"}],"shadow": ["source_error"]}}
+      ]
+    },
+    {
+      "name": "served shadow distinguishes source timeout from its own deadline",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 60},"shadow": {"ramp": 100}},"tracked": true},
+      "steps": [
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1}],"loaders": 1,"reads": 1,"policyCalls": 1,"loads": 1}},
+        {"input": {"op": "reject","loader": 0,"error": "timeout"},"expect": {"calls": [{"status": "value","value": 1}],"shadow": ["source_error"]}}
+      ]
+    },
+    {
+      "name": "dark shadow publishes only caller source into local cache",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"local": 60,"remote": 60},"ramp": {"remote": 0},"shadow": {"ramp": 100}},"tracked": true},
+      "steps": [
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"reads": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 2},"expect": {"calls": [{"status": "value","value": 2}],"loads": 1,"reads": 2,"shadow": ["mismatch"]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 2},{"status": "value","value": 2}],"policyCalls": 2}}
+      ]
+    },
+    {
+      "name": "dark shadow publishes only caller source into request cache",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 60},"ramp": {"remote": 0},"shadow": {"ramp": 100},"requestLocal": true},"tracked": true},
+      "steps": [
+        {"input": {"op": "openScope","id": "r"},"expect": {}},
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin","scope": "r"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"reads": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 2},"expect": {"calls": [{"status": "value","value": 2}],"loads": 1,"reads": 2,"shadow": ["mismatch"]}},
+        {"input": {"op": "begin","scope": "r"},"expect": {"calls": [{"status": "value","value": 2},{"status": "value","value": 2}],"policyCalls": 2}},
+        {"input": {"op": "closeScope","id": "r"},"expect": {}}
+      ]
+    },
+    {
+      "name": "dark shadow deduplicates jobs without coalescing caller sources",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 60},"ramp": {"remote": 0},"shadow": {"ramp": 100}},"tracked": true},
+      "steps": [
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"reads": 1,"policyCalls": 1}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"},{"status": "pending"}],"loaders": 2,"policyCalls": 2,"shadow": ["dropped"]}},
+        {"input": {"op": "resolve","loader": 1,"value": 2},"expect": {"calls": [{"status": "pending"},{"status": "value","value": 2}]}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2}],"loads": 1,"shadow": ["dropped","match"]}}
+      ]
+    },
+    {
+      "name": "uncoalesced recovery preserves each caller's independently acquired bytes",
+      "feature": "stale-recovery",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"staleOnErrorMaxAgeSec": 5,"coalesce": false},"tracked": true,"recovery": "allow"},
+      "steps": [
+        {"input": {"op": "seed","value": 1,"ageMs": 1000},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"reads": 1,"policyCalls": 1}},
+        {"input": {"op": "seed","value": 2,"ageMs": 1000},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"},{"status": "pending"}],"loaders": 2,"reads": 2,"policyCalls": 2}},
+        {"input": {"op": "invalidate"},"expect": {"invalidations": 1,"maintenance": ["ok"]}},
+        {"input": {"op": "reject","loader": 1},"expect": {"calls": [{"status": "pending"},{"status": "value","value": 2}],"classifications": 1,"loads": 1,"recovery": ["served"]}},
+        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2}],"classifications": 2,"loads": 2,"recovery": ["served","served"]}}
+      ]
+    },
+    {
+      "name": "dark serving never recovers stale even when classifier allows",
+      "feature": "stale-recovery",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"ramp": {"remote": 0},"shadow": {"ramp": 100},"staleOnErrorMaxAgeSec": 5},"tracked": true,"recovery": "allow"},
+      "steps": [
+        {"input": {"op": "seed","value": 1,"ageMs": 1000},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"reads": 1,"policyCalls": 1}},
+        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "error","error": "source:0"}],"shadow": ["source_error"]}}
+      ]
+    },
+    {
+      "name": "recovered absent value never starts selected shadow work",
+      "feature": "stale-recovery",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"staleOnErrorMaxAgeSec": 5,"shadow": {"ramp": 100}},"tracked": true,"recovery": "allow"},
+      "steps": [
+        {"input": {"op": "seed","ageMs": 1000},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"reads": 1,"policyCalls": 1}},
+        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "value","value": {"absent": true}}],"classifications": 1,"loads": 1,"recovery": ["served"]}}
+      ]
+    },
+    {
+      "name": "coalesced remote hits admit only one shadow source",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 60},"shadow": {"ramp": 100}},"tracked": true},
+      "steps": [
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "faults","value": {"holdReads": true}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"policyCalls": 1}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"},{"status": "pending"}],"policyCalls": 2}},
+        {"input": {"op": "release","effect": "read","index": 0},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1}],"loaders": 1,"loads": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"loads": 2,"shadow": ["match"]}}
+      ]
+    },
+    {
+      "name": "served shadow decode retains capacity after timeout until raw load settles",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 60},"shadow": {"ramp": 100}},"tracked": true},
+      "steps": [
+        {"input": {"op": "seed","key": "a","value": 1},"expect": {}},
+        {"input": {"op": "seed","key": "b","value": 2},"expect": {}},
+        {"input": {"op": "begin","key": "a"},"expect": {"calls": [{"status": "value","value": 1}],"reads": 1,"loads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "faults","value": {"holdLoads": true}},"expect": {}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"loads": 2}},
+        {"input": {"op": "advance","ms": 10},"expect": {"shadow": ["timeout"]}},
+        {"input": {"op": "faults","value": {"holdLoads": false}},"expect": {}},
+        {"input": {"op": "begin","key": "b"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2}],"reads": 2,"loads": 3,"policyCalls": 2,"shadow": ["timeout","dropped"]}},
+        {"input": {"op": "release","effect": "load","index": 1},"expect": {}},
+        {"input": {"op": "begin","key": "b"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "value","value": 2}],"reads": 3,"loads": 4,"loaders": 2,"policyCalls": 3}},
+        {"input": {"op": "resolve","loader": 1,"value": 2},"expect": {"loads": 5,"shadow": ["timeout","dropped","match"]}}
+      ]
+    },
+    {
+      "name": "shadow confirmation read retains capacity after its separate read deadline",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 60},"shadow": {"ramp": 100}},"tracked": true,"readTimeoutMs": 5,"fallbackTimeoutMs": 100},
+      "steps": [
+        {"input": {"op": "seed","key": "a","value": 1},"expect": {}},
+        {"input": {"op": "seed","key": "b","value": 2},"expect": {}},
+        {"input": {"op": "begin","key": "a"},"expect": {"calls": [{"status": "value","value": 1}],"reads": 1,"loads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "faults","value": {"holdReads": true}},"expect": {}},
+        {"input": {"op": "resolve","loader": 0,"value": 2},"expect": {"reads": 2,"loads": 2}},
+        {"input": {"op": "advance","ms": 5},"expect": {"shadow": ["confirmation_error"]}},
+        {"input": {"op": "faults","value": {"holdReads": false}},"expect": {}},
+        {"input": {"op": "begin","key": "b"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2}],"reads": 3,"loads": 3,"policyCalls": 2,"shadow": ["confirmation_error","dropped"]}},
+        {"input": {"op": "release","effect": "read","index": 1},"expect": {}},
+        {"input": {"op": "begin","key": "b"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "value","value": 2}],"reads": 4,"loads": 4,"loaders": 2,"policyCalls": 3}},
+        {"input": {"op": "resolve","loader": 1,"value": 2},"expect": {"loads": 5,"shadow": ["confirmation_error","dropped","match"]}}
+      ]
+    },
+    {
+      "name": "dark fill preserves accepted runtime TTL and retention after policy changes",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"ramp": {"remote": 0},"shadow": {"ramp": 100},"staleOnErrorMaxAgeSec": 5},"tracked": true,"fallbackTimeoutMs": 10000},
+      "steps": [
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "policy","value": {"ttlSec": {"remote": 2},"staleOnErrorMaxAgeSec": 10}},"expect": {}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1}],"writes": 1,"dumps": 1,"writeTtls": [5000],"shadow": ["filled"]}},
+        {"input": {"op": "policy","value": {"ramp": {"remote": 100},"shadow": {"ramp": 0}}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1}],"reads": 2,"loads": 1,"policyCalls": 2}},
+        {"input": {"op": "advance","ms": 5000},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1},{"status": "pending"}],"reads": 3,"loaders": 2,"policyCalls": 3}}
+      ]
+    },
+    {
+      "name": "dark future C0 is a miss that permits source fill",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"ramp": {"remote": 0},"shadow": {"ramp": 100}},"tracked": true},
+      "steps": [
+        {"input": {"op": "seed","value": 1,"ageMs": -1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 2},"expect": {"calls": [{"status": "value","value": 2}],"dumps": 1,"writes": 1,"writeTtls": [1000],"shadow": ["filled"]}}
+      ]
+    },
+    {
+      "name": "dark expired C0 is a miss that permits source fill",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"ramp": {"remote": 0},"shadow": {"ramp": 100}},"tracked": true},
+      "steps": [
+        {"input": {"op": "seed","value": 1,"ageMs": 1000},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 2},"expect": {"calls": [{"status": "value","value": 2}],"dumps": 1,"writes": 1,"writeTtls": [1000],"shadow": ["filled"]}}
+      ]
+    },
+    {
+      "name": "dark acquired miss survives later Redis replacement without a second C0 read",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 60},"ramp": {"remote": 0},"shadow": {"ramp": 100}},"tracked": true},
+      "steps": [
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "resolve","loader": 0,"value": 2},"expect": {"calls": [{"status": "value","value": 2}],"dumps": 1,"writes": 1,"writeTtls": [60000],"shadow": ["filled"]}},
+        {"input": {"op": "policy","value": {"ramp": {"remote": 100},"shadow": {"ramp": 0}}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 2},{"status": "value","value": 2}],"reads": 2,"loads": 1,"policyCalls": 2}}
+      ]
+    },
+    {
+      "name": "dark C0 retained for comparison is not reclassified after freshness expires",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"ramp": {"remote": 0},"shadow": {"ramp": 100}},"tracked": true,"fallbackTimeoutMs": 5000},
+      "steps": [
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "advance","ms": 1000},"expect": {}},
+        {"input": {"op": "resolve","loader": 0,"value": 2},"expect": {"calls": [{"status": "value","value": 2}],"reads": 2,"loads": 1,"shadow": ["mismatch"]}}
+      ]
+    },
+    {
+      "name": "shadow confirmation preserves payload comparison across wall clock rollback",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 60},"shadow": {"ramp": 100}},"tracked": true},
+      "steps": [
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1}],"reads": 1,"loads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "shiftWall","ms": -100},"expect": {}},
+        {"input": {"op": "resolve","loader": 0,"value": 2},"expect": {"reads": 2,"loads": 2,"shadow": ["mismatch"]}}
+      ]
+    },
+    {
+      "name": "uncoalesced request calls still memoize the last settled value",
+      "feature": "coalescing",
+      "fixture": {"policy": {"requestLocal": true,"coalesce": false}},
+      "steps": [
+        {"input": {"op": "openScope","id": "r"},"expect": {}},
+        {"input": {"op": "begin","scope": "r"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "begin","scope": "r"},"expect": {"calls": [{"status": "pending"},{"status": "pending"}],"loaders": 2,"policyCalls": 2}},
+        {"input": {"op": "resolve","loader": 1,"value": 2},"expect": {"calls": [{"status": "pending"},{"status": "value","value": 2}]}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2}]}},
+        {"input": {"op": "begin","scope": "r"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "value","value": 1}],"policyCalls": 3}},
+        {"input": {"op": "closeScope","id": "r"},"expect": {}}
+      ]
+    },
+    {
+      "name": "runtime reenabling joins the registered flight before a newer local hit",
+      "feature": "coalescing",
+      "fixture": {"policy": {"ttlSec": {"local": 60}}},
+      "steps": [
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "policy","value": {"coalesce": false}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"},{"status": "pending"}],"loaders": 2,"policyCalls": 2}},
+        {"input": {"op": "resolve","loader": 1,"value": 2},"expect": {"calls": [{"status": "pending"},{"status": "value","value": 2}]}},
+        {"input": {"op": "policy","value": {"coalesce": true}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"},{"status": "value","value": 2},{"status": "pending"}],"policyCalls": 3}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "value","value": 1}]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "value","value": 1},{"status": "value","value": 1}],"policyCalls": 4}}
+      ]
+    },
+    {
+      "name": "runtime coalescing override enables sharing over a disabled default",
+      "feature": "runtime-policy",
+      "fixture": {"policy": {"ttlSec": {"local": 60},"coalesce": false}},
+      "steps": [
+        {"input": {"op": "policy","value": {"coalesce": true}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"},{"status": "pending"}],"policyCalls": 2}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1}]}}
+      ]
+    },
+    {
+      "name": "concurrent outer request scopes retain independent flights and memo",
+      "feature": "request-local",
+      "fixture": {"policy": {"requestLocal": true}},
+      "steps": [
+        {"input": {"op": "openScope","id": "a"},"expect": {}},
+        {"input": {"op": "openScope","id": "b"},"expect": {}},
+        {"input": {"op": "begin","scope": "a"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "begin","scope": "b"},"expect": {"calls": [{"status": "pending"},{"status": "pending"}],"loaders": 2,"policyCalls": 2}},
+        {"input": {"op": "closeScope","id": "a"},"expect": {}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1},{"status": "pending"}]}},
+        {"input": {"op": "resolve","loader": 1,"value": 2},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2}]}},
+        {"input": {"op": "begin","scope": "b"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "value","value": 2}],"policyCalls": 3}},
+        {"input": {"op": "closeScope","id": "b"},"expect": {}}
+      ]
+    },
+    {
+      "name": "late recovery cannot memoize into a closed or replacement request scope",
+      "feature": "stale-recovery",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"staleOnErrorMaxAgeSec": 5,"requestLocal": true},"tracked": true,"recovery": "allow"},
+      "steps": [
+        {"input": {"op": "openScope","id": "old"},"expect": {}},
+        {"input": {"op": "seed","value": 1,"ageMs": 1000},"expect": {}},
+        {"input": {"op": "begin","scope": "old"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"reads": 1,"policyCalls": 1}},
+        {"input": {"op": "faults","value": {"holdLoads": true}},"expect": {}},
+        {"input": {"op": "reject","loader": 0},"expect": {"loads": 1,"classifications": 1}},
+        {"input": {"op": "closeScope","id": "old"},"expect": {}},
+        {"input": {"op": "openScope","id": "new"},"expect": {}},
+        {"input": {"op": "release","effect": "load","index": 0},"expect": {"calls": [{"status": "value","value": 1}],"recovery": ["served"]}},
+        {"input": {"op": "begin","scope": "new"},"expect": {"calls": [{"status": "value","value": 1},{"status": "pending"}],"loaders": 2,"reads": 2,"policyCalls": 2}},
+        {"input": {"op": "resolve","loader": 1,"value": 2},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2}],"dumps": 1,"writes": 1,"writeTtls": [5000]}},
+        {"input": {"op": "begin","scope": "new"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "value","value": 2}],"policyCalls": 3}},
+        {"input": {"op": "closeScope","id": "new"},"expect": {}}
+      ]
+    },
+    {
+      "name": "failed fresh deserialization is never retried as stale recovery",
+      "feature": "stale-recovery",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"staleOnErrorMaxAgeSec": 5},"tracked": true,"recovery": "allow"},
+      "steps": [
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "faults","value": {"load": true}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"loads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "advance","ms": 1},"expect": {}},
+        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "error","error": "source:0"}]}}
+      ]
+    },
+    {
+      "name": "wall rollback during recovery decode rejects a now future snapshot",
+      "feature": "stale-recovery",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"staleOnErrorMaxAgeSec": 5},"tracked": true,"recovery": "allow"},
+      "steps": [
+        {"input": {"op": "seed","value": 1,"ageMs": 1000},"expect": {}},
+        {"input": {"op": "faults","value": {"holdLoads": true}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "reject","loader": 0},"expect": {"loads": 1,"classifications": 1}},
+        {"input": {"op": "shiftWall","ms": -1001},"expect": {}},
+        {"input": {"op": "release","effect": "load","index": 0},"expect": {"calls": [{"status": "error","error": "source:0"}],"recovery": ["miss"]}}
+      ]
+    },
+    {
+      "name": "nearly expired remote hit warms local for its full insertion TTL",
+      "feature": "local-cache",
+      "fixture": {"policy": {"ttlSec": {"local": 1,"remote": 1}},"tracked": true},
+      "steps": [
+        {"input": {"op": "seed","value": 1,"ageMs": 999,"ttlMs": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1}],"reads": 1,"loads": 1,"policyCalls": 1}},
+        {"input": {"op": "advance","ms": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1}],"policyCalls": 2}},
+        {"input": {"op": "advance","ms": 999},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1},{"status": "pending"}],"reads": 2,"loaders": 1,"policyCalls": 3}}
+      ]
+    },
+    {
+      "name": "shadow capacity and job deduplication are isolated per instance",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 60},"shadow": {"ramp": 100}},"tracked": true,"shadowMaxInFlight": 1},
+      "steps": [
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin","instance": "a"},"expect": {"calls": [{"status": "value","value": 1}],"reads": 1,"loads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "begin","instance": "b"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1}],"reads": 2,"loads": 2,"loaders": 2,"policyCalls": 2}},
+        {"input": {"op": "resolve","loader": 1,"value": 1},"expect": {"loads": 3,"shadow": ["match"]}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"loads": 4,"shadow": ["match","match"]}}
+      ]
+    },
+    {
+      "name": "invalid optional shadow disables dark reads while retaining local publication",
+      "feature": "runtime-policy",
+      "fixture": {"policy": {"ttlSec": {"local": 60,"remote": 60},"ramp": {"remote": 0},"shadow": {"ramp": 100}},"tracked": true},
+      "steps": [
+        {"input": {"op": "policy","value": {"shadow": {"ramp": 101}}},"expect": {}},
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 2},"expect": {"calls": [{"status": "value","value": 2}]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 2},{"status": "value","value": 2}],"policyCalls": 2}}
+      ]
+    },
+    {
+      "name": "disabling shadow prevents new jobs but preserves an admitted comparison",
+      "feature": "shadow-validation",
+      "fixture": {"policy": {"ttlSec": {"remote": 60},"shadow": {"ramp": 100}},"tracked": true},
+      "steps": [
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1}],"reads": 1,"loads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "policy","value": {"shadow": {"ramp": 0}}},"expect": {}},
+        {"input": {"op": "resolve","loader": 0,"value": 2},"expect": {"loads": 2,"reads": 2,"shadow": ["mismatch"]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1}],"reads": 3,"loads": 3,"policyCalls": 2}}
+      ]
+    },
+    {
+      "name": "uncoalesced tracked readers on either side of invalidation keep their own snapshots",
+      "feature": "invalidation",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"coalesce": false},"tracked": true},
+      "steps": [
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "faults","value": {"holdLoads": true}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"loads": 1,"policyCalls": 1}},
+        {"input": {"op": "invalidate"},"expect": {"invalidations": 1,"maintenance": ["ok"]}},
+        {"input": {"op": "advance","ms": 1},"expect": {}},
+        {"input": {"op": "seed","value": 2},"expect": {}},
+        {"input": {"op": "faults","value": {"holdLoads": false}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"},{"status": "value","value": 2}],"reads": 2,"loads": 2,"policyCalls": 2}},
+        {"input": {"op": "release","effect": "load","index": 0},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2}]}}
+      ]
     }
   ]
 }

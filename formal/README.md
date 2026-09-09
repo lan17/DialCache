@@ -111,7 +111,7 @@ DIALCACHE_FEATURE_TRACE_FILE=.formal-traces/features/shadow/trace_0.itf.json \
   corepack pnpm exec vitest run test/formal-features.test.ts --coverage.enabled=false
 ```
 
-Without these environment variables, ordinary TypeScript tests replay all five committed smoke traces through their generated-trace parsers, with no Quint installation. They run all 144 portable feature scenarios, reject malformed traces, and prove the harness detects lost local caching, coalescing, Redis writes, and invalidation. All 102 key/frame/codec/cohort/compression cases run in ordinary CI too. The 19 invalidation vectors run on both engines via `corepack pnpm test:integration` in the regular CI job.
+Without these environment variables, ordinary TypeScript tests replay all five committed smoke traces through their generated-trace parsers, with no Quint installation. They run all 174 portable feature scenarios, reject malformed traces, and prove the harness detects lost local caching, coalescing, Redis writes, and invalidation. All 102 key/frame/codec/cohort/compression cases run in ordinary CI too. The 19 invalidation vectors run on both engines via `corepack pnpm test:integration` in the regular CI job.
 
 Model-checker exploration is separate from CI's sampled runs. For example, `quint verify` supports a TLC backend; any reported result must include the backend/version, model bounds, assumptions, and invariant. No exhaustive result is claimed here.
 
