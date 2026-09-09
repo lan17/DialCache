@@ -38,3 +38,27 @@ if [ "${count}" -ne 32 ]; then
   echo "Expected 32 effects traces; generated ${count}" >&2
   exit 1
 fi
+
+generate_feature() {
+  local profile="$1" traces="$2" samples="$3"
+  shift 3
+  local output=".formal-traces/features/${profile}"
+  rm -rf "${output}"
+  mkdir -p "${output}"
+  quint run "formal/dialcache-${profile}-conformance.qnt" \
+    --mbt --backend=rust --n-threads=1 --seed="${QUINT_SEED:-0xd1a1ca}" \
+    --max-samples="${samples}" --max-steps=60 --n-traces="${traces}" \
+    --out-itf="${output}/trace_{seq}.itf.json" --verbosity=1 --invariants "$@"
+  local count
+  count=$(find "${output}" -name '*.itf.json' -type f | wc -l)
+  if [ "${count}" -ne "${traces}" ]; then
+    echo "Expected ${traces} ${profile} traces; generated ${count}" >&2
+    exit 1
+  fi
+}
+
+generate_feature recovery 64 512 singleReadPerFlight pendingDecodeHasCall writesHaveRetention
+generate_feature policy 64 512 writesHaveRetention hitsSkipSource pendingCallHasPhase
+# C1 failures/supersession require several independently controlled effects.
+# Replay also requires these outcomes; trace count alone is insufficient.
+generate_feature shadow 256 1024 oneSourcePerCaller writesRequireMiss writesHaveRetention

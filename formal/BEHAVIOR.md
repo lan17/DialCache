@@ -1,8 +1,8 @@
-# Portable behavioral scenarios and pending-effect profile
+# Portable behavioral scenarios and generated feature profiles
 
 [`behavioral-scenarios.json`](./behavioral-scenarios.json) specifies deterministic feature scenarios independently of TypeScript. [`dialcache-effects-conformance.qnt`](./dialcache-effects-conformance.qnt) generates additional races using the same driver operations. Together with the [core profile](./CONFORMANCE.md) and [protocol vectors](./protocol-vectors.json), these are executable contracts for implementation tests and language ports.
 
-The deterministic corpus currently contains 144 scenarios across 12 behavior families. It includes request-scope lifetime, coalescing, both read and fallback deadlines, local TTL/LRU, runtime snapshots, layer precedence, cache failures, tracked invalidation, frame age/retention, stale recovery, and shadow validation. These scenarios are test-derived contracts, **not Quint-generated traces**. The separate effects model generates interleavings of calls, loader settlement, clock observations, native writes, and invalidation. Keeping these complementary forms avoids a single model containing every feature combination.
+The deterministic corpus currently contains 144 scenarios across 12 behavior families. It includes request-scope lifetime, coalescing, both read and fallback deadlines, local TTL/LRU, runtime snapshots, layer precedence, cache failures, tracked invalidation, frame age/retention, stale recovery, and shadow validation. These scenarios are test-derived contracts, **not Quint-generated traces**. The effects model generates interleavings of calls, loader settlement, clock observations, native writes, and invalidation. Recovery, policy, and shadow models generate further feature schedules through the same driver; their bounds and action mappings appear below. Keeping these complementary forms avoids a single model containing every feature combination.
 
 ## Scenario format
 
@@ -21,7 +21,7 @@ Start with the empty observation below. After each input, drain runnable work un
 }
 ```
 
-Every scenario/trace gets a fresh default cache instance and empty Redis environment. Additional named instances share that Redis environment but own separate local storage, request contexts, flights, and shadow capacity. State persists between its steps. The TypeScript implementation is [`test/formal/behavior-driver.ts`](../test/formal/behavior-driver.ts), used by both replay tests. No production APIs, private cache maps, or flight mutations are needed.
+Every scenario/trace gets a fresh default cache instance and empty Redis environment. Additional named instances share that Redis environment but own separate local storage, request contexts, flights, and shadow capacity. State persists between its steps. The TypeScript implementation is [`test/formal/behavior-driver.ts`](../test/formal/behavior-driver.ts), used by the effects and feature replay tests. No production APIs, private cache maps, or flight mutations are needed.
 
 ## Fixture
 
@@ -84,16 +84,79 @@ ITF contains `mbt::actionTaken`, expected state `s`, and `mbt::nondetPicks.loade
 
 After every step, replay compares actual caller outcomes, loader/read/write/invalidation/serializer/provider counts, and physical write TTLs. Model caller codes are 0 pending, 1 value 1, 2 original source error, 3 timeout. Error identity is checked by the deterministic scenarios. CI also requires every action and four witnesses in the generated corpus: abandoned loader/new-flight overlap, accepted publication after deadline, a delayed fenced write, and settlement after deadline before timer delivery. These checks establish occurrence, not exhaustive schedule coverage.
 
-Both generated profiles run on every PR alongside ordinary tests. Normal CI replays the committed [`effects-smoke.itf.json`](./effects-smoke.itf.json) without installing Quint. Failure diagnostics include scenario/trace, step, input/action, and both observations.
+All five generated profiles run on every PR alongside ordinary tests. Normal CI replays the committed [`effects-smoke.itf.json`](./effects-smoke.itf.json) without installing Quint. Failure diagnostics include scenario/trace, step, input/action, and both observations.
 
-Schema version 2 adds scalar/absent value distinction, callback observations, instance/operation identities, and independent wall-clock steps. Old drivers must reject this unsupported schema rather than ignoring inputs. The core/effects ITF schemas are unchanged; their projected observations exclude these additional fixture probes. See [`CONTRACTS.md`](./CONTRACTS.md) for the portable/binding boundary.
+Schema version 2 adds scalar/absent value distinction, callback observations, instance/operation identities, and independent wall-clock steps. Old drivers must reject this unsupported schema rather than ignoring inputs. The core/effects ITF schemas are unchanged; their projected observations exclude these additional fixture probes. The new feature profiles compare the entire observation using the call encoding below. See [`CONTRACTS.md`](./CONTRACTS.md) for the portable/binding boundary.
+
+## Generated recovery, policy, and shadow profiles
+
+Three additional models share the existing driver and a common [observation record](./conformance-observations.qnt). Their ITF states contain `s.o` as the expected observation, `mbt::actionTaken`, and `mbt::nondetPicks.choice`. State outside `s.o` is model-private prediction, not an implementation observation. The choice is `Some` with a nonnegative ITF integer only on actions with choices below; otherwise it is `None` with the empty tuple. Reject unknown actions, unsupported choices, missing observation fields, and integer precision loss.
+
+Call observations encode pending as 0, fixture values 1/2 as 1/2, source errors as 3, and deadline errors as 4. Other outcomes fail replay. These profiles compare error categories; the fixed scenarios compare logical error identity. All other observation fields use the scenario vocabulary directly, including zero/empty fields. A driver must derive effect indices from its actual invocation counts. It must never use expected counters, phases, cached values, or fences to select an input or fabricate an observation.
+
+| Profile | Fixture and bounds | Generated coverage |
+| --- | --- | --- |
+| [Recovery](./dialcache-recovery-conformance.qnt) | Tracked remote-only, F=1 s, M initially 5 s, no source deadline, held decoding, up to eight callers | Fresh/stale/future frames; F/M boundaries; allow/deny/failing classifier; coalesced followers; source success versus rejection; age checks around decode; invalidation/replacement; read/decode failures; captured recovery policy |
+| [Policy](./dialcache-policy-conformance.qnt) | Untracked local+remote, both TTLs initially 1 s, M=5 s, local capacity one, two keys, held provider, no source deadline, up to twelve callers | Independent runtime leaves; invalid local/remote TTL; provider/read/dump/write failure; policy acquisition and pending publication; local eviction/insertion TTL; logical Redis freshness versus physical retention |
+| [Shadow](./dialcache-shadow-conformance.qnt) | Tracked remote TTL=60 s, serving ramp=0, shadow ramp=100, caller/job deadline=10 ms, all read/load/dump/write effects held, up to eight callers | Independent dark C0/source settlement; captured payload decode; match/mismatch/C1 supersession; confirmation failure; conditional fills; source/read/decode/dump/write failure; deadline during held effects; late work cannot change emitted outcomes |
+
+Recovery begins with value 1 seeded at age 1,000 ms. Policy and shadow begin with empty storage. Every trace gets a fresh fixture. Shadow permits another call once its preceding source and owned job work have settled; cross-key capacity/drop behavior remains covered by fixed scenarios. Recovery leaves source time unbounded to explore age changes in seconds; timeout recovery and request memoization remain fixed scenarios. Policy serializes invocations while permitting changes during held provider/source work; cross-flight policy interactions retain scenario coverage.
+
+Common actions reuse the scenario inputs: `releaseRead/Load/Dump/Write/Policy` releases the most recently observed corresponding external effect; `readFault/loadFault/dumpFault/writeFault/providerFault` sets that failure flag from choice 0/1 (provider uses `faults.policy`). `rejectLoader` rejects the latest actual loader. No action reads or mutates the cache's internal state.
+
+| Profile/action | Input mapping and allowed choices |
+| --- | --- |
+| Recovery `beginCall` | `begin.recovery`: choice 0=allow, 1=deny, 2=error |
+| Recovery `joinCall` | Plain `begin`; the registered leader owns recovery policy |
+| Recovery `resolveLoader` | Resolve latest loader with value 2; no choice |
+| Recovery `seed` | Choices 0..6 give ages `[0,999,1000,4999,5000,-1,1000]` ms; value 1 except choice 6 gives value 2 |
+| Recovery `advance` | Elapsed time choice 1, 1000, or 4000 ms, with timers delivered |
+| Recovery `invalidate` | Public invalidation with zero future buffer |
+| Recovery `policy` | Set `staleOnErrorMaxAgeSec` to choice 2000/5000 divided by 1000 |
+| Policy `beginCall` | Key is string `"0"` or `"1"` from choice 0/1 |
+| Policy `resolveLoader` | Resolve latest loader with choice 1/2 |
+| Policy `advance` | Elapsed time choice 1, 1000, 2000, or 5000 ms |
+| Policy `policy` | Replace overlay using the numbered table below |
+| Shadow `beginCall` | Plain `begin` |
+| Shadow `resolveLoader` | Resolve latest loader with choice 1/2 |
+| Shadow `seed` | Seed value choice 1/2 at current wall time |
+| Shadow `advance` | Elapsed time choice 1/10 ms, delivering due timers |
+| Shadow `invalidate` | Public invalidation with future buffer choice 0/20 ms |
+
+Policy overlay choices replace the entire runtime overlay; omitted leaves inherit the fixture's defaults:
+
+| Choice | Overlay |
+| --- | --- |
+| 0 | Empty/inherit |
+| 1 | Local TTL 2 s |
+| 2 | Remote TTL 2 s |
+| 3 | Local serving ramp 0 |
+| 4 | Remote serving ramp 0 |
+| 5 | Invalid local TTL -1 s |
+| 6 | Invalid remote TTL -1 s |
+| 7 | Recovery maximum age 2 s |
+| 8 | Both serving ramps 0 |
+| 9 | Remote TTL 4 s, recovery disabled (maximum age 0) |
+
+Generation exports 64 recovery and 64 policy traces from 512 samples each, and 256 shadow traces from 1,024 samples, at most 60 transitions each. Actions are sampled in progress/environment groups so repeated environmental changes do not crowd out useful completion paths; C1 additionally focuses sampling on replacement, fencing, read failure, and time. This changes exploration frequency, not the allowed transition semantics.
+
+CI requires every named action, all three recovery outcomes, recovery across invalidation, coalesced recovery, age-out during decoding, local/remote hits, changed-policy publication, physical TTLs of 2/4/5 seconds, both C0/source orders, all eleven modeled shadow outcomes, and a write completing after shadow timeout. These witness checks fail if a configured corpus misses its promised paths. They establish occurrence only. The separate verification models still reason about wider abstractions such as shadow admission, and the portable fixed corpus covers additional binding-independent boundaries.
+
+`test/formal-features.test.ts` replays these traces and checks parser/assertion trust boundaries. Ordinary CI uses the committed `recovery-smoke.itf.json`, `policy-smoke.itf.json`, and `shadow-smoke.itf.json` without Quint. Formal CI replays every generated trace. To replay a downloaded artifact:
+
+```sh
+DIALCACHE_FEATURE_TRACE_FILE=.formal-traces/features/recovery/trace_0.itf.json \
+  corepack pnpm exec vitest run test/formal-features.test.ts --coverage.enabled=false
+```
+
+The parent `recovery/`, `policy/`, or `shadow/` directory identifies the fixture. To replay a whole generated feature corpus, set `DIALCACHE_FEATURE_TRACE_DIR=.formal-traces/features` instead. Keep a failing trace with its profile directory when copying it.
 
 ## Port workflow and limits
 
 1. Implement the protocol/key/normalization/envelope vectors and the invalidation-transition vectors against the actual remote adapter/protocol.
 2. Implement these fixture operations using public cache operations and controlled external adapters.
 3. Run the committed scenarios and smoke traces.
-4. Replay the same core and pending-effect ITF corpora used by TypeScript.
+4. Replay the same core, pending-effect, recovery, policy, and shadow ITF corpora used by TypeScript.
 5. Report passing behavior families, specification revision, seed, bounds, and tool versions.
 
 Passing covers the supplied observations and scenarios. It does not establish every feature interaction, fairness/liveness, arbitrary resource limits, or all external failures. A second-language driver has not yet validated the portability of this interface. See [`TEST-MAP.md`](./TEST-MAP.md) for the remaining boundaries.
