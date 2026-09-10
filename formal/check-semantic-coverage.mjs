@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { checkSourceAudit } from './check-source-audit.mjs';
+import { readExecution, scheduledProperties, validateExecution } from './execution.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const read = path => readFileSync(root + path, 'utf8');
@@ -10,7 +11,6 @@ const scenarios = new Set(parse('formal/behavioral-scenarios.json').scenarios.ma
 const witnesses = parse('formal/coverage-witnesses.json');
 const protocol = parse('formal/protocol-vectors.json');
 const invalidation = parse('formal/invalidation-vectors.json').vectors;
-const escapeRegex = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export function checkProfiles(registry = parse('formal/profiles.json')) {
   if (registry.schemaVersion !== 1 || registry.specificationVersion !== '0.1.0' || registry.status !== 'experimental') throw new Error('Unsupported specification/profile registry');
@@ -35,6 +35,9 @@ export function checkProfiles(registry = parse('formal/profiles.json')) {
 
 export function checkSemanticCoverage(catalog = parse('formal/semantic-cases.json')) {
   const profiles = checkProfiles();
+  const manifest = readExecution();
+  const execution = validateExecution(manifest);
+  const scheduled = scheduledProperties(manifest);
   const sourceAccounting = checkSourceAudit();
   if (catalog.schemaVersion !== 1 || !Array.isArray(catalog.cases) || !catalog.cases.length) throw new Error('Invalid semantic case inventory');
   const ids = new Set(), parents = new Set();
@@ -51,8 +54,7 @@ export function checkSemanticCoverage(catalog = parse('formal/semantic-cases.jso
     for (const name of c.scenarios) if (!scenarios.has(name)) throw new Error(`${c.id}: unknown scenario ${name}`);
     for (const g of c.generated) if (!witnesses[g.profile]?.includes(g.witness)) throw new Error(`${c.id}: unknown required witness ${g.profile}/${g.witness}`);
     for (const model of c.models) {
-      const [path, name] = model.split(':');
-      if (!/^formal\/[\w-]+\.qnt$/.test(path) || !name || !new RegExp(`\\b(?:val|run) ${escapeRegex(name)}\\b`).test(read(path))) throw new Error(`${c.id}: missing model property ${model}`);
+      if (!scheduled.has(model)) throw new Error(`${c.id}: model property is not scheduled for execution: ${model}`);
     }
     for (const vector of c.vectors) {
       const parts = vector.split('/');
@@ -78,7 +80,7 @@ export function checkSemanticCoverage(catalog = parse('formal/semantic-cases.jso
     portable: cases.filter(portable).length, generated: cases.filter(c => c.generated.length).length,
     modelOnly: cases.filter(c => c.models.length && !portable(c)).map(c => c.id),
     uncovered: cases.filter(c => !c.models.length && !portable(c)).map(c => c.id) });
-  return { profiles, sourceAccounting, contracts: parents.size, cases: count(catalog.cases), behavioral: count(behavioral),
+  return { profiles, execution, sourceAccounting, contracts: parents.size, cases: count(catalog.cases), behavioral: count(behavioral),
     protocol: count(catalog.cases.filter(c => c.vectors.length)), mutations: mutations.mutations.length };
 }
 

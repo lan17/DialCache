@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readExecution } from './execution.mjs';
 
 // Challenge a verification property itself, separately from implementation
 // mutation/replay. A noncompiling model or failed evaluator is never detection.
@@ -13,7 +14,11 @@ const source = readFileSync(resolve(root, 'formal/dialcache-coalescing-liveness.
 const before = 'fallbackDeadline: s.now + FALLBACK_TIMEOUT,';
 const after = 'fallbackDeadline: FALLBACK_TIMEOUT,';
 const invariant = 'fallbackDeadlineStartsWithFallback';
-const options = ['--backend=rust', '--n-threads=1', '--seed=0xd1a1ca', '--max-samples=2000', '--max-steps=40', '--invariants', invariant];
+const { settings, check } = readExecution();
+// The challenge uses the reviewed default seed, including during exploratory
+// QUINT_SEED runs, so its detection requirement stays reproducible.
+const options = [`--backend=${settings.backend}`, `--n-threads=${settings.threads}`, `--seed=${settings.seed}`,
+  `--max-samples=${check.maxSamples}`, `--max-steps=${check.maxSteps}`, '--invariants', invariant];
 mkdirSync(output, { recursive: true });
 const report = { schemaVersion: 1, complete: false, contract: 'C23', invariant,
   sourceSha256: createHash('sha256').update(source).digest('hex'), before, after, options };

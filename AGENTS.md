@@ -54,6 +54,9 @@ test/                   # Unit and Redis integration tests
 - Keep Redis client-specific behavior in adapters; core code depends on `DialCacheRedisClient`.
 - Public exports belong in the root or an explicit integration entry point such as `src/node-redis.ts`, `src/prometheus.ts`, or `src/redis-protocol.ts`.
 - Use `corepack pnpm` for project commands.
+- For formal specification changes, follow `formal/AUTHORING.md`: keep models
+  readable as behavior definitions, share helpers with identical meaning, retain
+  independent property checks, and register executable evidence in the catalogs.
 
 ## Validation
 

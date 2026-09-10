@@ -1,0 +1,411 @@
+{
+  "schemaVersion": 1,
+  "settings": {
+    "backend": "rust",
+    "threads": 1,
+    "seed": "0xd1a1ca",
+    "verbosity": 1
+  },
+  "check": {
+    "maxSamples": 2000,
+    "maxSteps": 40,
+    "outputDirectory": ".formal-traces/verification"
+  },
+  "test": {
+    "maxSamples": 1
+  },
+  "libraries": [
+    "formal/conformance-observations.qnt"
+  ],
+  "models": [
+    {
+      "path": "formal/dialcache-core.qnt",
+      "invariants": [
+        "failedLocalReadSkipsReuseAndPublication",
+        "failedLocalWritePreservesAcceptedResult",
+        "closedScopeHasNoRequestValue",
+        "requestValueBelongsToCurrentScope",
+        "passThroughSkipsCacheMachinery",
+        "firstHitStopsLowerTraversal",
+        "remoteFailureNeverRefills",
+        "trackedRemoteFallbackSuppressesLocalPublication",
+        "onePolicySnapshotPerEnabledInvocation"
+      ],
+      "regressions": [
+        "lateResultCannotEnterReplacementScopeTest",
+        "nestedDisablePreservesMemoTest",
+        "localReadFailureContinuesToRemoteTest",
+        "localWriteFailurePreservesSourceAndMemoTest",
+        "localWriteFailurePreservesRemoteHitTest",
+        "localReadFailureSuppressesSourcePublicationTest"
+      ]
+    },
+    {
+      "path": "formal/dialcache-runtime-policy.qnt",
+      "invariants": [
+        "runtimeOverlayIsLeafWise",
+        "configuredTtlImpliesDefaultFullRamp",
+        "featureLibraryDefaults",
+        "existingLocalEntryKeepsInsertionTtl",
+        "existingRemoteEntryKeepsPhysicalTtl"
+      ],
+      "regressions": [
+        "policyChangeDuringInvocationTest",
+        "localTtlMutationIsDetectedTest",
+        "physicalTtlMutationIsDetectedTest"
+      ]
+    },
+    {
+      "path": "formal/dialcache-coalescing-liveness.qnt",
+      "invariants": [
+        "flightsRequireEligibleCaching",
+        "oneSourcePerRegisteredFlight",
+        "fallbackDeadlineStartsWithFallback",
+        "timedOutSourceCannotPublish",
+        "publicationRequiresAcceptedSource",
+        "noFlightWhenCoalescingIneligible",
+        "abandonedSourceIsNotAFlight"
+      ],
+      "regressions": [
+        "lateSettlementBeforeTimerTest",
+        "abandonedSourceMayOverlapNewFlightTest",
+        "acceptedPublicationOutlivesDeadlineTest",
+        "delayedLookupKeepsFullSourceBudgetTest",
+        "deadlineEpochMutationIsDetectedTest"
+      ],
+      "propertyChallenge": "formal/check-model-properties.mjs"
+    },
+    {
+      "path": "formal/dialcache-tracked-invalidation.qnt",
+      "invariants": [
+        "servedSnapshotClearedObservedFence",
+        "staleValueAfterInvalidationIsFenced",
+        "acquiredAfterInvalidationDoesNotServeStale"
+      ],
+      "regressions": []
+    },
+    {
+      "path": "formal/dialcache-stale-recovery.qnt",
+      "invariants": [
+        "recoveryUsesSingleRedisRead",
+        "retainedCandidateWasEligible",
+        "servedStaleIsStrictlyWithinMaxAge",
+        "staleRequiresAuthorizedSourceFailure",
+        "sourceSuccessDoesNotDecodeCandidate",
+        "recoveredStaleHasNoSharedPublication",
+        "readFailureNeverRetains",
+        "readFailureNeverAttemptsRecovery"
+      ],
+      "regressions": [
+        "servedValueCanAgeTest",
+        "decodingAtMaxAgeRejectsTest",
+        "futureFrameIsNotRetainedTest",
+        "failedReadSkipsRecoveryTest"
+      ]
+    },
+    {
+      "path": "formal/dialcache-shadow-validation.qnt",
+      "invariants": [
+        "comparisonAndFillWaitForSource",
+        "completedVerdictRequiresSource",
+        "ordinaryRemoteMissHasNoShadowJob",
+        "rampedDownDoesNotDuplicateSource",
+        "verdictsRequireSingleConfirmation",
+        "mismatchMeansSameC1Bytes",
+        "presentC0IsNeverRepaired",
+        "fillsRequireMiss",
+        "fencedFillDoesNotWrite"
+      ],
+      "regressions": [
+        "darkReadCanPrecedeCallerResultTest",
+        "sourceFailureNeverFillsTest",
+        "deadlineStopsFillTest"
+      ]
+    },
+    {
+      "path": "formal/dialcache-redis-protocol.qnt",
+      "invariants": [
+        "nilValueIsValueAbsent",
+        "fenceCanPrecedeEncodingError",
+        "malformedWatermarkPrecedesEncodingError",
+        "trackedZeroTimestampIsNotHit",
+        "observedWatermarkOnlyOnTrackedReads",
+        "encodingErrorRequiresSupportedFrame"
+      ],
+      "regressions": [
+        "fencedEncodingTest",
+        "reversedPrecedenceIsDetectedTest",
+        "malformedWatermarkTest"
+      ]
+    },
+    {
+      "path": "formal/dialcache-conformance.qnt",
+      "invariants": [
+        "loaderCountsNonNegative",
+        "redisCountsNonNegative",
+        "readableRemoteHasValue"
+      ],
+      "regressions": [],
+      "profile": "core",
+      "generate": {
+        "maxSamples": 256,
+        "maxSteps": 30,
+        "traces": 32,
+        "outputDirectory": ".formal-traces/conformance"
+      }
+    },
+    {
+      "path": "formal/dialcache-effects-conformance.qnt",
+      "invariants": [
+        "oneRegisteredSource",
+        "registeredFlightHasPendingCalls",
+        "writeRequiresAcceptedSource",
+        "registeredReadOwnsFlight",
+        "effectCountsMatchRecords",
+        "oneRequestPerRead",
+        "oneSourceDurationPerSettlement",
+        "measurementsAreNonnegative"
+      ],
+      "regressions": [
+        "unknownReasonKeepsValidFenceTest",
+        "untrackedReplyCannotCarryFenceTest",
+        "missDiscriminatorWinsOverFrameFieldsTest",
+        "frameWithoutMissDiscriminatorIgnoresMetadataTest",
+        "readDurationIncludesDecodeTest",
+        "sourceDurationExcludesPublicationTest",
+        "lateSourceCannotRepeatFailureMetricTest",
+        "timedOutLoaderOverlapsNewFlightTest",
+        "acceptedWriteOutlivesDeadlineTest",
+        "delayedWriteRemainsFencedTest",
+        "readTimeoutStartsIndependentSourceDeadlineTest",
+        "lateReadCannotBecomeHitTest",
+        "acquiredDecodeSurvivesInvalidationAndDeadlineTest",
+        "readFailureNeverRefillsTest",
+        "decodeFailureMayRefillTest",
+        "dumpFailurePreservesSourceTest",
+        "writeFailurePreservesSourceTest",
+        "rollbackDuringDumpRechecksObservedFenceTest",
+        "rollbackDoesNotExtendSourceDeadlineTest",
+        "observerFailuresCannotReplaceSourceErrorTest",
+        "libraryReadBudgetIsFiftyMillisecondsTest",
+        "followerKeepsAcceptedReadBudgetTest"
+      ],
+      "profile": "effects",
+      "generate": {
+        "maxSamples": 4096,
+        "maxSteps": 60,
+        "traces": 512,
+        "outputDirectory": ".formal-traces/effects"
+      }
+    },
+    {
+      "path": "formal/dialcache-recovery-conformance.qnt",
+      "invariants": [
+        "singleReadPerFlight",
+        "pendingDecodeHasCall",
+        "writesHaveRetention",
+        "sourcesMatchEffects",
+        "onlyRegisteredSourceOwnsDeadline",
+        "agesRequireRecovery",
+        "closedScopesHaveNoMemo"
+      ],
+      "regressions": [
+        "futureFrameDoesNotCarryMissFenceTest",
+        "defaultRecoversOwnTimeoutTest",
+        "explicitDenialReplacesDefaultTest",
+        "defaultRejectsOrdinaryFailureTest",
+        "defaultRecoversPropagatedTimeoutTest",
+        "lateSuccessCannotReplaceRecoveredValueTest",
+        "failedRecoveryPreservesDeadlineErrorTest",
+        "recoveredValueMemoizesOnlyInAttachedRequestTest",
+        "crossRequestRecoveryMemoizesBothScopesTest",
+        "closedRequestCannotReceiveLateRecoveryMemoTest",
+        "rollbackCannotLowerInvalidationWatermarkTest",
+        "rollbackDuringRetainedDecodeRejectsFutureSnapshotTest",
+        "instanceAllowReplacesTimeoutOnlyDefaultTest",
+        "instanceDenialReplacesTimeoutOnlyDefaultTest",
+        "operationDenialReplacesInstanceAllowTest"
+      ],
+      "profile": "recovery",
+      "generate": {
+        "maxSamples": 4096,
+        "maxSteps": 60,
+        "traces": 512,
+        "outputDirectory": ".formal-traces/features/recovery"
+      }
+    },
+    {
+      "path": "formal/dialcache-policy-conformance.qnt",
+      "invariants": [
+        "writesHaveRetention",
+        "hitsSkipSource",
+        "callsKeepSourceOutcome",
+        "sourceCountsMatchEffects",
+        "registeredSourcesArePending",
+        "sharedSourcesKeepRegistration"
+      ],
+      "regressions": [
+        "invalidReadBudgetBypassesAllCachingTest",
+        "invalidLocalRampPreservesRemoteTest",
+        "invalidRemoteRampPreservesLocalTest",
+        "invalidRecoveryUsesOrdinaryRetentionTest",
+        "invalidShadowPreservesNormalServingTest",
+        "wallRollbackDoesNotExtendLocalTtlTest",
+        "wallRollbackRejectsFutureRemoteFrameTest",
+        "independentCompletionKeepsRegisteredLeaderTest",
+        "independentFailureKeepsRegisteredLeaderTest",
+        "eachSourceKeepsPublicationPolicyTest",
+        "absentValueIsStoredAndReusedTest"
+      ],
+      "profile": "policy",
+      "generate": {
+        "maxSamples": 2048,
+        "maxSteps": 60,
+        "traces": 512,
+        "outputDirectory": ".formal-traces/features/policy"
+      }
+    },
+    {
+      "path": "formal/dialcache-shadow-conformance.qnt",
+      "invariants": [
+        "oneSourcePerCaller",
+        "writesRequireMiss",
+        "writesHaveRetention",
+        "agesRequireVerdicts",
+        "warningsRequireMismatch",
+        "missingHookHasNoShadowEffects"
+      ],
+      "regressions": [
+        "identicalTextAndBinaryBytesConfirmMismatchTest",
+        "sameDecodedValueWithDifferentBytesIsSupersededTest",
+        "binarySnapshotComparesDecodedValueTest",
+        "slowComparisonTimesOutBeforeConfirmationTest",
+        "slowComparisonFailureStillTimesOutTest",
+        "missingHookSkipsDarkJobTest",
+        "invalidShadowPolicySkipsDarkJobTest",
+        "admittedComparisonSurvivesPolicyDisableTest",
+        "explicitEqualityOverridesValuesTest",
+        "explicitInequalityRequiresConfirmationTest",
+        "comparisonFailureKeepsCallerTest",
+        "acceptedLoggingSurvivesPolicyChangeTest",
+        "ageClampsAfterWallRollbackTest",
+        "confirmationKeepsOriginalAgeTest"
+      ],
+      "profile": "shadow",
+      "generate": {
+        "maxSamples": 4096,
+        "maxSteps": 60,
+        "traces": 1024,
+        "outputDirectory": ".formal-traces/features/shadow"
+      }
+    },
+    {
+      "path": "formal/dialcache-scope-conformance.qnt",
+      "invariants": [
+        "closedScopesHaveNoMemo",
+        "registeredSourcesArePending",
+        "callsKeepSourceOutcome",
+        "sourceCountsMatchEffects"
+      ],
+      "regressions": [
+        "lateSourceCannotPopulateReplacementTest",
+        "policyReplyAfterCloseBypassesRequestTest",
+        "nestedCloseAndDisabledBypassKeepOuterMemoTest",
+        "rejectedFlightAllowsRetryTest",
+        "sharedFailureHasOneAttributedErrorTest",
+        "disabledSourceFailureHasNoCacheTrailTest",
+        "policyClosureFailureIsAttributedWithoutCachingTest",
+        "absentValueIsMemoizedTest"
+      ],
+      "profile": "scope",
+      "generate": {
+        "maxSamples": 1024,
+        "maxSteps": 60,
+        "traces": 256,
+        "outputDirectory": ".formal-traces/features/scope"
+      }
+    },
+    {
+      "path": "formal/dialcache-admission-conformance.qnt",
+      "invariants": [
+        "capacityIsPerInstance",
+        "oneJobPerIdentity",
+        "registeredCallsArePending",
+        "callsKeepAcquiredValue",
+        "jobsAreDiagnostic",
+        "effectsMatchRecords"
+      ],
+      "regressions": [
+        "coalescedHitAdmitsOneJobTest",
+        "duplicateDropsBeforeCapacityIsFullTest",
+        "timeoutRetainsSourceCapacityTest",
+        "timeoutRetainsDecodeCapacityTest",
+        "timeoutRetainsConfirmationCapacityTest",
+        "fullInstanceDoesNotBlockOtherInstanceTest"
+      ],
+      "profile": "admission",
+      "generate": {
+        "maxSamples": 1024,
+        "maxSteps": 60,
+        "traces": 128,
+        "outputDirectory": ".formal-traces/features/admission"
+      }
+    },
+    {
+      "path": "formal/dialcache-layers-conformance.qnt",
+      "invariants": [
+        "sourceEffectsMatch",
+        "capacityIsPerInstance",
+        "closedScopesHaveNoMemo",
+        "registeredSourcesArePending",
+        "zeroCapacityHasNoLocalValues",
+        "callsKeepSourceOutcome",
+        "localMembershipMatchesLru",
+        "absentRemoteHasNoAdapterEffects"
+      ],
+      "regressions": [
+        "absentRemoteMaintenancePreservesLocalReuseTest",
+        "absentRemotePreservesLocalReuseTest",
+        "requestMissesShareProcessAndMemoizeSeparatelyTest",
+        "localReadPromotesBeforeEvictionTest",
+        "zeroCapacityKeepsSharingWithoutStorageTest",
+        "trackedSourceWaitsForValidatedReadToWarmLocalTest",
+        "invalidationGroupsOperationsButPreservesAcquiredCachesTest",
+        "requestMemoExceedsLocalCapacityTest"
+      ],
+      "profile": "layers",
+      "generate": {
+        "maxSamples": 2048,
+        "maxSteps": 80,
+        "traces": 512,
+        "outputDirectory": ".formal-traces/features/layers"
+      }
+    },
+    {
+      "path": "formal/dialcache-independent-conformance.qnt",
+      "invariants": [
+        "oneReadPerCall",
+        "effectsMatchOwners",
+        "completedCallsHaveNoActiveWork",
+        "retainedSnapshotsWereEligible",
+        "abortsAreUnique",
+        "writesKeepCapturedRetention"
+      ],
+      "regressions": [
+        "independentReadDeadlinesStartSeparateSourcesTest",
+        "independentRecoveryKeepsDistinctSnapshotsTest",
+        "timedOutReadCannotAffectAnotherCallTest",
+        "acceptedFreshDecodeSurvivesOtherInvalidationTest",
+        "readFailureCannotBorrowAnotherCallsRefillTest",
+        "recoveryPolicyIsCapturedPerCallerTest"
+      ],
+      "profile": "independent",
+      "generate": {
+        "maxSamples": 2048,
+        "maxSteps": 60,
+        "traces": 512,
+        "outputDirectory": ".formal-traces/features/independent"
+      }
+    }
+  ]
+}

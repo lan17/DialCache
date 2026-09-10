@@ -1,0 +1,131 @@
+# Reading and extending the DialCache models
+
+The Quint files should let a reader understand a behavior without translating
+the TypeScript implementation. Readability is part of the specification's
+acceptance criteria. Executable checks then challenge that written behavior.
+
+## Reading a model
+
+Start with the file's scope and assumptions. Each model deliberately covers a
+bounded part of DialCache. The verification models emphasize rules; conformance
+profiles describe external actions that a language driver can replay. The
+[model inventory](./README.md#verification-models) and [profile registry](./profiles.json)
+identify the relevant starting point.
+
+Read the types and state next. Distinguish three kinds of information:
+
+- **Environment inputs:** policy replies, cache bytes, clocks, source results,
+  and the completion or failure of external work.
+- **DialCache ownership:** a live request scope, registered flight, retained
+  candidate, or pending publication.
+- **Recorded observations:** a value acquired earlier, the time a result was
+  accepted, and the effects or outcomes already produced by the modeled call.
+
+Those distinctions explain races. A later invalidation changes external storage;
+it cannot change bytes already retained by a caller. Likewise, advancing time
+after a result was returned cannot retroactively invalidate that return.
+
+Then follow the transitions. `s` is the current state; `s' = ...` defines the
+next state. In `all { ... }`, guards must hold together for the transition to be
+enabled. `any { ... }` and `nondet ...oneOf()` provide alternative schedules or
+inputs. A record update lists changed fields and retains the rest with `...s`.
+Named predicates make the conditions readable; they do not perform cache work.
+
+Finally, read the invariants and `run ...Test` examples. An invariant states a
+property of explored states. A regression gives a concrete sequence and its
+expected observations. A `val` declaration can also be a helper; `execution.json`
+identifies the properties that are actually scheduled for checking. Some
+regressions deliberately corrupt state to show that
+a property rejects the fault. They are tests of the property, not allowed system
+transitions. Passing bounded exploration is not a proof over every execution.
+
+## Writing conventions
+
+Use this reading order, allowing a short helper next to the transition it explains:
+
+1. Scope, assumptions, omissions, and the relevant contract IDs.
+2. Types, finite input domains, and state ownership.
+3. Named predicates and small pure helpers.
+4. Initial state and environment/system transitions.
+5. The exploration `step` definition.
+6. Independently stated invariants.
+7. Deterministic regression histories.
+
+Use two-space indentation. Expand substantial records, nested updates, and
+multi-condition guards; aim for lines that can be read without horizontal
+scrolling. Keep a genuinely short action compact. Prefer a descriptive
+intermediate state such as `published` or `completed` over a chain of `x`, `y`,
+and `z`. Comments should explain ownership, ordering, assumptions, or a boundary
+case, rather than narrate the syntax. Quint 0.32.0 has no CLI formatting command;
+these are reviewed authoring conventions.
+
+Give phase, outcome, policy, and fixture codes names. Verification models can
+use sum types. Conformance profiles retain their published integer encodings
+and use named constants, so a readability edit does not silently change the
+portable trace interface. An integer can have a different meaning in another
+profile; do not share a constant merely because its numeric value matches.
+
+Keep repeated definitions DRY when they express the same operation. Small
+representation helpers such as completing callers owned by one source belong
+in [conformance-observations.qnt](./conformance-observations.qnt). Name repeated
+transition conditions locally, including the time or snapshot they inspect.
+Keep request lifetime, flight ownership, deadline acceptance, and publication
+policy in the model that explains them. A common cache-model framework would
+make those differences harder to see.
+
+An assertion needs an independent way to detect a wrong transition. Do not
+rewrite both sides of a check to call the same newly extracted eligibility
+predicate. For example, the transition can use a named recovery-age predicate,
+while its invariant independently compares the retained timestamp with the
+recorded acceptance time and exclusive maximum age. This intentional repetition
+provides evidence; it is not duplicate behavior to remove mechanically.
+
+## Codifying the next behavior
+
+For each new rule or interaction:
+
+1. **State the contract.** Record the observable guarantee, its boundary cases,
+   environmental assumptions, and allowed races in `SPEC.md`/`CONTRACTS.md`.
+   Distinguish language binding details from behavior a port must preserve.
+2. **Model the smallest relevant boundary.** Extend the appropriate model with
+   readable state, inputs, and transitions. Add another profile only when an
+   existing one cannot express the necessary ownership or scheduling boundary.
+3. **Challenge the rule.** Add an independently stated invariant or regression,
+   and a representative fault when it adds useful evidence. Merely declaring a
+   property is insufficient: schedule it in `execution.json`.
+4. **Exercise the implementation.** Add a portable scenario/vector or generated
+   witness. The driver supplies only external inputs and asserts actual public
+   results/effects. Expected model state must never drive the implementation.
+5. **Account for the evidence.** Link the case, property, scenario, and required
+   witness in the existing catalogs. Preserve explicit gaps and update profile
+   claims only after the corresponding language driver passes.
+
+This is also the route for expanding Go: choose the next bounded profile, add
+the missing behavior and its environment controls, then replay the shared
+corpus. A readable model and TypeScript replay do not by themselves establish
+Go conformance. The current Go claim remains core-only.
+
+## Refactoring and execution
+
+[`execution.json`](./execution.json) is the execution schedule: invariant and
+regression names, model order, exploration settings, and generated trace paths
+and bounds. [`profiles.json`](./profiles.json) records versioned conformance
+claims. Keep these purposes distinct; checking and generation consume the same
+execution settings rather than maintaining separate invariant lists.
+
+Preserve public action names, choice encodings, state/observation fields, and
+`...Test` suffixes during cleanup. Preserve the order and nesting of `any` and
+`oneOf` choices: grouping influences sampled histories even when the set of
+possible transitions is unchanged. Review the model-mutation anchor if its
+source expression moves or changes; its failure must never count as detection.
+
+For a model refactor, run the scheduled model checks/regressions, generation,
+implementation replay, evidence validation, and relevant mutation gates using
+the [documented commands](./README.md#running-and-reproducing-checks). Keep the
+committed smoke expectations unchanged. Compare pre/post generated action and
+state histories when preserving a fixed seed and schedule is intended, and
+investigate differences rather than replacing expectations to obtain a pass.
+
+Formatting and deduplication improve reviewability; they do not increase the
+number of behavioral cases or justify a broader conformance claim. Changes to
+behavior, bounds, or claims should be reviewed separately from cleanup.
