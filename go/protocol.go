@@ -5,6 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"math/big"
+	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode/utf16"
@@ -12,6 +16,78 @@ import (
 )
 
 const MaxSafeInteger = uint64(9007199254740991)
+const MaxSupportedDurationMS = int64(31536000000)
+const MaxTrackedValueTTLMS = int64(3600000)
+
+// CeilSupportedCacheTTLMS is the adapter-level duration boundary. Fractional
+// milliseconds round up, before checking the positive, 365-day limit.
+func CeilSupportedCacheTTLMS(value float64) (int64, error) {
+	ceiled := math.Ceil(value)
+	if math.IsNaN(ceiled) || math.IsInf(ceiled, 0) || ceiled <= 0 || ceiled > float64(MaxSupportedDurationMS) {
+		return 0, errors.New("cache TTL must be positive and no greater than 365 days")
+	}
+	return int64(ceiled), nil
+}
+
+func ValidateTimestampMS(value float64) (uint64, error) {
+	if math.IsNaN(value) || math.IsInf(value, 0) || value < 0 || math.Trunc(value) != value || value > float64(MaxSafeInteger) {
+		return 0, errors.New("timestamp must be a nonnegative safe integer")
+	}
+	return uint64(value), nil
+}
+
+// NormalizeArgs omits Absent, converts the supported scalar domain using the
+// JavaScript String rules, and orders names lexicographically by UTF-16 units.
+// Arbitrary precision integers use big.Int; objects and arrays are rejected.
+func NormalizeArgs(args map[string]any) ([][2]string, error) {
+	result := make([][2]string, 0, len(args))
+	for name, value := range args {
+		if IsAbsent(value) {
+			continue
+		}
+		if !utf8.ValidString(name) {
+			return nil, errors.New("argument name must contain Unicode scalars")
+		}
+		var text string
+		switch value := value.(type) {
+		case nil:
+			text = "null"
+		case string:
+			text = value
+		case bool:
+			text = strconv.FormatBool(value)
+		case big.Int:
+			text = value.String()
+		case *big.Int:
+			if value == nil {
+				return nil, errors.New("nil bigint")
+			}
+			text = value.String()
+		default:
+			number, ok := scalarNumber(reflect.ValueOf(value))
+			if !ok {
+				return nil, fmt.Errorf("unsupported argument value %T", value)
+			}
+			text = numberString(number)
+		}
+		if !utf8.ValidString(text) {
+			return nil, errors.New("argument value must contain Unicode scalars")
+		}
+		result = append(result, [2]string{name, text})
+	}
+	sort.Slice(result, func(i, j int) bool { return utf16Less(result[i][0], result[j][0]) })
+	return result, nil
+}
+
+func utf16Less(left, right string) bool {
+	a, b := utf16.Encode([]rune(left)), utf16.Encode([]rune(right))
+	for i := 0; i < len(a) && i < len(b); i++ {
+		if a[i] != b[i] {
+			return a[i] < b[i]
+		}
+	}
+	return len(a) < len(b)
+}
 
 // Identity is an already normalized logical identity. Ordered arguments retain
 // caller order; normalization of host-language objects is a separate profile.
@@ -97,6 +173,73 @@ type ReadResult struct {
 	Reason              string
 	ObservedWatermarkMS *uint64
 	Frame               Frame
+	// RawSet marks an untrusted semantic adapter result, including explicit nil.
+	Raw    any
+	RawSet bool
+}
+
+func RawReadResult(value any) ReadResult { return ReadResult{Raw: value, RawSet: true} }
+
+// NormalizeReadResult is the core trust boundary, above wire decoding. Miss
+// reason and refill fence are validated independently. Frame-shaped objects
+// ignore stray miss metadata; only kind:"miss" selects the miss branch.
+func NormalizeReadResult(result ReadResult, tracked bool) ReadResult {
+	if result.RawSet {
+		object, ok := result.Raw.(map[string]any)
+		if !ok {
+			return ReadResult{Kind: "miss", Reason: "unclassified"}
+		}
+		if object["kind"] == "miss" {
+			reason, _ := object["reason"].(string)
+			result = ReadResult{Kind: "miss", Reason: reason}
+			if number, ok := scalarNumber(reflect.ValueOf(object["observedWatermarkMs"])); ok {
+				if stamp, err := ValidateTimestampMS(number); err == nil {
+					result.ObservedWatermarkMS = &stamp
+				}
+			}
+		} else {
+			number, ok := scalarNumber(reflect.ValueOf(object["createdAtMs"]))
+			stamp, err := ValidateTimestampMS(number)
+			if !ok || err != nil {
+				return ReadResult{Kind: "miss", Reason: "unclassified"}
+			}
+			frame := Frame{CreatedAtMS: stamp}
+			switch payload := object["payload"].(type) {
+			case string:
+				frame.Payload = []byte(payload)
+			case []byte:
+				frame.Payload = append([]byte{}, payload...)
+				frame.Binary = true
+			}
+			result = ReadResult{Kind: "hit", Frame: frame}
+		}
+	}
+	if result.Kind == "miss" {
+		if !tracked || result.ObservedWatermarkMS != nil && *result.ObservedWatermarkMS > MaxSafeInteger {
+			result.ObservedWatermarkMS = nil
+		}
+		switch result.Reason {
+		case "value_absent", "expired", "unclassified":
+		case "watermark_fenced":
+			if result.ObservedWatermarkMS == nil {
+				result.Reason = "unclassified"
+			}
+		default:
+			result.Reason = "unclassified"
+		}
+		return ReadResult{Kind: "miss", Reason: result.Reason, ObservedWatermarkMS: result.ObservedWatermarkMS}
+	}
+	if result.Kind == "hit" {
+		if result.Frame.CreatedAtMS > MaxSafeInteger {
+			return ReadResult{Kind: "miss", Reason: "unclassified"}
+		}
+		return ReadResult{Kind: "hit", Frame: result.Frame}
+	}
+	// Wire payload failures remain errors; malformed semantic kinds become misses.
+	if result.Kind == "payload_encoding_error" {
+		return result
+	}
+	return ReadResult{Kind: "miss", Reason: "unclassified"}
 }
 
 // EncodeFrame accepts only the writer timestamp domain. DecodeFrame retains
@@ -104,6 +247,9 @@ type ReadResult struct {
 func EncodeFrame(frame Frame) ([]byte, error) {
 	if frame.CreatedAtMS > MaxSafeInteger {
 		return nil, errors.New("unsafe writer timestamp")
+	}
+	if !frame.Binary {
+		frame.Payload = replacementUTF8(frame.Payload)
 	}
 	out := make([]byte, 10+len(frame.Payload))
 	out[0] = 1

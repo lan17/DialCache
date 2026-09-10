@@ -1,6 +1,6 @@
 # Executable DialCache specification
 
-This suite formalizes DialCache behavior for implementation testing and language ports. [`SPEC.md`](./SPEC.md) defines normative behavior and conformance; [`profiles.json`](./profiles.json) registers experimental specification 0.1.0 and bounded profile versions. It has three complementary parts:
+This suite formalizes DialCache behavior for implementation testing and language ports. Quint transitions and independently checked properties are the behavioral source of truth for TypeScript and Go; [`SPEC.md`](./SPEC.md) explains their contracts and conformance; [`profiles.json`](./profiles.json) registers experimental specification 0.1.0 and bounded profile versions. It has three complementary parts:
 
 | Part | Execution | What passing establishes |
 | --- | --- | --- |
@@ -15,7 +15,7 @@ Seven verification models                 Conformance models
           |                                      |
  bounded invariant checking                generated ITF traces + portable scenarios
                                                  |
-                                     TypeScript / Go / Rust driver
+                                     TypeScript / Go driver
                                                  |
                                           real implementation
                                                  |
@@ -24,7 +24,7 @@ Seven verification models                 Conformance models
 Protocol JSON vectors ────────────────> exact key / frame / decoder checks
 ```
 
-The TypeScript driver covers all nine profiles. A separately implemented [Go reference](./go/README.md) replays the same core traces and checks 93 cases across six protocol vector groups. It uses explicit contexts, goroutines, and mutexes, with real observations and deterministic external gates; CI runs it with the race detector. It is a bounded specification consumer, not a production port, a clean-room implementation, or evidence for the other eight profiles. Exhaustive feature combinations remain future work. [`TEST-MAP.md`](./TEST-MAP.md) distinguishes implemented coverage from remaining gaps; [`CONFORMANCE.md`](./CONFORMANCE.md) defines the core profile; [`BEHAVIOR.md`](./BEHAVIOR.md) defines the shared feature-scenario/effects driver and porting workflow.
+The TypeScript and [Go implementation](../go/README.md) execute the same nine generated profiles, all 238 portable feature scenarios and all 134 protocol cases. The Go module provides runtime configuration, deadlines, recovery, shadow validation, compression, observability and a real Redis adapter. Go replay uses actual contexts, goroutines and external gates, with race detection in CI. Real tests additionally exercise Redis, Valkey, Redis Cluster and bidirectional TypeScript/Go payload and invalidation interoperability. [`GO-PARITY.md`](./GO-PARITY.md) records acceptance and native binding adaptations; [`TEST-MAP.md`](./TEST-MAP.md) records finite coverage and remaining interaction bounds.
 
 [`SEMANTIC-COVERAGE.md`](./SEMANTIC-COVERAGE.md) measures 189 named contract cases, required generated witnesses, and detection of 13 intentional behavioral/protocol faults. CI compares ordinary Vitest, generated replay, and the positive portable suite in isolated source copies and preserves the reports. These measures expose gaps; they do not establish exhaustive semantic completeness.
 
@@ -89,18 +89,19 @@ bash formal/generate-traces.sh
 DIALCACHE_MBT_TRACE_DIR=.formal-traces/conformance \
 DIALCACHE_EFFECTS_TRACE_DIR=.formal-traces/effects \
 DIALCACHE_FEATURE_TRACE_DIR=.formal-traces/features \
+DIALCACHE_WITNESS_EVIDENCE_DIR=.formal-traces/go-parity-witnesses \
   corepack pnpm exec vitest run test/formal-conformance.test.ts test/formal-effects.test.ts \
   test/formal-features.test.ts test/formal-behavior.test.ts test/formal-protocol-vectors.test.ts --coverage.enabled=false
 node formal/measure-semantics.mjs
 ```
 
-[`execution.json`](./execution.json) schedules all 16 models, 101 selected invariants, 114 named regressions, and generation settings for the nine profiles. The shell entrypoints delegate to `run-models.mjs`; checking and generation share the invariant lists. `node formal/execution.mjs` validates the schedule without Quint, and `node formal/run-models.mjs check --dry-run` or `generate --dry-run` displays the ordered commands. Validation checks the model/library inventory, property declarations, complete regression names, profile mappings, and output bounds. Semantic evidence must reference a scheduled property. It cannot be satisfied by a declaration in a comment or by an unscheduled helper.
+[`execution.json`](./execution.json) schedules all 16 models, 104 selected invariants, 119 named regressions, and generation settings for the nine profiles. The shell entrypoints delegate to `run-models.mjs`; checking and generation share the invariant lists. `node formal/execution.mjs` validates the schedule without Quint, and `node formal/run-models.mjs check --dry-run` or `generate --dry-run` displays the ordered commands. Validation checks the model/library inventory, property declarations, complete regression names, profile mappings, and output bounds. Semantic evidence must reference a scheduled property. It cannot be satisfied by a declaration in a comment or by an unscheduled helper.
 
-`check.sh` typechecks all seven verification models plus all nine conformance models and checks their scheduled invariants using the Rust simulator: **2,000 sampled traces per model, up to 40 transitions per trace**, seed `0xd1a1ca`, one evaluator thread. It also executes 114 deterministic model regressions, including witnesses that deliberately corrupt TTL or decoder outcomes and require the strengthened invariants to reject them. This is bounded sampling, not exhaustive mathematical proof.
+`check.sh` typechecks all seven verification models plus all nine conformance models and checks their scheduled invariants using the Rust simulator: **2,000 sampled traces per model, up to 40 transitions per trace**, seed `0xd1a1ca`, one evaluator thread. It also executes 119 deterministic model regressions, including witnesses that deliberately corrupt TTL or decoder outcomes and require the strengthened invariants to reject them. This is bounded sampling, not exhaustive mathematical proof.
 
-`generate-traces.sh` uses the same pinned version/backend/seed with one thread. It exports 32 core traces from 256 samples (up to 30 transitions), 512 effects and 512 recovery traces from 4,096 samples each, 512 policy and 512 independent-caller traces from 2,048 samples each, 1,024 dark-shadow traces from 4,096 samples, and 256 request-scope / 128 served-hit admission traces from 1,024 samples each (up to 60 transitions). An additional layer-composition profile exports 512 traces from 2,048 samples, up to 80 transitions. All **4,000 generated traces** replay against real TypeScript DialCache using [Quint's model-based testing interface](https://quint.sh/docs/model-based-testing). Required witnesses now include separate read/source budgets, held decoding and publication, cancellation requests, observer failure isolation, wall rollback at the second fence check, timeout recovery and late sources, and empty/falsy/absent cache hits in all three layers. These conformance models remain separate from the seven verification models because replayable public operations and reasoning-oriented transitions serve different purposes.
+`generate-traces.sh` uses the same pinned version/backend/seed with one thread. It exports 32 core traces from 256 samples (up to 30 transitions), 512 effects and 512 recovery traces from 4,096 samples each, 512 policy and 512 independent-caller traces from 2,048 samples each, 1,024 dark-shadow traces from 4,096 samples, and 256 request-scope / 128 served-hit admission traces from 1,024 samples each (up to 60 transitions). An additional layer-composition profile exports 512 traces from 2,048 samples, up to 80 transitions. All **4,000 generated traces** replay against real TypeScript and Go DialCache using [Quint's model-based testing interface](https://quint.sh/docs/model-based-testing). Required witnesses now include separate read/source budgets, held decoding and publication, cancellation requests, observer failure isolation, wall rollback at the second fence check, timeout recovery and late sources, and empty/falsy/absent cache hits in all three layers. These conformance models remain separate from the seven verification models because replayable public operations and reasoning-oriented transitions serve different purposes.
 
-Both scripts accept `QUINT_SEED` for exploratory runs. The generated directory is replaced on each generation. CI runs on every PR and main push, including implementation-only changes, and uploads `.formal-traces/` as the `formal-traces` artifact for 14 days even after failure. `verification/` contains model samples or counterexamples; `conformance/`, `effects/`, and `features/{scope,recovery,policy,shadow,admission,layers,independent}/` contain the generated corpora. Replay requires every named action and specified race/outcome witnesses, including scope closure/replacement and nested memo reuse, recovery across invalidation and decoding age boundaries, policy changes during overlapping calls, per-source publication snapshots, reverse source settlement, independent reads with distinct budgets and retained recovery/error identities, both dark C0/source orders, UTF-8 text/binary C1 equivalence and same-value/different-byte supersession, comparison consuming the job deadline, C1 failures, writes completing after shadow timeout, and served-hit shadow capacity retained through pending source/decode/confirmation work.
+Both scripts accept `QUINT_SEED` for exploratory runs. The generated directory is replaced on each generation. CI runs on every PR and main push, including implementation-only changes, and uploads `.formal-traces/` as the `formal-traces` artifact for 14 days even after failure. `verification/` contains model samples or counterexamples; `conformance/`, `effects/`, and `features/{scope,recovery,policy,shadow,admission,layers,independent}/` contain the generated corpora. Replay requires every named action and 276 catalogued race/outcome witnesses across the eight effects/feature profiles, including scope closure/replacement and nested memo reuse, recovery across invalidation and decoding age boundaries, policy changes during overlapping calls, per-source publication snapshots, reverse source settlement, independent reads with distinct budgets and retained recovery/error identities, both dark C0/source orders, UTF-8 text/binary C1 equivalence and same-value/different-byte supersession, comparison consuming the job deadline, C1 failures, writes completing after shadow timeout, and served-hit shadow capacity retained through pending source/decode/confirmation work.
 
 A replay failure prints the trace path, step, action, expected model observation, actual implementation observation, and a reproduction command. After downloading a failing artifact, replay just the relevant conformance file:
 
@@ -122,19 +123,24 @@ Without these environment variables, ordinary TypeScript tests replay all nine c
 
 Model-checker exploration is separate from CI's sampled runs. For example, `quint verify` supports a TLC backend; any reported result must include the backend/version, model bounds, assumptions, and invariant. No exhaustive result is claimed here.
 
-## Checked properties and the Go reference
+## Checked properties and Go parity
 
-`formal/check-model-properties.mjs` challenges C23 with a compiling model mutation that incorrectly starts the source budget at model initialization. CI requires an invariant counterexample and preserves it. `test/formal/effects-contract.ts` also checks source-relative duration, deadline acceptance, and prior-success publication on actual TypeScript source/adapter/diagnostic history during every effects replay. It consumes no expected model state. This checked subset does not prove full refinement or causal write ownership; see `SPEC.md`.
+`formal/check-model-properties.mjs` challenges C23 with a compiling model mutation that incorrectly starts the source budget at model initialization. CI requires an invariant counterexample and preserves it. Separate source-duration and source-ownership monitors check actual public effect histories without reading expected state. The ownership monitor associates writes with actual source callbacks using fixture context, including overlapping calls; this is a necessary publication condition, not full refinement or liveness proof.
 
 ```sh
-# Go 1.27.1 is pinned in CI; no third-party Go dependencies.
-go -C formal/go test -race -count=1 ./...
-# After generating the corpus, point DIALCACHE_MBT_TRACE_DIR at its absolute path.
+go -C go test -race -count=1 ./...
+# After the TypeScript replay creates exact corpus/witness fingerprints:
 DIALCACHE_MBT_TRACE_DIR="$PWD/.formal-traces/conformance" \
-  go -C formal/go test -race -count=1 ./...
+DIALCACHE_EFFECTS_TRACE_DIR="$PWD/.formal-traces/effects" \
+DIALCACHE_FEATURE_TRACE_DIR="$PWD/.formal-traces/features" \
+DIALCACHE_WITNESS_EVIDENCE_DIR="$PWD/.formal-traces/go-parity-witnesses" \
+  go -C go test -race -count=1 -json ./... > .formal-traces/go-replay.jsonl
+node formal/check-go-replay.mjs
+go -C go test -race -tags integration -run '^TestRedisIntegration$' ./...
+node formal/measure-go-semantics.mjs
 ```
 
-The core profile and supported protocol groups now have a second-language execution witness. Feature scenarios, deadlines, recovery, shadow, compression, full invalidation transitions, and real Redis adapters remain outside the Go claim. The Go README records specification questions resolved during this milestone.
+CI generates one corpus and replays it in both languages. `check-go-replay.mjs` requires a completed passing Go package report, the exact 4,000 generated trace leaves, all 238 scenarios, all 134 protocol cases, and all eight witness gates; partial, skipped, or smoke-only runs cannot satisfy it. The Go job verifies witness metadata against the current models, registry, classifier and exact trace files; a stale classification cannot satisfy reachability. Go and TypeScript fault catalogs challenge the same 13 representative obligations. Parse/build errors, missing witnesses, crashes and watchdog failures are infrastructure failures, not detections.
 
 ## Source audit
 
@@ -142,4 +148,4 @@ The core profile and supported protocol groups now have a second-language execut
 
 ## Maintenance
 
-For every changed rule, review its `source-audit.json` disposition and fingerprint, then update the classification and evidence in `CONTRACTS.md` and its coverage summary in `TEST-MAP.md`. A model is not authoritative merely because it is formal. Resolve disagreements against the intended contract, existing focused tests, and implementation. Update the affected model, ordinary tests, portable traces/vectors, and documentation together. Keep the driver independent: expected model state belongs in assertions, never in the code that executes the implementation or records its observations.
+For every changed rule, review its `source-audit.json` disposition and fingerprint, then update the classification and evidence in `CONTRACTS.md` and its coverage summary in `TEST-MAP.md`. Review intended behavior in Quint first. Use existing focused tests and implementation to identify discrepancies, retain a distinguishing model regression and generated witness, then update both implementations and explanatory documentation. Keep the driver independent: expected model state belongs in assertions, never in the code that executes the implementation or records its observations.

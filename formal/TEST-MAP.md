@@ -6,11 +6,11 @@ This file maps each formal slice to the existing tests that most directly exerci
 
 See [`CONTRACTS.md`](./CONTRACTS.md) for the rule inventory, named executable evidence, revision-pinned test/section audit, and binding/assumption/exclusion decisions. The table below is a summary; linking a test file never means every assertion in it is modeled.
 
-[`SEMANTIC-COVERAGE.md`](./SEMANTIC-COVERAGE.md) adds finer case accounting and an executable mutation comparison. Of 167 named behavioral cases, 165 cite portable execution and 108 cite required generated witnesses; local read/write failures remain model-only. All 22 named protocol cases cite vectors. The nine new fixed scenarios close the earlier sparse/default-policy and logging/deferred-start gaps. The measured fault catalog additionally identifies fixed-only TTL-renewal detection and a protocol-ordering defect missed by ordinary tests. These denominators are reviewed cases and selected faults, not all possible behavior.
+[`SEMANTIC-COVERAGE.md`](./SEMANTIC-COVERAGE.md) adds finer case accounting and an executable mutation comparison. Of 167 named behavioral cases, 165 cite portable execution and 113 cite required generated witnesses; local read/write failures remain model-only. All 22 named protocol cases cite vectors. The nine new fixed scenarios close the earlier sparse/default-policy and logging/deferred-start gaps. Policy and shadow version 2 add generated witnesses for insertion-TTL preservation, malformed logging and expiration before deferred dispatch. Protocol vectors remain the direct check for argument ordering. These denominators are reviewed cases and selected faults, not all possible behavior.
 
 ## Coverage matrix
 
-“Model” means an abstraction of the named rules, not every case in the linked test file. “Core”, “Effects”, “Recovery”, “Policy”, “Scope”, “Shadow”, “Admission”, “Layers”, and “Independent” are the nine generated ITF profiles; they do not imply direct replay of the seven verification models. “Scenarios” means the committed language-neutral `behavioral-scenarios.json` corpus executed against TypeScript. A dash means no portable coverage of that kind. All model runs are bounded samples.
+“Model” means an abstraction of the named rules, not every case in the linked test file. “Core”, “Effects”, “Recovery”, “Policy”, “Scope”, “Shadow”, “Admission”, “Layers”, and “Independent” are the nine generated ITF profiles; they do not imply direct replay of the seven verification models. “Scenarios” means the committed language-neutral `behavioral-scenarios.json` corpus executed against TypeScript and Go. A dash means no portable coverage of that kind. All model runs are bounded samples.
 
 | Behavior | Ordinary implementation evidence | Verification model | Generated MBT | Portable scenarios | Protocol vectors | Remaining boundary/gap |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -35,7 +35,7 @@ Test basenames above refer to `test/*.test.ts`; real/cluster evidence includes `
 
 ## Generated contract expansion
 
-The fixed corpus is an oracle and a regression suite; it is not a substitute for Quint-generated implementation testing. The current expansion moves these previously fixed-only boundaries into conformance profiles:
+The fixed corpus is a regression suite with explicit expected observations; Quint remains the portable behavioral source of truth. Generated histories drive most portable testing, while fixed cases retain narrow boundaries. The current expansion moves these previously fixed-only boundaries into conformance profiles:
 
 | Test-derived contract | Generated evidence |
 | --- | --- |
@@ -53,7 +53,7 @@ The fixed corpus is an oracle and a regression suite; it is not a substitute for
 | C03/C43: recovery with request memoization | Recovery requires later memo probes in both scopes after shared recovery and a new read after closed-scope recovery; no shared publication is permitted |
 | C41/C42/C46: timeout recovery and classifier precedence | Recovery generates own/propagated timeout, ordinary error, instance and operation allow/deny/error overrides, held recovery decode, and abandoned source completion |
 
-The oracles are `dialcache-liveness`, `dialcache-redis`, `dialcache-invalidation`, `dialcache-request-local`, `dialcache-local`, `dialcache-stale-on-error`, and `dialcache-stale-recovery-policy`. No production API or private-state injection was added. This closes named rule gaps, not every feature product; the table above retains narrower boundaries explicitly.
+The referenced implementation tests are `dialcache-liveness`, `dialcache-redis`, `dialcache-invalidation`, `dialcache-request-local`, `dialcache-local`, `dialcache-stale-on-error`, and `dialcache-stale-recovery-policy`. No production API or private-state injection was added. This closes named rule gaps, not every feature product; the table above retains narrower boundaries explicitly.
 
 ## Source assertion audit
 
@@ -64,10 +64,10 @@ The oracles are `dialcache-liveness`, `dialcache-redis`, `dialcache-invalidation
 - `invalidation-vectors.json` adds 49 portable state transitions exercised against the actual exported protocol on both Redis and Valkey, including watermark repair/persistence/retention and invalid-argument atomicity. This checks the requested protocol state; deployment preservation remains an assumption.
 
 - [`CONFORMANCE.md`](./CONFORMANCE.md) defines the original core profile. [`BEHAVIOR.md`](./BEHAVIOR.md) defines the shared portable scenario/feature driver, action boundaries, clocks, and independently observed outputs.
-- `formal/generate-traces.sh` exports 32 core, 512 pending-effect, 256 scope, 512 recovery, 512 policy, 1,024 dark-shadow, 128 served-hit admission, 512 layer-composition, and 512 independent-caller ITF traces. Three replay test files execute every action through public calls. Effects and feature CI require named actions plus explicit race/outcome witnesses, rather than relying on trace count alone.
+- `formal/generate-traces.sh` exports 32 core, 512 pending-effect, 256 scope, 512 recovery, 512 policy, 1,024 dark-shadow, 128 served-hit admission, 512 layer-composition, and 512 independent-caller ITF traces. Each language has core, effects, and feature replay tests that execute every action through public calls. Effects and feature CI require named actions plus explicit race/outcome witnesses, rather than relying on trace count alone.
 - The 238 portable scenarios cover 12 behavior families. After every input, the driver compares all outputs/effect counts against assertion-side expected patches. Expected fields never enter execution.
 - Model cache-presence, fence, and flight fields predict later behavior but are excluded from implementation projection. Negative checks remove local caching/coalescing/recovery or acknowledge lost writes/invalidation and require an observable failure.
-- All nine committed ITF smokes, all feature scenarios, and all protocol vectors run in ordinary TypeScript CI without Quint. Parser checks reject empty/unknown/misplaced traces, missing choices/observations, unsupported arguments, and unsafe integers.
+- All nine committed ITF smokes, all feature scenarios, and all protocol vectors run in ordinary TypeScript and Go tests without Quint. Parser checks reject empty/unknown/misplaced traces, missing choices/observations, unsupported arguments, and unsafe integers.
 - CI artifacts retain model counterexamples and generated replay inputs. Failures include file/scenario, step/action, and both observations. Automatic shrinking is not implemented.
 - Deterministic model tests exercise previously weak assertions: changing an existing TTL or reversing fence/encoding precedence must violate its invariant. Reachability witnesses also cover policy mutation during a pending invocation, replacement request scopes, and dark reads before source acceptance.
 
@@ -92,7 +92,7 @@ The earlier interaction audit added 30 fixed scenarios, bringing the corpus to 1
 | Coalescing policy and scopes | Uncoalesced request calls still memoize their last publication. Reenabled coalescing joins a registered flight before reading a newer local value. Runtime policy overrides a disabled default. Concurrent outer request scopes remain independent. | `dialcache-coalescing`, `dialcache-request-local`; `docs/coalescing.md` |
 | Remote age versus local insertion age | A nearly expired Redis hit warms local storage for its full configured insertion TTL, which may outlive the remote entry. | `dialcache-local`, `dialcache-redis`; `docs/stale-on-error.md` |
 
-Some schedules combine independently established rules rather than duplicate one existing test. Their expected results are authored from the contracts, never recorded from the driver. This closes specific portable witnesses; arbitrary feature products, larger concurrent histories, larger mixed dark/served capacity schedules, and second-language validation of the feature profiles remain open.
+Some schedules combine independently established rules rather than duplicate one existing test. Their expected results are authored from the contracts, never recorded from the driver. This closes specific portable witnesses; arbitrary feature products, larger concurrent histories, and larger mixed dark/served capacity schedules remain open. Both languages now validate all nine generated profiles and the fixed scenarios.
 
 ## `dialcache-core.qnt`
 
@@ -131,21 +131,21 @@ A successful lower result can memoize request-local only while the outer scope r
 
 ## `dialcache-scope-conformance.qnt`
 
-Generated request-only schedules use the existing public driver, one key, two outer lifetimes, three nested contexts, and up to sixteen callers. The value domain includes absent/null/false/zero/empty-string results. They interleave scope closure with held policy resolution and independently settled sources, including disabled/re-enabled contexts, memo bypass, and sharing changes. CI requires all actions and nineteen observable witnesses; see [`BEHAVIOR.md`](./BEHAVIOR.md#generated-request-scope-profile) for exact input mappings and bounds.
+Generated request-only schedules use the existing public driver, one key, two outer lifetimes, three nested contexts, and up to sixteen callers. The value domain includes absent/null/false/zero/empty-string results. They interleave scope closure with held policy resolution and independently settled sources, including disabled/re-enabled contexts, memo bypass, and sharing changes. CI requires all actions and 24 observable witnesses; see [`BEHAVIOR.md`](./BEHAVIOR.md#generated-request-scope-profile) for exact input mappings and bounds.
 
-The source oracle is `test/dialcache-request-local.test.ts`, `test/dialcache-coalescing.test.ts`, `src/context.ts`, and the request-local path in `src/dialcache.ts`. Five deterministic model regressions check absent-value memo reuse, replacement isolation after late completion, uncached policy continuation after closure, nested closure/disabled bypass preserving the outer memo, and shared rejection followed by retry. The generated smoke retains the closure/replacement schedule. Source deadlines, request/process sharing, and recovery during scope closure retain their separate fixed-scenario coverage; arbitrary context trees are not generated.
+The referenced implementation evidence is `test/dialcache-request-local.test.ts`, `test/dialcache-coalescing.test.ts`, `src/context.ts`, and the request-local path in `src/dialcache.ts`. Eight deterministic model regressions check absent-value memo reuse, replacement isolation after late completion, uncached policy continuation after closure, nested closure/disabled bypass preserving the outer memo, shared rejection followed by retry, and three failure-attribution cases. The generated smoke retains the closure/replacement schedule. Source deadlines, request/process sharing, and recovery during scope closure retain their separate generated-profile and fixed-scenario coverage; arbitrary context trees are not generated.
 
 ## `dialcache-layers-conformance.qnt`
 
-The source oracle is `dialcache-coalescing` (request/process admission), `dialcache-request-local` (independent memo publication and closure), `dialcache-local` (capacity, read promotion, operation identity), and `dialcache-invalidation` (tracked publication and acquired/local survival). Eight deterministic regressions and twenty generated witnesses connect these rules through the real public API. A fixture choice selects tracked/untracked mode, local capacity 0/2, or local serving without a Redis adapter; neither the fixture nor actions read expected model state. See [`BEHAVIOR.md`](./BEHAVIOR.md#generated-layer-composition-profile) for exact scope/identity mappings and fresh-entry bounds.
+The referenced implementation evidence is `dialcache-coalescing` (request/process admission), `dialcache-request-local` (independent memo publication and closure), `dialcache-local` (capacity, read promotion, operation identity), and `dialcache-invalidation` (tracked publication and acquired/local survival). Eight deterministic regressions and twenty generated witnesses connect these rules through the real public API. A fixture choice selects tracked/untracked mode, local capacity 0/2, or local serving without a Redis adapter; neither the fixture nor actions read expected model state. See [`BEHAVIOR.md`](./BEHAVIOR.md#generated-layer-composition-profile) for exact scope/identity mappings and fresh-entry bounds.
 
 ## `dialcache-independent-conformance.qnt`
 
-The oracle is `dialcache-liveness` (uncoalesced read budgets), `dialcache-coalescing` (independent read/source results), `dialcache-stale-on-error` (retained bytes and source-error preservation), and `dialcache-invalidation` (acquired snapshots). Six deterministic regressions and sixteen required generated witnesses extend these contracts to concurrent same-key callers without sharing. See the [independent profile](./BEHAVIOR.md#generated-independent-caller-profile) for exact effect indices, read observations, policy choices, and bounded deadline schedules.
+The referenced implementation evidence is `dialcache-liveness` (uncoalesced read budgets), `dialcache-coalescing` (independent read/source results), `dialcache-stale-on-error` (retained bytes and source-error preservation), and `dialcache-invalidation` (acquired snapshots). Six deterministic regressions and sixteen required generated witnesses extend these contracts to concurrent same-key callers without sharing. See the [independent profile](./BEHAVIOR.md#generated-independent-caller-profile) for exact effect indices, read observations, policy choices, and bounded deadline schedules.
 
 ## `dialcache-admission-conformance.qnt`
 
-The generated served-hit profile adds three keys, two instances, and two shadow slots per instance. `test/dialcache-shadow-validation.test.ts` provides the oracle for coalesced admission, same-key drops, full capacity, source disablement, and timeout ownership. `test/dialcache-shadow-confirmation.test.ts` establishes retained C0/C1 comparison and raw confirmation-read ownership. The matching fixed scenarios include `coalesced remote hits admit only one shadow source`, `served shadow decode retains capacity after timeout until raw load settles`, and `shadow capacity and job deduplication are isolated per instance`.
+The generated served-hit profile adds three keys, two instances, and two shadow slots per instance. `test/dialcache-shadow-validation.test.ts` provides implementation evidence for coalesced admission, same-key drops, full capacity, source disablement, and timeout ownership. `test/dialcache-shadow-confirmation.test.ts` establishes retained C0/C1 comparison and raw confirmation-read ownership. The matching fixed scenarios include `coalesced remote hits admit only one shadow source`, `served shadow decode retains capacity after timeout until raw load settles`, and `shadow capacity and job deduplication are isolated per instance`.
 
 Six deterministic model regressions and eighteen generated outcome/race witnesses check these contracts against the same public driver. The committed smoke includes timeout, drop, raw completion, and readmission. See [`BEHAVIOR.md`](./BEHAVIOR.md#generated-served-hit-shadow-admission-profile) for exact mappings and bounds. Separate read deadlines, dark-fill capacity, and mixed local/request/shadow combinations remain fixed scenarios or other profiles; hook/policy prerequisites are generated by the dark-shadow profile; the new model does not claim every product of those features.
 
@@ -334,7 +334,7 @@ This prevents the formal suite from becoming a second implementation that silent
 
 ## Generated coverage measurement
 
-After the generated behavior expansion, fresh Vitest 4.1.10/V8 measurements use identical source files and instrumentation maps for all four cohorts. The denominator includes 26 source files, including adapters and exporters; integration/Lua execution and negative harness/parser checks are excluded.
+These review-baseline Vitest 4.1.10/V8 measurements predate the Go parity milestone and policy/shadow profile version 2. They use identical source files and instrumentation maps for all four recorded cohorts. The denominator includes 26 source files, including adapters and exporters; integration/Lua execution and negative harness/parser checks are excluded.
 
 | Corpus | Library lines | Library branches | Main engine lines | Main engine branches |
 | --- | --- | --- | --- | --- |
@@ -343,15 +343,15 @@ After the generated behavior expansion, fresh Vitest 4.1.10/V8 measurements use 
 | Review-baseline 229 scenarios + 102 protocol cases + 4 schema/audit checks | 72.54% | 72.50% | 82.72% | 79.21% |
 | Generated + portable (4,335 positive tests) | 75.00% | 77.49% | 85.34% | 85.33% |
 
-The table separates generated execution from the combined generated/fixed corpus. Moving already-covered boundary rules into nondeterministic generated schedules improves reusable behavioral testing without necessarily reaching a new code branch. The formal corpus still misses 205 outcomes reached by ordinary tests (44 in the main engine), and reaches five outcomes absent from those tests. These counts describe execution paths, not bugs or semantic obligations.
+The table separates generated execution from the combined generated/fixed corpus. Moving already-covered boundary rules into nondeterministic generated schedules improves reusable behavioral testing without necessarily reaching a new code branch. That recorded formal corpus missed 205 outcomes reached by ordinary tests (44 in the main engine), and reached five outcomes absent from those tests. These counts describe execution paths, not bugs or semantic obligations.
 
 Coverage measures code execution, not assertion strength or the percentage of behavior formalized. Generated schedules can improve race testing while revisiting existing branches. Fixed scenarios retain broader cross-feature request-scope, multi-instance, callback-precedence, and mixed shadow-job coverage. Native adapters/exporters and TypeScript binding obligations still need ordinary tests.
 
-### Audit of the remaining engine branches
+### Historical audit of the remaining engine branches
 
-This pass reduced the engine's ordinary-only branch outcomes from 58 to 44. The fourteen newly reached outcomes belong to missing-Redis maintenance, shadow UTF-8 text/binary confirmation, and elapsed comparison deadline guards. Independent-caller traces mostly strengthen schedules and ownership assertions along branches that the formal corpus already reached. This is why branch counts alone understate their value.
+That measurement pass reduced the engine's ordinary-only branch outcomes from 58 to 44. The fourteen newly reached outcomes belong to missing-Redis maintenance, shadow UTF-8 text/binary confirmation, and elapsed comparison deadline guards. Independent-caller traces mostly strengthen schedules and ownership assertions along branches that the formal corpus already reached. This is why branch counts alone understate their value.
 
-The remaining 44 outcomes in `src/dialcache.ts` are accounted for below. Locations refer to the unchanged source used for the table above; counts are V8 branch outcomes, not distinct behavioral rules.
+The 44 outcomes outside that recorded formal corpus are accounted for below. Locations refer to the unchanged source used for the table above; counts are V8 branch outcomes, not distinct behavioral rules.
 
 | Source locations | Outcomes | Disposition and remaining work |
 | --- | ---: | --- |
@@ -359,10 +359,10 @@ The remaining 44 outcomes in `src/dialcache.ts` are accounted for below. Locatio
 | 901, 1186, 1188, 1718, 1741, 1775 | 11 | Native callback validation, non-boolean/thenable returns, and rejection consumption (B01/B02). Portable classifier/comparator failures, observer isolation, and elapsed comparison deadlines are tested; ports must preserve those consequences without copying Promise mechanics. |
 | 365 | 2 | Optional coalescing-state inspection (X01), retained as implementation observability tests. |
 | 760 | 1 | Local-storage read failure and suppression of later local publication. Core invariants/regressions plus ordinary tests cover C27; generated public replay has no local-fault injection point. |
-| 989 | 1 | Invalid runtime logging policy falls back to logging off without disabling an otherwise eligible shadow job. Current generated logging/invalid-admission cases do not assert this exact combination. Keep this as a concrete portable replay gap, including its configuration-error diagnostic. |
-| 1097 | 1 | A dark shadow job whose deadline already elapsed before deferred work starts must stop before its Redis read. Ordinary `dialcache-shadow-confirmation` tests cover this; the generated comparison/held-effect timeout cases do not exercise the initial delayed-start boundary. |
+| 989 | 1 | Invalid runtime logging policy falls back to logging off without disabling an eligible shadow job. Shadow version 2 now requires an admitted invalid-logging mismatch, its configuration-error diagnostic, and no warning in both-language replay. |
+| 1097 | 1 | A dark shadow job whose deadline already elapsed before deferred work starts must stop before its Redis read. Shadow version 2 now exercises external source work at 9/10ms, requiring no read at the deadline and checking both late settlement outcomes in both languages. |
 
-The last two rows remain explicit next generated-replay targets; fixed portable scenarios now cover invalid logging and deferred dark start. They are not silently excluded as language-specific merely because TypeScript tests reach them through invalid objects or synchronous executor delay. Larger mixed dark/served capacity histories and second-language feature-profile drivers also remain open. The source inventory still cannot establish assertion-by-assertion equivalence with Vitest.
+The last two rows now have fixed scenarios, generated witnesses, and both-language replay. This does not update the historical branch percentages without rerunning the same instrumentation comparison. Larger mixed dark/served capacity histories remain additional assurance work. The source inventory still cannot establish assertion-by-assertion equivalence with Vitest.
 
 ### Reproduce the execution coverage comparison
 
@@ -396,6 +396,6 @@ coverage_cohort formal test/formal-conformance.test.ts \
   --testNamePattern='replays |portable behavioral scenarios|formal protocol conformance vectors'
 ```
 
-## Go milestone
+## Go parity milestone
 
-Specification 0.1.0 adds `SPEC.md` and `profiles.json`, fixes C16/C31 wording, adds nine portable scenarios (238 total), expands protocol vectors to 134 and invalidation transitions to 49 (schema 2), and supplies a Go core driver plus 93 cases across six protocol groups. Go does not yet execute the feature profiles. The source-deadline model mutation and actual-effects history monitor check a bounded property connection; see `SEMANTIC-COVERAGE.md`. Code-coverage tables above retain the explicitly recorded earlier instrumentation corpus; they are not regenerated percentages for this milestone.
+The Go module now executes all nine generated profiles, all 238 portable scenarios and all 134 protocol cases. Real integration checks run the 49 invalidation transitions against Redis, Valkey and Redis Cluster, including bidirectional TypeScript/Go payload and invalidation behavior. Policy and shadow profile version 2 add generated insertion-expiry, invalid-logging and pre-dispatch-expiration witnesses. All 11 selected behavioral faults are detected by generated TypeScript histories; Go supplies equivalent fault challenges. See `SEMANTIC-COVERAGE.md` for measured results and `GO-PARITY.md` for acceptance and native adaptations. The code-coverage tables above retain their explicitly recorded earlier instrumentation corpus; they are not regenerated percentages for this milestone.

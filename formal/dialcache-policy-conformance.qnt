@@ -31,6 +31,7 @@ module dialcache_policy_conformance {
   pure val NO_OWNER = -1
   pure val NO_CACHED_VALUE = 0
   pure val DISABLED_TTL_MS = 0
+  pure val HALF_SECOND_MS = 500
   pure val ONE_SECOND_MS = 1000
   pure val TWO_SECONDS_MS = 2000
   pure val FOUR_SECONDS_MS = 4000
@@ -231,13 +232,14 @@ module dialcache_policy_conformance {
     nondet choice = POLICY_INHERIT.to(POLICY_INVALID_SHADOW_RAMP).oneOf()
     s' = { overlay: choice, ...s }
   }
+  pure def advanceTime(state: State, elapsedMs: int): State = {
+    now: state.now + elapsedMs,
+    wall: state.wall + elapsedMs,
+    ...state
+  }
   action advance = {
-    nondet choice = Set(1, ONE_SECOND_MS, TWO_SECONDS_MS, DEFAULT_RETENTION_MS).oneOf()
-    s' = {
-      now: s.now + choice,
-      wall: s.wall + choice,
-      ...s
-    }
+    nondet choice = Set(1, HALF_SECOND_MS, ONE_SECOND_MS, TWO_SECONDS_MS, DEFAULT_RETENTION_MS).oneOf()
+    s' = advanceTime(s, choice)
   }
   action seed = {
     nondet choice = 0.to(3).oneOf()
@@ -342,6 +344,22 @@ module dialcache_policy_conformance {
     .then(s' = begin(s, 0))
     .then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE) and s.o.loads == 1 and s.o.shadow == List())
+
+  // A hit changes recency, but the insertion deadline stays at 1,000 ms.
+  // The final probe distinguishes fixed TTL from renewing it on the middle hit.
+  run localHitDoesNotRenewInsertionTtlTest = init
+    .then(s' = { overlay: POLICY_NO_REMOTE, ...s })
+    .then(s' = begin(s, 0))
+    .then(releasePolicy)
+    .then(s' = settle(s, 0, VALUE_ONE))
+    .then(s' = advanceTime(s, HALF_SECOND_MS))
+    .then(s' = begin(s, 0))
+    .then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.localExpires == ONE_SECOND_MS)
+    .then(s' = advanceTime(s, HALF_SECOND_MS))
+    .then(s' = begin(s, 0))
+    .then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, CALL_PENDING) and s.o.loaders == 2)
 
   run wallRollbackDoesNotExtendLocalTtlTest = init.then(s' = { overlay: POLICY_NO_REMOTE, ...s })
     .then(s' = begin(s, 0))

@@ -10,6 +10,7 @@ import {
 } from "../../src/index.js";
 import { encodeFrame, FakeRedis } from "../fake-redis.js";
 import type { EffectsContractEvent } from "./effects-contract.js";
+import { assertPublicationCausality, type CausalEvent } from "./causal-contract.js";
 
 export type Policy = ConstructorParameters<typeof DialCacheKeyConfig>[0];
 export type Value = number | boolean | string | null;
@@ -104,6 +105,9 @@ export class BehaviorDriver {
   // Independent event journal for bounded contract monitors. Entries come
   // only from external callbacks, settlements, and public diagnostics.
   private readonly history: EffectsContractEvent[] = [];
+  private readonly causalHistory: CausalEvent[] = [];
+  private readonly invocation = new AsyncLocalStorage<{ id: number }>();
+  private readonly sourceByInvocation = new Map<number, number>();
   private fallbackFailed = false;
   private adapterReply: { value: AdapterReply } | undefined;
   private readonly loaders: Array<ReturnType<typeof deferred<Value | undefined>>> = [];
@@ -125,6 +129,15 @@ export class BehaviorDriver {
     this.observed = emptyObservation(fixture);
     const origin = Date.now();
     vi.spyOn(performance, "now").mockImplementation(() => Date.now() - origin - this.wallOffset);
+    // Sinon delivers fake immediates outside the async context in which they
+    // were scheduled. Preserve only the driver's opaque ownership token at
+    // this external scheduler seam; cache request scopes remain untouched.
+    const scheduleImmediate = globalThis.setImmediate;
+    vi.spyOn(globalThis, "setImmediate").mockImplementation(((callback: (...args: unknown[]) => void, ...args: unknown[]) => {
+      const invocation = this.invocation.getStore();
+      return scheduleImmediate(invocation === undefined ? callback
+        : (...values: unknown[]) => this.invocation.run(invocation, () => callback(...values)), ...args);
+    }) as typeof setImmediate);
     const owner = this;
     this.redis = new class extends FakeRedis {
       override async read(request: RedisReadRequest, context?: RedisReadContext): Promise<RedisReadResult> {
@@ -144,6 +157,9 @@ export class BehaviorDriver {
       }
       override async write(request: RedisWriteRequest): Promise<void> {
         const index = owner.observed.writes++;
+        const invocation = owner.invocation.getStore();
+        owner.causalHistory.push({ event: "writeDispatch", atMs: performance.now(), owner: invocation?.id,
+          source: invocation === undefined ? undefined : owner.sourceByInvocation.get(invocation.id) });
         owner.history.push({ event: "writeDispatch", atMs: performance.now() });
         owner.record("writeDispatch", { index });
         owner.observed.writeTtls.push(request.cacheTtlMs);
@@ -244,7 +260,11 @@ export class BehaviorDriver {
         this.observed.calls.push({ status: "pending" });
         const scope = input.scope === undefined ? undefined : this.scope(input.scope);
         const cache = this.instance(input.instance ?? scope?.instance ?? "default");
+        let sourceBudget: number | null = null;
         const call = () => cache.getOrLoad(() => {
+          this.sourceByInvocation.set(index, this.loaders.length);
+          this.causalHistory.push({ event: "sourceStart", id: this.loaders.length, owner: index,
+            atMs: performance.now(), budgetMs: sourceBudget });
           this.history.push({ event: "sourceStart", id: this.loaders.length, atMs: performance.now() });
           if (this.fixture.probeSourceScope) this.observed.sourceScopes.push(cache.isEnabled());
           const gate = deferred<Value | undefined>();
@@ -270,7 +290,12 @@ export class BehaviorDriver {
           ...(this.fixture.fallbackTimeoutMs === "default" ? {} : {
             fallbackTimeoutMs: this.fixture.fallbackTimeoutMs === undefined ? 10 : this.fixture.fallbackTimeoutMs,
           }) });
-        const execute = () => input.disabled ? cache.disable(call) : call();
+        const ownedCall = () => {
+          sourceBudget = !cache.isEnabled() || this.fixture.fallbackTimeoutMs === null ? null
+            : this.fixture.fallbackTimeoutMs === "default" ? 60_000 : this.fixture.fallbackTimeoutMs ?? 10;
+          return this.invocation.run({ id: index }, call);
+        };
+        const execute = () => input.disabled ? cache.disable(ownedCall) : ownedCall();
         const result = input.scope !== undefined ? this.scope(input.scope).run(execute)
           : input.outside ? execute() : cache.enable(execute);
         void result.then(
@@ -282,11 +307,13 @@ export class BehaviorDriver {
       case "resolve":
         this.loader(input.loader).resolve(input.value);
         this.history.push({ event: "sourceSettlement", id: input.loader, atMs: performance.now(), outcome: "resolve" });
+        this.causalHistory.push({ event: "sourceSettlement", id: input.loader, atMs: performance.now(), outcome: "resolve" });
         break;
       case "reject": {
         if (input.error === "timeout") this.sourceErrors[input.loader] = new FallbackTimeoutError("NestedSource", 10);
         this.loader(input.loader).reject(this.sourceErrors[input.loader]);
         this.history.push({ event: "sourceSettlement", id: input.loader, atMs: performance.now(), outcome: "reject" });
+        this.causalHistory.push({ event: "sourceSettlement", id: input.loader, atMs: performance.now(), outcome: "reject" });
         break;
       }
       case "advance":
@@ -360,6 +387,7 @@ export class BehaviorDriver {
     // Drain ready executor work while unresolved external gates remain held.
     // No guessed number of Promise turns and no advancing deadline time.
     await vi.advanceTimersByTimeAsync(0);
+    assertPublicationCausality(this.causalHistory);
   }
 
   private record(event: EventName, fields: object): void {

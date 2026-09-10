@@ -1,0 +1,1731 @@
+{
+  "schemaVersion": 1,
+  "scope": "Manual applicability audit. A scheduled check supports only its stated scope, not necessarily every clause of a semantic case. Definitions describe transition semantics and are not independent invariants or extra coverage. No model state-space exhaustion or universal refinement is claimed.",
+  "checks": [
+    {
+      "case": "C01.no-cache-plumbing",
+      "reference": "formal/dialcache-core.qnt:passThroughSkipsCacheMachinery",
+      "kind": "invariant",
+      "scope": "Disabled/outside/closed calls make zero policy, key, cache read, or cache write operations in the presence-bit model; no clock claim."
+    },
+    {
+      "case": "C02.nested-memo",
+      "reference": "formal/dialcache-core.qnt:nestedDisablePreservesMemoTest",
+      "kind": "regression",
+      "scope": "Nested enable/disable leaves the outer memo available on reenable."
+    },
+    {
+      "case": "C02.reenabled-memo",
+      "reference": "formal/dialcache-scope-conformance.qnt:nestedCloseAndDisabledBypassKeepOuterMemoTest",
+      "kind": "regression",
+      "scope": "One nested enabled, disabled, and reenabled history preserves the root value; other sibling histories remain generated replay evidence."
+    },
+    {
+      "case": "C03.late-publication",
+      "reference": "formal/dialcache-core.qnt:requestValueBelongsToCurrentScope",
+      "kind": "invariant",
+      "scope": "A memo value belongs to the currently open scope; replacement scope receives no late old value."
+    },
+    {
+      "case": "C03.late-publication",
+      "reference": "formal/dialcache-core.qnt:lateResultCannotEnterReplacementScopeTest",
+      "kind": "regression",
+      "scope": "A memo value belongs to the currently open scope; replacement scope receives no late old value."
+    },
+    {
+      "case": "C03.late-publication",
+      "reference": "formal/dialcache-scope-conformance.qnt:closedScopesHaveNoMemo",
+      "kind": "invariant",
+      "scope": "Closed slots contain no memo/flight, and a replacement probe starts new source work after the old source settles."
+    },
+    {
+      "case": "C03.late-publication",
+      "reference": "formal/dialcache-scope-conformance.qnt:lateSourceCannotPopulateReplacementTest",
+      "kind": "regression",
+      "scope": "Closed slots contain no memo/flight, and a replacement probe starts new source work after the old source settles."
+    },
+    {
+      "case": "C03.detached-bypass",
+      "reference": "formal/dialcache-core.qnt:passThroughSkipsCacheMachinery",
+      "kind": "invariant",
+      "scope": "Outside/closed calls have no key, policy, or cache effects in the presence-bit model; source deadlines are not modeled here."
+    },
+    {
+      "case": "C04.pending-policy",
+      "reference": "formal/dialcache-scope-conformance.qnt:policyReplyAfterCloseBypassesRequestTest",
+      "kind": "regression",
+      "scope": "A provider released after root closure invokes source outside caching and writes no memo."
+    },
+    {
+      "case": "C06.absent-request",
+      "reference": "formal/dialcache-scope-conformance.qnt:absentValueIsMemoizedTest",
+      "kind": "regression",
+      "scope": "The explicit absent value code is memoized and reused without a second source."
+    },
+    {
+      "case": "C06.absent-local",
+      "reference": "formal/dialcache-policy-conformance.qnt:absentValueIsStoredAndReusedTest",
+      "kind": "regression",
+      "scope": "A source absent value is published and the subsequent local hit reuses it; this regression does not probe remote-only reuse."
+    },
+    {
+      "case": "C07.no-capacity-limit",
+      "reference": "formal/dialcache-layers-conformance.qnt:requestMemoExceedsLocalCapacityTest",
+      "kind": "regression",
+      "scope": "Three request identities remain memoized with zero process-local capacity; a bounded independence check, not an unbounded allocation claim."
+    },
+    {
+      "case": "C08.shared-capacity",
+      "reference": "formal/dialcache-layers-conformance.qnt:capacityIsPerInstance",
+      "kind": "invariant",
+      "scope": "Capacity applies across operation identities within each instance, with a concrete eviction probe after recency promotion."
+    },
+    {
+      "case": "C08.shared-capacity",
+      "reference": "formal/dialcache-layers-conformance.qnt:localReadPromotesBeforeEvictionTest",
+      "kind": "regression",
+      "scope": "Capacity applies across operation identities within each instance, with a concrete eviction probe after recency promotion."
+    },
+    {
+      "case": "C08.read-promotes",
+      "reference": "formal/dialcache-layers-conformance.qnt:localReadPromotesBeforeEvictionTest",
+      "kind": "regression",
+      "scope": "A middle local hit promotes recency, and subsequent probes distinguish which operation identity was evicted."
+    },
+    {
+      "case": "C09.fixed-local-ttl",
+      "reference": "formal/dialcache-policy-conformance.qnt:localHitDoesNotRenewInsertionTtlTest",
+      "kind": "regression",
+      "scope": "A hit at 500ms leaves the original 1000ms insertion deadline; the exact-boundary probe starts a new source."
+    },
+    {
+      "case": "C09.wall-rollback",
+      "reference": "formal/dialcache-policy-conformance.qnt:wallRollbackDoesNotExtendLocalTtlTest",
+      "kind": "regression",
+      "scope": "Local expiry advances on elapsed time despite wall-clock rollback."
+    },
+    {
+      "case": "C10.zero-capacity",
+      "reference": "formal/dialcache-layers-conformance.qnt:zeroCapacityHasNoLocalValues",
+      "kind": "invariant",
+      "scope": "Zero capacity stores no local values, shares concurrent work, and starts a new source after settlement."
+    },
+    {
+      "case": "C10.zero-capacity",
+      "reference": "formal/dialcache-layers-conformance.qnt:zeroCapacityKeepsSharingWithoutStorageTest",
+      "kind": "regression",
+      "scope": "Zero capacity stores no local values, shares concurrent work, and starts a new source after settlement."
+    },
+    {
+      "case": "C11.one-registered-flight",
+      "reference": "formal/dialcache-effects-conformance.qnt:oneRegisteredSource",
+      "kind": "invariant",
+      "scope": "At most one source has registered ownership in the one-key effects profile. Abandoned external work is distinct."
+    },
+    {
+      "case": "C11.one-registered-flight",
+      "reference": "formal/dialcache-coalescing-liveness.qnt:oneSourcePerRegisteredFlight",
+      "kind": "invariant",
+      "scope": "At most one source starts for a registered eligible one-key flight; abandoned raw work is separate."
+    },
+    {
+      "case": "C12.separate-request-memos",
+      "reference": "formal/dialcache-layers-conformance.qnt:requestMissesShareProcessAndMemoizeSeparatelyTest",
+      "kind": "regression",
+      "scope": "Two request scopes join one process source and both reuse their separate memos after shared settlement."
+    },
+    {
+      "case": "C14.inactive-layers",
+      "reference": "formal/dialcache-coalescing-liveness.qnt:flightsRequireEligibleCaching",
+      "kind": "invariant",
+      "scope": "A registered flight requires enabled caching, coalescing policy, and an eligible request/shared layer."
+    },
+    {
+      "case": "C14.inactive-layers",
+      "reference": "formal/dialcache-coalescing-liveness.qnt:noFlightWhenCoalescingIneligible",
+      "kind": "invariant",
+      "scope": "A registered flight requires enabled caching, coalescing policy, and an eligible request/shared layer."
+    },
+    {
+      "case": "C15.shared-error-retry",
+      "reference": "formal/dialcache-scope-conformance.qnt:rejectedFlightAllowsRetryTest",
+      "kind": "regression",
+      "scope": "One rejected source supplies both request followers, then a later call starts another source."
+    },
+    {
+      "case": "C16.sparse-leaves",
+      "reference": "formal/dialcache-runtime-policy.qnt:runtimeOverlayIsLeafWise",
+      "kind": "invariant",
+      "scope": "This checks captured-snapshot consistency using the same resolve helper as takeSnapshot. It is not an independent derivation of leaf merge semantics; those semantics are defined by resolve and exercised by replay."
+    },
+    {
+      "case": "C16.ttl-implies-ramp",
+      "reference": "formal/dialcache-runtime-policy.qnt:configuredTtlImpliesDefaultFullRamp",
+      "kind": "invariant",
+      "scope": "When both runtime and static ramps are omitted and resolved TTL is positive, independently require a full ramp."
+    },
+    {
+      "case": "C17.library-defaults",
+      "reference": "formal/dialcache-runtime-policy.qnt:featureLibraryDefaults",
+      "kind": "invariant",
+      "scope": "When both layers of policy omit each feature, independently require request/recovery/shadow off and coalescing on."
+    },
+    {
+      "case": "C18.captured-insertion",
+      "reference": "formal/dialcache-runtime-policy.qnt:existingLocalEntryKeepsInsertionTtl",
+      "kind": "invariant",
+      "scope": "An invocation captures its TTL before later overlay changes; the installed local TTL remains the insertion value."
+    },
+    {
+      "case": "C18.captured-insertion",
+      "reference": "formal/dialcache-runtime-policy.qnt:policyChangeDuringInvocationTest",
+      "kind": "regression",
+      "scope": "An invocation captures its TTL before later overlay changes; the installed local TTL remains the insertion value."
+    },
+    {
+      "case": "C18.existing-leader",
+      "reference": "formal/dialcache-policy-conformance.qnt:sharedSourcesKeepRegistration",
+      "kind": "invariant",
+      "scope": "Independent completion/failure cannot remove the shared leader registration; a reenabled caller joins that leader before a newer local hit."
+    },
+    {
+      "case": "C18.existing-leader",
+      "reference": "formal/dialcache-policy-conformance.qnt:independentCompletionKeepsRegisteredLeaderTest",
+      "kind": "regression",
+      "scope": "Independent completion/failure cannot remove the shared leader registration; a reenabled caller joins that leader before a newer local hit."
+    },
+    {
+      "case": "C18.existing-leader",
+      "reference": "formal/dialcache-policy-conformance.qnt:independentFailureKeepsRegisteredLeaderTest",
+      "kind": "regression",
+      "scope": "Independent completion/failure cannot remove the shared leader registration; a reenabled caller joins that leader before a newer local hit."
+    },
+    {
+      "case": "C20.invalid-invocation-policy",
+      "reference": "formal/dialcache-policy-conformance.qnt:invalidReadBudgetBypassesAllCachingTest",
+      "kind": "regression",
+      "scope": "An invalid read budget causes two separate sources and no reads, local storage, or remote publication."
+    },
+    {
+      "case": "C21.invalid-shadow",
+      "reference": "formal/dialcache-policy-conformance.qnt:invalidShadowPreservesNormalServingTest",
+      "kind": "regression",
+      "scope": "Invalid shadow ramp leaves normal source publication and subsequent remote serving available, with no shadow outcome."
+    },
+    {
+      "case": "C23.library-read-budget",
+      "reference": "formal/dialcache-effects-conformance.qnt:libraryReadBudgetIsFiftyMillisecondsTest",
+      "kind": "regression",
+      "scope": "Default read remains pending before 50ms and starts a fresh 10ms source budget at exactly 50ms."
+    },
+    {
+      "case": "C23.source-start",
+      "reference": "formal/dialcache-coalescing-liveness.qnt:fallbackDeadlineStartsWithFallback",
+      "kind": "invariant",
+      "scope": "The deadline equals actual fallback start plus the budget; the delayed lookup regression preserves the entire source budget after cache lookup time."
+    },
+    {
+      "case": "C23.source-start",
+      "reference": "formal/dialcache-coalescing-liveness.qnt:delayedLookupKeepsFullSourceBudgetTest",
+      "kind": "regression",
+      "scope": "The deadline equals actual fallback start plus the budget; the delayed lookup regression preserves the entire source budget after cache lookup time."
+    },
+    {
+      "case": "C23.source-start",
+      "reference": "formal/dialcache-effects-conformance.qnt:readTimeoutStartsIndependentSourceDeadlineTest",
+      "kind": "regression",
+      "scope": "Two shared callers consume one read timeout, then get the full source budget and no remote refill."
+    },
+    {
+      "case": "C24.follower-read",
+      "reference": "formal/dialcache-effects-conformance.qnt:followerKeepsAcceptedReadBudgetTest",
+      "kind": "regression",
+      "scope": "A later runtime budget change and follower do not replace the leader read's accepted 30ms budget."
+    },
+    {
+      "case": "C24.independent-reads",
+      "reference": "formal/dialcache-independent-conformance.qnt:independentReadDeadlinesStartSeparateSourcesTest",
+      "kind": "regression",
+      "scope": "Two uncoalesced reads started 1ms apart expire separately and start separate sources."
+    },
+    {
+      "case": "C25.late-source-rejected",
+      "reference": "formal/dialcache-coalescing-liveness.qnt:timedOutSourceCannotPublish",
+      "kind": "invariant",
+      "scope": "The abstract late-settlement action represents either success or rejection at elapsed >= budget; timeout prevents acceptance/publication before timer delivery."
+    },
+    {
+      "case": "C25.late-source-rejected",
+      "reference": "formal/dialcache-coalescing-liveness.qnt:lateSettlementBeforeTimerTest",
+      "kind": "regression",
+      "scope": "The abstract late-settlement action represents either success or rejection at elapsed >= budget; timeout prevents acceptance/publication before timer delivery."
+    },
+    {
+      "case": "C25.late-rejection",
+      "reference": "formal/dialcache-coalescing-liveness.qnt:timedOutSourceCannotPublish",
+      "kind": "invariant",
+      "scope": "The abstract late-settlement action represents either success or rejection at elapsed >= budget; timeout prevents acceptance/publication before timer delivery."
+    },
+    {
+      "case": "C25.late-rejection",
+      "reference": "formal/dialcache-coalescing-liveness.qnt:lateSettlementBeforeTimerTest",
+      "kind": "regression",
+      "scope": "The abstract late-settlement action represents either success or rejection at elapsed >= budget; timeout prevents acceptance/publication before timer delivery."
+    },
+    {
+      "case": "C25.abandoned-overlap",
+      "reference": "formal/dialcache-coalescing-liveness.qnt:abandonedSourceMayOverlapNewFlightTest",
+      "kind": "regression",
+      "scope": "After timeout, old raw source may settle while a new registered source remains active."
+    },
+    {
+      "case": "C25.abandoned-overlap",
+      "reference": "formal/dialcache-effects-conformance.qnt:timedOutLoaderOverlapsNewFlightTest",
+      "kind": "regression",
+      "scope": "A timeout caller and pending new caller coexist with one abandoned and one registered source."
+    },
+    {
+      "case": "C26.publication-ownership",
+      "reference": "formal/dialcache-coalescing-liveness.qnt:publicationRequiresAcceptedSource",
+      "kind": "invariant",
+      "scope": "Publication requires accepted source and may complete after the former source deadline."
+    },
+    {
+      "case": "C26.publication-ownership",
+      "reference": "formal/dialcache-coalescing-liveness.qnt:acceptedPublicationOutlivesDeadlineTest",
+      "kind": "regression",
+      "scope": "Publication requires accepted source and may complete after the former source deadline."
+    },
+    {
+      "case": "C26.publication-ownership",
+      "reference": "formal/dialcache-effects-conformance.qnt:writeRequiresAcceptedSource",
+      "kind": "invariant",
+      "scope": "Accepted serialization and dispatched write may remain pending beyond source deadline, then return the source value."
+    },
+    {
+      "case": "C26.publication-ownership",
+      "reference": "formal/dialcache-effects-conformance.qnt:acceptedWriteOutlivesDeadlineTest",
+      "kind": "regression",
+      "scope": "Accepted serialization and dispatched write may remain pending beyond source deadline, then return the source value."
+    },
+    {
+      "case": "C26.decode-ownership",
+      "reference": "formal/dialcache-effects-conformance.qnt:acquiredDecodeSurvivesInvalidationAndDeadlineTest",
+      "kind": "regression",
+      "scope": "Accepted fresh decode survives later invalidation and elapsed read/source-sized budget without starting source or cancelling the acquired read."
+    },
+    {
+      "case": "C27.dump-failure",
+      "reference": "formal/dialcache-effects-conformance.qnt:dumpFailurePreservesSourceTest",
+      "kind": "regression",
+      "scope": "Serialization failure returns source value and dispatches no write."
+    },
+    {
+      "case": "C27.write-failure",
+      "reference": "formal/dialcache-effects-conformance.qnt:writeFailurePreservesSourceTest",
+      "kind": "regression",
+      "scope": "Failed write preserves the source value and does not commit remote storage in this adapter fixture."
+    },
+    {
+      "case": "C27.local-read-failure",
+      "reference": "formal/dialcache-core.qnt:failedLocalReadSkipsReuseAndPublication",
+      "kind": "invariant",
+      "scope": "A local read failure forbids local reuse and publication; local failures are modeled as injected environment health, without a real public fault-injection replay."
+    },
+    {
+      "case": "C27.local-write-failure",
+      "reference": "formal/dialcache-core.qnt:failedLocalWritePreservesAcceptedResult",
+      "kind": "invariant",
+      "scope": "A local write failure preserves the accepted result; local failures are modeled as injected environment health, without a real public fault-injection replay."
+    },
+    {
+      "case": "C28.no-refill-after-read-failure",
+      "reference": "formal/dialcache-core.qnt:remoteFailureNeverRefills",
+      "kind": "invariant",
+      "scope": "Remote read failure prevents refill in the layer presence abstraction."
+    },
+    {
+      "case": "C28.no-refill-after-read-failure",
+      "reference": "formal/dialcache-effects-conformance.qnt:readTimeoutStartsIndependentSourceDeadlineTest",
+      "kind": "regression",
+      "scope": "Timeout suppresses refill; a late read accepted only after elapsed budget starts source and cannot be decoded into a hit."
+    },
+    {
+      "case": "C28.no-refill-after-read-failure",
+      "reference": "formal/dialcache-effects-conformance.qnt:lateReadCannotBecomeHitTest",
+      "kind": "regression",
+      "scope": "Timeout suppresses refill; a late read accepted only after elapsed budget starts source and cannot be decoded into a hit."
+    },
+    {
+      "case": "C29.missing-redis-local",
+      "reference": "formal/dialcache-layers-conformance.qnt:absentRemoteHasNoAdapterEffects",
+      "kind": "invariant",
+      "scope": "Missing adapter creates no remote effects; valid local storage is still filled and reused."
+    },
+    {
+      "case": "C29.missing-redis-local",
+      "reference": "formal/dialcache-layers-conformance.qnt:absentRemotePreservesLocalReuseTest",
+      "kind": "regression",
+      "scope": "Missing adapter creates no remote effects; valid local storage is still filled and reused."
+    },
+    {
+      "case": "C29.missing-redis-maintenance",
+      "reference": "formal/dialcache-layers-conformance.qnt:absentRemoteMaintenancePreservesLocalReuseTest",
+      "kind": "regression",
+      "scope": "Missing-remote maintenance returns its distinct error, invokes no remote adapter, and preserves a later local hit."
+    },
+    {
+      "case": "C31.tracked-no-local-fill",
+      "reference": "formal/dialcache-core.qnt:trackedRemoteFallbackSuppressesLocalPublication",
+      "kind": "invariant",
+      "scope": "Tracked source after semantic remote miss cannot publish to local storage."
+    },
+    {
+      "case": "C31.tracked-no-local-fill",
+      "reference": "formal/dialcache-layers-conformance.qnt:trackedSourceWaitsForValidatedReadToWarmLocalTest",
+      "kind": "regression",
+      "scope": "Tracked source leaves local empty; a later validated remote hit warms it and the next local hit avoids remote."
+    },
+    {
+      "case": "C34.second-fence",
+      "reference": "formal/dialcache-effects-conformance.qnt:rollbackDuringDumpRechecksObservedFenceTest",
+      "kind": "regression",
+      "scope": "Rollback during serialization makes the second observed-fence check skip native write while preserving source result."
+    },
+    {
+      "case": "C35.delayed-old-write",
+      "reference": "formal/dialcache-tracked-invalidation.qnt:staleValueAfterInvalidationIsFenced",
+      "kind": "invariant",
+      "scope": "Safety is conditional on the explicit future-buffer, stale-write-delay, and writer-lead bounds in the model."
+    },
+    {
+      "case": "C35.delayed-old-write",
+      "reference": "formal/dialcache-tracked-invalidation.qnt:acquiredAfterInvalidationDoesNotServeStale",
+      "kind": "invariant",
+      "scope": "Safety is conditional on the explicit future-buffer, stale-write-delay, and writer-lead bounds in the model."
+    },
+    {
+      "case": "C35.delayed-old-write",
+      "reference": "formal/dialcache-effects-conformance.qnt:delayedWriteRemainsFencedTest",
+      "kind": "regression",
+      "scope": "A dispatched old write completing after invalidation does not become a readable tracked hit on the next call."
+    },
+    {
+      "case": "C36.acquired-fresh",
+      "reference": "formal/dialcache-effects-conformance.qnt:acquiredDecodeSurvivesInvalidationAndDeadlineTest",
+      "kind": "regression",
+      "scope": "The acquired fresh snapshot survives a later invalidation before asynchronous decode returns."
+    },
+    {
+      "case": "C36.acquired-fresh",
+      "reference": "formal/dialcache-independent-conformance.qnt:acceptedFreshDecodeSurvivesOtherInvalidationTest",
+      "kind": "regression",
+      "scope": "An already acquired snapshot still returns while a later independent call observes invalidation and starts source."
+    },
+    {
+      "case": "C36.acquired-local",
+      "reference": "formal/dialcache-layers-conformance.qnt:invalidationGroupsOperationsButPreservesAcquiredCachesTest",
+      "kind": "regression",
+      "scope": "A remote watermark change fences later remote reads while earlier local and request values remain reusable."
+    },
+    {
+      "case": "C36.acquired-request",
+      "reference": "formal/dialcache-layers-conformance.qnt:invalidationGroupsOperationsButPreservesAcquiredCachesTest",
+      "kind": "regression",
+      "scope": "A remote watermark change fences later remote reads while earlier local and request values remain reusable."
+    },
+    {
+      "case": "C38.marker-transition",
+      "reference": "formal/dialcache-recovery-conformance.qnt:rollbackCannotLowerInvalidationWatermarkTest",
+      "kind": "regression",
+      "scope": "A second invalidation after wall rollback does not lower the existing watermark; exact Redis retention remains vector/integration evidence."
+    },
+    {
+      "case": "C40.first-stale",
+      "reference": "formal/dialcache-stale-recovery.qnt:recoveredStaleHasNoSharedPublication",
+      "kind": "invariant",
+      "scope": "At exact fresh boundary F=2, authorized failure returns stale with no remote/local/shadow publication; later age does not revoke the returned value."
+    },
+    {
+      "case": "C40.first-stale",
+      "reference": "formal/dialcache-stale-recovery.qnt:servedValueCanAgeTest",
+      "kind": "regression",
+      "scope": "At exact fresh boundary F=2, authorized failure returns stale with no remote/local/shadow publication; later age does not revoke the returned value."
+    },
+    {
+      "case": "C40.maximum-age",
+      "reference": "formal/dialcache-stale-recovery.qnt:retainedCandidateWasEligible",
+      "kind": "invariant",
+      "scope": "Every retained candidate has initial age strictly below M; therefore age exactly M cannot be retained."
+    },
+    {
+      "case": "C40.future-rejected",
+      "reference": "formal/dialcache-stale-recovery.qnt:retainedCandidateWasEligible",
+      "kind": "invariant",
+      "scope": "Retained candidates have nonnegative stale age; a directly seeded future frame takes a plain miss without retention."
+    },
+    {
+      "case": "C40.future-rejected",
+      "reference": "formal/dialcache-stale-recovery.qnt:futureFrameIsNotRetainedTest",
+      "kind": "regression",
+      "scope": "Retained candidates have nonnegative stale age; a directly seeded future frame takes a plain miss without retention."
+    },
+    {
+      "case": "C41.success-skips-decode",
+      "reference": "formal/dialcache-stale-recovery.qnt:sourceSuccessDoesNotDecodeCandidate",
+      "kind": "invariant",
+      "scope": "Source success precludes any candidate decoding."
+    },
+    {
+      "case": "C41.denial-keeps-error",
+      "reference": "formal/dialcache-recovery-conformance.qnt:operationDenialReplacesInstanceAllowTest",
+      "kind": "regression",
+      "scope": "An operation denial over instance allow preserves ordinary source error and does not start candidate decode."
+    },
+    {
+      "case": "C42.timeout-only-default",
+      "reference": "formal/dialcache-recovery-conformance.qnt:defaultRejectsOrdinaryFailureTest",
+      "kind": "regression",
+      "scope": "The inherited timeout-only classifier preserves ordinary source error without custom classification or decode."
+    },
+    {
+      "case": "C42.propagated-timeout",
+      "reference": "formal/dialcache-recovery-conformance.qnt:defaultRecoversPropagatedTimeoutTest",
+      "kind": "regression",
+      "scope": "A timeout error propagated by source is recovered by the default classifier without invoking a custom classifier."
+    },
+    {
+      "case": "C42.explicit-denial",
+      "reference": "formal/dialcache-recovery-conformance.qnt:explicitDenialReplacesDefaultTest",
+      "kind": "regression",
+      "scope": "Explicit operation or instance denial preserves timeout and avoids decode."
+    },
+    {
+      "case": "C42.explicit-denial",
+      "reference": "formal/dialcache-recovery-conformance.qnt:instanceDenialReplacesTimeoutOnlyDefaultTest",
+      "kind": "regression",
+      "scope": "Explicit operation or instance denial preserves timeout and avoids decode."
+    },
+    {
+      "case": "C43.request-memo",
+      "reference": "formal/dialcache-recovery-conformance.qnt:closedScopesHaveNoMemo",
+      "kind": "invariant",
+      "scope": "Recovered value is reusable only in attached live request scope; closure prevents late memo publication."
+    },
+    {
+      "case": "C43.request-memo",
+      "reference": "formal/dialcache-recovery-conformance.qnt:recoveredValueMemoizesOnlyInAttachedRequestTest",
+      "kind": "regression",
+      "scope": "Recovered value is reusable only in attached live request scope; closure prevents late memo publication."
+    },
+    {
+      "case": "C43.request-memo",
+      "reference": "formal/dialcache-recovery-conformance.qnt:closedRequestCannotReceiveLateRecoveryMemoTest",
+      "kind": "regression",
+      "scope": "Recovered value is reusable only in attached live request scope; closure prevents late memo publication."
+    },
+    {
+      "case": "C43.request-memo",
+      "reference": "formal/dialcache-stale-recovery.qnt:recoveredStaleHasNoSharedPublication",
+      "kind": "invariant",
+      "scope": "Recovered stale results do not publish into shared local or remote caches or schedule shadow work."
+    },
+    {
+      "case": "C43.independent-values",
+      "reference": "formal/dialcache-independent-conformance.qnt:independentRecoveryKeepsDistinctSnapshotsTest",
+      "kind": "regression",
+      "scope": "Two independent callers retain different values and return those exact values despite invalidation and reverse decode completion."
+    },
+    {
+      "case": "C44.retained-invalidation",
+      "reference": "formal/dialcache-independent-conformance.qnt:independentRecoveryKeepsDistinctSnapshotsTest",
+      "kind": "regression",
+      "scope": "Retained acquired bytes survive replacement for another caller and later invalidation; each caller still returns its own snapshot."
+    },
+    {
+      "case": "C44.no-reread",
+      "reference": "formal/dialcache-stale-recovery.qnt:recoveryUsesSingleRedisRead",
+      "kind": "invariant",
+      "scope": "One initial read at most; failed read retains no candidate, never begins recovery, and preserves source rejection."
+    },
+    {
+      "case": "C44.no-reread",
+      "reference": "formal/dialcache-stale-recovery.qnt:readFailureNeverRetains",
+      "kind": "invariant",
+      "scope": "One initial read at most; failed read retains no candidate, never begins recovery, and preserves source rejection."
+    },
+    {
+      "case": "C44.no-reread",
+      "reference": "formal/dialcache-stale-recovery.qnt:readFailureNeverAttemptsRecovery",
+      "kind": "invariant",
+      "scope": "One initial read at most; failed read retains no candidate, never begins recovery, and preserves source rejection."
+    },
+    {
+      "case": "C44.no-reread",
+      "reference": "formal/dialcache-stale-recovery.qnt:failedReadSkipsRecoveryTest",
+      "kind": "regression",
+      "scope": "One initial read at most; failed read retains no candidate, never begins recovery, and preserves source rejection."
+    },
+    {
+      "case": "C45.maximum-age-exclusive",
+      "reference": "formal/dialcache-stale-recovery.qnt:servedStaleIsStrictlyWithinMaxAge",
+      "kind": "invariant",
+      "scope": "Return-event age must be < M and nonnegative; crossing to exact M during decode preserves source rejection and writes no request memo."
+    },
+    {
+      "case": "C45.maximum-age-exclusive",
+      "reference": "formal/dialcache-stale-recovery.qnt:decodingAtMaxAgeRejectsTest",
+      "kind": "regression",
+      "scope": "Return-event age must be < M and nonnegative; crossing to exact M during decode preserves source rejection and writes no request memo."
+    },
+    {
+      "case": "C45.recheck-after-decode",
+      "reference": "formal/dialcache-stale-recovery.qnt:servedStaleIsStrictlyWithinMaxAge",
+      "kind": "invariant",
+      "scope": "Return-event age must be < M and nonnegative; crossing to exact M during decode preserves source rejection and writes no request memo."
+    },
+    {
+      "case": "C45.recheck-after-decode",
+      "reference": "formal/dialcache-stale-recovery.qnt:decodingAtMaxAgeRejectsTest",
+      "kind": "regression",
+      "scope": "Return-event age must be < M and nonnegative; crossing to exact M during decode preserves source rejection and writes no request memo."
+    },
+    {
+      "case": "C45.captured-policy",
+      "reference": "formal/dialcache-independent-conformance.qnt:recoveryPolicyIsCapturedPerCallerTest",
+      "kind": "regression",
+      "scope": "Two acquired candidates retain their own max-age snapshots; after decode delay the older policy serves while the newer shorter policy preserves that caller's source error."
+    },
+    {
+      "case": "C45.preserve-source-error",
+      "reference": "formal/dialcache-recovery-conformance.qnt:failedRecoveryPreservesDeadlineErrorTest",
+      "kind": "regression",
+      "scope": "Recovery load failure preserves the original deadline result and emits deserialization_error."
+    },
+    {
+      "case": "C45.rollback-future",
+      "reference": "formal/dialcache-recovery-conformance.qnt:rollbackDuringRetainedDecodeRejectsFutureSnapshotTest",
+      "kind": "regression",
+      "scope": "Wall rollback during decode makes the retained snapshot future and preserves the original deadline with recovery miss/no age sample."
+    },
+    {
+      "case": "C46.ignore-late-source",
+      "reference": "formal/dialcache-recovery-conformance.qnt:lateSuccessCannotReplaceRecoveredValueTest",
+      "kind": "regression",
+      "scope": "Late successful source cannot replace timeout recovery or create dump/write effects."
+    },
+    {
+      "case": "C47.requires-hook",
+      "reference": "formal/dialcache-shadow-conformance.qnt:missingHookHasNoShadowEffects",
+      "kind": "invariant",
+      "scope": "Without the outcome hook no dark cache/read/load/write machinery runs; caller still returns its source value."
+    },
+    {
+      "case": "C47.requires-hook",
+      "reference": "formal/dialcache-shadow-conformance.qnt:missingHookSkipsDarkJobTest",
+      "kind": "regression",
+      "scope": "Without the outcome hook no dark cache/read/load/write machinery runs; caller still returns its source value."
+    },
+    {
+      "case": "C47.requires-capacity",
+      "reference": "formal/dialcache-admission-conformance.qnt:capacityIsPerInstance",
+      "kind": "invariant",
+      "scope": "Per-instance capacity bounds admitted jobs; a full instance drops its next key while another instance can admit."
+    },
+    {
+      "case": "C47.requires-capacity",
+      "reference": "formal/dialcache-admission-conformance.qnt:fullInstanceDoesNotBlockOtherInstanceTest",
+      "kind": "regression",
+      "scope": "Per-instance capacity bounds admitted jobs; a full instance drops its next key while another instance can admit."
+    },
+    {
+      "case": "C48.source-disabled",
+      "reference": "formal/dialcache-admission-conformance.qnt:jobsAreDiagnostic",
+      "kind": "invariant",
+      "scope": "Served-hit detached shadow sources observe disabled caching; all their outcomes remain diagnostic with no dump/write effects in this profile."
+    },
+    {
+      "case": "C48.ordinary-miss",
+      "reference": "formal/dialcache-shadow-validation.qnt:ordinaryRemoteMissHasNoShadowJob",
+      "kind": "invariant",
+      "scope": "Ordinary remote miss always leaves shadow job idle."
+    },
+    {
+      "case": "C49.dark-source-reuse",
+      "reference": "formal/dialcache-shadow-validation.qnt:rampedDownDoesNotDuplicateSource",
+      "kind": "invariant",
+      "scope": "Ramped-down dark work never starts a detached source; fill/comparison wait for the accepted, committed caller result."
+    },
+    {
+      "case": "C49.dark-source-reuse",
+      "reference": "formal/dialcache-shadow-validation.qnt:comparisonAndFillWaitForSource",
+      "kind": "invariant",
+      "scope": "Ramped-down dark work never starts a detached source; fill/comparison wait for the accepted, committed caller result."
+    },
+    {
+      "case": "C49.dark-source-reuse",
+      "reference": "formal/dialcache-shadow-validation.qnt:darkReadCanPrecedeCallerResultTest",
+      "kind": "regression",
+      "scope": "Ramped-down dark work never starts a detached source; fill/comparison wait for the accepted, committed caller result."
+    },
+    {
+      "case": "C50.custom-equal",
+      "reference": "formal/dialcache-shadow-conformance.qnt:explicitEqualityOverridesValuesTest",
+      "kind": "regression",
+      "scope": "Explicit equal comparator overrides unequal values and yields one match and age sample."
+    },
+    {
+      "case": "C50.custom-unequal",
+      "reference": "formal/dialcache-shadow-conformance.qnt:explicitInequalityRequiresConfirmationTest",
+      "kind": "regression",
+      "scope": "Explicit unequal comparator overrides equal values, requires C1 confirmation, and only then yields mismatch/warning."
+    },
+    {
+      "case": "C50.comparator-error",
+      "reference": "formal/dialcache-shadow-conformance.qnt:comparisonFailureKeepsCallerTest",
+      "kind": "regression",
+      "scope": "Comparator error emits comparison_error without changing already acquired caller result or recording age."
+    },
+    {
+      "case": "C51.changed-confirmation",
+      "reference": "formal/dialcache-shadow-validation.qnt:verdictsRequireSingleConfirmation",
+      "kind": "invariant",
+      "scope": "A mismatch requires exactly one C1 and unchanged payload bytes; changed/absent C1 cannot be reported as mismatch. The superseded outcome itself is defined by confirmation transitions."
+    },
+    {
+      "case": "C51.changed-confirmation",
+      "reference": "formal/dialcache-shadow-validation.qnt:mismatchMeansSameC1Bytes",
+      "kind": "invariant",
+      "scope": "A mismatch requires exactly one C1 and unchanged payload bytes; changed/absent C1 cannot be reported as mismatch. The superseded outcome itself is defined by confirmation transitions."
+    },
+    {
+      "case": "C51.payload-representation",
+      "reference": "formal/dialcache-shadow-conformance.qnt:identicalTextAndBinaryBytesConfirmMismatchTest",
+      "kind": "regression",
+      "scope": "Text and binary C0/C1 representations with identical UTF-8 bytes confirm mismatch; the byte identity is a finite fixture encoding."
+    },
+    {
+      "case": "C51.bytes-not-decoded-value",
+      "reference": "formal/dialcache-shadow-conformance.qnt:sameDecodedValueWithDifferentBytesIsSupersededTest",
+      "kind": "regression",
+      "scope": "Padding changes C1 bytes even when decoded value is equal, so the model produces superseded."
+    },
+    {
+      "case": "C52.present-not-repaired",
+      "reference": "formal/dialcache-shadow-validation.qnt:presentC0IsNeverRepaired",
+      "kind": "invariant",
+      "scope": "Present C0 is never repaired, irrespective of comparison verdict."
+    },
+    {
+      "case": "C52.undecodable-not-repaired",
+      "reference": "formal/dialcache-shadow-validation.qnt:presentC0IsNeverRepaired",
+      "kind": "invariant",
+      "scope": "Undecodable present C0 still forbids fill/repair."
+    },
+    {
+      "case": "C53.fill-fenced",
+      "reference": "formal/dialcache-shadow-validation.qnt:fillsRequireMiss",
+      "kind": "invariant",
+      "scope": "Fill only follows C0 miss; a fenced fill outcome has no write. The exact timestamp comparison is in finishFill."
+    },
+    {
+      "case": "C53.fill-fenced",
+      "reference": "formal/dialcache-shadow-validation.qnt:fencedFillDoesNotWrite",
+      "kind": "invariant",
+      "scope": "Fill only follows C0 miss; a fenced fill outcome has no write. The exact timestamp comparison is in finishFill."
+    },
+    {
+      "case": "C53.confirmation-fails-open",
+      "reference": "formal/dialcache-shadow-validation.qnt:presentC0IsNeverRepaired",
+      "kind": "invariant",
+      "scope": "C1 failure occurs for present C0 and cannot initiate a repair; caller preservation is separately replayed."
+    },
+    {
+      "case": "C54.deduplication",
+      "reference": "formal/dialcache-admission-conformance.qnt:oneJobPerIdentity",
+      "kind": "invariant",
+      "scope": "At most one live job per identity; another same-key eligible hit drops even when capacity is not full."
+    },
+    {
+      "case": "C54.deduplication",
+      "reference": "formal/dialcache-admission-conformance.qnt:duplicateDropsBeforeCapacityIsFullTest",
+      "kind": "regression",
+      "scope": "At most one live job per identity; another same-key eligible hit drops even when capacity is not full."
+    },
+    {
+      "case": "C54.source-ownership",
+      "reference": "formal/dialcache-admission-conformance.qnt:timeoutRetainsSourceCapacityTest",
+      "kind": "regression",
+      "scope": "Job timeout keeps raw source capacity live until source settlement, which releases it without changing caller or emitting another outcome."
+    },
+    {
+      "case": "C54.decode-ownership",
+      "reference": "formal/dialcache-admission-conformance.qnt:timeoutRetainsDecodeCapacityTest",
+      "kind": "regression",
+      "scope": "Job timeout keeps raw decode capacity live until load settlement; no later confirmation is started."
+    },
+    {
+      "case": "C54.comparison-budget",
+      "reference": "formal/dialcache-shadow-conformance.qnt:slowComparisonTimesOutBeforeConfirmationTest",
+      "kind": "regression",
+      "scope": "Successful or failing comparator work reaching the job budget produces timeout before any confirmation read; caller result remains unchanged."
+    },
+    {
+      "case": "C54.comparison-budget",
+      "reference": "formal/dialcache-shadow-conformance.qnt:slowComparisonFailureStillTimesOutTest",
+      "kind": "regression",
+      "scope": "Successful or failing comparator work reaching the job budget produces timeout before any confirmation read; caller result remains unchanged."
+    },
+    {
+      "case": "C54.expired-before-start",
+      "reference": "formal/dialcache-shadow-conformance.qnt:expiredSourceWorkSkipsRedis",
+      "kind": "invariant",
+      "scope": "At 9ms source work, deferred read can start and source settlement can succeed; at exactly 10ms, no Redis read starts and late success/rejection gives the source deadline. These fixtures observe later timer progress only in complete 10ms windows."
+    },
+    {
+      "case": "C54.expired-before-start",
+      "reference": "formal/dialcache-shadow-conformance.qnt:sourceWorkBeforeDeadlineStillReadsTest",
+      "kind": "regression",
+      "scope": "At 9ms source work, deferred read can start and source settlement can succeed; at exactly 10ms, no Redis read starts and late success/rejection gives the source deadline. These fixtures observe later timer progress only in complete 10ms windows."
+    },
+    {
+      "case": "C54.expired-before-start",
+      "reference": "formal/dialcache-shadow-conformance.qnt:sourceWorkAtDeadlineSkipsDeferredReadTest",
+      "kind": "regression",
+      "scope": "At 9ms source work, deferred read can start and source settlement can succeed; at exactly 10ms, no Redis read starts and late success/rejection gives the source deadline. These fixtures observe later timer progress only in complete 10ms windows."
+    },
+    {
+      "case": "C54.expired-before-start",
+      "reference": "formal/dialcache-shadow-conformance.qnt:expiredDeferredJobRetainsSourceRejectionDeadlineTest",
+      "kind": "regression",
+      "scope": "At 9ms source work, deferred read can start and source settlement can succeed; at exactly 10ms, no Redis read starts and late success/rejection gives the source deadline. These fixtures observe later timer progress only in complete 10ms windows."
+    },
+    {
+      "case": "C55.miss-discriminator",
+      "reference": "formal/dialcache-effects-conformance.qnt:missDiscriminatorWinsOverFrameFieldsTest",
+      "kind": "regression",
+      "scope": "A miss discriminator wins over stray frame fields and starts source without decode; other metadata trust rules remain the adapterReply/releaseRead transition."
+    },
+    {
+      "case": "C55.unknown-reason",
+      "reference": "formal/dialcache-effects-conformance.qnt:unknownReasonKeepsValidFenceTest",
+      "kind": "regression",
+      "scope": "Unknown reason is normalized to unclassified while a valid future fence still suppresses serialization."
+    },
+    {
+      "case": "C55.ignore-untracked-fence",
+      "reference": "formal/dialcache-effects-conformance.qnt:untrackedReplyCannotCarryFenceTest",
+      "kind": "regression",
+      "scope": "Untracked reply strips observed fence and normalizes reason, allowing serialization."
+    },
+    {
+      "case": "C56.cooperative-cancel",
+      "reference": "formal/dialcache-effects-conformance.qnt:readTimeoutStartsIndependentSourceDeadlineTest",
+      "kind": "regression",
+      "scope": "One shared read deadline requests one cancellation for two pending callers."
+    },
+    {
+      "case": "C56.late-read",
+      "reference": "formal/dialcache-effects-conformance.qnt:lateReadCannotBecomeHitTest",
+      "kind": "regression",
+      "scope": "A reply observed after elapsed read budget cannot start fresh decode even before timer delivery."
+    },
+    {
+      "case": "C56.clear-read-timer",
+      "reference": "formal/dialcache-effects-conformance.qnt:acquiredDecodeSurvivesInvalidationAndDeadlineTest",
+      "kind": "regression",
+      "scope": "A read accepted before deadline does not request cancellation when decoding later crosses the budget."
+    },
+    {
+      "case": "C57.shadow-age",
+      "reference": "formal/dialcache-shadow-conformance.qnt:confirmationKeepsOriginalAgeTest",
+      "kind": "regression",
+      "scope": "A mismatch records C0's age at verdict, not the replacement C1 timestamp."
+    },
+    {
+      "case": "C57.clamp-age",
+      "reference": "formal/dialcache-shadow-conformance.qnt:ageClampsAfterWallRollbackTest",
+      "kind": "regression",
+      "scope": "A match age sample after wall rollback clamps to zero."
+    },
+    {
+      "case": "C59.remote-includes-decode",
+      "reference": "formal/dialcache-effects-conformance.qnt:readDurationIncludesDecodeTest",
+      "kind": "regression",
+      "scope": "Remote get duration includes delayed fresh decode while accepted decoding starts no source budget."
+    },
+    {
+      "case": "C59.remote-includes-decode",
+      "reference": "formal/dialcache-effects-conformance.qnt:acquiredDecodeSurvivesInvalidationAndDeadlineTest",
+      "kind": "regression",
+      "scope": "Remote get duration includes delayed fresh decode while accepted decoding starts no source budget."
+    },
+    {
+      "case": "C59.source-excludes-publication",
+      "reference": "formal/dialcache-effects-conformance.qnt:sourceDurationExcludesPublicationTest",
+      "kind": "regression",
+      "scope": "Source duration stays at its accepted settlement interval while serialization has a separate later duration."
+    },
+    {
+      "case": "C60.logging-enabled",
+      "reference": "formal/dialcache-shadow-conformance.qnt:explicitInequalityRequiresConfirmationTest",
+      "kind": "regression",
+      "scope": "Confirmed mismatch warns only after C1; accepted enabled logging remains in effect despite later policy disable."
+    },
+    {
+      "case": "C60.logging-enabled",
+      "reference": "formal/dialcache-shadow-conformance.qnt:acceptedLoggingSurvivesPolicyChangeTest",
+      "kind": "regression",
+      "scope": "Confirmed mismatch warns only after C1; accepted enabled logging remains in effect despite later policy disable."
+    },
+    {
+      "case": "C60.no-warning-on-match",
+      "reference": "formal/dialcache-shadow-conformance.qnt:warningsRequireValidCapturedPolicy",
+      "kind": "invariant",
+      "scope": "Warnings equal the captured authorizations recorded only for mismatches. This constrains warnings for match but does not test every logger implementation."
+    },
+    {
+      "case": "C60.no-warning-on-superseded",
+      "reference": "formal/dialcache-shadow-conformance.qnt:warningsRequireValidCapturedPolicy",
+      "kind": "invariant",
+      "scope": "Warnings equal the captured authorizations recorded only for mismatches. Superseded itself adds no warning authorization."
+    },
+    {
+      "case": "C60.invalid-logging-policy",
+      "reference": "formal/dialcache-shadow-conformance.qnt:invalidLoggingCannotBeCaptured",
+      "kind": "invariant",
+      "scope": "An invalid logging flag is never captured as enabled. Admission still records one configuration error, comparison reaches mismatch, and no warning is emitted."
+    },
+    {
+      "case": "C60.invalid-logging-policy",
+      "reference": "formal/dialcache-shadow-conformance.qnt:warningsRequireValidCapturedPolicy",
+      "kind": "invariant",
+      "scope": "An invalid logging flag is never captured as enabled. Admission still records one configuration error, comparison reaches mismatch, and no warning is emitted."
+    },
+    {
+      "case": "C60.invalid-logging-policy",
+      "reference": "formal/dialcache-shadow-conformance.qnt:invalidLoggingKeepsComparisonWithoutWarningTest",
+      "kind": "regression",
+      "scope": "An invalid logging flag is never captured as enabled. Admission still records one configuration error, comparison reaches mismatch, and no warning is emitted."
+    },
+    {
+      "case": "W04.tracked-decoder",
+      "reference": "formal/dialcache-redis-protocol.qnt:nilValueIsValueAbsent",
+      "kind": "invariant",
+      "scope": "Abstract reply/frame/watermark/encoding classes check classification precedence; exact bytes and host numeric boundaries remain vectors."
+    },
+    {
+      "case": "W04.tracked-decoder",
+      "reference": "formal/dialcache-redis-protocol.qnt:fenceCanPrecedeEncodingError",
+      "kind": "invariant",
+      "scope": "Abstract reply/frame/watermark/encoding classes check classification precedence; exact bytes and host numeric boundaries remain vectors."
+    },
+    {
+      "case": "W04.tracked-decoder",
+      "reference": "formal/dialcache-redis-protocol.qnt:malformedWatermarkPrecedesEncodingError",
+      "kind": "invariant",
+      "scope": "Abstract reply/frame/watermark/encoding classes check classification precedence; exact bytes and host numeric boundaries remain vectors."
+    },
+    {
+      "case": "W04.tracked-decoder",
+      "reference": "formal/dialcache-redis-protocol.qnt:trackedZeroTimestampIsNotHit",
+      "kind": "invariant",
+      "scope": "Abstract reply/frame/watermark/encoding classes check classification precedence; exact bytes and host numeric boundaries remain vectors."
+    },
+    {
+      "case": "W04.tracked-decoder",
+      "reference": "formal/dialcache-redis-protocol.qnt:encodingErrorRequiresSupportedFrame",
+      "kind": "invariant",
+      "scope": "Abstract reply/frame/watermark/encoding classes check classification precedence; exact bytes and host numeric boundaries remain vectors."
+    },
+    {
+      "case": "W04.tracked-decoder",
+      "reference": "formal/dialcache-redis-protocol.qnt:fencedEncodingTest",
+      "kind": "regression",
+      "scope": "Abstract reply/frame/watermark/encoding classes check classification precedence; exact bytes and host numeric boundaries remain vectors."
+    },
+    {
+      "case": "W04.tracked-decoder",
+      "reference": "formal/dialcache-redis-protocol.qnt:malformedWatermarkTest",
+      "kind": "regression",
+      "scope": "Abstract reply/frame/watermark/encoding classes check classification precedence; exact bytes and host numeric boundaries remain vectors."
+    },
+    {
+      "case": "W04.strict-fence",
+      "reference": "formal/dialcache-redis-protocol.qnt:fenceCanPrecedeEncodingError",
+      "kind": "invariant",
+      "scope": "Tracked supported positive frames at equality are fenced; zero timestamp cannot yield a hit."
+    },
+    {
+      "case": "W04.strict-fence",
+      "reference": "formal/dialcache-redis-protocol.qnt:trackedZeroTimestampIsNotHit",
+      "kind": "invariant",
+      "scope": "Tracked supported positive frames at equality are fenced; zero timestamp cannot yield a hit."
+    },
+    {
+      "case": "W04.strict-fence",
+      "reference": "formal/dialcache-tracked-invalidation.qnt:servedSnapshotClearedObservedFence",
+      "kind": "invariant",
+      "scope": "Every served tracked snapshot has timestamp strictly above its acquired watermark."
+    }
+  ],
+  "definitions": [
+    {
+      "case": "C06.null-request",
+      "reference": "formal/dialcache-scope-conformance.qnt:resolveLoader",
+      "kind": "transition",
+      "scope": "Positive value codes preserve this falsy native value across source settlement, memo publication, and a later memo hit; the value code/native mapping is specified by the profile."
+    },
+    {
+      "case": "C06.null-request",
+      "reference": "formal/dialcache-scope-conformance.qnt:settle",
+      "kind": "helper",
+      "scope": "Positive value codes preserve this falsy native value across source settlement, memo publication, and a later memo hit; the value code/native mapping is specified by the profile."
+    },
+    {
+      "case": "C06.null-request",
+      "reference": "formal/dialcache-scope-conformance.qnt:releasePolicy",
+      "kind": "transition",
+      "scope": "Positive value codes preserve this falsy native value across source settlement, memo publication, and a later memo hit; the value code/native mapping is specified by the profile."
+    },
+    {
+      "case": "C06.null-local",
+      "reference": "formal/dialcache-policy-conformance.qnt:resolveLoader",
+      "kind": "transition",
+      "scope": "The source value code is stored without a truthiness test on the native value; later local lookup returns the same code."
+    },
+    {
+      "case": "C06.null-local",
+      "reference": "formal/dialcache-policy-conformance.qnt:settle",
+      "kind": "helper",
+      "scope": "The source value code is stored without a truthiness test on the native value; later local lookup returns the same code."
+    },
+    {
+      "case": "C06.null-local",
+      "reference": "formal/dialcache-policy-conformance.qnt:releasePolicy",
+      "kind": "transition",
+      "scope": "The source value code is stored without a truthiness test on the native value; later local lookup returns the same code."
+    },
+    {
+      "case": "C06.null-remote",
+      "reference": "formal/dialcache-policy-conformance.qnt:resolveLoader",
+      "kind": "transition",
+      "scope": "The source value code is stored remotely; remote lookup uses the sentinel/presence distinction and returns the code after local eviction or bypass."
+    },
+    {
+      "case": "C06.null-remote",
+      "reference": "formal/dialcache-policy-conformance.qnt:settle",
+      "kind": "helper",
+      "scope": "The source value code is stored remotely; remote lookup uses the sentinel/presence distinction and returns the code after local eviction or bypass."
+    },
+    {
+      "case": "C06.null-remote",
+      "reference": "formal/dialcache-policy-conformance.qnt:releasePolicy",
+      "kind": "transition",
+      "scope": "The source value code is stored remotely; remote lookup uses the sentinel/presence distinction and returns the code after local eviction or bypass."
+    },
+    {
+      "case": "C06.false-request",
+      "reference": "formal/dialcache-scope-conformance.qnt:resolveLoader",
+      "kind": "transition",
+      "scope": "Positive value codes preserve this falsy native value across source settlement, memo publication, and a later memo hit; the value code/native mapping is specified by the profile."
+    },
+    {
+      "case": "C06.false-request",
+      "reference": "formal/dialcache-scope-conformance.qnt:settle",
+      "kind": "helper",
+      "scope": "Positive value codes preserve this falsy native value across source settlement, memo publication, and a later memo hit; the value code/native mapping is specified by the profile."
+    },
+    {
+      "case": "C06.false-request",
+      "reference": "formal/dialcache-scope-conformance.qnt:releasePolicy",
+      "kind": "transition",
+      "scope": "Positive value codes preserve this falsy native value across source settlement, memo publication, and a later memo hit; the value code/native mapping is specified by the profile."
+    },
+    {
+      "case": "C06.false-local",
+      "reference": "formal/dialcache-policy-conformance.qnt:resolveLoader",
+      "kind": "transition",
+      "scope": "The source value code is stored without a truthiness test on the native value; later local lookup returns the same code."
+    },
+    {
+      "case": "C06.false-local",
+      "reference": "formal/dialcache-policy-conformance.qnt:settle",
+      "kind": "helper",
+      "scope": "The source value code is stored without a truthiness test on the native value; later local lookup returns the same code."
+    },
+    {
+      "case": "C06.false-local",
+      "reference": "formal/dialcache-policy-conformance.qnt:releasePolicy",
+      "kind": "transition",
+      "scope": "The source value code is stored without a truthiness test on the native value; later local lookup returns the same code."
+    },
+    {
+      "case": "C06.false-remote",
+      "reference": "formal/dialcache-policy-conformance.qnt:resolveLoader",
+      "kind": "transition",
+      "scope": "The source value code is stored remotely; remote lookup uses the sentinel/presence distinction and returns the code after local eviction or bypass."
+    },
+    {
+      "case": "C06.false-remote",
+      "reference": "formal/dialcache-policy-conformance.qnt:settle",
+      "kind": "helper",
+      "scope": "The source value code is stored remotely; remote lookup uses the sentinel/presence distinction and returns the code after local eviction or bypass."
+    },
+    {
+      "case": "C06.false-remote",
+      "reference": "formal/dialcache-policy-conformance.qnt:releasePolicy",
+      "kind": "transition",
+      "scope": "The source value code is stored remotely; remote lookup uses the sentinel/presence distinction and returns the code after local eviction or bypass."
+    },
+    {
+      "case": "C06.zero-request",
+      "reference": "formal/dialcache-scope-conformance.qnt:resolveLoader",
+      "kind": "transition",
+      "scope": "Positive value codes preserve this falsy native value across source settlement, memo publication, and a later memo hit; the value code/native mapping is specified by the profile."
+    },
+    {
+      "case": "C06.zero-request",
+      "reference": "formal/dialcache-scope-conformance.qnt:settle",
+      "kind": "helper",
+      "scope": "Positive value codes preserve this falsy native value across source settlement, memo publication, and a later memo hit; the value code/native mapping is specified by the profile."
+    },
+    {
+      "case": "C06.zero-request",
+      "reference": "formal/dialcache-scope-conformance.qnt:releasePolicy",
+      "kind": "transition",
+      "scope": "Positive value codes preserve this falsy native value across source settlement, memo publication, and a later memo hit; the value code/native mapping is specified by the profile."
+    },
+    {
+      "case": "C06.zero-local",
+      "reference": "formal/dialcache-policy-conformance.qnt:resolveLoader",
+      "kind": "transition",
+      "scope": "The source value code is stored without a truthiness test on the native value; later local lookup returns the same code."
+    },
+    {
+      "case": "C06.zero-local",
+      "reference": "formal/dialcache-policy-conformance.qnt:settle",
+      "kind": "helper",
+      "scope": "The source value code is stored without a truthiness test on the native value; later local lookup returns the same code."
+    },
+    {
+      "case": "C06.zero-local",
+      "reference": "formal/dialcache-policy-conformance.qnt:releasePolicy",
+      "kind": "transition",
+      "scope": "The source value code is stored without a truthiness test on the native value; later local lookup returns the same code."
+    },
+    {
+      "case": "C06.zero-remote",
+      "reference": "formal/dialcache-policy-conformance.qnt:resolveLoader",
+      "kind": "transition",
+      "scope": "The source value code is stored remotely; remote lookup uses the sentinel/presence distinction and returns the code after local eviction or bypass."
+    },
+    {
+      "case": "C06.zero-remote",
+      "reference": "formal/dialcache-policy-conformance.qnt:settle",
+      "kind": "helper",
+      "scope": "The source value code is stored remotely; remote lookup uses the sentinel/presence distinction and returns the code after local eviction or bypass."
+    },
+    {
+      "case": "C06.zero-remote",
+      "reference": "formal/dialcache-policy-conformance.qnt:releasePolicy",
+      "kind": "transition",
+      "scope": "The source value code is stored remotely; remote lookup uses the sentinel/presence distinction and returns the code after local eviction or bypass."
+    },
+    {
+      "case": "C06.empty-string-request",
+      "reference": "formal/dialcache-scope-conformance.qnt:resolveLoader",
+      "kind": "transition",
+      "scope": "Positive value codes preserve this falsy native value across source settlement, memo publication, and a later memo hit; the value code/native mapping is specified by the profile."
+    },
+    {
+      "case": "C06.empty-string-request",
+      "reference": "formal/dialcache-scope-conformance.qnt:settle",
+      "kind": "helper",
+      "scope": "Positive value codes preserve this falsy native value across source settlement, memo publication, and a later memo hit; the value code/native mapping is specified by the profile."
+    },
+    {
+      "case": "C06.empty-string-request",
+      "reference": "formal/dialcache-scope-conformance.qnt:releasePolicy",
+      "kind": "transition",
+      "scope": "Positive value codes preserve this falsy native value across source settlement, memo publication, and a later memo hit; the value code/native mapping is specified by the profile."
+    },
+    {
+      "case": "C06.empty-string-local",
+      "reference": "formal/dialcache-policy-conformance.qnt:resolveLoader",
+      "kind": "transition",
+      "scope": "The source value code is stored without a truthiness test on the native value; later local lookup returns the same code."
+    },
+    {
+      "case": "C06.empty-string-local",
+      "reference": "formal/dialcache-policy-conformance.qnt:settle",
+      "kind": "helper",
+      "scope": "The source value code is stored without a truthiness test on the native value; later local lookup returns the same code."
+    },
+    {
+      "case": "C06.empty-string-local",
+      "reference": "formal/dialcache-policy-conformance.qnt:releasePolicy",
+      "kind": "transition",
+      "scope": "The source value code is stored without a truthiness test on the native value; later local lookup returns the same code."
+    },
+    {
+      "case": "C06.empty-string-remote",
+      "reference": "formal/dialcache-policy-conformance.qnt:resolveLoader",
+      "kind": "transition",
+      "scope": "The source value code is stored remotely; remote lookup uses the sentinel/presence distinction and returns the code after local eviction or bypass."
+    },
+    {
+      "case": "C06.empty-string-remote",
+      "reference": "formal/dialcache-policy-conformance.qnt:settle",
+      "kind": "helper",
+      "scope": "The source value code is stored remotely; remote lookup uses the sentinel/presence distinction and returns the code after local eviction or bypass."
+    },
+    {
+      "case": "C06.empty-string-remote",
+      "reference": "formal/dialcache-policy-conformance.qnt:releasePolicy",
+      "kind": "transition",
+      "scope": "The source value code is stored remotely; remote lookup uses the sentinel/presence distinction and returns the code after local eviction or bypass."
+    },
+    {
+      "case": "C06.absent-remote",
+      "reference": "formal/dialcache-policy-conformance.qnt:resolveLoader",
+      "kind": "transition",
+      "scope": "Explicit absent code remains present in remote storage and reusable; the existing absent regression only probes local reuse."
+    },
+    {
+      "case": "C06.absent-remote",
+      "reference": "formal/dialcache-policy-conformance.qnt:settle",
+      "kind": "helper",
+      "scope": "Explicit absent code remains present in remote storage and reusable; the existing absent regression only probes local reuse."
+    },
+    {
+      "case": "C06.absent-remote",
+      "reference": "formal/dialcache-policy-conformance.qnt:releasePolicy",
+      "kind": "transition",
+      "scope": "Explicit absent code remains present in remote storage and reusable; the existing absent regression only probes local reuse."
+    },
+    {
+      "case": "C07.scope-isolation",
+      "reference": "formal/dialcache-scope-conformance.qnt:holder",
+      "kind": "helper",
+      "scope": "Per-root slots index memo and flight ownership; source settlement updates only its own slot. This bounded profile has two independent root slots."
+    },
+    {
+      "case": "C07.scope-isolation",
+      "reference": "formal/dialcache-scope-conformance.qnt:source",
+      "kind": "helper",
+      "scope": "Per-root slots index memo and flight ownership; source settlement updates only its own slot. This bounded profile has two independent root slots."
+    },
+    {
+      "case": "C07.scope-isolation",
+      "reference": "formal/dialcache-scope-conformance.qnt:releasePolicy",
+      "kind": "transition",
+      "scope": "Per-root slots index memo and flight ownership; source settlement updates only its own slot. This bounded profile has two independent root slots."
+    },
+    {
+      "case": "C07.scope-isolation",
+      "reference": "formal/dialcache-scope-conformance.qnt:settle",
+      "kind": "helper",
+      "scope": "Per-root slots index memo and flight ownership; source settlement updates only its own slot. This bounded profile has two independent root slots."
+    },
+    {
+      "case": "C08.instance-capacity",
+      "reference": "formal/dialcache-layers-conformance.qnt:putLocal",
+      "kind": "helper",
+      "scope": "Instance indexes partition local entries, LRU order, and process flights. Remote storage is intentionally shared, not partitioned by process instance."
+    },
+    {
+      "case": "C08.instance-capacity",
+      "reference": "formal/dialcache-layers-conformance.qnt:start",
+      "kind": "helper",
+      "scope": "Instance indexes partition local entries, LRU order, and process flights. Remote storage is intentionally shared, not partitioned by process instance."
+    },
+    {
+      "case": "C08.instance-capacity",
+      "reference": "formal/dialcache-layers-conformance.qnt:begin",
+      "kind": "helper",
+      "scope": "Instance indexes partition local entries, LRU order, and process flights. Remote storage is intentionally shared, not partitioned by process instance."
+    },
+    {
+      "case": "C08.instance-capacity",
+      "reference": "formal/dialcache-layers-conformance.qnt:settle",
+      "kind": "helper",
+      "scope": "Instance indexes partition local entries, LRU order, and process flights. Remote storage is intentionally shared, not partitioned by process instance."
+    },
+    {
+      "case": "C11.distinct-keys",
+      "reference": "formal/dialcache-policy-conformance.qnt:releasePolicy",
+      "kind": "transition",
+      "scope": "Registration is indexed by key; settlement removes only the matching source ownership and publishes to that source key."
+    },
+    {
+      "case": "C11.distinct-keys",
+      "reference": "formal/dialcache-policy-conformance.qnt:settle",
+      "kind": "helper",
+      "scope": "Registration is indexed by key; settlement removes only the matching source ownership and publishes to that source key."
+    },
+    {
+      "case": "C19.memo-bypass",
+      "reference": "formal/dialcache-scope-conformance.qnt:releasePolicy",
+      "kind": "transition",
+      "scope": "POLICY_NO_REQUEST uses no memo slot; the policy transition leaves stored memo intact for later reenable."
+    },
+    {
+      "case": "C19.memo-bypass",
+      "reference": "formal/dialcache-scope-conformance.qnt:policy",
+      "kind": "transition",
+      "scope": "POLICY_NO_REQUEST uses no memo slot; the policy transition leaves stored memo intact for later reenable."
+    },
+    {
+      "case": "C21.invalid-recovery",
+      "reference": "formal/dialcache-policy-conformance.qnt:retention",
+      "kind": "predicate",
+      "scope": "Invalid optional recovery selects ordinary retention but leaves normal remote TTL/hit traversal active. The existing retention regression does not itself probe a later fresh hit."
+    },
+    {
+      "case": "C21.invalid-recovery",
+      "reference": "formal/dialcache-policy-conformance.qnt:releasePolicy",
+      "kind": "transition",
+      "scope": "Invalid optional recovery selects ordinary retention but leaves normal remote TTL/hit traversal active. The existing retention regression does not itself probe a later fresh hit."
+    },
+    {
+      "case": "C23.instance-read-budget",
+      "reference": "formal/dialcache-effects-conformance.qnt:initial",
+      "kind": "helper",
+      "scope": "Finite fixture modes provide distinct instance/operation/runtime accepted budgets; beginCall captures the read budget. The binding supplies the corresponding precedence inputs; this is not a general policy resolver proof."
+    },
+    {
+      "case": "C23.instance-read-budget",
+      "reference": "formal/dialcache-effects-conformance.qnt:beginCall",
+      "kind": "transition",
+      "scope": "Finite fixture modes provide distinct instance/operation/runtime accepted budgets; beginCall captures the read budget. The binding supplies the corresponding precedence inputs; this is not a general policy resolver proof."
+    },
+    {
+      "case": "C23.operation-read-budget",
+      "reference": "formal/dialcache-effects-conformance.qnt:initial",
+      "kind": "helper",
+      "scope": "Finite fixture modes provide distinct instance/operation/runtime accepted budgets; beginCall captures the read budget. The binding supplies the corresponding precedence inputs; this is not a general policy resolver proof."
+    },
+    {
+      "case": "C23.operation-read-budget",
+      "reference": "formal/dialcache-effects-conformance.qnt:beginCall",
+      "kind": "transition",
+      "scope": "Finite fixture modes provide distinct instance/operation/runtime accepted budgets; beginCall captures the read budget. The binding supplies the corresponding precedence inputs; this is not a general policy resolver proof."
+    },
+    {
+      "case": "C23.runtime-read-budget",
+      "reference": "formal/dialcache-effects-conformance.qnt:initial",
+      "kind": "helper",
+      "scope": "Finite fixture modes provide distinct instance/operation/runtime accepted budgets; beginCall captures the read budget. The binding supplies the corresponding precedence inputs; this is not a general policy resolver proof."
+    },
+    {
+      "case": "C23.runtime-read-budget",
+      "reference": "formal/dialcache-effects-conformance.qnt:beginCall",
+      "kind": "transition",
+      "scope": "Finite fixture modes provide distinct instance/operation/runtime accepted budgets; beginCall captures the read budget. The binding supplies the corresponding precedence inputs; this is not a general policy resolver proof."
+    },
+    {
+      "case": "C30.observer-isolation",
+      "reference": "formal/dialcache-effects-conformance.qnt:observerFault",
+      "kind": "transition",
+      "scope": "Observer-failure fixture changes exporter behavior but no cache/source transition branch. The generated actual-API replay checks consequences; the model does not execute exporter code."
+    },
+    {
+      "case": "C30.observer-isolation",
+      "reference": "formal/dialcache-effects-conformance.qnt:emit",
+      "kind": "helper",
+      "scope": "Observer-failure fixture changes exporter behavior but no cache/source transition branch. The generated actual-API replay checks consequences; the model does not execute exporter code."
+    },
+    {
+      "case": "C30.observer-isolation",
+      "reference": "formal/dialcache-effects-conformance.qnt:settledRead",
+      "kind": "helper",
+      "scope": "Observer-failure fixture changes exporter behavior but no cache/source transition branch. The generated actual-API replay checks consequences; the model does not execute exporter code."
+    },
+    {
+      "case": "C30.observer-isolation",
+      "reference": "formal/dialcache-effects-conformance.qnt:settledSource",
+      "kind": "helper",
+      "scope": "Observer-failure fixture changes exporter behavior but no cache/source transition branch. The generated actual-API replay checks consequences; the model does not execute exporter code."
+    },
+    {
+      "case": "C32.grouped-invalidation",
+      "reference": "formal/dialcache-layers-conformance.qnt:invalidate",
+      "kind": "transition",
+      "scope": "Invalidation chooses an entity watermark; tracked reads index it by key/operations-per-entity, covering two operation variants without fencing the other entity."
+    },
+    {
+      "case": "C32.grouped-invalidation",
+      "reference": "formal/dialcache-layers-conformance.qnt:begin",
+      "kind": "helper",
+      "scope": "Invalidation chooses an entity watermark; tracked reads index it by key/operations-per-entity, covering two operation variants without fencing the other entity."
+    },
+    {
+      "case": "C32.untracked-unaffected",
+      "reference": "formal/dialcache-layers-conformance.qnt:begin",
+      "kind": "helper",
+      "scope": "Untracked reads omit the watermark comparison while retaining ordinary cache presence checks."
+    },
+    {
+      "case": "C34.first-fence",
+      "reference": "formal/dialcache-effects-conformance.qnt:settledSource",
+      "kind": "helper",
+      "scope": "A successful source at wall <= observed fence returns its value without starting serialization."
+    },
+    {
+      "case": "C42.allow-override",
+      "reference": "formal/dialcache-recovery-conformance.qnt:admitted",
+      "kind": "helper",
+      "scope": "Operation classifier replaces inherited instance classifier; an explicit allow admits a valid retained candidate after source error."
+    },
+    {
+      "case": "C42.allow-override",
+      "reference": "formal/dialcache-recovery-conformance.qnt:rejected",
+      "kind": "helper",
+      "scope": "Operation classifier replaces inherited instance classifier; an explicit allow admits a valid retained candidate after source error."
+    },
+    {
+      "case": "C43.coalesced-once",
+      "reference": "formal/dialcache-recovery-conformance.qnt:joined",
+      "kind": "helper",
+      "scope": "Followers attach to the current execution; one source rejection classifies once and starts one candidate decode, whose result completes all pending callers."
+    },
+    {
+      "case": "C43.coalesced-once",
+      "reference": "formal/dialcache-recovery-conformance.qnt:rejected",
+      "kind": "helper",
+      "scope": "Followers attach to the current execution; one source rejection classifies once and starts one candidate decode, whose result completes all pending callers."
+    },
+    {
+      "case": "C43.coalesced-once",
+      "reference": "formal/dialcache-recovery-conformance.qnt:releaseLoad",
+      "kind": "transition",
+      "scope": "Followers attach to the current execution; one source rejection classifies once and starts one candidate decode, whose result completes all pending callers."
+    },
+    {
+      "case": "C49.dark-no-delay",
+      "reference": "formal/dialcache-shadow-conformance.qnt:resolveLoader",
+      "kind": "transition",
+      "scope": "Source settlement completes caller outcomes immediately even when C0 read remains pending; job progression is separate."
+    },
+    {
+      "case": "C49.dark-no-delay",
+      "reference": "formal/dialcache-shadow-conformance.qnt:continueJob",
+      "kind": "helper",
+      "scope": "Source settlement completes caller outcomes immediately even when C0 read remains pending; job progression is separate."
+    },
+    {
+      "case": "C57.future-offset",
+      "reference": "formal/dialcache-effects-conformance.qnt:settledRead",
+      "kind": "helper",
+      "scope": "Only an otherwise readable future frame produces a positive offset, attributed to the remote layer in this profile. Other observing layers and unit conversion require their binding evidence."
+    },
+    {
+      "case": "C57.future-offset",
+      "reference": "formal/dialcache-effects-conformance.qnt:metric",
+      "kind": "helper",
+      "scope": "Only an otherwise readable future frame produces a positive offset, attributed to the remote layer in this profile. Other observing layers and unit conversion require their binding evidence."
+    },
+    {
+      "case": "C58.recovered-failure",
+      "reference": "formal/dialcache-recovery-conformance.qnt:rejected",
+      "kind": "helper",
+      "scope": "A source rejection records its fallback error before deciding whether stale recovery may succeed."
+    },
+    {
+      "case": "C60.logging-default-off",
+      "reference": "formal/dialcache-shadow-conformance.qnt:init",
+      "kind": "transition",
+      "scope": "Omitted-logging fixture starts false, admission captures it, and mismatch warning emission consults the captured flag."
+    },
+    {
+      "case": "C60.logging-default-off",
+      "reference": "formal/dialcache-shadow-conformance.qnt:beginCall",
+      "kind": "transition",
+      "scope": "Omitted-logging fixture starts false, admission captures it, and mismatch warning emission consults the captured flag."
+    },
+    {
+      "case": "C60.logging-default-off",
+      "reference": "formal/dialcache-shadow-conformance.qnt:done",
+      "kind": "helper",
+      "scope": "Omitted-logging fixture starts false, admission captures it, and mismatch warning emission consults the captured flag."
+    },
+    {
+      "case": "C05.participating-publication",
+      "reference": "formal/dialcache-core.qnt:loaderSuccessAfterSemanticMiss",
+      "kind": "transition",
+      "scope": "An untracked semantic miss followed by accepted source and remote publication can fill all participating remote/local/live-request layers; health flags and scope lifetime gate publication."
+    },
+    {
+      "case": "C05.participating-publication",
+      "reference": "formal/dialcache-core.qnt:finishRemotePublication",
+      "kind": "transition",
+      "scope": "An untracked semantic miss followed by accepted source and remote publication can fill all participating remote/local/live-request layers; health flags and scope lifetime gate publication."
+    },
+    {
+      "case": "C05.first-hit",
+      "reference": "formal/dialcache-shadow-validation.qnt:callerEarlierLayerHit",
+      "kind": "transition",
+      "scope": "An earlier-layer hit is excluded from shadow admission; abstract callerPath represents request/local hit, not actual layer traversal."
+    },
+    {
+      "case": "C05.first-hit",
+      "reference": "formal/dialcache-shadow-validation.qnt:admitJob",
+      "kind": "transition",
+      "scope": "An earlier-layer hit is excluded from shadow admission; abstract callerPath represents request/local hit, not actual layer traversal."
+    },
+    {
+      "case": "C09.insertion-age",
+      "reference": "formal/dialcache-policy-conformance.qnt:releasePolicy",
+      "kind": "transition",
+      "scope": "A remote hit stores localExpires=now+current localTTL, independent of remaining remote freshness. Current fixed case remains the explicit narrow boundary evidence."
+    },
+    {
+      "case": "C13.uncoalesced-caching",
+      "reference": "formal/dialcache-policy-conformance.qnt:releasePolicy",
+      "kind": "transition",
+      "scope": "Independent-policy fixture disables registration but still captures publication TTLs and replaces local/remote values on accepted source completion. No independent property asserts general last-writer behavior."
+    },
+    {
+      "case": "C13.uncoalesced-caching",
+      "reference": "formal/dialcache-policy-conformance.qnt:settle",
+      "kind": "helper",
+      "scope": "Independent-policy fixture disables registration but still captures publication TTLs and replaces local/remote values on accepted source completion. No independent property asserts general last-writer behavior."
+    },
+    {
+      "case": "C13.local-last-writer",
+      "reference": "formal/dialcache-policy-conformance.qnt:releasePolicy",
+      "kind": "transition",
+      "scope": "Independent-policy fixture disables registration but still captures publication TTLs and replaces local/remote values on accepted source completion. No independent property asserts general last-writer behavior."
+    },
+    {
+      "case": "C13.local-last-writer",
+      "reference": "formal/dialcache-policy-conformance.qnt:settle",
+      "kind": "helper",
+      "scope": "Independent-policy fixture disables registration but still captures publication TTLs and replaces local/remote values on accepted source completion. No independent property asserts general last-writer behavior."
+    },
+    {
+      "case": "C13.remote-last-writer",
+      "reference": "formal/dialcache-policy-conformance.qnt:releasePolicy",
+      "kind": "transition",
+      "scope": "Independent-policy fixture disables registration but still captures publication TTLs and replaces local/remote values on accepted source completion. No independent property asserts general last-writer behavior."
+    },
+    {
+      "case": "C13.remote-last-writer",
+      "reference": "formal/dialcache-policy-conformance.qnt:settle",
+      "kind": "helper",
+      "scope": "Independent-policy fixture disables registration but still captures publication TTLs and replaces local/remote values on accepted source completion. No independent property asserts general last-writer behavior."
+    },
+    {
+      "case": "C17.disable-keeps-entry",
+      "reference": "formal/dialcache-policy-conformance.qnt:policy",
+      "kind": "transition",
+      "scope": "Changing the overlay does not remove storage; a disabled layer skips serving and can serve its remaining-valid entry after reenable."
+    },
+    {
+      "case": "C17.disable-keeps-entry",
+      "reference": "formal/dialcache-policy-conformance.qnt:releasePolicy",
+      "kind": "transition",
+      "scope": "Changing the overlay does not remove storage; a disabled layer skips serving and can serve its remaining-valid entry after reenable."
+    },
+    {
+      "case": "C20.provider-failure",
+      "reference": "formal/dialcache-policy-conformance.qnt:providerFault",
+      "kind": "transition",
+      "scope": "Provider failure makes both serving TTLs zero and prevents shared registration/publication. It does not model every provider failure representation."
+    },
+    {
+      "case": "C20.provider-failure",
+      "reference": "formal/dialcache-policy-conformance.qnt:localTtl",
+      "kind": "predicate",
+      "scope": "Provider failure makes both serving TTLs zero and prevents shared registration/publication. It does not model every provider failure representation."
+    },
+    {
+      "case": "C20.provider-failure",
+      "reference": "formal/dialcache-policy-conformance.qnt:remoteTtl",
+      "kind": "predicate",
+      "scope": "Provider failure makes both serving TTLs zero and prevents shared registration/publication. It does not model every provider failure representation."
+    },
+    {
+      "case": "C20.provider-failure",
+      "reference": "formal/dialcache-policy-conformance.qnt:releasePolicy",
+      "kind": "transition",
+      "scope": "Provider failure makes both serving TTLs zero and prevents shared registration/publication. It does not model every provider failure representation."
+    },
+    {
+      "case": "C21.invalid-layer",
+      "reference": "formal/dialcache-policy-conformance.qnt:localTtl",
+      "kind": "predicate",
+      "scope": "An invalid local TTL selects zero only for the local layer, preserving valid remote traversal."
+    },
+    {
+      "case": "C21.invalid-layer",
+      "reference": "formal/dialcache-policy-conformance.qnt:remoteTtl",
+      "kind": "predicate",
+      "scope": "An invalid local TTL selects zero only for the local layer, preserving valid remote traversal."
+    },
+    {
+      "case": "C21.invalid-layer",
+      "reference": "formal/dialcache-policy-conformance.qnt:releasePolicy",
+      "kind": "transition",
+      "scope": "An invalid local TTL selects zero only for the local layer, preserving valid remote traversal."
+    },
+    {
+      "case": "C22.freshness-boundary",
+      "reference": "formal/dialcache-policy-conformance.qnt:releasePolicy",
+      "kind": "transition",
+      "scope": "Remote hit requires logical age strictly below captured remote TTL and physical expiry strictly after elapsed now."
+    },
+    {
+      "case": "C22.physical-vs-logical",
+      "reference": "formal/dialcache-policy-conformance.qnt:releasePolicy",
+      "kind": "transition",
+      "scope": "Invocation captures publication TTL/retention; later calls evaluate current logical freshness without rewriting existing physical expiry."
+    },
+    {
+      "case": "C22.physical-vs-logical",
+      "reference": "formal/dialcache-policy-conformance.qnt:settle",
+      "kind": "helper",
+      "scope": "Invocation captures publication TTL/retention; later calls evaluate current logical freshness without rewriting existing physical expiry."
+    },
+    {
+      "case": "C24.follower-source",
+      "reference": "formal/dialcache-coalescing-liveness.qnt:joinFollower",
+      "kind": "transition",
+      "scope": "Joining a running flight increments followers without resetting its source deadline; this model has no independent follower-deadline invariant."
+    },
+    {
+      "case": "C28.untracked-local-publication",
+      "reference": "formal/dialcache-core.qnt:loaderSuccessAfterRemoteFailure",
+      "kind": "transition",
+      "scope": "Untracked source after remote read failure can publish to healthy active local storage without refilling remote."
+    },
+    {
+      "case": "C31.local-only-publication",
+      "reference": "formal/dialcache-core.qnt:loaderSuccessWithoutRemote",
+      "kind": "transition",
+      "scope": "Tracked status alone does not prevent local publication when remote serving did not participate."
+    },
+    {
+      "case": "C31.ramped-down-publication",
+      "reference": "formal/dialcache-core.qnt:skipRemote",
+      "kind": "transition",
+      "scope": "Remote policy exclusion traverses the no-remote source path, preserving eligible local publication for tracked calls."
+    },
+    {
+      "case": "C31.ramped-down-publication",
+      "reference": "formal/dialcache-core.qnt:loaderSuccessWithoutRemote",
+      "kind": "transition",
+      "scope": "Remote policy exclusion traverses the no-remote source path, preserving eligible local publication for tracked calls."
+    },
+    {
+      "case": "C34.write-timestamp",
+      "reference": "formal/dialcache-effects-conformance.qnt:releaseDump",
+      "kind": "transition",
+      "scope": "Native dispatch captures current writer wall clock after serialization; later completion commits that captured timestamp."
+    },
+    {
+      "case": "C34.write-timestamp",
+      "reference": "formal/dialcache-effects-conformance.qnt:releaseWrite",
+      "kind": "transition",
+      "scope": "Native dispatch captures current writer wall clock after serialization; later completion commits that captured timestamp."
+    },
+    {
+      "case": "C40.last-stale",
+      "reference": "formal/dialcache-stale-recovery.qnt:performInitialRead",
+      "kind": "transition",
+      "scope": "Eligibility and both decode checks accept age < M; the model uses integer F=2/M=5 units, not every native millisecond value."
+    },
+    {
+      "case": "C40.last-stale",
+      "reference": "formal/dialcache-stale-recovery.qnt:checkCandidate",
+      "kind": "transition",
+      "scope": "Eligibility and both decode checks accept age < M; the model uses integer F=2/M=5 units, not every native millisecond value."
+    },
+    {
+      "case": "C40.last-stale",
+      "reference": "formal/dialcache-stale-recovery.qnt:candidateLoadSucceeds",
+      "kind": "transition",
+      "scope": "Eligibility and both decode checks accept age < M; the model uses integer F=2/M=5 units, not every native millisecond value."
+    },
+    {
+      "case": "C44.retained-expiry",
+      "reference": "formal/dialcache-stale-recovery.qnt:mutateRedisAfterRetention",
+      "kind": "transition",
+      "scope": "Later storage mutation cannot replace retained candidate bytes; the model does not model Redis expiry timers themselves."
+    },
+    {
+      "case": "C44.retained-expiry",
+      "reference": "formal/dialcache-stale-recovery.qnt:candidateLoadSucceeds",
+      "kind": "transition",
+      "scope": "Later storage mutation cannot replace retained candidate bytes; the model does not model Redis expiry timers themselves."
+    },
+    {
+      "case": "C45.failed-fresh-not-stale",
+      "reference": "formal/dialcache-recovery-conformance.qnt:releaseLoad",
+      "kind": "transition",
+      "scope": "Failed fresh decode starts source with canRecover=false; later source error cannot decode that failed fresh snapshot again."
+    },
+    {
+      "case": "C45.failed-fresh-not-stale",
+      "reference": "formal/dialcache-recovery-conformance.qnt:rejected",
+      "kind": "helper",
+      "scope": "Failed fresh decode starts source with canRecover=false; later source error cannot decode that failed fresh snapshot again."
+    },
+    {
+      "case": "C51.confirmation-age",
+      "reference": "formal/dialcache-shadow-conformance.qnt:releaseRead",
+      "kind": "transition",
+      "scope": "C1 confirmation compares valid unfenced payload bytes without applying C0 freshness or current wall-clock age; no wall-age filter runs on the confirmation branch."
+    },
+    {
+      "case": "C51.confirmation-rollback",
+      "reference": "formal/dialcache-shadow-conformance.qnt:releaseRead",
+      "kind": "transition",
+      "scope": "C1 confirmation compares valid unfenced payload bytes without applying C0 freshness or current wall-clock age; no wall-age filter runs on the confirmation branch."
+    },
+    {
+      "case": "C57.recovery-age",
+      "reference": "formal/dialcache-recovery-conformance.qnt:releaseLoad",
+      "kind": "transition",
+      "scope": "Successful recovery samples retained-frame age after decode; miss/error/fresh decode do not append recovery age."
+    },
+    {
+      "case": "C58.shared-trail",
+      "reference": "formal/dialcache-effects-conformance.qnt:beginCall",
+      "kind": "transition",
+      "scope": "Each follower adds a coalesced event while the single read/source owner records the failure trail; exact native label attribution is checked by replay."
+    },
+    {
+      "case": "C58.shared-trail",
+      "reference": "formal/dialcache-effects-conformance.qnt:settledRead",
+      "kind": "helper",
+      "scope": "Each follower adds a coalesced event while the single read/source owner records the failure trail; exact native label attribution is checked by replay."
+    },
+    {
+      "case": "C58.shared-trail",
+      "reference": "formal/dialcache-effects-conformance.qnt:sourceDone",
+      "kind": "helper",
+      "scope": "Each follower adds a coalesced event while the single read/source owner records the failure trail; exact native label attribution is checked by replay."
+    },
+    {
+      "case": "W04.untracked-decoder",
+      "reference": "formal/dialcache-redis-protocol.qnt:classify",
+      "kind": "helper",
+      "scope": "Untracked classification ignores watermark validity/fence; exact bytes and numeric input boundaries remain protocol vectors."
+    },
+    {
+      "case": "W04.untracked-decoder",
+      "reference": "formal/dialcache-redis-protocol.qnt:decode",
+      "kind": "transition",
+      "scope": "Untracked classification ignores watermark validity/fence; exact bytes and numeric input boundaries remain protocol vectors."
+    }
+  ],
+  "limitations": [
+    "Generated witness reachability and implementation replay are recorded separately. A property reference alone does not establish the witness was reached or that both implementations passed.",
+    "C16.sparse-leaves uses runtimeOverlayIsLeafWise, which calls the same resolve helper as capture; retain its snapshot-consistency claim without presenting it as an independent leaf-merge derivation.",
+    "C54.read-ownership is not linked to timeoutRetainsConfirmationCapacityTest: that model regression exhausts the job deadline, not the separate read deadline specified by this case.",
+    "Weak accounting checks such as policy hitsSkipSource (loaders <= callers), recovery singleReadPerFlight (reads <= callers), and age-sample counts are not treated as proofs of hit traversal, single execution, or sample time.",
+    "No general generated model claim is added for native key/byte/compression/numeric limits, 60000ms default source timeout, unbounded source mode, one-hour tracked cap, or arbitrary backend collector behavior. Fixed/vector/native evidence and explicit model bounds remain relevant."
+  ]
+}

@@ -288,7 +288,7 @@ describe("generated pending-effect conformance", () => {
       const allWitnesses = new Set([...witnesses, ...diagnosticWitnesses]);
       expect(required.effects!.filter(witness => !allWitnesses.has(witness)), "Missing effects witnesses").toEqual([]);
       expect([...seen].sort()).toEqual([...actions].sort());
-      recordWitnesses("effects", allWitnesses, required.effects!, traces.length);
+      recordWitnesses("effects", allWitnesses, required.effects!, traces);
     });
   }
 

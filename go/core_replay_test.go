@@ -224,7 +224,11 @@ type coreDriver struct {
 func newCoreDriver() *coreDriver {
 	d := &coreDriver{clock: &manualClock{wall: 1788868800000}, source: 1, loaders: make(map[string]int64), events: make(chan Event, 64)}
 	d.remote = &memoryRemote{clock: d.clock, values: make(map[string]remoteEntry), watermarks: make(map[string]string)}
-	d.cache = New(Options[int64]{Clock: d.clock, Remote: d.remote, Codec: integerCodec{}, LocalCapacity: 10000, Observe: func(event Event) { d.events <- event }})
+	d.cache = New(Options[int64]{Clock: d.clock, Remote: d.remote, Codec: integerCodec{}, LocalCapacity: 10000, Observe: func(event Event) {
+		if event.Kind == "coalesced" {
+			d.events <- event
+		}
+	}})
 	return d
 }
 func (d *coreDriver) loader(counter string, gate <-chan struct{}, started chan<- struct{}) func(context.Context) (int64, error) {
@@ -427,7 +431,7 @@ func replayCoreWithDriver(steps []coreStep, d *coreDriver) error {
 
 func TestCoreConformance(t *testing.T) {
 	requireRegistry(t)
-	paths := []string{"../conformance-smoke.itf.json"}
+	paths := []string{"../formal/conformance-smoke.itf.json"}
 	file, directory := os.Getenv("DIALCACHE_MBT_TRACE_FILE"), os.Getenv("DIALCACHE_MBT_TRACE_DIR")
 	if file != "" && directory != "" {
 		t.Fatal("select either a trace file or directory")
@@ -475,7 +479,7 @@ func TestCoreConformance(t *testing.T) {
 }
 
 func TestCoreParserAndObservationBoundary(t *testing.T) {
-	raw, err := os.ReadFile("../conformance-smoke.itf.json")
+	raw, err := os.ReadFile("../formal/conformance-smoke.itf.json")
 	if err != nil {
 		t.Fatal(err)
 	}

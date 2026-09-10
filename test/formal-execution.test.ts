@@ -29,7 +29,7 @@ const validate = (value: unknown) => invoke("validateExecution(input)", value);
 
 describe("formal execution schedule", () => {
   it("accounts for all models, selected invariants, regressions, and generated traces without Quint", () => {
-    expect(validate(manifest())).toEqual({ models: 16, libraries: 1, profiles: 9, invariants: 101, regressions: 114, generatedTraces: 4000 });
+    expect(validate(manifest())).toEqual({ models: 16, libraries: 1, profiles: 9, invariants: 104, regressions: 119, generatedTraces: 4000 });
   });
 
   it("rejects omitted models and dropped or renamed regressions", () => {

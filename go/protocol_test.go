@@ -4,15 +4,17 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"math/big"
 	"os"
 	"reflect"
+	"strconv"
 	"testing"
 )
 
 func vectors(t *testing.T) map[string]json.RawMessage {
 	t.Helper()
 	requireRegistry(t)
-	raw, err := os.ReadFile("../protocol-vectors.json")
+	raw, err := os.ReadFile("../formal/protocol-vectors.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,4 +197,160 @@ func TestProtocolCohorts(t *testing.T) {
 		})
 	}
 	t.Logf("rampVectors: %d/%d", len(cases), len(cases))
+}
+
+func TestProtocolRemainingVectors(t *testing.T) {
+	groups := vectors(t)
+	var durations []struct {
+		Name     string
+		Input    float64
+		Expected *int64
+	}
+	if err := json.Unmarshal(groups["durationVectors"], &durations); err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range durations {
+		t.Run(v.Name, func(t *testing.T) {
+			got, err := CeilSupportedCacheTTLMS(v.Input)
+			if v.Expected == nil {
+				if err == nil {
+					t.Fatal("invalid duration accepted")
+				}
+			} else if err != nil || got != *v.Expected {
+				t.Fatalf("got %d %v want %d", got, err, *v.Expected)
+			}
+		})
+	}
+	var stamps []struct {
+		Name  string
+		Input float64
+	}
+	if err := json.Unmarshal(groups["invalidTimestampVectors"], &stamps); err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range stamps {
+		t.Run(v.Name, func(t *testing.T) {
+			if _, err := ValidateTimestampMS(v.Input); err == nil {
+				t.Fatal("invalid timestamp accepted")
+			}
+		})
+	}
+	var normalize []struct {
+		Name                    string
+		Input                   map[string]any
+		UndefinedSentinel       string
+		BigintArgs, SpecialArgs map[string]string
+		Expected                [][2]string
+	}
+	if err := json.Unmarshal(groups["normalizeArgsVectors"], &normalize); err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range normalize {
+		t.Run(v.Name, func(t *testing.T) {
+			for k, x := range v.Input {
+				if v.UndefinedSentinel != "" && x == v.UndefinedSentinel {
+					v.Input[k] = Absent
+				}
+			}
+			for k, s := range v.BigintArgs {
+				n, ok := new(big.Int).SetString(s, 10)
+				if !ok {
+					t.Fatal("invalid bigint fixture")
+				}
+				v.Input[k] = n
+			}
+			for k, s := range v.SpecialArgs {
+				n, err := strconv.ParseFloat(s, 64)
+				if err != nil {
+					t.Fatal(err)
+				}
+				v.Input[k] = n
+			}
+			got, err := NormalizeArgs(v.Input)
+			if err != nil || !reflect.DeepEqual(got, v.Expected) {
+				t.Fatalf("got %#v %v want %#v", got, err, v.Expected)
+			}
+		})
+	}
+	var envelopes []struct{ Name, InputHex, EscapedHex, DecodedHex, Outcome string }
+	if err := json.Unmarshal(groups["envelopeVectors"], &envelopes); err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range envelopes {
+		t.Run(v.Name, func(t *testing.T) {
+			raw := Payload{Bytes: unhex(t, v.InputHex), Binary: true}
+			escaped := EscapeRawPayload(raw)
+			if !bytes.Equal(escaped.Bytes, unhex(t, v.EscapedHex)) {
+				t.Fatal("escape differs")
+			}
+			decoded := DecompressPayload(raw)
+			if decoded.Outcome != v.Outcome || !decoded.Payload.Binary || !bytes.Equal(decoded.Payload.Bytes, unhex(t, v.DecodedHex)) {
+				t.Fatalf("decoded %#v", decoded)
+			}
+			if !bytes.Equal(DecompressPayload(escaped).Payload.Bytes, raw.Bytes) {
+				t.Fatal("escape roundtrip differs")
+			}
+		})
+	}
+	var decodes []struct{ Name, InputHex, PayloadType, PayloadUTF8, PayloadHex string }
+	if err := json.Unmarshal(groups["compressedDecodeVectors"], &decodes); err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range decodes {
+		t.Run(v.Name, func(t *testing.T) {
+			got := DecompressPayload(Payload{Bytes: unhex(t, v.InputHex), Binary: true})
+			want := []byte(v.PayloadUTF8)
+			if v.PayloadType == "binary" {
+				want = unhex(t, v.PayloadHex)
+			}
+			if got.Outcome != "decompressed" || got.Payload.Binary != (v.PayloadType == "binary") || !bytes.Equal(got.Payload.Bytes, want) {
+				t.Fatalf("got %#v want %q", got, want)
+			}
+		})
+	}
+	var writes []struct {
+		Name, PayloadType, PayloadUTF8, PayloadHex, Outcome string
+		ThresholdBytes                                      int
+	}
+	if err := json.Unmarshal(groups["compressionWriteVectors"], &writes); err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range writes {
+		t.Run(v.Name, func(t *testing.T) {
+			raw := Payload{Bytes: []byte(v.PayloadUTF8), Binary: v.PayloadType == "binary"}
+			if raw.Binary {
+				raw.Bytes = unhex(t, v.PayloadHex)
+			}
+			got, err := CompressPayload(raw, CompressionConfig{v.ThresholdBytes, 3})
+			if err != nil || got.Outcome != v.Outcome {
+				t.Fatalf("got %#v %v", got, err)
+			}
+			decoded := DecompressPayload(got.Payload)
+			if decoded.Payload.Binary != raw.Binary || !bytes.Equal(decoded.Payload.Bytes, raw.Bytes) {
+				t.Fatal("compression changed value")
+			}
+			if got.Outcome == "compressed" {
+				if !got.Payload.Binary || got.StoredBytes >= got.OriginalBytes {
+					t.Fatal("compression grew")
+				}
+			} else if !bytes.Equal(got.Payload.Bytes, EscapeRawPayload(raw).Bytes) {
+				t.Fatal("raw representation differs")
+			}
+		})
+	}
+	count := 0
+	for group, raw := range groups {
+		if group == "schemaVersion" {
+			continue
+		}
+		var entries []json.RawMessage
+		if err := json.Unmarshal(raw, &entries); err != nil {
+			t.Fatalf("unknown group %s", group)
+		}
+		count += len(entries)
+	}
+	if count != 134 {
+		t.Fatalf("review protocol vector coverage: got %d expected 134", count)
+	}
+	t.Logf("all protocol groups exercised: %d vectors", count)
 }

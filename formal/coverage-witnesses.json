@@ -120,6 +120,7 @@
     "operation-allow-overrides-instance-denial"
   ],
   "policy": [
+    "local-hit-preserves-insertion-expiry",
     "invalid-read-budget-bypasses-caching",
     "invalid-local-ramp-preserves-remote",
     "invalid-remote-ramp-preserves-local",
@@ -198,7 +199,16 @@
     "mismatch-logging:false",
     "omitted-logging-defaults-off",
     "age-clamped-after-rollback",
-    "age-at-verdict"
+    "age-at-verdict",
+    "fixture:11",
+    "fixture:12",
+    "invalid-logging-compares-without-warning",
+    "source-work-before-deadline-dispatches-read",
+    "source-work-exhausts-deferred-job",
+    "expired-job-source-resolve-keeps-deadline",
+    "expired-job-source-reject-keeps-deadline",
+    "enabled-logging-match-has-no-warning",
+    "enabled-logging-superseded-has-no-warning"
   ],
   "effects": [
     "event:request",

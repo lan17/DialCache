@@ -33,9 +33,14 @@ module dialcache_shadow_conformance {
   pure val FIXTURE_NO_HOOK = 8
   pure val FIXTURE_SLOW_EQUAL = 9
   pure val FIXTURE_SLOW_ERROR = 10
+  pure val FIXTURE_SOURCE_WORK_BEFORE_DEADLINE = 11
+  pure val FIXTURE_SOURCE_WORK_AT_DEADLINE = 12
   pure val SHADOW_ENABLED = 0
   pure val SHADOW_DISABLED = 1
   pure val SHADOW_INVALID = 2
+  pure val LOGGING_DISABLED = 0
+  pure val LOGGING_ENABLED = 1
+  pure val LOGGING_INVALID = 2
   pure val JOB_BUDGET_MS = 10
   pure val WALL_ROLLBACK_MS = 1000
   pure val MAX_CALLS = 8
@@ -53,11 +58,20 @@ module dialcache_shadow_conformance {
   pure val BINARY_UNICODE = 8
   pure val DECODED_UNICODE = 3
 
+  // Shadow profile v2 adds a configuration-error count to its diagnostic
+  // projection. The other profiles retain the shared Diagnostics schema.
+  type ShadowDiagnostics = {
+    configErrors: int, warnings: int, ages: List[int],
+    coalesced: List[str], fallbackErrors: List[str]
+  }
+
   // State: diagnostics, independent source/job lifecycles, and remote bytes.
   type State = {
-    o: Observation, d: Diagnostics,
-    now: int, wall: int, comparator: int, comparisonMs: int,
+    o: Observation, d: ShadowDiagnostics,
+    now: int, wall: int, comparator: int, comparisonMs: int, sourceWorkMs: int,
     hook: bool, shadowActive: bool, defaultLog: bool, log: bool, acceptedLog: bool,
+    invalidShadow: bool, invalidLog: bool, acceptedInvalidLog: bool,
+    mismatchAuthorizations: List[bool],
     c0Created: int, deadline: int, phase: int, source: int,
     sourcePending: bool, sourceValue: int, abandoned: bool,
     frame: int, created: int, watermark: int, c0: int, fence: int, writeStamp: int,
@@ -84,6 +98,9 @@ module dialcache_shadow_conformance {
     val age = if (st.wall < st.c0Created) 0 else st.wall - st.c0Created
     {
       phase: JOB_DONE,
+      mismatchAuthorizations: if (outcome == "mismatch")
+        st.mismatchAuthorizations.append(st.acceptedLog and not(st.acceptedInvalidLog))
+        else st.mismatchAuthorizations,
       o: { shadow: st.o.shadow.append(outcome), ...st.o },
       d: {
         warnings: st.d.warnings + (if (outcome == "mismatch" and st.acceptedLog) 1 else 0),
@@ -105,17 +122,25 @@ module dialcache_shadow_conformance {
   // Input fixtures: default/equal/unequal/error comparator, then the same four
   // with mismatch logging enabled; fixture 8 omits the outcome hook.
   // Fixtures 9/10 let successful/failing comparison consume the job budget.
+  // Fixtures 11/12 consume 9/10 ms of synchronous external source work before
+  // deferred job dispatch. This advances elapsed time without delivering
+  // timers: job admission and eventual caller settlement remain separate.
   // Policy changes are captured at admission.
   action init = {
-    nondet choice = 0.to(FIXTURE_SLOW_ERROR).oneOf()
+    nondet choice = 0.to(FIXTURE_SOURCE_WORK_AT_DEADLINE).oneOf()
     s' = {
-      o: empty, d: noDiagnostics, now: 10000, wall: 100000,
-      comparator: if (choice == FIXTURE_SLOW_ERROR) COMPARE_ERROR else choice % COMPARATOR_COUNT,
-      comparisonMs: if (choice >= FIXTURE_SLOW_EQUAL) JOB_BUDGET_MS else 0,
+      o: empty, d: { configErrors: 0, warnings: 0, ages: List(), coalesced: List(), fallbackErrors: List() },
+      now: 10000, wall: 100000,
+      comparator: if (choice >= FIXTURE_SOURCE_WORK_BEFORE_DEADLINE) COMPARE_DEFAULT
+        else if (choice == FIXTURE_SLOW_ERROR) COMPARE_ERROR else choice % COMPARATOR_COUNT,
+      comparisonMs: if (choice == FIXTURE_SLOW_EQUAL or choice == FIXTURE_SLOW_ERROR) JOB_BUDGET_MS else 0,
+      sourceWorkMs: if (choice == FIXTURE_SOURCE_WORK_AT_DEADLINE) JOB_BUDGET_MS
+        else if (choice == FIXTURE_SOURCE_WORK_BEFORE_DEADLINE) JOB_BUDGET_MS - 1 else 0,
       hook: choice != FIXTURE_NO_HOOK, shadowActive: choice != FIXTURE_NO_HOOK,
       defaultLog: choice >= FIRST_LOGGING_FIXTURE and choice < FIXTURE_NO_HOOK,
       log: choice >= FIRST_LOGGING_FIXTURE and choice < FIXTURE_NO_HOOK,
-      acceptedLog: false, c0Created: 0, deadline: 0,
+      acceptedLog: false, invalidShadow: false, invalidLog: false, acceptedInvalidLog: false,
+      mismatchAuthorizations: List(), c0Created: 0, deadline: 0,
       phase: IDLE, source: SOURCE_NOT_STARTED,
       sourcePending: false, sourceValue: 0, abandoned: false,
       frame: NO_PAYLOAD, created: 0, watermark: 0, c0: NO_PAYLOAD, fence: 0, writeStamp: 0,
@@ -126,14 +151,22 @@ module dialcache_shadow_conformance {
   // Caller source and job admission ------------------------------------------
   action beginCall = all {
     (s.phase == IDLE or s.phase == JOB_DONE), not(s.sourcePending), s.o.calls.length() < MAX_CALLS,
+    val jobExpired = s.shadowActive and s.sourceWorkMs >= JOB_BUDGET_MS
     s' = {
-      phase: if (s.shadowActive) C0_READ else JOB_DONE,
+      now: s.now + s.sourceWorkMs, wall: s.wall + s.sourceWorkMs,
+      phase: if (s.shadowActive and not(jobExpired)) C0_READ else JOB_DONE,
       source: SOURCE_PENDING, sourcePending: true, sourceValue: 0,
-      abandoned: false, deadline: s.now + JOB_BUDGET_MS,
+      abandoned: jobExpired, deadline: s.now + JOB_BUDGET_MS,
       c0: NO_PAYLOAD, c0Created: 0, fence: 0, acceptedLog: s.log,
+      acceptedInvalidLog: s.invalidLog,
+      d: {
+        configErrors: s.d.configErrors + (if (s.invalidShadow or (s.shadowActive and s.invalidLog)) 1 else 0),
+        ...s.d
+      },
       o: {
         calls: s.o.calls.append(CALL_PENDING), loaders: s.o.loaders + 1,
-        reads: s.o.reads + (if (s.shadowActive) 1 else 0), policyCalls: s.o.policyCalls + 1,
+        reads: s.o.reads + (if (s.shadowActive and not(jobExpired)) 1 else 0), policyCalls: s.o.policyCalls + 1,
+        shadow: if (jobExpired) s.o.shadow.append("timeout") else s.o.shadow,
         ...s.o
       },
       ...s
@@ -143,19 +176,26 @@ module dialcache_shadow_conformance {
     nondet choice = Set(VALUE_ONE, VALUE_TWO).oneOf()
     all {
       s.sourcePending,
+      val expired = s.source == SOURCE_TIMED_OUT or s.now >= s.deadline
       s' = continueJob({
         sourcePending: false,
-        source: if (s.source == SOURCE_TIMED_OUT) SOURCE_TIMED_OUT else SOURCE_ACCEPTED, sourceValue: choice,
-        o: if (s.source == SOURCE_TIMED_OUT) s.o else finishPendingCalls(s.o, choice),
+        source: if (expired) SOURCE_TIMED_OUT else SOURCE_ACCEPTED, sourceValue: choice,
+        o: finishPendingCalls(s.o, if (expired) DEADLINE_ERROR else choice),
+        d: {
+          fallbackErrors: if (expired and s.source != SOURCE_TIMED_OUT) s.d.fallbackErrors.append("local")
+            else s.d.fallbackErrors,
+          ...s.d
+        },
         ...s
       })
     }
   }
   action rejectLoader = all {
     s.sourcePending,
+    val expired = s.source == SOURCE_TIMED_OUT or s.now >= s.deadline
     s' = continueJob({
-      sourcePending: false, source: if (s.source == SOURCE_TIMED_OUT) SOURCE_TIMED_OUT else SOURCE_FAILED,
-      o: if (s.source == SOURCE_TIMED_OUT) s.o else finishPendingCalls(s.o, SOURCE_ERROR),
+      sourcePending: false, source: if (expired) SOURCE_TIMED_OUT else SOURCE_FAILED,
+      o: finishPendingCalls(s.o, if (expired) DEADLINE_ERROR else SOURCE_ERROR),
       d: {
         fallbackErrors: if (s.source == SOURCE_TIMED_OUT) s.d.fallbackErrors
           else s.d.fallbackErrors.append("local"),
@@ -223,7 +263,11 @@ module dialcache_shadow_conformance {
 
   // Environmental clocks, storage, policy, and failures -----------------------
   action advance = {
-    nondet choice = Set(1, 10).oneOf()
+    // Work fixtures probe 9/10 ms by source settlement. A later time step is
+    // a full budget, so due source timers are delivered despite the preceding
+    // blocked executor interval; timer ordering inside that interval is out
+    // of this fixture's bounds. Ordinary fixtures retain 1 ms time steps.
+    nondet choice = (if (s.sourceWorkMs > 0) Set(JOB_BUDGET_MS) else Set(1, JOB_BUDGET_MS)).oneOf()
     val expired = s.now + choice >= s.deadline
     val callerTimeout = s.source == SOURCE_PENDING and expired
     val jobTimeout = s.phase > IDLE and s.phase < JOB_DONE and not(s.abandoned) and expired
@@ -244,6 +288,13 @@ module dialcache_shadow_conformance {
   }
   action seed = {
     nondet choice = TEXT_ONE.to(BINARY_UNICODE).oneOf()
+    s' = { frame: choice, created: s.wall, ...s }
+  }
+  // A second external seed choice gives multibyte text/binary identities enough
+  // exploration weight alongside the new blocked-source fixtures. The ordinary
+  // seed action still admits every payload representation.
+  action seedUnicode = {
+    nondet choice = Set(TEXT_UNICODE, BINARY_UNICODE).oneOf()
     s' = { frame: choice, created: s.wall, ...s }
   }
   // External replacement with identical bytes in the other supported form.
@@ -272,11 +323,13 @@ module dialcache_shadow_conformance {
   }
   action rollbackWall = s' = { wall: s.wall - WALL_ROLLBACK_MS, ...s }
   action logPolicy = {
-    nondet choice = Set(0, 1).oneOf()
-    s' = { log: choice == 1, shadowActive: s.hook, ...s }
+    nondet choice = Set(LOGGING_DISABLED, LOGGING_ENABLED, LOGGING_INVALID).oneOf()
+    s' = { log: choice == LOGGING_ENABLED, invalidLog: choice == LOGGING_INVALID,
+      invalidShadow: false, shadowActive: s.hook, ...s }
   }
   def shadowPolicyFor(choice: int): State = {
     shadowActive: s.hook and choice == SHADOW_ENABLED, log: s.defaultLog,
+    invalidShadow: choice == SHADOW_INVALID, invalidLog: false,
     ...s
   }
   action shadowPolicy = {
@@ -300,15 +353,16 @@ module dialcache_shadow_conformance {
     s' = { writeFailed: choice == 1, ...s }
   }
 
-  // Exploration schedule: preserve grouping and order for seeded sampling.
+  // Exploration schedule: retain every progress/environment action.
   // At C1, favor completion and logging changes while retaining every
-  // replacement, failure, clock, and admission-policy transition.
+  // replacement, failure, clock, and admission-policy transition. Unicode seed
+  // choices add exploration frequency, not another payload representation.
   action step = if (s.phase == CONFIRMATION_READ) any {
     releaseRead, logPolicy, reencode,
-    any { seed, invalidate, readFault, advance, rollbackWall, shadowPolicy }
+    any { seed, seedUnicode, invalidate, readFault, advance, rollbackWall, shadowPolicy }
   } else any {
     any { beginCall, resolveLoader, rejectLoader, releaseRead, releaseLoad, releaseDump, releaseWrite },
-    any { advance, seed, invalidate, readFault, loadFault, dumpFault, writeFault, rollbackWall, logPolicy, shadowPolicy }
+    any { advance, seed, seedUnicode, invalidate, readFault, loadFault, dumpFault, writeFault, rollbackWall, logPolicy, shadowPolicy }
   }
 
   // Invariants: independent checks over state and observed history.
@@ -318,6 +372,9 @@ module dialcache_shadow_conformance {
   val missingHookHasNoShadowEffects = s.hook or (s.o.reads == 0 and s.o.loads == 0 and s.o.dumps == 0 and s.o.writes == 0)
   val agesRequireVerdicts = s.d.ages.length() == s.o.shadow.select(x => x == "match" or x == "mismatch").length()
   val warningsRequireMismatch = s.d.warnings <= s.o.shadow.select(x => x == "mismatch").length()
+  val warningsRequireValidCapturedPolicy = s.d.warnings == s.mismatchAuthorizations.select(allowed => allowed).length()
+  val invalidLoggingCannotBeCaptured = not(s.acceptedInvalidLog and s.acceptedLog)
+  val expiredSourceWorkSkipsRedis = s.sourceWorkMs < JOB_BUDGET_MS or s.o.reads == 0
 
   // Deterministic model regressions ------------------------------------------
   // Fixed model regressions anchor the callback and captured-policy contract.
@@ -366,4 +423,27 @@ module dialcache_shadow_conformance {
     .then(s' = { comparator: COMPARE_UNEQUAL, frame: TEXT_ONE, created: s.wall, ...s }).then(releaseLoad)
     .then(s' = { wall: s.wall + 1, created: s.wall + 1000, ...s }).then(releaseRead)
     .expect(s.o.shadow == List("mismatch") and s.d.ages == List(2))
+
+  run invalidLoggingKeepsComparisonWithoutWarningTest = init.then(s' = {
+    hook: true, shadowActive: true, comparator: COMPARE_UNEQUAL, comparisonMs: 0, sourceWorkMs: 0,
+    log: false, invalidLog: true, frame: TEXT_ONE, created: s.wall,
+    ...s
+  }).then(beginCall).expect(s.d.configErrors == 1 and s.o.reads == 1)
+    .then(releaseRead).then(resolveLoader).then(releaseLoad).then(releaseRead)
+    .expect(s.o.shadow == List("mismatch") and s.d.warnings == 0 and s.o.comparisons == 1)
+  run sourceWorkBeforeDeadlineStillReadsTest = init.then(s' = {
+    hook: true, shadowActive: true, sourceWorkMs: JOB_BUDGET_MS - 1, ...s
+  }).then(beginCall).expect(s.o.reads == 1 and s.o.calls == List(CALL_PENDING) and s.o.shadow == List())
+    .then(resolveLoader).expect(s.o.calls.nth(0) == VALUE_ONE or s.o.calls.nth(0) == VALUE_TWO)
+  run sourceWorkAtDeadlineSkipsDeferredReadTest = init.then(s' = {
+    hook: true, shadowActive: true, sourceWorkMs: JOB_BUDGET_MS, ...s
+  }).then(beginCall)
+    .expect(s.o.reads == 0 and s.o.calls == List(CALL_PENDING) and s.o.shadow == List("timeout")
+      and s.d.fallbackErrors == List())
+    .then(resolveLoader)
+    .expect(s.o.calls == List(DEADLINE_ERROR) and s.o.reads == 0 and s.d.fallbackErrors == List("local"))
+  run expiredDeferredJobRetainsSourceRejectionDeadlineTest = init.then(s' = {
+    hook: true, shadowActive: true, sourceWorkMs: JOB_BUDGET_MS, ...s
+  }).then(beginCall).then(rejectLoader)
+    .expect(s.o.calls == List(DEADLINE_ERROR) and s.o.shadow == List("timeout") and s.o.reads == 0)
 }

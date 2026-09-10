@@ -101,6 +101,7 @@
       "after": "this.recordError(key, CacheLayer.REMOTE, \"config_resolution\");\n      return true;\n    }\n    return configuredLogMismatches;",
       "requiredDetections": [
         "ordinary",
+        "generated",
         "portable"
       ]
     },
@@ -139,6 +140,7 @@
       "after": "ttlResolution: 0,\n            updateAgeOnGet: true,",
       "requiredDetections": [
         "ordinary",
+        "generated",
         "portable"
       ]
     },
@@ -162,6 +164,7 @@
       "after": "        try {\n          let shadowFillConfig:",
       "requiredDetections": [
         "ordinary",
+        "generated",
         "portable"
       ]
     }

@@ -3,7 +3,7 @@
   "sources": [
     {
       "path": "README.md",
-      "sha256": "ea557ca4be7b4a0d81b833fe04bb7b9f11b420872d388e87b91e9554f0cc8346",
+      "sha256": "3f2805199cf7f156ef3abe294a404e44d96a00252c37d04c24a5f0fa5f71c245",
       "entries": [
         {"line":1,"title":"DialCache","contracts":["B01"]},
         {"line":24,"title":"Install","contracts":["B01"]},

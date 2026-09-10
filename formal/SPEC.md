@@ -1,8 +1,11 @@
 # DialCache behavioral specification
 
 Specification revision **0.1.0 (experimental)**. The repository commit identifies
-the exact normative text, profile definitions, models, and evidence used in a
-conformance report. This document defines behavior; [`CONTRACTS.md`](./CONTRACTS.md)
+the exact Quint definitions, profile definitions, and evidence used in a
+conformance report. **Quint is the source of truth for portable behavior.**
+The models registered in [`execution.json`](./execution.json) define transitions
+and independently checked properties; this document explains their contracts,
+assumptions, and encoding boundaries. [`CONTRACTS.md`](./CONTRACTS.md)
 assigns stable obligation IDs and indexes its evidence. [`PROTOCOL.md`](./PROTOCOL.md)
 defines malformed-text compatibility, and the protocol vectors and existing
 Redis/key documentation define wire representation. [`BEHAVIOR.md`](./BEHAVIOR.md)
@@ -28,10 +31,15 @@ caller results, publication authority, scope ownership, or required ordering
 within its declared profile. A test schedule may select one permitted order;
 that selection is not a universal ordering requirement between unrelated calls.
 
-The models are checked abstractions of these requirements. Neither a model nor
-the current TypeScript implementation silently overrides a contradictory rule.
-A disagreement must be resolved explicitly by correcting the specification,
-model, implementation, or profile and retaining a distinguishing regression.
+The models have explicit finite bounds; they do not define every native API or
+wire transformation. Protocol vectors and native tests cover those boundaries.
+For a portable behavior change, update Quint first, retain an independent
+property and a required generated witness, then replay the same histories in
+TypeScript and Go. Prose and implementation must follow that reviewed contract.
+A discovered disagreement is resolved explicitly in Quint with a distinguishing
+regression; existing implementation behavior is evidence to investigate, not an
+alternative oracle. Case-ledger gaps remain visible until their behavior has
+been modeled and checked.
 
 ## State and environmental inputs
 
@@ -218,14 +226,20 @@ and binding responsibilities.
 A report identifies specification revision, implementation revision, supported
 profiles and vector groups, tool versions, seed, bounds, and exact corpus. It
 must list unsupported features. [`profiles.json`](./profiles.json) registers the
-profile formats and the bounded Go reference's intended claims. Go core replay
-does not establish effects/recovery/shadow conformance or real Redis integration.
+profile formats and both implementations' declared coverage. Go checks all
+nine profiles and protocol vectors, with separate real Redis/Valkey/Cluster
+interoperability evidence. A claim requires those current-revision checks;
+passing one profile does not imply the others.
 
 The source-deadline verification model and the actual-effects history monitor
 check selected C23/C25/C26 properties: source-relative duration and full budget,
 strictly pre-deadline success acceptance, and publication requiring a preceding
-accepted success. Both have negative checks. The monitor does not assign writes
-to source identities, so full late-source isolation still relies on replay's
-actual outcomes/effect counts and distinguishing histories. Pending prefixes
+accepted success. A second monitor in both drivers associates each dispatched
+write with its actual source callback and invocation context, then requires
+that exact source to have succeeded before its own deadline. It reads no
+expected model state. Negative checks distinguish a late source, another
+invocation's source, and valid publication after an accepted source's deadline.
+This necessary condition does not prove payload provenance, refill fences, or
+all publication authority; those have their own replay observations. Pending prefixes
 are allowed and establish no eventual completion. This is a bounded checked
 connection, not a full refinement proof for all verification and replay models.

@@ -42,7 +42,7 @@ func validateRegistry(raw []byte) error {
 }
 func requireRegistry(t *testing.T) {
 	t.Helper()
-	raw, err := os.ReadFile("../profiles.json")
+	raw, err := os.ReadFile("../formal/profiles.json")
 	if err != nil {
 		t.Fatal(err)
 	}

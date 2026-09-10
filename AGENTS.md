@@ -2,7 +2,7 @@
 
 ## Project overview
 
-DialCache is a TypeScript caching library with explicit request-scoped enablement, local and Redis layers, runtime rollout controls, request coalescing, targeted invalidation, and adapter-based observability.
+DialCache has TypeScript and Go implementations with explicit request-scoped enablement, local and Redis layers, runtime rollout controls, request coalescing, targeted invalidation, and adapter-based observability.
 
 ## Structure
 
@@ -26,6 +26,8 @@ src/
   serializer.ts         # Serializer contract and JSON implementation
   internal/             # Cache layers, runtime config, payload compression, and invalidation Lua script
 test/                   # Unit and Redis integration tests
+go/                     # Go module, public cache and adapters, shared-corpus replay
+formal/                 # Quint behavioral source of truth, contracts and portable vectors
 ```
 
 ## Critical behavior
@@ -57,6 +59,9 @@ test/                   # Unit and Redis integration tests
 - For formal specification changes, follow `formal/AUTHORING.md`: keep models
   readable as behavior definitions, share helpers with identical meaning, retain
   independent property checks, and register executable evidence in the catalogs.
+- Define portable behavior in Quint first. Require consequential generated
+  witnesses and replay the same histories in TypeScript and Go; keep native
+  API, wire and integration tests for their explicit boundaries.
 
 ## Validation
 
@@ -67,4 +72,6 @@ corepack pnpm test
 corepack pnpm build
 corepack pnpm test:package
 corepack pnpm test:integration
+go -C go test -race ./...
+go -C go test -race -tags integration -run '^TestRedisIntegration$' ./...
 ```

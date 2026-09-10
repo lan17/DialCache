@@ -3,6 +3,9 @@
 The Quint files should let a reader understand a behavior without translating
 the TypeScript implementation. Readability is part of the specification's
 acceptance criteria. Executable checks then challenge that written behavior.
+Quint is the behavioral source of truth for both TypeScript and Go. The prose
+explains it; implementation tests must not become an independent, drifting
+definition of the same portable rule.
 
 ## Reading a model
 
@@ -93,17 +96,21 @@ For each new rule or interaction:
 3. **Challenge the rule.** Add an independently stated invariant or regression,
    and a representative fault when it adds useful evidence. Merely declaring a
    property is insufficient: schedule it in `execution.json`.
-4. **Exercise the implementation.** Add a portable scenario/vector or generated
-   witness. The driver supplies only external inputs and asserts actual public
+4. **Exercise both implementations.** Require a generated witness that exposes
+   the rule's consequence, and replay the same Quint histories in TypeScript and
+   Go. Fixed scenarios preserve narrow regressions; protocol vectors and native
+   tests cover wire and language boundaries. The driver supplies only external inputs and asserts actual public
    results/effects. Expected model state must never drive the implementation.
 5. **Account for the evidence.** Link the case, property, scenario, and required
    witness in the existing catalogs. Preserve explicit gaps and update profile
    claims only after the corresponding language driver passes.
 
-This is also the route for expanding Go: choose the next bounded profile, add
-the missing behavior and its environment controls, then replay the shared
-corpus. A readable model and TypeScript replay do not by themselves establish
-Go conformance. The current Go claim remains core-only.
+Both implementations now replay all nine profiles. To expand their generated
+scope, model the next bounded interaction and its environment controls, then
+replay the same corpus in both languages. A readable model and TypeScript
+replay do not by themselves establish Go conformance; the Go completion gate
+also requires every scheduled profile, fixed case, protocol case, and witness
+gate to finish successfully.
 
 ## Refactoring and execution
 

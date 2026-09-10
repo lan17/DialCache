@@ -10,7 +10,7 @@ import { recordWitnesses } from "./formal/coverage-evidence.js";
 
 type Projected = Omit<Observation, "calls"> & { calls: number[] };
 type Action = { choices?: readonly number[]; input: (choice: number, observed: Observation) => Input };
-interface Profile { readIO?: boolean; diagnosticAge?: "shadowAge" | "recoveryAge" | "none"; fixture: Fixture | ((choice: number) => Fixture); initChoices?: readonly number[]; setup: Input[]; actions: Record<string, Action> }
+interface Profile { readIO?: boolean; diagnosticConfigErrors?: boolean; diagnosticAge?: "shadowAge" | "recoveryAge" | "none"; fixture: Fixture | ((choice: number) => Fixture); initChoices?: readonly number[]; setup: Input[]; actions: Record<string, Action> }
 const settle = (op: "resolve" | "reject"): Action => ({
   ...(op === "resolve" ? { choices: [1, 2] } : {}),
   input: (choice, o) => op === "resolve" ? { op, loader: o.loaders - 1, value: choice } : { op, loader: o.loaders - 1 },
@@ -160,32 +160,34 @@ const profiles: Record<string, Profile> = {
       rejectLoader: { choices: Array.from({ length: 12 }, (_, i) => i), input: (choice) => ({ op: "reject", loader: choice }) },
       seed: { choices: [0, 1, 2, 3], input: (choice) => ({ op: "seed", key: String(Math.floor(choice / 2)), value: choice % 2 + 1, ttlMs: 5000 }) },
       policy: { choices: policyOverlays.map((_, i) => i), input: (choice) => ({ op: "policy", value: policyOverlays[choice]! }) },
-      advance: advance([1, 1000, 2000, 5000]), rollbackWall: { input: () => ({ op: "shiftWall", ms: -1000 }) }, providerFault: fault("policy"),
+      advance: advance([1, 500, 1000, 2000, 5000]), rollbackWall: { input: () => ({ op: "shiftWall", ms: -1000 }) }, providerFault: fault("policy"),
       readFault: fault("read"), dumpFault: fault("dump"), writeFault: fault("write"),
     },
   },
   shadow: {
-    diagnosticAge: "shadowAge", initChoices: Array.from({ length: 11 }, (_, i) => i),
+    diagnosticAge: "shadowAge", diagnosticConfigErrors: true, initChoices: Array.from({ length: 13 }, (_, i) => i),
     fixture: (choice) => ({ policy: { ttlSec: { remote: 60 }, ramp: { remote: 0 },
       shadow: { ramp: 100, ...(choice < 4 || choice >= 8 ? {} : { logMismatches: true }) } }, tracked: true, shadowHook: choice !== 8,
-      ...(choice % 4 === 0 ? {} : { comparator: (["equal", "unequal", "error"] as const)[choice === 10 ? 2 : choice % 4 - 1]! }),
-      ...(choice >= 9 ? { comparisonMs: 10 } : {}),
+      ...(choice % 4 === 0 || choice >= 11 ? {} : { comparator: (["equal", "unequal", "error"] as const)[choice === 10 ? 2 : choice % 4 - 1]! }),
+      ...(choice === 9 || choice === 10 ? { comparisonMs: 10 } : {}),
+      ...(choice >= 11 ? { sourceWorkMs: choice === 11 ? 9 : 10 } : {}),
       observe: ["shadowAge", "mismatchWarning", "coalesced", "error"] }),
     setup: [{ op: "faults", value: { holdReads: true, holdLoads: true, holdDumps: true, holdWrites: true } }],
     actions: {
       beginCall: { input: () => ({ op: "begin" }) }, resolveLoader: settle("resolve"), rejectLoader: settle("reject"),
       releaseRead: release("read"), releaseLoad: release("load"), releaseDump: release("dump"), releaseWrite: release("write"),
       advance: advance([1, 10]), seed: shadowSeed, reencode: shadowSeed,
+      seedUnicode: { ...shadowSeed, choices: [7, 8] },
       invalidate: { choices: [0, 20], input: (choice) => ({ op: "invalidate", futureBufferMs: choice }) },
       readFault: fault("read"), loadFault: fault("load"), dumpFault: fault("dump"), writeFault: fault("write"),
       rollbackWall: { input: () => ({ op: "shiftWall", ms: -1000 }) },
       shadowPolicy: { choices: [0, 1, 2], input: (choice) => ({ op: "policy", value: { shadow: { ramp: [100, 0, 101][choice]! } } }) },
-      logPolicy: { choices: [0, 1], input: (choice) => ({ op: "policy", value: { shadow: { logMismatches: choice === 1 } } }) },
+      logPolicy: { choices: [0, 1, 2], input: (choice) => ({ op: "policy", value: { shadow: { logMismatches: choice === 2 ? "invalid" as unknown as boolean : choice === 1 } } }) },
     },
   },
 };
 
-interface Diagnostics { warnings: number; ages: number[]; coalesced: string[]; fallbackErrors: string[] }
+interface Diagnostics { warnings: number; ages: number[]; coalesced: string[]; fallbackErrors: string[]; configErrors?: number }
 interface ReadIO { budgets: number[]; aborted: number[]; sourceErrors: number[] }
 interface Step { io?: ReadIO; action: string; choice: number; expected: Projected; diagnostics?: Diagnostics }
 interface Trace { path: string; steps: Step[] }
@@ -209,14 +211,14 @@ function observation(raw: unknown, context: string): Projected {
   }));
   return result as Projected;
 }
-function diagnostics(raw: unknown, context: string): Diagnostics {
+function diagnostics(raw: unknown, context: string, configErrors = false): Diagnostics {
   const value = record(raw, context);
-  if (Object.keys(value).sort().join() !== "ages,coalesced,fallbackErrors,warnings" || !Array.isArray(value.ages)) throw new Error(`${context}: invalid diagnostics`);
+  if (Object.keys(value).sort().join() !== (configErrors ? "ages,coalesced,configErrors,fallbackErrors,warnings" : "ages,coalesced,fallbackErrors,warnings") || !Array.isArray(value.ages)) throw new Error(`${context}: invalid diagnostics`);
   const labels = (items: unknown, allowed: string[]): string[] => {
     if (!Array.isArray(items) || items.some(item => typeof item !== "string" || !allowed.includes(item))) throw new Error(`${context}: invalid diagnostic labels`);
     return items as string[];
   };
-  return { warnings: itfInteger(value.warnings, context), ages: value.ages.map(age => itfInteger(age, context) / 1000),
+  return { ...(configErrors ? { configErrors: itfInteger(value.configErrors, context) } : {}), warnings: itfInteger(value.warnings, context), ages: value.ages.map(age => itfInteger(age, context) / 1000),
     coalesced: labels(value.coalesced, ["process", "request_local"]), fallbackErrors: labels(value.fallbackErrors, ["noop", "local", "remote", "request_local"]) };
 }
 function readIO(raw: unknown, context: string): ReadIO {
@@ -252,7 +254,7 @@ function parseTrace(raw: unknown, path: string, profile: Profile): Trace {
     }
     return { action, choice, expected: observation(record(state.s, context).o, context),
       ...(profile.readIO ? { io: readIO(record(state.s, context).io, context) } : {}),
-      ...(profile.diagnosticAge === undefined ? {} : { diagnostics: diagnostics(record(state.s, context).d, context) }) };
+      ...(profile.diagnosticAge === undefined ? {} : { diagnostics: diagnostics(record(state.s, context).d, context, profile.diagnosticConfigErrors) }) };
   }) };
 }
 function valueCode(value: Observation["calls"][number] & { status: "value" }): number {
@@ -296,13 +298,18 @@ function projectObservation(profile: Profile, observed: Observation) {
   const { events, ...base } = observed;
   if (events === undefined) throw new Error("Missing actual diagnostic observations");
   const ages: number[] = [];
-  let warnings = 0;
+  let warnings = 0, configErrors = 0;
   const coalesced: string[] = [], fallbackErrors: string[] = [];
   const outcomes = profile.diagnosticAge === "shadowAge" ? observed.shadow.filter(x => x === "match" || x === "mismatch")
     : observed.recovery.filter(x => x === "served");
   for (const event of events) {
     // This profile selects source failures; other error trails are specified
     // by effects. Maintenance errors deliberately carry another use case.
+    if (profile.diagnosticConfigErrors && event.event === "error" && event.error === "config_resolution") {
+      expect(event).toMatchObject({ cacheNamespace: "urn", useCase: "Behavior", keyType: "id", layer: "remote", inFallback: false });
+      configErrors++;
+      continue;
+    }
     if (event.event === "error" && event.error !== "fallback") continue;
     expect(event).toMatchObject({ cacheNamespace: "urn", useCase: "Behavior", keyType: "id" });
     if (event.event === "coalesced") {
@@ -324,7 +331,7 @@ function projectObservation(profile: Profile, observed: Observation) {
       ages.push(event.seconds);
     }
   }
-  return { o: project(base), d: { warnings, ages, coalesced, fallbackErrors } };
+  return { o: project(base), d: { warnings, ages, coalesced, fallbackErrors, ...(profile.diagnosticConfigErrors ? { configErrors } : {}) } };
 }
 async function replay(profile: Profile, trace: Trace) {
   const driver = new BehaviorDriver(typeof profile.fixture === "function" ? profile.fixture(trace.steps[0]!.choice) : profile.fixture);
@@ -647,6 +654,7 @@ function clockWitnesses(name: "policy" | "recovery", traces: Trace[]): Set<strin
   for (const trace of traces) {
     const states = (JSON.parse(readFileSync(trace.path, "utf8")).states as unknown[]).map(state => record(record(state, trace.path).s, trace.path));
     let rolledLocal: { key: number; expires: number } | undefined;
+    let hitBeforeExpiry: { key: number; value: number; expires: number; at: number } | undefined;
     let rolled = false;
     const integer = (value: unknown) => itfInteger(value, trace.path);
     for (const [i, step] of trace.steps.entries()) {
@@ -661,6 +669,15 @@ function clockWitnesses(name: "policy" | "recovery", traces: Trace[]): Set<strin
       if (name === "policy" && step.action === "releasePolicy") {
         const key = integer(before.key), overlay = integer(before.overlay), base = overlay < 20 ? overlay % 10 : 0;
         const local = before.providerFailed === false && ![20, 21].includes(overlay) && ![3, 5, 8].includes(base);
+        const now = integer(before.now), expires = integer(before.localExpires), value = integer(before.localValue);
+        const sameEntry = local && integer(before.localKey) === key && value > 0;
+        // The probe occurs after the original expiry but before even the shortest
+        // permitted TTL could expire if the preceding read had renewed it.
+        if (sameEntry && hitBeforeExpiry?.key === key && hitBeforeExpiry.value === value &&
+          hitBeforeExpiry.expires === expires && now >= expires && now < hitBeforeExpiry.at + 1000 &&
+          (o.reads > previous.reads || o.loaders > previous.loaders)) seen.add("local-hit-preserves-insertion-expiry");
+        if (sameEntry && now < expires && o.calls[integer(before.policyCall)]! > 0 &&
+          o.reads === previous.reads && o.loaders === previous.loaders) hitBeforeExpiry = { key, value, expires, at: now };
         if (local && rolledLocal?.key === key && integer(before.localKey) === key && integer(before.localExpires) === rolledLocal.expires) {
           const result = o.calls[integer(before.policyCall)]!;
           if (integer(before.now) < rolledLocal.expires && result > 0 && o.reads === previous.reads && o.loaders === previous.loaders) seen.add("rollback-preserves-live-local");
@@ -848,6 +865,8 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
     let sawShadowPolicy = false, acceptedDefaultLogging = false;
     let shadowPolicy = 0, jobAdmitted = false, changedAdmittedJob = false;
     let acceptedLogging = false;
+    let acceptedInvalidLogging = false;
+    let invalidLoggingReportedAtAdmission = false;
     // Model-private values classify reached comparison schedules only; replay
     // above has already compared public callbacks/results independently.
     const shadowStates = name === "shadow" ? (JSON.parse(readFileSync(trace.path, "utf8")).states as unknown[])
@@ -919,8 +938,18 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
       if (name === "shadow") {
         if (step.action === "beginCall") {
           acceptedLogging = logging; wallRolledAfterC0 = false;
+          acceptedInvalidLogging = shadowStates[i - 1]!.invalidLog === true;
+          invalidLoggingReportedAtAdmission = step.diagnostics!.configErrors === trace.steps[i - 1]!.diagnostics!.configErrors! + 1;
           acceptedDefaultLogging = !defaultLogging && !sawShadowPolicy;
           jobAdmitted = o.reads > previous.reads; changedAdmittedJob = false;
+          if (trace.steps[0]!.choice === 11 && jobAdmitted && o.calls.at(-1) === 0 && o.shadow.length === previous.shadow.length) {
+            seen.add("source-work-before-deadline-dispatches-read");
+          }
+          if (trace.steps[0]!.choice === 12 && o.reads === previous.reads && o.calls.at(-1) === 0 &&
+            o.shadow.length === previous.shadow.length + 1 && o.shadow.at(-1) === "timeout" &&
+            step.diagnostics!.fallbackErrors.length === trace.steps[i - 1]!.diagnostics!.fallbackErrors.length) {
+            seen.add("source-work-exhausts-deferred-job");
+          }
           if (!jobAdmitted && o.loaders > previous.loaders) {
             if (trace.steps[0]!.choice === 8) seen.add("missing-hook-skips-job");
             else if (shadowPolicy > 0) seen.add(`shadow-policy-skips-job:${shadowPolicy}`);
@@ -933,6 +962,12 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
           if (jobAdmitted && step.choice > 0) changedAdmittedJob = true;
         }
         if (step.action === "rollbackWall" && c0Released) wallRolledAfterC0 = true;
+        if (trace.steps[0]!.choice === 12 && ["resolveLoader", "rejectLoader"].includes(step.action) &&
+          previous.calls.at(-1) === 0 && o.calls.at(-1) === 4 && o.reads === previous.reads &&
+          o.shadow.length === previous.shadow.length && step.diagnostics!.fallbackErrors.length === trace.steps[i - 1]!.diagnostics!.fallbackErrors.length + 1 &&
+          step.diagnostics!.fallbackErrors.at(-1) === "local") {
+          seen.add(step.action === "resolveLoader" ? "expired-job-source-resolve-keeps-deadline" : "expired-job-source-reject-keeps-deadline");
+        }
         if (o.shadow.length > previous.shadow.length) {
           const outcome = o.shadow.at(-1);
           if (changedAdmittedJob && shadowPolicy > 0 && ["match", "mismatch", "filled"].includes(outcome!)) seen.add("admitted-job-keeps-shadow-policy");
@@ -953,6 +988,12 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
           if (outcome === "mismatch" && acceptedLogging !== logging) seen.add(`captured-logging:${acceptedLogging}`);
           if (outcome === "mismatch") seen.add(`mismatch-logging:${acceptedLogging}`);
           if (outcome === "mismatch" && acceptedDefaultLogging && step.diagnostics!.warnings === trace.steps[i - 1]!.diagnostics!.warnings) seen.add("omitted-logging-defaults-off");
+          if (outcome === "mismatch" && acceptedInvalidLogging && invalidLoggingReportedAtAdmission &&
+            step.diagnostics!.warnings === trace.steps[i - 1]!.diagnostics!.warnings) seen.add("invalid-logging-compares-without-warning");
+          if (acceptedLogging && step.diagnostics!.warnings === trace.steps[i - 1]!.diagnostics!.warnings) {
+            if (outcome === "match") seen.add("enabled-logging-match-has-no-warning");
+            if (outcome === "superseded") seen.add("enabled-logging-superseded-has-no-warning");
+          }
           if (step.diagnostics!.ages.length > trace.steps[i - 1]!.diagnostics!.ages.length) {
             if (wallRolledAfterC0 && step.diagnostics!.ages.at(-1) === 0) seen.add("age-clamped-after-rollback");
             if (step.diagnostics!.ages.at(-1)! > 0) seen.add("age-at-verdict");
@@ -990,7 +1031,7 @@ for (const [name, profile] of Object.entries(profiles)) {
       const seen = witnesses(name, traces);
       const wanted = Object.keys(profile.actions).map((action) => `action:${action}`).concat(required[name]!);
       expect(wanted.filter((witness) => !seen.has(witness)), `Missing ${name} coverage witnesses`).toEqual([]);
-      recordWitnesses(name, seen, required[name]!, traces.length);
+      recordWitnesses(name, seen, required[name]!, traces);
     });
     if (traces.length > 0) {
       it("rejects missing observations, unknown actions and invalid choices", () => {

@@ -255,7 +255,8 @@
         "independentCompletionKeepsRegisteredLeaderTest",
         "independentFailureKeepsRegisteredLeaderTest",
         "eachSourceKeepsPublicationPolicyTest",
-        "absentValueIsStoredAndReusedTest"
+        "absentValueIsStoredAndReusedTest",
+        "localHitDoesNotRenewInsertionTtlTest"
       ],
       "profile": "policy",
       "generate": {
@@ -273,7 +274,10 @@
         "writesHaveRetention",
         "agesRequireVerdicts",
         "warningsRequireMismatch",
-        "missingHookHasNoShadowEffects"
+        "missingHookHasNoShadowEffects",
+        "warningsRequireValidCapturedPolicy",
+        "invalidLoggingCannotBeCaptured",
+        "expiredSourceWorkSkipsRedis"
       ],
       "regressions": [
         "identicalTextAndBinaryBytesConfirmMismatchTest",
@@ -289,7 +293,11 @@
         "comparisonFailureKeepsCallerTest",
         "acceptedLoggingSurvivesPolicyChangeTest",
         "ageClampsAfterWallRollbackTest",
-        "confirmationKeepsOriginalAgeTest"
+        "confirmationKeepsOriginalAgeTest",
+        "invalidLoggingKeepsComparisonWithoutWarningTest",
+        "sourceWorkBeforeDeadlineStillReadsTest",
+        "sourceWorkAtDeadlineSkipsDeferredReadTest",
+        "expiredDeferredJobRetainsSourceRejectionDeadlineTest"
       ],
       "profile": "shadow",
       "generate": {
