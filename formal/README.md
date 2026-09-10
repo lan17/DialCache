@@ -89,7 +89,7 @@ bash formal/generate-traces.sh
 DIALCACHE_MBT_TRACE_DIR=.formal-traces/conformance \
 DIALCACHE_EFFECTS_TRACE_DIR=.formal-traces/effects \
 DIALCACHE_FEATURE_TRACE_DIR=.formal-traces/features \
-DIALCACHE_WITNESS_EVIDENCE_DIR=.formal-traces/go-parity-witnesses \
+DIALCACHE_COVERAGE_EVIDENCE_DIR=.formal-traces/go-parity-witnesses \
   corepack pnpm exec vitest run test/formal-conformance.test.ts test/formal-effects.test.ts \
   test/formal-features.test.ts test/formal-behavior.test.ts test/formal-protocol-vectors.test.ts --coverage.enabled=false
 node formal/measure-semantics.mjs

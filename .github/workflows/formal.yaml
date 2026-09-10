@@ -49,7 +49,7 @@ jobs:
           DIALCACHE_MBT_TRACE_DIR: .formal-traces/conformance
           DIALCACHE_EFFECTS_TRACE_DIR: .formal-traces/effects
           DIALCACHE_FEATURE_TRACE_DIR: .formal-traces/features
-          DIALCACHE_WITNESS_EVIDENCE_DIR: .formal-traces/go-parity-witnesses
+          DIALCACHE_COVERAGE_EVIDENCE_DIR: .formal-traces/go-parity-witnesses
         run: pnpm exec vitest run test/formal-conformance.test.ts test/formal-effects.test.ts test/formal-features.test.ts test/formal-behavior.test.ts test/formal-protocol-vectors.test.ts --coverage.enabled=false
       - name: Measure semantic cases and retain behavioral fault detection
         run: node formal/measure-semantics.mjs
@@ -97,7 +97,9 @@ jobs:
           DIALCACHE_EFFECTS_TRACE_DIR: ${{ github.workspace }}/.formal-traces/effects
           DIALCACHE_FEATURE_TRACE_DIR: ${{ github.workspace }}/.formal-traces/features
           DIALCACHE_WITNESS_EVIDENCE_DIR: ${{ github.workspace }}/.formal-traces/go-parity-witnesses
-        run: go -C go test -race -count=1 -json ./... | tee .formal-traces/go-replay.jsonl
+        run: |
+          go -C go test -count=1 -run '^TestGeneratedWitnessEvidence$' ./...
+          go -C go test -race -count=1 -json ./... | tee .formal-traces/go-replay.jsonl
       - name: Require complete generated, fixed, protocol and witness replay
         run: node formal/check-go-replay.mjs > .formal-traces/go-replay-summary.json
       - name: Check Redis, Valkey, Cluster and TypeScript interoperability
