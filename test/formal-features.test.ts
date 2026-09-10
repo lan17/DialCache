@@ -7,6 +7,8 @@ import { BehaviorDriver, emptyObservation, type Fixture, type Input, type Observ
 import { itfInteger, record } from "./formal/itf.js";
 
 import { recordWitnesses } from "./formal/coverage-evidence.js";
+import { runtimeWitnesses } from "./formal/runtime-witnesses.js";
+import { recoveryShadowWitnesses } from "./formal/recovery-shadow-witnesses.js";
 
 type Projected = Omit<Observation, "calls"> & { calls: number[] };
 type Action = { choices?: readonly number[]; input: (choice: number, observed: Observation) => Input };
@@ -1028,7 +1030,8 @@ for (const [name, profile] of Object.entries(profiles)) {
   describe(`generated ${name} conformance`, () => {
     for (const trace of traces) it(`replays ${trace.path}`, async () => { await replay(profile, trace); });
     if (directory !== undefined && single === undefined) it("reaches every action and required outcome or race", () => {
-      const seen = witnesses(name, traces);
+      const paths = traces.map(trace => trace.path);
+      const seen = new Set([...witnesses(name, traces), ...runtimeWitnesses(name, paths), ...recoveryShadowWitnesses(name, paths)]);
       const wanted = Object.keys(profile.actions).map((action) => `action:${action}`).concat(required[name]!);
       expect(wanted.filter((witness) => !seen.has(witness)), `Missing ${name} coverage witnesses`).toEqual([]);
       recordWitnesses(name, seen, required[name]!, traces);

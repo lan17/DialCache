@@ -15,7 +15,9 @@ export function recordWitnesses(profile: string, seen: Set<string>, required: st
   const inputs = ["formal/profiles.json", "formal/coverage-witnesses.json", "formal/execution.json",
     `formal/dialcache-${profile}-conformance.qnt`, "formal/conformance-observations.qnt",
     profile === "effects" ? "test/formal-effects.test.ts" : "test/formal-features.test.ts",
-    "test/formal/coverage-evidence.ts"].map(path => ({ path, sha256: hash(path) }));
+    "test/formal/coverage-evidence.ts",
+    ...(profile === "effects" ? [] : ["test/formal/runtime-witnesses.ts", "test/formal/recovery-shadow-witnesses.ts"]),
+  ].map(path => ({ path, sha256: hash(path) }));
   const corpus = traces.map(({ path }) => ({ name: basename(path), sha256: hash(path) }))
     .sort((a, b) => a.name.localeCompare(b.name, "en"));
   if (new Set(corpus.map(({ name }) => name)).size !== corpus.length) throw new Error("Witness corpus contains duplicate file names");

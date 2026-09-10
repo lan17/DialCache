@@ -156,7 +156,7 @@
       "case": "C16.sparse-leaves",
       "reference": "formal/dialcache-runtime-policy.qnt:runtimeOverlayIsLeafWise",
       "kind": "invariant",
-      "scope": "This checks captured-snapshot consistency using the same resolve helper as takeSnapshot. It is not an independent derivation of leaf merge semantics; those semantics are defined by resolve and exercised by replay."
+      "scope": "Independently checks all eight captured leaves against runtime/base precedence without calling the transition resolve helper. This valid-overlay abstraction does not classify malformed host values."
     },
     {
       "case": "C16.ttl-implies-ramp",
@@ -967,6 +967,852 @@
       "reference": "formal/dialcache-tracked-invalidation.qnt:servedSnapshotClearedObservedFence",
       "kind": "invariant",
       "scope": "Every served tracked snapshot has timestamp strictly above its acquired watermark."
+    },
+    {
+      "case": "C22.freshness-boundary",
+      "reference": "formal/dialcache-stale-recovery.qnt:lastFreshAgeSkipsSourceTest",
+      "kind": "regression",
+      "scope": "Zero-age evidence also closes fresh-side boundary; exact F continues to use independent tests. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C22.freshness-boundary",
+      "reference": "formal/dialcache-recovery-conformance.qnt:lastFreshReadDoesNotInvokeSourceTest",
+      "kind": "regression",
+      "scope": "remote exact fresh TTL expires This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C40.first-stale",
+      "reference": "formal/dialcache-stale-recovery.qnt:firstStaleAgeRetainsWithoutDecodingTest",
+      "kind": "regression",
+      "scope": "first stale age is recoverable without shared publication This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C40.last-stale",
+      "reference": "formal/dialcache-recovery-conformance.qnt:lastRecoveryMillisecondIsServedTest",
+      "kind": "regression",
+      "scope": "last millisecond before M is recoverable This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C40.last-stale",
+      "reference": "formal/dialcache-stale-recovery.qnt:lastRecoveryAgeStillServesTest",
+      "kind": "regression",
+      "scope": "last millisecond before M is recoverable This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C40.maximum-age",
+      "reference": "formal/dialcache-recovery-conformance.qnt:maximumAgeAtReadDoesNotDecodeTest",
+      "kind": "regression",
+      "scope": "maximum age is not retained for recovery This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C40.maximum-age",
+      "reference": "formal/dialcache-stale-recovery.qnt:exactMaximumAgeDoesNotRetainTest",
+      "kind": "regression",
+      "scope": "maximum age is not retained for recovery This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C40.fenced-candidate",
+      "reference": "formal/dialcache-recovery-conformance.qnt:fencedInitialBytesNeverRecoverTest",
+      "kind": "regression",
+      "scope": "A fenced initial value is not retained or decoded for recovery; an allowed failure remains the original source error. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C40.fenced-candidate",
+      "reference": "formal/dialcache-stale-recovery.qnt:fencedFrameNeverBecomesRecoveryCandidateTest",
+      "kind": "regression",
+      "scope": "A fenced initial value is not retained or decoded for recovery; an allowed failure remains the original source error. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C33.reject-unsafe-before-decode",
+      "reference": "formal/dialcache-stale-recovery.qnt:invalidFrameNeverBecomesRecoveryCandidateTest",
+      "kind": "regression",
+      "scope": "Verification model abstracts invalid frame structure; wire vectors separately distinguish unsafe timestamps from malformed/version/encoding fields. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C41.success-skips-decode",
+      "reference": "formal/dialcache-stale-recovery.qnt:acceptedSourceNeverDecodesRetainedBytesTest",
+      "kind": "regression",
+      "scope": "source success skips retained candidate decoding This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C41.denial-keeps-error",
+      "reference": "formal/dialcache-stale-recovery.qnt:deniedRecoveryNeverDecodesRetainedBytesTest",
+      "kind": "regression",
+      "scope": "denied recovery preserves source error without decoding This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C41.classifier-failure",
+      "reference": "formal/dialcache-recovery-conformance.qnt:classifierErrorPreservesSourceWithoutDecodeTest",
+      "kind": "regression",
+      "scope": "A failing recovery classifier preserves the source error without decoding retained bytes or publishing them. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C44.no-reread",
+      "reference": "formal/dialcache-recovery-conformance.qnt:initialReadFailureSkipsRecoveryClassificationTest",
+      "kind": "regression",
+      "scope": "read failure never causes a recovery reread This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C44.retained-invalidation",
+      "reference": "formal/dialcache-recovery-conformance.qnt:replacementDoesNotChangeRetainedRecoveryTest",
+      "kind": "regression",
+      "scope": "recovery uses acquired snapshot after invalidation and replacement This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C44.retained-invalidation",
+      "reference": "formal/dialcache-stale-recovery.qnt:retainedBytesSurviveRedisDeletionAndFenceTest",
+      "kind": "regression",
+      "scope": "recovery uses acquired snapshot after invalidation and replacement This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C45.maximum-age-exclusive",
+      "reference": "formal/dialcache-recovery-conformance.qnt:maximumAgeAfterDecodePreservesSourceTest",
+      "kind": "regression",
+      "scope": "Distinguish equality after decode from greater-than-M; do not count the same fixed scenario twice as independent evidence. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C45.recheck-before-decode",
+      "reference": "formal/dialcache-recovery-conformance.qnt:maximumAgeBeforeDecodePreservesSourceTest",
+      "kind": "regression",
+      "scope": "A classifier exists for maximum-age-before-decode-skips-load, but unchanged generated corpus does not reach it; fixed scenario and checked regression only. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C45.recheck-before-decode",
+      "reference": "formal/dialcache-stale-recovery.qnt:maximumAgeBeforeDecodeSkipsLoadingTest",
+      "kind": "regression",
+      "scope": "A classifier exists for maximum-age-before-decode-skips-load, but unchanged generated corpus does not reach it; fixed scenario and checked regression only. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C45.preserve-source-error",
+      "reference": "formal/dialcache-stale-recovery.qnt:recoveryDecodeFailureKeepsSourceOutcomeTest",
+      "kind": "regression",
+      "scope": "Verification outcome enum checks source-vs-recovery error category; portable fixed driver/native errors carry exact original identity. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C45.failed-fresh-not-stale",
+      "reference": "formal/dialcache-recovery-conformance.qnt:freshDecodeFailureCannotBeRetriedAsRecoveryTest",
+      "kind": "regression",
+      "scope": "failed fresh deserialization is never retried as stale recovery This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C45.rollback-below-fresh",
+      "reference": "formal/dialcache-recovery-conformance.qnt:rollbackBelowFreshCeilingStillRecoversTest",
+      "kind": "regression",
+      "scope": "After retaining stale bytes, wall rollback to a nonnegative age below the fresh ceiling still permits recovery; only future age or the exclusive maximum rejects. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C45.rollback-below-fresh",
+      "reference": "formal/dialcache-stale-recovery.qnt:rollbackBelowFreshAgeStillRecoversTest",
+      "kind": "regression",
+      "scope": "After retaining stale bytes, wall rollback to a nonnegative age below the fresh ceiling still permits recovery; only future age or the exclusive maximum rejects. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C45.rollback-future",
+      "reference": "formal/dialcache-stale-recovery.qnt:rollbackToFutureCandidateRejectsTest",
+      "kind": "regression",
+      "scope": "wall rollback during recovery decode rejects a now future snapshot This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C57.recovery-age",
+      "reference": "formal/dialcache-recovery-conformance.qnt:agesRequireRecovery",
+      "kind": "invariant",
+      "scope": "Witness checks successful decode age against observed diagnostic; existing agesRequireRecovery invariant checks no nonserved age samples. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C49.dark-no-delay",
+      "reference": "formal/dialcache-shadow-validation.qnt:callerResultCanPrecedeDarkReadTest",
+      "kind": "regression",
+      "scope": "dark read does not delay caller source result This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C49.dark-no-delay",
+      "reference": "formal/dialcache-shadow-validation.qnt:darkReadCanPrecedeCallerResultTest",
+      "kind": "regression",
+      "scope": "dark read does not delay caller source result This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C53.dark-read-error-keeps-caller",
+      "reference": "formal/dialcache-shadow-conformance.qnt:darkReadErrorCannotReplaceCallerSourceTest",
+      "kind": "regression",
+      "scope": "A failed dark C0 read completes the diagnostic job but an independent caller source can still succeed; no decode or fill follows the failed read. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C53.dark-read-error-keeps-caller",
+      "reference": "formal/dialcache-shadow-validation.qnt:darkReadFailureStillAllowsCallerResultTest",
+      "kind": "regression",
+      "scope": "A failed dark C0 read completes the diagnostic job but an independent caller source can still succeed; no decode or fill follows the failed read. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C53.dark-source-error",
+      "reference": "formal/dialcache-shadow-conformance.qnt:sourceErrorDoesNotDecodePresentDarkBytesTest",
+      "kind": "regression",
+      "scope": "A rejected dark caller source is preserved as the caller failure, emits source_error, and never decodes or fills C0. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C53.dark-source-error",
+      "reference": "formal/dialcache-shadow-validation.qnt:sourceFailureNeverFillsTest",
+      "kind": "regression",
+      "scope": "A rejected dark caller source is preserved as the caller failure, emits source_error, and never decodes or fills C0. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C52.future-miss-may-fill",
+      "reference": "formal/dialcache-shadow-conformance.qnt:futureDarkBytesFillWithoutDecodingTest",
+      "kind": "regression",
+      "scope": "A future C0 is a semantic miss; after caller success a dark job may fill from that source subject to its observed fence. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C52.fenced-miss-may-fill",
+      "reference": "formal/dialcache-shadow-conformance.qnt:fencedDarkBytesCanAdmitNewerFillTest",
+      "kind": "regression",
+      "scope": "A fenced C0 is a semantic miss; a source-success fill may proceed once its own timestamp clears the observed fence, without decoding C0. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C51.fenced-confirmation",
+      "reference": "formal/dialcache-shadow-conformance.qnt:fencedConfirmationNeverRepairsTest",
+      "kind": "regression",
+      "scope": "A watermark-fenced C1 supersedes an unequal C0/source comparison without repair, warning, or value-age verdict. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C51.future-confirmation",
+      "reference": "formal/dialcache-shadow-conformance.qnt:futureConfirmationStillComparesBytesTest",
+      "kind": "regression",
+      "scope": "A future-dated C1 still participates in payload confirmation after C0 was accepted; identical bytes confirm mismatch without cache repair. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C50.equal-skips-confirmation",
+      "reference": "formal/dialcache-shadow-validation.qnt:equalComparisonSkipsConfirmationTest",
+      "kind": "regression",
+      "scope": "A semantic C0/source match emits match without issuing a C1 read or repairing the cache. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C50.equal-skips-confirmation",
+      "reference": "formal/dialcache-shadow-conformance.qnt:binarySnapshotComparesDecodedValueTest",
+      "kind": "regression",
+      "scope": "A semantic C0/source match emits match without issuing a C1 read or repairing the cache. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C52.undecodable-not-repaired",
+      "reference": "formal/dialcache-shadow-validation.qnt:undecodablePresentFrameNeverFillsTest",
+      "kind": "regression",
+      "scope": "dark present undecodable value is never repaired This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C53.fill-serialization-error",
+      "reference": "formal/dialcache-shadow-conformance.qnt:fillSerializationFailureNeverDispatchesWriteTest",
+      "kind": "regression",
+      "scope": "A dark fill serialization failure emits fill_error without dispatching a Redis write and preserves the accepted caller result. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C53.fill-write-error",
+      "reference": "formal/dialcache-shadow-conformance.qnt:fillWriteFailurePreservesCallerResultTest",
+      "kind": "regression",
+      "scope": "A dispatched dark Redis write failure emits fill_error and preserves the accepted caller result; it does not retry or emit a second verdict. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C54.dark-read-ownership",
+      "reference": "formal/dialcache-shadow-conformance.qnt:lateDarkReadCannotStartDecodeOrFillTest",
+      "kind": "regression",
+      "scope": "This witness proves late-effect suppression only. Capacity retention is a separate fixed-scenario observation for the dark read. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C54.read-ownership",
+      "reference": "formal/dialcache-shadow-conformance.qnt:lateConfirmationCannotEmitAnotherVerdictTest",
+      "kind": "regression",
+      "scope": "This witness proves late-effect suppression; existing admission confirmation-timeout-keeps-slot and fixed separate-read-deadline scenario cover owned capacity. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C54.decode-ownership",
+      "reference": "formal/dialcache-shadow-conformance.qnt:lateDecodeCannotStartConfirmationTest",
+      "kind": "regression",
+      "scope": "This witness proves late-effect suppression; existing admission decode-timeout-keeps-slot proves capacity ownership. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C54.dump-ownership",
+      "reference": "formal/dialcache-shadow-conformance.qnt:lateFillSerializationCannotDispatchWriteTest",
+      "kind": "regression",
+      "scope": "This witness proves late-effect suppression only. Fixed capacity probes must remain attached to this case. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C54.write-ownership",
+      "reference": "formal/dialcache-shadow-conformance.qnt:lateFillWriteCannotEmitAnotherVerdictTest",
+      "kind": "regression",
+      "scope": "This witness proves post-timeout completion does not alter result/verdict; fixed capacity probe proves retained slot. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C47.requires-capacity",
+      "reference": "formal/dialcache-shadow-validation.qnt:droppedShadowStillAllowsCallerResultTest",
+      "kind": "regression",
+      "scope": "shadow global capacity drops another key instead of queueing This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C54.unowned-caller-releases-slot",
+      "reference": "formal/dialcache-shadow-validation.qnt:timedOutShadowStillAllowsCallerResultTest",
+      "kind": "regression",
+      "scope": "Abstract verification allows independent caller settlement after diagnostic timeout. Slot release and finite-vs-unbounded source distinctions remain in fixed native/portable scenarios. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C51.changed-confirmation",
+      "reference": "formal/dialcache-shadow-validation.qnt:missingConfirmationSupersedesWithoutRepairTest",
+      "kind": "regression",
+      "scope": "served hit shadow superseded remains diagnostic This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C51.changed-confirmation",
+      "reference": "formal/dialcache-shadow-validation.qnt:changedConfirmationSupersedesWithoutRepairTest",
+      "kind": "regression",
+      "scope": "served hit shadow superseded remains diagnostic This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C51.changed-confirmation",
+      "reference": "formal/dialcache-shadow-validation.qnt:identicalConfirmationDiagnosesWithoutRepairTest",
+      "kind": "regression",
+      "scope": "served hit shadow superseded remains diagnostic This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C36.acquired-fresh",
+      "reference": "formal/dialcache-tracked-invalidation.qnt:acquiredSnapshotSurvivesLaterInvalidationTest",
+      "kind": "regression",
+      "scope": "acquired tracked snapshot survives later invalidation This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C35.delayed-old-write",
+      "reference": "formal/dialcache-tracked-invalidation.qnt:acquisitionAfterInvalidationRejectsOldBytesTest",
+      "kind": "regression",
+      "scope": "Stale-write guarantee requires documented buffer >= stale work delay + writer clock lead; regression is conditional on those model bounds. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C35.delayed-old-write",
+      "reference": "formal/dialcache-tracked-invalidation.qnt:staleWriteAtCoveredDelayEqualityRemainsFencedTest",
+      "kind": "regression",
+      "scope": "Stale-write guarantee requires documented buffer >= stale work delay + writer clock lead; regression is conditional on those model bounds. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C35.delayed-old-write",
+      "reference": "formal/dialcache-tracked-invalidation.qnt:freshWriteBeyondBufferBecomesReadableTest",
+      "kind": "regression",
+      "scope": "Stale-write guarantee requires documented buffer >= stale work delay + writer clock lead; regression is conditional on those model bounds. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C34.first-fence",
+      "reference": "formal/dialcache-tracked-invalidation.qnt:observedFutureFenceSkipsRefillTest",
+      "kind": "regression",
+      "scope": "observed future fence suppresses serialization and refill This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C34.first-fence",
+      "reference": "formal/dialcache-tracked-invalidation.qnt:refillAtFenceEqualitySkipsWriteTest",
+      "kind": "regression",
+      "scope": "observed future fence suppresses serialization and refill This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C34.observed-fence-snapshot",
+      "reference": "formal/dialcache-tracked-invalidation.qnt:laterInvalidationDoesNotRewriteMissFenceTest",
+      "kind": "regression",
+      "scope": "A conditional refill uses the miss-time observed fence; later invalidation can fence a dispatched write on subsequent reads without retroactively rewriting that miss. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C38.value-work-does-not-extend-marker",
+      "reference": "formal/dialcache-tracked-invalidation.qnt:readsAndValueWritesDoNotMoveWatermarkTest",
+      "kind": "regression",
+      "scope": "The model checks cutoff preservation. Marker existence/TTL preservation requires wire/native integration and existing fixed scenarios. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C51.changed-confirmation",
+      "reference": "formal/dialcache-shadow-conformance.qnt:sameDecodedValueWithDifferentBytesIsSupersededTest",
+      "kind": "regression",
+      "scope": "The common confirmation rule is checked on the dark generated profile and on served-hit fixed scenarios; this witness does not establish source detachment. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C51.identical-payload-confirmation",
+      "reference": "formal/dialcache-shadow-conformance.qnt:identicalTextAndBinaryBytesConfirmMismatchTest",
+      "kind": "regression",
+      "scope": "Shared confirmation rule; source detachment and caller-path differences have separate cases. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+    },
+    {
+      "case": "C01.no-deadline",
+      "reference": "formal/dialcache-coalescing-liveness.qnt:outsideSourceHasNoDeadline",
+      "kind": "invariant",
+      "scope": "outside calls have no fallback deadline or sharing. This check covers the bounded model clause: outsideSourceHasNoDeadline. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C01.no-deadline",
+      "reference": "formal/dialcache-coalescing-liveness.qnt:outsideCallsIgnoreConfiguredSourceDeadlineTest",
+      "kind": "regression",
+      "scope": "outside calls have no fallback deadline or sharing. This check covers the bounded model clause: outsideCallsIgnoreConfiguredSourceDeadlineTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C05.participating-publication",
+      "reference": "formal/dialcache-core.qnt:untrackedSourcePublishesToAllParticipatingLayersTest",
+      "kind": "regression",
+      "scope": "untracked source fills remote local and request layers. This check covers the bounded model clause: untrackedSourcePublishesToAllParticipatingLayersTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C09.insertion-age",
+      "reference": "formal/dialcache-policy-conformance.qnt:remoteHitStartsFullLocalInsertionTtlTest",
+      "kind": "regression",
+      "scope": "nearly expired remote hit warms local for its full insertion TTL. This check covers the bounded model clause: remoteHitStartsFullLocalInsertionTtlTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C13.uncoalesced-caching",
+      "reference": "formal/dialcache-policy-conformance.qnt:independentLocalCallsStillReuseSettledValueTest",
+      "kind": "regression",
+      "scope": "coalescing off keeps settled caching. This check covers the bounded model clause: independentLocalCallsStillReuseSettledValueTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C13.local-last-writer",
+      "reference": "formal/dialcache-policy-conformance.qnt:independentLocalPublicationUsesLastCompletionTest",
+      "kind": "regression",
+      "scope": "independent local publication is last writer wins. This check covers the bounded model clause: independentLocalPublicationUsesLastCompletionTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C13.remote-last-writer",
+      "reference": "formal/dialcache-policy-conformance.qnt:independentRemotePublicationUsesLastCompletionTest",
+      "kind": "regression",
+      "scope": "independent remote publication is last writer wins. This check covers the bounded model clause: independentRemotePublicationUsesLastCompletionTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C14.inactive-layers",
+      "reference": "formal/dialcache-coalescing-liveness.qnt:inactiveServingLayersKeepConcurrentCallsIndependentTest",
+      "kind": "regression",
+      "scope": "inactive serving layers do not coalesce. This check covers the bounded model clause: inactiveServingLayersKeepConcurrentCallsIndependentTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C16.null-inherits",
+      "reference": "formal/dialcache-runtime-policy.qnt:nullProviderRetainsEveryBaselineLeafTest",
+      "kind": "regression",
+      "scope": "The omitted overlay representation preserves every baseline leaf. Literal null-to-omission normalization is exercised by the portable fixed scenario, not this abstract valid-policy model."
+    },
+    {
+      "case": "C16.sparse-leaves",
+      "reference": "formal/dialcache-runtime-policy.qnt:sparseLocalOverridePreservesRemoteAndFeaturesTest",
+      "kind": "regression",
+      "scope": "Runtime overlays replace only supplied leaves. This check covers the bounded model clause: sparseLocalOverridePreservesRemoteAndFeaturesTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C16.explicit-null-leaf",
+      "reference": "formal/dialcache-core.qnt:invalidInvocationPolicyNeverTouchesStorage",
+      "kind": "invariant",
+      "scope": "Malformed boolean leaves are abstracted as invalid invocation admission. The check asserts no storage effects and retained memo; the fixed scenario binds actual JSON null to this invalid branch."
+    },
+    {
+      "case": "C16.explicit-null-leaf",
+      "reference": "formal/dialcache-core.qnt:invalidBooleanOverlayBypassesAndPreservesMemoTest",
+      "kind": "regression",
+      "scope": "Malformed boolean leaves are abstracted as invalid invocation admission. The check asserts no storage effects and retained memo; the fixed scenario binds actual JSON null to this invalid branch."
+    },
+    {
+      "case": "C17.library-defaults",
+      "reference": "formal/dialcache-runtime-policy.qnt:omittedPolicyUsesLibraryDefaultsTest",
+      "kind": "regression",
+      "scope": "Request memoization, recovery, and shadow default off; coalescing defaults on. This check covers the bounded model clause: omittedPolicyUsesLibraryDefaultsTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C17.disable-keeps-entry",
+      "reference": "formal/dialcache-runtime-policy.qnt:disablingPolicyDoesNotEvictInsertedEntriesTest",
+      "kind": "regression",
+      "scope": "runtime ramp changes preserve existing entries. This check covers the bounded model clause: disablingPolicyDoesNotEvictInsertedEntriesTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C17.disable-keeps-entry",
+      "reference": "formal/dialcache-policy-conformance.qnt:disablingServingKeepsExistingLocalForReenablementTest",
+      "kind": "regression",
+      "scope": "runtime ramp changes preserve existing entries. This check covers the bounded model clause: disablingServingKeepsExistingLocalForReenablementTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C20.provider-failure",
+      "reference": "formal/dialcache-policy-conformance.qnt:providerFailureBypassesAndPreservesExistingLocalTest",
+      "kind": "regression",
+      "scope": "provider failure fails open without caching. This check covers the bounded model clause: providerFailureBypassesAndPreservesExistingLocalTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C22.freshness-boundary",
+      "reference": "formal/dialcache-policy-conformance.qnt:exactRemoteFreshBoundaryStartsSourceTest",
+      "kind": "regression",
+      "scope": "remote exact fresh TTL expires. This check covers the bounded model clause: exactRemoteFreshBoundaryStartsSourceTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C22.physical-vs-logical",
+      "reference": "formal/dialcache-policy-conformance.qnt:increasedFreshTtlCanReusePhysicallyRetainedValueTest",
+      "kind": "regression",
+      "scope": "runtime changes preserve in-flight physical TTL and affect later freshness. This check covers the bounded model clause: increasedFreshTtlCanReusePhysicallyRetainedValueTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C22.physical-vs-logical",
+      "reference": "formal/dialcache-policy-conformance.qnt:increasedFreshTtlCannotResurrectExpiredStorageTest",
+      "kind": "regression",
+      "scope": "runtime changes preserve in-flight physical TTL and affect later freshness. This check covers the bounded model clause: increasedFreshTtlCannotResurrectExpiredStorageTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C23.default-source-budget",
+      "reference": "formal/dialcache-coalescing-liveness.qnt:omittedSourceBudgetUsesSixtySeconds",
+      "kind": "invariant",
+      "scope": "The independent-source submodel captures omitted budget as 60000ms; the regression checks rejection at that exact deadline. Generated main-flight samples retain their separately bounded budget."
+    },
+    {
+      "case": "C23.default-source-budget",
+      "reference": "formal/dialcache-coalescing-liveness.qnt:librarySourceDeadlineIsSixtySecondsTest",
+      "kind": "regression",
+      "scope": "The independent-source submodel captures omitted budget as 60000ms; the regression checks rejection at that exact deadline. Generated main-flight samples retain their separately bounded budget."
+    },
+    {
+      "case": "C24.follower-source",
+      "reference": "formal/dialcache-coalescing-liveness.qnt:lateFollowerKeepsLeaderSourceDeadlineTest",
+      "kind": "regression",
+      "scope": "late follower inherits remaining fallback deadline. This check covers the bounded model clause: lateFollowerKeepsLeaderSourceDeadlineTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C26.unbounded-source",
+      "reference": "formal/dialcache-coalescing-liveness.qnt:disabledSourceDeadlineNeverTimesOut",
+      "kind": "invariant",
+      "scope": "disabled fallback deadline accepts later source settlement. This check covers the bounded model clause: disabledSourceDeadlineNeverTimesOut. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C26.unbounded-source",
+      "reference": "formal/dialcache-coalescing-liveness.qnt:explicitlyUnboundedEnabledSourceAcceptsLateValueTest",
+      "kind": "regression",
+      "scope": "disabled fallback deadline accepts later source settlement. This check covers the bounded model clause: explicitlyUnboundedEnabledSourceAcceptsLateValueTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C27.key-failure",
+      "reference": "formal/dialcache-coalescing-liveness.qnt:keyFailureKeepsEnabledSourceDeadlineTest",
+      "kind": "regression",
+      "scope": "key construction failure runs source with its enabled deadline. This check covers the bounded model clause: keyFailureKeepsEnabledSourceDeadlineTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C27.key-failure",
+      "reference": "formal/dialcache-coalescing-liveness.qnt:independentAcceptanceChecksCapturedDeadline",
+      "kind": "invariant",
+      "scope": "key construction failure runs source with its enabled deadline. This check covers the bounded model clause: independentAcceptanceChecksCapturedDeadline. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C27.local-read-failure",
+      "reference": "formal/dialcache-core.qnt:localReadFailureContinuesToRemoteTest",
+      "kind": "regression",
+      "scope": "Failed local reads skip reuse and local publication. This check covers the bounded model clause: localReadFailureContinuesToRemoteTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C27.local-read-failure",
+      "reference": "formal/dialcache-core.qnt:localReadFailureSuppressesSourcePublicationTest",
+      "kind": "regression",
+      "scope": "Failed local reads skip reuse and local publication. This check covers the bounded model clause: localReadFailureSuppressesSourcePublicationTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C27.local-write-failure",
+      "reference": "formal/dialcache-core.qnt:localWriteFailurePreservesSourceAndMemoTest",
+      "kind": "regression",
+      "scope": "A failed local write preserves the accepted source result. This check covers the bounded model clause: localWriteFailurePreservesSourceAndMemoTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C27.local-write-failure",
+      "reference": "formal/dialcache-core.qnt:localWriteFailurePreservesRemoteHitTest",
+      "kind": "regression",
+      "scope": "A failed local write preserves the accepted source result. This check covers the bounded model clause: localWriteFailurePreservesRemoteHitTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C28.untracked-local-publication",
+      "reference": "formal/dialcache-core.qnt:remoteReadFailureStillPublishesUntrackedLocalAndRequestTest",
+      "kind": "regression",
+      "scope": "untracked read failure still permits active local publication. This check covers the bounded model clause: remoteReadFailureStillPublishesUntrackedLocalAndRequestTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C28.untracked-local-publication",
+      "reference": "formal/dialcache-policy-conformance.qnt:untrackedReadFailureStillWarmsActiveLocalTest",
+      "kind": "regression",
+      "scope": "untracked read failure still permits active local publication. This check covers the bounded model clause: untrackedReadFailureStillWarmsActiveLocalTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C31.local-only-publication",
+      "reference": "formal/dialcache-core.qnt:trackedWithoutRemoteStillPublishesLocalTest",
+      "kind": "regression",
+      "scope": "Tracked local-only calls retain eligible local source publication. This check covers the bounded model clause: trackedWithoutRemoteStillPublishesLocalTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C31.ramped-down-publication",
+      "reference": "formal/dialcache-core.qnt:trackedWithoutRemoteStillPublishesLocalTest",
+      "kind": "regression",
+      "scope": "Tracked calls excluded from remote serving retain eligible local source publication. This check covers the bounded model clause: trackedWithoutRemoteStillPublishesLocalTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C05.request-hit-stops-traversal",
+      "reference": "formal/dialcache-core.qnt:firstHitStopsLowerTraversal",
+      "kind": "invariant",
+      "scope": "A request memo hit skips local and remote traversal and source execution. This check covers the bounded model clause: firstHitStopsLowerTraversal. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C05.request-hit-stops-traversal",
+      "reference": "formal/dialcache-core.qnt:untrackedSourcePublishesToAllParticipatingLayersTest",
+      "kind": "regression",
+      "scope": "A request memo hit skips local and remote traversal and source execution. This check covers the bounded model clause: untrackedSourcePublishesToAllParticipatingLayersTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C05.local-hit-stops-traversal",
+      "reference": "formal/dialcache-core.qnt:firstHitStopsLowerTraversal",
+      "kind": "invariant",
+      "scope": "A local hit skips remote reads and source execution while warming an eligible request memo. This check covers the bounded model clause: firstHitStopsLowerTraversal. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C05.local-hit-stops-traversal",
+      "reference": "formal/dialcache-core.qnt:localHitWarmsRequestAndSkipsRemoteTest",
+      "kind": "regression",
+      "scope": "A local hit skips remote reads and source execution while warming an eligible request memo. This check covers the bounded model clause: localHitWarmsRequestAndSkipsRemoteTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C16.reenable-default-coalescing",
+      "reference": "formal/dialcache-runtime-policy.qnt:reenablingDisabledBaselineKeepsDefaultCoalescingTest",
+      "kind": "regression",
+      "scope": "Reenabling a shared serving layer over the disabled baseline retains library coalescing when its leaf is omitted. This check covers the bounded model clause: reenablingDisabledBaselineKeepsDefaultCoalescingTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C17.explicit-feature-kill-switch",
+      "reference": "formal/dialcache-runtime-policy.qnt:explicitOffReplacesInheritedFeaturesTest",
+      "kind": "regression",
+      "scope": "Explicit zero or false runtime feature leaves replace inherited request, recovery, and shadow enablement while preserving omitted coalescing policy. This check covers the bounded model clause: explicitOffReplacesInheritedFeaturesTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C21.invalid-local-ramp",
+      "reference": "formal/dialcache-policy-conformance.qnt:invalidLocalRampPreservesRemoteTest",
+      "kind": "regression",
+      "scope": "Invalid local ramp preserves valid remote hits. This check covers the bounded model clause: invalidLocalRampPreservesRemoteTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C21.invalid-remote-ramp",
+      "reference": "formal/dialcache-policy-conformance.qnt:invalidRemoteRampPreservesLocalTest",
+      "kind": "regression",
+      "scope": "Invalid remote ramp preserves valid local hits. This check covers the bounded model clause: invalidRemoteRampPreservesLocalTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C27.source-error-no-publication",
+      "reference": "formal/dialcache-core.qnt:sourceFailureNeverPublishes",
+      "kind": "invariant",
+      "scope": "A rejected source preserves its failure and publishes no successful value to participating cache layers. This check covers the bounded model clause: sourceFailureNeverPublishes. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C27.source-error-no-publication",
+      "reference": "formal/dialcache-core.qnt:rejectedSourceNeverPublishesTest",
+      "kind": "regression",
+      "scope": "A rejected source preserves its failure and publishes no successful value to participating cache layers. This check covers the bounded model clause: rejectedSourceNeverPublishesTest. Host representations and other feature combinations retain separate fixed/native evidence."
+    },
+    {
+      "case": "C27.decode-failure-refill",
+      "reference": "formal/dialcache-effects-conformance.qnt:decodeFailureMayRefillTest",
+      "kind": "regression",
+      "scope": "A failed fresh decode falls through to the source and may refill Redis when the read itself granted publication authority. The cited property covers its bounded modeled clause; exact values, adapter errors and unmodeled combinations retain their separate evidence."
+    },
+    {
+      "case": "C33.reject-future-before-decode",
+      "reference": "formal/dialcache-recovery-conformance.qnt:futureFrameDoesNotCarryMissFenceTest",
+      "kind": "regression",
+      "scope": "The model rejects an acquired future frame and excludes it from recovery; generated rollback evidence exercises future rejection, while fixed scenarios exercise direct future timestamps before deserialization."
+    },
+    {
+      "case": "C33.reject-version-before-decode",
+      "reference": "formal/dialcache-redis-protocol.qnt:unsupportedFramePrecedesEncodingError",
+      "kind": "invariant",
+      "scope": "The decoder classifies unsupported frame versions before consulting payload encoding. Fixed cache-path scenarios establish that this miss skips application deserialization."
+    },
+    {
+      "case": "C50.served-match-diagnostic",
+      "reference": "formal/dialcache-admission-conformance.qnt:callsKeepAcquiredValue",
+      "kind": "invariant",
+      "scope": "A served-hit shadow match keeps the originally returned value and emits a match without cache repair. The cited property covers its bounded modeled clause; exact values, adapter errors and unmodeled combinations retain their separate evidence."
+    },
+    {
+      "case": "C50.served-match-diagnostic",
+      "reference": "formal/dialcache-admission-conformance.qnt:jobsAreDiagnostic",
+      "kind": "invariant",
+      "scope": "A served-hit shadow match keeps the originally returned value and emits a match without cache repair. The cited property covers its bounded modeled clause; exact values, adapter errors and unmodeled combinations retain their separate evidence."
+    },
+    {
+      "case": "C50.served-mismatch-diagnostic",
+      "reference": "formal/dialcache-admission-conformance.qnt:callsKeepAcquiredValue",
+      "kind": "invariant",
+      "scope": "A confirmed served-hit shadow mismatch keeps the originally returned value and does not repair the cache. The cited property covers its bounded modeled clause; exact values, adapter errors and unmodeled combinations retain their separate evidence."
+    },
+    {
+      "case": "C50.served-mismatch-diagnostic",
+      "reference": "formal/dialcache-admission-conformance.qnt:jobsAreDiagnostic",
+      "kind": "invariant",
+      "scope": "A confirmed served-hit shadow mismatch keeps the originally returned value and does not repair the cache. The cited property covers its bounded modeled clause; exact values, adapter errors and unmodeled combinations retain their separate evidence."
+    },
+    {
+      "case": "C53.source-error-keeps-caller",
+      "reference": "formal/dialcache-admission-conformance.qnt:callsKeepAcquiredValue",
+      "kind": "invariant",
+      "scope": "A detached shadow source failure reports its diagnostic outcome without replacing the value already served to the caller. The cited property covers its bounded modeled clause; exact values, adapter errors and unmodeled combinations retain their separate evidence."
+    },
+    {
+      "case": "C53.source-error-keeps-caller",
+      "reference": "formal/dialcache-admission-conformance.qnt:jobsAreDiagnostic",
+      "kind": "invariant",
+      "scope": "A detached shadow source failure reports its diagnostic outcome without replacing the value already served to the caller. The cited property covers its bounded modeled clause; exact values, adapter errors and unmodeled combinations retain their separate evidence."
+    },
+    {
+      "case": "C20.invalid-coalesce",
+      "reference": "formal/dialcache-core.qnt:invalidInvocationPolicyNeverTouchesStorage",
+      "kind": "invariant",
+      "scope": "The core model abstracts malformed invocation-level leaves as invalid admission and checks bypass plus preserved memo. Fixed scenarios supply the actual malformed coalesce/requestLocal values."
+    },
+    {
+      "case": "C20.invalid-coalesce",
+      "reference": "formal/dialcache-core.qnt:invalidBooleanOverlayBypassesAndPreservesMemoTest",
+      "kind": "regression",
+      "scope": "The core model abstracts malformed invocation-level leaves as invalid admission and checks bypass plus preserved memo. Fixed scenarios supply the actual malformed coalesce/requestLocal values."
+    },
+    {
+      "case": "C20.invalid-request-local",
+      "reference": "formal/dialcache-core.qnt:invalidInvocationPolicyNeverTouchesStorage",
+      "kind": "invariant",
+      "scope": "The core model abstracts malformed invocation-level leaves as invalid admission and checks bypass plus preserved memo. Fixed scenarios supply the actual malformed coalesce/requestLocal values."
+    },
+    {
+      "case": "C20.invalid-request-local",
+      "reference": "formal/dialcache-core.qnt:invalidBooleanOverlayBypassesAndPreservesMemoTest",
+      "kind": "regression",
+      "scope": "The core model abstracts malformed invocation-level leaves as invalid admission and checks bypass plus preserved memo. Fixed scenarios supply the actual malformed coalesce/requestLocal values."
+    },
+    {
+      "case": "C42.operation-denial",
+      "reference": "formal/dialcache-recovery-conformance.qnt:operationDenialReplacesInstanceAllowTest",
+      "kind": "regression",
+      "scope": "An operation recovery denial replaces an instance allow predicate and preserves the original source failure. The cited property covers its bounded modeled clause; exact values, adapter errors and unmodeled combinations retain their separate evidence."
+    },
+    {
+      "case": "C24.independent-source-budgets",
+      "reference": "formal/dialcache-coalescing-liveness.qnt:independentAcceptanceChecksCapturedDeadline",
+      "kind": "invariant",
+      "scope": "The independent-source submodel checks each recorded source start and captured budget; the generated independent profile supplies per-call source/read ownership and the fixed scenario isolates different source start times."
+    },
+    {
+      "case": "C23.policy-does-not-spend-source-budget",
+      "reference": "formal/dialcache-coalescing-liveness.qnt:delayedLookupKeepsFullSourceBudgetTest",
+      "kind": "regression",
+      "scope": "The model abstracts pre-source waiting as cache lookup and independently checks a full budget from source start. The fixed policy-delay scenario binds runtime-provider waiting to that rule."
+    },
+    {
+      "case": "C30.original-source-error",
+      "reference": "formal/dialcache-effects-conformance.qnt:observerFailuresCannotReplaceSourceErrorTest",
+      "kind": "regression",
+      "scope": "Observer failure preserves the identity of the original source rejection. The cited property covers its bounded modeled clause; exact values, adapter errors and unmodeled combinations retain their separate evidence."
+    },
+    {
+      "case": "C47.recovery-skips-shadow",
+      "reference": "formal/dialcache-stale-recovery.qnt:recoveredStaleHasNoSharedPublication",
+      "kind": "invariant",
+      "scope": "The stale model keeps a zero-shadow-job projection after recovery but does not model otherwise eligible shadow admission. The fixed selected-shadow/absent-recovery scenario supplies the discriminating implementation check."
+    },
+    {
+      "case": "C47.coalesced-hit-one-job",
+      "reference": "formal/dialcache-admission-conformance.qnt:coalescedHitAdmitsOneJobTest",
+      "kind": "regression",
+      "scope": "Coalesced callers sharing one remote hit admit only one detached shadow source. The cited property covers its bounded modeled clause; exact values, adapter errors and unmodeled combinations retain their separate evidence."
+    },
+    {
+      "case": "C03.late-recovery-publication",
+      "reference": "formal/dialcache-recovery-conformance.qnt:closedRequestCannotReceiveLateRecoveryMemoTest",
+      "kind": "regression",
+      "scope": "Late stale recovery returns to original callers but cannot populate a closed or replacement request scope. The cited property covers its bounded modeled clause; exact values, adapter errors and unmodeled combinations retain their separate evidence."
+    },
+    {
+      "case": "C54.instance-isolation",
+      "reference": "formal/dialcache-admission-conformance.qnt:capacityIsPerInstance",
+      "kind": "invariant",
+      "scope": "Shadow capacity and job identity deduplication apply within each cache instance independently. The cited property covers its bounded modeled clause; exact values, adapter errors and unmodeled combinations retain their separate evidence."
+    },
+    {
+      "case": "C54.instance-isolation",
+      "reference": "formal/dialcache-admission-conformance.qnt:fullInstanceDoesNotBlockOtherInstanceTest",
+      "kind": "regression",
+      "scope": "Shadow capacity and job identity deduplication apply within each cache instance independently. The cited property covers its bounded modeled clause; exact values, adapter errors and unmodeled combinations retain their separate evidence."
+    },
+    {
+      "case": "C18.captured-shadow-admission",
+      "reference": "formal/dialcache-shadow-conformance.qnt:admittedComparisonSurvivesPolicyDisableTest",
+      "kind": "regression",
+      "scope": "Disabling shadow prevents new admission while an already admitted comparison retains its captured policy. The cited property covers its bounded modeled clause; exact values, adapter errors and unmodeled combinations retain their separate evidence."
+    },
+    {
+      "case": "C36.independent-invalidation-snapshots",
+      "reference": "formal/dialcache-independent-conformance.qnt:acceptedFreshDecodeSurvivesOtherInvalidationTest",
+      "kind": "regression",
+      "scope": "Independent tracked reads acquired before and after invalidation keep their own snapshot and fencing outcomes. The cited property covers its bounded modeled clause; exact values, adapter errors and unmodeled combinations retain their separate evidence."
+    },
+    {
+      "case": "C55.valid-fence-independent-of-cause",
+      "reference": "formal/dialcache-redis-protocol.qnt:validMissWatermarksArePreserved",
+      "kind": "invariant",
+      "scope": "A valid future fence suppresses serialization despite an absent cause; zero-fence expired metadata permits serialization. Protocol invariants separately require valid metadata retention for semantic misses."
+    },
+    {
+      "case": "C55.frame-ignores-miss-metadata",
+      "reference": "formal/dialcache-effects-conformance.qnt:frameWithoutMissDiscriminatorIgnoresMetadataTest",
+      "kind": "regression",
+      "scope": "The scheduled regression asserts the frame is served without a source. Generated reply15 is an additional required input category, not by itself proof that a frame was served."
+    },
+    {
+      "case": "C56.late-read",
+      "reference": "formal/dialcache-effects-conformance.qnt:lateReadRejectionUsesDeadlineCategoryTest",
+      "kind": "regression",
+      "scope": "late read fulfillment checks deadline before timer delivery The cited property covers its bounded modeled clause; exact values, adapter errors and unmodeled combinations retain their separate evidence."
+    },
+    {
+      "case": "C56.clear-read-timer",
+      "reference": "formal/dialcache-effects-conformance.qnt:successfulReadClearsDeadlineBeforeDecodeTest",
+      "kind": "regression",
+      "scope": "successful read does not request cancellation after its timer is cleared The cited property covers its bounded modeled clause; exact values, adapter errors and unmodeled combinations retain their separate evidence."
+    },
+    {
+      "case": "C58.failure-categories",
+      "reference": "formal/dialcache-effects-conformance.qnt:readFailureKeepsCategoryAndDeniesRefillTest",
+      "kind": "regression",
+      "scope": "Each added model regression requires the phase label alongside its source-result and write/no-write consequence. Fixed scenarios additionally check policy-resolution diagnostics."
+    },
+    {
+      "case": "C58.failure-categories",
+      "reference": "formal/dialcache-effects-conformance.qnt:decodeFailureKeepsCategoryAndAllowsRefillTest",
+      "kind": "regression",
+      "scope": "Each added model regression requires the phase label alongside its source-result and write/no-write consequence. Fixed scenarios additionally check policy-resolution diagnostics."
+    },
+    {
+      "case": "C58.failure-categories",
+      "reference": "formal/dialcache-effects-conformance.qnt:dumpFailureKeepsCategoryAndSourceValueTest",
+      "kind": "regression",
+      "scope": "Each added model regression requires the phase label alongside its source-result and write/no-write consequence. Fixed scenarios additionally check policy-resolution diagnostics."
+    },
+    {
+      "case": "C58.failure-categories",
+      "reference": "formal/dialcache-effects-conformance.qnt:writeFailureKeepsCategoryAndSourceValueTest",
+      "kind": "regression",
+      "scope": "Each added model regression requires the phase label alongside its source-result and write/no-write consequence. Fixed scenarios additionally check policy-resolution diagnostics."
+    },
+    {
+      "case": "C58.request-follower-trail",
+      "reference": "formal/dialcache-scope-conformance.qnt:sharedFailureHasOneAttributedErrorTest",
+      "kind": "regression",
+      "scope": "Request followers report request-local coalescing without repeating lower cache traversal or the leader error trail. The cited property covers its bounded modeled clause; exact values, adapter errors and unmodeled combinations retain their separate evidence."
+    },
+    {
+      "case": "C58.late-rejection-not-recounted",
+      "reference": "formal/dialcache-effects-conformance.qnt:lateSourceCannotRepeatFailureMetricTest",
+      "kind": "regression",
+      "scope": "A source deadline records one failure; a later rejection of the abandoned loader does not emit another fallback failure. The cited property covers its bounded modeled clause; exact values, adapter errors and unmodeled combinations retain their separate evidence."
+    },
+    {
+      "case": "C60.logging-explicit-off",
+      "reference": "formal/dialcache-shadow-conformance.qnt:warningsRequireValidCapturedPolicy",
+      "kind": "invariant",
+      "scope": "A confirmed mismatch with an explicitly disabled logging flag has no warning. Omitted/default logging and malformed flags have separate named cases."
+    },
+    {
+      "case": "C40.maximum-age",
+      "reference": "formal/dialcache-stale-recovery.qnt:initiallyTooOldCannotRecoverAfterRollbackTest",
+      "kind": "regression",
+      "scope": "Initial rejected bytes stay unavailable after the clock makes their age eligible before authorized source failure. The final error, no decode, and single initial read distinguish initial retention from failure-time age checking alone."
+    },
+    {
+      "case": "C40.future-rejected",
+      "reference": "formal/dialcache-stale-recovery.qnt:initiallyFutureCannotRecoverAfterClockAdvanceTest",
+      "kind": "regression",
+      "scope": "Initial rejected bytes stay unavailable after the clock makes their age eligible before authorized source failure. The final error, no decode, and single initial read distinguish initial retention from failure-time age checking alone."
     }
   ],
   "definitions": [
@@ -1719,6 +2565,18 @@
       "reference": "formal/dialcache-redis-protocol.qnt:decode",
       "kind": "transition",
       "scope": "Untracked classification ignores watermark validity/fence; exact bytes and numeric input boundaries remain protocol vectors."
+    },
+    {
+      "case": "C55.legacy-reply-normalization",
+      "reference": "formal/dialcache-effects-conformance.qnt:settledRead",
+      "kind": "helper",
+      "scope": "Queued legacy/primitive/kindless reply classes fall through normalized misses and may refill; exact host shapes are the driver binding."
+    },
+    {
+      "case": "C55.invalid-fence-discarded",
+      "reference": "formal/dialcache-effects-conformance.qnt:settledRead",
+      "kind": "helper",
+      "scope": "The reply-class transition retains only the enumerated valid tracked fence classes; fixed inputs bind numeric invalidity and missing metadata."
     }
   ],
   "limitations": [

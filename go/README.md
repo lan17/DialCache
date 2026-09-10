@@ -7,12 +7,13 @@ deadlines, stale recovery, dark and served-hit shadow validation, compression,
 and failure-isolated observability.
 
 The [Quint models](../formal/README.md) are the behavioral source of truth. Both
-implementations replay the same nine generated profiles and 238 fixed
-scenarios. All 134 protocol vectors also run in Go. Real integration checks
+implementations are required to replay the same nine generated profiles and
+244 fixed scenarios. All 134 protocol vectors also run in Go. Real integration checks
 exercise the 49 invalidation transitions on Redis, Valkey and Redis Cluster,
 plus bidirectional TypeScript/Go payload and invalidation interoperability.
 These are finite checks of the documented contract, not proof of every
-possible input or schedule. See [parity acceptance](../formal/GO-PARITY.md).
+possible input or schedule. See [parity acceptance](../formal/GO-PARITY.md)
+and the [feature and corner-case map](../formal/FEATURE-COVERAGE.md).
 
 ## Use
 
@@ -91,8 +92,10 @@ returns an error before execution.
 writes, and surfaced invalidation errors. The bundled `RedisAdapter` uses
 go-redis with standalone, Sentinel or Cluster clients. Tracked reads select
 the slot primary even if replica reads were enabled on the client. Writes use
-one native `SET`; the invalidation Lua script uses `EVALSHA` with `NOSCRIPT`
-fallback. No value write creates or extends a watermark. `Invalidate` affects
+one native `SET`. Invalidation first dispatches `EVALSHA`; any command rejection
+triggers one retry with `EVAL` using identical logical arguments. A successful
+command with an invalid reply does not trigger a retry. No value write creates
+or extends a watermark. `Invalidate` affects
 shared remote authority; other processes' local entries and already acquired
 snapshots retain the documented lifetime rules.
 
@@ -107,9 +110,11 @@ are returned. Applications still own cancellation of the source context.
 `Clock` separates wall time from elapsed time. The default clock preserves
 fractional milliseconds through `PreciseClock.ElapsedTime`. Custom clocks can
 implement that optional interface; existing `ElapsedMS`-only clocks retain their
-supplied integer resolution. Deadlines and local expiry compare elapsed durations without rounding absolute
-timestamps, and millisecond timers round remaining delays upward. A timer
-callback rechecks elapsed time before declaring a timeout. A custom clock should
+supplied integer resolution. Source/read/shadow deadlines compare precise
+elapsed durations, and millisecond timers round remaining delays upward. A
+timer callback rechecks elapsed time before declaring a timeout. Local expiry
+matches TypeScript's whole-millisecond monotonic clock observations at insertion
+and lookup; it does not use the fractional deadline-clock resolution. A custom clock should
 implement `TimerClock` for corresponding deadline delivery; `DeferredExecutor` provides
 an optional executor for detached work. Normal use needs none of these hooks.
 Owned unfinished shadow work retains its capacity after a reported timeout,

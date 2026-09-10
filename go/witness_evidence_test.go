@@ -80,6 +80,8 @@ func checkWitnessEvidence(profile, directory string, paths []string) error {
 	expectedInputs := []string{"formal/profiles.json", "formal/coverage-witnesses.json", "formal/execution.json", "formal/dialcache-" + profile + "-conformance.qnt", "formal/conformance-observations.qnt", "test/formal-features.test.ts", "test/formal/coverage-evidence.ts"}
 	if profile == "effects" {
 		expectedInputs[5] = "test/formal-effects.test.ts"
+	} else {
+		expectedInputs = append(expectedInputs, "test/formal/runtime-witnesses.ts", "test/formal/recovery-shadow-witnesses.ts")
 	}
 	if len(evidence.Inputs) != len(expectedInputs) {
 		return fmt.Errorf("incomplete witness definition fingerprints")

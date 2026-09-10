@@ -9,10 +9,17 @@ as an alternative behavioral oracle.
 
 [`go-parity.json`](go-parity.json) records the reviewed implementation mappings,
 shared execution evidence, native adaptations, and remaining assurance gaps.
-Its status is `validated-finite-portable-parity`: both implementations passed
-the same 4,000 generated histories, 238 fixed scenarios, and 134 protocol
-vectors. The Go run also passed under the race detector. Inventory counts
-account for what was reviewed; they are neither a coverage percentage nor a
+Its status is `finite-portable-contract-inventory`. Current requirements are
+4,000 generated histories across nine profiles, 244 fixed scenarios, 134
+protocol vectors, and 344 required witnesses. The [feature map](FEATURE-COVERAGE.md)
+accounts for 261 behavioral/protocol cases and 33 separate native cases.
+
+The ledger retains a **historical acceptance record** from before this
+behavioral expansion: both implementations passed the same 4,000 generated
+histories, 238 fixed scenarios, and 134 protocol vectors, with Go under the
+race detector. That record does not validate the changed models, witnesses,
+cases, or native tests; fresh reports must identify the expanded inputs.
+Inventory counts account for what was reviewed; they are neither a coverage percentage nor a
 proof. A source declaration, a test name, and a model file are not
 interchangeable units of behavior.
 
@@ -68,11 +75,14 @@ gap, not necessarily a Go implementation gap. A known implementation gap
 requires a specific unsupported portable behavior or a failing behavioral
 comparison. A rule already supported by fixed, vector, or native evidence can
 instead be a candidate for additional generated assurance. Current expansion
-candidates include sparse policy preservation and default/boundary cases,
-publication across multiple active layers, logical versus physical retention,
-and shadow confirmation ownership at its separate read deadline. Review these
-by consequence and interaction risk; do not manufacture one model per fixed
-test or label every remaining fixed case as missing Go parity.
+candidates are the explicitly retained limits in [FEATURE-COVERAGE.md](FEATURE-COVERAGE.md):
+larger feature combinations, additional shadow confirmation/physical-expiry
+schedules, and shared malformed-compression vectors. Sparse policy, default
+boundaries, multi-layer publication, and retained shadow ownership now have
+more specific evidence; that evidence still has the bounds recorded for each
+case. Review remaining work by consequence and interaction risk; do not
+manufacture one model per fixed test or label every remaining fixed case as
+missing Go parity.
 
 ## Reading and updating the ledger
 
@@ -91,8 +101,9 @@ silently satisfy a changed model or implementation.
 each cited scheduled invariant or regression, plus separate transition,
 helper, and predicate references. It explicitly distinguishes a checked
 safety clause from a complete case proof and records known limits of the
-properties. The ordinary metadata gate checks reference kinds, scheduling,
-case membership, and nonempty scope notes without requiring Quint; it cannot
+properties. The ordinary metadata gates check reference kinds, scheduling,
+case membership, positive scenario/vector assignments, feature/native coverage,
+and nonempty scope notes without requiring Quint; it cannot
 automate the semantic judgment in those notes.
 
 `profiles` records the shared corpus for each executable profile. Scheduled
@@ -125,12 +136,18 @@ shared histories express these rules in integer ticks. Their replays did not
 expose a Go clock-binding defect: rounding two absolute elapsed readings before
 subtracting them could reject work completed within its full source budget.
 
-The default Go clock now retains monotonic `time.Duration` precision before
-subtraction. The optional `PreciseClock` interface supports the same precision
-for custom clocks; existing integer clocks retain their declared millisecond
-resolution. Timer delivery is checked against elapsed time, and local expiry
-compares elapsed time since insertion with its captured TTL, preserving
-fractional insertion times without relying on an absolute expiry sum.
+Source, read and shadow budgets retain monotonic `time.Duration` precision
+before subtraction. The optional `PreciseClock` interface supports the same
+precision for custom clocks; integer clocks retain their declared resolution.
+Timer delivery is checked against elapsed time.
+
+Local TTL has a different native boundary: TypeScript floors the monotonic
+clock to whole milliseconds at insertion and lookup. Go follows those same
+whole-millisecond observations. For example, insertion at 0.7 ms with a 1,000 ms
+TTL expires at the observed clock value 1,000 ms. Applying precise elapsed
+subtraction to local storage would retain that entry beyond TypeScript's
+boundary. Native tests distinguish this rule from precise source/read/shadow
+budgets; integer-tick Quint traces alone cannot distinguish the bindings.
 
 [`clock_precision_test.go`](../go/clock_precision_test.go) uses deterministic
 native clock phases to exercise source and read completion before and at their

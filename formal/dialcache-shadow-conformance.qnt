@@ -446,4 +446,90 @@ module dialcache_shadow_conformance {
     hook: true, shadowActive: true, sourceWorkMs: JOB_BUDGET_MS, ...s
   }).then(beginCall).then(rejectLoader)
     .expect(s.o.calls == List(DEADLINE_ERROR) and s.o.shadow == List("timeout") and s.o.reads == 0)
+
+
+  // These histories distinguish failures at C0, decode, C1, serialization and
+  // write settlement. Their effects remain subordinate to the caller result.
+  action darkCallerFixture = init.then(s' = {
+    hook: true, shadowActive: true, sourceWorkMs: 0, comparisonMs: 0,
+    comparator: COMPARE_DEFAULT, ...s
+  })
+  action fillFixture = darkCallerFixture.then(beginCall)
+    .then(releaseRead).then(resolveLoader)
+
+  run darkReadErrorCannotReplaceCallerSourceTest = darkCallerFixture
+    .then(s' = { readFailed: true, ...s }).then(beginCall).then(releaseRead)
+    .expect(s.o.calls == List(CALL_PENDING) and s.o.shadow == List("redis_error"))
+    .then(resolveLoader)
+    .expect(s.o.calls.nth(0) == VALUE_ONE or s.o.calls.nth(0) == VALUE_TWO)
+    .expect(s.o.shadow == List("redis_error") and s.o.loads == 0 and s.o.writes == 0)
+
+  run sourceErrorDoesNotDecodePresentDarkBytesTest = darkCallerFixture
+    .then(s' = { frame: TEXT_ONE, created: s.wall, ...s })
+    .then(beginCall).then(releaseRead).then(rejectLoader)
+    .expect(s.o.calls == List(SOURCE_ERROR) and s.o.shadow == List("source_error")
+      and s.o.loads == 0 and s.o.dumps == 0 and s.o.writes == 0)
+
+  run futureDarkBytesFillWithoutDecodingTest = darkCallerFixture
+    .then(s' = { frame: TEXT_ONE, created: s.wall + 1, ...s })
+    .then(beginCall).then(releaseRead).then(resolveLoader).then(releaseDump).then(releaseWrite)
+    .expect(s.o.shadow == List("filled") and s.o.loads == 0
+      and s.o.loaders == 1 and s.o.writes == 1)
+
+  run fencedDarkBytesCanAdmitNewerFillTest = darkCallerFixture
+    .then(s' = { frame: TEXT_ONE, created: s.wall - 2, watermark: s.wall - 1, ...s })
+    .then(beginCall).then(releaseRead).then(resolveLoader).then(releaseDump).then(releaseWrite)
+    .expect(s.o.shadow == List("filled") and s.o.loads == 0
+      and s.o.writes == 1 and s.created > s.watermark)
+
+  run fencedConfirmationNeverRepairsTest = compareFixture
+    .then(s' = { comparator: COMPARE_UNEQUAL, frame: TEXT_ONE, created: s.wall, watermark: s.wall, ...s })
+    .then(releaseLoad).then(releaseRead)
+    .expect(s.o.shadow == List("superseded") and s.o.reads == 2
+      and s.o.calls == List(VALUE_TWO) and s.o.writes == 0 and s.d.ages == List())
+
+  run futureConfirmationStillComparesBytesTest = compareFixture
+    .then(s' = { comparator: COMPARE_UNEQUAL, frame: TEXT_ONE, created: s.wall + 1, ...s })
+    .then(releaseLoad).then(releaseRead)
+    .expect(s.o.shadow == List("mismatch") and s.o.reads == 2
+      and s.o.calls == List(VALUE_TWO) and s.o.writes == 0)
+
+  run fillSerializationFailureNeverDispatchesWriteTest = fillFixture
+    .then(s' = { dumpFailed: true, ...s }).then(releaseDump)
+    .expect(s.o.shadow == List("fill_error") and s.o.dumps == 1 and s.o.writes == 0)
+    .expect(s.o.calls.nth(0) == VALUE_ONE or s.o.calls.nth(0) == VALUE_TWO)
+
+  run fillWriteFailurePreservesCallerResultTest = fillFixture.then(releaseDump)
+    .then(s' = { writeFailed: true, ...s }).then(releaseWrite)
+    .expect(s.o.shadow == List("fill_error") and s.o.dumps == 1 and s.o.writes == 1)
+    .expect(s.o.calls.nth(0) == VALUE_ONE or s.o.calls.nth(0) == VALUE_TWO)
+
+  action expirePendingJob = s' = {
+    abandoned: true, now: s.deadline, wall: s.wall + s.deadline - s.now,
+    o: { shadow: s.o.shadow.append("timeout"), ...s.o },
+    ...s
+  }
+  run lateFillSerializationCannotDispatchWriteTest = fillFixture
+    .then(expirePendingJob).then(releaseDump)
+    .expect(s.o.shadow == List("timeout") and s.o.dumps == 1 and s.o.writes == 0)
+
+  run lateFillWriteCannotEmitAnotherVerdictTest = fillFixture.then(releaseDump)
+    .then(expirePendingJob).then(releaseWrite)
+    .expect(s.o.shadow == List("timeout") and s.o.writes == 1)
+    .expect(s.o.calls.nth(0) == VALUE_ONE or s.o.calls.nth(0) == VALUE_TWO)
+
+  run lateDecodeCannotStartConfirmationTest = compareFixture
+    .then(s' = { comparator: COMPARE_UNEQUAL, ...s }).then(expirePendingJob).then(releaseLoad)
+    .expect(s.o.shadow == List("timeout") and s.o.reads == 1 and s.o.comparisons == 0
+      and s.o.calls == List(VALUE_TWO))
+
+  run lateConfirmationCannotEmitAnotherVerdictTest = compareFixture
+    .then(s' = { comparator: COMPARE_UNEQUAL, ...s }).then(releaseLoad)
+    .then(expirePendingJob).then(releaseRead)
+    .expect(s.o.shadow == List("timeout") and s.o.reads == 2 and s.o.writes == 0
+      and s.o.calls == List(VALUE_TWO))
+
+  run lateDarkReadCannotStartDecodeOrFillTest = darkCallerFixture
+    .then(beginCall).then(resolveLoader).then(expirePendingJob).then(releaseRead)
+    .expect(s.o.shadow == List("timeout") and s.o.loads == 0 and s.o.dumps == 0 and s.o.writes == 0)
 }

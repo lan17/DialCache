@@ -422,4 +422,41 @@ module dialcache_effects_conformance {
     .then(s' = { readBudget: 10, ...s }).then(beginCall).then(tick).then(tick)
     .expect(s.phase == READ_PENDING and s.readBudgets == List(30) and s.calls == List(CALL_PENDING, CALL_PENDING))
     .then(tick).expect(s.phase == SOURCE_RUNNING and s.deadline == 10040 and s.readAborts == 1)
+
+  // Deadline acceptance is checked when raw work settles, even if timer
+  // delivery has not run. Rejection must receive the same deadline treatment
+  // as fulfillment, without being recategorized as an ordinary adapter error.
+  run lateReadRejectionUsesDeadlineCategoryTest = tenMillisecondFixture
+    .then(beginCall).then(jumpClock).then(failRead)
+    .expect(s.readAborts == 1 and s.loaders == 1 and s.refill == REFILL_DENIED and
+      s.events.select(e => e.event == "error").foldl(List(), (out, e) => out.append(e.detail)) == List("cache_read_timeout"))
+
+  run successfulReadClearsDeadlineBeforeDecodeTest = tenMillisecondFixture
+    .then(seedRemote).then(beginCall).then(releaseRead).then(tick).then(tick)
+    .then(releaseLoad)
+    .expect(s.calls == List(CALL_VALUE) and s.readAborts == 0 and s.loaders == 0)
+
+  // Each failure has its own diagnostic phase. The result and mutation
+  // consequences are checked alongside the label; observing a label alone
+  // would not establish fail-open behavior.
+  run readFailureKeepsCategoryAndDeniesRefillTest = tenMillisecondFixture
+    .then(beginCall).then(failRead).then(resolveLoader)
+    .expect(s.calls == List(CALL_VALUE) and s.dumps == 0 and s.writes == 0 and
+      s.events.select(e => e.event == "error").foldl(List(), (out, e) => out.append(e.detail)) == List("cache_read"))
+
+  run decodeFailureKeepsCategoryAndAllowsRefillTest = tenMillisecondFixture
+    .then(seedRemote).then(beginCall).then(releaseRead).then(failLoad)
+    .then(resolveLoader).then(releaseDump).then(releaseWrite)
+    .expect(s.calls == List(CALL_VALUE) and s.writes == 1 and
+      s.events.select(e => e.event == "error").foldl(List(), (out, e) => out.append(e.detail)) == List("serialization_load"))
+
+  run dumpFailureKeepsCategoryAndSourceValueTest = tenMillisecondFixture
+    .then(beginCall).then(releaseRead).then(resolveLoader).then(failDump)
+    .expect(s.calls == List(CALL_VALUE) and s.writes == 0 and
+      s.events.select(e => e.event == "error").foldl(List(), (out, e) => out.append(e.detail)) == List("serialization_dump"))
+
+  run writeFailureKeepsCategoryAndSourceValueTest = tenMillisecondFixture
+    .then(beginCall).then(releaseRead).then(resolveLoader).then(releaseDump).then(failWrite)
+    .expect(s.calls == List(CALL_VALUE) and s.storedTimestamp == 0 and
+      s.events.select(e => e.event == "error").foldl(List(), (out, e) => out.append(e.detail)) == List("cache_write"))
 }

@@ -321,4 +321,74 @@ module dialcache_recovery_conformance {
     .then(beginInheritedFixture).then(timeoutFixture).expect(s.o.calls == List(DEADLINE_ERROR) and s.o.loads == 0)
   run operationDenialReplacesInstanceAllowTest = init.then(s' = { instanceClassifier: CLASSIFIER_ALLOW, ...s })
     .then(beginDenyFixture).then(rejectLoader).expect(s.o.calls == List(SOURCE_ERROR) and s.o.loads == 0)
+
+
+  // Narrow boundary histories use the same public actions and projections as
+  // generated replay. Fixture updates supply external bytes, clocks or faults.
+  action allowRecoveryFixture = init.then(s' = {
+    instanceClassifier: CLASSIFIER_ALLOW, request: false, ...s
+  })
+  action beginAllowedRecovery = s' = admitted(0, CLASSIFIER_ALLOW)
+
+  run lastFreshReadDoesNotInvokeSourceTest = allowRecoveryFixture
+    .then(s' = { created: s.wall - FRESH_AGE_MS + 1, ...s })
+    .then(beginAllowedRecovery).then(releaseLoad)
+    .expect(s.o.calls == List(VALUE_ONE) and s.o.loaders == 0
+      and s.o.loads == 1 and s.o.recovery == List() and s.o.writes == 0)
+
+  run lastRecoveryMillisecondIsServedTest = allowRecoveryFixture
+    .then(s' = { created: s.wall - s.maxAge + 1, ...s })
+    .then(beginAllowedRecovery).then(rejectLoader).then(releaseLoad)
+    .expect(s.o.calls == List(VALUE_ONE) and s.d.ages == List(4999)
+      and s.o.recovery == List("served") and s.o.dumps == 0 and s.o.writes == 0)
+
+  run maximumAgeAtReadDoesNotDecodeTest = allowRecoveryFixture
+    .then(s' = { created: s.wall - s.maxAge, ...s })
+    .then(beginAllowedRecovery).then(rejectLoader)
+    .expect(s.o.calls == List(SOURCE_ERROR) and s.o.loads == 0
+      and s.o.reads == 1 and s.o.recovery == List("miss"))
+
+  run fencedInitialBytesNeverRecoverTest = allowRecoveryFixture.then(invalidate)
+    .then(beginAllowedRecovery).then(rejectLoader)
+    .expect(s.o.calls == List(SOURCE_ERROR) and s.o.loads == 0
+      and s.o.reads == 1 and s.o.recovery == List("miss"))
+
+  run classifierErrorPreservesSourceWithoutDecodeTest = allowRecoveryFixture
+    .then(s' = admitted(0, CLASSIFIER_ERROR)).then(rejectLoader)
+    .expect(s.o.calls == List(SOURCE_ERROR) and s.o.classifications == 1
+      and s.o.loads == 0 and s.o.recovery == List() and s.o.writes == 0)
+
+  run freshDecodeFailureCannotBeRetriedAsRecoveryTest = allowRecoveryFixture
+    .then(s' = { created: s.wall, loadFailed: true, ...s })
+    .then(beginAllowedRecovery).then(releaseLoad).then(rejectLoader)
+    .expect(s.o.calls == List(SOURCE_ERROR) and s.o.loads == 1
+      and s.o.classifications == 0 and s.o.recovery == List() and s.o.reads == 1)
+
+  run initialReadFailureSkipsRecoveryClassificationTest = allowRecoveryFixture
+    .then(s' = { readFailed: true, ...s }).then(beginAllowedRecovery).then(rejectLoader)
+    .expect(s.o.calls == List(SOURCE_ERROR) and s.o.loads == 0
+      and s.o.classifications == 0 and s.o.recovery == List() and s.o.reads == 1)
+
+  run rollbackBelowFreshCeilingStillRecoversTest = allowRecoveryFixture
+    .then(beginAllowedRecovery).then(rejectLoader).then(rollbackWall).then(releaseLoad)
+    .expect(s.o.calls == List(VALUE_ONE) and s.d.ages == List(0)
+      and s.o.recovery == List("served") and s.o.writes == 0)
+
+  run replacementDoesNotChangeRetainedRecoveryTest = allowRecoveryFixture
+    .then(beginAllowedRecovery).then(s' = { frame: VALUE_TWO, created: s.wall, ...s })
+    .then(rejectLoader).then(releaseLoad)
+    .expect(s.o.calls == List(VALUE_ONE) and s.frame == VALUE_TWO
+      and s.o.reads == 1 and s.o.loads == 1 and s.o.writes == 0)
+
+  run maximumAgeBeforeDecodePreservesSourceTest = allowRecoveryFixture
+    .then(s' = { created: s.wall - s.maxAge + 1, ...s }).then(beginAllowedRecovery)
+    .then(s' = { now: s.now + 1, wall: s.wall + 1, ...s }).then(rejectLoader)
+    .expect(s.o.calls == List(SOURCE_ERROR) and s.o.loads == 0
+      and s.o.reads == 1 and s.o.recovery == List("miss"))
+
+  run maximumAgeAfterDecodePreservesSourceTest = allowRecoveryFixture
+    .then(beginAllowedRecovery).then(rejectLoader)
+    .then(s' = { wall: s.candidateCreated + s.acceptedMaxAge, ...s }).then(releaseLoad)
+    .expect(s.o.calls == List(SOURCE_ERROR) and s.o.loads == 1
+      and s.o.recovery == List("miss") and s.d.ages == List() and s.o.writes == 0)
 }

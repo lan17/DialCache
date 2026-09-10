@@ -46,4 +46,16 @@ describe("semantic coverage accounting", () => {
     model.cases[0]!.models = ["formal/dialcache-core.qnt:unknownInvariant"];
     expect(() => check(model)).toThrow();
   });
+  it("rejects a valid case inventory that silently drops a positive scenario", () => {
+    const broken = structuredClone(inventory);
+    for (const c of broken.cases) c.scenarios = c.scenarios.filter(name => name !== "disabled calls bypass policy and caches");
+    expect(() => check(broken)).toThrow(/Portable scenarios missing from case inventory/);
+  });
+  it("rejects a protocol group with valid but incomplete vector references", () => {
+    const broken = structuredClone(inventory);
+    const vectors = JSON.parse(readFileSync(new URL("../formal/protocol-vectors.json", import.meta.url), "utf8"));
+    for (const c of broken.cases) c.vectors = c.vectors.map(name => name === "protocol/keyVectors/*"
+      ? `protocol/keyVectors/${vectors.keyVectors[0].name}` : name);
+    expect(() => check(broken)).toThrow(/Protocol vector missing from case inventory/);
+  });
 });

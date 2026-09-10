@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { checkSourceAudit } from './check-source-audit.mjs';
+import { checkFeatureCoverage } from './check-feature-coverage.mjs';
 import { readExecution, scanDeclarations, scheduledProperties, validateExecution } from './execution.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -110,7 +111,28 @@ export function checkSemanticCoverage(catalog = parse('formal/semantic-cases.jso
     if (!executable && (typeof c.gap !== 'string' || c.gap.length < 10)) throw new Error(`${c.id}: uncovered case needs an explicit gap`);
   }
   if (contractIds.some(id => !parents.has(id))) throw new Error('Portable contract missing from case inventory');
+  // A passing scenario is useful evidence only when its obligation is named.
+  // Keep this independent of the per-case reference checks: valid references
+  // alone allow an entire scenario (or vector) to disappear from the inventory.
+  const namedScenarios = new Set(catalog.cases.flatMap(c => c.scenarios));
+  const unassignedScenarios = [...scenarios].filter(name => !namedScenarios.has(name));
+  if (unassignedScenarios.length) throw new Error(`Portable scenarios missing from case inventory: ${unassignedScenarios.join('; ')}`);
+  const namedVectors = new Set(catalog.cases.flatMap(c => c.vectors));
+  for (const [group, entries] of Object.entries(protocol)) {
+    if (!Array.isArray(entries)) continue;
+    for (const entry of entries) {
+      if (!namedVectors.has(`protocol/${group}/*`) && !namedVectors.has(`protocol/${group}/${entry.name}`)) {
+        throw new Error(`Protocol vector missing from case inventory: ${group}/${entry.name}`);
+      }
+    }
+  }
+  for (const entry of invalidation) {
+    if (!namedVectors.has('invalidation/*') && !namedVectors.has(`invalidation/${entry.name}`)) {
+      throw new Error(`Invalidation vector missing from case inventory: ${entry.name}`);
+    }
+  }
   const applicability = checkQuintCaseAudit(undefined, catalog, manifest);
+  const featureCoverage = checkFeatureCoverage(undefined, catalog);
   const mutations = parse('formal/semantic-mutations.json');
   if (mutations.schemaVersion !== 1 || !Array.isArray(mutations.mutations) || !mutations.mutations.length) throw new Error('Invalid mutation catalog');
   const mutationIds = new Set();
@@ -125,7 +147,7 @@ export function checkSemanticCoverage(catalog = parse('formal/semantic-cases.jso
     portable: cases.filter(portable).length, generated: cases.filter(c => c.generated.length).length,
     modelOnly: cases.filter(c => c.models.length && !portable(c)).map(c => c.id),
     uncovered: cases.filter(c => !c.models.length && !portable(c)).map(c => c.id) });
-  return { profiles, execution, sourceAccounting, applicability, contracts: parents.size, cases: count(catalog.cases), behavioral: count(behavioral),
+  return { profiles, execution, sourceAccounting, applicability, featureCoverage, contracts: parents.size, cases: count(catalog.cases), behavioral: count(behavioral),
     protocol: count(catalog.cases.filter(c => c.vectors.length)), mutations: mutations.mutations.length };
 }
 

@@ -213,8 +213,25 @@ module dialcache_runtime_policy {
   }
 
   // Invariants
-  val runtimeOverlayIsLeafWise =
-    not(s.snapshotTaken) or s.snapshot == resolve(s.capturedRuntime, s.capturedBaseline)
+  // This check deliberately does not call resolve() or inherit(). A faulty
+  // resolver must disagree with the captured inputs rather than validate itself.
+  pure def selectedLeaf(value: int, runtime: int, baseline: int, defaultValue: int): bool = and {
+    runtime == OMITTED or value == runtime,
+    runtime != OMITTED or baseline == OMITTED or value == baseline,
+    runtime != OMITTED or baseline != OMITTED or value == defaultValue,
+  }
+  val runtimeOverlayIsLeafWise = not(s.snapshotTaken) or and {
+    selectedLeaf(s.snapshot.localTtl, s.capturedRuntime.localTtl, s.capturedBaseline.localTtl, 0),
+    selectedLeaf(s.snapshot.remoteTtl, s.capturedRuntime.remoteTtl, s.capturedBaseline.remoteTtl, 0),
+    selectedLeaf(s.snapshot.localRamp, s.capturedRuntime.localRamp, s.capturedBaseline.localRamp,
+      if (s.snapshot.localTtl > 0) 100 else 0),
+    selectedLeaf(s.snapshot.remoteRamp, s.capturedRuntime.remoteRamp, s.capturedBaseline.remoteRamp,
+      if (s.snapshot.remoteTtl > 0) 100 else 0),
+    selectedLeaf(s.snapshot.requestLocal, s.capturedRuntime.requestLocal, s.capturedBaseline.requestLocal, 0),
+    selectedLeaf(s.snapshot.coalesce, s.capturedRuntime.coalesce, s.capturedBaseline.coalesce, 1),
+    selectedLeaf(s.snapshot.recoveryAge, s.capturedRuntime.recoveryAge, s.capturedBaseline.recoveryAge, 0),
+    selectedLeaf(s.snapshot.shadowRamp, s.capturedRuntime.shadowRamp, s.capturedBaseline.shadowRamp, 0),
+  }
   val configuredTtlImpliesDefaultFullRamp = and {
     not(s.snapshotTaken) or s.snapshot.localTtl <= 0 or
       s.capturedRuntime.localRamp != OMITTED or s.capturedBaseline.localRamp != OMITTED or
@@ -253,4 +270,65 @@ module dialcache_runtime_policy {
     .expect(s.remotePhysicalTtlAtInsert == 12)
     .then(all { s' = { remotePhysicalTtlAtInsert: 8, ...s } })
     .expect(not(existingRemoteEntryKeepsPhysicalTtl))
+
+  run omittedPolicyUsesLibraryDefaultsTest = init.then(takeSnapshot)
+    .expect(s.snapshot == {
+      localTtl: 0, localRamp: 0, remoteTtl: 0, remoteRamp: 0,
+      requestLocal: 0, coalesce: 1, recoveryAge: 0, shadowRamp: 0
+    })
+
+  run nullProviderRetainsEveryBaselineLeafTest = init
+    .then(setBaselineLocal).then(setBaselineRemote).then(setBaselineFeatures)
+    .then(takeSnapshot)
+    .expect(s.snapshot.localTtl == 6 and s.snapshot.remoteTtl == 8)
+    .expect(s.snapshot.localRamp == 100 and s.snapshot.remoteRamp == 100)
+    .expect(s.snapshot.requestLocal == 1 and s.snapshot.coalesce == 0
+      and s.snapshot.recoveryAge == 12 and s.snapshot.shadowRamp == 25)
+
+  run sparseLocalOverridePreservesRemoteAndFeaturesTest = init
+    .then(setBaselineLocal).then(setBaselineRemote).then(setBaselineFeatures)
+    .then(s' = { runtime: { localTtl: 4, localRamp: 50, ...s.runtime }, ...s })
+    .then(takeSnapshot)
+    .expect(s.snapshot.localTtl == 4 and s.snapshot.localRamp == 50)
+    .expect(s.snapshot.remoteTtl == 8 and s.snapshot.remoteRamp == 100
+      and s.snapshot.requestLocal == 1 and s.snapshot.coalesce == 0
+      and s.snapshot.recoveryAge == 12 and s.snapshot.shadowRamp == 25)
+
+  run explicitOffReplacesInheritedFeaturesTest = init
+    .then(setBaselineLocal).then(setBaselineRemote).then(setBaselineFeatures)
+    .then(s' = { runtime: {
+      localRamp: 0, remoteRamp: 0, requestLocal: 0, recoveryAge: 0,
+      shadowRamp: 0, ...s.runtime
+    }, ...s })
+    .then(takeSnapshot)
+    .expect(s.snapshot.localTtl == 6 and s.snapshot.remoteTtl == 8)
+    .expect(s.snapshot.localRamp == 0 and s.snapshot.remoteRamp == 0
+      and s.snapshot.requestLocal == 0 and s.snapshot.recoveryAge == 0
+      and s.snapshot.shadowRamp == 0 and s.snapshot.coalesce == 0)
+
+  // The kill switch does not explicitly disable coalescing. Once a serving
+  // layer is reenabled, an omitted coalesce leaf still inherits library true.
+  run reenablingDisabledBaselineKeepsDefaultCoalescingTest = init
+    .then(s' = { baseline: {
+      localRamp: 0, remoteRamp: 0, requestLocal: 0, recoveryAge: 0,
+      shadowRamp: 0, ...s.baseline
+    }, ...s })
+    .then(s' = { runtime: { localTtl: 4, localRamp: 100, ...s.runtime }, ...s })
+    .then(takeSnapshot)
+    .expect(s.snapshot.localTtl == 4 and s.snapshot.localRamp == 100 and s.snapshot.coalesce == 1)
+
+  run disablingPolicyDoesNotEvictInsertedEntriesTest = init
+    .then(setBaselineLocal).then(setBaselineRemote).then(takeSnapshot)
+    .then(insertLocalEntry).then(insertRemoteEntry).then(endInvocation)
+    .then(s' = { runtime: { localRamp: 0, remoteRamp: 0, ...s.runtime }, ...s })
+    .then(takeSnapshot)
+    .expect(s.snapshot.localRamp == 0 and s.snapshot.remoteRamp == 0)
+    .expect(s.localEntryPresent and s.localEntryTtlAtInsert == 6
+      and s.remoteEntryPresent and s.remotePhysicalTtlAtInsert == 8)
+
+  run wrongOverlayLeafIsDetectedTest = init.then(setBaselineLocal).then(setBaselineRemote)
+    .then(s' = { runtime: { localTtl: 4, ...s.runtime }, ...s })
+    .then(takeSnapshot)
+    .then(s' = { snapshot: { remoteTtl: 4, ...s.snapshot }, ...s })
+    .expect(not(runtimeOverlayIsLeafWise))
 }

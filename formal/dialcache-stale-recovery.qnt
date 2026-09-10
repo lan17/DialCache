@@ -90,6 +90,12 @@ module dialcache_stale_recovery {
     s' = { now: s.now + 1, ...s },
   }
 
+  // Wall rollback affects candidate age but does not rewrite acquisition time.
+  action rollbackWall = all {
+    s.now > 0,
+    s' = { now: s.now - 1, ...s },
+  }
+
   action seedFrameNow = all {
     s.initialRead == ReadPending,
     s.redisReads == 0,
@@ -246,6 +252,7 @@ module dialcache_stale_recovery {
   // Exploration order
   action step = any {
     advanceTime,
+    rollbackWall,
     seedFrameNow,
     seedFutureFrame,
     makeFrameOlder,
@@ -322,4 +329,107 @@ module dialcache_stale_recovery {
   run failedReadSkipsRecoveryTest = init.then(toggleReadHealth).then(performInitialRead)
     .then(toggleClassifier).then(startSource).then(sourceRejects)
     .expect(s.finalOutcome == RejectedSource and s.recoveryState == RecoveryIdle)
+
+
+  // These examples distinguish acquisition eligibility from recovery eligibility.
+  // A rollback may make retained bytes fresh again; only future age or M rejects.
+  action retainedFixture = init.then(seedFrameNow)
+    .then(advanceTime).then(advanceTime).then(performInitialRead)
+
+  run lastFreshAgeSkipsSourceTest = init.then(seedFrameNow).then(advanceTime)
+    .then(performInitialRead)
+    .expect(s.finalOutcome == ServedFresh and not(s.candidateRetained)
+      and s.sourceState == SourceIdle and s.redisReads == 1)
+
+  run firstStaleAgeRetainsWithoutDecodingTest = retainedFixture
+    .expect(s.initialRead == RetainedCandidate and s.candidateRetained
+      and not(s.candidateDecoded) and s.finalOutcome == PendingOutcome)
+
+  run lastRecoveryAgeStillServesTest = retainedFixture
+    .then(advanceTime).then(advanceTime).then(toggleClassifier)
+    .then(startSource).then(sourceRejects).then(checkCandidate)
+    .then(candidateLoadSucceeds)
+    .expect(s.candidateServedAt - s.candidateCreatedAt == MAX_RECOVERY_AGE - 1
+      and s.finalOutcome == ServedStale and s.redisWrites == 0
+      and s.processLocalWrites == 0 and s.requestLocalWrites == 1)
+
+  run exactMaximumAgeDoesNotRetainTest = init.then(seedFrameNow)
+    .then(advanceTime).then(advanceTime).then(advanceTime)
+    .then(advanceTime).then(advanceTime).then(performInitialRead)
+    .then(toggleClassifier).then(startSource).then(sourceRejects).then(checkCandidate)
+    .expect(not(s.candidateRetained) and not(s.candidateDecoded)
+      and s.finalOutcome == RejectedSource and s.redisReads == 1)
+
+  run invalidFrameNeverBecomesRecoveryCandidateTest = init.then(seedFrameNow)
+    .then(advanceTime).then(advanceTime).then(toggleFrameValidity)
+    .then(performInitialRead).then(toggleClassifier).then(startSource)
+    .then(sourceRejects).then(checkCandidate)
+    .expect(not(s.candidateRetained) and not(s.candidateDecoded)
+      and s.finalOutcome == RejectedSource)
+
+  // Rejected initial bytes cannot become a candidate just because their age
+  // becomes acceptable later. These histories distinguish initial retention
+  // from an implementation that retains everything and checks only at failure.
+  run initiallyTooOldCannotRecoverAfterRollbackTest = init.then(seedFrameNow)
+    .then(advanceTime).then(advanceTime).then(advanceTime).then(advanceTime).then(advanceTime)
+    .then(performInitialRead).then(rollbackWall).then(toggleClassifier)
+    .then(startSource).then(sourceRejects).then(checkCandidate)
+    .expect(s.now - s.frameCreatedAt == MAX_RECOVERY_AGE - 1
+      and not(s.candidateRetained) and not(s.candidateDecoded)
+      and s.finalOutcome == RejectedSource and s.redisReads == 1)
+
+  run initiallyFutureCannotRecoverAfterClockAdvanceTest = init.then(seedFutureFrame)
+    .then(performInitialRead).then(advanceTime).then(advanceTime).then(advanceTime)
+    .then(toggleClassifier).then(startSource).then(sourceRejects).then(checkCandidate)
+    .expect(s.now - s.frameCreatedAt == FRESH_AGE
+      and not(s.candidateRetained) and not(s.candidateDecoded)
+      and s.finalOutcome == RejectedSource and s.redisReads == 1)
+
+  run fencedFrameNeverBecomesRecoveryCandidateTest = init.then(seedFrameNow)
+    .then(advanceTime).then(advanceTime).then(toggleFence)
+    .then(performInitialRead).then(toggleClassifier).then(startSource)
+    .then(sourceRejects).then(checkCandidate)
+    .expect(not(s.candidateRetained) and not(s.candidateDecoded)
+      and s.finalOutcome == RejectedSource)
+
+  run acceptedSourceNeverDecodesRetainedBytesTest = retainedFixture
+    .then(startSource).then(sourceSucceeds)
+    .expect(s.finalOutcome == ServedSource and not(s.candidateDecoded)
+      and s.redisReads == 1 and s.redisWrites == 1)
+
+  run deniedRecoveryNeverDecodesRetainedBytesTest = retainedFixture
+    .then(startSource).then(sourceRejects)
+    .expect(s.finalOutcome == RejectedSource and not(s.candidateDecoded)
+      and s.redisWrites == 0 and s.requestLocalWrites == 0)
+
+  run maximumAgeBeforeDecodeSkipsLoadingTest = retainedFixture
+    .then(toggleClassifier).then(startSource).then(sourceRejects)
+    .then(advanceTime).then(advanceTime).then(advanceTime).then(checkCandidate)
+    .expect(s.recoveryState == RecoveryMissed and not(s.candidateDecoded)
+      and s.finalOutcome == RejectedSource and s.requestLocalWrites == 0)
+
+  run recoveryDecodeFailureKeepsSourceOutcomeTest = retainedFixture
+    .then(toggleClassifier).then(startSource).then(sourceRejects)
+    .then(checkCandidate).then(candidateLoadFails)
+    .expect(s.finalOutcome == RejectedSource and s.redisReads == 1
+      and s.redisWrites == 0 and s.requestLocalWrites == 0)
+
+  run retainedBytesSurviveRedisDeletionAndFenceTest = retainedFixture
+    .then(mutateRedisAfterRetention).then(toggleClassifier).then(startSource)
+    .then(sourceRejects).then(checkCandidate).then(candidateLoadSucceeds)
+    .expect(not(s.framePresent) and s.frameFenced and s.finalOutcome == ServedStale
+      and s.redisReads == 1 and s.redisWrites == 0 and s.processLocalWrites == 0)
+
+  run rollbackBelowFreshAgeStillRecoversTest = retainedFixture
+    .then(toggleClassifier).then(startSource).then(sourceRejects)
+    .then(checkCandidate).then(rollbackWall).then(candidateLoadSucceeds)
+    .expect(s.candidateServedAt - s.candidateCreatedAt == FRESH_AGE - 1
+      and s.finalOutcome == ServedStale and s.requestLocalWrites == 1)
+
+  run rollbackToFutureCandidateRejectsTest = init.then(advanceTime).then(seedFrameNow)
+    .then(advanceTime).then(advanceTime).then(performInitialRead)
+    .then(toggleClassifier).then(startSource).then(sourceRejects).then(checkCandidate)
+    .then(rollbackWall).then(rollbackWall).then(rollbackWall).then(candidateLoadSucceeds)
+    .expect(s.now < s.candidateCreatedAt and s.finalOutcome == RejectedSource
+      and s.requestLocalWrites == 0)
 }

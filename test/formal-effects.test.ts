@@ -211,6 +211,7 @@ describe("generated pending-effect conformance", () => {
         let budgetChanged = false;
         let delayedWriteWasFenced = false;
         const normalizedFenceSources = new Set<number>();
+        const normalizedReplies = new Map<number, number>();
         let failedRead = false;
         let failedDecode = false;
         let acquiredAt: number | undefined;
@@ -232,9 +233,20 @@ describe("generated pending-effect conformance", () => {
             diagnosticWitnesses.add(`reply:${previous.reply}`);
             if (previous.tracked === 1 && [7, 12, 16].includes(previous.reply) && s.phase === 1) normalizedFenceSources.add(s.activeLoader);
             if (previous.tracked === 0 && previous.reply === 16) diagnosticWitnesses.add("untracked-demotes-fenced-reply");
+            if (s.phase === 1) normalizedReplies.set(s.activeLoader, previous.reply);
           }
           if (previous !== undefined && step.action === "resolveLoader" && previous.sources[step.choice!] === 0 && previous.refill === 1 && previous.now < previous.deadline) {
             if (normalizedFenceSources.has(step.choice!) && previous.observedFence > previous.wall && s.dumps === previous.dumps) diagnosticWitnesses.add("normalized-fence-blocks-publication");
+            const reply = normalizedReplies.get(step.choice!);
+            if (reply !== undefined && s.observedFence === 0 && s.dumps === previous.dumps + 1) {
+              diagnosticWitnesses.add(`normalized-reply-allows-refill:${reply}`);
+            }
+            if (reply !== undefined && s.observedFence > previous.wall && s.dumps === previous.dumps && s.calls.includes(1)) {
+              diagnosticWitnesses.add(`normalized-reply-fences-refill:${reply}`);
+            }
+            if (step.choice === previous.activeLoader && previous.calls.filter(value => value === 0).length > 1) {
+              witnesses.add("source-followers-share-accepted-result");
+            }
           }
           for (const budget of s.readBudgets) witnesses.add(`read-budget:${budget}`);
           if (step.action === "beginCall" && previous?.phase === 3 && previous.readBudget !== previous.readBudgets[previous.activeRead]) witnesses.add("follower-keeps-read-budget");
@@ -260,6 +272,9 @@ describe("generated pending-effect conformance", () => {
           if (step.action === "releaseLoad" && acquiredAt !== undefined) {
             if (s.now - decodeStarted >= 10) witnesses.add("decode-outlives-deadline");
             if (s.watermark >= acquiredAt) witnesses.add("acquired-hit-survives-invalidation");
+            if (s.now - decodeStarted >= 10 && s.readAborts === previous?.readAborts && s.loaders === previous.loaders) {
+              witnesses.add("successful-read-has-no-late-cancel");
+            }
           }
           if (step.action === "failLoad") failedDecode = true;
           if (step.action === "resolveLoader" && previous?.sources[step.choice!] === 0 && previous.now < previous.deadline) {
@@ -270,6 +285,12 @@ describe("generated pending-effect conformance", () => {
           if (step.action === "failDump") witnesses.add("dump-failure-preserves-value");
           if (step.action === "failWrite") witnesses.add("write-failure-preserves-value");
           if (step.action === "releaseDump" && previous !== undefined && previous.now >= previous.deadline) witnesses.add("serialize-outlives-deadline");
+          if (step.action === "releaseDump" && previous !== undefined && s.writes === previous.writes + 1 &&
+            s.wall > previous.acceptedWall && s.writeTimestamp === s.wall) witnesses.add("write-stamp-after-serialization");
+          if (step.action === "rejectLoader" && previous?.sources[step.choice!] === 1 &&
+            s.events.filter(event => event.event === "error" && event.detail === "fallback").length ===
+              previous.events.filter(event => event.event === "error" && event.detail === "fallback").length &&
+            s.calls.every((value, index) => value === previous.calls[index])) witnesses.add("late-rejection-does-not-repeat-error");
           if (step.action === "releaseWrite") {
             delayedWriteWasFenced = s.storedTimestamp <= s.watermark;
             if (previous !== undefined && previous.now >= previous.deadline) witnesses.add("publication-after-deadline");

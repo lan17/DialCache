@@ -112,6 +112,47 @@ replay do not by themselves establish Go conformance; the Go completion gate
 also requires every scheduled profile, fixed case, protocol case, and witness
 gate to finish successfully.
 
+## Maintaining case and witness evidence
+
+Use [FEATURE-COVERAGE.md](./FEATURE-COVERAGE.md) to place each new rule in its
+feature family. Update `semantic-cases.json` and `quint-case-audit.json` with
+precise contract, provenance and checked-scope references. Every positive fixed
+scenario and every protocol/invalidation vector must be assigned to at least
+one semantic case. An unmapped fixture is an accounting failure, even if its
+test passes. Reuse a case for repeated evidence of the same rule; splitting
+rows or mapping an entire file does not strengthen the evidence.
+
+Keep native API, value-domain, clock, exporter and adapter obligations in
+`feature-coverage.json`. Record exact tests and scope for each applicable
+language, an explicit adaptation, and any evidence gap. Non-applicability
+requires a concrete binding reason, not an empty evidence list. Review source
+hash changes against the assertion, not only the test's unchanged name.
+
+A generated witness must require its distinguishing input, ownership/order,
+and actual observable consequence. Remove competing explanations: classifier
+failure needs an otherwise eligible candidate, fence rejection needs otherwise
+valid bytes, and a deadline case needs an actual boundary result. A private
+phase or fixture label alone must not earn credit. Track a surviving value from
+before the event being tested; even an equal-value replacement cannot prove
+that the earlier publication survived. Late-effect suppression alone does not
+prove that raw work retained capacity.
+
+Add discriminating negative controls when introducing or changing witness
+classification. Preserve the matching fixture or phase, then remove or alter
+the final consequence and require the classifier to reject it. Exercise exact
+F/M or deadline boundaries, byte-equivalence distinctions, and ownership where
+the rule depends on them. Keep these classifier/harness controls outside positive
+behavioral and mutation-detection cohorts. Raw expected state may classify
+reachability and assert outcomes; it must never supply execution inputs or
+actual observations to either implementation.
+
+Run `node formal/check-semantic-coverage.mjs`,
+`node formal/check-feature-coverage.mjs`, and the relevant attribution tests.
+These validate accounting and selected classifier boundaries; they do not
+replace model checks, generation, both implementation replays, or real/native
+integration checks. Refresh execution fingerprints and reports after changed
+inputs. Preserve previous measurements as historical until fresh runs finish.
+
 ## Refactoring and execution
 
 [`execution.json`](./execution.json) is the execution schedule: invariant and

@@ -6,7 +6,7 @@ This file maps each formal slice to the existing tests that most directly exerci
 
 See [`CONTRACTS.md`](./CONTRACTS.md) for the rule inventory, named executable evidence, revision-pinned test/section audit, and binding/assumption/exclusion decisions. The table below is a summary; linking a test file never means every assertion in it is modeled.
 
-[`SEMANTIC-COVERAGE.md`](./SEMANTIC-COVERAGE.md) adds finer case accounting and an executable mutation comparison. Of 167 named behavioral cases, 165 cite portable execution and 113 cite required generated witnesses; local read/write failures remain model-only. All 22 named protocol cases cite vectors. The nine new fixed scenarios close the earlier sparse/default-policy and logging/deferred-start gaps. Policy and shadow version 2 add generated witnesses for insertion-TTL preservation, malformed logging and expiration before deferred dispatch. Protocol vectors remain the direct check for argument ordering. These denominators are reviewed cases and selected faults, not all possible behavior.
+[`FEATURE-COVERAGE.md`](./FEATURE-COVERAGE.md) maps 12 feature families and their known corners, including 33 separate native cases. [`SEMANTIC-COVERAGE.md`](./SEMANTIC-COVERAGE.md) distinguishes the evidence links and historical mutation measurements. Of 239 named behavioral cases, 236 cite portable implementation evidence and 181 cite required generated witnesses. Local read/write failures and C38 watermark-lifetime preservation have model checks without portable scenario/vector/generated links; C38 also has native real-Redis corroboration. All 22 named protocol cases cite vectors. These are reviewed case counts, not all possible behavior, and changed inputs require fresh execution reports.
 
 ## Coverage matrix
 
@@ -65,7 +65,7 @@ The referenced implementation tests are `dialcache-liveness`, `dialcache-redis`,
 
 - [`CONFORMANCE.md`](./CONFORMANCE.md) defines the original core profile. [`BEHAVIOR.md`](./BEHAVIOR.md) defines the shared portable scenario/feature driver, action boundaries, clocks, and independently observed outputs.
 - `formal/generate-traces.sh` exports 32 core, 512 pending-effect, 256 scope, 512 recovery, 512 policy, 1,024 dark-shadow, 128 served-hit admission, 512 layer-composition, and 512 independent-caller ITF traces. Each language has core, effects, and feature replay tests that execute every action through public calls. Effects and feature CI require named actions plus explicit race/outcome witnesses, rather than relying on trace count alone.
-- The 238 portable scenarios cover 12 behavior families. After every input, the driver compares all outputs/effect counts against assertion-side expected patches. Expected fields never enter execution.
+- The 244 portable scenarios cover 12 behavior families. After every input, the driver compares all outputs/effect counts against assertion-side expected patches. Expected fields never enter execution.
 - Model cache-presence, fence, and flight fields predict later behavior but are excluded from implementation projection. Negative checks remove local caching/coalescing/recovery or acknowledge lost writes/invalidation and require an observable failure.
 - All nine committed ITF smokes, all feature scenarios, and all protocol vectors run in ordinary TypeScript and Go tests without Quint. Parser checks reject empty/unknown/misplaced traces, missing choices/observations, unsupported arguments, and unsafe integers.
 - CI artifacts retain model counterexamples and generated replay inputs. Failures include file/scenario, step/action, and both observations. Automatic shrinking is not implemented.
@@ -334,7 +334,7 @@ This prevents the formal suite from becoming a second implementation that silent
 
 ## Generated coverage measurement
 
-These review-baseline Vitest 4.1.10/V8 measurements predate the Go parity milestone and policy/shadow profile version 2. They use identical source files and instrumentation maps for all four recorded cohorts. The denominator includes 26 source files, including adapters and exporters; integration/Lua execution and negative harness/parser checks are excluded.
+These review-baseline Vitest 4.1.10/V8 measurements predate the Go parity milestone, policy/shadow profile version 2, and the current behavioral expansion. They use identical source files and instrumentation maps for all four recorded cohorts. The denominator includes 26 source files, including adapters and exporters; integration/Lua execution and negative harness/parser checks are excluded.
 
 | Corpus | Library lines | Library branches | Main engine lines | Main engine branches |
 | --- | --- | --- | --- | --- |
@@ -396,6 +396,8 @@ coverage_cohort formal test/formal-conformance.test.ts \
   --testNamePattern='replays |portable behavioral scenarios|formal protocol conformance vectors'
 ```
 
-## Go parity milestone
+## Historical Go acceptance and current requirements
 
-The Go module now executes all nine generated profiles, all 238 portable scenarios and all 134 protocol cases. Real integration checks run the 49 invalidation transitions against Redis, Valkey and Redis Cluster, including bidirectional TypeScript/Go payload and invalidation behavior. Policy and shadow profile version 2 add generated insertion-expiry, invalid-logging and pre-dispatch-expiration witnesses. All 11 selected behavioral faults are detected by generated TypeScript histories; Go supplies equivalent fault challenges. See `SEMANTIC-COVERAGE.md` for measured results and `GO-PARITY.md` for acceptance and native adaptations. The code-coverage tables above retain their explicitly recorded earlier instrumentation corpus; they are not regenerated percentages for this milestone.
+The earlier Go acceptance run passed all nine generated profiles, 238 portable scenarios and 134 protocol cases. Its mutation measurements detected all 11 selected behavioral faults through generated histories in both languages. Those results are historical; the current suite requires 244 scenarios and 344 witnesses with fresh input fingerprints and reports. The model schedule now contains 117 invariants and 219 regressions across 16 models.
+
+Real integration checks exercise the 49 invalidation transitions against Redis, Valkey and Redis Cluster, including bidirectional TypeScript/Go payload and invalidation behavior. See [SEMANTIC-COVERAGE.md](./SEMANTIC-COVERAGE.md) for measurement methods and recorded results, [GO-PARITY.md](./GO-PARITY.md) for acceptance and native adaptations, and [FEATURE-COVERAGE.md](./FEATURE-COVERAGE.md) for the expanded inventory. The code-coverage tables above retain their earlier instrumentation corpus; they are not regenerated percentages for the current suite.

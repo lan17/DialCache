@@ -13,9 +13,10 @@ type Clock interface {
 	ElapsedMS() int64
 }
 
-// PreciseClock optionally preserves fractional milliseconds for elapsed-time
-// decisions. ElapsedTime and ElapsedMS must use the same monotonic origin.
-// Existing integer clocks remain supported through Clock.ElapsedMS.
+// PreciseClock optionally preserves fractional milliseconds for deadlines and
+// diagnostics. Local TTL uses whole milliseconds from Clock.ElapsedMS.
+// ElapsedTime and ElapsedMS must use the same monotonic origin. Existing integer
+// clocks remain supported through Clock.ElapsedMS.
 type PreciseClock interface {
 	ElapsedTime() time.Duration
 }
@@ -32,6 +33,20 @@ type TimerClock interface {
 type DeferredExecutor interface{ Defer(func()) }
 
 type systemClock struct{ origin time.Time }
+
+var processClockOrigin = time.Now()
+
+func newSystemClock() systemClock {
+	now := time.Now()
+	// Default instances share a millisecond grid, as performance.now does in
+	// TypeScript. A nearby aligned origin keeps elapsed time nonnegative even
+	// under a synthetic clock whose epoch precedes package initialization.
+	phase := now.Sub(processClockOrigin) % time.Millisecond
+	if phase < 0 {
+		phase += time.Millisecond
+	}
+	return systemClock{origin: now.Add(-phase)}
+}
 
 func (c systemClock) WallMS() int64              { return time.Now().UnixMilli() }
 func (c systemClock) ElapsedTime() time.Duration { return time.Since(c.origin) }

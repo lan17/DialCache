@@ -433,4 +433,94 @@ module dialcache_policy_conformance {
     .then(s' = begin(s, 0))
     .then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ABSENT, VALUE_ABSENT) and s.o.loaders == 1 and s.o.writes == 1)
+
+  // Coalescing controls pending work. It does not turn off settled caching.
+  run independentLocalCallsStillReuseSettledValueTest = init
+    .then(s' = { overlay: INDEPENDENT_POLICY_OFFSET + POLICY_NO_REMOTE, ...s })
+    .then(s' = begin(s, 0)).then(releasePolicy)
+    .then(s' = settle(s, 0, VALUE_ONE))
+    .then(s' = begin(s, 0)).then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loaders == 1 and s.o.reads == 0)
+
+  run independentLocalPublicationUsesLastCompletionTest = init
+    .then(s' = { overlay: INDEPENDENT_POLICY_OFFSET + POLICY_NO_REMOTE, ...s })
+    .then(s' = begin(s, 0)).then(releasePolicy)
+    .then(s' = begin(s, 0)).then(releasePolicy)
+    .then(s' = settle(s, 1, VALUE_TWO)).then(s' = settle(s, 0, VALUE_ONE))
+    .then(s' = begin(s, 0)).then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE) and s.o.loaders == 2)
+
+  run independentRemotePublicationUsesLastCompletionTest = init
+    .then(s' = { overlay: INDEPENDENT_POLICY_OFFSET + POLICY_NO_LOCAL, ...s })
+    .then(s' = begin(s, 0)).then(releasePolicy)
+    .then(s' = begin(s, 0)).then(releasePolicy)
+    .then(s' = settle(s, 1, VALUE_TWO)).then(s' = settle(s, 0, VALUE_ONE))
+    .then(s' = begin(s, 0)).then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE)
+      and s.o.loaders == 2 and s.o.reads == 3 and s.o.writes == 2 and s.o.loads == 1)
+
+  run providerFailureBypassesAndPreservesExistingLocalTest = init
+    .then(s' = begin(s, 0)).then(releasePolicy).then(s' = settle(s, 0, VALUE_ONE))
+    .then(s' = { providerFailed: true, ...s })
+    .then(s' = begin(s, 0)).then(releasePolicy).then(s' = settle(s, 1, VALUE_TWO))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO) and s.o.reads == 1 and s.o.writes == 1)
+    .then(s' = { providerFailed: false, ...s })
+    .then(s' = begin(s, 0)).then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE) and s.o.loaders == 2)
+
+  run disablingServingKeepsExistingLocalForReenablementTest = init
+    .then(s' = begin(s, 0)).then(releasePolicy).then(s' = settle(s, 0, VALUE_ONE))
+    .then(s' = { overlay: POLICY_NO_SERVING, ...s })
+    .then(s' = begin(s, 0)).then(releasePolicy).then(s' = settle(s, 1, VALUE_TWO))
+    .then(s' = { overlay: POLICY_INHERIT, ...s })
+    .then(s' = begin(s, 0)).then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE)
+      and s.o.loaders == 2 and s.o.reads == 1 and s.o.writes == 1)
+
+  // Redis physical retention may outlast logical freshness. Increasing the
+  // fresh TTL can reuse retained bytes, but cannot recreate expired storage.
+  run increasedFreshTtlCanReusePhysicallyRetainedValueTest = init
+    .then(s' = { overlay: POLICY_NO_LOCAL, ...s })
+    .then(s' = begin(s, 0)).then(releasePolicy).then(s' = settle(s, 0, VALUE_ONE))
+    .then(s' = advanceTime(s, ONE_SECOND_MS))
+    .then(s' = { overlay: POLICY_REMOTE_TTL_TWO_SECONDS, ...s })
+    .then(s' = begin(s, 0)).then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE)
+      and s.o.loaders == 1 and s.o.loads == 1 and s.o.writes == 1)
+
+  run exactRemoteFreshBoundaryStartsSourceTest = init
+    .then(s' = { overlay: POLICY_NO_LOCAL, ...s })
+    .then(s' = begin(s, 0)).then(releasePolicy).then(s' = settle(s, 0, VALUE_ONE))
+    .then(s' = advanceTime(s, ONE_SECOND_MS))
+    .then(s' = begin(s, 0)).then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_ONE, CALL_PENDING)
+      and s.o.loaders == 2 and s.o.loads == 0 and s.remoteExpires.nth(0) == DEFAULT_RETENTION_MS)
+
+  run increasedFreshTtlCannotResurrectExpiredStorageTest = init
+    .then(s' = { overlay: POLICY_RECOVERY_TWO_SECONDS, ...s })
+    .then(s' = begin(s, 0)).then(releasePolicy).then(s' = settle(s, 0, VALUE_ONE))
+    .then(s' = advanceTime(s, TWO_SECONDS_MS))
+    .then(s' = { overlay: POLICY_REMOTE_FOUR_SECONDS_NO_RECOVERY, ...s })
+    .then(s' = begin(s, 0)).then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_ONE, CALL_PENDING)
+      and s.o.loaders == 2 and s.o.loads == 0 and s.o.writes == 1)
+
+  run remoteHitStartsFullLocalInsertionTtlTest = init
+    .then(s' = { overlay: POLICY_NO_LOCAL, ...s })
+    .then(s' = begin(s, 0)).then(releasePolicy).then(s' = settle(s, 0, VALUE_ONE))
+    .then(s' = advanceTime(s, HALF_SECOND_MS))
+    .then(s' = { overlay: POLICY_INHERIT, ...s })
+    .then(s' = begin(s, 0)).then(releasePolicy)
+    .expect(s.localExpires == HALF_SECOND_MS + ONE_SECOND_MS)
+    .then(s' = advanceTime(s, HALF_SECOND_MS))
+    .then(s' = begin(s, 0)).then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_ONE)
+      and s.o.loaders == 1 and s.o.reads == 2 and s.o.loads == 1)
+
+  run untrackedReadFailureStillWarmsActiveLocalTest = init
+    .then(s' = { readFailed: true, ...s })
+    .then(s' = begin(s, 0)).then(releasePolicy).then(s' = settle(s, 0, VALUE_ONE))
+    .then(s' = begin(s, 0)).then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE)
+      and s.o.loaders == 1 and s.o.reads == 1 and s.o.dumps == 0 and s.o.writes == 0)
 }

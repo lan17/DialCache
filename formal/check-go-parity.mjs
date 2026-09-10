@@ -62,7 +62,7 @@ export function checkGoParity(ledger = json('formal/go-parity.json')) {
     return pathExists(path, context);
   };
   check(ledger.schemaVersion === 1, 'Unsupported Go parity ledger version');
-  for (const [field, path] of Object.entries({ semanticCasesSha256: 'formal/semantic-cases.json', executionSha256: 'formal/execution.json', sourceAuditSha256: 'formal/source-audit.json', quintCaseAuditSha256: 'formal/quint-case-audit.json' })) {
+  for (const [field, path] of Object.entries({ semanticCasesSha256: 'formal/semantic-cases.json', executionSha256: 'formal/execution.json', sourceAuditSha256: 'formal/source-audit.json', quintCaseAuditSha256: 'formal/quint-case-audit.json', featureCoverageSha256: 'formal/feature-coverage.json' })) {
     check(ledger.inputs?.[field] === digest(path), `${path}: ledger input hash is stale; review and refresh its snapshot`);
   }
   check(equal(ledger.cases?.map(row => row.id), semantic.cases.map(row => row.id)), 'Semantic case inventory/order differs from the reviewed ledger');

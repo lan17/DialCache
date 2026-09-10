@@ -29,7 +29,7 @@ const validate = (value: unknown) => invoke("validateExecution(input)", value);
 
 describe("formal execution schedule", () => {
   it("accounts for all models, selected invariants, regressions, and generated traces without Quint", () => {
-    expect(validate(manifest())).toEqual({ models: 16, libraries: 1, profiles: 9, invariants: 104, regressions: 119, generatedTraces: 4000 });
+    expect(validate(manifest())).toEqual({ models: 16, libraries: 1, profiles: 9, invariants: 117, regressions: 219, generatedTraces: 4000 });
   });
 
   it("rejects omitted models and dropped or renamed regressions", () => {
@@ -106,7 +106,7 @@ describe("formal execution schedule", () => {
     }).toString()) as Command[];
     const check = dryRun("check");
     expect(check.filter(job => job.args[0] === "typecheck").map(job => job.args[1])).toEqual(manifest().models.map(model => model.path));
-    expect(check.filter(job => job.args[0] === "test")).toHaveLength(14);
+    expect(check.filter(job => job.args[0] === "test")).toHaveLength(15);
     const challenge = check.findIndex(job => job.command === "node");
     expect(check[challenge - 1]!.args.slice(0, 2)).toEqual(["test", "formal/dialcache-coalescing-liveness.qnt"]);
     expect(check[challenge]!.args).toEqual(["formal/check-model-properties.mjs"]);

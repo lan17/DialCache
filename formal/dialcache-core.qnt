@@ -32,6 +32,7 @@ module dialcache_core {
     callRemote: bool,
     callTracked: bool,
     callStartedEnabled: bool,
+    invalidInvocationPolicy: bool,
     requestHasValue: bool,
     localHasValue: bool,
     remoteHasValue: bool,
@@ -82,6 +83,7 @@ module dialcache_core {
     callRemote: false,
     callTracked: false,
     callStartedEnabled: false,
+    invalidInvocationPolicy: false,
     requestHasValue: false,
     localHasValue: false,
     remoteHasValue: false,
@@ -198,6 +200,7 @@ module dialcache_core {
     s.scope != OpenScope or s.scopeDisabled,
     s' = {
       callStartedEnabled: false,
+      invalidInvocationPolicy: false,
       callRequestLocal: false,
       callLocal: false,
       callRemote: false,
@@ -228,6 +231,7 @@ module dialcache_core {
     s' = {
       callScopeId: s.scopeId,
       callStartedEnabled: true,
+      invalidInvocationPolicy: false,
       callRequestLocal: s.policyRequestLocal,
       callLocal: s.policyLocal,
       callRemote: s.policyRemote,
@@ -246,6 +250,22 @@ module dialcache_core {
       keyConstructions: 1,
       remoteSemanticMiss: false,
       remoteReadFailed: false,
+      ...s
+    },
+  }
+
+  // A malformed invocation-wide flag (for example an explicit null where a
+  // boolean is required) differs from valid false. Host representations are
+  // abstracted to invalid admission here; they remain fixed/native boundary tests.
+  action rejectInvalidInvocationPolicy = all {
+    s.phase == RequestLookup,
+    s' = {
+      invalidInvocationPolicy: true,
+      callRequestLocal: false,
+      callLocal: false,
+      callRemote: false,
+      sourceCalls: 1,
+      phase: LoaderRunning,
       ...s
     },
   }
@@ -410,6 +430,7 @@ module dialcache_core {
     startPassThrough,
     startEnabledCall,
     requestLookup,
+    rejectInvalidInvocationPolicy,
     localLookup,
     remoteLookupHealthy,
     remoteLookupFailure,
@@ -462,6 +483,20 @@ module dialcache_core {
   val requestValueBelongsToCurrentScope =
     not(s.requestHasValue) or (s.scope == OpenScope and s.requestValueScope == s.scopeId)
 
+  val sourceFailureNeverPublishes =
+    s.phase != CallDone or s.origin != NoResult or
+      (s.requestWrites == 0 and s.localWrites == 0 and s.remoteWrites == 0)
+
+  val noLayerPolicySkipsAllStorage =
+    s.callRequestLocal or s.callLocal or s.callRemote or
+      (s.requestReads == 0 and s.localReads == 0 and s.remoteReads == 0 and
+       s.requestWrites == 0 and s.localWrites == 0 and s.remoteWrites == 0)
+
+  val invalidInvocationPolicyNeverTouchesStorage =
+    not(s.invalidInvocationPolicy) or
+      (s.requestReads == 0 and s.localReads == 0 and s.remoteReads == 0 and
+       s.requestWrites == 0 and s.localWrites == 0 and s.remoteWrites == 0)
+
   // Deterministic regressions
   run lateResultCannotEnterReplacementScopeTest = init.then(toggleRequestPolicy).then(openScope)
     .then(startEnabledCall).then(requestLookup).then(localLookup).then(skipRemote)
@@ -497,4 +532,52 @@ module dialcache_core {
     .then(openScope).then(startEnabledCall).then(requestLookup).then(localLookup).then(skipRemote)
     .then(loaderSuccessWithoutRemote)
     .expect(s.origin == SourceValue and not(s.localHasValue) and s.localWrites == 0 and s.localWriteFailures == 0)
+
+  run untrackedSourcePublishesToAllParticipatingLayersTest = init
+    .then(toggleRequestPolicy).then(toggleLocalPolicy).then(toggleRemotePolicy)
+    .then(openScope).then(startEnabledCall).then(requestLookup).then(localLookup)
+    .then(remoteLookupHealthy).then(loaderSuccessAfterSemanticMiss).then(finishRemotePublication)
+    .expect(s.origin == SourceValue and s.requestWrites == 1
+      and s.localWrites == 1 and s.remoteWrites == 1)
+    .then(resetCall).then(startEnabledCall).then(requestLookup)
+    .expect(s.origin == RequestValue and s.localReads == 0
+      and s.remoteReads == 0 and s.sourceCalls == 0)
+
+  run localHitWarmsRequestAndSkipsRemoteTest = init.then(toggleLocalPolicy)
+    .then(openScope).then(startEnabledCall).then(requestLookup).then(localLookup)
+    .then(skipRemote).then(loaderSuccessWithoutRemote).then(resetCall)
+    .then(toggleRequestPolicy).then(toggleRemotePolicy)
+    .then(startEnabledCall).then(requestLookup).then(localLookup)
+    .expect(s.origin == LocalValue and s.requestWrites == 1
+      and s.remoteReads == 0 and s.sourceCalls == 0)
+
+  run remoteReadFailureStillPublishesUntrackedLocalAndRequestTest = init
+    .then(toggleRequestPolicy).then(toggleLocalPolicy).then(toggleRemotePolicy)
+    .then(toggleRedisHealth).then(openScope).then(startEnabledCall)
+    .then(requestLookup).then(localLookup).then(remoteLookupFailure)
+    .then(loaderSuccessAfterRemoteFailure)
+    .expect(s.origin == SourceValue and s.requestWrites == 1
+      and s.localWrites == 1 and s.remoteWrites == 0)
+
+  run trackedWithoutRemoteStillPublishesLocalTest = init
+    .then(toggleLocalPolicy).then(toggleTrackedPolicy).then(openScope)
+    .then(startEnabledCall).then(requestLookup).then(localLookup).then(skipRemote)
+    .then(loaderSuccessWithoutRemote)
+    .expect(s.origin == SourceValue and s.localWrites == 1 and s.remoteWrites == 0)
+
+  run rejectedSourceNeverPublishesTest = init
+    .then(toggleRequestPolicy).then(toggleLocalPolicy).then(toggleRemotePolicy)
+    .then(openScope).then(startEnabledCall).then(requestLookup).then(localLookup)
+    .then(remoteLookupHealthy).then(loaderFailure)
+    .expect(s.origin == NoResult and s.requestWrites == 0
+      and s.localWrites == 0 and s.remoteWrites == 0)
+
+  run invalidBooleanOverlayBypassesAndPreservesMemoTest = init
+    .then(toggleRequestPolicy).then(openScope).then(startEnabledCall)
+    .then(requestLookup).then(localLookup).then(skipRemote)
+    .then(loaderSuccessWithoutRemote).then(resetCall).then(startEnabledCall)
+    .then(rejectInvalidInvocationPolicy).then(loaderSuccessWithoutRemote)
+    .expect(s.origin == SourceValue and s.requestReads == 0 and s.requestWrites == 0)
+    .then(resetCall).then(startEnabledCall).then(requestLookup)
+    .expect(s.origin == RequestValue and s.sourceCalls == 0)
 }

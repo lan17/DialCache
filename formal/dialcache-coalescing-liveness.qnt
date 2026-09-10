@@ -3,8 +3,11 @@ module dialcache_coalescing_liveness {
   // and older abandoned sources. Policy flags are environment inputs; phase and
   // flightScope are DialCache ownership. fallbackStartedAt records invocation
   // time so deadline properties can be checked independently of the transition.
-  // Time ranges from 0 through MAX_TIME. This model checks deadline safety and
-  // cleanup; it does not assume scheduler fairness or prove eventual progress.
+  // Sampled time ranges from 0 through MAX_TIME; named library-budget regressions
+  // also jump to 60,000/60,001 ms to check the real default boundary. Independently
+  // admitted sources model successful settlement versus timeout, without cache
+  // publication; the main flight also models rejection and publication ownership.
+  // This checks deadline safety and cleanup, not scheduler fairness or progress.
 
   // Types, bounds and state
   type FlightScope = NoFlight | RequestFlight | ProcessFlight
@@ -13,6 +16,22 @@ module dialcache_coalescing_liveness {
 
   pure val MAX_TIME = 8
   pure val FALLBACK_TIMEOUT = 3
+  pure val LIBRARY_FALLBACK_TIMEOUT_MS = 60000
+  pure val OMITTED_FALLBACK_TIMEOUT = -1
+  pure val NO_FALLBACK_TIMEOUT = 0
+
+  // Independently admitted callers include disabled calls, enabled calls with
+  // no serving layers, failed key construction, and coalescing-disabled calls.
+  // A zero captured budget means no deadline; initially disabled callers always
+  // capture zero regardless of the operation's configured source budget.
+  type IndependentSource = {
+    startedEnabled: bool,
+    configuredBudget: int,
+    budget: int,
+    startedAt: int,
+    acceptedAt: int,
+    outcome: Outcome
+  }
 
   type State = {
     now: int,
@@ -26,6 +45,9 @@ module dialcache_coalescing_liveness {
     followers: int,
     sourceExecutions: int,
     independentExecutions: int,
+    independentSources: List[IndependentSource],
+    configuredSourceBudget: int,
+    keyConstructionFailed: bool,
     fallbackDeadline: int,
     fallbackStartedAt: int,
     fallbackDeadlineStarted: bool,
@@ -50,6 +72,9 @@ module dialcache_coalescing_liveness {
     followers: 0,
     sourceExecutions: 0,
     independentExecutions: 0,
+    independentSources: List(),
+    configuredSourceBudget: FALLBACK_TIMEOUT,
+    keyConstructionFailed: false,
     fallbackDeadline: 0,
     fallbackStartedAt: 0,
     fallbackDeadlineStarted: false,
@@ -85,6 +110,16 @@ module dialcache_coalescing_liveness {
     s' = { coalesce: not(s.coalesce), ...s },
   }
 
+  action chooseSourceBudget = {
+    nondet budget = Set(OMITTED_FALLBACK_TIMEOUT, NO_FALLBACK_TIMEOUT, FALLBACK_TIMEOUT).oneOf()
+    s' = { configuredSourceBudget: budget, ...s }
+  }
+
+  action toggleKeyFailure = all {
+    s.phase == FlightIdle,
+    s' = { keyConstructionFailed: not(s.keyConstructionFailed), ...s },
+  }
+
   // Flight admission and cache lookup
   // Request-local coalescing wraps process coalescing and therefore wins when
   // both scopes are eligible for the same key.
@@ -92,6 +127,7 @@ module dialcache_coalescing_liveness {
     s.phase == FlightIdle,
     s.scopeEnabled,
     s.coalesce,
+    not(s.keyConstructionFailed),
     s.requestLayerActive or s.sharedLayerActive,
     s' = {
       phase: CacheLookup,
@@ -116,8 +152,38 @@ module dialcache_coalescing_liveness {
 
   action startIndependentCaller = all {
     s.phase == FlightIdle,
-    not(s.scopeEnabled and s.coalesce and (s.requestLayerActive or s.sharedLayerActive)),
-    s' = { independentExecutions: s.independentExecutions + 1, ...s },
+    s.keyConstructionFailed or
+      not(s.scopeEnabled and s.coalesce and (s.requestLayerActive or s.sharedLayerActive)),
+    val budget = if (not(s.scopeEnabled)) NO_FALLBACK_TIMEOUT
+      else if (s.configuredSourceBudget == OMITTED_FALLBACK_TIMEOUT) LIBRARY_FALLBACK_TIMEOUT_MS
+      else s.configuredSourceBudget
+    s' = {
+      independentExecutions: s.independentExecutions + 1,
+      independentSources: s.independentSources.append({
+        startedEnabled: s.scopeEnabled,
+        configuredBudget: s.configuredSourceBudget,
+        budget: budget,
+        startedAt: s.now,
+        acceptedAt: 0,
+        outcome: NoOutcome
+      }),
+      ...s
+    },
+  }
+
+  action settleIndependentSource = {
+    nondet source = s.independentSources.indices()
+      .filter(i => s.independentSources.nth(i).outcome == NoOutcome).oneOf()
+    val pending = s.independentSources.nth(source)
+    val expired = pending.budget > 0 and s.now - pending.startedAt >= pending.budget
+    s' = {
+      independentSources: s.independentSources.replaceAt(source, {
+        outcome: if (expired) SourceTimeout else SourceSuccess,
+        acceptedAt: s.now,
+        ...pending
+      }),
+      ...s
+    }
   }
 
   action finishCacheHit = all {
@@ -251,6 +317,9 @@ module dialcache_coalescing_liveness {
     abandonedSourceSettles,
     dispatchPublication,
     resetFlight,
+    chooseSourceBudget,
+    toggleKeyFailure,
+    settleIndependentSource,
   }
 
   // Invariants
@@ -281,6 +350,37 @@ module dialcache_coalescing_liveness {
   // Abandoned work is explicitly not represented as an active registered source.
   val abandonedSourceIsNotAFlight =
     s.abandonedSources == 0 or not(s.activeSourceRunning) or s.phase == FallbackRunning
+
+  val requestLayerOwnsOuterFlight =
+    s.flightScope == NoFlight or not(s.requestLayerActive) or s.flightScope == RequestFlight
+
+  val cacheHitNeverStartsSourceDeadline =
+    s.outcome != CacheHit or (s.sourceExecutions == 0 and not(s.fallbackDeadlineStarted))
+
+  val outsideSourceHasNoDeadline = s.independentSources.indices().forall(i => {
+    val source = s.independentSources.nth(i)
+    source.startedEnabled or (source.budget == 0 and source.outcome != SourceTimeout)
+  })
+
+  val omittedSourceBudgetUsesSixtySeconds = s.independentSources.indices().forall(i => {
+    val source = s.independentSources.nth(i)
+    not(source.startedEnabled) or source.configuredBudget != OMITTED_FALLBACK_TIMEOUT or source.budget == 60000
+  })
+
+  val disabledSourceDeadlineNeverTimesOut = s.independentSources.indices().forall(i => {
+    val source = s.independentSources.nth(i)
+    source.budget != NO_FALLBACK_TIMEOUT or source.outcome != SourceTimeout
+  })
+
+  val independentAcceptanceChecksCapturedDeadline = s.independentSources.indices().forall(i => {
+    val source = s.independentSources.nth(i)
+    and {
+      source.outcome != SourceSuccess or source.budget == 0 or
+        source.acceptedAt - source.startedAt < source.budget,
+      source.outcome != SourceTimeout or
+        (source.budget > 0 and source.acceptedAt - source.startedAt >= source.budget),
+    }
+  })
 
   // Deterministic regressions
   run lateSettlementBeforeTimerTest = init
@@ -323,4 +423,57 @@ module dialcache_coalescing_liveness {
     .then(advanceTime).then(advanceTime).then(cacheMissStartsFallback)
     .then(all { s' = { fallbackDeadline: FALLBACK_TIMEOUT, ...s } })
     .expect(not(fallbackDeadlineStartsWithFallback))
+
+  run lateFollowerKeepsLeaderSourceDeadlineTest = init
+    .then(toggleEnabled).then(toggleSharedLayer).then(startLeader)
+    .then(cacheMissStartsFallback).then(advanceTime).then(advanceTime)
+    .then(joinFollower)
+    .expect(s.followers == 1 and s.sourceExecutions == 1
+      and s.fallbackStartedAt == 0 and s.fallbackDeadline == 3)
+    .then(advanceTime).then(fallbackTimesOut)
+    .expect(s.outcome == SourceTimeout and s.flightScope == NoFlight)
+
+  run inactiveServingLayersKeepConcurrentCallsIndependentTest = init
+    .then(toggleEnabled).then(startIndependentCaller).then(startIndependentCaller)
+    .expect(s.independentExecutions == 2 and s.flightScope == NoFlight)
+
+  run coalescingDisabledKeepsConcurrentCallsIndependentTest = init
+    .then(toggleEnabled).then(toggleSharedLayer).then(toggleCoalesce)
+    .then(startIndependentCaller).then(startIndependentCaller)
+    .expect(s.independentExecutions == 2 and s.flightScope == NoFlight)
+
+  run sharedCacheHitDoesNotStartSourceTest = init
+    .then(toggleEnabled).then(toggleSharedLayer).then(startLeader).then(joinFollower)
+    .then(finishCacheHit)
+    .expect(s.outcome == CacheHit and s.followers == 1
+      and s.sourceExecutions == 0 and not(s.fallbackDeadlineStarted))
+
+  run outsideCallsIgnoreConfiguredSourceDeadlineTest = init
+    .then(toggleSharedLayer).then(startIndependentCaller).then(startIndependentCaller)
+    .then(advanceTime).then(advanceTime).then(advanceTime).then(advanceTime)
+    .then(settleIndependentSource).then(settleIndependentSource)
+    .expect(s.independentExecutions == 2 and s.flightScope == NoFlight)
+    .expect(s.independentSources.indices().forall(i =>
+      s.independentSources.nth(i).outcome == SourceSuccess and s.independentSources.nth(i).budget == 0))
+
+  run librarySourceDeadlineIsSixtySecondsTest = init.then(toggleEnabled)
+    .then(s' = { configuredSourceBudget: OMITTED_FALLBACK_TIMEOUT, ...s })
+    .then(startIndependentCaller)
+    .expect(s.independentSources.nth(0).budget == 60000)
+    .then(s' = { now: 60000, ...s }).then(settleIndependentSource)
+    .expect(s.independentSources.nth(0).outcome == SourceTimeout)
+
+  run explicitlyUnboundedEnabledSourceAcceptsLateValueTest = init.then(toggleEnabled)
+    .then(s' = { configuredSourceBudget: NO_FALLBACK_TIMEOUT, ...s })
+    .then(startIndependentCaller)
+    .then(s' = { now: 60001, ...s }).then(settleIndependentSource)
+    .expect(s.independentSources.nth(0).outcome == SourceSuccess
+      and s.independentSources.nth(0).budget == 0)
+
+  run keyFailureKeepsEnabledSourceDeadlineTest = init
+    .then(toggleEnabled).then(toggleSharedLayer).then(toggleKeyFailure)
+    .then(startIndependentCaller)
+    .expect(s.flightScope == NoFlight and s.independentSources.nth(0).budget == 3)
+    .then(advanceTime).then(advanceTime).then(advanceTime).then(settleIndependentSource)
+    .expect(s.independentSources.nth(0).outcome == SourceTimeout)
 }

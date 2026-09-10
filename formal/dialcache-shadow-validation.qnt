@@ -153,7 +153,7 @@ module dialcache_shadow_validation {
   action rampedDownSourceReady = all {
     s.callerPath == RemoteRampedDown,
     not(s.sourceAccepted),
-    s.phase != JobDone,
+    // A completed diagnostic job cannot prevent the independent caller result.
     s' = {
       sourceAccepted: true,
       callerResultCommitted: true,
@@ -353,4 +353,53 @@ module dialcache_shadow_validation {
   run deadlineStopsFillTest = init.then(callerRemoteRampedDown)
     .then(admitJob).then(rampedDownObserveMiss).then(shadowDeadlineFires)
     .expect(s.phase == JobDone and s.fillWrites == 0)
+
+
+  action servedComparisonFixture = init.then(callerServedRemoteHit)
+    .then(admitJob).then(servedHitStartsDetachedSource).then(detachedSourceReady)
+
+  run equalComparisonSkipsConfirmationTest = servedComparisonFixture.then(compareEqual)
+    .expect(s.outcome == Match and s.confirmationReads == 0 and s.fillWrites == 0
+      and s.callerResultCommitted)
+
+  run missingConfirmationSupersedesWithoutRepairTest = servedComparisonFixture
+    .then(compareDifferent).then(confirmationSeesAbsent)
+    .expect(s.outcome == Superseded and s.confirmationReads == 1
+      and s.fillWrites == 0 and s.callerResultCommitted)
+
+  run changedConfirmationSupersedesWithoutRepairTest = servedComparisonFixture
+    .then(compareDifferent).then(confirmationSeesChanged)
+    .expect(s.outcome == Superseded and s.confirmationReads == 1
+      and s.fillWrites == 0 and s.callerResultCommitted)
+
+  run identicalConfirmationDiagnosesWithoutRepairTest = servedComparisonFixture
+    .then(compareDifferent).then(confirmationSeesSame)
+    .expect(s.outcome == Mismatch and s.confirmationReads == 1
+      and s.fillWrites == 0 and s.callerResultCommitted)
+
+  run darkReadFailureStillAllowsCallerResultTest = init.then(callerRemoteRampedDown)
+    .then(admitJob).then(darkReadFails).then(rampedDownSourceReady)
+    .expect(s.outcome == RedisError and s.phase == JobDone and s.callerResultCommitted
+      and s.sourceAccepted and s.fillWrites == 0 and s.detachedSourceExecutions == 0)
+
+  run droppedShadowStillAllowsCallerResultTest = init.then(toggleCapacity)
+    .then(callerRemoteRampedDown).then(dropJob).then(rampedDownSourceReady)
+    .expect(s.outcome == Dropped and s.phase == JobDone and s.callerResultCommitted
+      and s.fillWrites == 0 and s.detachedSourceExecutions == 0)
+
+  run timedOutShadowStillAllowsCallerResultTest = init.then(callerRemoteRampedDown)
+    .then(admitJob).then(shadowDeadlineFires).then(rampedDownSourceReady)
+    .expect(s.outcome == TimedOut and s.phase == JobDone and s.callerResultCommitted
+      and s.fillWrites == 0 and s.detachedSourceExecutions == 0)
+
+  run callerResultCanPrecedeDarkReadTest = init.then(callerRemoteRampedDown)
+    .then(admitJob).then(rampedDownSourceReady)
+    .expect(s.callerResultCommitted and s.c0 == C0Unknown and s.fillWrites == 0)
+    .then(rampedDownObserveMiss).then(finishFill)
+    .expect(s.outcome == Filled and s.detachedSourceExecutions == 0)
+
+  run undecodablePresentFrameNeverFillsTest = init.then(callerRemoteRampedDown)
+    .then(admitJob).then(rampedDownSourceReady).then(rampedDownObserveUndecodable)
+    .expect(s.outcome == DeserializationError and s.fillWrites == 0
+      and s.callerResultCommitted)
 }

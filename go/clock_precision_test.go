@@ -156,9 +156,9 @@ func TestPreciseShadowDeadline(t *testing.T) {
 	}
 }
 
-func TestPreciseLocalInsertionExpiry(t *testing.T) {
+func TestLocalInsertionExpiryUsesWholeMilliseconds(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		cache := New[int](Options[int]{})
+		cache := New[int](Options[int]{Clock: systemClock{origin: time.Now()}})
 		time.Sleep(700 * time.Microsecond)
 		op := Operation{Identity: Identity{KeyType: "clock", ID: "one", UseCase: "local"}, Policy: Policy{LocalTTLMS: 1000}}
 		sources := 0
@@ -176,13 +176,64 @@ func TestPreciseLocalInsertionExpiry(t *testing.T) {
 		if call() != 1 {
 			t.Fatal("initial source result differs")
 		}
-		time.Sleep(999400 * time.Microsecond)
+		// Local cache age uses absolute whole milliseconds, matching TS. The
+		// entry inserted at 0.7ms expires at 1000ms, before 1000.7ms.
+		time.Sleep(999200 * time.Microsecond)
 		if call() != 1 || sources != 1 {
-			t.Fatal("entry expired before its full insertion TTL")
+			t.Fatal("entry expired before its whole-millisecond boundary")
 		}
-		time.Sleep(600 * time.Microsecond)
+		time.Sleep(100 * time.Microsecond)
 		if call() != 2 || sources != 2 {
-			t.Fatal("entry survived its exact insertion TTL")
+			t.Fatal("entry survived its whole-millisecond boundary")
+		}
+	})
+}
+
+func TestDefaultInstancesShareLocalMillisecondGrid(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		// Align the external schedule to the native default clock's next tick.
+		// Expected results below come only from public calls, not cache state.
+		probe := New[int](Options[int]{})
+		elapsed := elapsedNow(probe.options.Clock)
+		if elapsed < 0 {
+			t.Fatal("default clock started with negative elapsed time")
+		}
+		phase := elapsed % time.Millisecond
+		time.Sleep(time.Millisecond - phase)
+		first := New[int](Options[int]{})
+		time.Sleep(400 * time.Microsecond)
+		second := New[int](Options[int]{})
+		time.Sleep(300 * time.Microsecond)
+		caches := []*Cache[int]{first, second}
+		sources := []int{0, 0}
+		op := Operation{Identity: Identity{KeyType: "clock", ID: "one", UseCase: "shared-grid"}, Policy: Policy{LocalTTLMS: 1000}}
+		call := func(index int) int {
+			var value int
+			if err := caches[index].Enable(context.Background(), func(ctx context.Context) error {
+				var err error
+				value, err = caches[index].GetOrLoad(ctx, op, func(context.Context) (int, error) { sources[index]++; return sources[index], nil })
+				return err
+			}); err != nil {
+				t.Fatal(err)
+			}
+			return value
+		}
+		for index := range caches {
+			if call(index) != 1 {
+				t.Fatal("initial instance result differs")
+			}
+		}
+		time.Sleep(999200 * time.Microsecond)
+		for index := range caches {
+			if call(index) != 1 || sources[index] != 1 {
+				t.Fatalf("instance %d expired before the common millisecond boundary", index)
+			}
+		}
+		time.Sleep(100 * time.Microsecond)
+		for index := range caches {
+			if call(index) != 2 || sources[index] != 2 {
+				t.Fatalf("instance %d survived the common millisecond boundary", index)
+			}
 		}
 	})
 }

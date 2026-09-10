@@ -11,10 +11,10 @@ import (
 )
 
 type entry[T any] struct {
-	value    T
-	inserted time.Duration
-	ttl      time.Duration
-	used     uint64
+	value      T
+	insertedMS int64
+	ttlMS      int64
+	used       uint64
 }
 type flight[T any] struct {
 	done      chan struct{}
@@ -45,7 +45,7 @@ type Cache[T any] struct {
 
 func New[T any](options Options[T]) *Cache[T] {
 	if options.Clock == nil {
-		options.Clock = systemClock{origin: time.Now()}
+		options.Clock = newSystemClock()
 	}
 	if options.Codec == nil {
 		options.Codec = JSONCodec[T]{}
@@ -128,7 +128,9 @@ func (c *Cache[T]) localGet(key string) (T, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	item, found := c.local[key]
-	if found && elapsedNow(c.options.Clock)-item.inserted >= item.ttl {
+	// Match the TypeScript local cache's whole-millisecond monotonic clock.
+	// Source/read/shadow deadlines separately retain fractional elapsed time.
+	if found && c.options.Clock.ElapsedMS()-item.insertedMS >= item.ttlMS {
 		delete(c.local, key)
 		found = false
 	}
@@ -146,7 +148,7 @@ func (c *Cache[T]) localPut(key string, value T, ttl int64) {
 		return
 	}
 	c.sequence++
-	c.local[key] = entry[T]{value: value, inserted: elapsedNow(c.options.Clock), ttl: time.Duration(ttl) * time.Millisecond, used: c.sequence}
+	c.local[key] = entry[T]{value: value, insertedMS: c.options.Clock.ElapsedMS(), ttlMS: ttl, used: c.sequence}
 	if len(c.local) > c.options.LocalCapacity {
 		var oldest string
 		stamp := ^uint64(0)

@@ -37,7 +37,13 @@
     "lru-eviction-probed",
     "tracked-refill-needs-remote-validation",
     "untracked-ignores-watermark",
-    "invalidation-fences-both-operations"
+    "invalidation-fences-both-operations",
+    "different-instances-own-distinct-flights",
+    "invalidation-preserves-request-hit",
+    "local-hit-stops-remote-and-source",
+    "request-hit-stops-lower-traversal",
+    "source-publication-probed-in-all-three-layers",
+    "tracked-remote-disabled-local-hit"
   ],
   "admission": [
     "outcome:match",
@@ -83,7 +89,9 @@
     "memo-value:6",
     "memo-value:7",
     "memo-value:8",
-    "memo-value:9"
+    "memo-value:9",
+    "independent-request-last-completion-probed",
+    "uncoalesced-request-settled-hit"
   ],
   "recovery": [
     "fixture:4",
@@ -117,7 +125,22 @@
     "instance-classifier-error-preserves-source",
     "instance-denial-overrides-timeout-default",
     "instance-allow-recovers-ordinary-error",
-    "operation-allow-overrides-instance-denial"
+    "operation-allow-overrides-instance-denial",
+    "classifier-error-keeps-error-without-decode",
+    "exact-maximum-after-decode-rejects",
+    "failed-fresh-decode-is-not-recovery",
+    "failed-initial-read-skips-recovery",
+    "fenced-read-does-not-retain",
+    "first-stale-age-recovers-without-publication",
+    "fresh-zero-age-skips-source",
+    "future-read-preserves-source-error",
+    "last-fresh-age-skips-source",
+    "last-recovery-age-serves",
+    "maximum-age-read-preserves-source-error",
+    "recovery-age-sampled-at-successful-decode",
+    "replacement-cannot-change-recovered-value",
+    "rollback-below-fresh-age-still-recovers",
+    "source-success-skips-stale-decode"
   ],
   "policy": [
     "local-hit-preserves-insertion-expiry",
@@ -152,7 +175,23 @@
     "local-value:8",
     "remote-value:8",
     "local-value:9",
-    "remote-value:9"
+    "remote-value:9",
+    "failed-untracked-read-still-warms-local",
+    "inactive-layers-independent-sources",
+    "increased-fresh-ttl-cannot-resurrect-expired-storage",
+    "increased-fresh-ttl-reuses-retained-frame",
+    "independent-local-last-completion-probed",
+    "invalid-local-ramp-preserves-remote-hit",
+    "invalid-local-ttl-preserves-remote-hit",
+    "invalid-remote-ramp-preserves-local-hit",
+    "invalid-remote-ttl-preserves-local-hit",
+    "provider-failure-preserves-existing-local",
+    "remote-exact-fresh-boundary-miss",
+    "serving-disabled-preserves-existing-local",
+    "sparse-empty-provider-inherits-local-hit",
+    "sparse-empty-provider-inherits-remote-hit",
+    "uncoalesced-local-settled-hit",
+    "uncoalesced-remote-settled-hit"
   ],
   "shadow": [
     "outcome:match",
@@ -208,7 +247,24 @@
     "expired-job-source-resolve-keeps-deadline",
     "expired-job-source-reject-keeps-deadline",
     "enabled-logging-match-has-no-warning",
-    "enabled-logging-superseded-has-no-warning"
+    "enabled-logging-superseded-has-no-warning",
+    "dark-read-error-still-allows-source-result",
+    "dark-source-error-never-decodes-or-fills",
+    "equal-comparison-skips-c1",
+    "fenced-c1-supersedes-without-repair",
+    "fenced-dark-c0-can-fill-after-cutoff",
+    "fill-serialization-error-preserves-caller",
+    "fill-write-error-preserves-caller",
+    "future-c1-confirms-payload-without-repair",
+    "future-dark-c0-fills-without-decoding",
+    "late-c0-cannot-start-new-shadow-work",
+    "late-c1-cannot-emit-second-verdict",
+    "late-shadow-decode-cannot-start-c1",
+    "late-shadow-dump-cannot-dispatch-write",
+    "late-shadow-write-cannot-change-caller-or-verdict",
+    "present-undecodable-c0-is-not-repaired",
+    "different-c1-bytes-supersede",
+    "same-c1-bytes-confirm-mismatch"
   ],
   "effects": [
     "event:request",
@@ -289,6 +345,18 @@
     "initial-budget:3",
     "initial-budget:4",
     "late-resolve",
-    "late-reject"
+    "late-reject",
+    "normalized-reply-allows-refill:1",
+    "normalized-reply-allows-refill:2",
+    "normalized-reply-allows-refill:4",
+    "normalized-reply-allows-refill:8",
+    "normalized-reply-allows-refill:9",
+    "normalized-reply-allows-refill:10",
+    "normalized-reply-allows-refill:11",
+    "normalized-reply-fences-refill:12",
+    "normalized-reply-allows-refill:13",
+    "successful-read-has-no-late-cancel",
+    "write-stamp-after-serialization",
+    "late-rejection-does-not-repeat-error"
   ]
 }

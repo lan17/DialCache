@@ -183,4 +183,52 @@ module dialcache_tracked_invalidation {
     s.readPhase != ReadServed or
     s.snapshotWatermark < s.watermark or
     s.snapshotSourceVersion >= s.sourceVersion
+
+
+  // Acquiring bytes and consuming them are separate from the shared store.
+  run acquiredSnapshotSurvivesLaterInvalidationTest = init.then(startLoad)
+    .then(completeLoadWrite).then(acquireTrackedRead).then(commitAndInvalidate)
+    .then(finishTrackedRead)
+    .expect(s.readPhase == ReadServed and s.snapshotSourceVersion == 0
+      and s.sourceVersion == 1 and s.snapshotWatermark == 0 and s.watermark == 4)
+
+  run acquisitionAfterInvalidationRejectsOldBytesTest = init.then(startLoad)
+    .then(completeLoadWrite).then(commitAndInvalidate).then(acquireTrackedRead)
+    .then(finishTrackedRead)
+    .expect(s.readPhase == ReadMissed and s.snapshotCreatedAt <= s.snapshotWatermark)
+
+  // At the last permitted stale completion, writer clock lead reaches the
+  // watermark exactly. The strict comparison still excludes the old version.
+  run staleWriteAtCoveredDelayEqualityRemainsFencedTest = init.then(startLoad)
+    .then(commitAndInvalidate).then(advanceTime).then(advanceTime).then(advanceTime)
+    .then(completeLoadWrite).then(acquireTrackedRead).then(finishTrackedRead)
+    .expect(s.valueSourceVersion == 0 and s.valueCreatedAt == s.watermark
+      and s.readPhase == ReadMissed and staleValueAfterInvalidationIsFenced)
+
+  run freshWriteBeyondBufferBecomesReadableTest = init.then(commitAndInvalidate)
+    .then(advanceTime).then(advanceTime).then(advanceTime).then(advanceTime)
+    .then(startLoad).then(completeLoadWrite).then(acquireTrackedRead).then(finishTrackedRead)
+    .expect(s.readPhase == ReadServed and s.valueSourceVersion == 1
+      and s.valueCreatedAt > s.watermark)
+
+  run readsAndValueWritesDoNotMoveWatermarkTest = init.then(commitAndInvalidate)
+    .then(startLoad).then(completeLoadWrite).then(acquireTrackedRead).then(finishTrackedRead)
+    .expect(s.watermark == FUTURE_BUFFER_MS)
+
+  run observedFutureFenceSkipsRefillTest = init.then(commitAndInvalidate)
+    .then(acquireTrackedRead).then(finishTrackedRead).then(conditionalRefill)
+    .expect(not(s.valuePresent) and s.watermark == FUTURE_BUFFER_MS)
+
+  run refillAtFenceEqualitySkipsWriteTest = init.then(commitAndInvalidate)
+    .then(acquireTrackedRead).then(finishTrackedRead)
+    .then(advanceTime).then(advanceTime).then(advanceTime).then(conditionalRefill)
+    .expect(not(s.valuePresent) and s.watermark == FUTURE_BUFFER_MS)
+
+  // A new fence is not substituted for the one captured by a miss. The write
+  // can proceed, but the next authoritative read rejects its fenced timestamp.
+  run laterInvalidationDoesNotRewriteMissFenceTest = init.then(acquireTrackedRead)
+    .then(finishTrackedRead).then(commitAndInvalidate).then(conditionalRefill)
+    .expect(s.valuePresent and s.snapshotWatermark == 0 and s.valueCreatedAt <= s.watermark)
+    .then(acquireTrackedRead).then(finishTrackedRead)
+    .expect(s.readPhase == ReadMissed)
 }

@@ -2658,121 +2658,200 @@
     {
       "name": "tracked local-only calls publish and reuse source values",
       "feature": "local-cache",
-      "fixture": {"policy":{"ttlSec":{"local":60}},"tracked":true},
+      "fixture": {"policy": {"ttlSec": {"local": 60}},"tracked": true},
       "steps": [
-        {"input":{"op":"begin"},"expect":{"calls":[{"status":"pending"}],"loaders":1,"policyCalls":1}},
-        {"input":{"op":"resolve","loader":0,"value":2},"expect":{"calls":[{"status":"value","value":2}]}},
-        {"input":{"op":"begin"},"expect":{"calls":[{"status":"value","value":2},{"status":"value","value":2}],"policyCalls":2}}
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 2},"expect": {"calls": [{"status": "value","value": 2}]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 2},{"status": "value","value": 2}],"policyCalls": 2}}
       ]
     },
     {
       "name": "tracked remote ramp zero retains local source publication",
       "feature": "local-cache",
-      "fixture": {"policy":{"ttlSec":{"local":60,"remote":60},"ramp":{"remote":0}},"tracked":true},
+      "fixture": {"policy": {"ttlSec": {"local": 60,"remote": 60},"ramp": {"remote": 0}},"tracked": true},
       "steps": [
-        {"input":{"op":"seed","value":1},"expect":{}},
-        {"input":{"op":"begin"},"expect":{"calls":[{"status":"pending"}],"loaders":1,"policyCalls":1}},
-        {"input":{"op":"resolve","loader":0,"value":2},"expect":{"calls":[{"status":"value","value":2}]}},
-        {"input":{"op":"begin"},"expect":{"calls":[{"status":"value","value":2},{"status":"value","value":2}],"policyCalls":2}}
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 2},"expect": {"calls": [{"status": "value","value": 2}]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 2},{"status": "value","value": 2}],"policyCalls": 2}}
       ]
     },
     {
       "name": "null coalesce leaf bypasses caching without replacing retained entries",
       "feature": "runtime-policy",
-      "fixture": {"policy":{"ttlSec":{"local":60,"remote":60},"requestLocal":true}},
+      "fixture": {"policy": {"ttlSec": {"local": 60,"remote": 60},"requestLocal": true}},
       "steps": [
-        {"input":{"op":"openScope","id":"request"},"expect":{}},
-        {"input":{"op":"policy","value":null},"expect":{}},
-        {"input":{"op":"begin","scope":"request"},"expect":{"calls":[{"status":"pending"}],"loaders":1,"policyCalls":1,"reads":1}},
-        {"input":{"op":"resolve","loader":0,"value":1},"expect":{"calls":[{"status":"value","value":1}],"writes":1,"dumps":1,"writeTtls":[60000]}},
-        {"input":{"op":"policy","value":{"coalesce":null}},"expect":{}},
-        {"input":{"op":"begin","scope":"request"},"expect":{"calls":[{"status":"value","value":1},{"status":"pending"}],"loaders":2,"policyCalls":2}},
-        {"input":{"op":"begin","scope":"request"},"expect":{"calls":[{"status":"value","value":1},{"status":"pending"},{"status":"pending"}],"loaders":3,"policyCalls":3}},
-        {"input":{"op":"resolve","loader":1,"value":2},"expect":{"calls":[{"status":"value","value":1},{"status":"value","value":2},{"status":"pending"}]}},
-        {"input":{"op":"resolve","loader":2,"value":3},"expect":{"calls":[{"status":"value","value":1},{"status":"value","value":2},{"status":"value","value":3}]}},
-        {"input":{"op":"policy","value":null},"expect":{}},
-        {"input":{"op":"begin","scope":"request"},"expect":{"calls":[{"status":"value","value":1},{"status":"value","value":2},{"status":"value","value":3},{"status":"value","value":1}],"policyCalls":4}},
-        {"input":{"op":"closeScope","id":"request"},"expect":{}},
-        {"input":{"op":"begin"},"expect":{"calls":[{"status":"value","value":1},{"status":"value","value":2},{"status":"value","value":3},{"status":"value","value":1},{"status":"value","value":1}],"policyCalls":5}}
+        {"input": {"op": "openScope","id": "request"},"expect": {}},
+        {"input": {"op": "policy","value": null},"expect": {}},
+        {"input": {"op": "begin","scope": "request"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1,"reads": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1}],"writes": 1,"dumps": 1,"writeTtls": [60000]}},
+        {"input": {"op": "policy","value": {"coalesce": null}},"expect": {}},
+        {"input": {"op": "begin","scope": "request"},"expect": {"calls": [{"status": "value","value": 1},{"status": "pending"}],"loaders": 2,"policyCalls": 2}},
+        {"input": {"op": "begin","scope": "request"},"expect": {"calls": [{"status": "value","value": 1},{"status": "pending"},{"status": "pending"}],"loaders": 3,"policyCalls": 3}},
+        {"input": {"op": "resolve","loader": 1,"value": 2},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "pending"}]}},
+        {"input": {"op": "resolve","loader": 2,"value": 3},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "value","value": 3}]}},
+        {"input": {"op": "policy","value": null},"expect": {}},
+        {"input": {"op": "begin","scope": "request"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "value","value": 3},{"status": "value","value": 1}],"policyCalls": 4}},
+        {"input": {"op": "closeScope","id": "request"},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "value","value": 3},{"status": "value","value": 1},{"status": "value","value": 1}],"policyCalls": 5}}
       ]
     },
     {
       "name": "sparse TTL overlay retains the remote TTL and replaces local insertion TTL",
       "feature": "runtime-policy",
-      "fixture": {"policy":{"ttlSec":{"local":1,"remote":60}},"fallbackTimeoutMs":null},
+      "fixture": {"policy": {"ttlSec": {"local": 1,"remote": 60}},"fallbackTimeoutMs": null},
       "steps": [
-        {"input":{"op":"policy","value":{"ttlSec":{"local":2}}},"expect":{}},
-        {"input":{"op":"begin"},"expect":{"calls":[{"status":"pending"}],"loaders":1,"reads":1,"policyCalls":1}},
-        {"input":{"op":"resolve","loader":0,"value":1},"expect":{"calls":[{"status":"value","value":1}],"writes":1,"dumps":1,"writeTtls":[60000]}},
-        {"input":{"op":"advance","ms":1000},"expect":{}},
-        {"input":{"op":"begin"},"expect":{"calls":[{"status":"value","value":1},{"status":"value","value":1}],"policyCalls":2}},
-        {"input":{"op":"advance","ms":1000},"expect":{}},
-        {"input":{"op":"begin"},"expect":{"calls":[{"status":"value","value":1},{"status":"value","value":1},{"status":"value","value":1}],"policyCalls":3,"reads":2,"loads":1}}
+        {"input": {"op": "policy","value": {"ttlSec": {"local": 2}}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"reads": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1}],"writes": 1,"dumps": 1,"writeTtls": [60000]}},
+        {"input": {"op": "advance","ms": 1000},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1}],"policyCalls": 2}},
+        {"input": {"op": "advance","ms": 1000},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1},{"status": "value","value": 1}],"policyCalls": 3,"reads": 2,"loads": 1}}
       ]
     },
     {
       "name": "sparse ramp overlay preserves the disabled sibling layer",
       "feature": "runtime-policy",
-      "fixture": {"policy":{"ttlSec":{"local":60,"remote":60},"ramp":{"local":0,"remote":100}}},
+      "fixture": {"policy": {"ttlSec": {"local": 60,"remote": 60},"ramp": {"local": 0,"remote": 100}}},
       "steps": [
-        {"input":{"op":"policy","value":{"ramp":{"remote":0}}},"expect":{}},
-        {"input":{"op":"begin"},"expect":{"calls":[{"status":"pending"}],"loaders":1,"policyCalls":1}},
-        {"input":{"op":"resolve","loader":0,"value":1},"expect":{"calls":[{"status":"value","value":1}]}},
-        {"input":{"op":"begin"},"expect":{"calls":[{"status":"value","value":1},{"status":"pending"}],"loaders":2,"policyCalls":2}},
-        {"input":{"op":"resolve","loader":1,"value":2},"expect":{"calls":[{"status":"value","value":1},{"status":"value","value":2}]}},
-        {"input":{"op":"policy","value":{"ramp":{"remote":100}}},"expect":{}},
-        {"input":{"op":"begin"},"expect":{"calls":[{"status":"value","value":1},{"status":"value","value":2},{"status":"pending"}],"loaders":3,"reads":1,"policyCalls":3}},
-        {"input":{"op":"resolve","loader":2,"value":3},"expect":{"calls":[{"status":"value","value":1},{"status":"value","value":2},{"status":"value","value":3}],"writes":1,"dumps":1,"writeTtls":[60000]}},
-        {"input":{"op":"begin"},"expect":{"calls":[{"status":"value","value":1},{"status":"value","value":2},{"status":"value","value":3},{"status":"value","value":3}],"reads":2,"loads":1,"policyCalls":4}}
+        {"input": {"op": "policy","value": {"ramp": {"remote": 0}}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1}]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "pending"}],"loaders": 2,"policyCalls": 2}},
+        {"input": {"op": "resolve","loader": 1,"value": 2},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2}]}},
+        {"input": {"op": "policy","value": {"ramp": {"remote": 100}}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "pending"}],"loaders": 3,"reads": 1,"policyCalls": 3}},
+        {"input": {"op": "resolve","loader": 2,"value": 3},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "value","value": 3}],"writes": 1,"dumps": 1,"writeTtls": [60000]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "value","value": 3},{"status": "value","value": 3}],"reads": 2,"loads": 1,"policyCalls": 4}}
       ]
     },
     {
       "name": "runtime TTLs without ramps enable both serving layers",
       "feature": "runtime-policy",
-      "fixture": {"policy":{}},
+      "fixture": {"policy": {}},
       "steps": [
-        {"input":{"op":"policy","value":{"ttlSec":{"local":60,"remote":60}}},"expect":{}},
-        {"input":{"op":"begin"},"expect":{"calls":[{"status":"pending"}],"loaders":1,"reads":1,"policyCalls":1}},
-        {"input":{"op":"resolve","loader":0,"value":1},"expect":{"calls":[{"status":"value","value":1}],"writes":1,"dumps":1,"writeTtls":[60000]}},
-        {"input":{"op":"begin"},"expect":{"calls":[{"status":"value","value":1},{"status":"value","value":1}],"policyCalls":2}},
-        {"input":{"op":"policy","value":{"ttlSec":{"local":60,"remote":60},"ramp":{"local":0}}},"expect":{}},
-        {"input":{"op":"begin"},"expect":{"calls":[{"status":"value","value":1},{"status":"value","value":1},{"status":"value","value":1}],"reads":2,"loads":1,"policyCalls":3}}
+        {"input": {"op": "policy","value": {"ttlSec": {"local": 60,"remote": 60}}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"reads": 1,"policyCalls": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1}],"writes": 1,"dumps": 1,"writeTtls": [60000]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1}],"policyCalls": 2}},
+        {"input": {"op": "policy","value": {"ttlSec": {"local": 60,"remote": 60},"ramp": {"local": 0}}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1},{"status": "value","value": 1}],"reads": 2,"loads": 1,"policyCalls": 3}}
       ]
     },
     {
       "name": "library defaults disable request memo recovery and shadow while sharing active work",
       "feature": "runtime-policy",
-      "fixture": {"policy":{"ttlSec":{"remote":1}}},
+      "fixture": {"policy": {"ttlSec": {"remote": 1}}},
       "steps": [
-        {"input":{"op":"openScope","id":"request"},"expect":{}},
-        {"input":{"op":"seed","value":1,"ttlMs":60000},"expect":{}},
-        {"input":{"op":"begin","scope":"request"},"expect":{"calls":[{"status":"value","value":1}],"reads":1,"loads":1,"policyCalls":1}},
-        {"input":{"op":"advance","ms":1000},"expect":{}},
-        {"input":{"op":"begin","scope":"request"},"expect":{"calls":[{"status":"value","value":1},{"status":"pending"}],"reads":2,"loaders":1,"policyCalls":2}},
-        {"input":{"op":"begin","scope":"request"},"expect":{"calls":[{"status":"value","value":1},{"status":"pending"},{"status":"pending"}],"policyCalls":3}},
-        {"input":{"op":"advance","ms":10},"expect":{"calls":[{"status":"value","value":1},{"status":"error","error":"timeout:0"},{"status":"error","error":"timeout:0"}]}},
-        {"input":{"op":"resolve","loader":0,"value":2},"expect":{}},
-        {"input":{"op":"closeScope","id":"request"},"expect":{}}
+        {"input": {"op": "openScope","id": "request"},"expect": {}},
+        {"input": {"op": "seed","value": 1,"ttlMs": 60000},"expect": {}},
+        {"input": {"op": "begin","scope": "request"},"expect": {"calls": [{"status": "value","value": 1}],"reads": 1,"loads": 1,"policyCalls": 1}},
+        {"input": {"op": "advance","ms": 1000},"expect": {}},
+        {"input": {"op": "begin","scope": "request"},"expect": {"calls": [{"status": "value","value": 1},{"status": "pending"}],"reads": 2,"loaders": 1,"policyCalls": 2}},
+        {"input": {"op": "begin","scope": "request"},"expect": {"calls": [{"status": "value","value": 1},{"status": "pending"},{"status": "pending"}],"policyCalls": 3}},
+        {"input": {"op": "advance","ms": 10},"expect": {"calls": [{"status": "value","value": 1},{"status": "error","error": "timeout:0"},{"status": "error","error": "timeout:0"}]}},
+        {"input": {"op": "resolve","loader": 0,"value": 2},"expect": {}},
+        {"input": {"op": "closeScope","id": "request"},"expect": {}}
       ]
     },
     {
       "name": "malformed runtime mismatch logging keeps comparison and suppresses warnings",
       "feature": "shadow-validation",
-      "fixture": {"policy":{"ttlSec":{"remote":60},"shadow":{"ramp":100,"logMismatches":true}},"observe":["mismatchWarning","error"]},
+      "fixture": {"policy": {"ttlSec": {"remote": 60},"shadow": {"ramp": 100,"logMismatches": true}},"observe": ["mismatchWarning","error"]},
       "steps": [
-        {"input":{"op":"policy","value":{"shadow":{"logMismatches":null}}},"expect":{}},
-        {"input":{"op":"seed","value":1},"expect":{}},
-        {"input":{"op":"begin"},"expect":{"calls":[{"status":"value","value":1}],"reads":1,"loads":1,"loaders":1,"policyCalls":1,"events":[{"event":"error","cacheNamespace":"urn","useCase":"Behavior","keyType":"id","layer":"remote","error":"config_resolution","inFallback":false}]}},
-        {"input":{"op":"resolve","loader":0,"value":2},"expect":{"loads":2,"reads":2,"shadow":["mismatch"]}}
+        {"input": {"op": "policy","value": {"shadow": {"logMismatches": null}}},"expect": {}},
+        {"input": {"op": "seed","value": 1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1}],"reads": 1,"loads": 1,"loaders": 1,"policyCalls": 1,"events": [{"event": "error","cacheNamespace": "urn","useCase": "Behavior","keyType": "id","layer": "remote","error": "config_resolution","inFallback": false}]}},
+        {"input": {"op": "resolve","loader": 0,"value": 2},"expect": {"loads": 2,"reads": 2,"shadow": ["mismatch"]}}
       ]
     },
     {
       "name": "elapsed source work expires dark shadow before deferred read dispatch",
       "feature": "shadow-validation",
-      "fixture": {"policy":{"ttlSec":{"remote":60},"ramp":{"remote":0},"shadow":{"ramp":100}},"tracked":true,"fallbackTimeoutMs":null,"sourceWorkMs":60001},
+      "fixture": {"policy": {"ttlSec": {"remote": 60},"ramp": {"remote": 0},"shadow": {"ramp": 100}},"tracked": true,"fallbackTimeoutMs": null,"sourceWorkMs": 60001},
       "steps": [
-        {"input":{"op":"begin"},"expect":{"calls":[{"status":"pending"}],"loaders":1,"policyCalls":1,"shadow":["timeout"]}},
-        {"input":{"op":"resolve","loader":0,"value":2},"expect":{"calls":[{"status":"value","value":2}]}}
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1,"shadow": ["timeout"]}},
+        {"input": {"op": "resolve","loader": 0,"value": 2},"expect": {"calls": [{"status": "value","value": 2}]}}
+      ]
+    },
+    {
+      "name": "runtime ramp up over disabled baseline preserves default coalescing",
+      "feature": "runtime-policy",
+      "fixture": {"policy": {}},
+      "steps": [
+        {"input": {"op": "policy","value": {"ttlSec": {"local": 60},"ramp": {"local": 100}}},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"},{"status": "pending"}],"policyCalls": 2}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1}]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 1},{"status": "value","value": 1}],"policyCalls": 3}}
+      ]
+    },
+    {
+      "name": "source rejection publishes to none of the participating layers",
+      "feature": "fail-open",
+      "fixture": {"policy": {"requestLocal": true,"ttlSec": {"local": 60,"remote": 60}}},
+      "steps": [
+        {"input": {"op": "openScope","id": "request"},"expect": {}},
+        {"input": {"op": "begin","scope": "request"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1,"reads": 1}},
+        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "error","error": "source:0"}]}},
+        {"input": {"op": "begin","scope": "request"},"expect": {"calls": [{"status": "error","error": "source:0"},{"status": "pending"}],"loaders": 2,"policyCalls": 2,"reads": 2}},
+        {"input": {"op": "reject","loader": 1},"expect": {"calls": [{"status": "error","error": "source:0"},{"status": "error","error": "source:1"}]}}
+      ]
+    },
+    {
+      "name": "explicit feature kill switches bypass and preserve request memo for reenablement",
+      "feature": "runtime-policy",
+      "fixture": {"policy": {"requestLocal": true,"ttlSec": {"local": 60,"remote": 60},"staleOnErrorMaxAgeSec": 120,"shadow": {"ramp": 100}}},
+      "steps": [
+        {"input": {"op": "openScope","id": "request"},"expect": {}},
+        {"input": {"op": "begin","scope": "request"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"policyCalls": 1,"reads": 1}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1}],"dumps": 1,"writes": 1,"writeTtls": [120000]}},
+        {"input": {"op": "policy","value": {"requestLocal": false,"ramp": {"local": 0,"remote": 0},"staleOnErrorMaxAgeSec": 0,"shadow": {"ramp": 0}}},"expect": {}},
+        {"input": {"op": "begin","scope": "request"},"expect": {"calls": [{"status": "value","value": 1},{"status": "pending"}],"loaders": 2,"policyCalls": 2}},
+        {"input": {"op": "begin","scope": "request"},"expect": {"calls": [{"status": "value","value": 1},{"status": "pending"},{"status": "pending"}],"loaders": 3,"policyCalls": 3}},
+        {"input": {"op": "resolve","loader": 1,"value": 2},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "pending"}]}},
+        {"input": {"op": "resolve","loader": 2,"value": 3},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "value","value": 3}]}},
+        {"input": {"op": "policy","value": {}},"expect": {}},
+        {"input": {"op": "begin","scope": "request"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "value","value": 3},{"status": "value","value": 1}],"policyCalls": 4}}
+      ]
+    },
+    {
+      "name": "initially too-old bytes cannot recover after wall rollback",
+      "feature": "stale-recovery",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"staleOnErrorMaxAgeSec": 5},"tracked": true,"recovery": "allow"},
+      "steps": [
+        {"input": {"op": "seed","value": 1,"ageMs": 5000},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"reads": 1,"policyCalls": 1}},
+        {"input": {"op": "shiftWall","ms": -1000},"expect": {}},
+        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "error","error": "source:0"}],"recovery": ["miss"],"classifications": 1}}
+      ]
+    },
+    {
+      "name": "initially future bytes cannot recover after wall clock catches up",
+      "feature": "stale-recovery",
+      "fixture": {"policy": {"ttlSec": {"remote": 1},"staleOnErrorMaxAgeSec": 5},"tracked": true,"recovery": "allow"},
+      "steps": [
+        {"input": {"op": "seed","value": 1,"ageMs": -1},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"loaders": 1,"reads": 1,"policyCalls": 1}},
+        {"input": {"op": "shiftWall","ms": 1001},"expect": {}},
+        {"input": {"op": "reject","loader": 0},"expect": {"calls": [{"status": "error","error": "source:0"}],"recovery": ["miss"],"classifications": 1}}
+      ]
+    },
+    {
+      "name": "invalidation during source does not replace the acquired miss fence",
+      "feature": "invalidation",
+      "fixture": {"policy": {"ttlSec": {"remote": 1}},"tracked": true},
+      "steps": [
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "pending"}],"reads": 1,"loaders": 1,"policyCalls": 1}},
+        {"input": {"op": "invalidate","futureBufferMs": 20},"expect": {"invalidations": 1,"maintenance": ["ok"]}},
+        {"input": {"op": "resolve","loader": 0,"value": 1},"expect": {"calls": [{"status": "value","value": 1}],"dumps": 1,"writes": 1,"writeTtls": [1000]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "pending"}],"reads": 2,"loaders": 2,"policyCalls": 2}},
+        {"input": {"op": "resolve","loader": 1,"value": 2},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2}]}},
+        {"input": {"op": "advance","ms": 21},"expect": {}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "pending"}],"reads": 3,"loaders": 3,"policyCalls": 3}},
+        {"input": {"op": "resolve","loader": 2,"value": 3},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "value","value": 3}],"dumps": 2,"writes": 2,"writeTtls": [1000,1000]}},
+        {"input": {"op": "begin"},"expect": {"calls": [{"status": "value","value": 1},{"status": "value","value": 2},{"status": "value","value": 3},{"status": "value","value": 3}],"reads": 4,"loads": 1,"policyCalls": 4}}
       ]
     }
   ]

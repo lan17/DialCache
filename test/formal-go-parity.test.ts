@@ -33,7 +33,7 @@ describe("Go parity ledger freshness", () => {
   it("validates reviewed inventory without claiming executed parity", () => {
     expect(validate(ledger())).toMatchObject({
       kind: "accounting-and-freshness", sourceFiles: 27, declarations: 772,
-      reviewedTestsAndDocs: 44, semanticCases: 189, profiles: 9,
+      reviewedTestsAndDocs: 44, semanticCases: 261, profiles: 9,
       meaning: "Fresh reviewed mappings and inventory snapshots; execution evidence remains separately assessed.",
     });
   });

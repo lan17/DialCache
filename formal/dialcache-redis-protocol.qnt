@@ -191,6 +191,43 @@ module dialcache_redis_protocol {
   val observedWatermarkOnlyOnTrackedReads =
     not(s.observedWatermarkAttached) or s.tracked
 
+  // Nil and unsupported frames still require well-typed native replies. A
+  // malformed decimal watermark is different from a non-bulk-string reply.
+  val replyTypesAreValidatedFirst =
+    s.result == PendingDecode or
+      ((s.result == PayloadTypeError) ==
+        (s.valueReply == InvalidReply or
+         (s.tracked and s.watermarkReply == InvalidReply)))
+
+  // A trustworthy watermark is retained even when the value cannot be read.
+  // The independent predicate uses external frame facts, not classify/result,
+  // so dropping the fence from a miss is observable to the property.
+  val validMissWatermarksArePreserved =
+    s.result == PendingDecode or
+      (s.observedWatermarkAttached ==
+        (s.tracked and s.watermarkReply == BufferReply and
+         s.watermarkState == ValidWatermark and
+         (s.valueReply == NilReply or
+          (s.valueReply == BufferReply and
+           (s.frameShape != SupportedFrame or s.frameTimestamp == 0 or
+            s.frameTimestamp <= s.watermarkValue)))))
+
+  val untrackedDecodingIgnoresWatermarks =
+    s.result == PendingDecode or s.tracked or
+      (not(s.observedWatermarkAttached) and
+       s.result ==
+         (if (s.valueReply == InvalidReply) PayloadTypeError
+          else if (s.valueReply == NilReply) ValueAbsent
+          else if (s.frameShape != SupportedFrame) UnclassifiedMiss
+          else if (s.encoding == UnsupportedEncoding) PayloadEncodingError
+          else DecodedHit))
+
+  val unsupportedFramePrecedesEncodingError =
+    s.result == PendingDecode or s.valueReply != BufferReply or
+      s.frameShape == SupportedFrame or
+      (s.tracked and s.watermarkReply == InvalidReply) or
+      s.result == UnclassifiedMiss
+
   val encodingErrorRequiresSupportedFrame =
     s.result != PayloadEncodingError or
       (s.valueReply == BufferReply and s.frameShape == SupportedFrame and s.encoding == UnsupportedEncoding)
@@ -209,4 +246,41 @@ module dialcache_redis_protocol {
     .then(cycleWatermarkState).then(cycleWatermarkState)
     .then(toggleEncoding).then(toggleEncoding).then(decode)
     .expect(s.result == UnclassifiedMiss and malformedWatermarkPrecedesEncodingError)
+
+  run absentValuePreservesWatermarkTest = init.then(toggleTracked)
+    .then(setFencedTimestamp).then(cycleValueReply).then(decode)
+    .expect(s.result == ValueAbsent and s.observedWatermarkAttached and
+      validMissWatermarksArePreserved)
+
+  run unsupportedFramePreservesWatermarkTest = init.then(toggleTracked)
+    .then(setFencedTimestamp).then(cycleFrameShape).then(cycleFrameShape)
+    .then(toggleEncoding).then(toggleEncoding).then(decode)
+    .expect(s.result == UnclassifiedMiss and s.observedWatermarkAttached and
+      validMissWatermarksArePreserved and unsupportedFramePrecedesEncodingError)
+
+  run zeroTimestampPreservesWatermarkTest = init.then(toggleTracked)
+    .then(setFencedTimestamp).then(setZeroTimestamp).then(decode)
+    .expect(s.result == UnclassifiedMiss and s.observedWatermarkAttached and
+      validMissWatermarksArePreserved)
+
+  run droppedMissWatermarkIsDetectedTest = init.then(toggleTracked)
+    .then(setFencedTimestamp).then(cycleValueReply).then(decode)
+    .then(all { s' = { observedWatermarkAttached: false, ...s } })
+    .expect(not(validMissWatermarksArePreserved))
+
+  run invalidWatermarkReplyPrecedesAbsenceTest = init.then(toggleTracked)
+    .then(cycleValueReply).then(cycleWatermarkReply).then(cycleWatermarkReply)
+    .then(decode)
+    .expect(s.result == PayloadTypeError and replyTypesAreValidatedFirst)
+
+  run untrackedZeroIgnoresInvalidWatermarkReplyTest = init.then(setZeroTimestamp)
+    .then(cycleWatermarkReply).then(cycleWatermarkReply).then(decode)
+    .expect(s.result == DecodedHit and not(s.observedWatermarkAttached) and
+      untrackedDecodingIgnoresWatermarks)
+
+  run malformedWatermarkCannotReplaceAbsenceTest = init.then(toggleTracked)
+    .then(cycleValueReply).then(cycleWatermarkState).then(cycleWatermarkState)
+    .then(decode)
+    .expect(s.result == ValueAbsent and not(s.observedWatermarkAttached) and
+      nilValueIsValueAbsent)
 }

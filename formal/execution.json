@@ -29,7 +29,10 @@
         "firstHitStopsLowerTraversal",
         "remoteFailureNeverRefills",
         "trackedRemoteFallbackSuppressesLocalPublication",
-        "onePolicySnapshotPerEnabledInvocation"
+        "onePolicySnapshotPerEnabledInvocation",
+        "sourceFailureNeverPublishes",
+        "noLayerPolicySkipsAllStorage",
+        "invalidInvocationPolicyNeverTouchesStorage"
       ],
       "regressions": [
         "lateResultCannotEnterReplacementScopeTest",
@@ -37,7 +40,13 @@
         "localReadFailureContinuesToRemoteTest",
         "localWriteFailurePreservesSourceAndMemoTest",
         "localWriteFailurePreservesRemoteHitTest",
-        "localReadFailureSuppressesSourcePublicationTest"
+        "localReadFailureSuppressesSourcePublicationTest",
+        "untrackedSourcePublishesToAllParticipatingLayersTest",
+        "localHitWarmsRequestAndSkipsRemoteTest",
+        "remoteReadFailureStillPublishesUntrackedLocalAndRequestTest",
+        "trackedWithoutRemoteStillPublishesLocalTest",
+        "rejectedSourceNeverPublishesTest",
+        "invalidBooleanOverlayBypassesAndPreservesMemoTest"
       ]
     },
     {
@@ -52,7 +61,14 @@
       "regressions": [
         "policyChangeDuringInvocationTest",
         "localTtlMutationIsDetectedTest",
-        "physicalTtlMutationIsDetectedTest"
+        "physicalTtlMutationIsDetectedTest",
+        "omittedPolicyUsesLibraryDefaultsTest",
+        "nullProviderRetainsEveryBaselineLeafTest",
+        "sparseLocalOverridePreservesRemoteAndFeaturesTest",
+        "explicitOffReplacesInheritedFeaturesTest",
+        "reenablingDisabledBaselineKeepsDefaultCoalescingTest",
+        "disablingPolicyDoesNotEvictInsertedEntriesTest",
+        "wrongOverlayLeafIsDetectedTest"
       ]
     },
     {
@@ -64,14 +80,28 @@
         "timedOutSourceCannotPublish",
         "publicationRequiresAcceptedSource",
         "noFlightWhenCoalescingIneligible",
-        "abandonedSourceIsNotAFlight"
+        "abandonedSourceIsNotAFlight",
+        "requestLayerOwnsOuterFlight",
+        "cacheHitNeverStartsSourceDeadline",
+        "outsideSourceHasNoDeadline",
+        "omittedSourceBudgetUsesSixtySeconds",
+        "disabledSourceDeadlineNeverTimesOut",
+        "independentAcceptanceChecksCapturedDeadline"
       ],
       "regressions": [
         "lateSettlementBeforeTimerTest",
         "abandonedSourceMayOverlapNewFlightTest",
         "acceptedPublicationOutlivesDeadlineTest",
         "delayedLookupKeepsFullSourceBudgetTest",
-        "deadlineEpochMutationIsDetectedTest"
+        "deadlineEpochMutationIsDetectedTest",
+        "lateFollowerKeepsLeaderSourceDeadlineTest",
+        "inactiveServingLayersKeepConcurrentCallsIndependentTest",
+        "coalescingDisabledKeepsConcurrentCallsIndependentTest",
+        "sharedCacheHitDoesNotStartSourceTest",
+        "outsideCallsIgnoreConfiguredSourceDeadlineTest",
+        "librarySourceDeadlineIsSixtySecondsTest",
+        "explicitlyUnboundedEnabledSourceAcceptsLateValueTest",
+        "keyFailureKeepsEnabledSourceDeadlineTest"
       ],
       "propertyChallenge": "formal/check-model-properties.mjs"
     },
@@ -82,7 +112,16 @@
         "staleValueAfterInvalidationIsFenced",
         "acquiredAfterInvalidationDoesNotServeStale"
       ],
-      "regressions": []
+      "regressions": [
+        "acquiredSnapshotSurvivesLaterInvalidationTest",
+        "acquisitionAfterInvalidationRejectsOldBytesTest",
+        "staleWriteAtCoveredDelayEqualityRemainsFencedTest",
+        "freshWriteBeyondBufferBecomesReadableTest",
+        "readsAndValueWritesDoNotMoveWatermarkTest",
+        "observedFutureFenceSkipsRefillTest",
+        "refillAtFenceEqualitySkipsWriteTest",
+        "laterInvalidationDoesNotRewriteMissFenceTest"
+      ]
     },
     {
       "path": "formal/dialcache-stale-recovery.qnt",
@@ -100,7 +139,22 @@
         "servedValueCanAgeTest",
         "decodingAtMaxAgeRejectsTest",
         "futureFrameIsNotRetainedTest",
-        "failedReadSkipsRecoveryTest"
+        "failedReadSkipsRecoveryTest",
+        "lastFreshAgeSkipsSourceTest",
+        "firstStaleAgeRetainsWithoutDecodingTest",
+        "lastRecoveryAgeStillServesTest",
+        "exactMaximumAgeDoesNotRetainTest",
+        "invalidFrameNeverBecomesRecoveryCandidateTest",
+        "fencedFrameNeverBecomesRecoveryCandidateTest",
+        "acceptedSourceNeverDecodesRetainedBytesTest",
+        "deniedRecoveryNeverDecodesRetainedBytesTest",
+        "maximumAgeBeforeDecodeSkipsLoadingTest",
+        "recoveryDecodeFailureKeepsSourceOutcomeTest",
+        "retainedBytesSurviveRedisDeletionAndFenceTest",
+        "rollbackBelowFreshAgeStillRecoversTest",
+        "rollbackToFutureCandidateRejectsTest",
+        "initiallyTooOldCannotRecoverAfterRollbackTest",
+        "initiallyFutureCannotRecoverAfterClockAdvanceTest"
       ]
     },
     {
@@ -119,7 +173,16 @@
       "regressions": [
         "darkReadCanPrecedeCallerResultTest",
         "sourceFailureNeverFillsTest",
-        "deadlineStopsFillTest"
+        "deadlineStopsFillTest",
+        "equalComparisonSkipsConfirmationTest",
+        "missingConfirmationSupersedesWithoutRepairTest",
+        "changedConfirmationSupersedesWithoutRepairTest",
+        "identicalConfirmationDiagnosesWithoutRepairTest",
+        "darkReadFailureStillAllowsCallerResultTest",
+        "droppedShadowStillAllowsCallerResultTest",
+        "timedOutShadowStillAllowsCallerResultTest",
+        "callerResultCanPrecedeDarkReadTest",
+        "undecodablePresentFrameNeverFillsTest"
       ]
     },
     {
@@ -130,12 +193,23 @@
         "malformedWatermarkPrecedesEncodingError",
         "trackedZeroTimestampIsNotHit",
         "observedWatermarkOnlyOnTrackedReads",
-        "encodingErrorRequiresSupportedFrame"
+        "encodingErrorRequiresSupportedFrame",
+        "replyTypesAreValidatedFirst",
+        "validMissWatermarksArePreserved",
+        "untrackedDecodingIgnoresWatermarks",
+        "unsupportedFramePrecedesEncodingError"
       ],
       "regressions": [
         "fencedEncodingTest",
         "reversedPrecedenceIsDetectedTest",
-        "malformedWatermarkTest"
+        "malformedWatermarkTest",
+        "absentValuePreservesWatermarkTest",
+        "unsupportedFramePreservesWatermarkTest",
+        "zeroTimestampPreservesWatermarkTest",
+        "droppedMissWatermarkIsDetectedTest",
+        "invalidWatermarkReplyPrecedesAbsenceTest",
+        "untrackedZeroIgnoresInvalidWatermarkReplyTest",
+        "malformedWatermarkCannotReplaceAbsenceTest"
       ]
     },
     {
@@ -188,7 +262,13 @@
         "rollbackDoesNotExtendSourceDeadlineTest",
         "observerFailuresCannotReplaceSourceErrorTest",
         "libraryReadBudgetIsFiftyMillisecondsTest",
-        "followerKeepsAcceptedReadBudgetTest"
+        "followerKeepsAcceptedReadBudgetTest",
+        "lateReadRejectionUsesDeadlineCategoryTest",
+        "successfulReadClearsDeadlineBeforeDecodeTest",
+        "readFailureKeepsCategoryAndDeniesRefillTest",
+        "decodeFailureKeepsCategoryAndAllowsRefillTest",
+        "dumpFailureKeepsCategoryAndSourceValueTest",
+        "writeFailureKeepsCategoryAndSourceValueTest"
       ],
       "profile": "effects",
       "generate": {
@@ -224,7 +304,18 @@
         "rollbackDuringRetainedDecodeRejectsFutureSnapshotTest",
         "instanceAllowReplacesTimeoutOnlyDefaultTest",
         "instanceDenialReplacesTimeoutOnlyDefaultTest",
-        "operationDenialReplacesInstanceAllowTest"
+        "operationDenialReplacesInstanceAllowTest",
+        "lastFreshReadDoesNotInvokeSourceTest",
+        "lastRecoveryMillisecondIsServedTest",
+        "maximumAgeAtReadDoesNotDecodeTest",
+        "fencedInitialBytesNeverRecoverTest",
+        "classifierErrorPreservesSourceWithoutDecodeTest",
+        "freshDecodeFailureCannotBeRetriedAsRecoveryTest",
+        "initialReadFailureSkipsRecoveryClassificationTest",
+        "rollbackBelowFreshCeilingStillRecoversTest",
+        "replacementDoesNotChangeRetainedRecoveryTest",
+        "maximumAgeBeforeDecodePreservesSourceTest",
+        "maximumAgeAfterDecodePreservesSourceTest"
       ],
       "profile": "recovery",
       "generate": {
@@ -256,7 +347,17 @@
         "independentFailureKeepsRegisteredLeaderTest",
         "eachSourceKeepsPublicationPolicyTest",
         "absentValueIsStoredAndReusedTest",
-        "localHitDoesNotRenewInsertionTtlTest"
+        "localHitDoesNotRenewInsertionTtlTest",
+        "independentLocalCallsStillReuseSettledValueTest",
+        "independentLocalPublicationUsesLastCompletionTest",
+        "independentRemotePublicationUsesLastCompletionTest",
+        "providerFailureBypassesAndPreservesExistingLocalTest",
+        "disablingServingKeepsExistingLocalForReenablementTest",
+        "increasedFreshTtlCanReusePhysicallyRetainedValueTest",
+        "exactRemoteFreshBoundaryStartsSourceTest",
+        "increasedFreshTtlCannotResurrectExpiredStorageTest",
+        "remoteHitStartsFullLocalInsertionTtlTest",
+        "untrackedReadFailureStillWarmsActiveLocalTest"
       ],
       "profile": "policy",
       "generate": {
@@ -297,7 +398,20 @@
         "invalidLoggingKeepsComparisonWithoutWarningTest",
         "sourceWorkBeforeDeadlineStillReadsTest",
         "sourceWorkAtDeadlineSkipsDeferredReadTest",
-        "expiredDeferredJobRetainsSourceRejectionDeadlineTest"
+        "expiredDeferredJobRetainsSourceRejectionDeadlineTest",
+        "darkReadErrorCannotReplaceCallerSourceTest",
+        "sourceErrorDoesNotDecodePresentDarkBytesTest",
+        "futureDarkBytesFillWithoutDecodingTest",
+        "fencedDarkBytesCanAdmitNewerFillTest",
+        "fencedConfirmationNeverRepairsTest",
+        "futureConfirmationStillComparesBytesTest",
+        "fillSerializationFailureNeverDispatchesWriteTest",
+        "fillWriteFailurePreservesCallerResultTest",
+        "lateFillSerializationCannotDispatchWriteTest",
+        "lateFillWriteCannotEmitAnotherVerdictTest",
+        "lateDecodeCannotStartConfirmationTest",
+        "lateConfirmationCannotEmitAnotherVerdictTest",
+        "lateDarkReadCannotStartDecodeOrFillTest"
       ],
       "profile": "shadow",
       "generate": {
