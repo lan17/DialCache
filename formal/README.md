@@ -36,9 +36,10 @@ actual observations. The reviewed behavioral inventory now gives every named
 behavioral case a checked Quint reference and Quint-driven implementation
 evidence. This is case accounting, not universal behavioral completeness.
 
-The expanded suite's final combined CI and mutation run is still required.
-Earlier passing reports retain their original revisions, corpus and source
-fingerprints; they do not validate changed models, drivers or vectors.
+[VALIDATION.md](./VALIDATION.md) records the completed local validation of the
+reviewed implementation snapshot. Earlier reports retain their original
+revisions and fingerprints; changed models, drivers or vectors require new
+validation rather than inheriting a previous pass.
 
 ## Models and composition profiles
 

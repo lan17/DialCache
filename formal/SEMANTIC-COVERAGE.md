@@ -41,10 +41,10 @@ exact tests, asserted clauses and applicable language adaptations. The source
 audit separately accounts for reviewed test declarations and documentation
 sections; it does not count assertions or prove behavioral equivalence.
 
-The final combined CI and mutation run for this expansion is pending. Historical
-passing reports keep their actual revision, source and corpus fingerprints.
-Declared evidence links and focused replay passes do not make those reports
-current for changed inputs.
+[VALIDATION.md](./VALIDATION.md) records the completed expansion snapshot,
+including separate behavioral, primitive-vector and mutation results. Historical
+reports below retain their actual revisions and corpus definitions. Neither
+evidence links nor an older pass validate changed inputs.
 
 ## Generated boundary evidence
 
@@ -68,7 +68,7 @@ Execution partitions protocol rows with `DIALCACHE_PROTOCOL_CORPUS=generated` or
 
 Negative harness tests and inventory checks are excluded from detection cohorts: a test that expects a deliberately broken driver to fail must not count as behavioral fault detection. Real-server integration/Lua tests are outside this local mutation comparison; they have their own completion evidence. All unmodified baselines must pass. Compile/import errors, crashes, timeouts, missing reports, empty runs, and incomplete surviving runs fail measurement rather than counting as detections.
 
-The following is a **historical measurement from the earlier Go parity milestone, before the current case/witness expansion and generated primitive cohort**. Its completed TypeScript measurement produced this comparison. All unmodified baselines passed: 660 ordinary tests, 4,008 generated replays/witness gates, and 372 fixed scenarios/protocol vectors (4,380 positive portable tests/gates in their union). Exact source, input, and corpus fingerprints are retained in that report. These counts and detections describe that snapshot; the expanded suite requires fresh reports. CI repeats measurement on the committed revision.
+The following is a **historical measurement from the earlier Go parity milestone, before the current case/witness expansion and generated primitive cohort**. Its completed TypeScript measurement produced this comparison. All unmodified baselines passed: 660 ordinary tests, 4,008 generated replays/witness gates, and 372 fixed scenarios/protocol vectors (4,380 positive portable tests/gates in their union). Exact source, input, and corpus fingerprints are retained in that report. These counts and detections describe that snapshot; later changes require fresh reports. The completed expansion is recorded in [VALIDATION.md](./VALIDATION.md). CI repeats measurement on the committed revision.
 
 | Mutant scope | Ordinary detected | Generated detected | Portable detected |
 | --- | ---: | ---: | ---: |

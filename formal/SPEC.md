@@ -263,6 +263,6 @@ The current case inventory gives every reviewed behavioral case a checked
 Quint clause and Quint-driven implementation evidence. This is finite case
 accounting; it does not prove every admissible history. Native clock/fault seams,
 codec outcomes and encoded sizes, host numeric formatting, Redis atomicity and
-resource ceilings retain explicit scope notes. The final combined validation of
-this expansion remains pending; older passing reports identify only their own
-source revision and corpus.
+resource ceilings retain explicit scope notes. [VALIDATION.md](./VALIDATION.md)
+records a completed local expansion snapshot; older passing reports identify
+only their own source revision and corpus. None establishes universal conformance.

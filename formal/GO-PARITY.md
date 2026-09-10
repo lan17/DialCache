@@ -18,8 +18,9 @@ Quint definitions and Quint-driven implementation evidence.
 
 Earlier acceptance records remain **historical**. Their source revisions,
 corpora and report hashes describe the exact runs that passed; changed models,
-regressions, drivers or wire artifacts require fresh reports. The final combined
-CI and mutation run for this expansion is still pending. Inventory totals are
+regressions, drivers or wire artifacts require fresh reports.
+[VALIDATION.md](VALIDATION.md) records the completed local expansion snapshot
+and the exact scope of its shared and native evidence. Inventory totals are
 accounting, not coverage percentages or proofs.
 
 The local validation record identifies its base revision and dirty source

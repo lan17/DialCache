@@ -33,8 +33,9 @@ is regenerated and reviewed. Completeness checks reject missing/duplicate rows.
 These additions are an expansion of the fixed `protocol-vectors.json` schema 3
 and `invalidation-vectors.json` schema 2 corpora, which remain required. Current
 counts come from the execution manifest and semantic checker; vector row totals
-are not distinct behavioral obligations. Final combined validation is pending
-for this expansion, so earlier wire/replay reports remain historical.
+are not distinct behavioral obligations. [VALIDATION.md](./VALIDATION.md) records
+the completed local expansion snapshot; earlier wire/replay reports remain
+historical and do not validate later input changes.
 
 
 ## Text payload domain

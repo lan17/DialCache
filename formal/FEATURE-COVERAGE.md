@@ -37,9 +37,9 @@ Use these sources for current totals and execution requirements:
 several histories, and one history can support several cases. Those citations
 are not independent proofs, and native tests do not inflate portable counts.
 
-The expanded inventory describes requirements. The final combined CI and
-mutation measurements have not yet completed for this expansion. Earlier
-passing reports remain historical, with their actual input fingerprints.
+The inventory describes requirements; [VALIDATION.md](./VALIDATION.md) records
+the completed local expansion snapshot. Earlier reports remain historical with
+their actual input fingerprints, and future changes require new execution.
 
 ## Feature map
 
