@@ -2,14 +2,27 @@ module dialcache_core {
   // One-key behavioral model for caller-visible traversal and publication.
   // A single record state keeps every nondeterministic transition on the same
   // Quint update effect, while preserving the protocol-level distinctions.
+  // Selected rules from C01-C03, C05, C18, C27-C28 and C31.
+  // Values are presence bits; clocks, serializers,
+  // asynchronous policy replies and flight ownership belong to other models.
+  // Policy/health fields are environment inputs. call* fields capture admission;
+  // counters and origin record what this call actually did within the model.
+
+  // Types and state
 
   type ScopeState = OutsideScope | OpenScope | ClosedScope
-  type CallPhase = CallIdle | RequestLookup | LocalLookup | RemoteLookup | LoaderRunning | RemotePublishing | CallDone
+  type CallPhase =
+    CallIdle | RequestLookup | LocalLookup | RemoteLookup |
+    LoaderRunning | RemotePublishing | CallDone
   type ResultOrigin = NoResult | RequestValue | LocalValue | RemoteValue | SourceValue
 
   type State = {
     scope: ScopeState,
-    scopeId: int, callScopeId: int, requestValueScope: int, scopeDepth: int, scopeDisabled: bool,
+    scopeId: int,
+    callScopeId: int,
+    requestValueScope: int,
+    scopeDepth: int,
+    scopeDisabled: bool,
     policyRequestLocal: bool,
     policyLocal: bool,
     policyRemote: bool,
@@ -23,7 +36,8 @@ module dialcache_core {
     localHasValue: bool,
     remoteHasValue: bool,
     remoteReadHealthy: bool,
-    localReadHealthy: bool, localWriteHealthy: bool,
+    localReadHealthy: bool,
+    localWriteHealthy: bool,
     localWriteFailures: int,
     phase: CallPhase,
     origin: ResultOrigin,
@@ -42,11 +56,23 @@ module dialcache_core {
 
   var s: State
 
+  // Transition predicates. Invariants below restate the obligations independently.
   val callScopeLive = s.scope == OpenScope and s.callScopeId == s.scopeId
+  val requestMemoEligible = s.callRequestLocal and callScopeLive
+  val localReadEligible = s.callLocal and s.localReadHealthy
+  val localHit = localReadEligible and s.localHasValue
+  val localWriteEligible = localReadEligible and s.localWriteHealthy
+  val localWriteFails = localReadEligible and not(s.localWriteHealthy)
+
+  // Initial state
 
   action init = s' = {
     scope: OutsideScope,
-    scopeId: 0, callScopeId: 0, requestValueScope: 0, scopeDepth: 0, scopeDisabled: false,
+    scopeId: 0,
+    callScopeId: 0,
+    requestValueScope: 0,
+    scopeDepth: 0,
+    scopeDisabled: false,
     policyRequestLocal: false,
     policyLocal: false,
     policyRemote: false,
@@ -60,7 +86,9 @@ module dialcache_core {
     localHasValue: false,
     remoteHasValue: false,
     remoteReadHealthy: true,
-    localReadHealthy: true, localWriteHealthy: true, localWriteFailures: 0,
+    localReadHealthy: true,
+    localWriteHealthy: true,
+    localWriteFailures: 0,
     phase: CallIdle,
     origin: NoResult,
     requestReads: 0,
@@ -76,6 +104,7 @@ module dialcache_core {
     remoteReadFailed: false
   }
 
+  // Environment and request lifetime transitions
   action toggleRequestPolicy = all {
     s.phase == CallIdle,
     s' = { policyRequestLocal: not(s.policyRequestLocal), ...s },
@@ -107,6 +136,7 @@ module dialcache_core {
     s.phase == CallIdle,
     s' = { localReadHealthy: not(s.localReadHealthy), ...s },
   }
+
   action toggleLocalWriteHealth = all {
     s.phase == CallIdle,
     s' = { localWriteHealthy: not(s.localWriteHealthy), ...s },
@@ -114,31 +144,54 @@ module dialcache_core {
 
   action openScope = all {
     s.scope != OpenScope,
-    s' = { scope: OpenScope, scopeId: s.scopeId + 1, scopeDepth: 1, scopeDisabled: false, requestHasValue: false, ...s },
+    s' = {
+      scope: OpenScope,
+      scopeId: s.scopeId + 1,
+      scopeDepth: 1,
+      scopeDisabled: false,
+      requestHasValue: false,
+      ...s
+    },
   }
 
   action closeScope = all {
     s.scope == OpenScope,
-    s' = { scope: ClosedScope, scopeDepth: 0, scopeDisabled: false, requestHasValue: false, ...s },
+    s' = {
+      scope: ClosedScope,
+      scopeDepth: 0,
+      scopeDisabled: false,
+      requestHasValue: false,
+      ...s
+    },
   }
 
   action nestedEnable = all {
-    s.phase == CallIdle, s.scope == OpenScope, not(s.scopeDisabled),
+    s.phase == CallIdle,
+    s.scope == OpenScope,
+    not(s.scopeDisabled),
     s' = { scopeDepth: s.scopeDepth + 1, ...s },
   }
+
   action exitNestedEnable = all {
-    s.phase == CallIdle, s.scopeDepth > 1,
+    s.phase == CallIdle,
+    s.scopeDepth > 1,
     s' = { scopeDepth: s.scopeDepth - 1, ...s },
   }
+
   action disableScope = all {
-    s.phase == CallIdle, s.scope == OpenScope, not(s.scopeDisabled),
+    s.phase == CallIdle,
+    s.scope == OpenScope,
+    not(s.scopeDisabled),
     s' = { scopeDisabled: true, ...s },
   }
+
   action restoreScope = all {
-    s.phase == CallIdle, s.scopeDisabled,
+    s.phase == CallIdle,
+    s.scopeDisabled,
     s' = { scopeDisabled: false, ...s },
   }
 
+  // Call admission and layer traversal
   // Outside enable(), DialCache is true pass-through: no key/config/cache work.
   action startPassThrough = all {
     s.phase == CallIdle,
@@ -170,7 +223,8 @@ module dialcache_core {
   // Runtime/default policy is snapshotted once at invocation start.
   action startEnabledCall = all {
     s.phase == CallIdle,
-    s.scope == OpenScope, not(s.scopeDisabled),
+    s.scope == OpenScope,
+    not(s.scopeDisabled),
     s' = {
       callScopeId: s.scopeId,
       callStartedEnabled: true,
@@ -199,9 +253,9 @@ module dialcache_core {
   action requestLookup = all {
     s.phase == RequestLookup,
     s' = {
-      requestReads: if (s.callRequestLocal and callScopeLive) s.requestReads + 1 else s.requestReads,
-      origin: if (s.callRequestLocal and callScopeLive and s.requestHasValue) RequestValue else s.origin,
-      phase: if (s.callRequestLocal and callScopeLive and s.requestHasValue) CallDone else LocalLookup,
+      requestReads: if (requestMemoEligible) s.requestReads + 1 else s.requestReads,
+      origin: if (requestMemoEligible and s.requestHasValue) RequestValue else s.origin,
+      phase: if (requestMemoEligible and s.requestHasValue) CallDone else LocalLookup,
       ...s
     },
   }
@@ -210,11 +264,11 @@ module dialcache_core {
     s.phase == LocalLookup,
     s' = {
       localReads: if (s.callLocal) s.localReads + 1 else s.localReads,
-      origin: if (s.callLocal and s.localReadHealthy and s.localHasValue) LocalValue else s.origin,
-      requestHasValue: if (s.callLocal and s.localReadHealthy and s.localHasValue and s.callRequestLocal and callScopeLive) true else s.requestHasValue,
-      requestWrites: if (s.callLocal and s.localReadHealthy and s.localHasValue and s.callRequestLocal and callScopeLive) s.requestWrites + 1 else s.requestWrites,
-      requestValueScope: if (s.callLocal and s.localReadHealthy and s.localHasValue and s.callRequestLocal and callScopeLive) s.callScopeId else s.requestValueScope,
-      phase: if (s.callLocal and s.localReadHealthy and s.localHasValue) CallDone else RemoteLookup,
+      origin: if (localHit) LocalValue else s.origin,
+      requestHasValue: if (localHit and requestMemoEligible) true else s.requestHasValue,
+      requestWrites: if (localHit and requestMemoEligible) s.requestWrites + 1 else s.requestWrites,
+      requestValueScope: if (localHit and requestMemoEligible) s.callScopeId else s.requestValueScope,
+      phase: if (localHit) CallDone else RemoteLookup,
       ...s
     },
   }
@@ -226,12 +280,12 @@ module dialcache_core {
     s' = {
       remoteReads: s.remoteReads + 1,
       origin: if (s.remoteHasValue) RemoteValue else s.origin,
-      localWriteFailures: if (s.remoteHasValue and s.callLocal and s.localReadHealthy and not(s.localWriteHealthy)) s.localWriteFailures + 1 else s.localWriteFailures,
-      localHasValue: if (s.remoteHasValue and s.callLocal and s.localReadHealthy and s.localWriteHealthy) true else s.localHasValue,
-      localWrites: if (s.remoteHasValue and s.callLocal and s.localReadHealthy and s.localWriteHealthy) s.localWrites + 1 else s.localWrites,
-      requestHasValue: if (s.remoteHasValue and s.callRequestLocal and callScopeLive) true else s.requestHasValue,
-      requestWrites: if (s.remoteHasValue and s.callRequestLocal and callScopeLive) s.requestWrites + 1 else s.requestWrites,
-      requestValueScope: if (s.remoteHasValue and s.callRequestLocal and callScopeLive) s.callScopeId else s.requestValueScope,
+      localWriteFailures: if (s.remoteHasValue and localWriteFails) s.localWriteFailures + 1 else s.localWriteFailures,
+      localHasValue: if (s.remoteHasValue and localWriteEligible) true else s.localHasValue,
+      localWrites: if (s.remoteHasValue and localWriteEligible) s.localWrites + 1 else s.localWrites,
+      requestHasValue: if (s.remoteHasValue and requestMemoEligible) true else s.requestHasValue,
+      requestWrites: if (s.remoteHasValue and requestMemoEligible) s.requestWrites + 1 else s.requestWrites,
+      requestValueScope: if (s.remoteHasValue and requestMemoEligible) s.callScopeId else s.requestValueScope,
       remoteSemanticMiss: not(s.remoteHasValue),
       sourceCalls: if (s.remoteHasValue) s.sourceCalls else s.sourceCalls + 1,
       phase: if (s.remoteHasValue) CallDone else LoaderRunning,
@@ -258,6 +312,7 @@ module dialcache_core {
     s' = { sourceCalls: s.sourceCalls + 1, phase: LoaderRunning, ...s },
   }
 
+  // Source outcomes and publication
   action loaderSuccessPassThrough = all {
     s.phase == LoaderRunning,
     not(s.callStartedEnabled),
@@ -278,12 +333,12 @@ module dialcache_core {
     s.remoteReadFailed,
     s' = {
       origin: SourceValue,
-      localWriteFailures: if (s.callLocal and s.localReadHealthy and not(s.callTracked) and not(s.localWriteHealthy)) s.localWriteFailures + 1 else s.localWriteFailures,
-      localHasValue: if (s.callLocal and s.localReadHealthy and not(s.callTracked) and s.localWriteHealthy) true else s.localHasValue,
-      localWrites: if (s.callLocal and s.localReadHealthy and not(s.callTracked) and s.localWriteHealthy) s.localWrites + 1 else s.localWrites,
-      requestHasValue: if (s.callRequestLocal and callScopeLive) true else s.requestHasValue,
-      requestWrites: if (s.callRequestLocal and callScopeLive) s.requestWrites + 1 else s.requestWrites,
-      requestValueScope: if (s.callRequestLocal and callScopeLive) s.callScopeId else s.requestValueScope,
+      localWriteFailures: if (localWriteFails and not(s.callTracked)) s.localWriteFailures + 1 else s.localWriteFailures,
+      localHasValue: if (localWriteEligible and not(s.callTracked)) true else s.localHasValue,
+      localWrites: if (localWriteEligible and not(s.callTracked)) s.localWrites + 1 else s.localWrites,
+      requestHasValue: if (requestMemoEligible) true else s.requestHasValue,
+      requestWrites: if (requestMemoEligible) s.requestWrites + 1 else s.requestWrites,
+      requestValueScope: if (requestMemoEligible) s.callScopeId else s.requestValueScope,
       phase: CallDone,
       ...s
     },
@@ -295,12 +350,12 @@ module dialcache_core {
     not(s.callRemote),
     s' = {
       origin: SourceValue,
-      localWriteFailures: if (s.callLocal and s.localReadHealthy and not(s.localWriteHealthy)) s.localWriteFailures + 1 else s.localWriteFailures,
-      localHasValue: if (s.callLocal and s.localReadHealthy and s.localWriteHealthy) true else s.localHasValue,
-      localWrites: if (s.callLocal and s.localReadHealthy and s.localWriteHealthy) s.localWrites + 1 else s.localWrites,
-      requestHasValue: if (s.callRequestLocal and callScopeLive) true else s.requestHasValue,
-      requestWrites: if (s.callRequestLocal and callScopeLive) s.requestWrites + 1 else s.requestWrites,
-      requestValueScope: if (s.callRequestLocal and callScopeLive) s.callScopeId else s.requestValueScope,
+      localWriteFailures: if (localWriteFails) s.localWriteFailures + 1 else s.localWriteFailures,
+      localHasValue: if (localWriteEligible) true else s.localHasValue,
+      localWrites: if (localWriteEligible) s.localWrites + 1 else s.localWrites,
+      requestHasValue: if (requestMemoEligible) true else s.requestHasValue,
+      requestWrites: if (requestMemoEligible) s.requestWrites + 1 else s.requestWrites,
+      requestValueScope: if (requestMemoEligible) s.callScopeId else s.requestValueScope,
       phase: CallDone,
       ...s
     },
@@ -321,12 +376,12 @@ module dialcache_core {
     s' = {
       remoteWrites: s.remoteWrites + 1,
       remoteHasValue: true,
-      localWriteFailures: if (s.callLocal and s.localReadHealthy and not(s.callTracked) and not(s.localWriteHealthy)) s.localWriteFailures + 1 else s.localWriteFailures,
-      localHasValue: if (s.callLocal and s.localReadHealthy and not(s.callTracked) and s.localWriteHealthy) true else s.localHasValue,
-      localWrites: if (s.callLocal and s.localReadHealthy and not(s.callTracked) and s.localWriteHealthy) s.localWrites + 1 else s.localWrites,
-      requestHasValue: if (s.callRequestLocal and callScopeLive) true else s.requestHasValue,
-      requestWrites: if (s.callRequestLocal and callScopeLive) s.requestWrites + 1 else s.requestWrites,
-      requestValueScope: if (s.callRequestLocal and callScopeLive) s.callScopeId else s.requestValueScope,
+      localWriteFailures: if (localWriteFails and not(s.callTracked)) s.localWriteFailures + 1 else s.localWriteFailures,
+      localHasValue: if (localWriteEligible and not(s.callTracked)) true else s.localHasValue,
+      localWrites: if (localWriteEligible and not(s.callTracked)) s.localWrites + 1 else s.localWrites,
+      requestHasValue: if (requestMemoEligible) true else s.requestHasValue,
+      requestWrites: if (requestMemoEligible) s.requestWrites + 1 else s.requestWrites,
+      requestValueScope: if (requestMemoEligible) s.callScopeId else s.requestValueScope,
       phase: CallDone,
       ...s
     },
@@ -337,14 +392,21 @@ module dialcache_core {
     s' = { phase: CallIdle, origin: NoResult, ...s },
   }
 
+  // Exploration order is intentional: preserve it when editing the model.
   action step = any {
     toggleRequestPolicy,
     toggleLocalPolicy,
     toggleRemotePolicy,
     toggleTrackedPolicy,
-    toggleRedisHealth, toggleLocalReadHealth, toggleLocalWriteHealth,
+    toggleRedisHealth,
+    toggleLocalReadHealth,
+    toggleLocalWriteHealth,
     openScope,
-    closeScope, nestedEnable, exitNestedEnable, disableScope, restoreScope,
+    closeScope,
+    nestedEnable,
+    exitNestedEnable,
+    disableScope,
+    restoreScope,
     startPassThrough,
     startEnabledCall,
     requestLookup,
@@ -361,6 +423,7 @@ module dialcache_core {
     resetCall,
   }
 
+  // Invariants
   val closedScopeHasNoRequestValue =
     s.scope != ClosedScope or not(s.requestHasValue)
 
@@ -395,9 +458,11 @@ module dialcache_core {
       (s.configSnapshots == 1 and s.keyConstructions == 1)
     else
       (s.configSnapshots == 0 and s.keyConstructions == 0)
+
   val requestValueBelongsToCurrentScope =
     not(s.requestHasValue) or (s.scope == OpenScope and s.requestValueScope == s.scopeId)
 
+  // Deterministic regressions
   run lateResultCannotEnterReplacementScopeTest = init.then(toggleRequestPolicy).then(openScope)
     .then(startEnabledCall).then(requestLookup).then(localLookup).then(skipRemote)
     .then(closeScope).then(openScope).then(loaderSuccessWithoutRemote)

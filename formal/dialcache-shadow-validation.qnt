@@ -1,11 +1,21 @@
 module dialcache_shadow_validation {
   // One detached C0/S/C1 shadow job. Dark C0 reads may overlap the caller
   // source. Comparison and filling wait for the accepted source result.
+  // Selected rules from C47-C54. Policy, capacity and read/comparison outcomes are external
+  // inputs. Caller commitment, accepted source and job phase belong to DialCache.
+  // Deadline firing is an abstract environment outcome here; elapsed budgets,
+  // multiple jobs and capacity retention are checked in conformance profiles.
 
-  type CallerPath = NoCallerPath | ServedRemoteHit | RemoteRampedDown | OrdinaryRemoteMiss | EarlierLayerHit
+  // Types and state
+
+  type CallerPath =
+    NoCallerPath | ServedRemoteHit | RemoteRampedDown | OrdinaryRemoteMiss | EarlierLayerHit
   type C0State = C0Unknown | C0Miss | C0Present | C0Undecodable
   type JobPhase = JobIdle | JobAdmitted | WaitingForSource | Comparing | Confirming | Filling | JobDone
-  type ShadowOutcome = NoShadowOutcome | Match | Mismatch | Superseded | Filled | FillFenced | DeserializationError | ComparisonError | ConfirmationError | RedisError | SourceError | TimedOut | Dropped
+  type ShadowOutcome =
+    NoShadowOutcome | Match | Mismatch | Superseded | Filled | FillFenced |
+    DeserializationError | ComparisonError | ConfirmationError | RedisError |
+    SourceError | TimedOut | Dropped
 
   type State = {
     enabledScope: bool,
@@ -33,6 +43,13 @@ module dialcache_shadow_validation {
 
   var s: State
 
+  // Admission predicates; outcome invariants below are independently expressed.
+  val shadowPathEligible = s.callerPath == ServedRemoteHit or s.callerPath == RemoteRampedDown
+  val shadowRequested =
+    s.enabledScope and s.remotePolicyValid and s.shadowSelected and s.metricsHookPresent
+  val slotAvailable = s.capacityAvailable and not(s.duplicateKeyActive)
+
+  // Initial state
   action init = s' = {
     enabledScope: true,
     remotePolicyValid: true,
@@ -57,26 +74,32 @@ module dialcache_shadow_validation {
     repairWritesForPresentC0: 0
   }
 
+  // Environment configuration and caller path
   action toggleEnabled = all {
     s.callerPath == NoCallerPath,
     s' = { enabledScope: not(s.enabledScope), ...s },
   }
+
   action togglePolicy = all {
     s.callerPath == NoCallerPath,
     s' = { remotePolicyValid: not(s.remotePolicyValid), ...s },
   }
+
   action toggleSelection = all {
     s.callerPath == NoCallerPath,
     s' = { shadowSelected: not(s.shadowSelected), ...s },
   }
+
   action toggleMetricsHook = all {
     s.callerPath == NoCallerPath,
     s' = { metricsHookPresent: not(s.metricsHookPresent), ...s },
   }
+
   action toggleCapacity = all {
     s.callerPath == NoCallerPath,
     s' = { capacityAvailable: not(s.capacityAvailable), ...s },
   }
+
   action toggleDuplicate = all {
     s.callerPath == NoCallerPath,
     s' = { duplicateKeyActive: not(s.duplicateKeyActive), ...s },
@@ -86,42 +109,40 @@ module dialcache_shadow_validation {
     s.callerPath == NoCallerPath,
     s' = { callerPath: ServedRemoteHit, callerResultCommitted: true, c0: C0Present, ...s },
   }
+
   action callerRemoteRampedDown = all {
     s.callerPath == NoCallerPath,
     s' = { callerPath: RemoteRampedDown, sourceAccepted: false, callerResultCommitted: false, ...s },
   }
+
   action callerOrdinaryRemoteMiss = all {
     s.callerPath == NoCallerPath,
     s' = { callerPath: OrdinaryRemoteMiss, sourceAccepted: true, callerResultCommitted: true, ...s },
   }
+
   action callerEarlierLayerHit = all {
     s.callerPath == NoCallerPath,
     s' = { callerPath: EarlierLayerHit, callerResultCommitted: true, ...s },
   }
 
+  // Admission
   action admitJob = all {
     s.phase == JobIdle,
-    s.callerPath == ServedRemoteHit or s.callerPath == RemoteRampedDown,
-    s.enabledScope,
-    s.remotePolicyValid,
-    s.shadowSelected,
-    s.metricsHookPresent,
-    s.capacityAvailable,
-    not(s.duplicateKeyActive),
+    shadowPathEligible,
+    shadowRequested,
+    slotAvailable,
     s' = { phase: JobAdmitted, ...s },
   }
 
   action dropJob = all {
     s.phase == JobIdle,
-    s.callerPath == ServedRemoteHit or s.callerPath == RemoteRampedDown,
-    s.enabledScope,
-    s.remotePolicyValid,
-    s.shadowSelected,
-    s.metricsHookPresent,
-    not(s.capacityAvailable and not(s.duplicateKeyActive)),
+    shadowPathEligible,
+    shadowRequested,
+    not(slotAvailable),
     s' = { outcome: Dropped, phase: JobDone, ...s },
   }
 
+  // Source and C0 may complete in either order on the dark path.
   action servedHitStartsDetachedSource = all {
     s.phase == JobAdmitted,
     s.callerPath == ServedRemoteHit,
@@ -130,10 +151,17 @@ module dialcache_shadow_validation {
   }
 
   action rampedDownSourceReady = all {
-    s.callerPath == RemoteRampedDown, not(s.sourceAccepted), s.phase != JobDone,
-    s' = { sourceAccepted: true, callerResultCommitted: true,
+    s.callerPath == RemoteRampedDown,
+    not(s.sourceAccepted),
+    s.phase != JobDone,
+    s' = {
+      sourceAccepted: true,
+      callerResultCommitted: true,
       phase: if (s.phase == WaitingForSource and s.c0 == C0Miss) Filling
-        else if (s.phase == WaitingForSource and s.c0 == C0Present) Comparing else s.phase, ...s },
+        else if (s.phase == WaitingForSource and s.c0 == C0Present) Comparing
+        else s.phase,
+      ...s
+    },
   }
 
   // The dark read can complete either before or after the caller source.
@@ -142,11 +170,13 @@ module dialcache_shadow_validation {
     s.callerPath == RemoteRampedDown,
     s' = { c0: C0Miss, phase: if (s.sourceAccepted) Filling else WaitingForSource, ...s },
   }
+
   action rampedDownObservePresent = all {
     s.phase == JobAdmitted,
     s.callerPath == RemoteRampedDown,
     s' = { c0: C0Present, phase: if (s.sourceAccepted) Comparing else WaitingForSource, ...s },
   }
+
   action rampedDownObserveUndecodable = all {
     s.phase == JobAdmitted,
     s.callerPath == RemoteRampedDown,
@@ -161,16 +191,19 @@ module dialcache_shadow_validation {
     s' = { sourceAccepted: true, phase: Comparing, ...s },
   }
 
+  // Comparison and C1 confirmation
   action compareEqual = all {
     s.phase == Comparing,
     s.c0 == C0Present,
     s' = { c0EqualsSource: true, outcome: Match, phase: JobDone, ...s },
   }
+
   action compareDifferent = all {
     s.phase == Comparing,
     s.c0 == C0Present,
     s' = { c0EqualsSource: false, phase: Confirming, confirmationReads: s.confirmationReads + 1, ...s },
   }
+
   action comparisonFails = all {
     s.phase == Comparing,
     s' = { outcome: ComparisonError, phase: JobDone, ...s },
@@ -181,23 +214,28 @@ module dialcache_shadow_validation {
     s.phase == Confirming,
     s' = { c1Present: true, c1SameBytesAsC0: false, outcome: Superseded, phase: JobDone, ...s },
   }
+
   action confirmationSeesAbsent = all {
     s.phase == Confirming,
     s' = { c1Present: false, outcome: Superseded, phase: JobDone, ...s },
   }
+
   action confirmationSeesSame = all {
     s.phase == Confirming,
     s' = { c1Present: true, c1SameBytesAsC0: true, outcome: Mismatch, phase: JobDone, ...s },
   }
+
   action confirmationFails = all {
     s.phase == Confirming,
     s' = { outcome: ConfirmationError, phase: JobDone, ...s },
   }
 
+  // Miss filling and failure outcomes
   action toggleObservedFence = all {
     s.phase == Filling,
     s' = { observedFencePresent: not(s.observedFencePresent), ...s },
   }
+
   action toggleFillTimestamp = all {
     s.phase == Filling,
     s' = { fillTimestampClearsFence: not(s.fillTimestampClearsFence), ...s },
@@ -218,28 +256,59 @@ module dialcache_shadow_validation {
   }
 
   action darkReadFails = all {
-    s.phase == JobAdmitted, s.callerPath == RemoteRampedDown,
+    s.phase == JobAdmitted,
+    s.callerPath == RemoteRampedDown,
     s' = { outcome: RedisError, phase: JobDone, ...s },
   }
+
   action sourceFails = all {
-    s.phase == WaitingForSource, not(s.sourceAccepted),
+    s.phase == WaitingForSource,
+    not(s.sourceAccepted),
     s' = { outcome: SourceError, callerResultCommitted: true, phase: JobDone, ...s },
   }
+
   action shadowDeadlineFires = all {
-    s.phase != JobIdle, s.phase != JobDone,
+    s.phase != JobIdle,
+    s.phase != JobDone,
     s' = { outcome: TimedOut, phase: JobDone, ...s },
   }
 
+  // Exploration order
   action step = any {
-    toggleEnabled, togglePolicy, toggleSelection, toggleMetricsHook, toggleCapacity, toggleDuplicate,
-    callerServedRemoteHit, callerRemoteRampedDown, callerOrdinaryRemoteMiss, callerEarlierLayerHit,
-    rampedDownSourceReady, darkReadFails, sourceFails, shadowDeadlineFires,
-    admitJob, dropJob, servedHitStartsDetachedSource, rampedDownObserveMiss, rampedDownObservePresent,
-    rampedDownObserveUndecodable, detachedSourceReady, compareEqual, compareDifferent, comparisonFails,
-    confirmationSeesChanged, confirmationSeesAbsent, confirmationSeesSame, confirmationFails,
-    toggleObservedFence, toggleFillTimestamp, finishFill,
+    toggleEnabled,
+    togglePolicy,
+    toggleSelection,
+    toggleMetricsHook,
+    toggleCapacity,
+    toggleDuplicate,
+    callerServedRemoteHit,
+    callerRemoteRampedDown,
+    callerOrdinaryRemoteMiss,
+    callerEarlierLayerHit,
+    rampedDownSourceReady,
+    darkReadFails,
+    sourceFails,
+    shadowDeadlineFires,
+    admitJob,
+    dropJob,
+    servedHitStartsDetachedSource,
+    rampedDownObserveMiss,
+    rampedDownObservePresent,
+    rampedDownObserveUndecodable,
+    detachedSourceReady,
+    compareEqual,
+    compareDifferent,
+    comparisonFails,
+    confirmationSeesChanged,
+    confirmationSeesAbsent,
+    confirmationSeesSame,
+    confirmationFails,
+    toggleObservedFence,
+    toggleFillTimestamp,
+    finishFill,
   }
 
+  // Invariants
   val comparisonAndFillWaitForSource =
     (s.phase != Comparing and s.phase != Confirming and s.phase != Filling) or
       (s.callerResultCommitted and s.sourceAccepted)
@@ -269,6 +338,8 @@ module dialcache_shadow_validation {
 
   val fencedFillDoesNotWrite =
     s.outcome != FillFenced or s.fillWrites == 0
+
+  // Deterministic regressions
   run darkReadCanPrecedeCallerResultTest = init.then(callerRemoteRampedDown)
     .then(admitJob).then(rampedDownObserveMiss)
     .expect(not(s.callerResultCommitted) and s.phase == WaitingForSource and s.fillWrites == 0)

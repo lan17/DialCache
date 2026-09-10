@@ -1,4 +1,12 @@
 module dialcache_coalescing_liveness {
+  // Selected rules from C11, C14 and C23-C26. One request/process flight, with followers
+  // and older abandoned sources. Policy flags are environment inputs; phase and
+  // flightScope are DialCache ownership. fallbackStartedAt records invocation
+  // time so deadline properties can be checked independently of the transition.
+  // Time ranges from 0 through MAX_TIME. This model checks deadline safety and
+  // cleanup; it does not assume scheduler fairness or prove eventual progress.
+
+  // Types, bounds and state
   type FlightScope = NoFlight | RequestFlight | ProcessFlight
   type FlightPhase = FlightIdle | CacheLookup | FallbackRunning | Publication | FlightDone
   type Outcome = NoOutcome | CacheHit | SourceSuccess | SourceFailure | SourceTimeout
@@ -29,6 +37,7 @@ module dialcache_coalescing_liveness {
 
   var s: State
 
+  // Initial state
   action init = s' = {
     now: 0,
     scopeEnabled: false,
@@ -50,6 +59,7 @@ module dialcache_coalescing_liveness {
     publicationDispatched: false
   }
 
+  // Environment transitions
   action advanceTime = all {
     s.now < MAX_TIME,
     s' = { now: s.now + 1, ...s },
@@ -75,6 +85,7 @@ module dialcache_coalescing_liveness {
     s' = { coalesce: not(s.coalesce), ...s },
   }
 
+  // Flight admission and cache lookup
   // Request-local coalescing wraps process coalescing and therefore wins when
   // both scopes are eligible for the same key.
   action startLeader = all {
@@ -114,6 +125,7 @@ module dialcache_coalescing_liveness {
     s' = { outcome: CacheHit, phase: FlightDone, ...s },
   }
 
+  // Source acceptance, abandonment and publication
   // Cache-read time is outside the fallback budget. The source deadline begins
   // exactly when the leader invokes the fallback.
   action cacheMissStartsFallback = all {
@@ -220,6 +232,7 @@ module dialcache_coalescing_liveness {
     },
   }
 
+  // Exploration order
   action step = any {
     advanceTime,
     toggleEnabled,
@@ -240,6 +253,7 @@ module dialcache_coalescing_liveness {
     resetFlight,
   }
 
+  // Invariants
   val flightsRequireEligibleCaching =
     s.flightScope == NoFlight or
       (s.scopeEnabled and s.coalesce and (s.requestLayerActive or s.sharedLayerActive))
@@ -268,6 +282,7 @@ module dialcache_coalescing_liveness {
   val abandonedSourceIsNotAFlight =
     s.abandonedSources == 0 or not(s.activeSourceRunning) or s.phase == FallbackRunning
 
+  // Deterministic regressions
   run lateSettlementBeforeTimerTest = init
     .then(toggleEnabled).then(toggleSharedLayer).then(startLeader)
     .then(cacheMissStartsFallback)

@@ -2,10 +2,18 @@ module dialcache_stale_recovery {
   // Stale-on-error for one Redis frame and one caller/coalesced flight.
   // F is the fresh ceiling; M is the exclusive recovery ceiling. Recovery uses
   // retained bytes from the initial read and deliberately has no second read.
+  // Selected rules from C40-C45. Time ranges from 0 through MAX_TIME; source deadlines
+  // and independent callers are covered by conformance profiles. frame* fields
+  // describe the environment; candidate* fields retain the acquired snapshot
+  // and observation times. Later environment changes cannot rewrite that history.
+
+  // Types, bounds and state
 
   type InitialRead = ReadPending | FreshHit | RetainedCandidate | PlainMiss | ReadFailed
   type SourceState = SourceIdle | SourceRunning | SourceSucceeded | SourceRejected
-  type RecoveryState = RecoveryIdle | ClassifierDenied | CandidateChecking | CandidateLoading | RecoveryServed | RecoveryMissed
+  type RecoveryState =
+    RecoveryIdle | ClassifierDenied | CandidateChecking |
+    CandidateLoading | RecoveryServed | RecoveryMissed
   type FinalOutcome = PendingOutcome | ServedFresh | ServedSource | ServedStale | RejectedSource
 
   pure val FRESH_AGE = 2
@@ -38,6 +46,20 @@ module dialcache_stale_recovery {
 
   var s: State
 
+  // Transition predicates. Retention requires F <= age < M; a later recovery
+  // check only requires a nonfuture candidate younger than M.
+  val initialFrameUsable =
+    s.framePresent and s.frameValid and not(s.frameFenced) and s.frameCreatedAt <= s.now
+  val freshAtInitialRead =
+    s.readHealthy and initialFrameUsable and s.now - s.frameCreatedAt < FRESH_AGE
+  val candidateAtInitialRead =
+    s.readHealthy and initialFrameUsable and
+      s.now - s.frameCreatedAt >= FRESH_AGE and
+      s.now - s.frameCreatedAt < MAX_RECOVERY_AGE
+  val candidateWithinRecoveryAge =
+    s.candidateCreatedAt <= s.now and s.now - s.candidateCreatedAt < MAX_RECOVERY_AGE
+
+  // Initial state
   action init = s' = {
     now: 0,
     framePresent: false,
@@ -62,6 +84,7 @@ module dialcache_stale_recovery {
     finalOutcome: PendingOutcome
   }
 
+  // Environment transitions
   action advanceTime = all {
     s.now < MAX_TIME,
     s' = { now: s.now + 1, ...s },
@@ -111,6 +134,7 @@ module dialcache_stale_recovery {
     s' = { classifierAllows: not(s.classifierAllows), ...s },
   }
 
+  // Read acquisition, source settlement and recovery
   // Freshness is classified before ordinary deserialization. Only a valid,
   // unfenced, non-future frame with F <= age < M is retained as a candidate.
   action performInitialRead = all {
@@ -121,7 +145,7 @@ module dialcache_stale_recovery {
       candidateRetainedAt: s.now,
       initialRead: if (not(s.readHealthy))
         ReadFailed
-      else if (not(s.framePresent) or not(s.frameValid) or s.frameFenced or s.frameCreatedAt > s.now)
+      else if (not(initialFrameUsable))
         PlainMiss
       else if (s.now - s.frameCreatedAt < FRESH_AGE)
         FreshHit
@@ -129,20 +153,9 @@ module dialcache_stale_recovery {
         RetainedCandidate
       else
         PlainMiss,
-      candidateRetained: s.readHealthy and s.framePresent and s.frameValid and not(s.frameFenced) and
-        s.frameCreatedAt <= s.now and s.now - s.frameCreatedAt >= FRESH_AGE and
-        s.now - s.frameCreatedAt < MAX_RECOVERY_AGE,
-      candidateCreatedAt: if (s.readHealthy and s.framePresent and s.frameValid and not(s.frameFenced) and
-        s.frameCreatedAt <= s.now and s.now - s.frameCreatedAt >= FRESH_AGE and
-        s.now - s.frameCreatedAt < MAX_RECOVERY_AGE)
-        s.frameCreatedAt
-      else
-        s.candidateCreatedAt,
-      finalOutcome: if (s.readHealthy and s.framePresent and s.frameValid and not(s.frameFenced) and
-        s.frameCreatedAt <= s.now and s.now - s.frameCreatedAt < FRESH_AGE)
-        ServedFresh
-      else
-        s.finalOutcome,
+      candidateRetained: candidateAtInitialRead,
+      candidateCreatedAt: if (candidateAtInitialRead) s.frameCreatedAt else s.candidateCreatedAt,
+      finalOutcome: if (freshAtInitialRead) ServedFresh else s.finalOutcome,
       ...s
     },
   }
@@ -169,8 +182,13 @@ module dialcache_stale_recovery {
     s.sourceState == SourceRunning,
     s' = {
       sourceState: SourceRejected,
-      recoveryState: if (s.initialRead == ReadFailed) RecoveryIdle else if (s.classifierAllows) CandidateChecking else ClassifierDenied,
-      finalOutcome: if (s.classifierAllows and s.initialRead != ReadFailed) s.finalOutcome else RejectedSource,
+      recoveryState:
+        if (s.initialRead == ReadFailed) RecoveryIdle
+        else if (s.classifierAllows) CandidateChecking
+        else ClassifierDenied,
+      finalOutcome:
+        if (s.classifierAllows and s.initialRead != ReadFailed) s.finalOutcome
+        else RejectedSource,
       ...s
     },
   }
@@ -178,13 +196,11 @@ module dialcache_stale_recovery {
   action checkCandidate = all {
     s.recoveryState == CandidateChecking,
     s' = {
-      recoveryState: if (s.candidateRetained and s.candidateCreatedAt <= s.now and
-        s.now - s.candidateCreatedAt < MAX_RECOVERY_AGE)
+      recoveryState: if (s.candidateRetained and candidateWithinRecoveryAge)
         CandidateLoading
       else
         RecoveryMissed,
-      finalOutcome: if (s.candidateRetained and s.candidateCreatedAt <= s.now and
-        s.now - s.candidateCreatedAt < MAX_RECOVERY_AGE)
+      finalOutcome: if (s.candidateRetained and candidateWithinRecoveryAge)
         s.finalOutcome
       else
         RejectedSource,
@@ -199,15 +215,15 @@ module dialcache_stale_recovery {
     s' = {
       candidateDecoded: true,
       candidateServedAt: s.now,
-      recoveryState: if (s.candidateCreatedAt <= s.now and s.now - s.candidateCreatedAt < MAX_RECOVERY_AGE)
+      recoveryState: if (candidateWithinRecoveryAge)
         RecoveryServed
       else
         RecoveryMissed,
-      finalOutcome: if (s.candidateCreatedAt <= s.now and s.now - s.candidateCreatedAt < MAX_RECOVERY_AGE)
+      finalOutcome: if (candidateWithinRecoveryAge)
         ServedStale
       else
         RejectedSource,
-      requestLocalWrites: if (s.candidateCreatedAt <= s.now and s.now - s.candidateCreatedAt < MAX_RECOVERY_AGE)
+      requestLocalWrites: if (candidateWithinRecoveryAge)
         s.requestLocalWrites + 1
       else
         s.requestLocalWrites,
@@ -227,6 +243,7 @@ module dialcache_stale_recovery {
     s' = { framePresent: not(s.framePresent), frameFenced: true, ...s },
   }
 
+  // Exploration order
   action step = any {
     advanceTime,
     seedFrameNow,
@@ -246,6 +263,7 @@ module dialcache_stale_recovery {
     mutateRedisAfterRetention,
   }
 
+  // Invariants: the age obligations are independent of transition predicates.
   val recoveryUsesSingleRedisRead =
     s.redisReads <= 1
 
@@ -276,6 +294,10 @@ module dialcache_stale_recovery {
   val readFailureNeverRetains =
     s.initialRead != ReadFailed or not(s.candidateRetained)
 
+  val readFailureNeverAttemptsRecovery =
+    s.initialRead != ReadFailed or s.recoveryState == RecoveryIdle
+
+  // Deterministic regressions
   run servedValueCanAgeTest = init
     .then(seedFrameNow).then(advanceTime).then(advanceTime)
     .then(performInitialRead).then(toggleClassifier).then(startSource)
@@ -296,8 +318,6 @@ module dialcache_stale_recovery {
   run futureFrameIsNotRetainedTest = init
     .then(seedFutureFrame).then(performInitialRead)
     .expect(s.initialRead == PlainMiss and not(s.candidateRetained))
-  val readFailureNeverAttemptsRecovery =
-    s.initialRead != ReadFailed or s.recoveryState == RecoveryIdle
 
   run failedReadSkipsRecoveryTest = init.then(toggleReadHealth).then(performInitialRead)
     .then(toggleClassifier).then(startSource).then(sourceRejects)

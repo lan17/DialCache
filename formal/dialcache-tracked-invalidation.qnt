@@ -1,6 +1,13 @@
 module dialcache_tracked_invalidation {
   // One invalidation entity and one tracked Redis value. Reads atomically
   // snapshot value + watermark; later invalidation cannot revoke that snapshot.
+  // Selected rules from C33 and C35-C36. Mutation/invalidation share a model step.
+  // The finite time bound and stale-write/clock-lead assumptions below are part
+  // of the claim. Watermark expiry, Redis failures and multiple entities are
+  // covered elsewhere. value* describes external storage; snapshot* is the
+  // caller's acquired observation, not a live alias of that storage.
+
+  // Types, bounds and state
 
   type ReadPhase = ReadIdle | ReadAcquired | ReadServed | ReadMissed
 
@@ -32,6 +39,7 @@ module dialcache_tracked_invalidation {
 
   var s: State
 
+  // Initial state
   action init = s' = {
     now: 0,
     sourceVersion: 0,
@@ -50,6 +58,7 @@ module dialcache_tracked_invalidation {
     snapshotWatermark: 0
   }
 
+  // Environment time, source work and invalidation
   action advanceTime = all {
     s.now < MAX_TIME,
     s' = { now: s.now + 1, ...s },
@@ -97,6 +106,7 @@ module dialcache_tracked_invalidation {
     },
   }
 
+  // Atomic acquisition and subsequent consumption
   action acquireTrackedRead = all {
     s.readPhase == ReadIdle,
     s' = {
@@ -145,6 +155,7 @@ module dialcache_tracked_invalidation {
     },
   }
 
+  // Exploration order
   action step = any {
     advanceTime,
     startLoad,
@@ -156,6 +167,7 @@ module dialcache_tracked_invalidation {
     conditionalRefill,
   }
 
+  // Invariants
   val servedSnapshotClearedObservedFence =
     s.readPhase != ReadServed or
       (s.snapshotPresent and s.snapshotCreatedAt > s.snapshotWatermark)

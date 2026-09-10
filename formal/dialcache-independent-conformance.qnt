@@ -1,177 +1,340 @@
 module dialcache_independent_conformance {
   import conformance_observations.* from "./conformance-observations"
-  // Same-key callers with coalescing disabled. Reads, source work and decoding
-  // settle independently. F=1000 ms; captured M=2000/5000 ms; source budget=10 ms.
-  // Call phases: 1 read, 2 source, 3 fresh decode, 4 recovery decode, 5 done.
-  type Call = { source: int, phase: int, maxAge: int, candidate: int, created: int, acquiredAt: int,
-    canRecover: bool, canWrite: bool, fence: int, error: int }
+  // Model boundary -----------------------------------------------------------
+  // Six same-key callers with coalescing disabled exercise selected aspects of
+  // C24/C56: each owns its read and source deadline. Read failure denies only
+  // that caller's refill (C28); recovery keeps its captured policy, snapshot,
+  // and original error (selected aspects of C36/C40-C46/C58).
+  // See BEHAVIOR.md: "Generated feature profiles" and its independent input table.
+  // No local/request storage, shadow work, or publication failures participate.
+  // `now` is elapsed time; `wall` is the application clock. Pending external
+  // effects remain in their historical lists after timeout, so late settlement
+  // can be observed without regaining ownership of a completed caller.
+
+  // Trace encodings and fixture bounds ---------------------------------------
+  // Keep integer state/input fields stable; shared results come from the import.
+  pure val READ_PENDING = 1
+  pure val SOURCE_RUNNING = 2
+  pure val FRESH_DECODE = 3
+  pure val RECOVERY_DECODE = 4
+  pure val CALL_DONE = 5
+  pure val NO_SOURCE = -1
+  pure val NO_CANDIDATE = 0
+  pure val FRESH_AGE_MS = 1000
+  pure val SOURCE_BUDGET_MS = 10
+  pure val SHORT_READ_BUDGET_MS = 5
+  pure val LONG_READ_BUDGET_MS = 10
+  pure val SHORT_RETENTION_MS = 2000
+  pure val LONG_RETENTION_MS = 5000
+  pure val FIXTURE_TTL_MS = 60000
+  pure val MAX_CALLS = 6
+  pure val SOURCE_RESULT_COUNT = 2
+
+  // State: effect owners, captured admission values, and observed history.
+  type Call = {
+    source: int, phase: int, maxAge: int,
+    candidate: int, created: int, acquiredAt: int,
+    canRecover: bool, canWrite: bool, fence: int, error: int
+  }
   type Read = { caller: int, pending: bool, active: bool }
   type Source = { caller: int, pending: bool, active: bool }
   type Load = { caller: int, pending: bool, recovery: bool, value: int }
   type Timer = { read: bool, index: int, at: int }
   type State = {
-    o: Observation, io: { budgets: List[int], aborted: List[int], sourceErrors: List[int] }, now: int, wall: int,
+    o: Observation,
+    io: { budgets: List[int], aborted: List[int], sourceErrors: List[int] },
+    now: int, wall: int,
     frame: int, created: int, expires: int, watermark: int, readBudget: int, maxAge: int,
     calls: List[Call], reads: List[Read], sources: List[Source], loads: List[Load], timers: List[Timer]
   }
   var s: State
-  action init = s' = { o: empty, io: { budgets: List(), aborted: List(), sourceErrors: List() }, now: 0, wall: 100000,
-    frame: 1, created: 99000, expires: 60000, watermark: 0, readBudget: 5, maxAge: 5000,
-    calls: List(), reads: List(), sources: List(), loads: List(), timers: List() }
+
+  // Initial fixture ----------------------------------------------------------
+  action init = s' = {
+    o: empty,
+    io: { budgets: List(), aborted: List(), sourceErrors: List() },
+    now: 0, wall: 100000,
+    frame: VALUE_ONE, created: 99000, expires: FIXTURE_TTL_MS, watermark: 0,
+    readBudget: SHORT_READ_BUDGET_MS, maxAge: LONG_RETENTION_MS,
+    calls: List(), reads: List(), sources: List(), loads: List(), timers: List()
+  }
+
+  // Caller completion and owned effects -------------------------------------
   pure def finished(x: State, caller: int, value: int): State = {
-    calls: x.calls.replaceAt(caller, { phase: 5, ...x.calls.nth(caller) }),
-    io: { sourceErrors: x.io.sourceErrors.replaceAt(caller, if (value == 3) x.calls.nth(caller).source + 1 else 0), ...x.io },
-    o: { calls: x.o.calls.replaceAt(caller, value), ...x.o }, ...x
+    calls: x.calls.replaceAt(caller, { phase: CALL_DONE, ...x.calls.nth(caller) }),
+    io: {
+      sourceErrors: x.io.sourceErrors.replaceAt(caller,
+        if (value == SOURCE_ERROR) x.calls.nth(caller).source + 1 else 0),
+      ...x.io
+    },
+    o: { calls: x.o.calls.replaceAt(caller, value), ...x.o },
+    ...x
   }
   pure def startSource(x: State, caller: int): State = {
-    calls: x.calls.replaceAt(caller, { phase: 2, source: x.sources.length(), ...x.calls.nth(caller) }),
+    calls: x.calls.replaceAt(caller, { phase: SOURCE_RUNNING, source: x.sources.length(), ...x.calls.nth(caller) }),
     sources: x.sources.append({ caller: caller, active: true, pending: true }),
-    timers: x.timers.append({ read: false, index: x.sources.length(), at: x.now + 10 }),
-    o: { loaders: x.o.loaders + 1, ...x.o }, ...x
+    timers: x.timers.append({ read: false, index: x.sources.length(), at: x.now + SOURCE_BUDGET_MS }),
+    o: { loaders: x.o.loaders + 1, ...x.o },
+    ...x
   }
   pure def startLoad(x: State, caller: int, recovery: bool, value: int): State = {
-    calls: x.calls.replaceAt(caller, { phase: if (recovery) 4 else 3, ...x.calls.nth(caller) }),
+    calls: x.calls.replaceAt(caller, { phase: if (recovery) RECOVERY_DECODE else FRESH_DECODE, ...x.calls.nth(caller) }),
     loads: x.loads.append({ caller: caller, pending: true, recovery: recovery, value: value }),
-    o: { loads: x.o.loads + 1, ...x.o }, ...x
+    o: { loads: x.o.loads + 1, ...x.o },
+    ...x
   }
   pure def validCandidate(x: State, caller: int): bool = {
     val call = x.calls.nth(caller)
-    call.candidate > 0 and call.created <= x.wall and x.wall - call.created < call.maxAge
+    call.candidate > NO_CANDIDATE and call.created <= x.wall and x.wall - call.created < call.maxAge
   }
   pure def rejected(x: State, caller: int, error: int): State = {
     val call = x.calls.nth(caller)
-    val updated = { calls: x.calls.replaceAt(caller, { error: error, ...call }),
-      o: { classifications: x.o.classifications + (if (call.canRecover) 1 else 0), ...x.o }, ...x }
-    if (not(call.canRecover)) finished(updated, caller, error)
-    else if (validCandidate(x, caller)) startLoad(updated, caller, true, call.candidate)
-    else finished({ o: { recovery: updated.o.recovery.append("miss"), ...updated.o }, ...updated }, caller, error)
+    val classified = {
+      calls: x.calls.replaceAt(caller, { error: error, ...call }),
+      o: { classifications: x.o.classifications + (if (call.canRecover) 1 else 0), ...x.o },
+      ...x
+    }
+    if (not(call.canRecover)) finished(classified, caller, error)
+    else if (validCandidate(x, caller)) startLoad(classified, caller, true, call.candidate)
+    else finished({
+      o: { recovery: classified.o.recovery.append("miss"), ...classified.o },
+      ...classified
+    }, caller, error)
   }
+
+  // Admission captures policy separately for each same-key caller. -----------
   pure def begin(x: State): State = {
     val caller = x.calls.length()
-    { calls: x.calls.append({ source: -1, phase: 1, maxAge: x.maxAge, candidate: 0, created: 0, acquiredAt: 0,
-        canRecover: false, canWrite: false, fence: 0, error: 3 }),
+    {
+      calls: x.calls.append({
+        source: NO_SOURCE, phase: READ_PENDING, maxAge: x.maxAge,
+        candidate: NO_CANDIDATE, created: 0, acquiredAt: 0,
+        canRecover: false, canWrite: false, fence: 0, error: SOURCE_ERROR
+      }),
       reads: x.reads.append({ caller: caller, active: true, pending: true }),
       timers: x.timers.append({ read: true, index: x.reads.length(), at: x.now + x.readBudget }),
       io: { budgets: x.io.budgets.append(x.readBudget), sourceErrors: x.io.sourceErrors.append(0), ...x.io },
-      o: { calls: x.o.calls.append(0), reads: x.o.reads + 1, policyCalls: x.o.policyCalls + 1, ...x.o }, ...x }
+      o: {
+        calls: x.o.calls.append(CALL_PENDING),
+        reads: x.o.reads + 1, policyCalls: x.o.policyCalls + 1,
+        ...x.o
+      },
+      ...x
+    }
   }
-  action beginCall = all { s.calls.length() < 6, s' = begin(s) }
+  action beginCall = all { s.calls.length() < MAX_CALLS, s' = begin(s) }
   pure def expireRead(x: State, index: int): State = {
     val read = x.reads.nth(index)
-    startSource({ reads: x.reads.replaceAt(index, { active: false, ...read }),
-      io: { aborted: x.io.aborted.append(index), ...x.io }, ...x }, read.caller)
+    startSource({
+      reads: x.reads.replaceAt(index, { active: false, ...read }),
+      io: { aborted: x.io.aborted.append(index), ...x.io },
+      ...x
+    }, read.caller)
   }
   pure def expireSource(x: State, index: int): State = {
     val source = x.sources.nth(index)
-    rejected({ sources: x.sources.replaceAt(index, { active: false, ...source }), ...x }, source.caller, 4)
+    rejected({
+      sources: x.sources.replaceAt(index, { active: false, ...source }),
+      ...x
+    }, source.caller, DEADLINE_ERROR)
   }
+
+  // External settlement: abandoned effects cannot reclaim caller ownership. --
   pure def readReply(x: State, index: int, failed: bool): State = {
     val read = x.reads.nth(index)
-    val updated = { reads: x.reads.replaceAt(index, { pending: false, active: false, ...read }), ...x }
+    val settled = {
+      reads: x.reads.replaceAt(index, { pending: false, active: false, ...read }),
+      ...x
+    }
     val call = x.calls.nth(read.caller)
     val readable = x.frame > 0 and x.now < x.expires and x.created > x.watermark
-    val fresh = readable and x.created <= x.wall and x.wall - x.created < 1000
-    val stale = readable and x.created <= x.wall and x.wall - x.created >= 1000 and x.wall - x.created < call.maxAge
-    val observed = { calls: updated.calls.replaceAt(read.caller, { canWrite: not(failed), canRecover: not(failed) and not(fresh),
-        candidate: if (stale and not(failed)) x.frame else 0, created: x.created, acquiredAt: x.wall,
-        fence: if (readable) 0 else x.watermark, ...call }), ...updated }
-    if (not(read.active)) updated
+    val fresh = readable and x.created <= x.wall and x.wall - x.created < FRESH_AGE_MS
+    val stale = readable and x.created <= x.wall and
+      x.wall - x.created >= FRESH_AGE_MS and x.wall - x.created < call.maxAge
+    val observed = {
+      calls: settled.calls.replaceAt(read.caller, {
+        canWrite: not(failed), canRecover: not(failed) and not(fresh),
+        candidate: if (stale and not(failed)) x.frame else NO_CANDIDATE,
+        created: x.created, acquiredAt: x.wall,
+        fence: if (readable) 0 else x.watermark,
+        ...call
+      }),
+      ...settled
+    }
+    if (not(read.active)) settled
     else if (failed or not(fresh)) startSource(observed, read.caller)
     else startLoad(observed, read.caller, false, x.frame)
   }
-  action releaseRead = { nondet choice = s.reads.indices().filter(i => s.reads.nth(i).pending).oneOf()
-    s' = readReply(s, choice, false) }
-  action failRead = { nondet choice = s.reads.indices().filter(i => s.reads.nth(i).pending).oneOf()
-    s' = readReply(s, choice, true) }
+  action releaseRead = {
+    nondet choice = s.reads.indices().filter(i => s.reads.nth(i).pending).oneOf()
+    s' = readReply(s, choice, false)
+  }
+  action failRead = {
+    nondet choice = s.reads.indices().filter(i => s.reads.nth(i).pending).oneOf()
+    s' = readReply(s, choice, true)
+  }
   pure def sourceReply(x: State, index: int, value: int): State = {
     val source = x.sources.nth(index)
     val call = x.calls.nth(source.caller)
-    val updated = { sources: x.sources.replaceAt(index, { pending: false, active: false, ...source }), ...x }
-    val write = call.canWrite and x.wall > call.fence
-    if (not(source.active)) updated
-    else if (value == 3) rejected(updated, source.caller, 3)
-    else finished({ frame: if (write) value else x.frame, created: if (write) x.wall else x.created,
-      expires: if (write) x.now + call.maxAge else x.expires,
-      o: { writes: x.o.writes + (if (write) 1 else 0), dumps: x.o.dumps + (if (write) 1 else 0),
-        writeTtls: if (write) x.o.writeTtls.append(call.maxAge) else x.o.writeTtls, ...x.o }, ...updated }, source.caller, value)
+    val settled = {
+      sources: x.sources.replaceAt(index, { pending: false, active: false, ...source }),
+      ...x
+    }
+    val mayWrite = call.canWrite and x.wall > call.fence
+    if (not(source.active)) settled
+    else if (value == SOURCE_ERROR) rejected(settled, source.caller, SOURCE_ERROR)
+    else finished({
+      frame: if (mayWrite) value else x.frame,
+      created: if (mayWrite) x.wall else x.created,
+      expires: if (mayWrite) x.now + call.maxAge else x.expires,
+      o: {
+        writes: x.o.writes + (if (mayWrite) 1 else 0),
+        dumps: x.o.dumps + (if (mayWrite) 1 else 0),
+        writeTtls: if (mayWrite) x.o.writeTtls.append(call.maxAge) else x.o.writeTtls,
+        ...x.o
+      },
+      ...settled
+    }, source.caller, value)
   }
-  action resolveLoader = { nondet choice = 1.to(12).filter(code => (code - 1) / 2 < s.sources.length() and s.sources.nth((code - 1) / 2).pending).oneOf()
-    s' = sourceReply(s, (choice - 1) / 2, (choice - 1) % 2 + 1) }
-  action rejectLoader = { nondet choice = s.sources.indices().filter(i => s.sources.nth(i).pending).oneOf()
-    s' = sourceReply(s, choice, 3) }
+  action resolveLoader = {
+    // Wire choice 1..12 pairs each source index with result VALUE_ONE/VALUE_TWO.
+    nondet choice = 1.to(MAX_CALLS * SOURCE_RESULT_COUNT).filter(code =>
+      (code - 1) / SOURCE_RESULT_COUNT < s.sources.length() and
+      s.sources.nth((code - 1) / SOURCE_RESULT_COUNT).pending).oneOf()
+    s' = sourceReply(s, (choice - 1) / SOURCE_RESULT_COUNT, (choice - 1) % SOURCE_RESULT_COUNT + 1)
+  }
+  action rejectLoader = {
+    nondet choice = s.sources.indices().filter(i => s.sources.nth(i).pending).oneOf()
+    s' = sourceReply(s, choice, SOURCE_ERROR)
+  }
   pure def loadReply(x: State, index: int, failed: bool): State = {
     val load = x.loads.nth(index)
     val call = x.calls.nth(load.caller)
-    val updated = { loads: x.loads.replaceAt(index, { pending: false, ...load }), ...x }
+    val settled = { loads: x.loads.replaceAt(index, { pending: false, ...load }), ...x }
     if (not(load.recovery)) {
-      if (failed) startSource({ calls: x.calls.replaceAt(load.caller, { canRecover: false, ...call }), ...updated }, load.caller)
-      else finished(updated, load.caller, load.value)
+      if (failed) startSource({
+        calls: x.calls.replaceAt(load.caller, { canRecover: false, ...call }),
+        ...settled
+      }, load.caller)
+      else finished(settled, load.caller, load.value)
     } else {
       val valid = validCandidate(x, load.caller)
-      finished({ o: { recovery: x.o.recovery.append(if (failed) "deserialization_error" else if (valid) "served" else "miss"), ...x.o }, ...updated },
-        load.caller, if (failed or not(valid)) call.error else load.value)
+      finished({
+        o: {
+          recovery: x.o.recovery.append(
+            if (failed) "deserialization_error" else if (valid) "served" else "miss"),
+          ...x.o
+        },
+        ...settled
+      }, load.caller, if (failed or not(valid)) call.error else load.value)
     }
   }
-  action releaseLoad = { nondet choice = s.loads.indices().filter(i => s.loads.nth(i).pending).oneOf()
-    s' = loadReply(s, choice, false) }
-  action failLoad = { nondet choice = s.loads.indices().filter(i => s.loads.nth(i).pending).oneOf()
-    s' = loadReply(s, choice, true) }
+  action releaseLoad = {
+    nondet choice = s.loads.indices().filter(i => s.loads.nth(i).pending).oneOf()
+    s' = loadReply(s, choice, false)
+  }
+  action failLoad = {
+    nondet choice = s.loads.indices().filter(i => s.loads.nth(i).pending).oneOf()
+    s' = loadReply(s, choice, true)
+  }
+
+  // Environmental clocks, storage, and policy --------------------------------
   pure def tick(x: State, ms: int): State = {
     val target = x.now + ms
     // At most one read deadline and one source deadline per admitted call.
     // Visit only due deadline instants, including sources started by read expiry.
     0.to(x.calls.length() * 2).fold(x, (elapsed, _) => {
       val dueAt = elapsed.timers.foldl(target, (earliest, timer) => {
-        val active = if (timer.read) elapsed.reads.nth(timer.index).active else elapsed.sources.nth(timer.index).active
-        if (active and timer.at > elapsed.now and timer.at < earliest) timer.at else earliest
+        val timerActive = if (timer.read) elapsed.reads.nth(timer.index).active
+          else elapsed.sources.nth(timer.index).active
+        if (timerActive and timer.at > elapsed.now and timer.at < earliest) timer.at else earliest
       })
-      val current = { now: dueAt, wall: elapsed.wall + dueAt - elapsed.now, ...elapsed }
-      current.timers.foldl(current, (out, timer) => if (timer.at != current.now) out
-        else if (timer.read and out.reads.nth(timer.index).active) expireRead(out, timer.index)
-        else if (not(timer.read) and out.sources.nth(timer.index).active) expireSource(out, timer.index) else out)
+      val atDeadline = { now: dueAt, wall: elapsed.wall + dueAt - elapsed.now, ...elapsed }
+      atDeadline.timers.foldl(atDeadline, (delivered, timer) =>
+        if (timer.at != atDeadline.now) delivered
+        else if (timer.read and delivered.reads.nth(timer.index).active)
+          expireRead(delivered, timer.index)
+        else if (not(timer.read) and delivered.sources.nth(timer.index).active)
+          expireSource(delivered, timer.index)
+        else delivered)
     })
   }
-  action advance = { nondet choice = Set(1, 5, 10, 1000).oneOf()
-    s' = tick(s, choice) }
-  action seed = { nondet choice = 0.to(5).oneOf()
-    s' = { frame: if (choice == 2 or choice == 4) 2 else 1,
-      created: s.wall - (if (choice == 0 or choice == 4) 0 else if (choice == 3) 4999 else if (choice == 5) 1999 else 1000), expires: s.now + 60000, ...s } }
-  action invalidate = s' = { watermark: s.wall,
-    o: { invalidations: s.o.invalidations + 1, maintenance: s.o.maintenance.append("ok"), ...s.o }, ...s }
-  action policy = { nondet choice = 0.to(3).oneOf()
-    s' = { readBudget: if (choice % 2 == 0) 5 else 10, maxAge: if (choice < 2) 5000 else 2000, ...s } }
-  action step = any { beginCall, releaseRead, any { resolveLoader, rejectLoader, releaseLoad },
-    any { policy, seed }, any { advance, invalidate, failRead, failLoad } }
-  val oneReadPerCall = s.o.reads == s.o.calls.length() and s.io.budgets.length() == s.o.reads and s.io.sourceErrors.length() == s.o.calls.length()
-  val effectsMatchOwners = s.o.reads == s.reads.length() and s.o.loads == s.loads.length() and s.o.loaders == s.sources.length()
-  val completedCallsHaveNoActiveWork = s.calls.indices().forall(i => s.calls.nth(i).phase != 5 or
-    (s.reads.indices().forall(j => s.reads.nth(j).caller != i or not(s.reads.nth(j).active)) and s.sources.indices().forall(j => s.sources.nth(j).caller != i or not(s.sources.nth(j).active))))
-  val retainedSnapshotsWereEligible = s.calls.indices().forall(i => { val c = s.calls.nth(i)
-    c.candidate == 0 or (c.acquiredAt - c.created >= 1000 and c.acquiredAt - c.created < c.maxAge) })
-  val abortsAreUnique = s.io.aborted.indices().forall(i => s.io.aborted.indices().forall(j => i == j or s.io.aborted.nth(i) != s.io.aborted.nth(j)))
-  val writesKeepCapturedRetention = s.o.writeTtls.indices().forall(i => s.o.writeTtls.nth(i) == 2000 or s.o.writeTtls.nth(i) == 5000)
+  action advance = {
+    nondet choice = Set(1, 5, 10, 1000).oneOf()
+    s' = tick(s, choice)
+  }
+  action seed = {
+    // Fresh values and values just inside each admitted recovery age bound.
+    nondet choice = 0.to(5).oneOf()
+    s' = {
+      frame: if (choice == 2 or choice == 4) VALUE_TWO else VALUE_ONE,
+      created: s.wall - (if (choice == 0 or choice == 4) 0
+        else if (choice == 3) 4999 else if (choice == 5) 1999 else 1000),
+      expires: s.now + FIXTURE_TTL_MS,
+      ...s
+    }
+  }
+  action invalidate = s' = {
+    watermark: s.wall,
+    o: { invalidations: s.o.invalidations + 1, maintenance: s.o.maintenance.append("ok"), ...s.o },
+    ...s
+  }
+  action policy = {
+    // Wire choices 0/1 use long retention; parity chooses the read budget.
+    nondet choice = 0.to(3).oneOf()
+    s' = {
+      readBudget: if (choice % 2 == 0) SHORT_READ_BUDGET_MS else LONG_READ_BUDGET_MS,
+      maxAge: if (choice < 2) LONG_RETENTION_MS else SHORT_RETENTION_MS,
+      ...s
+    }
+  }
 
+  // Exploration schedule: preserve grouping and order for seeded sampling.
+  action step = any {
+    beginCall, releaseRead, any { resolveLoader, rejectLoader, releaseLoad },
+    any { policy, seed }, any { advance, invalidate, failRead, failLoad }
+  }
+
+  // Invariants: independent checks over ownership and observed history.
+  val oneReadPerCall = s.o.reads == s.o.calls.length() and
+    s.io.budgets.length() == s.o.reads and s.io.sourceErrors.length() == s.o.calls.length()
+  val effectsMatchOwners = s.o.reads == s.reads.length() and
+    s.o.loads == s.loads.length() and s.o.loaders == s.sources.length()
+  val completedCallsHaveNoActiveWork = s.calls.indices().forall(i => s.calls.nth(i).phase != CALL_DONE or
+    (s.reads.indices().forall(j => s.reads.nth(j).caller != i or not(s.reads.nth(j).active)) and
+      s.sources.indices().forall(j => s.sources.nth(j).caller != i or not(s.sources.nth(j).active))))
+  val retainedSnapshotsWereEligible = s.calls.indices().forall(i => {
+    val c = s.calls.nth(i)
+    c.candidate == NO_CANDIDATE or
+      (c.acquiredAt - c.created >= FRESH_AGE_MS and c.acquiredAt - c.created < c.maxAge)
+  })
+  val abortsAreUnique = s.io.aborted.indices().forall(i =>
+    s.io.aborted.indices().forall(j => i == j or s.io.aborted.nth(i) != s.io.aborted.nth(j)))
+  val writesKeepCapturedRetention = s.o.writeTtls.indices().forall(i =>
+    s.o.writeTtls.nth(i) == SHORT_RETENTION_MS or s.o.writeTtls.nth(i) == LONG_RETENTION_MS)
+
+  // Deterministic model regressions ------------------------------------------
   run independentReadDeadlinesStartSeparateSourcesTest = init.then(beginCall).then(s' = tick(s, 1)).then(beginCall)
     .then(s' = tick(s, 4)).expect(s.io.aborted == List(0) and s.o.loaders == 1)
     .then(s' = tick(s, 1)).expect(s.io.aborted == List(0, 1) and s.o.loaders == 2)
   run independentRecoveryKeepsDistinctSnapshotsTest = init.then(beginCall).then(s' = readReply(s, 0, false))
-    .then(s' = { frame: 2, ...s }).then(beginCall).then(s' = readReply(s, 1, false))
-    .then(s' = sourceReply(s, 0, 3)).then(s' = sourceReply(s, 1, 3)).then(invalidate)
+    .then(s' = { frame: VALUE_TWO, ...s }).then(beginCall).then(s' = readReply(s, 1, false))
+    .then(s' = sourceReply(s, 0, SOURCE_ERROR)).then(s' = sourceReply(s, 1, SOURCE_ERROR)).then(invalidate)
     .then(s' = loadReply(s, 1, false)).then(s' = loadReply(s, 0, false))
-    .expect(s.o.calls == List(1, 2) and s.o.reads == 2 and s.o.writes == 0)
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO) and s.o.reads == 2 and s.o.writes == 0)
   run timedOutReadCannotAffectAnotherCallTest = init.then(beginCall).then(s' = tick(s, 5))
     .then(beginCall).then(s' = readReply(s, 1, false)).then(s' = readReply(s, 0, false))
     .expect(s.o.loads == 0 and s.o.loaders == 2 and s.io.aborted == List(0))
   run acceptedFreshDecodeSurvivesOtherInvalidationTest = init.then(s' = { created: s.wall, ...s }).then(beginCall)
     .then(s' = readReply(s, 0, false)).then(invalidate).then(beginCall).then(s' = readReply(s, 1, false))
-    .then(s' = loadReply(s, 0, false)).expect(s.o.calls == List(1, 0) and s.o.loaders == 1)
+    .then(s' = loadReply(s, 0, false)).expect(s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.loaders == 1)
   run readFailureCannotBorrowAnotherCallsRefillTest = init.then(beginCall).then(beginCall)
     .then(s' = readReply(s, 0, true)).then(s' = readReply(s, 1, false))
-    .then(s' = sourceReply(s, 1, 2)).then(s' = sourceReply(s, 0, 1))
-    .expect(s.o.calls == List(1, 2) and s.o.writes == 1 and s.frame == 2)
+    .then(s' = sourceReply(s, 1, VALUE_TWO)).then(s' = sourceReply(s, 0, VALUE_ONE))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO) and s.o.writes == 1 and s.frame == VALUE_TWO)
   run recoveryPolicyIsCapturedPerCallerTest = init.then(beginCall).then(s' = readReply(s, 0, false))
-    .then(s' = { maxAge: 2000, ...s }).then(beginCall).then(s' = readReply(s, 1, false))
-    .then(s' = sourceReply(s, 0, 3)).then(s' = sourceReply(s, 1, 3)).then(s' = tick(s, 1000))
+    .then(s' = { maxAge: SHORT_RETENTION_MS, ...s }).then(beginCall).then(s' = readReply(s, 1, false))
+    .then(s' = sourceReply(s, 0, SOURCE_ERROR)).then(s' = sourceReply(s, 1, SOURCE_ERROR)).then(s' = tick(s, 1000))
     .then(s' = loadReply(s, 0, false)).then(s' = loadReply(s, 1, false))
-    .expect(s.o.calls == List(1, 3) and s.io.sourceErrors == List(0, 2) and s.o.recovery == List("served", "miss"))
+    .expect(s.o.calls == List(VALUE_ONE, SOURCE_ERROR) and s.io.sourceErrors == List(0, 2) and s.o.recovery == List("served", "miss"))
 }

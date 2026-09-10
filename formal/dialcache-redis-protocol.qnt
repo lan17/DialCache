@@ -1,12 +1,20 @@
 module dialcache_redis_protocol {
   // Abstract public Redis decoder classification. Exact bytes live in portable
   // protocol vectors; this model checks validation/classification precedence.
+  // Selected rules from W04 and C33. Reply/frame/watermark/encoding fields are external
+  // observations; result and observedWatermarkAttached record decoder output.
+  // Payload bytes, UTF-8 conversion and numeric host boundaries are specified
+  // in PROTOCOL.md and vectors. They are not reimplemented by this classifier.
+
+  // Types and state
 
   type ReplyType = NilReply | BufferReply | InvalidReply
   type FrameShape = ShortFrame | UnknownVersion | SupportedFrame
   type WatermarkState = MissingWatermark | ValidWatermark | MalformedWatermark
   type PayloadEncoding = Utf8Encoding | BinaryEncoding | UnsupportedEncoding
-  type DecodeResult = PendingDecode | ValueAbsent | UnclassifiedMiss | WatermarkFenced | DecodedHit | PayloadEncodingError | PayloadTypeError
+  type DecodeResult =
+    PendingDecode | ValueAbsent | UnclassifiedMiss | WatermarkFenced |
+    DecodedHit | PayloadEncodingError | PayloadTypeError
 
   type State = {
     tracked: bool,
@@ -23,7 +31,7 @@ module dialcache_redis_protocol {
 
   var s: State
 
-  // Ordering mirrors redis-payload.test.ts:
+  // Classification transition: ordering mirrors redis-payload.test.ts.
   // raw reply types -> nil/frame shape -> tracked watermark/fence -> encoding.
   pure def classify(st: State): DecodeResult =
     if (st.valueReply == InvalidReply or (st.tracked and st.watermarkReply == InvalidReply))
@@ -36,13 +44,15 @@ module dialcache_redis_protocol {
       UnclassifiedMiss
     else if (st.tracked and st.frameTimestamp == 0)
       UnclassifiedMiss
-    else if (st.tracked and st.watermarkReply == BufferReply and st.watermarkState == ValidWatermark and st.frameTimestamp <= st.watermarkValue)
+    else if (st.tracked and st.watermarkReply == BufferReply and
+      st.watermarkState == ValidWatermark and st.frameTimestamp <= st.watermarkValue)
       WatermarkFenced
     else if (st.encoding == UnsupportedEncoding)
       PayloadEncodingError
     else
       DecodedHit
 
+  // Initial state
   action init = s' = {
     tracked: false,
     valueReply: BufferReply,
@@ -56,6 +66,7 @@ module dialcache_redis_protocol {
     observedWatermarkAttached: false
   }
 
+  // Environment transitions
   action toggleTracked = all {
     s.result == PendingDecode,
     s' = { tracked: not(s.tracked), ...s },
@@ -131,15 +142,18 @@ module dialcache_redis_protocol {
 
   action decode = all {
     s.result == PendingDecode,
+    val decodedResult = classify(s)
     s' = {
-      result: classify(s),
+      result: decodedResult,
       observedWatermarkAttached: s.tracked and s.watermarkReply == BufferReply and
         s.watermarkState == ValidWatermark and
-        (classify(s) == ValueAbsent or classify(s) == UnclassifiedMiss or classify(s) == WatermarkFenced),
+        (decodedResult == ValueAbsent or decodedResult == UnclassifiedMiss or
+         decodedResult == WatermarkFenced),
       ...s
     },
   }
 
+  // Exploration order
   action step = any {
     toggleTracked,
     cycleValueReply,
@@ -152,6 +166,7 @@ module dialcache_redis_protocol {
     decode,
   }
 
+  // Invariants: classification precedence is restated independently of classify.
   val nilValueIsValueAbsent =
     s.result == PendingDecode or s.valueReply != NilReply or
       s.result == ValueAbsent or s.result == PayloadTypeError
@@ -179,6 +194,8 @@ module dialcache_redis_protocol {
   val encodingErrorRequiresSupportedFrame =
     s.result != PayloadEncodingError or
       (s.valueReply == BufferReply and s.frameShape == SupportedFrame and s.encoding == UnsupportedEncoding)
+
+  // Deterministic regressions
   run fencedEncodingTest = init.then(toggleTracked).then(setFencedTimestamp)
     .then(toggleEncoding).then(toggleEncoding).then(decode)
     .expect(s.result == WatermarkFenced and fenceCanPrecedeEncodingError)
