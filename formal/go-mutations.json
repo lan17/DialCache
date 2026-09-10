@@ -230,7 +230,7 @@
         {
           "path": "go/cache.go",
           "before": "item.used = c.sequence\n\t\tc.local[key] = item",
-          "after": "item.used = c.sequence\n\t\titem.inserted = elapsedNow(c.options.Clock)\n\t\tc.local[key] = item"
+          "after": "item.used = c.sequence\n\t\titem.insertedMS = c.options.Clock.ElapsedMS()\n\t\tc.local[key] = item"
         }
       ],
       "requiredDetections": [
