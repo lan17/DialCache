@@ -3,6 +3,7 @@ package dialcache
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,14 +16,19 @@ type behaviorAction struct {
 	input   func(int64, *behaviorDriver) obj
 }
 type behaviorProfile struct {
-	name                   string
-	fixture                func(int64) obj
-	setup                  []obj
-	initChoices            []int64
-	actions                map[string]behaviorAction
-	diagnosticAge          string
-	diagnosticConfigErrors bool
-	readIO                 bool
+	policyErrorIO           bool
+	explicitInputs          bool
+	markerIO                bool
+	compressionIO           bool
+	name                    string
+	fixture                 func(int64) obj
+	setup                   []obj
+	initChoices             []int64
+	actions                 map[string]behaviorAction
+	diagnosticAge           string
+	diagnosticConfigErrors  bool
+	diagnosticFutureOffsets bool
+	readIO                  bool
 }
 type behaviorStep struct {
 	action   string
@@ -86,7 +92,12 @@ func rejectSourceAction(count int64) behaviorAction {
 }
 func behaviorProfiles() map[string]behaviorProfile {
 	profiles := map[string]behaviorProfile{}
-	profiles["scope"] = behaviorProfile{name: "scope", diagnosticAge: "none", fixture: func(int64) obj {
+	profiles["recovery-read"] = recoveryReadProfile()
+	profiles["local-failure"] = localFailureProfile()
+	profiles["runtime-boundaries"] = runtimeBoundariesProfile()
+	profiles["shadow-layers"] = shadowLayersProfile()
+	profiles["source-budgets"] = sourceBudgetsProfile()
+	profiles["scope"] = behaviorProfile{name: "scope", explicitInputs: true, diagnosticAge: "none", fixture: func(int64) obj {
 		return obj{"policy": obj{"requestLocal": true}, "remote": false, "fallbackTimeoutMs": nil, "probeSourceScope": true, "observe": []any{"coalesced", "error"}}
 	}, setup: []obj{{"op": "openScope", "id": "0"}, {"op": "faults", "value": obj{"holdPolicies": true}}}, actions: map[string]behaviorAction{
 		"openScope": chosenAction(brange(1, 4), func(n int64) obj {
@@ -129,18 +140,18 @@ func behaviorProfiles() map[string]behaviorProfile {
 		overlays = append(overlays, v)
 	}
 	overlays = append(overlays, obj{"remoteReadTimeoutMs": 0}, obj{"ramp": obj{"local": 101}}, obj{"ramp": obj{"remote": 101}}, obj{"staleOnErrorMaxAgeSec": 1}, obj{"staleOnErrorMaxAgeSec": -1}, obj{"shadow": obj{"ramp": 101}})
-	profiles["policy"] = behaviorProfile{name: "policy", fixture: func(int64) obj {
-		return obj{"policy": obj{"ttlSec": obj{"local": 1, "remote": 1}, "staleOnErrorMaxAgeSec": 5}, "localMaxSize": 1, "fallbackTimeoutMs": nil}
+	profiles["policy"] = behaviorProfile{name: "policy", explicitInputs: true, policyErrorIO: true, fixture: func(int64) obj {
+		return obj{"policy": obj{"ttlSec": obj{"local": 1, "remote": 1}, "staleOnErrorMaxAgeSec": 5}, "localMaxSize": 1, "fallbackTimeoutMs": nil, "observe": []any{"error"}}
 	}, setup: []obj{{"op": "faults", "value": obj{"holdPolicies": true}}}, actions: map[string]behaviorAction{
 		"beginCall": chosenAction(brange(0, 1), func(n int64) obj { return obj{"op": "begin", "key": fmt.Sprint(n)} }), "releasePolicy": releaseAction("policy"), "resolveLoader": sourceValueAction(12), "rejectLoader": rejectSourceAction(12),
 		"seed": chosenAction(brange(0, 3), func(n int64) obj { return obj{"op": "seed", "key": fmt.Sprint(n / 2), "value": n%2 + 1, "ttlMs": 5000} }), "policy": chosenAction(brange(0, 25), func(n int64) obj { return obj{"op": "policy", "value": overlays[n]} }), "advance": advanceAction(1, 500, 1000, 2000, 5000), "rollbackWall": fixedAction(obj{"op": "shiftWall", "ms": -1000}), "providerFault": faultAction("policy"), "readFault": faultAction("read"), "dumpFault": faultAction("dump"), "writeFault": faultAction("write")}}
 	layerPolicies := []obj{{}, {"requestLocal": false}, {"ramp": obj{"local": 0}}, {"ramp": obj{"remote": 0}}, {"ramp": obj{"local": 0, "remote": 0}}, {"requestLocal": false, "ramp": obj{"local": 0, "remote": 0}}}
-	profiles["layers"] = behaviorProfile{name: "layers", initChoices: brange(0, 4), fixture: func(n int64) obj {
+	profiles["layers"] = behaviorProfile{name: "layers", explicitInputs: true, initChoices: brange(0, 5), fixture: func(n int64) obj {
 		capacity := 2
-		if n >= 2 && n != 4 {
+		if n == 2 || n == 3 {
 			capacity = 0
 		}
-		return obj{"policy": obj{"requestLocal": true, "ttlSec": obj{"local": 60, "remote": 60}}, "tracked": n%2 == 1, "remote": n != 4, "localMaxSize": capacity, "fallbackTimeoutMs": nil}
+		return obj{"policy": obj{"requestLocal": true, "ttlSec": obj{"local": 60, "remote": 60}}, "tracked": n%2 == 1, "remote": n < 4, "localMaxSize": capacity, "fallbackTimeoutMs": nil}
 	}, setup: []obj{{"op": "openScope", "id": "0", "instance": "0"}, {"op": "openScope", "id": "1", "instance": "0"}, {"op": "openScope", "id": "2", "instance": "1"}}, actions: map[string]behaviorAction{
 		"beginCall": chosenAction(brange(0, 19), func(n int64) obj {
 			context, id := n/4, n%4
@@ -172,7 +183,7 @@ func behaviorProfiles() map[string]behaviorProfile {
 			}
 			return obj{"op": "seed", "value": v, "ageMs": []int{0, 999, 1000, 4999, 5000, -1, 1000}[n]}
 		}), "advance": advanceAction(1, 10, 1000, 4000), "rollbackWall": fixedAction(obj{"op": "shiftWall", "ms": -1000}), "invalidate": fixedAction(obj{"op": "invalidate"}), "policy": chosenAction([]int64{2000, 5000}, func(n int64) obj { return obj{"op": "policy", "value": obj{"staleOnErrorMaxAgeSec": n / 1000}} }), "readFault": faultAction("read"), "loadFault": faultAction("load")}}
-	profiles["independent"] = behaviorProfile{name: "independent", readIO: true, fixture: func(int64) obj {
+	profiles["independent"] = behaviorProfile{name: "independent", explicitInputs: true, readIO: true, fixture: func(int64) obj {
 		return obj{"policy": obj{"ttlSec": obj{"remote": 1}, "staleOnErrorMaxAgeSec": 5, "coalesce": false}, "tracked": true, "readTimeoutMs": 5, "fallbackTimeoutMs": 10, "recovery": "allow", "observe": []any{"readContext", "readAbort"}}
 	}, setup: []obj{{"op": "seed", "value": 1, "ageMs": 1000}, {"op": "faults", "value": obj{"holdReads": true, "holdLoads": true}}}, actions: map[string]behaviorAction{
 		"beginCall": fixedAction(obj{"op": "begin"}), "resolveLoader": sourcePairAction(6), "rejectLoader": rejectSourceAction(6), "advance": advanceAction(1, 5, 10, 1000), "seed": chosenAction(brange(0, 5), func(n int64) obj {
@@ -222,12 +233,12 @@ func behaviorProfiles() map[string]behaviorProfile {
 		}
 		return v
 	})
-	profiles["shadow"] = behaviorProfile{name: "shadow", diagnosticAge: "shadowAge", diagnosticConfigErrors: true, initChoices: brange(0, 12), fixture: func(n int64) obj {
+	profiles["shadow"] = behaviorProfile{name: "shadow", explicitInputs: true, diagnosticFutureOffsets: true, diagnosticAge: "shadowAge", diagnosticConfigErrors: true, initChoices: brange(0, 12), fixture: func(n int64) obj {
 		shadow := obj{"ramp": 100}
 		if n >= 4 && n < 8 {
 			shadow["logMismatches"] = true
 		}
-		v := obj{"policy": obj{"ttlSec": obj{"remote": 60}, "ramp": obj{"remote": 0}, "shadow": shadow}, "tracked": true, "shadowHook": n != 8, "observe": []any{"shadowAge", "mismatchWarning", "coalesced", "error"}}
+		v := obj{"policy": obj{"ttlSec": obj{"remote": 60}, "ramp": obj{"remote": 0}, "shadow": shadow}, "tracked": true, "shadowHook": n != 8, "observe": []any{"shadowAge", "mismatchWarning", "coalesced", "error", "futureOffset"}}
 		if n%4 != 0 && n < 11 {
 			mode := n%4 - 1
 			if n == 10 {
@@ -247,7 +258,7 @@ func behaviorProfiles() map[string]behaviorProfile {
 			return obj{"op": "resolve", "loader": d.observedEffectCount("loader") - 1, "value": n}
 		}}, "rejectLoader": {input: func(_ int64, d *behaviorDriver) obj {
 			return obj{"op": "reject", "loader": d.observedEffectCount("loader") - 1}
-		}}, "releaseRead": releaseAction("read"), "releaseLoad": releaseAction("load"), "releaseDump": releaseAction("dump"), "releaseWrite": releaseAction("write"), "advance": advanceAction(1, 10), "seed": shadowSeed, "reencode": shadowSeed, "seedUnicode": behaviorAction{choices: []int64{7, 8}, input: shadowSeed.input}, "invalidate": chosenAction([]int64{0, 20}, func(n int64) obj { return obj{"op": "invalidate", "futureBufferMs": n} }), "readFault": faultAction("read"), "loadFault": faultAction("load"), "dumpFault": faultAction("dump"), "writeFault": faultAction("write"), "rollbackWall": fixedAction(obj{"op": "shiftWall", "ms": -1000}), "shadowPolicy": chosenAction(brange(0, 2), func(n int64) obj {
+		}}, "releaseRead": releaseAction("read"), "releaseLoad": releaseAction("load"), "releaseDump": releaseAction("dump"), "releaseWrite": releaseAction("write"), "advance": advanceAction(1, 10), "seed": shadowSeed, "reencode": shadowSeed, "seedUnicode": behaviorAction{choices: []int64{7, 8}, input: shadowSeed.input}, "invalidate": chosenAction([]int64{0, 20}, func(n int64) obj { return obj{"op": "invalidate", "futureBufferMs": n} }), "readFault": faultAction("read"), "loadFault": faultAction("load"), "dumpFault": faultAction("dump"), "writeFault": faultAction("write"), "rollbackWall": fixedAction(obj{"op": "shiftWall", "ms": -1000}), "advanceWall": chosenAction([]int64{1, 60000}, func(n int64) obj { return obj{"op": "shiftWall", "ms": n} }), "shadowPolicy": chosenAction(brange(0, 2), func(n int64) obj {
 			return obj{"op": "policy", "value": obj{"shadow": obj{"ramp": []int{100, 0, 101}[n]}}}
 		}), "logPolicy": chosenAction(brange(0, 2), func(n int64) obj {
 			var logging any = n == 1
@@ -270,10 +281,14 @@ func parseBehaviorTrace(raw []byte, path string, p behaviorProfile) (behaviorTra
 		States []struct {
 			Action string          `json:"mbt::actionTaken"`
 			Picks  json.RawMessage `json:"mbt::nondetPicks"`
+			Input  json.RawMessage `json:"input"`
 			State  struct {
-				O  json.RawMessage `json:"o"`
-				D  json.RawMessage `json:"d"`
-				IO json.RawMessage `json:"io"`
+				O            json.RawMessage `json:"o"`
+				PolicyErrors json.RawMessage `json:"policyErrors"`
+				D            json.RawMessage `json:"d"`
+				IO           json.RawMessage `json:"io"`
+				Markers      json.RawMessage `json:"markers"`
+				Compression  json.RawMessage `json:"compression"`
 			} `json:"s"`
 		} `json:"states"`
 	}
@@ -283,15 +298,17 @@ func parseBehaviorTrace(raw []byte, path string, p behaviorProfile) (behaviorTra
 	states := make([]obj, 0, len(envelope.States))
 	for _, wire := range envelope.States {
 		var rawPicks any
-		if err := json.Unmarshal(wire.Picks, &rawPicks); err != nil {
-			return behaviorTrace{}, err
+		if !p.explicitInputs {
+			if err := json.Unmarshal(wire.Picks, &rawPicks); err != nil {
+				return behaviorTrace{}, err
+			}
 		}
 		picks, err := behaviorITF(rawPicks)
 		if err != nil {
 			return behaviorTrace{}, err
 		}
 		state := obj{}
-		for name, bytes := range map[string]json.RawMessage{"o": wire.State.O, "d": wire.State.D, "io": wire.State.IO} {
+		for name, bytes := range map[string]json.RawMessage{"o": wire.State.O, "d": wire.State.D, "io": wire.State.IO, "markers": wire.State.Markers, "compression": wire.State.Compression, "policyErrors": wire.State.PolicyErrors} {
 			if len(bytes) == 0 {
 				continue
 			}
@@ -305,7 +322,19 @@ func parseBehaviorTrace(raw []byte, path string, p behaviorProfile) (behaviorTra
 			}
 			state[name] = value
 		}
-		states = append(states, obj{"mbt::actionTaken": wire.Action, "mbt::nondetPicks": picks, "s": state})
+		entry := obj{"mbt::actionTaken": wire.Action, "mbt::nondetPicks": picks, "s": state}
+		if p.explicitInputs {
+			var rawInput any
+			if err := json.Unmarshal(wire.Input, &rawInput); err != nil {
+				return behaviorTrace{}, err
+			}
+			input, err := behaviorITF(rawInput)
+			if err != nil {
+				return behaviorTrace{}, err
+			}
+			entry["input"] = input
+		}
+		states = append(states, entry)
 	}
 	trace := behaviorTrace{path: path}
 	if len(states) < 2 {
@@ -314,6 +343,13 @@ func parseBehaviorTrace(raw []byte, path string, p behaviorProfile) (behaviorTra
 	for index, rawState := range states {
 		s := bm(rawState)
 		action := bs(s["mbt::actionTaken"])
+		if p.explicitInputs {
+			input := bm(s["input"])
+			if behaviorKeys(input) != "choice,name" {
+				return trace, fmt.Errorf("invalid explicit input")
+			}
+			action = bs(input["name"])
+		}
 		descriptor, known := p.actions[action]
 		if index == 0 {
 			known = action == "init"
@@ -325,12 +361,18 @@ func parseBehaviorTrace(raw []byte, path string, p behaviorProfile) (behaviorTra
 			return trace, fmt.Errorf("%s step %d unknown/misplaced action %s", path, index, action)
 		}
 		picks := bm(s["mbt::nondetPicks"])
-		if behaviorKeys(picks) != "choice" {
+		if !p.explicitInputs && behaviorKeys(picks) != "choice" {
 			return trace, fmt.Errorf("%s unsupported choice fields", path)
 		}
 		pick := bm(picks["choice"])
 		var choice int64
-		if descriptor.choices != nil {
+		if p.explicitInputs {
+			n, ok := bm(s["input"])["choice"].(float64)
+			if !ok || float64(int64(n)) != n || descriptor.choices == nil && n != -1 || descriptor.choices != nil && !bcontains(descriptor.choices, int64(n)) {
+				return trace, fmt.Errorf("%s step %d unsupported explicit choice", path, index)
+			}
+			choice = int64(n)
+		} else if descriptor.choices != nil {
 			n, ok := pick["value"].(float64)
 			if pick["tag"] != "Some" || !ok || float64(int64(n)) != n || !bcontains(descriptor.choices, int64(n)) {
 				return trace, fmt.Errorf("%s step %d missing/unsupported choice", path, index)
@@ -361,7 +403,7 @@ func parseBehaviorTrace(raw []byte, path string, p behaviorProfile) (behaviorTra
 				for _, item := range items {
 					if field == "calls" || field == "writeTtls" {
 						n, ok := item.(float64)
-						if !ok || n < 0 || float64(int64(n)) != n || field == "calls" && n > 9 {
+						if !ok || n < 0 || float64(int64(n)) != n || field == "calls" && n > 9 && n != 11 {
 							return trace, fmt.Errorf("invalid outcome %s", field)
 						}
 					} else if field == "sourceScopes" {
@@ -378,11 +420,27 @@ func parseBehaviorTrace(raw []byte, path string, p behaviorProfile) (behaviorTra
 		if p.diagnosticConfigErrors {
 			diagnosticFields = "ages,coalesced,configErrors,fallbackErrors,warnings"
 		}
+		if p.diagnosticFutureOffsets {
+			diagnosticFields = strings.Replace(diagnosticFields, "fallbackErrors,warnings", "fallbackErrors,futureOffsets,warnings", 1)
+		}
 		if p.diagnosticAge != "" && behaviorKeys(bm(state["d"])) != diagnosticFields {
 			return trace, fmt.Errorf("missing diagnostic observations")
 		}
 		if p.diagnosticAge != "" {
 			d := bm(state["d"])
+			if p.diagnosticFutureOffsets {
+				offsets, ok := d["futureOffsets"].([]any)
+				if !ok {
+					return trace, fmt.Errorf("missing future offsets")
+				}
+				for _, raw := range offsets {
+					offset := bm(raw)
+					n, valid := offset["offsetMs"].(float64)
+					if behaviorKeys(offset) != "layer,offsetMs" || offset["layer"] != "remote_shadow" || !valid || n <= 0 || n > 9007199254740991 || math.Trunc(n) != n {
+						return trace, fmt.Errorf("invalid future offset")
+					}
+				}
+			}
 			if p.diagnosticConfigErrors {
 				if n, ok := d["configErrors"].(float64); !ok || n < 0 || n != float64(int64(n)) {
 					return trace, fmt.Errorf("invalid config diagnostic count")
@@ -429,7 +487,7 @@ func parseBehaviorTrace(raw []byte, path string, p behaviorProfile) (behaviorTra
 					}
 				}
 			}
-			if len(ba(io["budgets"])) != len(ba(io["sourceErrors"])) {
+			if len(ba(expected["calls"])) != len(ba(io["sourceErrors"])) {
 				return trace, fmt.Errorf("missing source error identities")
 			}
 			seen := map[int64]bool{}
@@ -439,6 +497,47 @@ func parseBehaviorTrace(raw []byte, path string, p behaviorProfile) (behaviorTra
 					return trace, fmt.Errorf("invalid/duplicate read abort")
 				}
 				seen[index] = true
+			}
+		}
+		if p.compressionIO {
+			values, ok := state["compression"].([]any)
+			if !ok {
+				return trace, fmt.Errorf("missing compression observations")
+			}
+			for _, value := range values {
+				if value != "decompressed" && value != "fallback_raw" {
+					return trace, fmt.Errorf("invalid compression outcome")
+				}
+			}
+		}
+		if p.markerIO {
+			markers, ok := state["markers"].([]any)
+			if !ok {
+				return trace, fmt.Errorf("missing marker observations")
+			}
+			for _, raw := range markers {
+				marker := bm(raw)
+				if behaviorKeys(marker) != "cutoffMs,ttlMs" {
+					return trace, fmt.Errorf("invalid marker observation")
+				}
+				for _, field := range []string{"cutoffMs", "ttlMs"} {
+					n, ok := marker[field].(float64)
+					if !ok || float64(int64(n)) != n {
+						return trace, fmt.Errorf("invalid marker number")
+					}
+				}
+			}
+		}
+		if p.policyErrorIO {
+			errors, ok := state["policyErrors"].([]any)
+			if !ok {
+				return trace, fmt.Errorf("missing policy errors")
+			}
+			for _, raw := range errors {
+				item := bm(raw)
+				if behaviorKeys(item) != "errorType,layer" || item["layer"] != "noop" || item["errorType"] != "config_resolution" {
+					return trace, fmt.Errorf("invalid policy error")
+				}
 			}
 		}
 		trace.steps = append(trace.steps, behaviorStep{action: action, choice: choice, state: state, expected: expected})
@@ -465,6 +564,9 @@ func featureValueCode(value any) int64 {
 		if x == "" {
 			return 9
 		}
+		if x == "undefined" {
+			return 11
+		}
 	case map[string]any:
 		if x["absent"] == true {
 			return 5
@@ -473,6 +575,66 @@ func featureValueCode(value any) int64 {
 	return 10
 }
 func featureObservation(p behaviorProfile, actual obj) (obj, error) {
+	if p.policyErrorIO {
+		events, ok := actual["events"].([]any)
+		if !ok {
+			return nil, fmt.Errorf("missing actual policy diagnostics")
+		}
+		errors := []any{}
+		for _, raw := range events {
+			event := bm(raw)
+			if event["event"] != "error" || event["layer"] != "noop" || event["error"] != "config_resolution" {
+				continue
+			}
+			if event["cacheNamespace"] != "urn" || event["useCase"] != "Behavior" || event["keyType"] != "id" || event["inFallback"] != false {
+				return nil, fmt.Errorf("invalid actual policy diagnostic labels")
+			}
+			errors = append(errors, obj{"layer": "noop", "errorType": "config_resolution"})
+		}
+		base := bm(bclone(actual))
+		delete(base, "events")
+		p.policyErrorIO = false
+		result, err := featureObservation(p, base)
+		if err != nil {
+			return nil, err
+		}
+		result["policyErrors"] = errors
+		return result, nil
+	}
+	markers := []any{}
+	compression := []any{}
+	if p.markerIO || p.compressionIO {
+		actual = bm(bclone(actual))
+		events := []any{}
+		for _, raw := range ba(actual["events"]) {
+			event := bm(raw)
+			if p.compressionIO && event["event"] == "compression" {
+				if event["cacheNamespace"] != "urn" || event["useCase"] != "Behavior" || event["keyType"] != "id" || event["layer"] != "remote" {
+					return nil, fmt.Errorf("invalid actual compression labels")
+				}
+				if event["outcome"] != "decompressed" && event["outcome"] != "fallback_raw" {
+					return nil, fmt.Errorf("invalid actual compression outcome")
+				}
+				compression = append(compression, event["outcome"])
+				continue
+			}
+			if !p.markerIO || event["event"] != "marker" {
+				events = append(events, raw)
+				continue
+			}
+			if _, ok := event["cutoffMs"]; !ok {
+				return nil, fmt.Errorf("invalid actual marker observation")
+			}
+			if _, ok := event["ttlMs"]; !ok {
+				return nil, fmt.Errorf("invalid actual marker observation")
+			}
+			markers = append(markers, obj{"cutoffMs": event["cutoffMs"], "ttlMs": event["ttlMs"]})
+		}
+		actual["events"] = events
+		if !p.readIO && p.diagnosticAge == "" {
+			delete(actual, "events")
+		}
+	}
 	out := make(obj, len(actual))
 	for k, v := range actual {
 		out[k] = v
@@ -496,6 +658,12 @@ func featureObservation(p behaviorProfile, actual obj) (obj, error) {
 	}
 	out["calls"] = calls
 	result := obj{"o": out}
+	if p.compressionIO {
+		result["compression"] = compression
+	}
+	if p.markerIO {
+		result["markers"] = markers
+	}
 	if p.readIO {
 		delete(out, "events")
 		io := obj{"budgets": []any{}, "aborted": []any{}, "sourceErrors": []any{}}
@@ -528,6 +696,9 @@ func featureObservation(p behaviorProfile, actual obj) (obj, error) {
 	} else if p.diagnosticAge != "" {
 		delete(out, "events")
 		diag := obj{"warnings": int64(0), "ages": []any{}, "coalesced": []any{}, "fallbackErrors": []any{}}
+		if p.diagnosticFutureOffsets {
+			diag["futureOffsets"] = []any{}
+		}
 		if p.diagnosticConfigErrors {
 			diag["configErrors"] = int64(0)
 		}
@@ -558,6 +729,13 @@ func featureObservation(p behaviorProfile, actual obj) (obj, error) {
 				return nil, fmt.Errorf("invalid diagnostic labels %s", bjson(event))
 			}
 			switch kind {
+			case "futureOffset":
+				seconds, ok := event["seconds"].(float64)
+				offsetMs := seconds * 1000
+				if !p.diagnosticFutureOffsets || event["layer"] != "remote_shadow" || !ok || offsetMs <= 0 || offsetMs > 9007199254740991 || math.Trunc(offsetMs) != offsetMs {
+					return nil, fmt.Errorf("invalid actual future offset")
+				}
+				diag["futureOffsets"] = append(ba(diag["futureOffsets"]), obj{"layer": "remote_shadow", "offsetMs": offsetMs})
 			case "coalesced":
 				diag["coalesced"] = append(ba(diag["coalesced"]), event["scope"])
 			case "error":
@@ -590,6 +768,15 @@ func featureObservation(p behaviorProfile, actual obj) (obj, error) {
 }
 func featureExpected(p behaviorProfile, step behaviorStep) obj {
 	out := obj{"o": step.expected}
+	if p.policyErrorIO {
+		out["policyErrors"] = step.state["policyErrors"]
+	}
+	if p.compressionIO {
+		out["compression"] = step.state["compression"]
+	}
+	if p.markerIO {
+		out["markers"] = step.state["markers"]
+	}
 	if p.diagnosticAge != "" {
 		diag := bm(bclone(step.state["d"]))
 		ages := []any{}
@@ -642,16 +829,60 @@ func featurePaths(p string) ([]string, error) {
 		if len(paths) == 0 {
 			return nil, fmt.Errorf("empty feature corpus %s", p)
 		}
+		regressions, err := featureRegressionPaths(p, dir)
+		if err != nil {
+			return nil, err
+		}
+		paths = append(paths, regressions...)
 		return paths, nil
 	}
 	return []string{filepath.Join("..", "formal", p+"-smoke.itf.json")}, nil
 }
+
+func featureRegressionPaths(profile, directory string) ([]string, error) {
+	raw, err := os.ReadFile("../formal/execution.json")
+	if err != nil {
+		return nil, err
+	}
+	var manifest struct {
+		Models []struct {
+			Profile     string   `json:"profile"`
+			Regressions []string `json:"replayRegressions"`
+		} `json:"models"`
+	}
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		return nil, err
+	}
+	paths := []string{}
+	for _, model := range manifest.Models {
+		if model.Profile != profile {
+			continue
+		}
+		for _, name := range model.Regressions {
+			path := filepath.Join(directory, "..", "regressions", profile, name+".itf.json")
+			if _, err := os.Stat(path); err != nil {
+				return nil, fmt.Errorf("missing Quint regression %s: %w", name, err)
+			}
+			paths = append(paths, path)
+		}
+	}
+	return paths, nil
+}
 func TestFeatureConformance(t *testing.T) {
 	requireRegistry(t)
 	profiles := behaviorProfiles()
+	selected := os.Getenv("DIALCACHE_FEATURE_PROFILE")
+	if selected != "" {
+		if _, ok := profiles[selected]; !ok {
+			t.Fatalf("unknown selected feature profile: %s", selected)
+		}
+	}
 	count := 0
 	executedProfiles := map[string]bool{}
-	for _, name := range []string{"scope", "policy", "layers", "recovery", "independent", "shadow", "admission"} {
+	for _, name := range []string{"scope", "policy", "layers", "recovery", "independent", "shadow", "admission", "recovery-read", "local-failure", "runtime-boundaries", "shadow-layers", "source-budgets"} {
+		if selected != "" && selected != name {
+			continue
+		}
 		p := profiles[name]
 		paths, err := featurePaths(name)
 		if err != nil {
@@ -711,7 +942,7 @@ func TestFeatureParserRejectsMissingAndUnsafeInputs(t *testing.T) {
 			state := bm(states[1])
 			switch mutation {
 			case "choice":
-				state["mbt::nondetPicks"] = obj{}
+				state["input"] = obj{}
 			case "observation":
 				delete(bm(bm(state["s"])["o"]), "calls")
 			case "diagnostics":

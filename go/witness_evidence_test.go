@@ -83,6 +83,47 @@ func checkWitnessEvidence(profile, directory string, paths []string) error {
 	} else {
 		expectedInputs = append(expectedInputs, "test/formal/runtime-witnesses.ts", "test/formal/recovery-shadow-witnesses.ts")
 	}
+	var execution struct {
+		Libraries []string `json:"libraries"`
+	}
+	executionRaw, err := os.ReadFile("../formal/execution.json")
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(executionRaw, &execution); err != nil {
+		return err
+	}
+	var definitions struct {
+		Profiles []struct {
+			ID      string   `json:"id"`
+			Sources []string `json:"witnessSources"`
+		} `json:"profiles"`
+	}
+	definitionsRaw, err := os.ReadFile("../formal/profiles.json")
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(definitionsRaw, &definitions); err != nil {
+		return err
+	}
+	additional := append([]string{}, execution.Libraries...)
+	for _, definition := range definitions.Profiles {
+		if definition.ID == profile {
+			additional = append(additional, definition.Sources...)
+		}
+	}
+	for _, path := range additional {
+		found := false
+		for _, prior := range expectedInputs {
+			if prior == path {
+				found = true
+				break
+			}
+		}
+		if !found {
+			expectedInputs = append(expectedInputs, path)
+		}
+	}
 	if len(evidence.Inputs) != len(expectedInputs) {
 		return fmt.Errorf("incomplete witness definition fingerprints")
 	}
@@ -134,6 +175,11 @@ func TestGeneratedWitnessEvidence(t *testing.T) {
 		profiles["effects"] = paths
 	}
 	if os.Getenv("DIALCACHE_FEATURE_TRACE_DIR") != "" && os.Getenv("DIALCACHE_FEATURE_TRACE_FILE") == "" {
+		clockPaths, err := featurePaths("local-clock")
+		if err != nil {
+			t.Fatal(err)
+		}
+		profiles["local-clock"] = clockPaths
 		for name := range behaviorProfiles() {
 			paths, err := featurePaths(name)
 			if err != nil {

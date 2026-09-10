@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { constants as zlibConstants, zstdCompressSync, zstdDecompressSync } from "node:zlib";
 
 import { describe, expect, it } from "vitest";
 
@@ -65,31 +66,39 @@ interface DecodeVector {
 interface ProtocolVectors {
   readonly schemaVersion: number;
   readonly keyVectors: readonly KeyVector[];
-  readonly invalidKeyVectors: ReadonlyArray<{ name: string; input: KeyVector["input"] }>;
-  readonly durationVectors: ReadonlyArray<{ name: string; input: number; expected: number | null }>;
+  readonly invalidKeyVectors: ReadonlyArray<{
+    name: string; input: KeyVector["input"];
+    inputUtf16?: { namespace: number[]; keyType: number[]; id: number[]; useCase: number[]; args: Array<[number[], number[]]> };
+  }>;
+  readonly durationVectors: ReadonlyArray<{ name: string; input: number; specialInput?: string; expected: number | null }>;
   readonly compressionWriteVectors: ReadonlyArray<{
     name: string; payloadType: "string" | "binary"; payloadUtf8?: string; payloadHex?: string;
-    thresholdBytes: number; outcome: string;
+    thresholdBytes: number; outcome?: string; maxDecompressedBytes?: number;
+    originalBytes?: number; rawStoredBytes?: number; escapedHex?: string;
+    codecBytes?: { typescript: number; go: number };
+    expectedByBinding?: Record<"typescript" | "go", { outcome: string; storedBytes: number; marker: number }>;
   }>;
   readonly normalizeArgsVectors: readonly NormalizeArgsVector[];
   readonly frameVectors: readonly FrameVector[];
   readonly trackedDecodeVectors: readonly DecodeVector[];
   readonly untrackedDecodeVectors: readonly DecodeVector[];
-  readonly invalidTimestampVectors: ReadonlyArray<{ name: string; input: number }>;
+  readonly invalidTimestampVectors: ReadonlyArray<{ name: string; input: number; specialInput?: string }>;
   readonly envelopeVectors: ReadonlyArray<{
     name: string; inputHex: string; escapedHex: string; decodedHex: string; outcome: string;
   }>;
   readonly compressedDecodeVectors: ReadonlyArray<{
     name: string; inputHex: string; payloadType: "string" | "binary"; payloadUtf8?: string; payloadHex?: string;
+    outcome?: string; maxDecompressedBytes?: number; newWritesEnabled?: boolean;
+    codecFixture?: { succeeds: boolean; decodedHex: string };
   }>;
   readonly rampVectors: ReadonlyArray<{
     name: string; input: KeyVector["input"]; layer: "local" | "remote" | "shadow"; sample: number;
   }>;
 }
 
-const vectors = JSON.parse(
-  readFileSync(new URL("../formal/protocol-vectors.json", import.meta.url), "utf8"),
-) as ProtocolVectors;
+const corpusUrl = new URL("../formal/vector-artifacts.mjs", import.meta.url).href;
+const { protocolCorpus } = await import(corpusUrl) as { protocolCorpus(manifest?: unknown, selection?: string): ProtocolVectors };
+const vectors = protocolCorpus(undefined, process.env.DIALCACHE_PROTOCOL_CORPUS ?? "all");
 
 describe("formal protocol conformance vectors", () => {
   it("keeps the vector schema version explicit", () => {
@@ -107,25 +116,46 @@ describe("formal protocol conformance vectors", () => {
 
   for (const vector of vectors.invalidKeyVectors) {
     it(`rejects invalid identity: ${vector.name}`, () => {
-      expect(() => new DialCacheKey(vector.input)).toThrow();
+      const units = vector.inputUtf16;
+      const input = units === undefined ? vector.input : {
+        ...vector.input,
+        namespace: String.fromCharCode(...units.namespace),
+        keyType: String.fromCharCode(...units.keyType),
+        id: String.fromCharCode(...units.id),
+        useCase: String.fromCharCode(...units.useCase),
+        args: units.args.map(([name, value]) => [String.fromCharCode(...name), String.fromCharCode(...value)] as const),
+      };
+      expect(() => new DialCacheKey(input)).toThrow();
     });
   }
   for (const vector of vectors.durationVectors) {
     it(`bounds physical duration: ${vector.name}`, () => {
-      if (vector.expected === null) expect(() => ceilSupportedCacheTtlMs(vector.input)).toThrow();
-      else expect(ceilSupportedCacheTtlMs(vector.input)).toBe(vector.expected);
+      if (vector.expected === null) expect(() => ceilSupportedCacheTtlMs(vector.specialInput === undefined ? vector.input : Number(vector.specialInput))).toThrow();
+      else expect(ceilSupportedCacheTtlMs(vector.specialInput === undefined ? vector.input : Number(vector.specialInput))).toBe(vector.expected);
     });
   }
   for (const vector of vectors.compressionWriteVectors) {
     it(`selects compression representation: ${vector.name}`, () => {
       const raw = vector.payloadType === "string" ? vector.payloadUtf8! : Buffer.from(vector.payloadHex!, "hex");
-      const result = compressPayload(raw, { thresholdBytes: vector.thresholdBytes, level: 3 });
-      expect(result.outcome).toBe(vector.outcome);
+      if (vector.codecBytes !== undefined) {
+        // Verify the explicit native-codec input independently of the wrapper.
+        const compressed = zstdCompressSync(Buffer.from(raw), { params: { [zlibConstants.ZSTD_c_compressionLevel]: 3 } });
+        expect(compressed.length).toBe(vector.codecBytes.typescript);
+      }
+      const result = compressPayload(raw, { thresholdBytes: vector.thresholdBytes, level: 3 }, vector.maxDecompressedBytes);
+      const expected = vector.expectedByBinding?.typescript;
+      expect(result.outcome).toBe(expected?.outcome ?? vector.outcome);
+      if (expected !== undefined) {
+        expect(result.storedBytes).toBe(expected.storedBytes);
+        expect(result.originalBytes).toBe(vector.originalBytes);
+        expect(Buffer.from(escapeRawPayload(raw)).toString("hex")).toBe(vector.escapedHex);
+        expect(Buffer.byteLength(escapeRawPayload(raw))).toBe(vector.rawStoredBytes);
+      }
       expect(decompressPayload(result.payload).payload).toEqual(raw);
-      if (vector.outcome === "compressed") {
-        expect(result.storedBytes).toBeLessThan(result.originalBytes);
+      if (result.outcome === "compressed") {
+        expect(result.storedBytes).toBeLessThan(Buffer.byteLength(escapeRawPayload(raw)));
         expect(Buffer.isBuffer(result.payload)).toBe(true);
-        expect(result.payload[0]).toBe(vector.payloadType === "string" ? 1 : 2);
+        expect(result.payload[0]).toBe(expected?.marker ?? (vector.payloadType === "string" ? 1 : 2));
       } else expect(result.payload).toEqual(escapeRawPayload(raw));
     });
   }
@@ -141,12 +171,12 @@ describe("formal protocol conformance vectors", () => {
 
   for (const vector of vectors.normalizeArgsVectors) {
     it(`normalizes args: ${vector.name}`, () => {
-      const input: Record<string, string | number | boolean | bigint | null | undefined> = Object.fromEntries(
+      const input: Record<string, string | number | boolean | bigint | null | undefined> = Object.assign(Object.create(null) as Record<string, string | number | boolean | bigint | null | undefined>, Object.fromEntries(
         Object.entries(vector.input).map(([name, value]) => [
           name,
           vector.undefinedSentinel !== undefined && value === vector.undefinedSentinel ? undefined : value,
         ]),
-      );
+      ));
       for (const [name, text] of Object.entries(vector.bigintArgs ?? {})) input[name] = BigInt(text);
       for (const [name, text] of Object.entries(vector.specialArgs ?? {})) input[name] = Number(text);
       expect(normalizeArgs(input)).toEqual(vector.expected);
@@ -193,7 +223,7 @@ describe("formal protocol conformance vectors", () => {
 
   for (const vector of vectors.invalidTimestampVectors) {
     it(`rejects timestamp: ${vector.name}`, () => {
-      expect(() => encodeRedisFrame("value", vector.input)).toThrow(RangeError);
+      expect(() => encodeRedisFrame("value", vector.specialInput === undefined ? vector.input : Number(vector.specialInput))).toThrow(RangeError);
     });
   }
 
@@ -208,8 +238,16 @@ describe("formal protocol conformance vectors", () => {
 
   for (const vector of vectors.compressedDecodeVectors) {
     it(`decodes compressed payload: ${vector.name}`, () => {
-      expect(decompressPayload(Buffer.from(vector.inputHex, "hex"))).toEqual({
-        outcome: "decompressed",
+      const input = Buffer.from(vector.inputHex, "hex");
+      if (vector.codecFixture !== undefined) {
+        const decodeNative = (): Buffer => zstdDecompressSync(input.subarray(1));
+        if (vector.codecFixture.succeeds) expect(decodeNative().toString("hex")).toBe(vector.codecFixture.decodedHex);
+        else expect(decodeNative).toThrow();
+      }
+      // New-write enablement is not a decoder argument. The cache-level
+      // compression:false binding is exercised by recovery-read histories.
+      expect(decompressPayload(input, vector.maxDecompressedBytes)).toEqual({
+        outcome: vector.outcome ?? "decompressed",
         payload: vector.payloadType === "binary" ? Buffer.from(vector.payloadHex!, "hex") : vector.payloadUtf8,
       });
     });

@@ -5,6 +5,7 @@ package dialcache
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -285,6 +286,10 @@ func testInvalidationVectors(t *testing.T, environment redisEnvironment) {
 		t.Fatal(err)
 	}
 	var corpus struct {
+		Provenance struct {
+			Model        string
+			SourceSHA256 map[string]string `json:"sourceSha256"`
+		}
 		SchemaVersion int
 		Vectors       []struct {
 			Name, FutureBufferMS, InvalidatedAtMS string
@@ -298,6 +303,37 @@ func testInvalidationVectors(t *testing.T, environment redisEnvironment) {
 	if err = json.Unmarshal(raw, &corpus); err != nil || corpus.SchemaVersion != 2 || len(corpus.Vectors) != 49 {
 		t.Fatal("unsupported invalidation corpus", err)
 	}
+	// The historical 49 vectors remain a separate corpus. New predictions are
+	// emitted by Quint; ordinary Redis runs reject stale model/generator inputs.
+	generated := corpus
+	generated.Vectors = nil
+	raw, err = os.ReadFile("../formal/quint-invalidation-vectors.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = json.Unmarshal(raw, &generated); err != nil || generated.SchemaVersion != 2 || len(generated.Vectors) != 288 {
+		t.Fatal("unsupported Quint invalidation corpus", err)
+	}
+	const model = "formal/dialcache-invalidation-transition.qnt"
+	const generator = "formal/generate-invalidation-vectors.mjs"
+	if generated.Provenance.Model != model || len(generated.Provenance.SourceSHA256) != 2 {
+		t.Fatal("invalid Quint invalidation provenance")
+	}
+	for _, path := range []string{model, generator} {
+		source, err := os.ReadFile(filepath.Join("..", path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fmt.Sprintf("%x", sha256.Sum256(source)) != generated.Provenance.SourceSHA256[path] {
+			t.Fatalf("stale Quint invalidation vectors for %s; regenerate and review", path)
+		}
+	}
+	for i, vector := range generated.Vectors {
+		if !strings.HasPrefix(vector.Name, fmt.Sprintf("Quint %03d: ", i)) {
+			t.Fatal("incomplete or reordered Quint invalidation combinations")
+		}
+	}
+	corpus.Vectors = append(corpus.Vectors, generated.Vectors...)
 	const setup = `redis.replicate_commands()
 local now=redis.call("TIME")
 redis.call("DEL",KEYS[1])

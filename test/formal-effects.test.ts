@@ -1,3 +1,4 @@
+import { effectsAuthorityWitnesses } from "./formal/effects-authority-witnesses.js";
 import { recordWitnesses } from "./formal/coverage-evidence.js";
 
 import { readFileSync, readdirSync } from "node:fs";
@@ -6,7 +7,7 @@ import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BehaviorDriver, type Input, type Fixture, type Observation, type AdapterReply } from "./formal/behavior-driver.js";
-import { itfInteger, record } from "./formal/itf.js";
+import { itfInteger, itfSignedInteger, record } from "./formal/itf.js";
 import { assertEffectsHistory } from "./formal/effects-contract.js";
 
 const actions = ["init", "beginCall", "resolveLoader", "rejectLoader", "releaseRead", "failRead", "releaseLoad", "failLoad", "releaseDump", "failDump", "releaseWrite", "failWrite", "seedRemote", "tick", "jumpClock", "rollbackWall", "observerFault", "readBudgetPolicy", "adapterReply", "invalidate", "futureFence"] as const;
@@ -27,24 +28,22 @@ function parseTrace(value: unknown, path: string): Trace {
   const steps = states.map((raw, index): Step => {
     const context = `${path} step ${index}`;
     const step = record(raw, context);
-    const action = step["mbt::actionTaken"];
+    const input = record(step.input, context);
+    if (Object.keys(input).sort().join() !== "choice,name") throw new Error(`${context}: invalid explicit input`);
+    const action = input.name;
     if (!actions.some((name) => name === action) || ((index === 0) !== (action === "init"))) {
       throw new Error(`${context}: unknown or misplaced action ${JSON.stringify(action)}`);
     }
-    const picks = record(step["mbt::nondetPicks"], context);
-    if (Object.keys(picks).join() !== "choice") throw new Error(`${context}: unsupported choices`);
-    const pick = record(picks.choice, context);
-    const settles = action === "init" || action === "adapterReply" || action === "readBudgetPolicy" || action === "observerFault" || action === "resolveLoader" || action === "rejectLoader" || action === "releaseRead" || action === "failRead";
+    const chosen = action === "init" || action === "adapterReply" || action === "readBudgetPolicy" || action === "observerFault" || action === "resolveLoader" || action === "rejectLoader" || action === "releaseRead" || action === "failRead";
+    const encoded = itfSignedInteger(input.choice, context);
     let choice: number | undefined;
-    if (settles) {
-      if (pick.tag !== "Some") throw new Error(`${context}: missing effect choice`);
-      choice = itfInteger(pick.value, context);
-      if (((action === "init" && choice > 5) || (action === "readBudgetPolicy" && choice > 4))) throw new Error(`${context}: unsupported budget choice`);
-      if (action === "adapterReply" && (choice < 1 || choice > 16)) throw new Error(`${context}: unsupported adapter reply`);
-      if (action === "observerFault" && choice > 1) throw new Error(`${context}: unsupported observer choice`);
-    } else if (pick.tag !== "None" || JSON.stringify(pick.value) !== '{"#tup":[]}') {
-      throw new Error(`${context}: unexpected effect choice`);
-    }
+    if (chosen) {
+      if (encoded < 0) throw new Error(`${context}: missing effect choice`);
+      choice = encoded;
+      if ((action === "init" && choice > 5) || (action === "readBudgetPolicy" && choice > 4)
+        || (action === "observerFault" && choice > 1)
+        || (action === "adapterReply" && (choice < 1 || choice > 16))) throw new Error(`${context}: unsupported effect choice`);
+    } else if (encoded !== -1) throw new Error(`${context}: unexpected effect choice`);
     const rawState = record(step.s, context);
     if (Object.keys(rawState).length !== fields.length + 5) throw new Error(`${context}: unexpected model fields`);
     const integers = Object.fromEntries(fields.map((field) => [field, itfInteger(rawState[field], `${context} ${field}`)])) as Record<typeof fields[number], number>;
@@ -78,7 +77,15 @@ function loadTraces(): Trace[] {
   let paths: string[];
   if (singleFile !== undefined) paths = [resolve(singleFile)];
   else if (directory === undefined) paths = [resolve("formal/effects-smoke.itf.json")];
-  else paths = readdirSync(directory).filter((name) => name.endsWith(".itf.json")).sort().map((name) => resolve(directory, name));
+  else {
+    paths = readdirSync(directory).filter((name) => name.endsWith(".itf.json")).sort().map((name) => resolve(directory, name));
+    const execution = JSON.parse(readFileSync(new URL("../formal/execution.json", import.meta.url), "utf8")) as {
+      models: Array<{ profile?: string; replayRegressions?: string[] }>;
+    };
+    for (const name of execution.models.find(model => model.profile === "effects")?.replayRegressions ?? []) {
+      paths.push(resolve(directory, "..", "regressions", "effects", `${name}.itf.json`));
+    }
+  }
   if (paths.length === 0) throw new Error("No effects conformance traces found");
   return paths.map((path) => parseTrace(JSON.parse(readFileSync(path, "utf8")), path));
 }
@@ -251,11 +258,6 @@ describe("generated pending-effect conformance", () => {
           for (const budget of s.readBudgets) witnesses.add(`read-budget:${budget}`);
           if (step.action === "beginCall" && previous?.phase === 3 && previous.readBudget !== previous.readBudgets[previous.activeRead]) witnesses.add("follower-keeps-read-budget");
           if (s.sources.includes(0) && s.sources.includes(1)) witnesses.add("abandoned-overlap");
-          if (previous?.observerFailed === 1) {
-            if (step.action === "releaseLoad") witnesses.add("observer-failure-hit");
-            if (step.action === "releaseWrite") witnesses.add("observer-failure-publication");
-            if (step.action === "rejectLoader" && previous.sources[step.choice!] === 0 && s.calls.includes(2)) witnesses.add("observer-failure-source-error");
-          }
           if (step.action === "seedRemote") delayedWriteWasFenced = false;
           if (previous?.phase === 3 && s.phase === 1) {
             failedRead = step.action === "failRead" || s.readAborts > previous.readAborts;
@@ -285,8 +287,6 @@ describe("generated pending-effect conformance", () => {
           if (step.action === "failDump") witnesses.add("dump-failure-preserves-value");
           if (step.action === "failWrite") witnesses.add("write-failure-preserves-value");
           if (step.action === "releaseDump" && previous !== undefined && previous.now >= previous.deadline) witnesses.add("serialize-outlives-deadline");
-          if (step.action === "releaseDump" && previous !== undefined && s.writes === previous.writes + 1 &&
-            s.wall > previous.acceptedWall && s.writeTimestamp === s.wall) witnesses.add("write-stamp-after-serialization");
           if (step.action === "rejectLoader" && previous?.sources[step.choice!] === 1 &&
             s.events.filter(event => event.event === "error" && event.detail === "fallback").length ===
               previous.events.filter(event => event.event === "error" && event.detail === "fallback").length &&
@@ -306,7 +306,7 @@ describe("generated pending-effect conformance", () => {
         }
       }
       const required = JSON.parse(readFileSync(new URL("../formal/coverage-witnesses.json", import.meta.url), "utf8")) as Record<string, string[]>;
-      const allWitnesses = new Set([...witnesses, ...diagnosticWitnesses]);
+      const allWitnesses = new Set([...witnesses, ...diagnosticWitnesses, ...effectsAuthorityWitnesses(traces.map(trace => trace.path))]);
       expect(required.effects!.filter(witness => !allWitnesses.has(witness)), "Missing effects witnesses").toEqual([]);
       expect([...seen].sort()).toEqual([...actions].sort());
       recordWitnesses("effects", allWitnesses, required.effects!, traces);
@@ -324,10 +324,9 @@ describe("generated pending-effect conformance", () => {
 
   it("rejects missing choices and precision loss", () => {
     const raw = JSON.parse(readFileSync(traces[0]!.path, "utf8"));
-    raw.states[1]["mbt::actionTaken"] = "resolveLoader";
-    raw.states[1]["mbt::nondetPicks"].choice = { tag: "None", value: { "#tup": [] } };
+    raw.states[1].input = { name: "resolveLoader", choice: { "#bigint": "-1" } };
     expect(() => parseTrace(raw, "missing-choice")).toThrow(/missing effect choice/);
-    raw.states[1]["mbt::nondetPicks"].choice = { tag: "Some", value: { "#bigint": "9007199254740993" } };
+    raw.states[1].input.choice = { "#bigint": "9007199254740993" };
     expect(() => parseTrace(raw, "unsafe-choice")).toThrow(/safe ITF integer/);
   });
 });

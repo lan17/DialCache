@@ -35,6 +35,7 @@ Every scenario/trace gets a fresh default cache instance and empty Redis environ
 - `shadowAge`, `recoveryAge`, `futureOffset`, `get`, `fallback`, `serialization`: actual observations with `seconds`; serialization adds `operation`, and verdict ages add `outcome`.
 - `size`, `storedSize`: observed `bytes`. `compression` carries its actual `outcome`.
 - `mismatchWarning`: fields supplied to the public logger for a confirmed-mismatch warning. The scalar fixtures do not prescribe a general host-language JSON conversion algorithm or truncation implementation.
+- `marker`: an explicit environment probe of the tracked watermark's cutoff and remaining physical TTL. Cutoffs are milliseconds relative to the fixture wall origin; absence is `cutoffMs: -1`. TTL uses Redis's `-2` absent and `-1` persistent values. This controlled adapter observation supplements real-server integration evidence.
 
 Names are a trace vocabulary, not required language method names. All selected events are compared after every input, including steps that expect none. The [source audit](./TEST-AUDIT.md) explains the test/doc obligations these probes cover.
 
@@ -61,13 +62,50 @@ Wall time starts at `2026-09-08T12:00:00Z`; monotonic time starts at zero. Elaps
 | `shiftWall` | Shift application wall time by signed `ms`, without advancing elapsed time or changing Redis physical retention. This is a clock observation, not a timer delivery. |
 | `seed` | Environment stores a frame for `key` and optional `useCase`: `value`, `ageMs` (default 0; negative is future), optional physical `ttlMs` (default 60,000). `frameHex` instead supplies exact raw bytes. This is external setup, not a DialCache write. |
 | `invalidate` | Call public targeted invalidation for `key`, with `futureBufferMs` default 0; await completion. Record its success, controlled mutation failure, or missing-remote-resource error. |
+| `observeMarker` | Observe the environment's tracked watermark for optional `key`, including remaining physical TTL. The fixture must select the `marker` observation. |
 | `policy` | Replace the runtime overlay with `value` (or `null` to inherit). Existing entries and already accepted invocation snapshots retain their contracts. |
-| `faults` | Update environmental flags: `read`, `write`, `dump`, `load`, `policy`, `observer`; and gates `holdReads`, `holdWrites`, `holdDumps`, `holdLoads`, `holdPolicies`. Unmentioned flags retain their values. Flags start false. |
+| `faults` | Update environmental flags: `read`, `write`, `dump`, `load`, `policy`, `observer`, `localStorage`; and gates `holdReads`, `holdWrites`, `holdDumps`, `holdLoads`, `holdPolicies`. Unmentioned flags retain their values. Flags start false. `localStorage` requires the dedicated local-failure fixture described below. |
 | `release` | Complete a held `effect` (`read`, `write`, `dump`, `load`, `policy`) by its zero-based invocation `index`. A released read acquires the environment's current atomic snapshot. Optional `fail: true` rejects only this effect. |
 | `openScope` | Open context `id` for optional `instance`, optionally nested inside `parent` (whose instance is inherited). `disabled: true` opens a disabled context; otherwise it calls enable. Save its execution context for later inputs. |
 | `closeScope` | Complete context `id`. Retain its context handle so later `begin` inputs can exercise detached work after closure. Nested scopes reuse the outer request memo lifetime. |
 
 Only unresolved external operations are gated. A port can use its own executor and explicit request-context handles. It must not reproduce Node Promise turns. The TypeScript driver captures its execution context inside public enable/disable calls; it does not read DialCache's context internals.
+
+## Additional composition profiles
+
+The following profiles extend the existing ownership models. Their exact bounds,
+checked properties and replayed regressions are registered in `execution.json`.
+Each records explicit public inputs as described in `AUTHORING.md`; expected
+observations never select a command, effect index or source result.
+
+| Profile | Boundary and distinguishing public observations |
+| --- | --- |
+| `recovery-read` | Request/local/remote traversal, retained snapshots, held reads/decoding, compressed candidates, frame rejection and watermark lifetime. New public requests distinguish retained bytes from current Redis state. |
+| `local-failure` | Local storage exceptions, accepted source outcomes and request-only reuse. A failed local read remains publication-ineligible even after the fault is cleared before source settlement. |
+| `runtime-boundaries` | Exact serving cohort thresholds, leaf inheritance and validation, falsy/absent values, and feature toggles. Results and later layer reuse distinguish policy admission from mere policy input selection. |
+| `shadow-layers` | Dark and served shadow work combined with request/local publication, independent caller sources, per-instance job capacity, captured fill policy and propagated source errors. |
+| `source-budgets` | Default, unbounded and finite source budgets; held policy resolution, outside calls, invalid keys, late followers and late results after retry. |
+| `local-clock` | Fractional native time with whole-millisecond local insertion and expiration, including instances constructed at different process times. |
+
+The local-failure fixture keeps real storage behind a narrow native failure
+seam: TypeScript throws from the local storage call; Go throws through the
+local clock observation while retaining the precise clock for deadlines and
+diagnostics. Reads are faulted only when an entry exists, because Go's missing
+entry path does not consult that clock. Healthy operations use real storage.
+These tests add no production fault-injection API and make no claim about
+elapsed time or overlapping sources.
+
+The local-clock profile has a dedicated runner. It advances environment time
+in microseconds and constructs actual default cache instances. Replacing their
+clocks with the common integer test clock would erase the boundary under test.
+Its fixture contains immediate healthy sources and no Redis, request memo,
+policy provider or precise source/read/shadow deadline work.
+
+Common value projections reserve code `11` for the ordinary text `"undefined"`,
+distinct from absent code `5`; code `10` remains invalid. Optional read, marker
+and compression projections compose with caller outcomes, diagnostics and
+external effect counts. Unselected observations remain outside a profile's
+claim.
 
 Gates delay external completion, not DialCache policy capture. A held policy
 provider observes the current runtime overlay and provider-failure flag **when
@@ -134,7 +172,7 @@ After every step, replay compares actual caller outcomes, loader/read/write/inva
 
 CI exports 512 traces from 4,096 samples, up to 60 transitions, and requires all actions plus 79 witnesses covering abandoned source/read settlement, independent budgets, late settlement guards, application-owned phases, acquired snapshots across invalidation, failure-specific publication, clock rollback at the second fence check, and observer failure isolation. Twenty-two deterministic model regressions anchor those rules. Sampling favors the narrow rollback-during-publication boundary as well as unrestricted clock changes; it does not restrict that behavior to the favored schedule.
 
-All nine generated profiles run in TypeScript and Go on every PR alongside ordinary tests. Committed ITF smokes run without Quint. Failure diagnostics include trace, step, action, and both observations. The effects choice/state schema and scope/policy value choices changed with this specification revision; ports must select a matching revision and reject unsupported actions or choices. Behavioral scenario schema 2 is unchanged.
+All profiles in `execution.json` run in TypeScript and Go on every PR alongside ordinary tests. Committed ITF smokes run without Quint. Failure diagnostics include trace, step, action, and both observations. The effects choice/state schema and scope/policy value choices changed with this specification revision; ports must select a matching revision and reject unsupported actions or choices. Behavioral scenario schema 2 is unchanged.
 
 The queued adapter choices are: 1 null, 2 primitive, 3 legacy watermark shape, 4 kindless metadata, 5 missing miss reason, 6 unknown reason, 7 unknown reason with valid future fence, 8 fenced reason without fence, 9 negative fence, 10 fractional fence, 11 unsafe fence, 12 absent reason with future fence, 13 expired reason with zero fence, 14 miss with stray frame fields, 15 valid frame with stray miss metadata, and 16 fenced reason with valid future fence. Future fences are the input wall clock plus 20 ms. Successful raw completion consumes the reply even when DialCache has abandoned that read; adapter failure leaves it queued. Ports with strongly typed replies may normalize these encodings at their input boundary, but must preserve the resulting miss/refill behavior.
 

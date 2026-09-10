@@ -73,6 +73,7 @@ module dialcache_effects_conformance {
     loads: int, dumps: int, policyCalls: int, readAborts: int, observerFailed: int
   }
   var s: State
+  var input: { name: str, choice: int }
 
   // Observation and transition helpers ---------------------------------------
   pure def finishPendingCalls(calls: List[int], outcome: int): List[int] =
@@ -123,13 +124,17 @@ module dialcache_effects_conformance {
     loads: 0, dumps: 0, policyCalls: 0, readAborts: 0, observerFailed: 0
   }
 
+  action initialized(mode: int): bool = all {
+    input' = { name: "init", choice: mode }, s' = initial(mode)
+  }
   action init = {
     nondet choice = FIXTURE_LIBRARY_BUDGET.to(FIXTURE_UNTRACKED).oneOf()
-    s' = initial(choice)
+    initialized(choice)
   }
 
   // Call admission and bounded raw reads -------------------------------------
   action beginCall = all {
+    input' = { name: "beginCall", choice: -1 },
     s.calls.length() < MAX_CALLS,
     val visited = emit(s, "disabled", "local", "policy_disabled", 0)
     val observed = if (s.phase == IDLE) metric(visited, "request", "", 0)
@@ -200,18 +205,29 @@ module dialcache_effects_conformance {
   }
   action releaseRead = {
     nondet choice = s.readStates.indices().filter(i => s.readStates.nth(i) != EFFECT_SETTLED).oneOf()
-    s' = settledRead(choice, false)
+    all {
+      input' = { name: "releaseRead", choice: choice },
+      s' = settledRead(choice, false)
+    }
   }
+
   action failRead = {
     nondet choice = s.readStates.indices().filter(i => s.readStates.nth(i) != EFFECT_SETTLED).oneOf()
-    s' = settledRead(choice, true)
+    all {
+      input' = { name: "failRead", choice: choice },
+      s' = settledRead(choice, true)
+    }
   }
+
   action releaseLoad = all {
+    input' = { name: "releaseLoad", choice: -1 },
     s.phase == DECODE_PENDING,
     // The acquired snapshot survives subsequent invalidation and time passage.
     s' = { phase: IDLE, calls: finishPendingCalls(s.calls, CALL_VALUE), ...decoded(s, false) }
   }
+
   action failLoad = all {
+    input' = { name: "failLoad", choice: -1 },
     s.phase == DECODE_PENDING,
     s' = startSource(decoded(s, true), REFILL_ALLOWED, 0)
   }
@@ -239,13 +255,22 @@ module dialcache_effects_conformance {
   }
   action resolveLoader = {
     nondet choice = s.sources.indices().filter(i => s.sources.nth(i) != EFFECT_SETTLED).oneOf()
-    s' = settledSource(choice, false)
+    all {
+      input' = { name: "resolveLoader", choice: choice },
+      s' = settledSource(choice, false)
+    }
   }
+
   action rejectLoader = {
     nondet choice = s.sources.indices().filter(i => s.sources.nth(i) != EFFECT_SETTLED).oneOf()
-    s' = settledSource(choice, true)
+    all {
+      input' = { name: "rejectLoader", choice: choice },
+      s' = settledSource(choice, true)
+    }
   }
+
   action releaseDump = all {
+    input' = { name: "releaseDump", choice: -1 },
     s.phase == SERIALIZE_PENDING,
     // The native write is stamped after serialization, not at source acceptance.
     val prepared = serialized(s, false)
@@ -256,15 +281,21 @@ module dialcache_effects_conformance {
       ...emit(prepared, "writeDispatch", "remote", "", s.writes)
     }
   }
+
   action failDump = all {
+    input' = { name: "failDump", choice: -1 },
     s.phase == SERIALIZE_PENDING,
     s' = { phase: IDLE, calls: finishPendingCalls(s.calls, CALL_VALUE), ...serialized(s, true) }
   }
+
   action releaseWrite = all {
+    input' = { name: "releaseWrite", choice: -1 },
     s.phase == WRITE_PENDING,
     s' = { storedTimestamp: s.writeTimestamp, phase: IDLE, calls: finishPendingCalls(s.calls, CALL_VALUE), ...s }
   }
+
   action failWrite = all {
+    input' = { name: "failWrite", choice: -1 },
     s.phase == WRITE_PENDING,
     s' = {
       phase: IDLE, calls: finishPendingCalls(s.calls, CALL_VALUE),
@@ -275,57 +306,91 @@ module dialcache_effects_conformance {
   // Environmental clock, storage, policy, and failure inputs ------------------
   action tick = {
     val advanced = { now: s.now + CLOCK_STEP_MS, wall: s.wall + CLOCK_STEP_MS, ...s }
-    s' = if (s.phase == READ_PENDING and s.now + CLOCK_STEP_MS >= s.deadline) {
-      val cancelled = {
-        readStates: s.readStates.replaceAt(s.activeRead, EFFECT_ABANDONED),
-        readAborts: s.readAborts + 1,
-        ...advanced
+    all {
+      input' = { name: "tick", choice: -1 },
+      s' = if (s.phase == READ_PENDING and s.now + CLOCK_STEP_MS >= s.deadline) {
+        val cancelled = {
+          readStates: s.readStates.replaceAt(s.activeRead, EFFECT_ABANDONED),
+          readAborts: s.readAborts + 1,
+          ...advanced
+        }
+        val measured = readDone(metric(cancelled, "error", "cache_read_timeout", 0))
+        startSource(measured, REFILL_DENIED, 0)
       }
-      val measured = readDone(metric(cancelled, "error", "cache_read_timeout", 0))
-      startSource(measured, REFILL_DENIED, 0)
+      else if (s.phase == SOURCE_RUNNING) {
+        phase: IDLE,
+        sources: s.sources.replaceAt(s.activeLoader, EFFECT_ABANDONED),
+        calls: finishPendingCalls(s.calls, CALL_TIMEOUT),
+        ...sourceDone(advanced, true)
+      }
+      else advanced
     }
-    else if (s.phase == SOURCE_RUNNING) {
-      phase: IDLE,
-      sources: s.sources.replaceAt(s.activeLoader, EFFECT_ABANDONED),
-      calls: finishPendingCalls(s.calls, CALL_TIMEOUT),
-      ...sourceDone(advanced, true)
-    }
-    else advanced
   }
+
   // Clock observation without timer delivery also exercises settlement guards.
   action jumpClock = all {
+    input' = { name: "jumpClock", choice: -1 },
     s.phase != READ_PENDING or s.readBudgets.nth(s.activeRead) == 10,
     s' = { now: s.now + CLOCK_STEP_MS, wall: s.wall + CLOCK_STEP_MS, ...s }
   }
-  action rollbackWall = s' = { wall: s.wall - WALL_ROLLBACK_MS, ...s }
-  action seedRemote = s' = { storedTimestamp: s.wall, ...s }
-  action invalidate = s' = {
-    invalidations: s.invalidations + 1,
-    watermark: if (s.wall > s.watermark) s.wall else s.watermark, ...metric(s, "invalidation", "", 0)
+
+  action rollbackWall = all {
+    input' = { name: "rollbackWall", choice: -1 },
+    s' = { wall: s.wall - WALL_ROLLBACK_MS, ...s }
   }
-  action futureFence = s' = {
-    invalidations: s.invalidations + 1,
-    watermark: if (s.wall + FUTURE_BUFFER_MS > s.watermark) s.wall + FUTURE_BUFFER_MS else s.watermark,
-    ...metric(s, "invalidation", "", 0)
+
+  action seedRemote = all {
+    input' = { name: "seedRemote", choice: -1 },
+    s' = { storedTimestamp: s.wall, ...s }
+  }
+
+  action invalidate = all {
+    input' = { name: "invalidate", choice: -1 },
+    s' = {
+      invalidations: s.invalidations + 1,
+      watermark: if (s.wall > s.watermark) s.wall else s.watermark, ...metric(s, "invalidation", "", 0)
+    }
+  }
+
+  action futureFence = all {
+    input' = { name: "futureFence", choice: -1 },
+    s' = {
+      invalidations: s.invalidations + 1,
+      watermark: if (s.wall + FUTURE_BUFFER_MS > s.watermark) s.wall + FUTURE_BUFFER_MS else s.watermark,
+      ...metric(s, "invalidation", "", 0)
+    }
   }
 
   // One queued external reply, consumed by the next successfully settled raw read,
   // including abandoned reads. 0 means the normal fake Redis environment.
+  action replyWith(code: int): bool = all {
+    input' = { name: "adapterReply", choice: code },
+    s.reply == NO_QUEUED_REPLY,
+    s' = { reply: code, replyAt: s.wall, ...s }
+  }
   action adapterReply = {
     nondet choice = 1.to(16).oneOf()
-    all { s.reply == NO_QUEUED_REPLY, s' = { reply: choice, replyAt: s.wall, ...s } }
+    replyWith(choice)
   }
+
   action readBudgetPolicy = {
     // Choice zero inherits the fixture's resolved base; 1..4 override it.
     nondet choice = 0.to(4).oneOf()
-    s' = {
-      readBudget: if (choice == 0) s.baseReadBudget else List(0, 10, 20, 30, 50).nth(choice),
-      ...s
+    all {
+      input' = { name: "readBudgetPolicy", choice: choice },
+      s' = {
+        readBudget: if (choice == 0) s.baseReadBudget else List(0, 10, 20, 30, 50).nth(choice),
+        ...s
+      }
     }
+  }
+
+  action observerFaultWith(code: int): bool = all {
+    input' = { name: "observerFault", choice: code }, s' = { observerFailed: code, ...s }
   }
   action observerFault = {
     nondet choice = Set(0, 1).oneOf()
-    s' = { observerFailed: choice, ...s }
+    observerFaultWith(choice)
   }
 
   // Exploration schedule: preserve grouping and order for seeded sampling.
@@ -357,21 +422,26 @@ module dialcache_effects_conformance {
   val effectCountsMatchRecords = s.reads == s.readStates.length() and
     s.reads == s.readBudgets.length() and s.loaders == s.sources.length()
 
+  val futureOffsetsArePositiveAtObservingLayer = s.events.indices().forall(i => {
+    val event = s.events.nth(i)
+    event.event != "futureOffset" or (event.location == "remote" and event.amount > 0)
+  })
+
   // Deterministic model regressions ------------------------------------------
-  action tenMillisecondFixture = s' = initial(FIXTURE_OPERATION_BUDGET)
+  action tenMillisecondFixture = initialized(FIXTURE_OPERATION_BUDGET)
 
   run unknownReasonKeepsValidFenceTest = tenMillisecondFixture.then(beginCall)
-    .then(s' = { reply: REPLY_UNKNOWN_WITH_FENCE, replyAt: s.wall, ...s }).then(releaseRead).then(resolveLoader)
+    .then(all { input' = input, s' = { reply: REPLY_UNKNOWN_WITH_FENCE, replyAt: s.wall, ...s } }).then(releaseRead).then(resolveLoader)
     .expect(s.calls == List(CALL_VALUE) and s.dumps == 0 and
       s.events.select(e => e.event == "miss").nth(0).detail == "unclassified")
-  run untrackedReplyCannotCarryFenceTest = (s' = initial(FIXTURE_UNTRACKED)).then(beginCall)
-    .then(s' = { reply: REPLY_FENCED_WITH_VALID_FENCE, replyAt: s.wall, ...s }).then(releaseRead).then(resolveLoader)
+  run untrackedReplyCannotCarryFenceTest = initialized(FIXTURE_UNTRACKED).then(beginCall)
+    .then(all { input' = input, s' = { reply: REPLY_FENCED_WITH_VALID_FENCE, replyAt: s.wall, ...s } }).then(releaseRead).then(resolveLoader)
     .expect(s.dumps == 1 and s.observedFence == 0 and s.events.select(e => e.event == "miss").nth(0).detail == "unclassified")
   run missDiscriminatorWinsOverFrameFieldsTest = tenMillisecondFixture.then(beginCall)
-    .then(s' = { reply: REPLY_MISS_WITH_FRAME_FIELDS, replyAt: s.wall, ...s }).then(releaseRead)
+    .then(all { input' = input, s' = { reply: REPLY_MISS_WITH_FRAME_FIELDS, replyAt: s.wall, ...s } }).then(releaseRead)
     .expect(s.loads == 0 and s.loaders == 1)
   run frameWithoutMissDiscriminatorIgnoresMetadataTest = tenMillisecondFixture.then(beginCall)
-    .then(s' = { reply: REPLY_FRAME_WITH_MISS_FIELDS, replyAt: s.wall, ...s }).then(releaseRead).then(releaseLoad)
+    .then(all { input' = input, s' = { reply: REPLY_FRAME_WITH_MISS_FIELDS, replyAt: s.wall, ...s } }).then(releaseRead).then(releaseLoad)
     .expect(s.calls == List(CALL_VALUE) and s.loaders == 0)
   run readDurationIncludesDecodeTest = tenMillisecondFixture.then(seedRemote).then(beginCall).then(releaseRead)
     .then(tick).then(releaseLoad)
@@ -413,13 +483,13 @@ module dialcache_effects_conformance {
     .expect(s.calls == List(CALL_VALUE) and s.dumps == 1 and s.writes == 0)
   run rollbackDoesNotExtendSourceDeadlineTest = tenMillisecondFixture.then(beginCall).then(releaseRead)
     .then(rollbackWall).then(tick).expect(s.calls == List(CALL_TIMEOUT))
-  run observerFailuresCannotReplaceSourceErrorTest = tenMillisecondFixture.then(s' = { observerFailed: 1, ...s })
+  run observerFailuresCannotReplaceSourceErrorTest = tenMillisecondFixture.then(observerFaultWith(1))
     .then(beginCall).then(failRead).then(rejectLoader).expect(s.calls == List(CALL_SOURCE_ERROR))
-  run libraryReadBudgetIsFiftyMillisecondsTest = (s' = initial(FIXTURE_LIBRARY_BUDGET)).then(beginCall)
+  run libraryReadBudgetIsFiftyMillisecondsTest = initialized(FIXTURE_LIBRARY_BUDGET).then(beginCall)
     .then(tick).then(tick).then(tick).then(tick).expect(s.phase == READ_PENDING and s.loaders == 0)
     .then(tick).expect(s.phase == SOURCE_RUNNING and s.deadline == 10060 and s.readBudgets == List(50))
-  run followerKeepsAcceptedReadBudgetTest = (s' = initial(FIXTURE_RUNTIME_BUDGET)).then(beginCall)
-    .then(s' = { readBudget: 10, ...s }).then(beginCall).then(tick).then(tick)
+  run followerKeepsAcceptedReadBudgetTest = initialized(FIXTURE_RUNTIME_BUDGET).then(beginCall)
+    .then(all { input' = input, s' = { readBudget: 10, ...s } }).then(beginCall).then(tick).then(tick)
     .expect(s.phase == READ_PENDING and s.readBudgets == List(30) and s.calls == List(CALL_PENDING, CALL_PENDING))
     .then(tick).expect(s.phase == SOURCE_RUNNING and s.deadline == 10040 and s.readAborts == 1)
 
@@ -459,4 +529,117 @@ module dialcache_effects_conformance {
     .then(beginCall).then(releaseRead).then(resolveLoader).then(releaseDump).then(failWrite)
     .expect(s.calls == List(CALL_VALUE) and s.storedTimestamp == 0 and
       s.events.select(e => e.event == "error").foldl(List(), (out, e) => out.append(e.detail)) == List("cache_write"))
+
+  // Observer failure is an external callback condition. Its isolation preserves
+  // traversal, public outcomes and accepted publication, not merely event count.
+  run observerFailuresCannotPreventCacheHitTest = tenMillisecondFixture
+    .then(observerFaultWith(1)).then(seedRemote)
+    .then(beginCall).then(releaseRead).then(releaseLoad)
+    .expect(s.calls == List(CALL_VALUE) and s.loaders == 0 and s.loads == 1 and s.writes == 0)
+  run observerFailuresCannotPreventPublicationTest = tenMillisecondFixture
+    .then(observerFaultWith(1)).then(beginCall).then(releaseRead)
+    .then(resolveLoader).then(releaseDump).then(releaseWrite)
+    .then(beginCall).then(releaseRead).then(releaseLoad)
+    .expect(s.calls == List(CALL_VALUE, CALL_VALUE) and s.loaders == 1
+      and s.reads == 2 and s.loads == 1 and s.dumps == 1 and s.writes == 1)
+
+  // Source acceptance precedes the native frame stamp. A serialization delay
+  // and intervening invalidation make the distinction visible to the next read.
+  run writeStampAfterSerializationClearsInterveningFenceTest = tenMillisecondFixture
+    .then(beginCall).then(releaseRead).then(resolveLoader).then(invalidate)
+    .then(tick).then(releaseDump).then(releaseWrite)
+    .expect(s.acceptedWall == 100000 and s.storedTimestamp == 100010 and s.watermark == 100000)
+    .then(beginCall).then(releaseRead).then(releaseLoad)
+    .expect(s.calls == List(CALL_VALUE, CALL_VALUE) and s.loaders == 1
+      and s.loads == 1 and s.writes == 1)
+
+  run instanceReadBudgetOverridesLibraryTest = initialized(FIXTURE_INSTANCE_BUDGET)
+    .then(beginCall).then(tick).expect(s.calls == List(CALL_PENDING) and s.loaders == 0)
+    .then(tick).then(resolveLoader)
+    .expect(s.readBudgets == List(20) and s.readAborts == 1
+      and s.calls == List(CALL_VALUE) and s.loaders == 1 and s.dumps == 0)
+  run operationReadBudgetOverridesInstanceTest = initialized(FIXTURE_OPERATION_BUDGET)
+    .then(beginCall).then(tick).then(resolveLoader)
+    .expect(s.readBudgets == List(10) and s.readAborts == 1
+      and s.calls == List(CALL_VALUE) and s.loaders == 1 and s.dumps == 0)
+  run runtimeReadBudgetOverridesOperationTest = initialized(FIXTURE_RUNTIME_BUDGET)
+    .then(beginCall).then(tick).then(tick).expect(s.calls == List(CALL_PENDING) and s.loaders == 0)
+    .then(tick).then(resolveLoader)
+    .expect(s.readBudgets == List(30) and s.readAborts == 1
+      and s.calls == List(CALL_VALUE) and s.loaders == 1 and s.dumps == 0)
+
+  // Amounts are model milliseconds, converted once to public seconds by both
+  // projections. This is the serving remote location; shadow locations are a
+  // separate interaction, not implied by this assertion.
+  run futureFrameReportsPositiveObservingOffsetTest = tenMillisecondFixture
+    .then(seedRemote).then(rollbackWall).then(beginCall).then(releaseRead).then(rejectLoader)
+    .expect(s.calls == List(CALL_SOURCE_ERROR) and s.loads == 0 and s.loaders == 1
+      and s.events.select(e => e.event == "futureOffset") ==
+        List({ event: "futureOffset", location: "remote", detail: "", amount: 1000 }))
+
+  run coalescedFailureKeepsOneLeaderAndFollowerTrailTest = tenMillisecondFixture
+    .then(beginCall).then(beginCall).then(failRead).then(rejectLoader)
+    .expect(s.calls == List(CALL_SOURCE_ERROR, CALL_SOURCE_ERROR)
+      and s.reads == 1 and s.loaders == 1 and s.loads == 0 and s.writes == 0)
+    .expect(s.events.select(e => e.event == "request" or e.event == "coalesced" or e.event == "error") == List(
+      { event: "request", location: "remote", detail: "", amount: 0 },
+      { event: "coalesced", location: "process", detail: "", amount: 0 },
+      { event: "error", location: "remote", detail: "cache_read", amount: 0 },
+      { event: "error", location: "remote", detail: "fallback", amount: 0 }))
+
+  run nullReplyRefillsAndIsReadableTest = tenMillisecondFixture.then(replyWith(1))
+    .then(beginCall).then(releaseRead).then(resolveLoader).then(releaseDump).then(releaseWrite)
+    .then(beginCall).then(releaseRead).then(releaseLoad)
+    .expect(s.calls == List(CALL_VALUE, CALL_VALUE) and s.loads == 1 and s.loaders == 1
+      and s.reads == 2 and s.dumps == 1 and s.writes == 1)
+    .expect(s.events.select(e => e.event == "miss").foldl(List(), (out, e) => out.append(e.detail)) == List("unclassified"))
+
+  run primitiveReplyRefillsAndIsReadableTest = tenMillisecondFixture.then(replyWith(2))
+    .then(beginCall).then(releaseRead).then(resolveLoader).then(releaseDump).then(releaseWrite)
+    .then(beginCall).then(releaseRead).then(releaseLoad)
+    .expect(s.calls == List(CALL_VALUE, CALL_VALUE) and s.loads == 1 and s.loaders == 1
+      and s.reads == 2 and s.dumps == 1 and s.writes == 1)
+    .expect(s.events.select(e => e.event == "miss").foldl(List(), (out, e) => out.append(e.detail)) == List("unclassified"))
+
+  run legacyReplyRefillsAndIsReadableTest = tenMillisecondFixture.then(replyWith(3))
+    .then(beginCall).then(releaseRead).then(resolveLoader).then(releaseDump).then(releaseWrite)
+    .then(beginCall).then(releaseRead).then(releaseLoad)
+    .expect(s.calls == List(CALL_VALUE, CALL_VALUE) and s.loads == 1 and s.loaders == 1
+      and s.reads == 2 and s.dumps == 1 and s.writes == 1)
+    .expect(s.events.select(e => e.event == "miss").foldl(List(), (out, e) => out.append(e.detail)) == List("unclassified"))
+
+  run kindlessReplyRefillsAndIsReadableTest = tenMillisecondFixture.then(replyWith(4))
+    .then(beginCall).then(releaseRead).then(resolveLoader).then(releaseDump).then(releaseWrite)
+    .then(beginCall).then(releaseRead).then(releaseLoad)
+    .expect(s.calls == List(CALL_VALUE, CALL_VALUE) and s.loads == 1 and s.loaders == 1
+      and s.reads == 2 and s.dumps == 1 and s.writes == 1)
+    .expect(s.events.select(e => e.event == "miss").foldl(List(), (out, e) => out.append(e.detail)) == List("unclassified"))
+
+  run missingFenceRefillsAndIsReadableTest = tenMillisecondFixture.then(replyWith(8))
+    .then(beginCall).then(releaseRead).then(resolveLoader).then(releaseDump).then(releaseWrite)
+    .then(beginCall).then(releaseRead).then(releaseLoad)
+    .expect(s.calls == List(CALL_VALUE, CALL_VALUE) and s.loads == 1 and s.loaders == 1
+      and s.reads == 2 and s.dumps == 1 and s.writes == 1)
+    .expect(s.events.select(e => e.event == "miss").foldl(List(), (out, e) => out.append(e.detail)) == List("unclassified"))
+
+  run negativeFenceRefillsAndIsReadableTest = tenMillisecondFixture.then(replyWith(9))
+    .then(beginCall).then(releaseRead).then(resolveLoader).then(releaseDump).then(releaseWrite)
+    .then(beginCall).then(releaseRead).then(releaseLoad)
+    .expect(s.calls == List(CALL_VALUE, CALL_VALUE) and s.loads == 1 and s.loaders == 1
+      and s.reads == 2 and s.dumps == 1 and s.writes == 1)
+    .expect(s.events.select(e => e.event == "miss").foldl(List(), (out, e) => out.append(e.detail)) == List("unclassified"))
+
+  run fractionalFenceRefillsAndIsReadableTest = tenMillisecondFixture.then(replyWith(10))
+    .then(beginCall).then(releaseRead).then(resolveLoader).then(releaseDump).then(releaseWrite)
+    .then(beginCall).then(releaseRead).then(releaseLoad)
+    .expect(s.calls == List(CALL_VALUE, CALL_VALUE) and s.loads == 1 and s.loaders == 1
+      and s.reads == 2 and s.dumps == 1 and s.writes == 1)
+    .expect(s.events.select(e => e.event == "miss").foldl(List(), (out, e) => out.append(e.detail)) == List("value_absent"))
+
+  run unsafeFenceRefillsAndIsReadableTest = tenMillisecondFixture.then(replyWith(11))
+    .then(beginCall).then(releaseRead).then(resolveLoader).then(releaseDump).then(releaseWrite)
+    .then(beginCall).then(releaseRead).then(releaseLoad)
+    .expect(s.calls == List(CALL_VALUE, CALL_VALUE) and s.loads == 1 and s.loaders == 1
+      and s.reads == 2 and s.dumps == 1 and s.writes == 1)
+    .expect(s.events.select(e => e.event == "miss").foldl(List(), (out, e) => out.append(e.detail)) == List("value_absent"))
 }

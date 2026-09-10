@@ -54,6 +54,8 @@ module dialcache_policy_conformance {
   }
   type State = {
     o: Observation,
+    policyErrors: List[{ layer: str, errorType: str }],
+    policyReplies: List[{ providerFailed: bool, invalidBudget: bool }],
     now: int,
     wall: int,
     policyCall: int,
@@ -74,26 +76,33 @@ module dialcache_policy_conformance {
     writeFailed: bool
   }
   var s: State
-  action init = s' = {
-    o: empty,
-    now: 0,
-    wall: 100000,
-    policyCall: NO_OWNER,
-    overlay: POLICY_INHERIT,
-    key: 0,
-    localKey: 0,
-    localValue: NO_CACHED_VALUE,
-    localExpires: 0,
-    remoteValues: List(NO_CACHED_VALUE, NO_CACHED_VALUE),
-    remoteCreated: List(0, 0),
-    remoteExpires: List(0, 0),
-    sources: List(),
-    owners: List(),
-    registered: List(NO_OWNER, NO_OWNER),
-    providerFailed: false,
-    readFailed: false,
-    dumpFailed: false,
-    writeFailed: false
+  // Recorded environment commands are replayable in sampled and fixed runs.
+  var input: { name: str, choice: int }
+  action init = all {
+    input' = { name: "init", choice: -1 },
+    s' = {
+      o: empty,
+      policyErrors: List(),
+      policyReplies: List(),
+      now: 0,
+      wall: 100000,
+      policyCall: NO_OWNER,
+      overlay: POLICY_INHERIT,
+      key: 0,
+      localKey: 0,
+      localValue: NO_CACHED_VALUE,
+      localExpires: 0,
+      remoteValues: List(NO_CACHED_VALUE, NO_CACHED_VALUE),
+      remoteCreated: List(0, 0),
+      remoteExpires: List(0, 0),
+      sources: List(),
+      owners: List(),
+      registered: List(NO_OWNER, NO_OWNER),
+      providerFailed: false,
+      readFailed: false,
+      dumpFailed: false,
+      writeFailed: false
+    }
   }
 
   // -- Effective policy for the pending provider reply -----------------------
@@ -136,12 +145,16 @@ module dialcache_policy_conformance {
     },
     ...state
   }
+  action startCall(key: int): bool = all {
+    s' = begin(s, key),
+    input' = { name: "beginCall", choice: key }
+  }
   action beginCall = {
     nondet choice = Set(0, 1).oneOf()
     all {
       s.policyCall == NO_OWNER,
       s.o.calls.length() < MAX_CALLERS,
-      s' = begin(s, choice)
+      startCall(choice)
     }
   }
   action releasePolicy = all {
@@ -161,6 +174,11 @@ module dialcache_policy_conformance {
     val owner = if (joinsFlight) s.registered.nth(s.key) else if (startsSource) s.sources.length() else NO_OWNER
     s' = {
       policyCall: NO_OWNER,
+      policyReplies: s.policyReplies.append({
+        providerFailed: s.providerFailed, invalidBudget: s.overlay == POLICY_INVALID_READ_BUDGET
+      }),
+      policyErrors: if (s.providerFailed or s.overlay == POLICY_INVALID_READ_BUDGET)
+        s.policyErrors.append({ layer: "noop", errorType: "config_resolution" }) else s.policyErrors,
       owners: s.owners.replaceAt(s.policyCall, owner),
       sources: if (startsSource) s.sources.append({
         key: s.key,
@@ -182,7 +200,8 @@ module dialcache_policy_conformance {
         ...s.o
       },
       ...s
-    }
+    },
+    input' = { name: "releasePolicy", choice: -1 }
   }
 
   // -- Source settlement and accepted publication policy ---------------------
@@ -215,57 +234,85 @@ module dialcache_policy_conformance {
       ...state
     }
   }
+  action finishSource(loader: int, value: int): bool = all {
+    s' = settle(s, loader, value),
+    input' = if (value == SOURCE_ERROR) { name: "rejectLoader", choice: loader }
+      else { name: "resolveLoader", choice: loader * SOURCE_VALUE_COUNT
+        + (if (value <= VALUE_TWO) value else value - 2) }
+  }
   action resolveLoader = {
     // One portable choice records both the actual source index and its value.
     nondet choice = 1.to(MAX_RESOLVE_CHOICE)
       .filter(code => pendingSources.contains((code - 1) / SOURCE_VALUE_COUNT)).oneOf()
-    s' = settle(s, (choice - 1) / SOURCE_VALUE_COUNT, values.nth((choice - 1) % SOURCE_VALUE_COUNT))
+    finishSource((choice - 1) / SOURCE_VALUE_COUNT, values.nth((choice - 1) % SOURCE_VALUE_COUNT))
   }
   action rejectLoader = {
     nondet choice = pendingSources.oneOf()
-    s' = settle(s, choice, SOURCE_ERROR)
+    finishSource(choice, SOURCE_ERROR)
   }
 
   // -- External policy, clocks, storage, and failures -------------------------
 
+  action changePolicy(overlay: int): bool = all {
+    s' = { overlay: overlay, ...s },
+    input' = { name: "policy", choice: overlay }
+  }
   action policy = {
     nondet choice = POLICY_INHERIT.to(POLICY_INVALID_SHADOW_RAMP).oneOf()
-    s' = { overlay: choice, ...s }
+    changePolicy(choice)
   }
   pure def advanceTime(state: State, elapsedMs: int): State = {
     now: state.now + elapsedMs,
     wall: state.wall + elapsedMs,
     ...state
   }
+  action elapse(ms: int): bool = all {
+    s' = advanceTime(s, ms),
+    input' = { name: "advance", choice: ms }
+  }
   action advance = {
     nondet choice = Set(1, HALF_SECOND_MS, ONE_SECOND_MS, TWO_SECONDS_MS, DEFAULT_RETENTION_MS).oneOf()
-    s' = advanceTime(s, choice)
+    elapse(choice)
+  }
+  action seedRemote(key: int, value: int): bool = all {
+    s' = {
+      remoteValues: s.remoteValues.replaceAt(key, value),
+      remoteCreated: s.remoteCreated.replaceAt(key, s.wall),
+      remoteExpires: s.remoteExpires.replaceAt(key, s.now + DEFAULT_RETENTION_MS),
+      ...s
+    },
+    input' = { name: "seed", choice: key * 2 + value - 1 }
   }
   action seed = {
     nondet choice = 0.to(3).oneOf()
-    s' = {
-      remoteValues: s.remoteValues.replaceAt(choice / 2, choice % 2 + 1),
-      remoteCreated: s.remoteCreated.replaceAt(choice / 2, s.wall),
-      remoteExpires: s.remoteExpires.replaceAt(choice / 2, s.now + DEFAULT_RETENTION_MS),
-      ...s
-    }
+    seedRemote(choice / 2, choice % 2 + 1)
   }
-  action rollbackWall = s' = { wall: s.wall - ONE_SECOND_MS, ...s }
+  action rollbackWall = all {
+    s' = { wall: s.wall - ONE_SECOND_MS, ...s },
+    input' = { name: "rollbackWall", choice: -1 }
+  }
+  action setFault(name: str, failed: bool): bool = all {
+    s' = if (name == "providerFault") { providerFailed: failed, ...s }
+      else if (name == "readFault") { readFailed: failed, ...s }
+      else if (name == "dumpFault") { dumpFailed: failed, ...s }
+      else { writeFailed: failed, ...s },
+    input' = { name: name, choice: if (failed) FAULT_FAILED else FAULT_HEALTHY }
+  }
   action providerFault = {
     nondet choice = Set(FAULT_HEALTHY, FAULT_FAILED).oneOf()
-    s' = { providerFailed: choice == FAULT_FAILED, ...s }
+    setFault("providerFault", choice == FAULT_FAILED)
   }
   action readFault = {
     nondet choice = Set(FAULT_HEALTHY, FAULT_FAILED).oneOf()
-    s' = { readFailed: choice == FAULT_FAILED, ...s }
+    setFault("readFault", choice == FAULT_FAILED)
   }
   action dumpFault = {
     nondet choice = Set(FAULT_HEALTHY, FAULT_FAILED).oneOf()
-    s' = { dumpFailed: choice == FAULT_FAILED, ...s }
+    setFault("dumpFault", choice == FAULT_FAILED)
   }
   action writeFault = {
     nondet choice = Set(FAULT_HEALTHY, FAULT_FAILED).oneOf()
-    s' = { writeFailed: choice == FAULT_FAILED, ...s }
+    setFault("writeFault", choice == FAULT_FAILED)
   }
 
   // -- Exploration schedule (nesting/order preserve sampling weights) ---------
@@ -304,223 +351,264 @@ module dialcache_policy_conformance {
   })
   val sharedSourcesKeepRegistration = pendingSources.forall(i =>
     not(s.sources.nth(i).shared) or s.registered.nth(s.sources.nth(i).key) == i)
+  // This projection owns invocation-level configuration failure only. Optional
+  // layer errors retain their independent layer-policy cases. The replay maps
+  // the public error label (not the source error object) into errorType.
+  val policyResolutionErrorsHaveStableClassification = s.policyErrors.indices().forall(index => {
+    val error = s.policyErrors.nth(index)
+    error.layer == "noop" and error.errorType == "config_resolution"
+  })
+  val eachFailedPolicyReplyHasOneDiagnostic = s.policyErrors.length() ==
+    s.policyReplies.select(reply => reply.providerFailed or reply.invalidBudget).length()
 
   // -- Deterministic regression schedules ------------------------------------
 
-  run invalidReadBudgetBypassesAllCachingTest = init.then(s' = { overlay: POLICY_INVALID_READ_BUDGET, ...s })
-    .then(s' = begin(s, 0))
+  run invalidReadBudgetBypassesAllCachingTest = init.then(changePolicy(POLICY_INVALID_READ_BUDGET))
+    .then(startCall(0))
     .then(releasePolicy)
-    .then(s' = begin(s, 0))
+    .then(startCall(0))
     .then(releasePolicy)
     .expect(s.o.loaders == 2 and s.o.reads == 0)
-    .then(s' = settle(s, 0, VALUE_ONE))
+    .then(finishSource(0, VALUE_ONE))
     .expect(s.localValue == NO_CACHED_VALUE and s.o.writes == 0)
-  run invalidLocalRampPreservesRemoteTest = init.then(s' = { overlay: POLICY_INVALID_LOCAL_RAMP, ...s })
-    .then(s' = begin(s, 0))
+  run invalidLocalRampPreservesRemoteTest = init.then(changePolicy(POLICY_INVALID_LOCAL_RAMP))
+    .then(startCall(0))
     .then(releasePolicy)
-    .then(s' = settle(s, 0, VALUE_ONE))
-    .then(s' = begin(s, 0))
+    .then(finishSource(0, VALUE_ONE))
+    .then(startCall(0))
     .then(releasePolicy)
     .expect(s.o.reads == 2 and s.o.loads == 1 and s.localValue == NO_CACHED_VALUE)
-  run invalidRemoteRampPreservesLocalTest = init.then(s' = { overlay: POLICY_INVALID_REMOTE_RAMP, ...s })
-    .then(s' = begin(s, 0))
+  run invalidRemoteRampPreservesLocalTest = init.then(changePolicy(POLICY_INVALID_REMOTE_RAMP))
+    .then(startCall(0))
     .then(releasePolicy)
-    .then(s' = settle(s, 0, VALUE_ONE))
-    .then(s' = begin(s, 0))
+    .then(finishSource(0, VALUE_ONE))
+    .then(startCall(0))
     .then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.reads == 0)
-  run invalidRecoveryUsesOrdinaryRetentionTest = init.then(s' = { overlay: POLICY_INVALID_RECOVERY_AGE, ...s })
-    .then(s' = begin(s, 0))
+  run invalidRecoveryUsesOrdinaryRetentionTest = init.then(changePolicy(POLICY_INVALID_RECOVERY_AGE))
+    .then(startCall(0))
     .then(releasePolicy)
-    .then(s' = settle(s, 0, VALUE_ONE))
+    .then(finishSource(0, VALUE_ONE))
     .expect(s.o.writeTtls == List(ONE_SECOND_MS) and s.remoteExpires == List(ONE_SECOND_MS, 0))
-  run invalidShadowPreservesNormalServingTest = init.then(s' = { overlay: POLICY_INVALID_SHADOW_RAMP, ...s })
-    .then(s' = begin(s, 0))
+  run invalidShadowPreservesNormalServingTest = init.then(changePolicy(POLICY_INVALID_SHADOW_RAMP))
+    .then(startCall(0))
     .then(releasePolicy)
-    .then(s' = settle(s, 0, VALUE_ONE))
-    .then(s' = begin(s, 1))
+    .then(finishSource(0, VALUE_ONE))
+    .then(startCall(1))
     .then(releasePolicy)
-    .then(s' = settle(s, 1, VALUE_TWO))
-    .then(s' = begin(s, 0))
+    .then(finishSource(1, VALUE_TWO))
+    .then(startCall(0))
     .then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE) and s.o.loads == 1 and s.o.shadow == List())
 
   // A hit changes recency, but the insertion deadline stays at 1,000 ms.
   // The final probe distinguishes fixed TTL from renewing it on the middle hit.
   run localHitDoesNotRenewInsertionTtlTest = init
-    .then(s' = { overlay: POLICY_NO_REMOTE, ...s })
-    .then(s' = begin(s, 0))
+    .then(changePolicy(POLICY_NO_REMOTE))
+    .then(startCall(0))
     .then(releasePolicy)
-    .then(s' = settle(s, 0, VALUE_ONE))
-    .then(s' = advanceTime(s, HALF_SECOND_MS))
-    .then(s' = begin(s, 0))
+    .then(finishSource(0, VALUE_ONE))
+    .then(elapse(HALF_SECOND_MS))
+    .then(startCall(0))
     .then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.localExpires == ONE_SECOND_MS)
-    .then(s' = advanceTime(s, HALF_SECOND_MS))
-    .then(s' = begin(s, 0))
+    .then(elapse(HALF_SECOND_MS))
+    .then(startCall(0))
     .then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, CALL_PENDING) and s.o.loaders == 2)
 
-  run wallRollbackDoesNotExtendLocalTtlTest = init.then(s' = { overlay: POLICY_NO_REMOTE, ...s })
-    .then(s' = begin(s, 0))
+  run wallRollbackDoesNotExtendLocalTtlTest = init.then(changePolicy(POLICY_NO_REMOTE))
+    .then(startCall(0))
     .then(releasePolicy)
-    .then(s' = settle(s, 0, VALUE_ONE))
+    .then(finishSource(0, VALUE_ONE))
     .then(rollbackWall)
-    .then(s' = begin(s, 0))
+    .then(startCall(0))
     .then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE))
-    .then(s' = {
-    now: s.now + ONE_SECOND_MS,
-    wall: s.wall + ONE_SECOND_MS,
-    ...s
-  })
-    .then(s' = begin(s, 0))
+    .then(elapse(ONE_SECOND_MS))
+    .then(startCall(0))
     .then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, CALL_PENDING) and s.o.loaders == 2)
-  run wallRollbackRejectsFutureRemoteFrameTest = init.then(s' = { overlay: POLICY_NO_LOCAL, ...s })
-    .then(s' = begin(s, 0))
+  run wallRollbackRejectsFutureRemoteFrameTest = init.then(changePolicy(POLICY_NO_LOCAL))
+    .then(startCall(0))
     .then(releasePolicy)
-    .then(s' = settle(s, 0, VALUE_ONE))
+    .then(finishSource(0, VALUE_ONE))
     .then(rollbackWall)
-    .then(s' = begin(s, 0))
+    .then(startCall(0))
     .then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.loaders == 2)
 
   run independentCompletionKeepsRegisteredLeaderTest = init
-    .then(s' = begin(s, 0))
+    .then(startCall(0))
     .then(releasePolicy)
-    .then(s' = { overlay: INDEPENDENT_POLICY_OFFSET, ...s })
-    .then(s' = begin(s, 0))
+    .then(changePolicy(INDEPENDENT_POLICY_OFFSET))
+    .then(startCall(0))
     .then(releasePolicy)
-    .then(s' = settle(s, 1, VALUE_TWO))
+    .then(finishSource(1, VALUE_TWO))
     .expect(s.o.calls == List(CALL_PENDING, VALUE_TWO) and s.registered == List(0, -1))
-    .then(s' = { overlay: POLICY_INHERIT, ...s })
-    .then(s' = begin(s, 0))
+    .then(changePolicy(POLICY_INHERIT))
+    .then(startCall(0))
     .then(releasePolicy)
     .expect(s.o.calls == List(CALL_PENDING, VALUE_TWO, CALL_PENDING) and s.o.loaders == 2 and s.o.reads == 2)
-    .then(s' = settle(s, 0, VALUE_ONE))
+    .then(finishSource(0, VALUE_ONE))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE))
 
   run independentFailureKeepsRegisteredLeaderTest = init
-    .then(s' = begin(s, 0))
+    .then(startCall(0))
     .then(releasePolicy)
-    .then(s' = { overlay: INDEPENDENT_POLICY_OFFSET, ...s })
-    .then(s' = begin(s, 0))
+    .then(changePolicy(INDEPENDENT_POLICY_OFFSET))
+    .then(startCall(0))
     .then(releasePolicy)
-    .then(s' = settle(s, 1, SOURCE_ERROR))
+    .then(finishSource(1, SOURCE_ERROR))
     .expect(s.o.calls == List(CALL_PENDING, SOURCE_ERROR) and s.registered == List(0, -1))
-    .then(s' = { overlay: POLICY_INHERIT, ...s })
-    .then(s' = begin(s, 0))
+    .then(changePolicy(POLICY_INHERIT))
+    .then(startCall(0))
     .then(releasePolicy)
-    .then(s' = settle(s, 0, VALUE_ONE))
+    .then(finishSource(0, VALUE_ONE))
     .expect(s.o.calls == List(VALUE_ONE, SOURCE_ERROR, VALUE_ONE))
 
   run eachSourceKeepsPublicationPolicyTest = init
-    .then(s' = begin(s, 0))
+    .then(startCall(0))
     .then(releasePolicy)
-    .then(s' = {
-    overlay: INDEPENDENT_POLICY_OFFSET + POLICY_REMOTE_FOUR_SECONDS_NO_RECOVERY,
-    ...s
-  })
-    .then(s' = begin(s, 0))
+    .then(changePolicy(INDEPENDENT_POLICY_OFFSET + POLICY_REMOTE_FOUR_SECONDS_NO_RECOVERY))
+    .then(startCall(0))
     .then(releasePolicy)
-    .then(s' = settle(s, 1, VALUE_TWO))
-    .then(s' = settle(s, 0, VALUE_ONE))
+    .then(finishSource(1, VALUE_TWO))
+    .then(finishSource(0, VALUE_ONE))
     .expect(s.o.writeTtls == List(FOUR_SECONDS_MS, DEFAULT_RETENTION_MS) and s.remoteValues == List(1, 0))
-  run absentValueIsStoredAndReusedTest = init.then(s' = begin(s, 0))
+  run absentValueIsStoredAndReusedTest = init.then(startCall(0))
     .then(releasePolicy)
-    .then(s' = settle(s, 0, VALUE_ABSENT))
-    .then(s' = begin(s, 0))
+    .then(finishSource(0, VALUE_ABSENT))
+    .then(startCall(0))
     .then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ABSENT, VALUE_ABSENT) and s.o.loaders == 1 and s.o.writes == 1)
 
   // Coalescing controls pending work. It does not turn off settled caching.
   run independentLocalCallsStillReuseSettledValueTest = init
-    .then(s' = { overlay: INDEPENDENT_POLICY_OFFSET + POLICY_NO_REMOTE, ...s })
-    .then(s' = begin(s, 0)).then(releasePolicy)
-    .then(s' = settle(s, 0, VALUE_ONE))
-    .then(s' = begin(s, 0)).then(releasePolicy)
+    .then(changePolicy(INDEPENDENT_POLICY_OFFSET + POLICY_NO_REMOTE))
+    .then(startCall(0)).then(releasePolicy)
+    .then(finishSource(0, VALUE_ONE))
+    .then(startCall(0)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loaders == 1 and s.o.reads == 0)
 
   run independentLocalPublicationUsesLastCompletionTest = init
-    .then(s' = { overlay: INDEPENDENT_POLICY_OFFSET + POLICY_NO_REMOTE, ...s })
-    .then(s' = begin(s, 0)).then(releasePolicy)
-    .then(s' = begin(s, 0)).then(releasePolicy)
-    .then(s' = settle(s, 1, VALUE_TWO)).then(s' = settle(s, 0, VALUE_ONE))
-    .then(s' = begin(s, 0)).then(releasePolicy)
+    .then(changePolicy(INDEPENDENT_POLICY_OFFSET + POLICY_NO_REMOTE))
+    .then(startCall(0)).then(releasePolicy)
+    .then(startCall(0)).then(releasePolicy)
+    .then(finishSource(1, VALUE_TWO)).then(finishSource(0, VALUE_ONE))
+    .then(startCall(0)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE) and s.o.loaders == 2)
 
   run independentRemotePublicationUsesLastCompletionTest = init
-    .then(s' = { overlay: INDEPENDENT_POLICY_OFFSET + POLICY_NO_LOCAL, ...s })
-    .then(s' = begin(s, 0)).then(releasePolicy)
-    .then(s' = begin(s, 0)).then(releasePolicy)
-    .then(s' = settle(s, 1, VALUE_TWO)).then(s' = settle(s, 0, VALUE_ONE))
-    .then(s' = begin(s, 0)).then(releasePolicy)
+    .then(changePolicy(INDEPENDENT_POLICY_OFFSET + POLICY_NO_LOCAL))
+    .then(startCall(0)).then(releasePolicy)
+    .then(startCall(0)).then(releasePolicy)
+    .then(finishSource(1, VALUE_TWO)).then(finishSource(0, VALUE_ONE))
+    .then(startCall(0)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE)
       and s.o.loaders == 2 and s.o.reads == 3 and s.o.writes == 2 and s.o.loads == 1)
 
   run providerFailureBypassesAndPreservesExistingLocalTest = init
-    .then(s' = begin(s, 0)).then(releasePolicy).then(s' = settle(s, 0, VALUE_ONE))
-    .then(s' = { providerFailed: true, ...s })
-    .then(s' = begin(s, 0)).then(releasePolicy).then(s' = settle(s, 1, VALUE_TWO))
+    .then(startCall(0)).then(releasePolicy).then(finishSource(0, VALUE_ONE))
+    .then(setFault("providerFault", true))
+    .then(startCall(0)).then(releasePolicy).then(finishSource(1, VALUE_TWO))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO) and s.o.reads == 1 and s.o.writes == 1)
-    .then(s' = { providerFailed: false, ...s })
-    .then(s' = begin(s, 0)).then(releasePolicy)
+    .then(setFault("providerFault", false))
+    .then(startCall(0)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE) and s.o.loaders == 2)
 
   run disablingServingKeepsExistingLocalForReenablementTest = init
-    .then(s' = begin(s, 0)).then(releasePolicy).then(s' = settle(s, 0, VALUE_ONE))
-    .then(s' = { overlay: POLICY_NO_SERVING, ...s })
-    .then(s' = begin(s, 0)).then(releasePolicy).then(s' = settle(s, 1, VALUE_TWO))
-    .then(s' = { overlay: POLICY_INHERIT, ...s })
-    .then(s' = begin(s, 0)).then(releasePolicy)
+    .then(startCall(0)).then(releasePolicy).then(finishSource(0, VALUE_ONE))
+    .then(changePolicy(POLICY_NO_SERVING))
+    .then(startCall(0)).then(releasePolicy).then(finishSource(1, VALUE_TWO))
+    .then(changePolicy(POLICY_INHERIT))
+    .then(startCall(0)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE)
       and s.o.loaders == 2 and s.o.reads == 1 and s.o.writes == 1)
 
   // Redis physical retention may outlast logical freshness. Increasing the
   // fresh TTL can reuse retained bytes, but cannot recreate expired storage.
   run increasedFreshTtlCanReusePhysicallyRetainedValueTest = init
-    .then(s' = { overlay: POLICY_NO_LOCAL, ...s })
-    .then(s' = begin(s, 0)).then(releasePolicy).then(s' = settle(s, 0, VALUE_ONE))
-    .then(s' = advanceTime(s, ONE_SECOND_MS))
-    .then(s' = { overlay: POLICY_REMOTE_TTL_TWO_SECONDS, ...s })
-    .then(s' = begin(s, 0)).then(releasePolicy)
+    .then(changePolicy(POLICY_NO_LOCAL))
+    .then(startCall(0)).then(releasePolicy).then(finishSource(0, VALUE_ONE))
+    .then(elapse(ONE_SECOND_MS))
+    .then(changePolicy(POLICY_REMOTE_TTL_TWO_SECONDS))
+    .then(startCall(0)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE)
       and s.o.loaders == 1 and s.o.loads == 1 and s.o.writes == 1)
 
   run exactRemoteFreshBoundaryStartsSourceTest = init
-    .then(s' = { overlay: POLICY_NO_LOCAL, ...s })
-    .then(s' = begin(s, 0)).then(releasePolicy).then(s' = settle(s, 0, VALUE_ONE))
-    .then(s' = advanceTime(s, ONE_SECOND_MS))
-    .then(s' = begin(s, 0)).then(releasePolicy)
+    .then(changePolicy(POLICY_NO_LOCAL))
+    .then(startCall(0)).then(releasePolicy).then(finishSource(0, VALUE_ONE))
+    .then(elapse(ONE_SECOND_MS))
+    .then(startCall(0)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, CALL_PENDING)
       and s.o.loaders == 2 and s.o.loads == 0 and s.remoteExpires.nth(0) == DEFAULT_RETENTION_MS)
 
   run increasedFreshTtlCannotResurrectExpiredStorageTest = init
-    .then(s' = { overlay: POLICY_RECOVERY_TWO_SECONDS, ...s })
-    .then(s' = begin(s, 0)).then(releasePolicy).then(s' = settle(s, 0, VALUE_ONE))
-    .then(s' = advanceTime(s, TWO_SECONDS_MS))
-    .then(s' = { overlay: POLICY_REMOTE_FOUR_SECONDS_NO_RECOVERY, ...s })
-    .then(s' = begin(s, 0)).then(releasePolicy)
+    .then(changePolicy(POLICY_RECOVERY_TWO_SECONDS))
+    .then(startCall(0)).then(releasePolicy).then(finishSource(0, VALUE_ONE))
+    .then(elapse(TWO_SECONDS_MS))
+    .then(changePolicy(POLICY_REMOTE_FOUR_SECONDS_NO_RECOVERY))
+    .then(startCall(0)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, CALL_PENDING)
       and s.o.loaders == 2 and s.o.loads == 0 and s.o.writes == 1)
 
   run remoteHitStartsFullLocalInsertionTtlTest = init
-    .then(s' = { overlay: POLICY_NO_LOCAL, ...s })
-    .then(s' = begin(s, 0)).then(releasePolicy).then(s' = settle(s, 0, VALUE_ONE))
-    .then(s' = advanceTime(s, HALF_SECOND_MS))
-    .then(s' = { overlay: POLICY_INHERIT, ...s })
-    .then(s' = begin(s, 0)).then(releasePolicy)
+    .then(changePolicy(POLICY_NO_LOCAL))
+    .then(startCall(0)).then(releasePolicy).then(finishSource(0, VALUE_ONE))
+    .then(elapse(HALF_SECOND_MS))
+    .then(changePolicy(POLICY_INHERIT))
+    .then(startCall(0)).then(releasePolicy)
     .expect(s.localExpires == HALF_SECOND_MS + ONE_SECOND_MS)
-    .then(s' = advanceTime(s, HALF_SECOND_MS))
-    .then(s' = begin(s, 0)).then(releasePolicy)
+    .then(elapse(HALF_SECOND_MS))
+    .then(startCall(0)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_ONE)
       and s.o.loaders == 1 and s.o.reads == 2 and s.o.loads == 1)
 
   run untrackedReadFailureStillWarmsActiveLocalTest = init
-    .then(s' = { readFailed: true, ...s })
-    .then(s' = begin(s, 0)).then(releasePolicy).then(s' = settle(s, 0, VALUE_ONE))
-    .then(s' = begin(s, 0)).then(releasePolicy)
+    .then(setFault("readFault", true))
+    .then(startCall(0)).then(releasePolicy).then(finishSource(0, VALUE_ONE))
+    .then(startCall(0)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE)
       and s.o.loaders == 1 and s.o.reads == 1 and s.o.dumps == 0 and s.o.writes == 0)
+
+  run invalidRemoteTtlPreservesLocalServingTest = init
+    .then(changePolicy(POLICY_INVALID_REMOTE_TTL))
+    .then(startCall(0)).then(releasePolicy)
+    .then(finishSource(0, VALUE_ONE))
+    .then(startCall(0)).then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loaders == 1
+      and s.o.reads == 0 and s.o.writes == 0 and s.o.loads == 0)
+
+  run invalidLocalTtlStillServesFreshRemoteTest = init
+    .then(seedRemote(0, VALUE_ONE)).then(changePolicy(POLICY_INVALID_LOCAL_TTL))
+    .then(startCall(0)).then(releasePolicy)
+    .then(startCall(0)).then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loaders == 0
+      and s.o.reads == 2 and s.o.loads == 2 and s.o.writes == 0)
+
+  run recoveryAgeEqualToFreshTtlStillServesFreshRemoteTest = init
+    .then(seedRemote(0, VALUE_ONE)).then(changePolicy(POLICY_INVALID_RECOVERY_AGE))
+    .then(startCall(0)).then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_ONE) and s.o.loaders == 0
+      and s.o.reads == 1 and s.o.loads == 1 and s.o.recovery == List())
+
+  run negativeRecoveryAgeStillServesFreshRemoteTest = init
+    .then(seedRemote(0, VALUE_ONE)).then(changePolicy(POLICY_NEGATIVE_RECOVERY_AGE))
+    .then(startCall(0)).then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_ONE) and s.o.loaders == 0
+      and s.o.reads == 1 and s.o.loads == 1 and s.o.recovery == List())
+
+  run providerFailureReportsStablePolicyCategoryTest = init
+    .then(startCall(0)).then(releasePolicy).then(finishSource(0, VALUE_ONE))
+    .then(setFault("providerFault", true))
+    .then(startCall(0)).then(releasePolicy)
+    .expect(s.policyErrors == List({ layer: "noop", errorType: "config_resolution" })
+      and s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.loaders == 2
+      and s.o.reads == 1 and s.o.writes == 1)
+    .then(finishSource(1, VALUE_TWO)).then(setFault("providerFault", false))
+    .then(startCall(0)).then(releasePolicy)
+    .expect(s.policyErrors == List({ layer: "noop", errorType: "config_resolution" })
+      and s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE) and s.o.loaders == 2)
 }

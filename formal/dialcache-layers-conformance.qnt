@@ -17,6 +17,7 @@ module dialcache_layers_conformance {
   pure val FIXTURE_ZERO_CAPACITY_UNTRACKED = 2
   pure val FIXTURE_ZERO_CAPACITY_TRACKED = 3
   pure val FIXTURE_WITHOUT_REMOTE = 4
+  pure val FIXTURE_TRACKED_WITHOUT_REMOTE = 5
   pure val POLICY_ALL_LAYERS = 0
   pure val POLICY_NO_REQUEST = 1
   pure val POLICY_NO_LOCAL = 2
@@ -78,9 +79,12 @@ module dialcache_layers_conformance {
     watermark: List[int],
     sources: List[Source],
     owners: List[int],
-    memoSlots: List[int]
+    memoSlots: List[int],
+    callerContexts: List[int],
+    callerKeys: List[int]
   }
   var s: State
+  var input: { name: str, choice: int }
   pure def zeros(n: int): List[int] = 0.to(n - 1).fold(List(), (out, _) => out.append(0))
   pure def slots(n: int): List[int] = 0.to(n - 1).fold(List(), (out, _) => out.append(NO_OWNER))
   pure def instance(context: int): int = if (context == OTHER_INSTANCE_REQUEST_CONTEXT
@@ -160,6 +164,8 @@ module dialcache_layers_conformance {
     val withCaller = {
       owners: state.owners.append(owner),
       memoSlots: state.memoSlots.append(slot),
+      callerContexts: state.callerContexts.append(context),
+      callerKeys: state.callerKeys.append(key),
       o: {
         calls: state.o.calls.append(CALL_PENDING),
         policyCalls: state.o.policyCalls + (if (participating) 1 else 0),
@@ -228,16 +234,14 @@ module dialcache_layers_conformance {
 
   // -- Public fixture inputs and external effects ----------------------------
 
-  action init = {
-    // The recorded input configures only the fresh external fixture.
-    nondet choice = FIXTURE_UNTRACKED.to(FIXTURE_WITHOUT_REMOTE).oneOf()
+  action initialize(fixture: int): bool = all {
     s' = {
       o: empty,
       now: INITIAL_TIME_MS,
-      tracked: choice % 2 == FIXTURE_TRACKED,
-      remoteAvailable: choice != FIXTURE_WITHOUT_REMOTE,
-      capacity: if (choice < FIXTURE_ZERO_CAPACITY_UNTRACKED
-        or choice == FIXTURE_WITHOUT_REMOTE) DEFAULT_LOCAL_CAPACITY else NO_LOCAL_CAPACITY,
+      tracked: fixture % 2 == FIXTURE_TRACKED,
+      remoteAvailable: fixture < FIXTURE_WITHOUT_REMOTE,
+      capacity: if (Set(FIXTURE_ZERO_CAPACITY_UNTRACKED, FIXTURE_ZERO_CAPACITY_TRACKED).contains(fixture))
+        NO_LOCAL_CAPACITY else DEFAULT_LOCAL_CAPACITY,
       policy: POLICY_ALL_LAYERS,
       closed: List(false, false, false),
       memo: zeros(12),
@@ -250,68 +254,100 @@ module dialcache_layers_conformance {
       watermark: zeros(2),
       sources: List(),
       owners: List(),
-      memoSlots: List()
-    }
+      memoSlots: List(),
+      callerContexts: List(),
+      callerKeys: List()
+    },
+    input' = { name: "init", choice: fixture }
+  }
+  action init = {
+    nondet choice = FIXTURE_UNTRACKED.to(FIXTURE_TRACKED_WITHOUT_REMOTE).oneOf()
+    initialize(choice)
+  }
+  action startCall(choice: int): bool = all {
+    s.o.calls.length() < MAX_CALLERS,
+    s' = begin(s, choice),
+    input' = { name: "beginCall", choice: choice }
   }
   action beginCall = {
     nondet choice = 0.to(MAX_CONTEXT_KEY_CHOICE).oneOf()
-    all {
-      s.o.calls.length() < MAX_CALLERS,
-      s' = begin(s, choice)
-    }
+    startCall(choice)
+  }
+  action finishSource(loader: int, value: int): bool = all {
+    s' = settle(s, loader, value),
+    input' = if (value == SOURCE_ERROR) { name: "rejectLoader", choice: loader }
+      else { name: "resolveLoader", choice: loader * SOURCE_VALUE_COUNT + value }
   }
   action resolveLoader = {
     nondet choice = 1.to(MAX_RESOLVE_CHOICE).filter(code =>
       (code - 1) / SOURCE_VALUE_COUNT < s.sources.length()
       and s.sources.nth((code - 1) / SOURCE_VALUE_COUNT).result == CALL_PENDING
     ).oneOf()
-    s' = settle(s, (choice - 1) / SOURCE_VALUE_COUNT, (choice - 1) % SOURCE_VALUE_COUNT + VALUE_ONE)
+    finishSource((choice - 1) / SOURCE_VALUE_COUNT, (choice - 1) % SOURCE_VALUE_COUNT + VALUE_ONE)
   }
   action rejectLoader = {
     nondet choice = s.sources.indices().filter(i => s.sources.nth(i).result == CALL_PENDING).oneOf()
-    s' = settle(s, choice, SOURCE_ERROR)
+    finishSource(choice, SOURCE_ERROR)
+  }
+  action closeContext(context: int): bool = all {
+    s' = {
+      closed: s.closed.replaceAt(context, true),
+      memo: s.memo.indices().fold(s.memo, (out, slot) =>
+        if (slot / KEYS_PER_INSTANCE == context) out.replaceAt(slot, NO_CACHED_VALUE) else out),
+      requestFlights: s.requestFlights.indices().fold(s.requestFlights, (out, slot) =>
+        if (slot / KEYS_PER_INSTANCE == context) out.replaceAt(slot, NO_OWNER) else out),
+      ...s
+    },
+    input' = { name: "closeScope", choice: context }
   }
   action closeScope = {
     nondet choice = FIRST_REQUEST_CONTEXT.to(OTHER_INSTANCE_REQUEST_CONTEXT)
       .filter(scope => not(s.closed.nth(scope))).oneOf()
-    s' = {
-      closed: s.closed.replaceAt(choice, true),
-      memo: s.memo.indices().fold(s.memo, (out, slot) =>
-        if (slot / KEYS_PER_INSTANCE == choice) out.replaceAt(slot, NO_CACHED_VALUE) else out),
-      requestFlights: s.requestFlights.indices().fold(s.requestFlights, (out, slot) =>
-        if (slot / KEYS_PER_INSTANCE == choice) out.replaceAt(slot, NO_OWNER) else out),
-      ...s
-    }
+    closeContext(choice)
+  }
+  action changePolicy(policy: int): bool = all {
+    s' = { policy: policy, ...s },
+    input' = { name: "policy", choice: policy }
   }
   action policy = {
     nondet choice = POLICY_ALL_LAYERS.to(POLICY_NO_LAYERS).oneOf()
-    s' = { policy: choice, ...s }
+    changePolicy(choice)
+  }
+  action seedRemote(key: int, value: int): bool = all {
+    s' = {
+      remoteValues: s.remoteValues.replaceAt(key, value),
+      created: s.created.replaceAt(key, s.now),
+      ...s
+    },
+    input' = { name: "seed", choice: key * SOURCE_VALUE_COUNT + value - 1 }
   }
   action seed = {
     nondet choice = 0.to(MAX_SEED_CHOICE).oneOf()
-    s' = {
-      remoteValues: s.remoteValues.replaceAt(choice / 2, choice % 2 + 1),
-      created: s.created.replaceAt(choice / 2, s.now),
-      ...s
-    }
+    seedRemote(choice / SOURCE_VALUE_COUNT, choice % SOURCE_VALUE_COUNT + VALUE_ONE)
   }
-  action invalidate = {
-    nondet choice = Set(0, 1).oneOf()
+  action invalidateEntity(entity: int): bool = all {
     s' = if (not(s.remoteAvailable)) {
       o: { maintenance: s.o.maintenance.append("missing_remote"), ...s.o },
       ...s
-    }
-    else {
-      watermark: s.watermark.replaceAt(choice, s.now),
+    } else {
+      watermark: s.watermark.replaceAt(entity, s.now),
       o: {
         invalidations: s.o.invalidations + 1,
         maintenance: s.o.maintenance.append("ok"),
         ...s.o
       },
       ...s
-    }
+    },
+    input' = { name: "invalidate", choice: entity }
   }
-  action tick = s' = { now: s.now + 1, ...s }
+  action invalidate = {
+    nondet choice = Set(0, 1).oneOf()
+    invalidateEntity(choice)
+  }
+  action tick = all {
+    s' = { now: s.now + 1, ...s },
+    input' = { name: "tick", choice: -1 }
+  }
 
   // -- Exploration schedule (nesting/order preserve sampling weights) ---------
 
@@ -347,114 +383,149 @@ module dialcache_layers_conformance {
     or s.localValues.select(v => v != NO_CACHED_VALUE).length() == 0
   val callsKeepSourceOutcome = s.owners.indices().forall(call =>
     s.owners.nth(call) < 0 or s.o.calls.nth(call) == s.sources.nth(s.owners.nth(call)).result)
+  val sourceOwnershipNeverCrossesKeyOrInstance = s.owners.indices().forall(call => {
+    val owner = s.owners.nth(call)
+    owner < 0 or (s.sources.nth(owner).key == s.callerKeys.nth(call)
+      and s.sources.nth(owner).instance == instance(s.callerContexts.nth(call)))
+  })
   val localMembershipMatchesLru = s.localValues.indices().forall(i =>
     (s.localValues.nth(i) > 0)
       == (s.lru.nth(i / KEYS_PER_INSTANCE).select(key => key == i % KEYS_PER_INSTANCE).length() > 0))
 
   // -- Deterministic regression schedules ------------------------------------
 
-  action untrackedFixture = init.then(s' = {
-    tracked: false,
-    remoteAvailable: true,
-    capacity: DEFAULT_LOCAL_CAPACITY,
-    ...s
-  })
-  action trackedFixture = init.then(s' = {
-    tracked: true,
-    remoteAvailable: true,
-    capacity: DEFAULT_LOCAL_CAPACITY,
-    ...s
-  })
-  run absentRemoteMaintenancePreservesLocalReuseTest = init.then(s' = {
-    remoteAvailable: false,
-    capacity: DEFAULT_LOCAL_CAPACITY,
-    ...s
-  })
-    .then(s' = begin(s, FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
-    .then(s' = settle(s, 0, VALUE_ONE))
-    .then(invalidate)
-    .then(s' = begin(s, FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+  action untrackedFixture = initialize(FIXTURE_UNTRACKED)
+  action trackedFixture = initialize(FIXTURE_TRACKED)
+  run absentRemoteMaintenancePreservesLocalReuseTest = initialize(FIXTURE_WITHOUT_REMOTE)
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(finishSource(0, VALUE_ONE))
+    .then(invalidateEntity(0))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.maintenance == List("missing_remote")
       and s.o.invalidations == 0)
-  run absentRemotePreservesLocalReuseTest = init.then(s' = {
-    remoteAvailable: false,
-    capacity: DEFAULT_LOCAL_CAPACITY,
-    ...s
-  })
-    .then(s' = begin(s, FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
-    .then(s' = settle(s, 0, VALUE_ONE))
-    .then(s' = begin(s, FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+  run absentRemotePreservesLocalReuseTest = initialize(FIXTURE_WITHOUT_REMOTE)
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(finishSource(0, VALUE_ONE))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loaders == 1 and s.o.reads == 0 and s.o.writes == 0)
   run requestMissesShareProcessAndMemoizeSeparatelyTest = untrackedFixture
-    .then(s' = begin(s, FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
-    .then(s' = begin(s, SECOND_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(startCall(FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(startCall(SECOND_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .expect(s.o.loaders == 1)
-    .then(s' = settle(s, 0, VALUE_ONE))
-    .then(s' = { policy: POLICY_REQUEST_ONLY, ...s })
-    .then(s' = begin(s, FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
-    .then(s' = begin(s, SECOND_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(finishSource(0, VALUE_ONE))
+    .then(changePolicy(POLICY_REQUEST_ONLY))
+    .then(startCall(FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(startCall(SECOND_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_ONE, VALUE_ONE) and s.o.loaders == 1)
-  run localReadPromotesBeforeEvictionTest = untrackedFixture.then(s' = { policy: POLICY_NO_REMOTE, ...s })
-    .then(s' = begin(s, FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
-    .then(s' = settle(s, 0, VALUE_ONE))
-    .then(s' = begin(s, FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A_OTHER_OPERATION))
-    .then(s' = settle(s, 1, VALUE_ONE))
-    .then(s' = begin(s, FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
-    .then(s' = begin(s, FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_B))
-    .then(s' = settle(s, 2, VALUE_ONE))
-    .then(s' = begin(s, FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+  run localReadPromotesBeforeEvictionTest = untrackedFixture.then(changePolicy(POLICY_NO_REMOTE))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(finishSource(0, VALUE_ONE))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A_OTHER_OPERATION))
+    .then(finishSource(1, VALUE_ONE))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_B))
+    .then(finishSource(2, VALUE_ONE))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .expect(s.o.loaders == 3)
-    .then(s' = begin(s, FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A_OTHER_OPERATION))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A_OTHER_OPERATION))
     .expect(s.o.loaders == 4 and s.o.calls.nth(5) == CALL_PENDING)
-  run zeroCapacityKeepsSharingWithoutStorageTest = untrackedFixture.then(s' = {
-    capacity: NO_LOCAL_CAPACITY,
-    policy: POLICY_NO_REMOTE,
-    ...s
-  })
-    .then(s' = begin(s, FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
-    .then(s' = begin(s, FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+  run zeroCapacityKeepsSharingWithoutStorageTest = initialize(FIXTURE_ZERO_CAPACITY_UNTRACKED).then(changePolicy(POLICY_NO_REMOTE))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .expect(s.o.loaders == 1)
-    .then(s' = settle(s, 0, VALUE_ONE))
-    .then(s' = begin(s, FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(finishSource(0, VALUE_ONE))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .expect(s.o.loaders == 2)
   run trackedSourceWaitsForValidatedReadToWarmLocalTest = trackedFixture
-    .then(s' = begin(s, FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
-    .then(s' = settle(s, 0, VALUE_ONE))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(finishSource(0, VALUE_ONE))
     .expect(s.localValues.nth(0) == 0)
-    .then(s' = begin(s, FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .expect(s.o.reads == 2 and s.localValues.nth(0) == 1)
-    .then(s' = begin(s, FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .expect(s.o.reads == 2)
   run invalidationGroupsOperationsButPreservesAcquiredCachesTest = trackedFixture
-    .then(s' = {
-    remoteValues: List(1, 2, 0, 0),
-    created: List(10000, 10000, 0, 0),
-    ...s
-  })
-    .then(s' = begin(s, FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
-    .then(s' = begin(s, FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A_OTHER_OPERATION))
-    .then(s' = {
-    watermark: List(10000, 0),
-    ...s
-  })
-    .then(s' = begin(s, FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
-    .then(s' = begin(s, FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A_OTHER_OPERATION))
+    .then(seedRemote(KEY_A, VALUE_ONE)).then(seedRemote(KEY_A_OTHER_OPERATION, VALUE_TWO))
+    .then(startCall(FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(startCall(FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A_OTHER_OPERATION))
+    .then(invalidateEntity(0))
+    .then(startCall(FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A_OTHER_OPERATION))
     .expect(s.o.loaders == 0)
-    .then(s' = { policy: POLICY_NO_LOCAL, ...s })
-    .then(s' = begin(s, FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
-    .then(s' = begin(s, FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A_OTHER_OPERATION))
+    .then(changePolicy(POLICY_NO_LOCAL))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A_OTHER_OPERATION))
     .expect(s.o.loaders == 2)
-  run requestMemoExceedsLocalCapacityTest = untrackedFixture.then(s' = {
-    policy: POLICY_REQUEST_ONLY,
-    capacity: NO_LOCAL_CAPACITY,
-    ...s
-  })
-    .then(s' = begin(s, FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
-    .then(s' = settle(s, 0, VALUE_ONE))
-    .then(s' = begin(s, FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A_OTHER_OPERATION))
-    .then(s' = settle(s, 1, VALUE_ONE))
-    .then(s' = begin(s, FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_B))
-    .then(s' = settle(s, 2, VALUE_ONE))
-    .then(s' = begin(s, FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+  run requestMemoExceedsLocalCapacityTest = initialize(FIXTURE_ZERO_CAPACITY_UNTRACKED).then(changePolicy(POLICY_REQUEST_ONLY))
+    .then(startCall(FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(finishSource(0, VALUE_ONE))
+    .then(startCall(FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A_OTHER_OPERATION))
+    .then(finishSource(1, VALUE_ONE))
+    .then(startCall(FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_B))
+    .then(finishSource(2, VALUE_ONE))
+    .then(startCall(FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .expect(s.o.loaders == 3 and s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_ONE, VALUE_ONE))
+
+  run separateRequestRootsRetainIndependentValuesTest = untrackedFixture
+    .then(changePolicy(POLICY_REQUEST_ONLY))
+    .then(startCall(FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(startCall(SECOND_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .expect(s.o.loaders == 2)
+    .then(finishSource(0, VALUE_ONE)).then(finishSource(1, VALUE_TWO))
+    .then(startCall(FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(startCall(SECOND_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE, VALUE_TWO) and s.o.loaders == 2)
+
+  run oneInstanceEvictionCannotEvictAnotherInstanceTest = initialize(FIXTURE_WITHOUT_REMOTE)
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(finishSource(0, VALUE_ONE))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A_OTHER_OPERATION))
+    .then(finishSource(1, VALUE_ONE))
+    .then(startCall(FRESH_OTHER_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(finishSource(2, VALUE_TWO))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_B))
+    .then(finishSource(3, VALUE_ONE))
+    .then(startCall(FRESH_OTHER_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_TWO, VALUE_ONE, VALUE_TWO) and s.o.loaders == 4)
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .expect(s.o.loaders == 5 and s.o.calls.nth(5) == CALL_PENDING)
+
+  run pendingSourcesKeepEntityAndOperationIdentityTest = untrackedFixture
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A_OTHER_OPERATION))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_B))
+    .expect(s.o.loaders == 3)
+    .then(finishSource(1, VALUE_TWO)).then(finishSource(0, VALUE_ONE))
+    .then(finishSource(2, VALUE_ONE))
+    .then(changePolicy(POLICY_NO_LOCAL))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A_OTHER_OPERATION))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_B))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE, VALUE_ONE, VALUE_TWO, VALUE_ONE)
+      and s.o.loaders == 3 and s.o.loads == 3)
+
+  run settledRequestMemoSurvivesSharedLayerRampDownTest = untrackedFixture
+    .then(startCall(FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(finishSource(0, VALUE_ONE))
+    .then(changePolicy(POLICY_REQUEST_ONLY))
+    .then(startCall(FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loaders == 1
+      and s.o.reads == 1 and s.o.writes == 1)
+    .then(startCall(SECOND_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .expect(s.o.loaders == 2 and s.o.reads == 1)
+
+  run untrackedReadsIgnoreGroupedInvalidationTest = untrackedFixture
+    .then(seedRemote(KEY_A, VALUE_ONE)).then(seedRemote(KEY_A_OTHER_OPERATION, VALUE_TWO))
+    .then(invalidateEntity(0)).then(changePolicy(POLICY_NO_LOCAL))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A_OTHER_OPERATION))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO) and s.o.loaders == 0
+      and s.o.reads == 2 and s.o.loads == 2 and s.o.invalidations == 1)
+
+  run trackedWithoutRemotePublishesReusableLocalTest = initialize(FIXTURE_TRACKED_WITHOUT_REMOTE)
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(finishSource(0, VALUE_ONE))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loaders == 1
+      and s.o.reads == 0 and s.o.writes == 0 and s.o.dumps == 0)
 }

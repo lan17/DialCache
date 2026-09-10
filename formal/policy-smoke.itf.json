@@ -1,63 +1,1864 @@
-{"#meta":{"format":"ITF","format-description":"https://apalache-mc.org/docs/adr/015adr-trace.html","source":"formal/dialcache-policy-conformance.qnt","status":"ok","description":"Created by Quint on Wed Sep 09 2026 11:37:37 GMT-0700 (Pacific Daylight Time)","timestamp":1788979057779},"vars":["mbt::actionTaken","mbt::nondetPicks","s","mbt::actionTaken","mbt::nondetPicks"],"states":[
-{"#meta":{"index":0},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
-{"#meta":{"index":1},"mbt::actionTaken":"beginCall","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"1"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
-{"#meta":{"index":2},"mbt::actionTaken":"releasePolicy","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"1"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"1"},"reads":{"#bigint":"1"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}}}},
-{"#meta":{"index":3},"mbt::actionTaken":"resolveLoader","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"7"}}},"s":{"o":{"calls":[{"#bigint":"9"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"1"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"1"},"reads":{"#bigint":"1"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}}}},
-{"#meta":{"index":4},"mbt::actionTaken":"advance","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1000"}}},"s":{"o":{"calls":[{"#bigint":"9"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"1"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"1"},"reads":{"#bigint":"1"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}}}},
-{"#meta":{"index":5},"mbt::actionTaken":"writeFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[{"#bigint":"9"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"1"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"1"},"reads":{"#bigint":"1"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}}}},
-{"#meta":{"index":6},"mbt::actionTaken":"rollbackWall","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"9"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"1"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"1"},"reads":{"#bigint":"1"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}}}},
-{"#meta":{"index":7},"mbt::actionTaken":"seed","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[{"#bigint":"9"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"1"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"1"},"reads":{"#bigint":"1"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}}}},
-{"#meta":{"index":8},"mbt::actionTaken":"beginCall","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"1"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"2"},"reads":{"#bigint":"1"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}}}},
-{"#meta":{"index":9},"mbt::actionTaken":"releasePolicy","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"2"},"reads":{"#bigint":"2"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}}}},
-{"#meta":{"index":10},"mbt::actionTaken":"beginCall","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"0"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"3"},"reads":{"#bigint":"2"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}}}},
-{"#meta":{"index":11},"mbt::actionTaken":"releasePolicy","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"0"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"3"},"reads":{"#bigint":"2"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}}}},
-{"#meta":{"index":12},"mbt::actionTaken":"resolveLoader","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"9"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"3"},"reads":{"#bigint":"2"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":13},"mbt::actionTaken":"beginCall","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"4"},"reads":{"#bigint":"2"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":14},"mbt::actionTaken":"dumpFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"4"},"reads":{"#bigint":"2"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":15},"mbt::actionTaken":"releasePolicy","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":[],"policyCalls":{"#bigint":"4"},"reads":{"#bigint":"3"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":16},"mbt::actionTaken":"writeFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":[],"policyCalls":{"#bigint":"4"},"reads":{"#bigint":"3"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":17},"mbt::actionTaken":"beginCall","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":[],"policyCalls":{"#bigint":"5"},"reads":{"#bigint":"3"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":18},"mbt::actionTaken":"releasePolicy","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":[],"policyCalls":{"#bigint":"5"},"reads":{"#bigint":"3"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":19},"mbt::actionTaken":"beginCall","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":[],"policyCalls":{"#bigint":"6"},"reads":{"#bigint":"3"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":20},"mbt::actionTaken":"releasePolicy","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"6"},"reads":{"#bigint":"4"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":21},"mbt::actionTaken":"beginCall","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"7"},"reads":{"#bigint":"4"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":22},"mbt::actionTaken":"policy","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"23"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"7"},"reads":{"#bigint":"4"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":23},"mbt::actionTaken":"releasePolicy","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"7"},"reads":{"#bigint":"4"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":24},"mbt::actionTaken":"beginCall","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"4"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":25},"mbt::actionTaken":"readFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"4"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":26},"mbt::actionTaken":"releasePolicy","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"3"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"5"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":27},"mbt::actionTaken":"readFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"3"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"5"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":28},"mbt::actionTaken":"rejectLoader","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"2"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"3"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"5"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":29},"mbt::actionTaken":"readFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"3"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"5"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":30},"mbt::actionTaken":"beginCall","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"3"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"9"},"reads":{"#bigint":"5"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":31},"mbt::actionTaken":"rollbackWall","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"3"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"9"},"reads":{"#bigint":"5"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":32},"mbt::actionTaken":"policy","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"13"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"3"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"9"},"reads":{"#bigint":"5"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":33},"mbt::actionTaken":"releasePolicy","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"4"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"9"},"reads":{"#bigint":"6"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":34},"mbt::actionTaken":"rejectLoader","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"3"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"4"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"9"},"reads":{"#bigint":"6"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":35},"mbt::actionTaken":"beginCall","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"4"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"10"},"reads":{"#bigint":"6"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":36},"mbt::actionTaken":"policy","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"9"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"4"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"10"},"reads":{"#bigint":"6"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":37},"mbt::actionTaken":"releasePolicy","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"2"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"4"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"10"},"reads":{"#bigint":"6"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":38},"mbt::actionTaken":"beginCall","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"2"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"4"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"11"},"reads":{"#bigint":"6"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":39},"mbt::actionTaken":"advance","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1000"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"2"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"4"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"11"},"reads":{"#bigint":"6"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":40},"mbt::actionTaken":"rollbackWall","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"2"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"4"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"11"},"reads":{"#bigint":"6"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":41},"mbt::actionTaken":"policy","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"6"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"2"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"4"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"11"},"reads":{"#bigint":"6"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":42},"mbt::actionTaken":"releasePolicy","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"2"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"5"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"11"},"reads":{"#bigint":"6"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":43},"mbt::actionTaken":"policy","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"10"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"2"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"5"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"11"},"reads":{"#bigint":"6"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":44},"mbt::actionTaken":"providerFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"2"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"5"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"11"},"reads":{"#bigint":"6"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":45},"mbt::actionTaken":"beginCall","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"2"},{"#bigint":"0"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"5"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"12"},"reads":{"#bigint":"6"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":46},"mbt::actionTaken":"rejectLoader","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"4"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"5"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"12"},"reads":{"#bigint":"6"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":47},"mbt::actionTaken":"writeFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"5"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"12"},"reads":{"#bigint":"6"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":48},"mbt::actionTaken":"policy","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"5"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"5"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"12"},"reads":{"#bigint":"6"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":49},"mbt::actionTaken":"releasePolicy","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"2"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"6"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"12"},"reads":{"#bigint":"7"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":50},"mbt::actionTaken":"resolveLoader","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"37"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"2"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"3"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"6"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"12"},"reads":{"#bigint":"7"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":51},"mbt::actionTaken":"policy","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"22"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"2"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"3"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"6"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"12"},"reads":{"#bigint":"7"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":52},"mbt::actionTaken":"writeFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"2"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"3"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"6"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"12"},"reads":{"#bigint":"7"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":53},"mbt::actionTaken":"policy","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"24"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"2"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"3"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"6"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"12"},"reads":{"#bigint":"7"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":54},"mbt::actionTaken":"writeFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"2"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"3"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"6"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"12"},"reads":{"#bigint":"7"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":55},"mbt::actionTaken":"dumpFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"2"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"3"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"6"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"12"},"reads":{"#bigint":"7"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":56},"mbt::actionTaken":"rollbackWall","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"2"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"3"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"6"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"12"},"reads":{"#bigint":"7"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":57},"mbt::actionTaken":"providerFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"2"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"3"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"6"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"12"},"reads":{"#bigint":"7"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":58},"mbt::actionTaken":"readFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"2"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"3"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"6"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"12"},"reads":{"#bigint":"7"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":59},"mbt::actionTaken":"rollbackWall","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"2"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"3"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"6"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"12"},"reads":{"#bigint":"7"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}},
-{"#meta":{"index":60},"mbt::actionTaken":"providerFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"9"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"1"},{"#bigint":"1"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"3"},{"#bigint":"2"},{"#bigint":"3"},{"#bigint":"2"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"3"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"6"},"loads":{"#bigint":"2"},"maintenance":[],"policyCalls":{"#bigint":"12"},"reads":{"#bigint":"7"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"},{"#bigint":"5000"}],"writes":{"#bigint":"2"}}}}
-]}
+{
+  "#meta": {
+    "format": "ITF",
+    "format-description": "https://apalache-mc.org/docs/adr/015adr-trace.html",
+    "source": "formal/dialcache-policy-conformance.qnt",
+    "status": "ok",
+    "description": "Created by Quint on Thu Sep 10 2026 14:14:16 GMT-0700 (Pacific Daylight Time)",
+    "timestamp": 1789074856476
+  },
+  "vars": [
+    "input",
+    "s",
+    "mbt::actionTaken",
+    "mbt::nondetPicks"
+  ],
+  "states": [
+    {
+      "#meta": {
+        "index": 0
+      },
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "init"
+      },
+      "s": {
+        "dumpFailed": false,
+        "key": {
+          "#bigint": "0"
+        },
+        "localExpires": {
+          "#bigint": "0"
+        },
+        "localKey": {
+          "#bigint": "0"
+        },
+        "localValue": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "0"
+        },
+        "o": {
+          "calls": [],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "0"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "0"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "overlay": {
+          "#bigint": "0"
+        },
+        "owners": [],
+        "policyCall": {
+          "#bigint": "-1"
+        },
+        "policyErrors": [],
+        "policyReplies": [],
+        "providerFailed": false,
+        "readFailed": false,
+        "registered": [
+          {
+            "#bigint": "-1"
+          },
+          {
+            "#bigint": "-1"
+          }
+        ],
+        "remoteCreated": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "remoteExpires": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "remoteValues": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "sources": [],
+        "wall": {
+          "#bigint": "100000"
+        },
+        "writeFailed": false
+      },
+      "mbt::actionTaken": "init",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 1
+      },
+      "input": {
+        "choice": {
+          "#bigint": "0"
+        },
+        "name": "beginCall"
+      },
+      "s": {
+        "dumpFailed": false,
+        "key": {
+          "#bigint": "0"
+        },
+        "localExpires": {
+          "#bigint": "0"
+        },
+        "localKey": {
+          "#bigint": "0"
+        },
+        "localValue": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "0"
+        },
+        "o": {
+          "calls": [
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "0"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "1"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "overlay": {
+          "#bigint": "0"
+        },
+        "owners": [
+          {
+            "#bigint": "-1"
+          }
+        ],
+        "policyCall": {
+          "#bigint": "0"
+        },
+        "policyErrors": [],
+        "policyReplies": [],
+        "providerFailed": false,
+        "readFailed": false,
+        "registered": [
+          {
+            "#bigint": "-1"
+          },
+          {
+            "#bigint": "-1"
+          }
+        ],
+        "remoteCreated": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "remoteExpires": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "remoteValues": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "sources": [],
+        "wall": {
+          "#bigint": "100000"
+        },
+        "writeFailed": false
+      },
+      "mbt::actionTaken": "beginCall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 2
+      },
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "releasePolicy"
+      },
+      "s": {
+        "dumpFailed": false,
+        "key": {
+          "#bigint": "0"
+        },
+        "localExpires": {
+          "#bigint": "0"
+        },
+        "localKey": {
+          "#bigint": "0"
+        },
+        "localValue": {
+          "#bigint": "0"
+        },
+        "now": {
+          "#bigint": "0"
+        },
+        "o": {
+          "calls": [
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "1"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "overlay": {
+          "#bigint": "0"
+        },
+        "owners": [
+          {
+            "#bigint": "0"
+          }
+        ],
+        "policyCall": {
+          "#bigint": "-1"
+        },
+        "policyErrors": [],
+        "policyReplies": [
+          {
+            "invalidBudget": false,
+            "providerFailed": false
+          }
+        ],
+        "providerFailed": false,
+        "readFailed": false,
+        "registered": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "-1"
+          }
+        ],
+        "remoteCreated": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "remoteExpires": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "remoteValues": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "sources": [
+          {
+            "key": {
+              "#bigint": "0"
+            },
+            "localTtl": {
+              "#bigint": "1000"
+            },
+            "remoteTtl": {
+              "#bigint": "1000"
+            },
+            "result": {
+              "#bigint": "0"
+            },
+            "retention": {
+              "#bigint": "5000"
+            },
+            "shared": true
+          }
+        ],
+        "wall": {
+          "#bigint": "100000"
+        },
+        "writeFailed": false
+      },
+      "mbt::actionTaken": "releasePolicy",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 3
+      },
+      "input": {
+        "choice": {
+          "#bigint": "1"
+        },
+        "name": "resolveLoader"
+      },
+      "s": {
+        "dumpFailed": false,
+        "key": {
+          "#bigint": "0"
+        },
+        "localExpires": {
+          "#bigint": "1000"
+        },
+        "localKey": {
+          "#bigint": "0"
+        },
+        "localValue": {
+          "#bigint": "1"
+        },
+        "now": {
+          "#bigint": "0"
+        },
+        "o": {
+          "calls": [
+            {
+              "#bigint": "1"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "1"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "overlay": {
+          "#bigint": "0"
+        },
+        "owners": [
+          {
+            "#bigint": "0"
+          }
+        ],
+        "policyCall": {
+          "#bigint": "-1"
+        },
+        "policyErrors": [],
+        "policyReplies": [
+          {
+            "invalidBudget": false,
+            "providerFailed": false
+          }
+        ],
+        "providerFailed": false,
+        "readFailed": false,
+        "registered": [
+          {
+            "#bigint": "-1"
+          },
+          {
+            "#bigint": "-1"
+          }
+        ],
+        "remoteCreated": [
+          {
+            "#bigint": "100000"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "remoteExpires": [
+          {
+            "#bigint": "5000"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "remoteValues": [
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "sources": [
+          {
+            "key": {
+              "#bigint": "0"
+            },
+            "localTtl": {
+              "#bigint": "1000"
+            },
+            "remoteTtl": {
+              "#bigint": "1000"
+            },
+            "result": {
+              "#bigint": "1"
+            },
+            "retention": {
+              "#bigint": "5000"
+            },
+            "shared": true
+          }
+        ],
+        "wall": {
+          "#bigint": "100000"
+        },
+        "writeFailed": false
+      },
+      "mbt::actionTaken": "resolveLoader",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 4
+      },
+      "input": {
+        "choice": {
+          "#bigint": "1"
+        },
+        "name": "providerFault"
+      },
+      "s": {
+        "dumpFailed": false,
+        "key": {
+          "#bigint": "0"
+        },
+        "localExpires": {
+          "#bigint": "1000"
+        },
+        "localKey": {
+          "#bigint": "0"
+        },
+        "localValue": {
+          "#bigint": "1"
+        },
+        "now": {
+          "#bigint": "0"
+        },
+        "o": {
+          "calls": [
+            {
+              "#bigint": "1"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "1"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "overlay": {
+          "#bigint": "0"
+        },
+        "owners": [
+          {
+            "#bigint": "0"
+          }
+        ],
+        "policyCall": {
+          "#bigint": "-1"
+        },
+        "policyErrors": [],
+        "policyReplies": [
+          {
+            "invalidBudget": false,
+            "providerFailed": false
+          }
+        ],
+        "providerFailed": true,
+        "readFailed": false,
+        "registered": [
+          {
+            "#bigint": "-1"
+          },
+          {
+            "#bigint": "-1"
+          }
+        ],
+        "remoteCreated": [
+          {
+            "#bigint": "100000"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "remoteExpires": [
+          {
+            "#bigint": "5000"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "remoteValues": [
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "sources": [
+          {
+            "key": {
+              "#bigint": "0"
+            },
+            "localTtl": {
+              "#bigint": "1000"
+            },
+            "remoteTtl": {
+              "#bigint": "1000"
+            },
+            "result": {
+              "#bigint": "1"
+            },
+            "retention": {
+              "#bigint": "5000"
+            },
+            "shared": true
+          }
+        ],
+        "wall": {
+          "#bigint": "100000"
+        },
+        "writeFailed": false
+      },
+      "mbt::actionTaken": "providerFault",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 5
+      },
+      "input": {
+        "choice": {
+          "#bigint": "0"
+        },
+        "name": "beginCall"
+      },
+      "s": {
+        "dumpFailed": false,
+        "key": {
+          "#bigint": "0"
+        },
+        "localExpires": {
+          "#bigint": "1000"
+        },
+        "localKey": {
+          "#bigint": "0"
+        },
+        "localValue": {
+          "#bigint": "1"
+        },
+        "now": {
+          "#bigint": "0"
+        },
+        "o": {
+          "calls": [
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "2"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "overlay": {
+          "#bigint": "0"
+        },
+        "owners": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "-1"
+          }
+        ],
+        "policyCall": {
+          "#bigint": "1"
+        },
+        "policyErrors": [],
+        "policyReplies": [
+          {
+            "invalidBudget": false,
+            "providerFailed": false
+          }
+        ],
+        "providerFailed": true,
+        "readFailed": false,
+        "registered": [
+          {
+            "#bigint": "-1"
+          },
+          {
+            "#bigint": "-1"
+          }
+        ],
+        "remoteCreated": [
+          {
+            "#bigint": "100000"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "remoteExpires": [
+          {
+            "#bigint": "5000"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "remoteValues": [
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "sources": [
+          {
+            "key": {
+              "#bigint": "0"
+            },
+            "localTtl": {
+              "#bigint": "1000"
+            },
+            "remoteTtl": {
+              "#bigint": "1000"
+            },
+            "result": {
+              "#bigint": "1"
+            },
+            "retention": {
+              "#bigint": "5000"
+            },
+            "shared": true
+          }
+        ],
+        "wall": {
+          "#bigint": "100000"
+        },
+        "writeFailed": false
+      },
+      "mbt::actionTaken": "beginCall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 6
+      },
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "releasePolicy"
+      },
+      "s": {
+        "dumpFailed": false,
+        "key": {
+          "#bigint": "0"
+        },
+        "localExpires": {
+          "#bigint": "1000"
+        },
+        "localKey": {
+          "#bigint": "0"
+        },
+        "localValue": {
+          "#bigint": "1"
+        },
+        "now": {
+          "#bigint": "0"
+        },
+        "o": {
+          "calls": [
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "2"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "overlay": {
+          "#bigint": "0"
+        },
+        "owners": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "1"
+          }
+        ],
+        "policyCall": {
+          "#bigint": "-1"
+        },
+        "policyErrors": [
+          {
+            "errorType": "config_resolution",
+            "layer": "noop"
+          }
+        ],
+        "policyReplies": [
+          {
+            "invalidBudget": false,
+            "providerFailed": false
+          },
+          {
+            "invalidBudget": false,
+            "providerFailed": true
+          }
+        ],
+        "providerFailed": true,
+        "readFailed": false,
+        "registered": [
+          {
+            "#bigint": "-1"
+          },
+          {
+            "#bigint": "-1"
+          }
+        ],
+        "remoteCreated": [
+          {
+            "#bigint": "100000"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "remoteExpires": [
+          {
+            "#bigint": "5000"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "remoteValues": [
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "sources": [
+          {
+            "key": {
+              "#bigint": "0"
+            },
+            "localTtl": {
+              "#bigint": "1000"
+            },
+            "remoteTtl": {
+              "#bigint": "1000"
+            },
+            "result": {
+              "#bigint": "1"
+            },
+            "retention": {
+              "#bigint": "5000"
+            },
+            "shared": true
+          },
+          {
+            "key": {
+              "#bigint": "0"
+            },
+            "localTtl": {
+              "#bigint": "0"
+            },
+            "remoteTtl": {
+              "#bigint": "0"
+            },
+            "result": {
+              "#bigint": "0"
+            },
+            "retention": {
+              "#bigint": "5000"
+            },
+            "shared": false
+          }
+        ],
+        "wall": {
+          "#bigint": "100000"
+        },
+        "writeFailed": false
+      },
+      "mbt::actionTaken": "releasePolicy",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 7
+      },
+      "input": {
+        "choice": {
+          "#bigint": "9"
+        },
+        "name": "resolveLoader"
+      },
+      "s": {
+        "dumpFailed": false,
+        "key": {
+          "#bigint": "0"
+        },
+        "localExpires": {
+          "#bigint": "1000"
+        },
+        "localKey": {
+          "#bigint": "0"
+        },
+        "localValue": {
+          "#bigint": "1"
+        },
+        "now": {
+          "#bigint": "0"
+        },
+        "o": {
+          "calls": [
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "2"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "overlay": {
+          "#bigint": "0"
+        },
+        "owners": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "1"
+          }
+        ],
+        "policyCall": {
+          "#bigint": "-1"
+        },
+        "policyErrors": [
+          {
+            "errorType": "config_resolution",
+            "layer": "noop"
+          }
+        ],
+        "policyReplies": [
+          {
+            "invalidBudget": false,
+            "providerFailed": false
+          },
+          {
+            "invalidBudget": false,
+            "providerFailed": true
+          }
+        ],
+        "providerFailed": true,
+        "readFailed": false,
+        "registered": [
+          {
+            "#bigint": "-1"
+          },
+          {
+            "#bigint": "-1"
+          }
+        ],
+        "remoteCreated": [
+          {
+            "#bigint": "100000"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "remoteExpires": [
+          {
+            "#bigint": "5000"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "remoteValues": [
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "sources": [
+          {
+            "key": {
+              "#bigint": "0"
+            },
+            "localTtl": {
+              "#bigint": "1000"
+            },
+            "remoteTtl": {
+              "#bigint": "1000"
+            },
+            "result": {
+              "#bigint": "1"
+            },
+            "retention": {
+              "#bigint": "5000"
+            },
+            "shared": true
+          },
+          {
+            "key": {
+              "#bigint": "0"
+            },
+            "localTtl": {
+              "#bigint": "0"
+            },
+            "remoteTtl": {
+              "#bigint": "0"
+            },
+            "result": {
+              "#bigint": "2"
+            },
+            "retention": {
+              "#bigint": "5000"
+            },
+            "shared": false
+          }
+        ],
+        "wall": {
+          "#bigint": "100000"
+        },
+        "writeFailed": false
+      },
+      "mbt::actionTaken": "resolveLoader",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "9"
+          }
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 8
+      },
+      "input": {
+        "choice": {
+          "#bigint": "0"
+        },
+        "name": "providerFault"
+      },
+      "s": {
+        "dumpFailed": false,
+        "key": {
+          "#bigint": "0"
+        },
+        "localExpires": {
+          "#bigint": "1000"
+        },
+        "localKey": {
+          "#bigint": "0"
+        },
+        "localValue": {
+          "#bigint": "1"
+        },
+        "now": {
+          "#bigint": "0"
+        },
+        "o": {
+          "calls": [
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "2"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "overlay": {
+          "#bigint": "0"
+        },
+        "owners": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "1"
+          }
+        ],
+        "policyCall": {
+          "#bigint": "-1"
+        },
+        "policyErrors": [
+          {
+            "errorType": "config_resolution",
+            "layer": "noop"
+          }
+        ],
+        "policyReplies": [
+          {
+            "invalidBudget": false,
+            "providerFailed": false
+          },
+          {
+            "invalidBudget": false,
+            "providerFailed": true
+          }
+        ],
+        "providerFailed": false,
+        "readFailed": false,
+        "registered": [
+          {
+            "#bigint": "-1"
+          },
+          {
+            "#bigint": "-1"
+          }
+        ],
+        "remoteCreated": [
+          {
+            "#bigint": "100000"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "remoteExpires": [
+          {
+            "#bigint": "5000"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "remoteValues": [
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "sources": [
+          {
+            "key": {
+              "#bigint": "0"
+            },
+            "localTtl": {
+              "#bigint": "1000"
+            },
+            "remoteTtl": {
+              "#bigint": "1000"
+            },
+            "result": {
+              "#bigint": "1"
+            },
+            "retention": {
+              "#bigint": "5000"
+            },
+            "shared": true
+          },
+          {
+            "key": {
+              "#bigint": "0"
+            },
+            "localTtl": {
+              "#bigint": "0"
+            },
+            "remoteTtl": {
+              "#bigint": "0"
+            },
+            "result": {
+              "#bigint": "2"
+            },
+            "retention": {
+              "#bigint": "5000"
+            },
+            "shared": false
+          }
+        ],
+        "wall": {
+          "#bigint": "100000"
+        },
+        "writeFailed": false
+      },
+      "mbt::actionTaken": "providerFault",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 9
+      },
+      "input": {
+        "choice": {
+          "#bigint": "0"
+        },
+        "name": "beginCall"
+      },
+      "s": {
+        "dumpFailed": false,
+        "key": {
+          "#bigint": "0"
+        },
+        "localExpires": {
+          "#bigint": "1000"
+        },
+        "localKey": {
+          "#bigint": "0"
+        },
+        "localValue": {
+          "#bigint": "1"
+        },
+        "now": {
+          "#bigint": "0"
+        },
+        "o": {
+          "calls": [
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "3"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "overlay": {
+          "#bigint": "0"
+        },
+        "owners": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "-1"
+          }
+        ],
+        "policyCall": {
+          "#bigint": "2"
+        },
+        "policyErrors": [
+          {
+            "errorType": "config_resolution",
+            "layer": "noop"
+          }
+        ],
+        "policyReplies": [
+          {
+            "invalidBudget": false,
+            "providerFailed": false
+          },
+          {
+            "invalidBudget": false,
+            "providerFailed": true
+          }
+        ],
+        "providerFailed": false,
+        "readFailed": false,
+        "registered": [
+          {
+            "#bigint": "-1"
+          },
+          {
+            "#bigint": "-1"
+          }
+        ],
+        "remoteCreated": [
+          {
+            "#bigint": "100000"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "remoteExpires": [
+          {
+            "#bigint": "5000"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "remoteValues": [
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "sources": [
+          {
+            "key": {
+              "#bigint": "0"
+            },
+            "localTtl": {
+              "#bigint": "1000"
+            },
+            "remoteTtl": {
+              "#bigint": "1000"
+            },
+            "result": {
+              "#bigint": "1"
+            },
+            "retention": {
+              "#bigint": "5000"
+            },
+            "shared": true
+          },
+          {
+            "key": {
+              "#bigint": "0"
+            },
+            "localTtl": {
+              "#bigint": "0"
+            },
+            "remoteTtl": {
+              "#bigint": "0"
+            },
+            "result": {
+              "#bigint": "2"
+            },
+            "retention": {
+              "#bigint": "5000"
+            },
+            "shared": false
+          }
+        ],
+        "wall": {
+          "#bigint": "100000"
+        },
+        "writeFailed": false
+      },
+      "mbt::actionTaken": "beginCall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 10
+      },
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "releasePolicy"
+      },
+      "s": {
+        "dumpFailed": false,
+        "key": {
+          "#bigint": "0"
+        },
+        "localExpires": {
+          "#bigint": "1000"
+        },
+        "localKey": {
+          "#bigint": "0"
+        },
+        "localValue": {
+          "#bigint": "1"
+        },
+        "now": {
+          "#bigint": "0"
+        },
+        "o": {
+          "calls": [
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "3"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "overlay": {
+          "#bigint": "0"
+        },
+        "owners": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "-1"
+          }
+        ],
+        "policyCall": {
+          "#bigint": "-1"
+        },
+        "policyErrors": [
+          {
+            "errorType": "config_resolution",
+            "layer": "noop"
+          }
+        ],
+        "policyReplies": [
+          {
+            "invalidBudget": false,
+            "providerFailed": false
+          },
+          {
+            "invalidBudget": false,
+            "providerFailed": true
+          },
+          {
+            "invalidBudget": false,
+            "providerFailed": false
+          }
+        ],
+        "providerFailed": false,
+        "readFailed": false,
+        "registered": [
+          {
+            "#bigint": "-1"
+          },
+          {
+            "#bigint": "-1"
+          }
+        ],
+        "remoteCreated": [
+          {
+            "#bigint": "100000"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "remoteExpires": [
+          {
+            "#bigint": "5000"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "remoteValues": [
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "sources": [
+          {
+            "key": {
+              "#bigint": "0"
+            },
+            "localTtl": {
+              "#bigint": "1000"
+            },
+            "remoteTtl": {
+              "#bigint": "1000"
+            },
+            "result": {
+              "#bigint": "1"
+            },
+            "retention": {
+              "#bigint": "5000"
+            },
+            "shared": true
+          },
+          {
+            "key": {
+              "#bigint": "0"
+            },
+            "localTtl": {
+              "#bigint": "0"
+            },
+            "remoteTtl": {
+              "#bigint": "0"
+            },
+            "result": {
+              "#bigint": "2"
+            },
+            "retention": {
+              "#bigint": "5000"
+            },
+            "shared": false
+          }
+        ],
+        "wall": {
+          "#bigint": "100000"
+        },
+        "writeFailed": false
+      },
+      "mbt::actionTaken": "releasePolicy",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      }
+    }
+  ]
+}

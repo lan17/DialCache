@@ -1,0 +1,1315 @@
+{
+  "#meta": {
+    "format": "ITF",
+    "format-description": "https://apalache-mc.org/docs/adr/015adr-trace.html",
+    "source": "formal/dialcache-runtime-boundaries-conformance.qnt",
+    "status": "ok",
+    "description": "Created by Quint on Thu Sep 10 2026 14:06:33 GMT-0700 (Pacific Daylight Time)",
+    "timestamp": 1789074393680
+  },
+  "vars": [
+    "input",
+    "s",
+    "mbt::actionTaken",
+    "mbt::nondetPicks"
+  ],
+  "states": [
+    {
+      "#meta": {
+        "index": 0
+      },
+      "input": {
+        "choice": {
+          "#bigint": "2"
+        },
+        "name": "init"
+      },
+      "s": {
+        "admissions": [],
+        "allFeatures": false,
+        "cached": {
+          "#bigint": "0"
+        },
+        "configured": true,
+        "defaultSharing": false,
+        "disabledBaseline": false,
+        "layer": {
+          "#bigint": "2"
+        },
+        "o": {
+          "calls": [],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "0"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "0"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "open": true,
+        "owners": [],
+        "policy": {
+          "#bigint": "9"
+        },
+        "registered": {
+          "#bigint": "-1"
+        },
+        "settlements": [],
+        "sources": [],
+        "waitingPolicy": {
+          "#bigint": "-1"
+        }
+      },
+      "mbt::actionTaken": "init",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "2"
+          }
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 1
+      },
+      "input": {
+        "choice": {
+          "#bigint": "5"
+        },
+        "name": "policy"
+      },
+      "s": {
+        "admissions": [],
+        "allFeatures": false,
+        "cached": {
+          "#bigint": "0"
+        },
+        "configured": true,
+        "defaultSharing": false,
+        "disabledBaseline": false,
+        "layer": {
+          "#bigint": "2"
+        },
+        "o": {
+          "calls": [],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "0"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "0"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "open": true,
+        "owners": [],
+        "policy": {
+          "#bigint": "5"
+        },
+        "registered": {
+          "#bigint": "-1"
+        },
+        "settlements": [],
+        "sources": [],
+        "waitingPolicy": {
+          "#bigint": "-1"
+        }
+      },
+      "mbt::actionTaken": "policy",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "5"
+          }
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 2
+      },
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "beginCall"
+      },
+      "s": {
+        "admissions": [],
+        "allFeatures": false,
+        "cached": {
+          "#bigint": "0"
+        },
+        "configured": true,
+        "defaultSharing": false,
+        "disabledBaseline": false,
+        "layer": {
+          "#bigint": "2"
+        },
+        "o": {
+          "calls": [
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "0"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "1"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "open": true,
+        "owners": [
+          {
+            "#bigint": "-1"
+          }
+        ],
+        "policy": {
+          "#bigint": "5"
+        },
+        "registered": {
+          "#bigint": "-1"
+        },
+        "settlements": [],
+        "sources": [],
+        "waitingPolicy": {
+          "#bigint": "0"
+        }
+      },
+      "mbt::actionTaken": "beginCall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 3
+      },
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "releasePolicy"
+      },
+      "s": {
+        "admissions": [
+          {
+            "cacheHit": false,
+            "joined": false,
+            "open": true,
+            "policy": {
+              "#bigint": "5"
+            },
+            "remoteReads": {
+              "#bigint": "0"
+            }
+          }
+        ],
+        "allFeatures": false,
+        "cached": {
+          "#bigint": "0"
+        },
+        "configured": true,
+        "defaultSharing": false,
+        "disabledBaseline": false,
+        "layer": {
+          "#bigint": "2"
+        },
+        "o": {
+          "calls": [
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "1"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "open": true,
+        "owners": [
+          {
+            "#bigint": "0"
+          }
+        ],
+        "policy": {
+          "#bigint": "5"
+        },
+        "registered": {
+          "#bigint": "-1"
+        },
+        "settlements": [],
+        "sources": [
+          {
+            "caches": false,
+            "result": {
+              "#bigint": "0"
+            },
+            "shared": false
+          }
+        ],
+        "waitingPolicy": {
+          "#bigint": "-1"
+        }
+      },
+      "mbt::actionTaken": "releasePolicy",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 4
+      },
+      "input": {
+        "choice": {
+          "#bigint": "0"
+        },
+        "name": "resolveLoader"
+      },
+      "s": {
+        "admissions": [
+          {
+            "cacheHit": false,
+            "joined": false,
+            "open": true,
+            "policy": {
+              "#bigint": "5"
+            },
+            "remoteReads": {
+              "#bigint": "0"
+            }
+          }
+        ],
+        "allFeatures": false,
+        "cached": {
+          "#bigint": "0"
+        },
+        "configured": true,
+        "defaultSharing": false,
+        "disabledBaseline": false,
+        "layer": {
+          "#bigint": "2"
+        },
+        "o": {
+          "calls": [
+            {
+              "#bigint": "1"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "1"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "open": true,
+        "owners": [
+          {
+            "#bigint": "0"
+          }
+        ],
+        "policy": {
+          "#bigint": "5"
+        },
+        "registered": {
+          "#bigint": "-1"
+        },
+        "settlements": [
+          {
+            "#bigint": "0"
+          }
+        ],
+        "sources": [
+          {
+            "caches": false,
+            "result": {
+              "#bigint": "1"
+            },
+            "shared": false
+          }
+        ],
+        "waitingPolicy": {
+          "#bigint": "-1"
+        }
+      },
+      "mbt::actionTaken": "resolveLoader",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 5
+      },
+      "input": {
+        "choice": {
+          "#bigint": "8"
+        },
+        "name": "policy"
+      },
+      "s": {
+        "admissions": [
+          {
+            "cacheHit": false,
+            "joined": false,
+            "open": true,
+            "policy": {
+              "#bigint": "5"
+            },
+            "remoteReads": {
+              "#bigint": "0"
+            }
+          }
+        ],
+        "allFeatures": false,
+        "cached": {
+          "#bigint": "0"
+        },
+        "configured": true,
+        "defaultSharing": false,
+        "disabledBaseline": false,
+        "layer": {
+          "#bigint": "2"
+        },
+        "o": {
+          "calls": [
+            {
+              "#bigint": "1"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "1"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "open": true,
+        "owners": [
+          {
+            "#bigint": "0"
+          }
+        ],
+        "policy": {
+          "#bigint": "8"
+        },
+        "registered": {
+          "#bigint": "-1"
+        },
+        "settlements": [
+          {
+            "#bigint": "0"
+          }
+        ],
+        "sources": [
+          {
+            "caches": false,
+            "result": {
+              "#bigint": "1"
+            },
+            "shared": false
+          }
+        ],
+        "waitingPolicy": {
+          "#bigint": "-1"
+        }
+      },
+      "mbt::actionTaken": "policy",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "8"
+          }
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 6
+      },
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "beginCall"
+      },
+      "s": {
+        "admissions": [
+          {
+            "cacheHit": false,
+            "joined": false,
+            "open": true,
+            "policy": {
+              "#bigint": "5"
+            },
+            "remoteReads": {
+              "#bigint": "0"
+            }
+          }
+        ],
+        "allFeatures": false,
+        "cached": {
+          "#bigint": "0"
+        },
+        "configured": true,
+        "defaultSharing": false,
+        "disabledBaseline": false,
+        "layer": {
+          "#bigint": "2"
+        },
+        "o": {
+          "calls": [
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "2"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "open": true,
+        "owners": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "-1"
+          }
+        ],
+        "policy": {
+          "#bigint": "8"
+        },
+        "registered": {
+          "#bigint": "-1"
+        },
+        "settlements": [
+          {
+            "#bigint": "0"
+          }
+        ],
+        "sources": [
+          {
+            "caches": false,
+            "result": {
+              "#bigint": "1"
+            },
+            "shared": false
+          }
+        ],
+        "waitingPolicy": {
+          "#bigint": "1"
+        }
+      },
+      "mbt::actionTaken": "beginCall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 7
+      },
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "releasePolicy"
+      },
+      "s": {
+        "admissions": [
+          {
+            "cacheHit": false,
+            "joined": false,
+            "open": true,
+            "policy": {
+              "#bigint": "5"
+            },
+            "remoteReads": {
+              "#bigint": "0"
+            }
+          },
+          {
+            "cacheHit": false,
+            "joined": false,
+            "open": true,
+            "policy": {
+              "#bigint": "8"
+            },
+            "remoteReads": {
+              "#bigint": "1"
+            }
+          }
+        ],
+        "allFeatures": false,
+        "cached": {
+          "#bigint": "0"
+        },
+        "configured": true,
+        "defaultSharing": false,
+        "disabledBaseline": false,
+        "layer": {
+          "#bigint": "2"
+        },
+        "o": {
+          "calls": [
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "2"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "open": true,
+        "owners": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "1"
+          }
+        ],
+        "policy": {
+          "#bigint": "8"
+        },
+        "registered": {
+          "#bigint": "1"
+        },
+        "settlements": [
+          {
+            "#bigint": "0"
+          }
+        ],
+        "sources": [
+          {
+            "caches": false,
+            "result": {
+              "#bigint": "1"
+            },
+            "shared": false
+          },
+          {
+            "caches": true,
+            "result": {
+              "#bigint": "0"
+            },
+            "shared": true
+          }
+        ],
+        "waitingPolicy": {
+          "#bigint": "-1"
+        }
+      },
+      "mbt::actionTaken": "releasePolicy",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 8
+      },
+      "input": {
+        "choice": {
+          "#bigint": "9"
+        },
+        "name": "resolveLoader"
+      },
+      "s": {
+        "admissions": [
+          {
+            "cacheHit": false,
+            "joined": false,
+            "open": true,
+            "policy": {
+              "#bigint": "5"
+            },
+            "remoteReads": {
+              "#bigint": "0"
+            }
+          },
+          {
+            "cacheHit": false,
+            "joined": false,
+            "open": true,
+            "policy": {
+              "#bigint": "8"
+            },
+            "remoteReads": {
+              "#bigint": "1"
+            }
+          }
+        ],
+        "allFeatures": false,
+        "cached": {
+          "#bigint": "2"
+        },
+        "configured": true,
+        "defaultSharing": false,
+        "disabledBaseline": false,
+        "layer": {
+          "#bigint": "2"
+        },
+        "o": {
+          "calls": [
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "2"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "60000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "open": true,
+        "owners": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "1"
+          }
+        ],
+        "policy": {
+          "#bigint": "8"
+        },
+        "registered": {
+          "#bigint": "-1"
+        },
+        "settlements": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "1"
+          }
+        ],
+        "sources": [
+          {
+            "caches": false,
+            "result": {
+              "#bigint": "1"
+            },
+            "shared": false
+          },
+          {
+            "caches": true,
+            "result": {
+              "#bigint": "2"
+            },
+            "shared": true
+          }
+        ],
+        "waitingPolicy": {
+          "#bigint": "-1"
+        }
+      },
+      "mbt::actionTaken": "resolveLoader",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "9"
+          }
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 9
+      },
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "beginCall"
+      },
+      "s": {
+        "admissions": [
+          {
+            "cacheHit": false,
+            "joined": false,
+            "open": true,
+            "policy": {
+              "#bigint": "5"
+            },
+            "remoteReads": {
+              "#bigint": "0"
+            }
+          },
+          {
+            "cacheHit": false,
+            "joined": false,
+            "open": true,
+            "policy": {
+              "#bigint": "8"
+            },
+            "remoteReads": {
+              "#bigint": "1"
+            }
+          }
+        ],
+        "allFeatures": false,
+        "cached": {
+          "#bigint": "2"
+        },
+        "configured": true,
+        "defaultSharing": false,
+        "disabledBaseline": false,
+        "layer": {
+          "#bigint": "2"
+        },
+        "o": {
+          "calls": [
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "3"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "60000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "open": true,
+        "owners": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "-1"
+          }
+        ],
+        "policy": {
+          "#bigint": "8"
+        },
+        "registered": {
+          "#bigint": "-1"
+        },
+        "settlements": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "1"
+          }
+        ],
+        "sources": [
+          {
+            "caches": false,
+            "result": {
+              "#bigint": "1"
+            },
+            "shared": false
+          },
+          {
+            "caches": true,
+            "result": {
+              "#bigint": "2"
+            },
+            "shared": true
+          }
+        ],
+        "waitingPolicy": {
+          "#bigint": "2"
+        }
+      },
+      "mbt::actionTaken": "beginCall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      }
+    },
+    {
+      "#meta": {
+        "index": 10
+      },
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "releasePolicy"
+      },
+      "s": {
+        "admissions": [
+          {
+            "cacheHit": false,
+            "joined": false,
+            "open": true,
+            "policy": {
+              "#bigint": "5"
+            },
+            "remoteReads": {
+              "#bigint": "0"
+            }
+          },
+          {
+            "cacheHit": false,
+            "joined": false,
+            "open": true,
+            "policy": {
+              "#bigint": "8"
+            },
+            "remoteReads": {
+              "#bigint": "1"
+            }
+          },
+          {
+            "cacheHit": true,
+            "joined": false,
+            "open": true,
+            "policy": {
+              "#bigint": "8"
+            },
+            "remoteReads": {
+              "#bigint": "1"
+            }
+          }
+        ],
+        "allFeatures": false,
+        "cached": {
+          "#bigint": "2"
+        },
+        "configured": true,
+        "defaultSharing": false,
+        "disabledBaseline": false,
+        "layer": {
+          "#bigint": "2"
+        },
+        "o": {
+          "calls": [
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "3"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "60000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "open": true,
+        "owners": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "-1"
+          }
+        ],
+        "policy": {
+          "#bigint": "8"
+        },
+        "registered": {
+          "#bigint": "-1"
+        },
+        "settlements": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "1"
+          }
+        ],
+        "sources": [
+          {
+            "caches": false,
+            "result": {
+              "#bigint": "1"
+            },
+            "shared": false
+          },
+          {
+            "caches": true,
+            "result": {
+              "#bigint": "2"
+            },
+            "shared": true
+          }
+        ],
+        "waitingPolicy": {
+          "#bigint": "-1"
+        }
+      },
+      "mbt::actionTaken": "releasePolicy",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      }
+    }
+  ]
+}

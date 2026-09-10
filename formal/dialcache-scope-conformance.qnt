@@ -43,24 +43,31 @@ module dialcache_scope_conformance {
     memo: List[int],
     registered: List[int],
     sources: List[Source],
+    settlements: List[int],
     owners: List[int],
     policyCall: int,
     scope: int,
     overlay: int
   }
   var s: State
-  action init = s' = {
-    o: empty,
-    d: noDiagnostics,
-    opened: List(true, false, false, false, false),
-    completed: List(false, false, false, false, false),
-    memo: List(NO_MEMO, NO_MEMO),
-    registered: List(NO_OWNER, NO_OWNER),
-    sources: List(),
-    owners: List(),
-    policyCall: NO_OWNER,
-    scope: ROOT_REQUEST,
-    overlay: POLICY_INHERIT
+  // Explicit environment inputs also make deterministic Quint runs replayable.
+  var input: { name: str, choice: int }
+  action init = all {
+    input' = { name: "init", choice: -1 },
+    s' = {
+      o: empty,
+      d: noDiagnostics,
+      opened: List(true, false, false, false, false),
+      completed: List(false, false, false, false, false),
+      memo: List(NO_MEMO, NO_MEMO),
+      registered: List(NO_OWNER, NO_OWNER),
+      sources: List(),
+      settlements: List(),
+      owners: List(),
+      policyCall: NO_OWNER,
+      scope: ROOT_REQUEST,
+      overlay: POLICY_INHERIT
+    }
   }
 
   // -- Scope ownership and caller admission ----------------------------------
@@ -99,13 +106,17 @@ module dialcache_scope_conformance {
     }
     if (active) withCaller else source(withCaller, state.o.calls.length(), NO_OWNER, false, false, "")
   }
+  action startCall(scope: int): bool = all {
+    s' = begin(s, scope),
+    input' = { name: "beginCall", choice: scope }
+  }
   action beginCall = {
     // Context 5 is outside every request.
     nondet choice = ROOT_REQUEST.to(OUTSIDE_REQUEST).filter(id => id == OUTSIDE_REQUEST or s.opened.nth(id)).oneOf()
     all {
       s.policyCall == NO_OWNER,
       s.o.calls.length() < MAX_CALLERS,
-      s' = begin(s, choice)
+      startCall(choice)
     }
   }
   action releasePolicy = all {
@@ -131,7 +142,8 @@ module dialcache_scope_conformance {
       ...afterPolicyReply
     }
     else source(afterPolicyReply, s.policyCall, memoSlot, canShare, scopeStillOpen,
-      if (not(scopeStillOpen)) "noop" else if (memoSlot >= 0) "request_local" else "local")
+      if (not(scopeStillOpen)) "noop" else if (memoSlot >= 0) "request_local" else "local"),
+    input' = { name: "releasePolicy", choice: -1 }
   }
 
   // -- Source settlement and request publication -----------------------------
@@ -147,6 +159,7 @@ module dialcache_scope_conformance {
         ...state.d
       },
       sources: state.sources.replaceAt(loader, { result: result, ...sourceRecord }),
+      settlements: state.settlements.append(loader),
       memo: if (memoScopeStillOpen and result != SOURCE_ERROR) state.memo.replaceAt(sourceRecord.slot, result)
         else state.memo,
       registered: if (memoScopeStillOpen
@@ -159,14 +172,20 @@ module dialcache_scope_conformance {
       ...state
     }
   }
+  action finishSource(loader: int, result: int): bool = all {
+    s' = settle(s, loader, result),
+    input' = if (result == SOURCE_ERROR) { name: "rejectLoader", choice: loader }
+      else { name: "resolveLoader", choice: loader * SOURCE_VALUE_COUNT
+        + (if (result <= VALUE_TWO) result else result - 2) }
+  }
   val pending = s.sources.indices().filter(i => s.sources.nth(i).result == CALL_PENDING)
   action resolveLoader = {
     nondet choice = 1.to(MAX_RESOLVE_CHOICE).filter(code => pending.contains((code - 1) / SOURCE_VALUE_COUNT)).oneOf()
-    s' = settle(s, (choice - 1) / SOURCE_VALUE_COUNT, values.nth((choice - 1) % SOURCE_VALUE_COUNT))
+    finishSource((choice - 1) / SOURCE_VALUE_COUNT, values.nth((choice - 1) % SOURCE_VALUE_COUNT))
   }
   action rejectLoader = {
     nondet choice = pending.oneOf()
-    s' = settle(s, choice, SOURCE_ERROR)
+    finishSource(choice, SOURCE_ERROR)
   }
 
   // -- Environment scope and policy changes ----------------------------------
@@ -175,11 +194,15 @@ module dialcache_scope_conformance {
     opened: state.opened.replaceAt(scope, true),
     ...state
   }
+  action openContext(scope: int): bool = all {
+    s' = open(s, scope),
+    input' = { name: "openScope", choice: scope }
+  }
   action openScope = {
     nondet choice = REPLACEMENT_REQUEST.to(REENABLED_REQUEST).filter(id => not(s.opened.nth(id)) and
       (id == REPLACEMENT_REQUEST or (not(s.completed.nth(ROOT_REQUEST)) and (id != REENABLED_REQUEST
         or s.opened.nth(NESTED_DISABLED))))).oneOf()
-    s' = open(s, choice)
+    openContext(choice)
   }
   pure def close(state: State, scope: int): State = {
     completed: state.completed.replaceAt(scope, true),
@@ -189,19 +212,27 @@ module dialcache_scope_conformance {
       if (scope < NESTED_ENABLED and slot == scope) out.replaceAt(slot, NO_OWNER) else out),
     ...state
   }
+  action closeContext(scope: int): bool = all {
+    s' = close(s, scope),
+    input' = { name: "closeScope", choice: scope }
+  }
   action closeScope = {
     nondet choice = ROOT_REQUEST.to(REENABLED_REQUEST).filter(id => s.opened.nth(id)
       and not(s.completed.nth(id))).oneOf()
     all {
       s.o.calls.length() > 0,
-      s' = close(s, choice)
+      closeContext(choice)
     }
   }
   // 0 inherits request caching/sharing; 1 bypasses request caching;
   // 2 retains memoization while disabling flight sharing.
+  action changePolicy(overlay: int): bool = all {
+    s' = { overlay: overlay, ...s },
+    input' = { name: "policy", choice: overlay }
+  }
   action policy = {
     nondet choice = Set(POLICY_INHERIT, POLICY_NO_REQUEST, POLICY_NO_COALESCING).oneOf()
-    s' = { overlay: choice, ...s }
+    changePolicy(choice)
   }
 
   // -- Exploration schedule (nesting/order preserve sampling weights) ---------
@@ -240,67 +271,101 @@ module dialcache_scope_conformance {
   val sourceCountsMatchEffects = s.sources.length() == s.o.loaders and
     s.o.sourceScopes.length() == s.o.loaders and s.owners.length() == s.o.calls.length()
 
+  // Record external completion order separately from the memo transition.
+  // Source admission order and coalescing do not determine the final value.
+  val memoFollowsLatestSuccessfulSettlement = s.memo.indices().forall(slot => {
+    val latest = s.settlements.foldl(NO_MEMO, (result, loader) => {
+      val source = s.sources.nth(loader)
+      if (source.slot == slot and values.indices().exists(index => values.nth(index) == source.result))
+        source.result else result
+    })
+    s.completed.nth(slot) or s.memo.nth(slot) == latest
+  })
+
   // -- Deterministic regression schedules ------------------------------------
 
   run lateSourceCannotPopulateReplacementTest = init
-    .then(s' = begin(s, ROOT_REQUEST))
+    .then(startCall(ROOT_REQUEST))
     .then(releasePolicy)
-    .then(s' = close(s, ROOT_REQUEST))
-    .then(s' = open(s, REPLACEMENT_REQUEST))
-    .then(s' = settle(s, 0, VALUE_ONE))
-    .then(s' = begin(s, REPLACEMENT_REQUEST))
+    .then(closeContext(ROOT_REQUEST))
+    .then(openContext(REPLACEMENT_REQUEST))
+    .then(finishSource(0, VALUE_ONE))
+    .then(startCall(REPLACEMENT_REQUEST))
     .then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.loaders == 2 and s.memo == List(NO_MEMO, NO_MEMO))
 
   run policyReplyAfterCloseBypassesRequestTest = init
-    .then(s' = begin(s, ROOT_REQUEST))
-    .then(s' = close(s, ROOT_REQUEST))
+    .then(startCall(ROOT_REQUEST))
+    .then(closeContext(ROOT_REQUEST))
     .then(releasePolicy)
-    .then(s' = settle(s, 0, VALUE_ONE))
+    .then(finishSource(0, VALUE_ONE))
     .expect(s.o.sourceScopes == List(false) and s.memo == List(NO_MEMO, NO_MEMO))
 
   run nestedCloseAndDisabledBypassKeepOuterMemoTest = init
-    .then(s' = open(s, NESTED_ENABLED))
-    .then(s' = begin(s, NESTED_ENABLED))
+    .then(openContext(NESTED_ENABLED))
+    .then(startCall(NESTED_ENABLED))
     .then(releasePolicy)
-    .then(s' = settle(s, 0, VALUE_ONE))
-    .then(s' = close(s, NESTED_ENABLED))
-    .then(s' = open(s, NESTED_DISABLED))
-    .then(s' = begin(s, NESTED_DISABLED))
-    .then(s' = settle(s, 1, VALUE_TWO))
-    .then(s' = open(s, REENABLED_REQUEST))
-    .then(s' = begin(s, REENABLED_REQUEST))
+    .then(finishSource(0, VALUE_ONE))
+    .then(closeContext(NESTED_ENABLED))
+    .then(openContext(NESTED_DISABLED))
+    .then(startCall(NESTED_DISABLED))
+    .then(finishSource(1, VALUE_TWO))
+    .then(openContext(REENABLED_REQUEST))
+    .then(startCall(REENABLED_REQUEST))
     .then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE) and s.o.loaders == 2
       and s.o.sourceScopes == List(true, false))
 
   run rejectedFlightAllowsRetryTest = init
-    .then(s' = begin(s, ROOT_REQUEST))
+    .then(startCall(ROOT_REQUEST))
     .then(releasePolicy)
-    .then(s' = begin(s, ROOT_REQUEST))
+    .then(startCall(ROOT_REQUEST))
     .then(releasePolicy)
-    .then(s' = settle(s, 0, SOURCE_ERROR))
-    .then(s' = begin(s, ROOT_REQUEST))
+    .then(finishSource(0, SOURCE_ERROR))
+    .then(startCall(ROOT_REQUEST))
     .then(releasePolicy)
     .expect(s.o.calls == List(SOURCE_ERROR, SOURCE_ERROR, CALL_PENDING) and s.o.loaders == 2)
-  run sharedFailureHasOneAttributedErrorTest = init.then(s' = begin(s, ROOT_REQUEST))
+  run sharedFailureHasOneAttributedErrorTest = init.then(startCall(ROOT_REQUEST))
     .then(releasePolicy)
-    .then(s' = begin(s, ROOT_REQUEST))
+    .then(startCall(ROOT_REQUEST))
     .then(releasePolicy)
-    .then(s' = settle(s, 0, SOURCE_ERROR))
+    .then(finishSource(0, SOURCE_ERROR))
     .expect(s.d.coalesced == List("request_local") and s.d.fallbackErrors == List("request_local"))
-  run disabledSourceFailureHasNoCacheTrailTest = init.then(s' = begin(s, OUTSIDE_REQUEST))
-    .then(s' = settle(s, 0, SOURCE_ERROR))
+  run disabledSourceFailureHasNoCacheTrailTest = init.then(startCall(OUTSIDE_REQUEST))
+    .then(finishSource(0, SOURCE_ERROR))
     .expect(s.d.fallbackErrors == List() and s.o.calls == List(SOURCE_ERROR))
-  run policyClosureFailureIsAttributedWithoutCachingTest = init.then(s' = begin(s, ROOT_REQUEST))
-    .then(s' = close(s, ROOT_REQUEST))
+  run policyClosureFailureIsAttributedWithoutCachingTest = init.then(startCall(ROOT_REQUEST))
+    .then(closeContext(ROOT_REQUEST))
     .then(releasePolicy)
-    .then(s' = settle(s, 0, SOURCE_ERROR))
+    .then(finishSource(0, SOURCE_ERROR))
     .expect(s.d.fallbackErrors == List("noop"))
-  run absentValueIsMemoizedTest = init.then(s' = begin(s, ROOT_REQUEST))
+  run absentValueIsMemoizedTest = init.then(startCall(ROOT_REQUEST))
     .then(releasePolicy)
-    .then(s' = settle(s, 0, VALUE_ABSENT))
-    .then(s' = begin(s, ROOT_REQUEST))
+    .then(finishSource(0, VALUE_ABSENT))
+    .then(startCall(ROOT_REQUEST))
     .then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ABSENT, VALUE_ABSENT) and s.o.loaders == 1)
+
+  run independentRequestMemoUsesLastCompletionTest = init
+    .then(changePolicy(POLICY_NO_COALESCING))
+    .then(startCall(ROOT_REQUEST)).then(releasePolicy)
+    .then(startCall(ROOT_REQUEST)).then(releasePolicy)
+    .then(finishSource(1, VALUE_TWO))
+    .then(finishSource(0, VALUE_ONE))
+    .then(startCall(ROOT_REQUEST)).then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE)
+      and s.o.loaders == 2 and s.d.coalesced == List())
+
+  run pendingSourceKeepsRequestPolicyAcrossBypassAndClosureTest = init
+    .then(changePolicy(POLICY_NO_COALESCING))
+    .then(startCall(ROOT_REQUEST)).then(releasePolicy)
+    .then(changePolicy(POLICY_NO_REQUEST))
+    .then(startCall(ROOT_REQUEST)).then(releasePolicy)
+    .then(closeContext(ROOT_REQUEST))
+    .then(openContext(REPLACEMENT_REQUEST))
+    .then(changePolicy(POLICY_INHERIT))
+    .then(finishSource(1, VALUE_TWO)).then(finishSource(0, VALUE_ONE))
+    .then(startCall(REPLACEMENT_REQUEST)).then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, CALL_PENDING)
+      and s.o.loaders == 3 and s.memo == List(NO_MEMO, NO_MEMO))
 }

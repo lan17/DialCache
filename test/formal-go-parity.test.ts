@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 type Ledger = {
   status: string;
-  inventory: { sourceDeclarations: number };
+  inventory: { sourceDeclarations: number; requiredWitnesses: number; casesWithQuintRegressionReplay: number };
   sourceInventory: Array<{
     path: string;
     sha256: string;
@@ -11,8 +11,9 @@ type Ledger = {
     candidateGoFiles: string[];
     mappingReview: { goBindings: Array<{ path: string; sha256: string; symbols: string[] }> };
   }>;
-  profiles: Array<{ id: string; version: number }>;
-  cases: Array<{ id: string; status: string }>;
+  profiles: Array<{ id: string; version: number; status: string; scheduledRegressions: string[]; witnessSources: string[] }>;
+  cases: Array<{ id: string; status: string; quintReplays: string[]; generatedVectors: Array<{ artifact: string; group?: string; name: string }> }>;
+  vectorExports: Array<{ model: string; artifactSha256: string }>;
   sourceDeclarationScope: {
     limitations: string;
     nativeBindingAdaptations: Array<{ id: string; rationale: string }>;
@@ -33,7 +34,7 @@ describe("Go parity ledger freshness", () => {
   it("validates reviewed inventory without claiming executed parity", () => {
     expect(validate(ledger())).toMatchObject({
       kind: "accounting-and-freshness", sourceFiles: 27, declarations: 772,
-      reviewedTestsAndDocs: 44, semanticCases: 261, profiles: 9,
+      reviewedTestsAndDocs: 44, semanticCases: 262, profiles: 15, vectorModels: 4,
       meaning: "Fresh reviewed mappings and inventory snapshots; execution evidence remains separately assessed.",
     });
   });
@@ -71,6 +72,9 @@ describe("Go parity ledger freshness", () => {
     const cases = ledger();
     cases.cases.pop();
     expect(() => validate(cases)).toThrow(/Semantic case inventory\/order differs/);
+    const witnesses = ledger();
+    witnesses.profiles.find(row => row.witnessSources.length > 0)!.witnessSources.pop();
+    expect(() => validate(witnesses)).toThrow(/witness source inventory is stale/);
   });
 
   it("requires explicit native binding rationale without upgrading prose edits to evidence", () => {
@@ -83,5 +87,36 @@ describe("Go parity ledger freshness", () => {
     prose.reviewedTestAndDocumentationAudit.limitations += " Evidence is assessed separately.";
     expect(validate(prose)).toMatchObject({ kind: "accounting-and-freshness" });
     expect(prose.cases.map(row => row.status)).toEqual(statuses);
+  });
+
+  it("rejects omitted scheduled Quint regression evidence", () => {
+    const input = ledger();
+    input.cases.find(row => row.quintReplays.length > 0)!.quintReplays.pop();
+    expect(() => validate(input)).toThrow(/model-driven replay\/vector references are stale/);
+    const schedule = ledger();
+    schedule.profiles.find(row => row.scheduledRegressions.length > 0)!.scheduledRegressions.pop();
+    expect(() => validate(schedule)).toThrow(/scheduled regression histories are stale/);
+  });
+
+  it("rejects omitted generated primitive vectors and stale artifact identity", () => {
+    const input = ledger();
+    input.cases.find(row => row.generatedVectors.length > 0)!.generatedVectors.pop();
+    expect(() => validate(input)).toThrow(/model-driven replay\/vector references are stale/);
+    const artifact = ledger();
+    artifact.vectorExports[0]!.artifactSha256 = "0".repeat(64);
+    expect(() => validate(artifact)).toThrow(/artifact fingerprint is stale/);
+    const inventory = ledger();
+    inventory.vectorExports.pop();
+    expect(() => validate(inventory)).toThrow(/Generated vector model inventory\/order differs/);
+  });
+
+  it("distinguishes referenced witnesses from the complete required gate", () => {
+    const input = ledger(); input.inventory.requiredWitnesses--;
+    expect(() => validate(input)).toThrow(/Required\/referenced witness inventory is stale/);
+  });
+
+  it("does not promote executable schedules to completed run evidence", () => {
+    const input = ledger(); input.profiles[0]!.status = "passed-shared-corpus";
+    expect(() => validate(input)).toThrow(/must not claim a completed replay/);
   });
 });

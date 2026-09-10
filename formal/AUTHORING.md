@@ -96,21 +96,55 @@ For each new rule or interaction:
 3. **Challenge the rule.** Add an independently stated invariant or regression,
    and a representative fault when it adds useful evidence. Merely declaring a
    property is insufficient: schedule it in `execution.json`.
-4. **Exercise both implementations.** Require a generated witness that exposes
-   the rule's consequence, and replay the same Quint histories in TypeScript and
-   Go. Fixed scenarios preserve narrow regressions; protocol vectors and native
+4. **Exercise both implementations.** Require a generated witness or exported
+   Quint regression that exposes the rule's consequence, and replay the same
+   history in TypeScript and Go. Fixed scenarios preserve narrow regressions;
+   protocol vectors and native
    tests cover wire and language boundaries. The driver supplies only external inputs and asserts actual public
    results/effects. Expected model state must never drive the implementation.
 5. **Account for the evidence.** Link the case, property, scenario, and required
    witness in the existing catalogs. Preserve explicit gaps and update profile
    claims only after the corresponding language driver passes.
 
-Both implementations now replay all nine profiles. To expand their generated
+Both implementations replay the registered profiles. To expand their generated
 scope, model the next bounded interaction and its environment controls, then
 replay the same corpus in both languages. A readable model and TypeScript
 replay do not by themselves establish Go conformance; the Go completion gate
 also requires every scheduled profile, fixed case, protocol case, and witness
 gate to finish successfully.
+
+## Exporting a deterministic regression
+
+Sampled histories explore combinations. Named Quint regressions guarantee that
+a reviewed boundary is exercised even when a random seed does not reach it.
+Keep the expected result in Quint; do not copy it into a hand-maintained JSON
+scenario and call that Quint-driven evidence.
+
+Profiles using `inputEncoding: "explicit-v1"` declare a top-level input record:
+
+```quint
+var input: { name: str, choice: int }
+```
+
+Every public action records its canonical command and external choice. Use
+`name: "init"` only for initialization and `choice: -1` when the command has no
+choice. A parameterized public action can serve both random exploration and a
+named regression. The regression must invoke those actions; an arbitrary
+assignment to private model state is not an executable input.
+
+List exportable runs in the model's `replayRegressions` in `execution.json`.
+Generation exports them under `regressions/<profile>/` alongside the sampled
+corpus. Quint's deterministic test export omits MBT action metadata, so
+`replay-inputs.mjs` normalizes only the explicit input record into the common
+envelope. It never infers commands from differences in expected state.
+
+Each implementation validates the input domain, performs the real public
+operation, and compares its own observations after every step. Both completion
+gates require the exact scheduled regression inventory. Link a case to its run
+with `quintReplays: ["profile/regressionTest"]`; the same case must cite that
+scheduled Quint check with a precise applicability scope. A checked property,
+an explanatory definition, a sampled witness and an exported regression are
+distinct evidence categories.
 
 ## Maintaining case and witness evidence
 

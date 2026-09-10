@@ -4,31 +4,53 @@ Measure named contract cases, exercised boundaries, and detected behavioral defe
 
 ## Evidence inventory
 
-[`semantic-cases.json`](./semantic-cases.json) refines the 69 obligations in [`CONTRACTS.md`](./CONTRACTS.md) into 261 named cases. Each case has a rule, parent obligations, and explicit references to fixed scenarios, required generated witnesses, model properties/regressions, or protocol vectors. Cases without executable evidence record a gap. Parent obligations retain the docs/test provenance in [`source-audit.json`](./source-audit.json).
+[semantic-cases.json](./semantic-cases.json) refines the obligations in
+[CONTRACTS.md](./CONTRACTS.md) into named behavioral and wire cases. All 240
+behavioral cases now cite checked Quint clauses and Quint-driven implementation
+evidence. The wire expansion adds Quint-derived artifacts alongside fixed
+vectors; native cases remain in [feature-coverage.json](./feature-coverage.json).
+Get current counts from `node formal/check-semantic-coverage.mjs`, rather than
+summing tables across documents.
 
-| Reviewed scope | Named cases | Cases with portable implementation evidence | Cases with required generated witnesses |
-| --- | ---: | ---: | ---: |
-| Behavioral | 239 | 236 | 181 |
-| Protocol | 22 | 22 | — |
-| Total | 261 | 258 | 181 |
+The checker reports these distinct categories:
 
-These are **declared evidence links**, validated by `node formal/check-semantic-coverage.mjs`. Execution must also pass. The protocol column includes invalidation transitions run separately against Redis/Valkey in integration CI. Fixed scenarios and vectors count as portable implementation evidence without needing a Quint generator.
+| Category | What is counted |
+| --- | --- |
+| Model | A cited invariant/regression scheduled in [execution.json](./execution.json) |
+| Portable | Fixed scenarios, witnesses, exported Quint regressions or wire vectors |
+| Generated witness | A required consequential history in [coverage-witnesses.json](./coverage-witnesses.json) |
+| Quint regression replay | A named public-action regression exported and replayed in both ports |
+| Quint vector replay | Expected primitive outputs exported from a scheduled Quint model |
+| Quint-driven | The union of the preceding three Quint execution categories |
 
-Model evidence must name an invariant or regression scheduled in [`execution.json`](./execution.json). Its declaration inventory ignores comments and strings, tolerates layout changes, and requires every model regression to remain scheduled with its `Test` suffix. This guards execution accounting; Quint still validates language syntax, types, and properties. Readability and helper refactoring do not change the case counts or broaden any profile claim.
+These categories overlap. Definitions/helpers explain rules but are not checked
+properties. A named case is not an independent proof, and a finite corpus is not
+the full input domain. [quint-case-audit.json](./quint-case-audit.json) records
+what each cited check actually establishes; metadata validation cannot replace
+semantic review of that scope.
 
-The separate [`quint-case-audit.json`](./quint-case-audit.json) reviews each scheduled-check citation, recording the clause it actually establishes and its limits. Scheduled checks are cited for 176 behavioral cases and three protocol cases. Separate transition/helper/predicate references explain behavior but are not independently checked properties. Cases without either kind of reference retain an explicit modeling gap. These categories overlap with execution evidence and must not be added into a coverage score.
+Previous model-only gaps now have replay: local read/write failure consequences
+use native injection seams, and marker-preservation histories observe actual
+existence and TTL around value reads/writes. Explicit-input regressions also
+cover default/omitted policy, exact cohorts, source budgets, dark publication,
+mixed shadow capacity and recovered absence skipping selected shadow work.
 
-Three behavioral cases have scheduled model checks but no portable scenario, generated witness, or vector link: local read/write failures (C27), and reads/value writes preserving watermark lifetime (C38). Local storage has no public fault-injection boundary. The C38 model checks cutoff preservation; native real-Redis tests separately check marker existence and TTL preservation. This accounting does not turn native evidence into a portable trace or infer marker lifetime from a cutoff-only property. Every named case has some declared executable evidence; execution and the scope of each assertion still require review.
+Every positive fixed scenario, fixed protocol/invalidation vector and generated
+wire artifact row must have a semantic-case assignment. Native evidence names
+exact tests, asserted clauses and applicable language adaptations. The source
+audit separately accounts for reviewed test declarations and documentation
+sections; it does not count assertions or prove behavioral equivalence.
 
-[`FEATURE-COVERAGE.md`](./FEATURE-COVERAGE.md) groups the cases into 12 feature families and accounts for 33 separate native cases, including API, exporter, codec, clock and adapter obligations. The metadata gates require all 244 positive scenarios, all 134 protocol vectors, and all 49 invalidation vectors to have a semantic-case assignment. Native evidence names exact tests and their checked scope in each applicable language, or an explicit non-applicability reason.
-
-This is a reviewed, finite case inventory, not an exhaustive enumeration of assertions or feature products. Some cases share scenarios or witnesses. Splitting a row cannot increase confidence by itself. The separate source audit accounts for 564 test declarations and 172 documentation sections, not individual assertions. Semantic review is still required to discover missing cases and check that each cited artifact actually asserts the rule.
+The final combined CI and mutation run for this expansion is pending. Historical
+passing reports keep their actual revision, source and corpus fingerprints.
+Declared evidence links and focused replay passes do not make those reports
+current for changed inputs.
 
 ## Generated boundary evidence
 
-[`coverage-witnesses.json`](./coverage-witnesses.json) names 344 required boundary/outcome/race witnesses across the eight effects/feature profiles. The core profile has replay and action checks but no case-level witness gate. Reachability is checked on generated traces, and every trace must independently replay against the real implementation. Expected model state is used only for assertions and reachability classification; it never supplies implementation observations.
+[`coverage-witnesses.json`](./coverage-witnesses.json) names the required boundary, outcome and race witnesses for each profile. The core profile has replay and action checks but no case-level witness gate. Reachability is checked across sampled histories and exported public-action regressions, and every history must independently replay against the real implementation. Expected model state is used only for assertions and reachability classification; it never supplies implementation observations.
 
-A case links to a specific required witness, not merely an action name or the presence of a test file. For example, read-budget precedence requires a first read before runtime policy changes, late source fulfillment and rejection have separate witnesses, and failed recovery requires the original source-error identity. Default-off logging requires an actually omitted flag; the fixed "warning omitted" scenario explicitly sets `false` and is not credited for that default. Multiple witness references are all required, but do not imply that all those events occurred in one history; use a dedicated interaction witness for that claim.
+A case links to a specific required witness, not merely an action name or the presence of a test file. For example, read-budget precedence requires a first read before runtime policy changes, late source fulfillment and rejection have separate witnesses, and failed recovery requires the original source-error identity. Default-off logging requires an actually omitted flag; a separate exported regression distinguishes omission from an explicit false runtime reply. Multiple witness references are all required, but do not imply that all those events occurred in one history; use a dedicated interaction witness for that claim.
 
 Witness classification also has negative controls in `test/formal-witness-boundaries.test.ts` and `test/formal-witness-attribution.test.ts`. A matching fixture or intermediate phase with a missing or contradictory public consequence must not count. These controls challenge the classifier; they are neither positive cache cases nor mutation-detection credit.
 
@@ -37,16 +59,16 @@ Witness classification also has negative controls in `test/formal-witness-bounda
 [`semantic-mutations.json`](./semantic-mutations.json) defines 13 reviewed, single-site faults. `node formal/measure-semantics.mjs` applies each in an isolated copy, verifies that it compiles, and runs three cohorts against it:
 
 1. **Ordinary:** existing unit tests, excluding all formal tests.
-2. **Generated:** generated implementation replays and their reachability gates.
-3. **Portable:** generated replay plus positive fixed scenarios and protocol vectors.
+2. **Generated:** sampled and exported-regression replays, reachability gates, and Quint-derived primitive vectors.
+3. **Portable:** the generated cohort plus positive fixed scenarios and complementary fixed protocol vectors.
 
 The source edits are TypeScript-specific audit machinery. Ports reuse the case/witness/vector contracts and can supply equivalent faults for their own implementation.
 
-Execution runs the generated and fixed/vector test files once each, using Vitest's normal file isolation. The reported portable result is their union: a fault is detected if either component records a failed assertion. Baseline counts and failing test names are combined from those actual runs. Both component reports are retained; generated traces are not redundantly replayed a second time per fault.
+Execution partitions protocol rows with `DIALCACHE_PROTOCOL_CORPUS=generated` or `fixed`; ordinary runs use their complete union. It runs each cohort using Vitest's normal file isolation. The reported portable result is their union: a fault is detected if either component records a failed assertion. Baseline counts and failing test names are combined from those actual runs. Both component reports are retained; generated traces are not redundantly replayed a second time per fault.
 
-Negative harness tests and inventory checks are excluded from detection cohorts: a test that expects a deliberately broken driver to fail must not count as behavioral fault detection. Integration/Lua tests are outside this local mutation comparison. All unmodified baselines must pass. Compile/import errors, crashes, timeouts, missing reports, empty runs, and incomplete surviving runs fail measurement rather than counting as detections.
+Negative harness tests and inventory checks are excluded from detection cohorts: a test that expects a deliberately broken driver to fail must not count as behavioral fault detection. Real-server integration/Lua tests are outside this local mutation comparison; they have their own completion evidence. All unmodified baselines must pass. Compile/import errors, crashes, timeouts, missing reports, empty runs, and incomplete surviving runs fail measurement rather than counting as detections.
 
-The following is a **historical measurement from the earlier Go parity milestone, before the current case/witness expansion**. Its completed TypeScript measurement produced this comparison. All unmodified baselines passed: 660 ordinary tests, 4,008 generated replays/witness gates, and 372 fixed scenarios/protocol vectors (4,380 positive portable tests/gates in their union). Exact source, input, and corpus fingerprints are retained in that report. These counts and detections describe that snapshot; the expanded suite requires fresh reports. CI repeats measurement on the committed revision.
+The following is a **historical measurement from the earlier Go parity milestone, before the current case/witness expansion and generated primitive cohort**. Its completed TypeScript measurement produced this comparison. All unmodified baselines passed: 660 ordinary tests, 4,008 generated replays/witness gates, and 372 fixed scenarios/protocol vectors (4,380 positive portable tests/gates in their union). Exact source, input, and corpus fingerprints are retained in that report. These counts and detections describe that snapshot; the expanded suite requires fresh reports. CI repeats measurement on the committed revision.
 
 | Mutant scope | Ordinary detected | Generated detected | Portable detected |
 | --- | ---: | ---: | ---: |
@@ -91,7 +113,7 @@ The runner clears inherited trace selectors, uses the complete generated directo
 
 Each catalog entry's `requiredDetections` is a regression gate. CI fails if a previously detected fault survives. Newly detected faults remain visible as improvements; update the required set after inspecting the result. Source edits must match exactly once, so implementation drift requires reviewing the mutation rather than silently skipping it.
 
-To expand assurance, add a test/doc-derived case and precise executable evidence, require a generated witness where appropriate, then add a representative fault for a previously unchallenged rule. Preserve gaps until execution closes them. Keep code coverage, source accounting, case evidence, and mutation detection as separate measurements. The current Go suite requires all nine shared profiles, all 244 fixed scenarios and all 134 protocol cases, with an equivalent 13-fault catalog in `go-mutations.json`. Broader interaction histories and larger domains remain separate assurance work.
+To expand assurance, add a test/doc-derived case and precise executable evidence, require a generated witness where appropriate, then add a representative fault for a previously unchallenged rule. Preserve gaps until execution closes them. Keep code coverage, source accounting, case evidence, and mutation detection as separate measurements. The current Go suite requires every shared profile, exported regression, fixed scenario and protocol case registered by the manifests, with an equivalent fault catalog in `go-mutations.json`. Broader interaction histories and larger domains remain separate assurance work.
 
 ## Model properties and cross-language execution
 

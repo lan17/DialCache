@@ -1,0 +1,2813 @@
+[
+  {
+    "regression": "omittedLoggingKeepsMismatchMetricsOnlyTest",
+    "trace": {
+      "states": [
+        {
+          "input": {
+            "choice": {
+              "#bigint": "2"
+            },
+            "name": "init"
+          },
+          "s": {
+            "o": {
+              "calls": [],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "0"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "0"
+              },
+              "reads": {
+                "#bigint": "0"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "1"
+            },
+            "name": "seed"
+          },
+          "s": {
+            "o": {
+              "calls": [],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "0"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "0"
+              },
+              "reads": {
+                "#bigint": "0"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "beginCall"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "0"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "releaseRead"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "0"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "2"
+            },
+            "name": "resolveLoader"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "2"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "1"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "releaseLoad"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "2"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "1"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "1"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "2"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "releaseRead"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "2"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "1"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "1"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "2"
+              },
+              "recovery": [],
+              "shadow": [
+                "mismatch"
+              ],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [
+                {
+                  "#bigint": "0"
+                }
+              ],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "regression": "explicitFalseLoggingOverridesEnabledDefaultTest",
+    "trace": {
+      "states": [
+        {
+          "input": {
+            "choice": {
+              "#bigint": "6"
+            },
+            "name": "init"
+          },
+          "s": {
+            "o": {
+              "calls": [],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "0"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "0"
+              },
+              "reads": {
+                "#bigint": "0"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "0"
+            },
+            "name": "logPolicy"
+          },
+          "s": {
+            "o": {
+              "calls": [],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "0"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "0"
+              },
+              "reads": {
+                "#bigint": "0"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "1"
+            },
+            "name": "seed"
+          },
+          "s": {
+            "o": {
+              "calls": [],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "0"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "0"
+              },
+              "reads": {
+                "#bigint": "0"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "beginCall"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "0"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "releaseRead"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "0"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "2"
+            },
+            "name": "resolveLoader"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "2"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "1"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "releaseLoad"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "2"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "1"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "1"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "2"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "releaseRead"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "2"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "1"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "1"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "2"
+              },
+              "recovery": [],
+              "shadow": [
+                "mismatch"
+              ],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [
+                {
+                  "#bigint": "0"
+                }
+              ],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "regression": "confirmationPastFreshnessKeepsOriginalPayloadAndAgeTest",
+    "trace": {
+      "states": [
+        {
+          "input": {
+            "choice": {
+              "#bigint": "6"
+            },
+            "name": "init"
+          },
+          "s": {
+            "o": {
+              "calls": [],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "0"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "0"
+              },
+              "reads": {
+                "#bigint": "0"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "1"
+            },
+            "name": "seed"
+          },
+          "s": {
+            "o": {
+              "calls": [],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "0"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "0"
+              },
+              "reads": {
+                "#bigint": "0"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "beginCall"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "0"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "releaseRead"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "0"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "2"
+            },
+            "name": "resolveLoader"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "2"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "1"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "releaseLoad"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "2"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "1"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "1"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "2"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "60000"
+            },
+            "name": "advanceWall"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "2"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "1"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "1"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "2"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "releaseRead"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "2"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "1"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "1"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "2"
+              },
+              "recovery": [],
+              "shadow": [
+                "mismatch"
+              ],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "1"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "regression": "confirmationRollbackKeepsPayloadAndClampsAgeTest",
+    "trace": {
+      "states": [
+        {
+          "input": {
+            "choice": {
+              "#bigint": "6"
+            },
+            "name": "init"
+          },
+          "s": {
+            "o": {
+              "calls": [],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "0"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "0"
+              },
+              "reads": {
+                "#bigint": "0"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "1"
+            },
+            "name": "seed"
+          },
+          "s": {
+            "o": {
+              "calls": [],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "0"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "0"
+              },
+              "reads": {
+                "#bigint": "0"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "beginCall"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "0"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "releaseRead"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "0"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "2"
+            },
+            "name": "resolveLoader"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "2"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "1"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "releaseLoad"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "2"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "1"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "1"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "2"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "rollbackWall"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "2"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "1"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "1"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "2"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "releaseRead"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "2"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "1"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "1"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "2"
+              },
+              "recovery": [],
+              "shadow": [
+                "mismatch"
+              ],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [
+                {
+                  "#bigint": "0"
+                }
+              ],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [
+                {
+                  "layer": "remote_shadow",
+                  "offsetMs": {
+                    "#bigint": "1000"
+                  }
+                }
+              ],
+              "warnings": {
+                "#bigint": "1"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "regression": "futureDarkAcquisitionReportsOffsetAndFillsMissTest",
+    "trace": {
+      "states": [
+        {
+          "input": {
+            "choice": {
+              "#bigint": "0"
+            },
+            "name": "init"
+          },
+          "s": {
+            "o": {
+              "calls": [],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "0"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "0"
+              },
+              "reads": {
+                "#bigint": "0"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "1"
+            },
+            "name": "seed"
+          },
+          "s": {
+            "o": {
+              "calls": [],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "0"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "0"
+              },
+              "reads": {
+                "#bigint": "0"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "rollbackWall"
+          },
+          "s": {
+            "o": {
+              "calls": [],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "0"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "0"
+              },
+              "reads": {
+                "#bigint": "0"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "beginCall"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "0"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "releaseRead"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "0"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [
+                {
+                  "layer": "remote_shadow",
+                  "offsetMs": {
+                    "#bigint": "1000"
+                  }
+                }
+              ],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "2"
+            },
+            "name": "resolveLoader"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "2"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [
+                {
+                  "layer": "remote_shadow",
+                  "offsetMs": {
+                    "#bigint": "1000"
+                  }
+                }
+              ],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "releaseDump"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "2"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [
+                {
+                  "layer": "remote_shadow",
+                  "offsetMs": {
+                    "#bigint": "1000"
+                  }
+                }
+              ],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "releaseWrite"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "2"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [
+                "filled"
+              ],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [
+                {
+                  "layer": "remote_shadow",
+                  "offsetMs": {
+                    "#bigint": "1000"
+                  }
+                }
+              ],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "regression": "futureLateDarkReadKeepsTimeoutAndReportsOffsetTest",
+    "trace": {
+      "states": [
+        {
+          "input": {
+            "choice": {
+              "#bigint": "0"
+            },
+            "name": "init"
+          },
+          "s": {
+            "o": {
+              "calls": [],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "0"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "0"
+              },
+              "reads": {
+                "#bigint": "0"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "1"
+            },
+            "name": "seed"
+          },
+          "s": {
+            "o": {
+              "calls": [],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "0"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "0"
+              },
+              "reads": {
+                "#bigint": "0"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "rollbackWall"
+          },
+          "s": {
+            "o": {
+              "calls": [],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "0"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "0"
+              },
+              "reads": {
+                "#bigint": "0"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "beginCall"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "0"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "10"
+            },
+            "name": "advance"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "4"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [
+                "timeout"
+              ],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [
+                "local"
+              ],
+              "futureOffsets": [],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "releaseRead"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "4"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [
+                "timeout"
+              ],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [
+                "local"
+              ],
+              "futureOffsets": [
+                {
+                  "layer": "remote_shadow",
+                  "offsetMs": {
+                    "#bigint": "990"
+                  }
+                }
+              ],
+              "warnings": {
+                "#bigint": "0"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+]

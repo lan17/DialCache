@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { checkSourceAudit } from './check-source-audit.mjs';
 import { checkFeatureCoverage } from './check-feature-coverage.mjs';
 import { readExecution, scanDeclarations, scheduledProperties, validateExecution } from './execution.mjs';
+import { protocolCorpus, readVectorArtifact } from './vector-artifacts.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const read = path => readFileSync(root + path, 'utf8');
@@ -10,21 +11,22 @@ const parse = path => JSON.parse(read(path));
 const contractIds = [...read('formal/CONTRACTS.md').matchAll(/^\| ([CW]\d{2}) \|/gm)].map(m => m[1]);
 const scenarios = new Set(parse('formal/behavioral-scenarios.json').scenarios.map(s => s.name));
 const witnesses = parse('formal/coverage-witnesses.json');
-const protocol = parse('formal/protocol-vectors.json');
+const protocol = protocolCorpus();
 const invalidation = parse('formal/invalidation-vectors.json').vectors;
 
 export function checkProfiles(registry = parse('formal/profiles.json')) {
   if (registry.schemaVersion !== 1 || registry.specificationVersion !== '0.1.0' || registry.status !== 'experimental') throw new Error('Unsupported specification/profile registry');
   if (registry.behavioralSchemaVersion !== parse('formal/behavioral-scenarios.json').schemaVersion ||
     registry.protocolSchemaVersion !== protocol.schemaVersion || registry.invalidationSchemaVersion !== parse('formal/invalidation-vectors.json').schemaVersion) throw new Error('Profile registry schema versions have drifted');
-  const expected = ['admission', 'core', 'effects', 'independent', 'layers', 'policy', 'recovery', 'scope', 'shadow'];
+  const expected = ['admission', 'core', 'effects', 'independent', 'layers', 'local-clock', 'local-failure', 'policy', 'recovery', 'recovery-read', 'runtime-boundaries', 'scope', 'shadow', 'shadow-layers', 'source-budgets'];
   if (!Array.isArray(registry.profiles) || JSON.stringify(registry.profiles.map(p => p.id).sort()) !== JSON.stringify(expected)) throw new Error('Profile inventory changed; review claims');
   read(registry.normativeDefinition);
   if (registry.behavioralAuthority?.kind !== 'quint' || registry.behavioralAuthority.executionManifest !== 'formal/execution.json' || !registry.behavioralAuthority.conflictPolicy) throw new Error('Quint behavioral authority must be explicit');
   for (const profile of registry.profiles) {
-    const supportedVersion = ["policy", "shadow"].includes(profile.id) ? 2 : 1;
+    const supportedVersion = ["policy", "shadow"].includes(profile.id) ? 3 : ["effects", "scope", "shadow", "layers", "independent"].includes(profile.id) ? 2 : 1;
     if (profile.version !== supportedVersion) throw new Error(`${profile.id}: unsupported profile version`);
     read(profile.definition); read(profile.model);
+    for (const path of profile.witnessSources ?? []) read(path);
     const smoke = parse(profile.smoke);
     if (!Array.isArray(smoke.states) || !smoke.states.length) throw new Error(`${profile.id}: missing smoke evidence`);
     for (const id of profile.historyContracts ?? []) if (!contractIds.includes(id)) throw new Error(`${profile.id}: unknown history contract`);
@@ -83,6 +85,8 @@ export function checkSemanticCoverage(catalog = parse('formal/semantic-cases.jso
   const manifest = readExecution();
   const execution = validateExecution(manifest);
   const scheduled = scheduledProperties(manifest);
+  const vectorArtifacts = new Map(manifest.models.filter(model => model.vectorExport)
+    .map(model => [model.vectorExport.artifact, { model, value: readVectorArtifact(model) }]));
   const sourceAccounting = checkSourceAudit();
   if (catalog.schemaVersion !== 1 || !Array.isArray(catalog.cases) || !catalog.cases.length) throw new Error('Invalid semantic case inventory');
   const ids = new Set(), parents = new Set();
@@ -101,14 +105,41 @@ export function checkSemanticCoverage(catalog = parse('formal/semantic-cases.jso
     for (const model of c.models) {
       if (!scheduled.has(model)) throw new Error(`${c.id}: model property is not scheduled for execution: ${model}`);
     }
+    if (c.quintReplays !== undefined) {
+      if (!Array.isArray(c.quintReplays) || new Set(c.quintReplays).size !== c.quintReplays.length) throw new Error(`${c.id}: invalid Quint regression replay inventory`);
+      for (const reference of c.quintReplays) {
+        const parts = typeof reference === 'string' ? reference.split('/') : [];
+        const model = manifest.models.find(model => model.profile === parts[0]);
+        if (parts.length !== 2 || !model?.replayRegressions?.includes(parts[1]) ||
+            !c.models.includes(`${model.path}:${parts[1]}`)) throw new Error(`${c.id}: Quint replay needs a cited scheduled exported regression: ${reference}`);
+      }
+    }
+    if (c.generatedVectors !== undefined) {
+      if (!Array.isArray(c.generatedVectors) || !c.generatedVectors.length) throw new Error(`${c.id}: invalid generated vector references`);
+      const references = new Set();
+      for (const reference of c.generatedVectors) {
+        const source = vectorArtifacts.get(reference.artifact);
+        const group = reference.group ?? 'vectors';
+        const rows = source?.value[group];
+        const key = `${reference.artifact}/${group}/${reference.name}`;
+        if (!source || !Array.isArray(rows) || !rows.length || references.has(key)
+          || (reference.name !== '*' && !rows.some(row => row.name === reference.name))
+          || !c.models.some(ref => ref.startsWith(`${source.model.path}:`))) throw new Error(`${c.id}: generated vector needs a cited model and exported case: ${key}`);
+        references.add(key);
+      }
+    }
     for (const vector of c.vectors) {
       const parts = vector.split('/');
       const entries = parts[0] === 'protocol' ? protocol[parts[1]] : parts[0] === 'invalidation' ? invalidation : undefined;
       const name = parts[0] === 'protocol' ? parts.slice(2).join('/') : parts.slice(1).join('/');
       if (!Array.isArray(entries) || !entries.length || (name !== '*' && !entries.some(v => v.name === name))) throw new Error(`${c.id}: unknown vector ${vector}`);
     }
-    const executable = c.scenarios.length + c.generated.length + c.models.length + c.vectors.length;
-    if (!executable && (typeof c.gap !== 'string' || c.gap.length < 10)) throw new Error(`${c.id}: uncovered case needs an explicit gap`);
+    // A fixed native example cannot replace the agreed portable authority.
+    // Native-only details belong in the explicit binding boundary inventory.
+    if (!c.models.length) throw new Error(`${c.id}: portable case requires a scheduled Quint check`);
+    if (!c.generated.length && !c.quintReplays?.length && !c.generatedVectors?.length) {
+      throw new Error(`${c.id}: portable case requires Quint-driven implementation replay`);
+    }
   }
   if (contractIds.some(id => !parents.has(id))) throw new Error('Portable contract missing from case inventory');
   // A passing scenario is useful evidence only when its obligation is named.
@@ -131,6 +162,16 @@ export function checkSemanticCoverage(catalog = parse('formal/semantic-cases.jso
       throw new Error(`Invalidation vector missing from case inventory: ${entry.name}`);
     }
   }
+  for (const [artifact, { value }] of vectorArtifacts) {
+    for (const [group, rows] of Object.entries(value).filter(([, value]) => Array.isArray(value))) {
+      for (const row of rows) {
+        if (!catalog.cases.some(c => c.generatedVectors?.some(ref => ref.artifact === artifact
+          && (ref.group ?? 'vectors') === group && (ref.name === '*' || ref.name === row.name)))) {
+          throw new Error(`Quint vector missing from case inventory: ${artifact}/${group}/${row.name}`);
+        }
+      }
+    }
+  }
   const applicability = checkQuintCaseAudit(undefined, catalog, manifest);
   const featureCoverage = checkFeatureCoverage(undefined, catalog);
   const mutations = parse('formal/semantic-mutations.json');
@@ -142,9 +183,12 @@ export function checkSemanticCoverage(catalog = parse('formal/semantic-cases.jso
     if (!Array.isArray(m.requiredDetections) || m.requiredDetections.some(c => !['ordinary', 'generated', 'portable'].includes(c))) throw new Error(`${m.id}: unknown mutation cohort`);
   }
   const behavioral = catalog.cases.filter(c => !c.vectors.length);
-  const portable = c => c.scenarios.length || c.generated.length || c.vectors.length;
+  const portable = c => c.scenarios.length || c.generated.length || c.vectors.length || c.quintReplays?.length || c.generatedVectors?.length;
   const count = cases => ({ total: cases.length, model: cases.filter(c => c.models.length).length,
     portable: cases.filter(portable).length, generated: cases.filter(c => c.generated.length).length,
+    quintRegressionReplay: cases.filter(c => c.quintReplays?.length).length,
+    quintVectorReplay: cases.filter(c => c.generatedVectors?.length).length,
+    quintDriven: cases.filter(c => c.generated.length || c.quintReplays?.length || c.generatedVectors?.length).length,
     modelOnly: cases.filter(c => c.models.length && !portable(c)).map(c => c.id),
     uncovered: cases.filter(c => !c.models.length && !portable(c)).map(c => c.id) });
   return { profiles, execution, sourceAccounting, applicability, featureCoverage, contracts: parents.size, cases: count(catalog.cases), behavioral: count(behavioral),

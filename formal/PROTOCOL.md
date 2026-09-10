@@ -1,10 +1,41 @@
-# Portable text decoding and invalidation states
+# Portable keys, frames, envelopes and invalidation
 
 These rules supplement the [wire protocol reference](../docs/redis.md#advanced-wire-protocol)
 and the W01–W09 obligations in [CONTRACTS.md](./CONTRACTS.md). They define
 interoperability behavior independently of a host language's string or Redis API.
-The protocol vectors test these rules; passing the finite examples does not
-replace implementing the stated input domains.
+Quint primitive models define the selected transforms; their generators export
+expected outputs into shared artifacts. Fixed vectors supplement those domains.
+Passing the finite examples does not replace implementing the stated rules.
+
+## Authority and generated artifacts
+
+`execution.json` schedules each primitive model's independent properties,
+regressions and `vectorExport`. That entry records the generator, artifact,
+complete case count and source files. `generate-traces.sh` checks the committed
+artifact against fresh Quint output. An intentional model change uses its
+`generate-*-vectors.mjs --write` command, followed by review and `--check`.
+Do not hand-edit the expected output or compute it with production code.
+
+| Model and artifact | Defined behavior | Explicit boundary |
+| --- | --- | --- |
+| `dialcache-key-protocol.qnt` → `quint-key-vectors.json` | Component validation/escaping, tracked tags, ordered arguments, UTF-16 name order, integer normalization, FNV-1a numerators and strict cohort admission | Finite strings and signed integer magnitudes; full IEEE754 shortest formatting and arbitrary bigint widths remain fixed/native evidence |
+| `dialcache-frame-vectors.qnt` → `quint-frame-vectors.json` | Complete version-1 bytes, text conversion, tracked/untracked classification order, writer timestamp validation and duration rounding | Finite byte/text/numeric inputs; core freshness and recovery are separate behavioral stages |
+| `dialcache-invalidation-transition.qnt` → `quint-invalidation-vectors.json` | Decimal validation before mutation, monotonic cutoff, type repair and exact retention/persistence | Redis supplies atomic script execution and measured physical time |
+| `dialcache-envelope-vectors.qnt` → `quint-envelope-vectors.json` | Marker escaping, decode fallback, UTF-8 byte thresholds, caps and strict smaller-representation choice | Decoder results and native encoder lengths are verified environment inputs; zstd itself is not implemented in Quint |
+
+Exporters only translate representation: model byte lists become hex, UTF-16
+units/scalars become JSON strings, and tagged observations become vector fields.
+The expected key, bytes, classification, cutoff, TTL or wrapper decision comes
+from Quint. Native readers exercise the real APIs and compare their observations.
+Provenance hashes reject changed models, libraries or exporters until the artifact
+is regenerated and reviewed. Completeness checks reject missing/duplicate rows.
+
+These additions are an expansion of the fixed `protocol-vectors.json` schema 3
+and `invalidation-vectors.json` schema 2 corpora, which remain required. Current
+counts come from the execution manifest and semantic checker; vector row totals
+are not distinct behavioral obligations. Final combined validation is pending
+for this expansion, so earlier wire/replay reports remain historical.
+
 
 ## Text payload domain
 
@@ -67,9 +98,72 @@ fixture input. Valid scalar strings follow the existing UTF-8 percent-escaping
 and UTF-16 ordering rules. The invalid-key vectors include these rejection
 cases separately from payload conversion.
 
+## Key normalization and rollout
+
+Logical identity includes namespace, key type, entity ID, use case and ordered
+argument pairs. Tracked variants share the entity watermark/hash tag while
+value keys retain operation/argument dimensions and the frame-version suffix.
+Key construction preserves supplied ordered pairs, including duplicate argument
+names. The separate record-normalization helper omits undefined entries and
+sorts names lexicographically by UTF-16 code units; it preserves value association.
+These are different input contracts.
+
+Scalar identity uses the documented JavaScript-compatible spelling for strings,
+null, booleans, numbers and integers. The Quint numeric normalization domain
+covers signed safe integers and bounded signed integer magnitudes through the
+signed 64-bit range. Its decimal-digit rules preserve those magnitudes exactly.
+It does not establish arbitrary bigint widths or the complete IEEE754 shortest
+round-trip formatting algorithm, including fractions, exponent thresholds,
+negative zero, NaN and infinities. Fixed vectors and native tests retain these
+binding obligations explicitly.
+
+Rollout hashes the logical key plus the layer/shadow discriminator with FNV-1a
+32-bit arithmetic over UTF-16 units. The sample is `hash / 2^32 * 100`, and the
+cohort admits exactly when the sample is strictly less than the ramp. Quint
+computes integer hash numerators; drivers translate that numerator to the public
+number representation. Below/equal/above tests distinguish the strict boundary
+without using the production hash as the expected-value oracle.
+
+## Envelope selection and codec environment
+
+Raw binary data beginning with `00`, `01` or `02` receives one leading `00`
+escape. Reading removes exactly one escape only for a prefix the writer can
+produce; an escaped compressed marker remains literal bytes. Successful `01`
+decoding returns text with the UTF-8 rule above; `02` returns exact binary bytes.
+Unknown markers pass through. Failed compressed decoding preserves the original
+marked bytes with `fallback_raw`.
+
+Read compatibility is independent of the policy for new writes. The reader has
+no compression-enable parameter. The envelope model states this independence;
+behavioral recovery/read histories also exercise already-compressed entries
+through instances configured not to compress new writes.
+
+Write selection measures UTF-8 bytes for text and escaped bytes for the raw
+stored alternative. Threshold comparison precedes the output-size cap. A
+compressed representation wins only when its native encoded length plus one
+marker byte is strictly smaller than the escaped raw representation. Equality
+keeps the raw representation. Text and binary retain their original logical type.
+
+The envelope model takes each native encoder's level-3 output length and each
+fixed decoder fixture's result as explicit environmental inputs. Both native
+runners independently verify those inputs using their actual codecs before
+checking the real wrapper. TypeScript and Go may choose different valid
+representations because their encoders produce different lengths; compressed
+bytes and compression outcome labels are therefore not universally identical.
+The preserved logical bytes/type and the selection rule are portable.
+
+The generated decoder domain includes fixed raw-block frames with valid,
+malformed, incomplete, BOM and supplementary text bytes, plus selected invalid
+or truncated headers. It does not cover arbitrary zstd windows, dictionaries,
+trailers or concatenated streams. Native tests retain those decoder/resource
+boundaries. Small per-call limits exercise before/exact/after cap decisions;
+they do not allocate or prove enforcement of the production 512 MiB resource
+ceiling under every runtime condition.
+
 ## Invalidation vector schema 2
 
-`invalidation-vectors.json` contains a `vectors` array. Each item supplies a
+Both fixed `invalidation-vectors.json` and generated `quint-invalidation-vectors.json`
+contain a `vectors` array; the latter additionally records model/source provenance. Each item supplies a
 unique `name`, `existing`, raw decimal argument text `futureBufferMs` and
 `invalidatedAtMs`, and `expected` with optional `error` and required `state`.
 Both `existing` and `expected.state` use this tagged state vocabulary:
@@ -87,9 +181,10 @@ original state: absence, type, content, list ordering, persistence, and remainin
 TTL. Malformed strings and unrelated lists must remain unrepaired after invalid
 arguments. Validation applies before the successful-transition repair rules.
 
-Each of the six rejected argument classes is exercised with a valid string,
-absence, malformed strings, and ordered lists; finite and persistent states
-are separate cases. Adapters must inspect type before reading content when
+Rejected argument classes are crossed with absence, valid/malformed strings and
+ordered lists; finite and persistent states are separate inputs. Generated
+transitions additionally check the declared decimal grammar, safe sum bounds,
+canonical output, exact retention floors and wrong-type repair. Adapters must inspect type before reading content when
 replaying these vectors. An unconditional `GET` cannot observe preserved lists.
 
 TTLs describe the logical transition. Real-server replay may subtract only the

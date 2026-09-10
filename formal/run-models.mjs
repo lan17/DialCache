@@ -1,8 +1,9 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readExecution, root, validateExecution } from './execution.mjs';
+import { normalizeReplayInputs } from './replay-inputs.mjs';
 
 export function executionPlan(mode, manifest = readExecution(), seed = process.env.QUINT_SEED || manifest.settings.seed) {
   validateExecution(manifest);
@@ -20,12 +21,24 @@ export function executionPlan(mode, manifest = readExecution(), seed = process.e
       if (model.regressions.length) commands.push({ command: 'quint', args: ['test', model.path,
         `--backend=${settings.backend}`, `--max-samples=${test.maxSamples}`] });
       if (model.propertyChallenge) commands.push({ command: 'node', args: [model.propertyChallenge] });
+    } else if (model.vectorExport) {
+      commands.push({ command: 'node', args: [model.vectorExport.generator, '--check'] });
     } else if (model.generate) {
       const generation = model.generate;
       commands.push({ command: 'quint', args: ['run', model.path, '--mbt', ...options,
         `--max-samples=${generation.maxSamples}`, `--max-steps=${generation.maxSteps}`, `--n-traces=${generation.traces}`,
         `--out-itf=${generation.outputDirectory}/trace_{seq}.itf.json`, `--verbosity=${settings.verbosity}`,
-        '--invariants', ...model.invariants], outputDirectory: generation.outputDirectory, expectedTraces: generation.traces });
+        '--invariants', ...model.invariants], outputDirectory: generation.outputDirectory, expectedTraces: generation.traces,
+        ...(model.replayRegressions === undefined ? {} : { explicitInputs: true }) });
+      if (model.replayRegressions?.length) {
+        const outputDirectory = `.formal-traces/regressions/${model.profile}`;
+        commands.push({ command: 'quint', args: ['test', model.path,
+          `--backend=${settings.backend}`, '--max-samples=1', `--seed=${seed}`,
+          `--match=^(${model.replayRegressions.join('|')})$`,
+          `--out-itf=${outputDirectory}/{test}.itf.json`], outputDirectory,
+          expectedTraces: model.replayRegressions.length, explicitInputs: true,
+          expectedFiles: model.replayRegressions.map(name => `${name}.itf.json`) });
+      }
     }
   }
   return commands;
@@ -50,9 +63,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       if (result.status !== 0) process.exit(result.status ?? 1);
       console.log('::endgroup::');
       if (job.outputDirectory) {
-        const count = readdirSync(resolve(root, job.outputDirectory), { recursive: true, withFileTypes: true })
-          .filter(entry => entry.isFile() && entry.name.endsWith('.itf.json')).length;
-        if (count !== job.expectedTraces) throw new Error(`Expected ${job.expectedTraces} traces in ${job.outputDirectory}; generated ${count}`);
+        const files = readdirSync(resolve(root, job.outputDirectory)).filter(name => name.endsWith('.itf.json'));
+        if (files.length !== job.expectedTraces) throw new Error(`Expected ${job.expectedTraces} traces in ${job.outputDirectory}; generated ${files.length}`);
+        if (job.expectedFiles && JSON.stringify([...files].sort()) !== JSON.stringify([...job.expectedFiles].sort())) throw new Error(`Regression trace inventory differs in ${job.outputDirectory}`);
+        if (job.explicitInputs) for (const name of files) {
+          const path = resolve(root, job.outputDirectory, name);
+          writeFileSync(path, JSON.stringify(normalizeReplayInputs(JSON.parse(readFileSync(path, 'utf8')))) + '\n');
+        }
       }
     }
   }

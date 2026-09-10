@@ -197,6 +197,26 @@ type behaviorClock struct {
 	deferred                 []func()
 }
 
+// Only local storage uses Clock.ElapsedMS directly; deadlines and diagnostic
+// timing use PreciseClock.ElapsedTime. A controlled failure at this public
+// clock boundary exercises the real local-read/local-write panic isolation.
+// No model observation supplies a cache value or result to this binding.
+type behaviorLocalFaultClock struct {
+	*behaviorClock
+	driver *behaviorDriver
+}
+
+func (c behaviorLocalFaultClock) ElapsedTime() time.Duration {
+	return time.Duration(c.behaviorClock.ElapsedMS()) * time.Millisecond
+}
+
+func (c behaviorLocalFaultClock) ElapsedMS() int64 {
+	if c.driver.fault("localStorage") {
+		panic("controlled local storage failure")
+	}
+	return c.behaviorClock.ElapsedMS()
+}
+
 func (c *behaviorClock) WallMS() int64    { c.mu.Lock(); defer c.mu.Unlock(); return c.wall }
 func (c *behaviorClock) ElapsedMS() int64 { c.mu.Lock(); defer c.mu.Unlock(); return c.elapsed }
 func (c *behaviorClock) AfterFunc(ms int64, fn func()) Timer {
@@ -436,6 +456,9 @@ func (d *behaviorDriver) instance(id string) *Cache[any] {
 	}}
 	if d.fixture["remote"] != false {
 		options.Remote = behaviorRemote{d: d}
+	}
+	if bb(d.fixture["localFaultInjection"]) {
+		options.Clock = behaviorLocalFaultClock{behaviorClock: d.clock, driver: d}
 	}
 	if d.fixture["readTimeoutMs"] != "default" {
 		options.RemoteReadTimeoutMS = bn(bdefault(d.fixture, "readTimeoutMs", 50))
@@ -678,6 +701,26 @@ func (d *behaviorDriver) apply(input obj) error {
 			}
 		}
 		d.append("maintenance", status)
+	case "observeMarker":
+		identity := d.identity(bs(input["key"]), "")
+		identity.Tracked = true
+		_, _, key, err := identity.Keys()
+		if err != nil {
+			return err
+		}
+		cutoff, ttl := int64(-1), int64(-2)
+		d.mu.Lock()
+		if raw := d.rawLocked(key); raw != nil {
+			stamp, parseErr := strconv.ParseInt(string(raw), 10, 64)
+			if parseErr != nil {
+				d.mu.Unlock()
+				return parseErr
+			}
+			cutoff = stamp - time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC).UnixMilli()
+			ttl = d.values[key].expires - d.clock.ElapsedMS()
+		}
+		d.mu.Unlock()
+		d.record("marker", obj{"cutoffMs": cutoff, "ttlMs": ttl})
 	case "adapterReply":
 		d.mu.Lock()
 		if d.replySet {

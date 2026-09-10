@@ -7,8 +7,9 @@ The models registered in [`execution.json`](./execution.json) define transitions
 and independently checked properties; this document explains their contracts,
 assumptions, and encoding boundaries. [`CONTRACTS.md`](./CONTRACTS.md)
 assigns stable obligation IDs and indexes its evidence. [`PROTOCOL.md`](./PROTOCOL.md)
-defines malformed-text compatibility, and the protocol vectors and existing
-Redis/key documentation define wire representation. [`BEHAVIOR.md`](./BEHAVIOR.md)
+explains wire representation and finite/native boundaries. Scheduled Quint
+primitive models compute generated wire expectations; fixed vectors and
+Redis/key documentation provide complementary examples and explanation. [`BEHAVIOR.md`](./BEHAVIOR.md)
 and [`CONFORMANCE.md`](./CONFORMANCE.md) define controlled execution profiles.
 
 ## Meaning of conformance
@@ -32,9 +33,11 @@ within its declared profile. A test schedule may select one permitted order;
 that selection is not a universal ordering requirement between unrelated calls.
 
 The models have explicit finite bounds; they do not define every native API or
-wire transformation. Protocol vectors and native tests cover those boundaries.
+unbounded wire input. Scheduled primitive models define selected deterministic
+wire transforms; fixed vectors and native tests retain the remaining boundaries.
 For a portable behavior change, update Quint first, retain an independent
-property and a required generated witness, then replay the same histories in
+property and a consequential witness or exported public-action regression,
+then replay the same histories in
 TypeScript and Go. Prose and implementation must follow that reviewed contract.
 A discovered disagreement is resolved explicitly in Quint with a distinguishing
 regression; existing implementation behavior is evidence to investigate, not an
@@ -159,7 +162,11 @@ cannot change source, cache, or maintenance outcomes (C27–C30).
 ## Time, source acceptance, and progress
 
 Wall time supplies frame/invalidation timestamps. Monotonic elapsed time governs
-local expiry and deadlines. Wall rollback neither renews local TTL nor grants
+local expiry and deadlines. Local insertion and lookup use whole monotonic
+milliseconds on one process grid; source/read/shadow budgets retain their
+native elapsed precision. The local-clock profile exposes fractional environment
+time to distinguish that expiry rule, while native tests cover precise timers
+and custom-clock resolution. Wall rollback neither renews local TTL nor grants
 more deadline time. For a finite source budget B and its actual invocation time
 S, the deadline is `D = S + B`, independent of preceding policy/read/decode time.
 
@@ -192,7 +199,8 @@ timeout-only default; denial/classifier failure preserves the original error.
 Recheck `0 <= age < M` before and after asynchronous decode using captured
 policy; rollback need not leave the retained value at or above F. A
 recovered value may memoize in each still-open participating request scope but
-never repopulates shared caches.
+never repopulates shared caches or admits served-hit shadow work, including
+when the recovered value is absence.
 
 Shadow work (C47–C54) is diagnostic. Served-hit jobs invoke a detached source
 under disabled caching. Dark jobs reuse the caller source, overlap C0 with it,
@@ -202,7 +210,13 @@ per-instance capacity/deduplication. An unequal C0/source comparison requires
 one C1 payload confirmation; changed/absent/fenced C1 is superseded. A present C0
 is never repaired, even if undecodable. Only semantic misses permit conditional
 fill. Expired work cannot start new phases; owned raw effects retain capacity
-until they settle. Mismatch warnings require opt-in and a confirmed verdict.
+until they settle. A dark job waiting on an independently owned caller source
+can release its slot at its own deadline while that unbounded caller continues;
+a served job owns its detached raw source and retains capacity until settlement.
+C0 retained while fresh is not reclassified after it ages. C1 confirms payload
+identity even after freshness expiry or wall rollback; mismatch age clamps to
+zero, while future-frame diagnostics retain their exact layer and offset.
+Mismatch warnings require opt-in and a confirmed verdict.
 
 Invalidation (C32–C39/W09) groups all tracked use-case/argument variants of the
 same namespace/type/id. It validates arguments before any mutation, advances
@@ -226,8 +240,8 @@ and binding responsibilities.
 A report identifies specification revision, implementation revision, supported
 profiles and vector groups, tool versions, seed, bounds, and exact corpus. It
 must list unsupported features. [`profiles.json`](./profiles.json) registers the
-profile formats and both implementations' declared coverage. Go checks all
-nine profiles and protocol vectors, with separate real Redis/Valkey/Cluster
+profile formats and both implementations' declared coverage. Both ports must check every registered
+profile, sampled history, exported regression and wire artifact, with separate real Redis/Valkey/Cluster
 interoperability evidence. A claim requires those current-revision checks;
 passing one profile does not imply the others.
 
@@ -243,3 +257,12 @@ This necessary condition does not prove payload provenance, refill fences, or
 all publication authority; those have their own replay observations. Pending prefixes
 are allowed and establish no eventual completion. This is a bounded checked
 connection, not a full refinement proof for all verification and replay models.
+
+
+The current case inventory gives every reviewed behavioral case a checked
+Quint clause and Quint-driven implementation evidence. This is finite case
+accounting; it does not prove every admissible history. Native clock/fault seams,
+codec outcomes and encoded sizes, host numeric formatting, Redis atomicity and
+resource ceilings retain explicit scope notes. The final combined validation of
+this expansion remains pending; older passing reports identify only their own
+source revision and corpus.

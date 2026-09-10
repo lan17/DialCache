@@ -94,7 +94,8 @@
         "C06.absent-distinct-from-text",
         "C22.freshness-after-read",
         "C05.request-hit-stops-traversal",
-        "C05.local-hit-stops-traversal"
+        "C05.local-hit-stops-traversal",
+        "C09.fractional-clock-grid"
       ],
       "nativeCases": [
         "B01.capacity-validation",
@@ -1880,7 +1881,7 @@
           "test": "TestRedisIntegration",
           "path": "go/redis_integration_test.go",
           "scope": "Real Redis, Valkey and Cluster run exact invalidation vectors, mixed TS/Go data exchange and complete-frame primary-read assertions.",
-          "sha256": "982a276f394cb036723fd1edcb7e6d0ceb225efe5986a698e9f88a91528a93c7"
+          "sha256": "45d854bc6feae418bccd0aba95df2565d6fbcbc01d4150f64c3dd0001ad0b0bb"
         },
         {
           "test": "TestRedisAdapterReadsAndBoundaries",
@@ -2001,13 +2002,13 @@
           "test": "uses one wire format across node-redis and Valkey GLIDE",
           "path": "test/redis-real.integration.test.ts",
           "scope": "Asserts that the TypeScript binding uses one wire format across node-redis and Valkey GLIDE.",
-          "sha256": "9728fc47a6eb8a4d8b8a9e685c84a78d96a760677b2b32271b4f358ba2add59c"
+          "sha256": "cb04c5891e64534319a983e45176e83ffe4c53e6cc6e2f1decd89b87ce636e5a"
         },
         {
           "test": "round-trips compressed payloads through tracked writes and invalidation",
           "path": "test/redis-real.integration.test.ts",
           "scope": "Asserts that the TypeScript binding round-trips compressed payloads through tracked writes and invalidation.",
-          "sha256": "9728fc47a6eb8a4d8b8a9e685c84a78d96a760677b2b32271b4f358ba2add59c"
+          "sha256": "cb04c5891e64534319a983e45176e83ffe4c53e6cc6e2f1decd89b87ce636e5a"
         },
         {
           "test": "routes cache operations across slots and reloads invalidation scripts per node",
@@ -2027,7 +2028,7 @@
           "test": "TestRedisIntegration",
           "path": "go/redis_integration_test.go",
           "scope": "Real Redis, Valkey and Cluster run exact invalidation vectors, mixed TS/Go data exchange and complete-frame primary-read assertions.",
-          "sha256": "982a276f394cb036723fd1edcb7e6d0ceb225efe5986a698e9f88a91528a93c7"
+          "sha256": "45d854bc6feae418bccd0aba95df2565d6fbcbc01d4150f64c3dd0001ad0b0bb"
         }
       ],
       "adaptation": "Real-server dispatch, Lua semantics, topology and mixed-language data are outside an in-memory conformance driver.",

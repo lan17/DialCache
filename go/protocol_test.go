@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"math"
 	"math/big"
 	"os"
 	"reflect"
 	"strconv"
 	"testing"
+
+	"github.com/klauspost/compress/zstd"
 )
 
 func vectors(t *testing.T) map[string]json.RawMessage {
@@ -25,6 +28,31 @@ func vectors(t *testing.T) map[string]json.RawMessage {
 	var version int
 	if err := json.Unmarshal(groups["schemaVersion"], &version); err != nil || version != 3 {
 		t.Fatal("unsupported protocol vector schema")
+	}
+	selection := os.Getenv("DIALCACHE_PROTOCOL_CORPUS")
+	if selection != "" && selection != "all" && selection != "generated" && selection != "fixed" {
+		t.Fatal("unknown protocol corpus selection", selection)
+	}
+	if selection == "generated" {
+		for name := range groups {
+			if name != "schemaVersion" {
+				groups[name] = json.RawMessage("[]")
+			}
+		}
+	}
+	for name, added := range generatedProtocolGroups(t) {
+		if selection == "fixed" {
+			continue
+		}
+		var existing []json.RawMessage
+		if err := json.Unmarshal(groups[name], &existing); err != nil {
+			t.Fatal("unknown generated protocol group", name, err)
+		}
+		combined, err := json.Marshal(append(existing, added...))
+		if err != nil {
+			t.Fatal(err)
+		}
+		groups[name] = combined
 	}
 	return groups
 }
@@ -64,8 +92,12 @@ func TestProtocolKeys(t *testing.T) {
 		})
 	}
 	var invalid []struct {
-		Name  string
-		Input json.RawMessage
+		Name       string
+		Input      json.RawMessage
+		InputUTF16 *struct {
+			Namespace, KeyType, ID, UseCase []int
+			Args                            [][2][]int
+		} `json:"inputUtf16"`
 	}
 	if err := json.Unmarshal(groups["invalidKeyVectors"], &invalid); err != nil {
 		t.Fatal(err)
@@ -74,6 +106,16 @@ func TestProtocolKeys(t *testing.T) {
 		t.Run(vector.Name, func(t *testing.T) {
 			var input Identity
 			err := json.Unmarshal(vector.Input, &input)
+			if raw := vector.InputUTF16; err == nil && raw != nil {
+				input.Namespace = protocolUTF16(t, raw.Namespace)
+				input.KeyType = protocolUTF16(t, raw.KeyType)
+				input.ID = protocolUTF16(t, raw.ID)
+				input.UseCase = protocolUTF16(t, raw.UseCase)
+				input.Args = make([][2]string, len(raw.Args))
+				for i, pair := range raw.Args {
+					input.Args[i] = [2]string{protocolUTF16(t, pair[0]), protocolUTF16(t, pair[1])}
+				}
+			}
 			if err == nil {
 				_, _, _, err = input.Keys()
 			}
@@ -83,6 +125,28 @@ func TestProtocolKeys(t *testing.T) {
 		})
 	}
 	t.Logf("keyVectors: %d/%d; invalidKeyVectors: %d/%d", len(valid), len(valid), len(invalid), len(invalid))
+}
+
+// Preserve lone UTF-16 units as WTF-8 bytes: encoding/json would replace them
+// before Identity.Keys could reject the actual malformed public input.
+func protocolUTF16(t *testing.T, units []int) string {
+	t.Helper()
+	var result []byte
+	for i := 0; i < len(units); i++ {
+		u := units[i]
+		if u < 0 || u > 0xffff {
+			t.Fatal("invalid protocol UTF-16 unit", u)
+		}
+		if u >= 0xd800 && u <= 0xdbff && i+1 < len(units) && units[i+1] >= 0xdc00 && units[i+1] <= 0xdfff {
+			u = 0x10000 + (u-0xd800)*0x400 + units[i+1] - 0xdc00
+			i++
+		} else if u >= 0xd800 && u <= 0xdfff {
+			result = append(result, byte(0xe0|u>>12), byte(0x80|u>>6&0x3f), byte(0x80|u&0x3f))
+			continue
+		}
+		result = append(result, string(rune(u))...)
+	}
+	return string(result)
 }
 
 func TestProtocolFrames(t *testing.T) {
@@ -202,16 +266,17 @@ func TestProtocolCohorts(t *testing.T) {
 func TestProtocolRemainingVectors(t *testing.T) {
 	groups := vectors(t)
 	var durations []struct {
-		Name     string
-		Input    float64
-		Expected *int64
+		Name         string
+		Input        float64
+		SpecialInput string
+		Expected     *int64
 	}
 	if err := json.Unmarshal(groups["durationVectors"], &durations); err != nil {
 		t.Fatal(err)
 	}
 	for _, v := range durations {
 		t.Run(v.Name, func(t *testing.T) {
-			got, err := CeilSupportedCacheTTLMS(v.Input)
+			got, err := CeilSupportedCacheTTLMS(protocolNumber(v.Input, v.SpecialInput))
 			if v.Expected == nil {
 				if err == nil {
 					t.Fatal("invalid duration accepted")
@@ -222,15 +287,16 @@ func TestProtocolRemainingVectors(t *testing.T) {
 		})
 	}
 	var stamps []struct {
-		Name  string
-		Input float64
+		Name         string
+		Input        float64
+		SpecialInput string
 	}
 	if err := json.Unmarshal(groups["invalidTimestampVectors"], &stamps); err != nil {
 		t.Fatal(err)
 	}
 	for _, v := range stamps {
 		t.Run(v.Name, func(t *testing.T) {
-			if _, err := ValidateTimestampMS(v.Input); err == nil {
+			if _, err := ValidateTimestampMS(protocolNumber(v.Input, v.SpecialInput)); err == nil {
 				t.Fatal("invalid timestamp accepted")
 			}
 		})
@@ -292,18 +358,49 @@ func TestProtocolRemainingVectors(t *testing.T) {
 			}
 		})
 	}
-	var decodes []struct{ Name, InputHex, PayloadType, PayloadUTF8, PayloadHex string }
+	var decodes []struct {
+		Name, InputHex, PayloadType, PayloadUTF8, PayloadHex, Outcome string
+		MaxDecompressedBytes                                          *int
+		CodecFixture                                                  *struct {
+			Succeeds   bool
+			DecodedHex string
+		}
+	}
 	if err := json.Unmarshal(groups["compressedDecodeVectors"], &decodes); err != nil {
 		t.Fatal(err)
 	}
 	for _, v := range decodes {
 		t.Run(v.Name, func(t *testing.T) {
-			got := DecompressPayload(Payload{Bytes: unhex(t, v.InputHex), Binary: true})
+			input := unhex(t, v.InputHex)
+			if v.CodecFixture != nil {
+				decoder, err := zstd.NewReader(nil, zstd.WithDecoderConcurrency(1))
+				if err != nil {
+					t.Fatal(err)
+				}
+				decoded, err := decoder.DecodeAll(input[1:], nil)
+				decoder.Close()
+				if v.CodecFixture.Succeeds {
+					if err != nil || !bytes.Equal(decoded, unhex(t, v.CodecFixture.DecodedHex)) {
+						t.Fatalf("native codec fixture differs: %x %v", decoded, err)
+					}
+				} else if err == nil {
+					t.Fatal("native decoder accepted rejected fixture")
+				}
+			}
+			var limits []int
+			if v.MaxDecompressedBytes != nil {
+				limits = append(limits, *v.MaxDecompressedBytes)
+			}
+			got := DecompressPayload(Payload{Bytes: input, Binary: true}, limits...)
 			want := []byte(v.PayloadUTF8)
 			if v.PayloadType == "binary" {
 				want = unhex(t, v.PayloadHex)
 			}
-			if got.Outcome != "decompressed" || got.Payload.Binary != (v.PayloadType == "binary") || !bytes.Equal(got.Payload.Bytes, want) {
+			outcome := v.Outcome
+			if outcome == "" {
+				outcome = "decompressed"
+			}
+			if got.Outcome != outcome || got.Payload.Binary != (v.PayloadType == "binary") || !bytes.Equal(got.Payload.Bytes, want) {
 				t.Fatalf("got %#v want %q", got, want)
 			}
 		})
@@ -311,6 +408,13 @@ func TestProtocolRemainingVectors(t *testing.T) {
 	var writes []struct {
 		Name, PayloadType, PayloadUTF8, PayloadHex, Outcome string
 		ThresholdBytes                                      int
+		MaxDecompressedBytes, OriginalBytes, RawStoredBytes *int
+		EscapedHex                                          string
+		CodecBytes                                          map[string]int
+		ExpectedByBinding                                   map[string]struct {
+			Outcome             string
+			StoredBytes, Marker int
+		}
 	}
 	if err := json.Unmarshal(groups["compressionWriteVectors"], &writes); err != nil {
 		t.Fatal(err)
@@ -321,17 +425,54 @@ func TestProtocolRemainingVectors(t *testing.T) {
 			if raw.Binary {
 				raw.Bytes = unhex(t, v.PayloadHex)
 			}
-			got, err := CompressPayload(raw, CompressionConfig{v.ThresholdBytes, 3})
-			if err != nil || got.Outcome != v.Outcome {
+			if v.CodecBytes != nil {
+				encoder, err := zstd.NewWriter(nil, zstd.WithEncoderConcurrency(1), zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(3)), zstd.WithEncoderCRC(false))
+				if err != nil {
+					t.Fatal(err)
+				}
+				compressed := encoder.EncodeAll(raw.Bytes, nil)
+				encoder.Close()
+				if len(compressed) != v.CodecBytes["go"] {
+					t.Fatalf("native codec length %d differs from fixture %d", len(compressed), v.CodecBytes["go"])
+				}
+			}
+			var limits []int
+			if v.MaxDecompressedBytes != nil {
+				limits = append(limits, *v.MaxDecompressedBytes)
+			}
+			got, err := CompressPayload(raw, CompressionConfig{v.ThresholdBytes, 3}, limits...)
+			expected, modeled := v.ExpectedByBinding["go"]
+			outcome := v.Outcome
+			if modeled {
+				outcome = expected.Outcome
+			}
+			if err != nil || got.Outcome != outcome {
 				t.Fatalf("got %#v %v", got, err)
+			}
+			if modeled {
+				if got.StoredBytes != expected.StoredBytes || v.OriginalBytes == nil || got.OriginalBytes != *v.OriginalBytes ||
+					v.RawStoredBytes == nil || len(EscapeRawPayload(raw).Bytes) != *v.RawStoredBytes ||
+					!bytes.Equal(EscapeRawPayload(raw).Bytes, unhex(t, v.EscapedHex)) {
+					t.Fatalf("modeled byte sizes/escape differ: %#v", got)
+				}
 			}
 			decoded := DecompressPayload(got.Payload)
 			if decoded.Payload.Binary != raw.Binary || !bytes.Equal(decoded.Payload.Bytes, raw.Bytes) {
 				t.Fatal("compression changed value")
 			}
 			if got.Outcome == "compressed" {
-				if !got.Payload.Binary || got.StoredBytes >= got.OriginalBytes {
+				if !got.Payload.Binary || got.StoredBytes >= len(EscapeRawPayload(raw).Bytes) {
 					t.Fatal("compression grew")
+				}
+				marker := byte(1)
+				if raw.Binary {
+					marker = 2
+				}
+				if modeled {
+					marker = byte(expected.Marker)
+				}
+				if got.Payload.Bytes[0] != marker {
+					t.Fatal("compressed payload marker differs")
 				}
 			} else if !bytes.Equal(got.Payload.Bytes, EscapeRawPayload(raw).Bytes) {
 				t.Fatal("raw representation differs")
@@ -349,8 +490,32 @@ func TestProtocolRemainingVectors(t *testing.T) {
 		}
 		count += len(entries)
 	}
-	if count != 134 {
-		t.Fatalf("review protocol vector coverage: got %d expected 134", count)
+	selection := os.Getenv("DIALCACHE_PROTOCOL_CORPUS")
+	expected := 0
+	if selection != "generated" {
+		expected = 134
+	}
+	if selection != "fixed" {
+		for _, rows := range generatedProtocolGroups(t) {
+			expected += len(rows)
+		}
+	}
+	if count != expected {
+		t.Fatalf("review protocol vector coverage: got %d expected %d", count, expected)
 	}
 	t.Logf("all protocol groups exercised: %d vectors", count)
+}
+
+// JSON carries nonfinite numeric fixture inputs with an explicit tag.
+func protocolNumber(value float64, special string) float64 {
+	switch special {
+	case "NaN":
+		return math.NaN()
+	case "Infinity":
+		return math.Inf(1)
+	case "-Infinity":
+		return math.Inf(-1)
+	default:
+		return value
+	}
 }

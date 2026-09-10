@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-var behaviorProfileVersions = map[string]int64{"effects": 1, "scope": 1, "policy": 2, "layers": 1, "recovery": 1, "independent": 1, "shadow": 2, "admission": 1}
+var behaviorProfileVersions = map[string]int64{"recovery-read": 1, "local-failure": 1, "runtime-boundaries": 1, "shadow-layers": 1, "local-clock": 1, "source-budgets": 1, "effects": 2, "scope": 2, "policy": 3, "layers": 2, "recovery": 1, "independent": 2, "shadow": 3, "admission": 1}
 
 func validateBehaviorProfileRegistry(raw []byte, name string, version int64) error {
 	decoded, err := behaviorJSON(raw)
@@ -72,7 +72,7 @@ func TestBehaviorProfileRegistryRejectsDrift(t *testing.T) {
 				}
 				break
 			}
-			if err := validateBehaviorProfileRegistry([]byte(bjson(registry)), "scope", 1); err == nil {
+			if err := validateBehaviorProfileRegistry([]byte(bjson(registry)), "scope", 2); err == nil {
 				t.Fatal("unsupported profile registry accepted")
 			}
 		})

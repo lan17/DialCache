@@ -9,6 +9,8 @@ module dialcache_shadow_conformance {
   // profile excludes serving hits, request/local storage, and overlapping jobs.
   // `now` is elapsed milliseconds; `wall` is independent application time.
   // C0, fence, accepted logging, and dispatched write stamp are retained history.
+  // C0 must be strictly younger than sixty seconds. C1 checks payload bytes
+  // independently of logical age; application time may change while it waits.
 
   // Trace encodings and fixture bounds ---------------------------------------
   pure val IDLE = 0
@@ -42,6 +44,7 @@ module dialcache_shadow_conformance {
   pure val LOGGING_ENABLED = 1
   pure val LOGGING_INVALID = 2
   pure val JOB_BUDGET_MS = 10
+  pure val FRESHNESS_MS = 60000
   pure val WALL_ROLLBACK_MS = 1000
   pure val MAX_CALLS = 8
 
@@ -58,11 +61,12 @@ module dialcache_shadow_conformance {
   pure val BINARY_UNICODE = 8
   pure val DECODED_UNICODE = 3
 
-  // Shadow profile v2 adds a configuration-error count to its diagnostic
-  // projection. The other profiles retain the shared Diagnostics schema.
+  // Shadow profile v3 retains explicit external inputs and future timestamp
+  // samples as well as verdict age, captured logging, and configuration errors.
   type ShadowDiagnostics = {
     configErrors: int, warnings: int, ages: List[int],
-    coalesced: List[str], fallbackErrors: List[str]
+    coalesced: List[str], fallbackErrors: List[str],
+    futureOffsets: List[{ layer: str, offsetMs: int }]
   }
 
   // State: diagnostics, independent source/job lifecycles, and remote bytes.
@@ -78,6 +82,7 @@ module dialcache_shadow_conformance {
     readFailed: bool, loadFailed: bool, dumpFailed: bool, writeFailed: bool
   }
   var s: State
+  var input: { name: str, choice: int }
 
   // Snapshot identity and job completion -------------------------------------
   // Text and binary representations can share bytes; different JSON bytes
@@ -126,10 +131,10 @@ module dialcache_shadow_conformance {
   // deferred job dispatch. This advances elapsed time without delivering
   // timers: job admission and eventual caller settlement remain separate.
   // Policy changes are captured at admission.
-  action init = {
-    nondet choice = 0.to(FIXTURE_SOURCE_WORK_AT_DEADLINE).oneOf()
+  action initialize(choice: int): bool = all {
+    input' = { name: "init", choice: choice },
     s' = {
-      o: empty, d: { configErrors: 0, warnings: 0, ages: List(), coalesced: List(), fallbackErrors: List() },
+      o: empty, d: { configErrors: 0, warnings: 0, ages: List(), coalesced: List(), fallbackErrors: List(), futureOffsets: List() },
       now: 10000, wall: 100000,
       comparator: if (choice >= FIXTURE_SOURCE_WORK_BEFORE_DEADLINE) COMPARE_DEFAULT
         else if (choice == FIXTURE_SLOW_ERROR) COMPARE_ERROR else choice % COMPARATOR_COUNT,
@@ -147,9 +152,14 @@ module dialcache_shadow_conformance {
       readFailed: false, loadFailed: false, dumpFailed: false, writeFailed: false
     }
   }
+  action init = {
+    nondet choice = 0.to(FIXTURE_SOURCE_WORK_AT_DEADLINE).oneOf()
+    initialize(choice)
+  }
 
   // Caller source and job admission ------------------------------------------
   action beginCall = all {
+    input' = { name: "beginCall", choice: -1 },
     (s.phase == IDLE or s.phase == JOB_DONE), not(s.sourcePending), s.o.calls.length() < MAX_CALLS,
     val jobExpired = s.shadowActive and s.sourceWorkMs >= JOB_BUDGET_MS
     s' = {
@@ -172,9 +182,8 @@ module dialcache_shadow_conformance {
       ...s
     }
   }
-  action resolveLoader = {
-    nondet choice = Set(VALUE_ONE, VALUE_TWO).oneOf()
-    all {
+  action resolveAt(choice: int): bool = all {
+      input' = { name: "resolveLoader", choice: choice },
       s.sourcePending,
       val expired = s.source == SOURCE_TIMED_OUT or s.now >= s.deadline
       s' = continueJob({
@@ -189,8 +198,12 @@ module dialcache_shadow_conformance {
         ...s
       })
     }
+  action resolveLoader = {
+    nondet choice = Set(VALUE_ONE, VALUE_TWO).oneOf()
+    resolveAt(choice)
   }
   action rejectLoader = all {
+    input' = { name: "rejectLoader", choice: -1 },
     s.sourcePending,
     val expired = s.source == SOURCE_TIMED_OUT or s.now >= s.deadline
     s' = continueJob({
@@ -207,21 +220,33 @@ module dialcache_shadow_conformance {
 
   // C0 acquisition, retained comparison, and C1 confirmation ------------------
   action releaseRead = all {
+    input' = { name: "releaseRead", choice: -1 },
     s.phase == C0_READ or s.phase == CONFIRMATION_READ,
     val readable = s.frame > NO_PAYLOAD and s.created > s.watermark
     val snapshot = if (readable) s.frame else NO_PAYLOAD
-    s' = if (s.abandoned) { phase: JOB_DONE, ...s }
-      else if (s.phase == CONFIRMATION_READ) done(s, if (s.readFailed) "confirmation_error"
+    // Raw read validation has its own read budget. Within this profile's
+    // elapsed-time bounds it may report a future timestamp even after the
+    // shorter job budget expired; the abandoned job still cannot continue.
+    val measured = {
+      d: { futureOffsets: if (not(s.readFailed) and readable and s.created > s.wall)
+        s.d.futureOffsets.append({ layer: "remote_shadow", offsetMs: s.created - s.wall })
+        else s.d.futureOffsets, ...s.d }, ...s
+    }
+    s' = if (s.abandoned) { phase: JOB_DONE, ...measured }
+      else if (s.phase == CONFIRMATION_READ) done(measured, if (s.readFailed) "confirmation_error"
         else if (payloadBytes(snapshot) == payloadBytes(s.c0)) "mismatch" else "superseded")
-      else if (s.readFailed) done(s, "redis_error")
+      else if (s.readFailed) done(measured, "redis_error")
       else continueJob({
         phase: SOURCE_WAIT,
-        c0: if (s.created > s.wall) NO_PAYLOAD else snapshot, c0Created: s.created,
+        c0: if (s.created > s.wall or s.wall - s.created >= FRESHNESS_MS)
+          NO_PAYLOAD else snapshot,
+        c0Created: s.created,
         fence: if (readable) 0 else s.watermark,
-        ...s
+        ...measured
       })
   }
   action releaseLoad = all {
+    input' = { name: "releaseLoad", choice: -1 },
     s.phase == SNAPSHOT_DECODE,
     val compared = {
       now: s.now + s.comparisonMs, wall: s.wall + s.comparisonMs,
@@ -240,6 +265,7 @@ module dialcache_shadow_conformance {
 
   // Conditional fill preparation and native write completion ------------------
   action releaseDump = all {
+    input' = { name: "releaseDump", choice: -1 },
     s.phase == FILL_SERIALIZE,
     s' = if (s.abandoned) { phase: JOB_DONE, ...s }
       else if (s.dumpFailed) done(s, "fill_error")
@@ -251,6 +277,7 @@ module dialcache_shadow_conformance {
       }
   }
   action releaseWrite = all {
+    input' = { name: "releaseWrite", choice: -1 },
     s.phase == FILL_WRITE,
     val stored = {
       frame: if (s.writeFailed) s.frame else s.sourceValue,
@@ -262,40 +289,52 @@ module dialcache_shadow_conformance {
   }
 
   // Environmental clocks, storage, policy, and failures -----------------------
-  action advance = {
-    // Work fixtures probe 9/10 ms by source settlement. A later time step is
-    // a full budget, so due source timers are delivered despite the preceding
-    // blocked executor interval; timer ordering inside that interval is out
-    // of this fixture's bounds. Ordinary fixtures retain 1 ms time steps.
-    nondet choice = (if (s.sourceWorkMs > 0) Set(JOB_BUDGET_MS) else Set(1, JOB_BUDGET_MS)).oneOf()
+  action advanceBy(choice: int): bool = {
     val expired = s.now + choice >= s.deadline
     val callerTimeout = s.source == SOURCE_PENDING and expired
     val jobTimeout = s.phase > IDLE and s.phase < JOB_DONE and not(s.abandoned) and expired
-    s' = {
-      d: {
-        fallbackErrors: if (callerTimeout) s.d.fallbackErrors.append("local") else s.d.fallbackErrors,
-        ...s.d
-      },
-      now: s.now + choice, wall: s.wall + choice, source: if (callerTimeout) SOURCE_TIMED_OUT else s.source,
-      abandoned: s.abandoned or jobTimeout,
-      phase: if (jobTimeout and s.phase == SOURCE_WAIT) JOB_DONE else s.phase,
-      o: {
-        shadow: if (jobTimeout) s.o.shadow.append("timeout") else s.o.shadow,
-        ...finishPendingCalls(s.o, if (callerTimeout) DEADLINE_ERROR else CALL_PENDING)
-      },
-      ...s
+    all {
+      input' = { name: "advance", choice: choice },
+      s' = {
+        d: {
+          fallbackErrors: if (callerTimeout) s.d.fallbackErrors.append("local") else s.d.fallbackErrors,
+          ...s.d
+        },
+        now: s.now + choice, wall: s.wall + choice, source: if (callerTimeout) SOURCE_TIMED_OUT else s.source,
+        abandoned: s.abandoned or jobTimeout,
+        phase: if (jobTimeout and s.phase == SOURCE_WAIT) JOB_DONE else s.phase,
+        o: {
+          shadow: if (jobTimeout) s.o.shadow.append("timeout") else s.o.shadow,
+          ...finishPendingCalls(s.o, if (callerTimeout) DEADLINE_ERROR else CALL_PENDING)
+        },
+        ...s
+      }
     }
+  }
+  action advance = {
+    // Blocked-source fixtures advance a full job budget so due timers run.
+    nondet choice = (if (s.sourceWorkMs > 0) Set(JOB_BUDGET_MS) else Set(1, JOB_BUDGET_MS)).oneOf()
+    advanceBy(choice)
+  }
+
+  action seedAt(choice: int): bool = all {
+    input' = { name: "seed", choice: choice },
+    s' = { frame: choice, created: s.wall, ...s }
   }
   action seed = {
     nondet choice = TEXT_ONE.to(BINARY_UNICODE).oneOf()
-    s' = { frame: choice, created: s.wall, ...s }
+    seedAt(choice)
   }
+
   // A second external seed choice gives multibyte text/binary identities enough
   // exploration weight alongside the new blocked-source fixtures. The ordinary
   // seed action still admits every payload representation.
   action seedUnicode = {
     nondet choice = Set(TEXT_UNICODE, BINARY_UNICODE).oneOf()
-    s' = { frame: choice, created: s.wall, ...s }
+    all {
+      input' = { name: "seedUnicode", choice: choice },
+      s' = { frame: choice, created: s.wall, ...s }
+    }
   }
   // External replacement with identical bytes in the other supported form.
   // This targets confirmation's representation boundary, without fixing its outcome.
@@ -304,28 +343,52 @@ module dialcache_shadow_conformance {
       NO_PAYLOAD, BINARY_ONE, BINARY_TWO, TEXT_ONE, TEXT_TWO,
       TEXT_PADDED_ONE, BINARY_PADDED_ONE, BINARY_UNICODE, TEXT_UNICODE
     ).nth(s.frame)).oneOf()
-    all { s.phase == CONFIRMATION_READ, s.frame > NO_PAYLOAD, s' = { frame: choice, created: s.wall, ...s } }
+    all { s.phase == CONFIRMATION_READ, s.frame > NO_PAYLOAD, input' = { name: "reencode", choice: choice },
+      s' = { frame: choice, created: s.wall, ...s } }
   }
   action invalidate = {
     nondet choice = Set(0, 20).oneOf()
-    s' = if (s.writeFailed) {
-      o: {
-        invalidations: s.o.invalidations + 1,
-        maintenance: s.o.maintenance.append("mutation_error"),
-        ...s.o
-      },
-      ...s
-    } else {
-      watermark: if (s.wall + choice > s.watermark) s.wall + choice else s.watermark,
-      o: { invalidations: s.o.invalidations + 1, maintenance: s.o.maintenance.append("ok"), ...s.o },
-      ...s
+    all {
+      input' = { name: "invalidate", choice: choice },
+      s' = if (s.writeFailed) {
+        o: {
+          invalidations: s.o.invalidations + 1,
+          maintenance: s.o.maintenance.append("mutation_error"),
+          ...s.o
+        },
+        ...s
+      } else {
+        watermark: if (s.wall + choice > s.watermark) s.wall + choice else s.watermark,
+        o: { invalidations: s.o.invalidations + 1, maintenance: s.o.maintenance.append("ok"), ...s.o },
+        ...s
+      }
     }
   }
-  action rollbackWall = s' = { wall: s.wall - WALL_ROLLBACK_MS, ...s }
+  action rollbackWall = all {
+    input' = { name: "rollbackWall", choice: -1 },
+    s' = { wall: s.wall - WALL_ROLLBACK_MS, ...s }
+  }
+  // Application time is independent of elapsed deadline time and physical TTL.
+  // Only an already acquired C0 may encounter this large forward change.
+  action advanceWallBy(choice: int): bool = all {
+    s.phase == CONFIRMATION_READ,
+    input' = { name: "advanceWall", choice: choice },
+    s' = { wall: s.wall + choice, ...s }
+  }
+  action advanceWall = {
+    nondet choice = Set(1, 60000).oneOf()
+    advanceWallBy(choice)
+  }
+  action setLogging(choice: int): bool = all {
+    input' = { name: "logPolicy", choice: choice },
+    s' = {
+      log: choice == LOGGING_ENABLED, invalidLog: choice == LOGGING_INVALID,
+      invalidShadow: false, shadowActive: s.hook, ...s
+    }
+  }
   action logPolicy = {
     nondet choice = Set(LOGGING_DISABLED, LOGGING_ENABLED, LOGGING_INVALID).oneOf()
-    s' = { log: choice == LOGGING_ENABLED, invalidLog: choice == LOGGING_INVALID,
-      invalidShadow: false, shadowActive: s.hook, ...s }
+    setLogging(choice)
   }
   def shadowPolicyFor(choice: int): State = {
     shadowActive: s.hook and choice == SHADOW_ENABLED, log: s.defaultLog,
@@ -334,23 +397,38 @@ module dialcache_shadow_conformance {
   }
   action shadowPolicy = {
     nondet choice = Set(SHADOW_ENABLED, SHADOW_DISABLED, SHADOW_INVALID).oneOf()
-    s' = shadowPolicyFor(choice)
+    all {
+      input' = { name: "shadowPolicy", choice: choice },
+      s' = shadowPolicyFor(choice)
+    }
   }
   action readFault = {
     nondet choice = Set(0, 1).oneOf()
-    s' = { readFailed: choice == 1, ...s }
+    all {
+      input' = { name: "readFault", choice: choice },
+      s' = { readFailed: choice == 1, ...s }
+    }
   }
   action loadFault = {
     nondet choice = Set(0, 1).oneOf()
-    s' = { loadFailed: choice == 1, ...s }
+    all {
+      input' = { name: "loadFault", choice: choice },
+      s' = { loadFailed: choice == 1, ...s }
+    }
   }
   action dumpFault = {
     nondet choice = Set(0, 1).oneOf()
-    s' = { dumpFailed: choice == 1, ...s }
+    all {
+      input' = { name: "dumpFault", choice: choice },
+      s' = { dumpFailed: choice == 1, ...s }
+    }
   }
   action writeFault = {
     nondet choice = Set(0, 1).oneOf()
-    s' = { writeFailed: choice == 1, ...s }
+    all {
+      input' = { name: "writeFault", choice: choice },
+      s' = { writeFailed: choice == 1, ...s }
+    }
   }
 
   // Exploration schedule: retain every progress/environment action.
@@ -358,7 +436,7 @@ module dialcache_shadow_conformance {
   // replacement, failure, clock, and admission-policy transition. Unicode seed
   // choices add exploration frequency, not another payload representation.
   action step = if (s.phase == CONFIRMATION_READ) any {
-    releaseRead, logPolicy, reencode,
+    releaseRead, logPolicy, reencode, advanceWall,
     any { seed, seedUnicode, invalidate, readFault, advance, rollbackWall, shadowPolicy }
   } else any {
     any { beginCall, resolveLoader, rejectLoader, releaseRead, releaseLoad, releaseDump, releaseWrite },
@@ -377,137 +455,161 @@ module dialcache_shadow_conformance {
   val expiredSourceWorkSkipsRedis = s.sourceWorkMs < JOB_BUDGET_MS or s.o.reads == 0
 
   // Deterministic model regressions ------------------------------------------
+  // Fixtures can patch ownership to challenge a property. They preserve the
+  // last declared input and are never exported as implementation histories.
+  action modelFixture(snapshot: State): bool = all {
+    input' = input, s' = snapshot
+  }
   // Fixed model regressions anchor the callback and captured-policy contract.
-  action compareFixture = init.then(s' = {
-    phase: SNAPSHOT_DECODE, deadline: s.now + JOB_BUDGET_MS, comparisonMs: 0,
-    hook: true, shadowActive: true,
-    c0: TEXT_ONE, c0Created: s.wall - 1, sourceValue: VALUE_TWO,
-    o: { calls: List(VALUE_TWO), loaders: 1, reads: 1, loads: 1, ...empty },
-    ...s
-  })
+  action compareFixture = init.then(modelFixture({
+      phase: SNAPSHOT_DECODE, deadline: s.now + JOB_BUDGET_MS, comparisonMs: 0,
+      hook: true, shadowActive: true,
+      c0: TEXT_ONE, c0Created: s.wall - 1, sourceValue: VALUE_TWO,
+      o: { calls: List(VALUE_TWO), loaders: 1, reads: 1, loads: 1, ...empty },
+      ...s
+    }))
   run identicalTextAndBinaryBytesConfirmMismatchTest = compareFixture
-    .then(s' = { comparator: COMPARE_UNEQUAL, frame: BINARY_ONE, created: s.wall, ...s }).then(releaseLoad).then(releaseRead)
+    .then(modelFixture({ comparator: COMPARE_UNEQUAL, frame: BINARY_ONE, created: s.wall, ...s })).then(releaseLoad).then(releaseRead)
     .expect(s.o.shadow == List("mismatch"))
   run sameDecodedValueWithDifferentBytesIsSupersededTest = compareFixture
-    .then(s' = { comparator: COMPARE_UNEQUAL, frame: BINARY_PADDED_ONE, created: s.wall, ...s }).then(releaseLoad).then(releaseRead)
+    .then(modelFixture({ comparator: COMPARE_UNEQUAL, frame: BINARY_PADDED_ONE, created: s.wall, ...s })).then(releaseLoad).then(releaseRead)
     .expect(s.o.shadow == List("superseded"))
   run binarySnapshotComparesDecodedValueTest = compareFixture
-    .then(s' = { comparator: COMPARE_DEFAULT, c0: BINARY_ONE, sourceValue: VALUE_ONE, ...s }).then(releaseLoad)
+    .then(modelFixture({ comparator: COMPARE_DEFAULT, c0: BINARY_ONE, sourceValue: VALUE_ONE, ...s })).then(releaseLoad)
     .expect(s.o.shadow == List("match") and s.o.reads == 1)
   run slowComparisonTimesOutBeforeConfirmationTest = compareFixture
-    .then(s' = { comparator: COMPARE_UNEQUAL, comparisonMs: 10, ...s }).then(releaseLoad)
+    .then(modelFixture({ comparator: COMPARE_UNEQUAL, comparisonMs: 10, ...s })).then(releaseLoad)
     .expect(s.o.shadow == List("timeout") and s.o.reads == 1 and s.o.comparisons == 1 and s.o.calls == List(VALUE_TWO))
   run slowComparisonFailureStillTimesOutTest = compareFixture
-    .then(s' = { comparator: COMPARE_ERROR, comparisonMs: 10, ...s }).then(releaseLoad)
+    .then(modelFixture({ comparator: COMPARE_ERROR, comparisonMs: 10, ...s })).then(releaseLoad)
     .expect(s.o.shadow == List("timeout") and s.o.comparisons == 1 and s.o.calls == List(VALUE_TWO))
-  run missingHookSkipsDarkJobTest = init.then(s' = { hook: false, shadowActive: false, ...s })
+  run missingHookSkipsDarkJobTest = init.then(modelFixture({ hook: false, shadowActive: false, ...s }))
     .then(beginCall).then(resolveLoader).expect(s.o.calls.nth(0) > 0 and s.o.reads == 0 and s.o.shadow == List())
-  run invalidShadowPolicySkipsDarkJobTest = init.then(s' = shadowPolicyFor(SHADOW_INVALID)).then(beginCall).then(resolveLoader)
+  run invalidShadowPolicySkipsDarkJobTest = init.then(modelFixture(shadowPolicyFor(SHADOW_INVALID))).then(beginCall).then(resolveLoader)
     .expect(s.o.calls.nth(0) > 0 and s.o.reads == 0 and s.o.shadow == List())
-  run admittedComparisonSurvivesPolicyDisableTest = compareFixture.then(s' = { comparator: COMPARE_EQUAL, ...s })
-    .then(s' = shadowPolicyFor(SHADOW_DISABLED)).then(releaseLoad).expect(s.o.shadow == List("match"))
-  run explicitEqualityOverridesValuesTest = compareFixture.then(s' = { comparator: COMPARE_EQUAL, ...s }).then(releaseLoad)
+  run admittedComparisonSurvivesPolicyDisableTest = compareFixture.then(modelFixture({ comparator: COMPARE_EQUAL, ...s }))
+    .then(modelFixture(shadowPolicyFor(SHADOW_DISABLED))).then(releaseLoad).expect(s.o.shadow == List("match"))
+  run explicitEqualityOverridesValuesTest = compareFixture.then(modelFixture({ comparator: COMPARE_EQUAL, ...s })).then(releaseLoad)
     .expect(s.o.shadow == List("match") and s.o.comparisons == 1 and s.d.ages == List(1))
   run explicitInequalityRequiresConfirmationTest = compareFixture
-    .then(s' = { comparator: COMPARE_UNEQUAL, sourceValue: VALUE_ONE, frame: TEXT_ONE, created: s.wall, acceptedLog: true, ...s })
+    .then(modelFixture({ comparator: COMPARE_UNEQUAL, sourceValue: VALUE_ONE, frame: TEXT_ONE, created: s.wall, acceptedLog: true, ...s }))
     .then(releaseLoad).expect(s.phase == CONFIRMATION_READ and s.d.warnings == 0).then(releaseRead)
     .expect(s.o.shadow == List("mismatch") and s.o.comparisons == 1 and s.d.warnings == 1)
-  run comparisonFailureKeepsCallerTest = compareFixture.then(s' = { comparator: COMPARE_ERROR, ...s }).then(releaseLoad)
+  run comparisonFailureKeepsCallerTest = compareFixture.then(modelFixture({ comparator: COMPARE_ERROR, ...s })).then(releaseLoad)
     .expect(s.o.calls == List(VALUE_TWO) and s.o.shadow == List("comparison_error") and s.d.ages == List())
   run acceptedLoggingSurvivesPolicyChangeTest = compareFixture
-    .then(s' = { comparator: COMPARE_UNEQUAL, frame: TEXT_ONE, created: s.wall, acceptedLog: true, log: false, ...s })
+    .then(modelFixture({ comparator: COMPARE_UNEQUAL, frame: TEXT_ONE, created: s.wall, acceptedLog: true, log: false, ...s }))
     .then(releaseLoad).then(releaseRead).expect(s.d.warnings == 1)
-  run ageClampsAfterWallRollbackTest = compareFixture.then(s' = { comparator: COMPARE_EQUAL, ...s })
+  run ageClampsAfterWallRollbackTest = compareFixture.then(modelFixture({ comparator: COMPARE_EQUAL, ...s }))
     .then(rollbackWall).then(releaseLoad).expect(s.d.ages == List(0))
   run confirmationKeepsOriginalAgeTest = compareFixture
-    .then(s' = { comparator: COMPARE_UNEQUAL, frame: TEXT_ONE, created: s.wall, ...s }).then(releaseLoad)
-    .then(s' = { wall: s.wall + 1, created: s.wall + 1000, ...s }).then(releaseRead)
+    .then(modelFixture({ comparator: COMPARE_UNEQUAL, frame: TEXT_ONE, created: s.wall, ...s })).then(releaseLoad)
+    .then(modelFixture({ wall: s.wall + 1, created: s.wall + 1000, ...s })).then(releaseRead)
     .expect(s.o.shadow == List("mismatch") and s.d.ages == List(2))
 
-  run invalidLoggingKeepsComparisonWithoutWarningTest = init.then(s' = {
-    hook: true, shadowActive: true, comparator: COMPARE_UNEQUAL, comparisonMs: 0, sourceWorkMs: 0,
-    log: false, invalidLog: true, frame: TEXT_ONE, created: s.wall,
-    ...s
-  }).then(beginCall).expect(s.d.configErrors == 1 and s.o.reads == 1)
+  run invalidLoggingKeepsComparisonWithoutWarningTest = init.then(modelFixture({
+      hook: true, shadowActive: true, comparator: COMPARE_UNEQUAL, comparisonMs: 0, sourceWorkMs: 0,
+      log: false, invalidLog: true, frame: TEXT_ONE, created: s.wall,
+      ...s
+    })).then(beginCall).expect(s.d.configErrors == 1 and s.o.reads == 1)
     .then(releaseRead).then(resolveLoader).then(releaseLoad).then(releaseRead)
     .expect(s.o.shadow == List("mismatch") and s.d.warnings == 0 and s.o.comparisons == 1)
-  run sourceWorkBeforeDeadlineStillReadsTest = init.then(s' = {
-    hook: true, shadowActive: true, sourceWorkMs: JOB_BUDGET_MS - 1, ...s
-  }).then(beginCall).expect(s.o.reads == 1 and s.o.calls == List(CALL_PENDING) and s.o.shadow == List())
+
+  // Omission and an explicit false reply are distinct environment inputs. Both
+  // keep diagnostic metrics, while neither authorizes a mismatch warning.
+  run omittedLoggingKeepsMismatchMetricsOnlyTest = initialize(COMPARE_UNEQUAL)
+    .expect(not(s.defaultLog) and not(s.log))
+    .then(seedAt(TEXT_ONE)).then(beginCall).then(releaseRead).then(resolveAt(VALUE_TWO))
+    .then(releaseLoad).then(releaseRead)
+    .expect(s.o.shadow == List("mismatch") and s.d.ages == List(0)
+      and s.d.warnings == 0 and s.d.configErrors == 0 and s.o.comparisons == 1)
+
+  run explicitFalseLoggingOverridesEnabledDefaultTest = initialize(FIRST_LOGGING_FIXTURE + COMPARE_UNEQUAL)
+    .expect(s.defaultLog and s.log)
+    .then(setLogging(LOGGING_DISABLED)).then(seedAt(TEXT_ONE)).then(beginCall)
+    .then(releaseRead).then(resolveAt(VALUE_TWO)).then(releaseLoad).then(releaseRead)
+    .expect(s.o.shadow == List("mismatch") and s.d.ages == List(0)
+      and s.d.warnings == 0 and s.d.configErrors == 0 and s.o.comparisons == 1)
+  run sourceWorkBeforeDeadlineStillReadsTest = init.then(modelFixture({
+      hook: true, shadowActive: true, sourceWorkMs: JOB_BUDGET_MS - 1, ...s
+    })).then(beginCall).expect(s.o.reads == 1 and s.o.calls == List(CALL_PENDING) and s.o.shadow == List())
     .then(resolveLoader).expect(s.o.calls.nth(0) == VALUE_ONE or s.o.calls.nth(0) == VALUE_TWO)
-  run sourceWorkAtDeadlineSkipsDeferredReadTest = init.then(s' = {
-    hook: true, shadowActive: true, sourceWorkMs: JOB_BUDGET_MS, ...s
-  }).then(beginCall)
+  run sourceWorkAtDeadlineSkipsDeferredReadTest = init.then(modelFixture({
+      hook: true, shadowActive: true, sourceWorkMs: JOB_BUDGET_MS, ...s
+    })).then(beginCall)
     .expect(s.o.reads == 0 and s.o.calls == List(CALL_PENDING) and s.o.shadow == List("timeout")
       and s.d.fallbackErrors == List())
     .then(resolveLoader)
     .expect(s.o.calls == List(DEADLINE_ERROR) and s.o.reads == 0 and s.d.fallbackErrors == List("local"))
-  run expiredDeferredJobRetainsSourceRejectionDeadlineTest = init.then(s' = {
-    hook: true, shadowActive: true, sourceWorkMs: JOB_BUDGET_MS, ...s
-  }).then(beginCall).then(rejectLoader)
+  run expiredDeferredJobRetainsSourceRejectionDeadlineTest = init.then(modelFixture({
+      hook: true, shadowActive: true, sourceWorkMs: JOB_BUDGET_MS, ...s
+    })).then(beginCall).then(rejectLoader)
     .expect(s.o.calls == List(DEADLINE_ERROR) and s.o.shadow == List("timeout") and s.o.reads == 0)
 
 
   // These histories distinguish failures at C0, decode, C1, serialization and
   // write settlement. Their effects remain subordinate to the caller result.
-  action darkCallerFixture = init.then(s' = {
-    hook: true, shadowActive: true, sourceWorkMs: 0, comparisonMs: 0,
-    comparator: COMPARE_DEFAULT, ...s
-  })
+  action darkCallerFixture = init.then(modelFixture({
+      hook: true, shadowActive: true, sourceWorkMs: 0, comparisonMs: 0,
+      comparator: COMPARE_DEFAULT, ...s
+    }))
   action fillFixture = darkCallerFixture.then(beginCall)
     .then(releaseRead).then(resolveLoader)
 
   run darkReadErrorCannotReplaceCallerSourceTest = darkCallerFixture
-    .then(s' = { readFailed: true, ...s }).then(beginCall).then(releaseRead)
+    .then(modelFixture({ readFailed: true, ...s })).then(beginCall).then(releaseRead)
     .expect(s.o.calls == List(CALL_PENDING) and s.o.shadow == List("redis_error"))
     .then(resolveLoader)
     .expect(s.o.calls.nth(0) == VALUE_ONE or s.o.calls.nth(0) == VALUE_TWO)
     .expect(s.o.shadow == List("redis_error") and s.o.loads == 0 and s.o.writes == 0)
 
   run sourceErrorDoesNotDecodePresentDarkBytesTest = darkCallerFixture
-    .then(s' = { frame: TEXT_ONE, created: s.wall, ...s })
+    .then(modelFixture({ frame: TEXT_ONE, created: s.wall, ...s }))
     .then(beginCall).then(releaseRead).then(rejectLoader)
     .expect(s.o.calls == List(SOURCE_ERROR) and s.o.shadow == List("source_error")
       and s.o.loads == 0 and s.o.dumps == 0 and s.o.writes == 0)
 
   run futureDarkBytesFillWithoutDecodingTest = darkCallerFixture
-    .then(s' = { frame: TEXT_ONE, created: s.wall + 1, ...s })
+    .then(modelFixture({ frame: TEXT_ONE, created: s.wall + 1, ...s }))
     .then(beginCall).then(releaseRead).then(resolveLoader).then(releaseDump).then(releaseWrite)
     .expect(s.o.shadow == List("filled") and s.o.loads == 0
       and s.o.loaders == 1 and s.o.writes == 1)
 
   run fencedDarkBytesCanAdmitNewerFillTest = darkCallerFixture
-    .then(s' = { frame: TEXT_ONE, created: s.wall - 2, watermark: s.wall - 1, ...s })
+    .then(modelFixture({ frame: TEXT_ONE, created: s.wall - 2, watermark: s.wall - 1, ...s }))
     .then(beginCall).then(releaseRead).then(resolveLoader).then(releaseDump).then(releaseWrite)
     .expect(s.o.shadow == List("filled") and s.o.loads == 0
       and s.o.writes == 1 and s.created > s.watermark)
 
   run fencedConfirmationNeverRepairsTest = compareFixture
-    .then(s' = { comparator: COMPARE_UNEQUAL, frame: TEXT_ONE, created: s.wall, watermark: s.wall, ...s })
+    .then(modelFixture({ comparator: COMPARE_UNEQUAL, frame: TEXT_ONE, created: s.wall, watermark: s.wall, ...s }))
     .then(releaseLoad).then(releaseRead)
     .expect(s.o.shadow == List("superseded") and s.o.reads == 2
       and s.o.calls == List(VALUE_TWO) and s.o.writes == 0 and s.d.ages == List())
 
   run futureConfirmationStillComparesBytesTest = compareFixture
-    .then(s' = { comparator: COMPARE_UNEQUAL, frame: TEXT_ONE, created: s.wall + 1, ...s })
+    .then(modelFixture({ comparator: COMPARE_UNEQUAL, frame: TEXT_ONE, created: s.wall + 1, ...s }))
     .then(releaseLoad).then(releaseRead)
     .expect(s.o.shadow == List("mismatch") and s.o.reads == 2
       and s.o.calls == List(VALUE_TWO) and s.o.writes == 0)
 
   run fillSerializationFailureNeverDispatchesWriteTest = fillFixture
-    .then(s' = { dumpFailed: true, ...s }).then(releaseDump)
+    .then(modelFixture({ dumpFailed: true, ...s })).then(releaseDump)
     .expect(s.o.shadow == List("fill_error") and s.o.dumps == 1 and s.o.writes == 0)
     .expect(s.o.calls.nth(0) == VALUE_ONE or s.o.calls.nth(0) == VALUE_TWO)
 
   run fillWriteFailurePreservesCallerResultTest = fillFixture.then(releaseDump)
-    .then(s' = { writeFailed: true, ...s }).then(releaseWrite)
+    .then(modelFixture({ writeFailed: true, ...s })).then(releaseWrite)
     .expect(s.o.shadow == List("fill_error") and s.o.dumps == 1 and s.o.writes == 1)
     .expect(s.o.calls.nth(0) == VALUE_ONE or s.o.calls.nth(0) == VALUE_TWO)
 
-  action expirePendingJob = s' = {
-    abandoned: true, now: s.deadline, wall: s.wall + s.deadline - s.now,
-    o: { shadow: s.o.shadow.append("timeout"), ...s.o },
-    ...s
+  action expirePendingJob = all {
+    input' = input,
+    s' = {
+      abandoned: true, now: s.deadline, wall: s.wall + s.deadline - s.now,
+      o: { shadow: s.o.shadow.append("timeout"), ...s.o },
+      ...s
+    }
   }
   run lateFillSerializationCannotDispatchWriteTest = fillFixture
     .then(expirePendingJob).then(releaseDump)
@@ -519,12 +621,12 @@ module dialcache_shadow_conformance {
     .expect(s.o.calls.nth(0) == VALUE_ONE or s.o.calls.nth(0) == VALUE_TWO)
 
   run lateDecodeCannotStartConfirmationTest = compareFixture
-    .then(s' = { comparator: COMPARE_UNEQUAL, ...s }).then(expirePendingJob).then(releaseLoad)
+    .then(modelFixture({ comparator: COMPARE_UNEQUAL, ...s })).then(expirePendingJob).then(releaseLoad)
     .expect(s.o.shadow == List("timeout") and s.o.reads == 1 and s.o.comparisons == 0
       and s.o.calls == List(VALUE_TWO))
 
   run lateConfirmationCannotEmitAnotherVerdictTest = compareFixture
-    .then(s' = { comparator: COMPARE_UNEQUAL, ...s }).then(releaseLoad)
+    .then(modelFixture({ comparator: COMPARE_UNEQUAL, ...s })).then(releaseLoad)
     .then(expirePendingJob).then(releaseRead)
     .expect(s.o.shadow == List("timeout") and s.o.reads == 2 and s.o.writes == 0
       and s.o.calls == List(VALUE_TWO))
@@ -532,4 +634,37 @@ module dialcache_shadow_conformance {
   run lateDarkReadCannotStartDecodeOrFillTest = darkCallerFixture
     .then(beginCall).then(resolveLoader).then(expirePendingJob).then(releaseRead)
     .expect(s.o.shadow == List("timeout") and s.o.loads == 0 and s.o.dumps == 0 and s.o.writes == 0)
+  run confirmationPastFreshnessKeepsOriginalPayloadAndAgeTest = initialize(FIRST_LOGGING_FIXTURE + COMPARE_UNEQUAL)
+    .then(seedAt(TEXT_ONE)).then(beginCall).then(releaseRead).then(resolveAt(VALUE_TWO))
+    .then(releaseLoad).then(advanceWallBy(60000)).then(releaseRead)
+    .expect(s.o.calls == List(VALUE_TWO) and s.o.shadow == List("mismatch")
+      and s.o.reads == 2 and s.o.loads == 1 and s.o.writes == 0
+      and s.d.ages == List(60000) and s.d.warnings == 1 and s.d.futureOffsets == List())
+
+  run confirmationRollbackKeepsPayloadAndClampsAgeTest = initialize(FIRST_LOGGING_FIXTURE + COMPARE_UNEQUAL)
+    .then(seedAt(TEXT_ONE)).then(beginCall).then(releaseRead).then(resolveAt(VALUE_TWO))
+    .then(releaseLoad).then(rollbackWall).then(releaseRead)
+    .expect(s.o.calls == List(VALUE_TWO) and s.o.shadow == List("mismatch")
+      and s.o.reads == 2 and s.o.loads == 1 and s.o.writes == 0
+      and s.d.ages == List(0) and s.d.warnings == 1
+      and s.d.futureOffsets == List({ layer: "remote_shadow", offsetMs: 1000 }))
+
+  run futureDarkAcquisitionReportsOffsetAndFillsMissTest = initialize(COMPARE_DEFAULT)
+    .then(seedAt(TEXT_ONE)).then(rollbackWall).then(beginCall).then(releaseRead)
+    .expect(s.o.loads == 0 and s.o.dumps == 0
+      and s.d.futureOffsets == List({ layer: "remote_shadow", offsetMs: 1000 }))
+    .then(resolveAt(VALUE_TWO)).then(releaseDump).then(releaseWrite)
+    .expect(s.o.calls == List(VALUE_TWO) and s.o.shadow == List("filled")
+      and s.o.loads == 0 and s.o.writes == 1
+      and s.d.futureOffsets == List({ layer: "remote_shadow", offsetMs: 1000 }))
+
+  run futureLateDarkReadKeepsTimeoutAndReportsOffsetTest = initialize(COMPARE_DEFAULT)
+    .then(seedAt(TEXT_ONE)).then(rollbackWall).then(beginCall).then(advanceBy(JOB_BUDGET_MS))
+    .expect(s.o.calls == List(DEADLINE_ERROR) and s.o.shadow == List("timeout")
+      and s.d.futureOffsets == List())
+    .then(releaseRead)
+    .expect(s.o.calls == List(DEADLINE_ERROR) and s.o.shadow == List("timeout")
+      and s.o.loads == 0 and s.o.dumps == 0 and s.o.writes == 0
+      and s.d.futureOffsets == List({ layer: "remote_shadow", offsetMs: 990 }))
+
 }

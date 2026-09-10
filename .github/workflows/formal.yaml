@@ -50,7 +50,7 @@ jobs:
           DIALCACHE_EFFECTS_TRACE_DIR: .formal-traces/effects
           DIALCACHE_FEATURE_TRACE_DIR: .formal-traces/features
           DIALCACHE_COVERAGE_EVIDENCE_DIR: .formal-traces/go-parity-witnesses
-        run: pnpm exec vitest run test/formal-conformance.test.ts test/formal-effects.test.ts test/formal-features.test.ts test/formal-behavior.test.ts test/formal-protocol-vectors.test.ts --coverage.enabled=false
+        run: pnpm exec vitest run test/formal-conformance.test.ts test/formal-effects.test.ts test/formal-features.test.ts test/formal-local-clock.test.ts test/formal-behavior.test.ts test/formal-protocol-vectors.test.ts --coverage.enabled=false
       - name: Preserve formal traces and counterexamples
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

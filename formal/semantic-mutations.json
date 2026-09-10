@@ -152,6 +152,7 @@
       "before": ".sort(([left], [right]) => compareCodePoints(left, right));",
       "after": ".sort(([left], [right]) => -compareCodePoints(left, right));",
       "requiredDetections": [
+        "generated",
         "portable"
       ]
     },

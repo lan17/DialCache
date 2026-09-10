@@ -15,30 +15,31 @@ Use [CONTRACTS.md](./CONTRACTS.md) for the obligations and
 
 ## What is accounted for
 
-| Inventory | Current requirement | Meaning |
-| --- | ---: | --- |
-| Behavioral cases | 239 | Named observable rules or specific corners |
-| Wire cases | 22 | Named key, frame, envelope, timestamp and invalidation rules |
-| Behavioral and wire cases | 261 | The union in [semantic-cases.json](./semantic-cases.json) |
-| Native cases | 33 | Separate API, value, clock, exporter and adapter obligations |
-| Positive portable scenarios | 244 | Fixed histories shared by both implementations |
-| Required generated witnesses | 344 | Consequential schedules required across eight effects/feature profiles |
-| Generated histories | 4,000 | Scheduled corpus across all nine conformance profiles |
-| Protocol vectors | 134 | Fixed key, frame, codec, cohort and compression examples |
-| Invalidation vectors | 49 | State transitions executed against real Redis/Valkey |
-| Quint execution | 16 models, 117 invariants, 219 regressions | Scheduled bounded checks in [execution.json](./execution.json) |
+The current catalogs give all **240 behavioral cases** a checked Quint
+reference and Quint-driven implementation evidence. Wire obligations have
+separate generated primitive artifacts and complementary fixed vectors; native
+cases remain separate API, value, clock, exporter and adapter obligations.
+This is a reviewed case inventory, not a percentage of all possible behavior.
 
-These are current inventory and execution requirements, not a fresh passing
-report. Earlier replay and mutation results remain explicitly historical in
-[GO-PARITY.md](./GO-PARITY.md) and
-[SEMANTIC-COVERAGE.md](./SEMANTIC-COVERAGE.md). Changed inputs require new
-model, replay, integration and mutation reports with their own fingerprints.
+Use these sources for current totals and execution requirements:
 
-A case can cite several scenarios, properties or witnesses, and one history
-can support several cases. The 181 behavioral cases with required generated
-witnesses are not 181 independent proofs. The 33 native cases are separate from
-the 261 behavioral/wire cases; they are not additional generated coverage.
-The feature families below overlap where one rule affects several features.
+| Inventory | Authoritative source |
+| --- | --- |
+| Behavioral/wire cases and evidence links | [semantic-cases.json](./semantic-cases.json) |
+| Checked clauses and explicit limits | [quint-case-audit.json](./quint-case-audit.json) |
+| Native cases and feature families | [feature-coverage.json](./feature-coverage.json) |
+| Profiles and input encodings | [profiles.json](./profiles.json) |
+| Models, properties, sampled histories, exported regressions and wire artifacts | [execution.json](./execution.json) |
+| Consequential witness requirements | [coverage-witnesses.json](./coverage-witnesses.json) |
+
+`node formal/check-semantic-coverage.mjs` reports the current breakdown;
+`node formal/execution.mjs` validates the execution inventory. A case can cite
+several histories, and one history can support several cases. Those citations
+are not independent proofs, and native tests do not inflate portable counts.
+
+The expanded inventory describes requirements. The final combined CI and
+mutation measurements have not yet completed for this expansion. Earlier
+passing reports remain historical, with their actual input fingerprints.
 
 ## Feature map
 
@@ -111,17 +112,18 @@ expected state is reserved for assertions and witness classification.
 
 ## Native adaptations are explicit contracts
 
-The 33 native cases comprise seven public API cases (B01), four host-execution
-cases (B02), five value-domain cases (B03), seven observability cases (X01), and
-ten resource/Redis integration cases (X02). Each applicable language names exact
+Native cases are grouped under public API (B01), host execution (B02),
+value domains (B03), observability (X01), and resources/Redis integration (X02). Each applicable language names exact
 tests and their scope. A non-applicable case needs a concrete explanation.
 
 Go uses explicit contexts, typed operations, errors and goroutines. It preserves
 scope and error consequences without copying Promise identity, thenables, or
 Node timer handles. Native clock tests distinguish precise elapsed
 source/read/shadow budgets from local TTL's whole-millisecond monotonic
-observations at insertion and lookup, matching TypeScript. Integer-tick Quint
-profiles cannot distinguish those fractional boundaries. API validation,
+observations at insertion and lookup, matching TypeScript. The local-clock profile now uses fractional environment advances and replays
+whole-millisecond expiry through real default instances sharing one process
+grid. Precise source/read/shadow timers and custom-clock compatibility retain
+native boundary tests; unrelated integer-tick profiles do not establish them. API validation,
 optional leaves and registration snapshots have native checks in both languages.
 
 JSON interoperability uses Unicode scalar strings. Go rejects lone escaped
@@ -148,22 +150,33 @@ explicitly non-applicable to Go's typed options and go-redis adapter.
 
 ## Remaining finite limits
 
-Three behavioral cases have model evidence without a portable scenario,
-required generated witness, or vector link. C27 local read/write failures lack
-a public storage-fault injection boundary. C38 reads/value writes preserving
-watermarks has a model check for cutoff preservation and native real-Redis
-checks for marker existence/TTL; it has no shared portable lifetime fixture.
-These are evidence boundaries, not automatically unsupported Go features.
+The previous local read/write and watermark-lifetime evidence gaps now have
+Quint-driven replay. Local-failure uses native storage/clock fault seams and
+checks source results, later local publication and separate-request probes.
+Recovery-read observes actual marker existence and TTL before and after value
+work, and composes retained bytes with physical expiry and compressed recovery.
+Shadow-layers covers mixed served/dark capacity, request/local publication and
+captured fill policy. Named public-action regressions guarantee these corners
+without relying on random selection.
 
-The shadow generator does not independently exercise every possible C1 deletion
-or physical-expiry schedule: its short job budget and much longer physical TTL
-limit those histories. Larger request trees, operation/key/instance sets,
-capacities, mixed dark/served jobs, and combined failures remain bounded.
-Native malformed/truncated zstd, trailing-garbage and concatenated-stream tests
-have no corresponding shared protocol vectors yet.
+Those additions do not enumerate arbitrary request trees, operation/key/instance
+sets, capacities or simultaneous failures. The short shadow job budget limits
+physical-expiry schedules; wall-clock-only confirmation changes are explicit
+inputs, not a claim that every remote expiry race was explored. Recovery-read's
+selected-shadow mode deliberately admits only stale seeds and failed sources;
+fresh-hit diagnostic jobs belong to other profiles.
 
-Finally, atomic primary reads, stable retained bytes, suitable clocks, executor
-progress and watermark durability remain explicit environmental assumptions.
-Race detection covers exercised schedules; sampled model checks do not prove
-fairness or universal refinement. The inventory makes the known feature/corner
-accounting reviewable while preserving those limits.
+Generated wire artifacts compute key escaping/order/cohorts, frame/text/duration
+rules and invalidation transitions. Envelope generation covers wrapper marker,
+threshold, cap and strict-shrink selection with independently verified native
+codec sizes/outcomes. It does not implement zstd or model arbitrary streams,
+dictionaries, windows, trailers or concatenation. Per-call test limits exercise
+boundary logic without allocating the production 512 MiB ceiling. Full IEEE754
+shortest decimal formatting and arbitrary-width integers remain fixed/native
+boundaries; the Quint key numeric domain uses safe integers and bounded signed
+integer magnitudes. See [PROTOCOL.md](./PROTOCOL.md).
+
+Atomic primary reads, stable retained bytes, suitable clocks, executor progress
+and watermark durability remain environmental assumptions. Race detection covers
+exercised schedules; sampled model checks do not prove fairness or universal
+refinement. The inventory keeps known cases and remaining domains reviewable.

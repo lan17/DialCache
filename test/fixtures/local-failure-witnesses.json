@@ -1,0 +1,2076 @@
+[
+  {
+    "regression": "localReadFailureFallsThroughAndPreservesOldLocalTest",
+    "trace": {
+      "states": [
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "init"
+          },
+          "s": {
+            "o": {
+              "calls": [],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "0"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "0"
+              },
+              "reads": {
+                "#bigint": "0"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "2"
+            },
+            "name": "beginCall"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "0"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "1"
+            },
+            "name": "resolveLoader"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "2"
+            },
+            "name": "seed"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "1"
+            },
+            "name": "localFault"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "0"
+            },
+            "name": "beginCall"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "2"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "1"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "2"
+              },
+              "reads": {
+                "#bigint": "2"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "0"
+            },
+            "name": "localFault"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "2"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "1"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "2"
+              },
+              "reads": {
+                "#bigint": "2"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "2"
+            },
+            "name": "beginCall"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "2"
+                },
+                {
+                  "#bigint": "1"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "1"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "3"
+              },
+              "reads": {
+                "#bigint": "2"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "0"
+            },
+            "name": "beginCall"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "2"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "2"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "1"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "4"
+              },
+              "reads": {
+                "#bigint": "2"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "regression": "localReadFailureSkipsSourcePublicationButMemoizesTest",
+    "trace": {
+      "states": [
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "init"
+          },
+          "s": {
+            "o": {
+              "calls": [],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "0"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "0"
+              },
+              "reads": {
+                "#bigint": "0"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "2"
+            },
+            "name": "beginCall"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "0"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "1"
+            },
+            "name": "resolveLoader"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "0"
+            },
+            "name": "policy"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "1"
+            },
+            "name": "localFault"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "0"
+            },
+            "name": "beginCall"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "2"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "2"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "0"
+            },
+            "name": "localFault"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "2"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "2"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "2"
+            },
+            "name": "resolveLoader"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "2"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "2"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "2"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "2"
+            },
+            "name": "beginCall"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "2"
+                },
+                {
+                  "#bigint": "1"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "2"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "3"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "0"
+            },
+            "name": "beginCall"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "2"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "2"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "2"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "4"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "regression": "localWriteFailureKeepsSourceAndRequestMemoTest",
+    "trace": {
+      "states": [
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "init"
+          },
+          "s": {
+            "o": {
+              "calls": [],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "0"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "0"
+              },
+              "reads": {
+                "#bigint": "0"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "0"
+            },
+            "name": "beginCall"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "0"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "1"
+            },
+            "name": "localFault"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "0"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "1"
+            },
+            "name": "resolveLoader"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "0"
+            },
+            "name": "localFault"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "0"
+            },
+            "name": "policy"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "0"
+            },
+            "name": "beginCall"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "1"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "2"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "2"
+            },
+            "name": "beginCall"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "2"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "3"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "2"
+            },
+            "name": "resolveLoader"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "2"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "2"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "3"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "2"
+            },
+            "name": "beginCall"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "2"
+                },
+                {
+                  "#bigint": "2"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "2"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "4"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "regression": "sourceFailureKeepsPreviouslyAcceptedStorageTest",
+    "trace": {
+      "states": [
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "init"
+          },
+          "s": {
+            "o": {
+              "calls": [],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "0"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "0"
+              },
+              "reads": {
+                "#bigint": "0"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "2"
+            },
+            "name": "beginCall"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "0"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "1"
+            },
+            "name": "resolveLoader"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "0"
+            },
+            "name": "policy"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "1"
+            },
+            "name": "localFault"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "0"
+            },
+            "name": "beginCall"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "0"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "2"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "2"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "rejectLoader"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "3"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "2"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "2"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "0"
+            },
+            "name": "localFault"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "3"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "2"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "2"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "2"
+            },
+            "name": "beginCall"
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "1"
+                },
+                {
+                  "#bigint": "3"
+                },
+                {
+                  "#bigint": "1"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "1"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "2"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "3"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [
+                {
+                  "#bigint": "60000"
+                }
+              ],
+              "writes": {
+                "#bigint": "1"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+]

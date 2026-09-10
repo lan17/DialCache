@@ -391,4 +391,25 @@ module dialcache_recovery_conformance {
     .then(s' = { wall: s.candidateCreated + s.acceptedMaxAge, ...s }).then(releaseLoad)
     .expect(s.o.calls == List(SOURCE_ERROR) and s.o.loads == 1
       and s.o.recovery == List("miss") and s.d.ages == List() and s.o.writes == 0)
+
+  // An operation classifier is the captured decision even when its instance
+  // would deny recovery. An ordinary failure distinguishes allow from default.
+  run operationAllowReplacesInstanceDenialTest = init
+    .then(s' = { instanceClassifier: CLASSIFIER_DENY, request: false, ...s })
+    .then(s' = admitted(0, CLASSIFIER_ALLOW)).then(rejectLoader).then(releaseLoad)
+    .expect(s.o.calls == List(VALUE_ONE) and s.o.classifications == 1
+      and s.o.loads == 1 and s.o.recovery == List("served") and s.o.writes == 0)
+
+  run coalescedRecoveryClassifiesAndDecodesOnceTest = requestFixture
+    .then(s' = admitted(0, CLASSIFIER_INHERIT)).then(s' = joined(1)).then(s' = joined(0))
+    .then(rejectLoader).then(releaseLoad)
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_ONE)
+      and s.o.reads == 1 and s.o.loaders == 1 and s.o.classifications == 1
+      and s.o.loads == 1 and s.o.recovery == List("served") and s.o.writes == 0)
+
+  run recoveredValueKeepsOriginalFallbackDiagnosticTest = allowRecoveryFixture
+    .then(beginAllowedRecovery).then(rejectLoader).then(releaseLoad)
+    .expect(s.o.calls == List(VALUE_ONE) and s.o.recovery == List("served")
+      and s.d.fallbackErrors == List("remote") and s.o.classifications == 1
+      and s.o.loads == 1 and s.o.dumps == 0 and s.o.writes == 0)
 }

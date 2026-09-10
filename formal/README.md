@@ -1,86 +1,106 @@
 # Executable DialCache specification
 
-This suite formalizes DialCache behavior for implementation testing and language ports. Quint transitions and independently checked properties are the behavioral source of truth for TypeScript and Go; [`SPEC.md`](./SPEC.md) explains their contracts and conformance; [`profiles.json`](./profiles.json) registers experimental specification 0.1.0 and bounded profile versions. It has three complementary parts:
+Quint defines DialCache's portable behavior through readable transitions and
+independently checked properties. TypeScript and Go replay the same external
+histories against their real APIs and compare the resulting values, errors,
+cache effects and diagnostics. The suite targets language ports and regression
+testing; passing finite executions is not a proof over every input or schedule.
 
-| Part | Execution | What passing establishes |
+## Reading order
+
+1. [SPEC.md](./SPEC.md) explains the behavior, ownership rules and allowed races.
+2. [CONTRACTS.md](./CONTRACTS.md) assigns stable obligations;
+   [FEATURE-COVERAGE.md](./FEATURE-COVERAGE.md) groups their known corners.
+3. [AUTHORING.md](./AUTHORING.md) explains Quint's notation and how to add a
+   distinguishing property and implementation replay.
+4. Read the relevant model below, then its public-action regressions.
+   [BEHAVIOR.md](./BEHAVIOR.md) and [CONFORMANCE.md](./CONFORMANCE.md) explain
+   replay inputs and observations; [PROTOCOL.md](./PROTOCOL.md) covers bytes.
+5. [SEMANTIC-COVERAGE.md](./SEMANTIC-COVERAGE.md) explains evidence accounting
+   and mutation measurement. [GO-PARITY.md](./GO-PARITY.md) defines acceptance
+   and native adaptations; [TEST-MAP.md](./TEST-MAP.md) helps locate evidence.
+
+## What the suite checks
+
+| Evidence | Execution | Meaning of a pass |
 | --- | --- | --- |
-| Verification | Seven Quint models → bounded simulation → invariant checks | No violation was found in the explored executions of those models |
-| Behavioral conformance | Quint core/effects/scope/recovery/policy/shadow/admission/layers/independent models → ITF traces, plus portable feature scenarios → language driver → real DialCache | The implementation produced the expected observations for the tested profile and traces |
-| Protocol interoperability | Portable JSON vectors → language implementation | Keys, frames, decoder/envelope results, cohorts, and invalidation transitions match the supplied cases |
+| Model properties | Quint transitions, bounded exploration and named regressions | The checked model obeyed those properties within the explored bounds |
+| Behavioral conformance | Sampled ITF histories and exported Quint regressions replayed in both ports | The real implementations produced the model's observations for those histories |
+| Wire interoperability | Quint-derived primitive artifacts and complementary fixed vectors | The implementations matched those key, frame, envelope and invalidation cases |
+| Native integration | Language, clock, codec, exporter and real Redis tests | The tested binding/environment satisfies its explicit obligations |
 
-Passing one part does not imply the others. In particular, a model can satisfy its invariants while an implementation diverges from it. Generated replay connects the two for nine profiles: core, pending effects, request scopes, recovery, policy/storage, dark shadow validation, served-hit shadow admission, layer composition, and independent caller recovery. Portable deterministic scenarios cover additional feature boundaries.
+These kinds of evidence complement each other. Models can pass while a driver
+or implementation diverges. A witness classification needs the distinguishing
+public consequence; expected model state never supplies execution inputs or
+actual observations. The reviewed behavioral inventory now gives every named
+behavioral case a checked Quint reference and Quint-driven implementation
+evidence. This is case accounting, not universal behavioral completeness.
 
-```text
-Seven verification models                 Conformance models
-          |                                      |
- bounded invariant checking                generated ITF traces + portable scenarios
-                                                 |
-                                     TypeScript / Go driver
-                                                 |
-                                          real implementation
-                                                 |
-                                      compare observable effects
+The expanded suite's final combined CI and mutation run is still required.
+Earlier passing reports retain their original revisions, corpus and source
+fingerprints; they do not validate changed models, drivers or vectors.
 
-Protocol JSON vectors ────────────────> exact key / frame / decoder checks
+## Models and composition profiles
+
+The verification models emphasize individual ownership or safety boundaries:
+
+| Model | Starting point |
+| --- | --- |
+| [dialcache-core.qnt](./dialcache-core.qnt) | Enabled scopes, traversal and publication |
+| [dialcache-runtime-policy.qnt](./dialcache-runtime-policy.qnt) | Sparse overlays and captured policy |
+| [dialcache-coalescing-liveness.qnt](./dialcache-coalescing-liveness.qnt) | Flights, deadlines and abandoned sources |
+| [dialcache-tracked-invalidation.qnt](./dialcache-tracked-invalidation.qnt) | Acquired snapshots, watermarks and delayed writes |
+| [dialcache-stale-recovery.qnt](./dialcache-stale-recovery.qnt) | Retained bytes, age checks and recovery authority |
+| [dialcache-shadow-validation.qnt](./dialcache-shadow-validation.qnt) | Diagnostic C0/source/C1 work and fills |
+| [dialcache-redis-protocol.qnt](./dialcache-redis-protocol.qnt) | Frame/fence validation order |
+
+Conformance profiles expose replayable external commands. The established
+`core`, `effects`, `scope`, `recovery`, `policy`, `shadow`, `admission`, `layers`
+and `independent` profiles remain separate slices. Six additional profiles
+compose previously separate boundaries:
+
+| Profile | Consequential interactions |
+| --- | --- |
+| [recovery-read](./dialcache-recovery-read-conformance.qnt) | Held reads/decode, request/local/remote publication, logical versus physical retention, compressed recovery, marker lifetime, and recovered absence skipping selected shadow work |
+| [local-failure](./dialcache-local-failure-conformance.qnt) | Local read/write failures, source outcome preservation, and request publication through native storage fault seams |
+| [runtime-boundaries](./dialcache-runtime-boundaries-conformance.qnt) | Omission versus invalid leaves, defaults, exact cohorts and policy capture at their invocation boundaries |
+| [shadow-layers](./dialcache-shadow-layers-conformance.qnt) | Dark source publication, captured fills, request/local first hits, independent sources, and mixed served/dark capacity ownership |
+| [local-clock](./dialcache-local-clock-conformance.qnt) | Fractional environment time, whole-millisecond local expiry, and the common process grid across separately constructed native instances |
+| [source-budgets](./dialcache-source-budgets-conformance.qnt) | Default/unbounded/finite source budgets, held policy, followers, disabled calls and key failures |
+
+These profiles deliberately bound callers, keys, contexts, capacities, payloads
+and time. Their introduction does not imply that every product of those domains
+is explored. [profiles.json](./profiles.json) records profile versions, input
+encodings, smoke traces and implementation declarations.
+
+## One execution inventory
+
+[execution.json](./execution.json) is the source for scheduled models,
+invariants, model regressions, exported replay regressions, vector generators,
+seeds and exploration bounds. [coverage-witnesses.json](./coverage-witnesses.json)
+records required consequences. [semantic-cases.json](./semantic-cases.json) and
+[quint-case-audit.json](./quint-case-audit.json) give each evidence link a reviewed
+scope. Native cases are separate in [feature-coverage.json](./feature-coverage.json).
+Read the manifests or run their checkers for current totals instead of copying
+counts between documents:
+
+```sh
+node formal/execution.mjs
+node formal/check-semantic-coverage.mjs
+node formal/check-feature-coverage.mjs
+node formal/run-models.mjs check --dry-run
+node formal/run-models.mjs generate --dry-run
 ```
 
-The TypeScript and [Go implementation](../go/README.md) runners require the same nine generated profiles, all 244 portable feature scenarios and all 134 protocol cases. The Go module provides runtime configuration, deadlines, recovery, shadow validation, compression, observability and a real Redis adapter. Go replay uses actual contexts, goroutines and external gates, with race detection in CI. Real tests additionally exercise Redis, Valkey, Redis Cluster and bidirectional TypeScript/Go payload and invalidation interoperability. [`GO-PARITY.md`](./GO-PARITY.md) records acceptance and native binding adaptations; [`TEST-MAP.md`](./TEST-MAP.md) records finite coverage and remaining interaction bounds.
+A declaration alone does not count as a checked property. The inventory rejects
+unscheduled regressions, stale references and positive scenarios/vectors without
+a case assignment. A case may cite several witnesses; each must hold. Shared
+histories or repeated citations are not independent proofs.
 
-[`FEATURE-COVERAGE.md`](./FEATURE-COVERAGE.md) is the readable map of all 12 feature families, 261 named behavioral/protocol cases, and 33 separate native binding/integration cases. [`SEMANTIC-COVERAGE.md`](./SEMANTIC-COVERAGE.md) distinguishes those evidence links, required generated witnesses, and detection of 13 intentional behavioral/protocol faults. CI compares ordinary Vitest, generated replay, and the positive portable suite in isolated source copies and preserves the reports. These measures expose gaps; they do not establish exhaustive semantic completeness. The expanded inventory states current execution requirements; historical passing reports do not validate changed inputs.
+## Generating and replaying behavior
 
-[`AUTHORING.md`](./AUTHORING.md) explains how to read the Quint models and codify the next behavior. Human-readable state, transitions, and properties are acceptance criteria alongside executable evidence. Small representation helpers are shared; ownership and scheduling rules remain visible in their bounded models.
-
-## Portable scope
-
-[`CONTRACTS.md`](./CONTRACTS.md) inventories the rules derived from current docs and tests, with named executable evidence and a source index. It separates portable behavior, protocol interoperability, language binding, and external assumptions. Backend-neutral diagnostic classifications, counts, ages, phase durations, byte sizes, and mismatch-warning eligibility have selected portable scenarios. Exporter compatibility and resource ceilings remain separate integration concerns. Registration APIs, native object identity, and Promise mechanics are not requirements for other languages.
-
-One logical call operation is enough to exercise the shared cache path. The feature corpus also controls classifier/comparator outcomes, multiple instances/scopes/operation identities, and independent wall-clock changes. A port supplies its own public API adapter; expected results never enter execution. Every cacheable result, including an absent fixture value, is distinct from a cache miss.
-
-## Verification models
-
-The models are decomposed by behavioral boundary, independently of the implementation's module layout. They use a single record state variable so alternative transitions have compatible Quint update effects.
-
-| Model | Scope |
-| --- | --- |
-| [`dialcache-core.qnt`](./dialcache-core.qnt) | Nested/disabled/replaced scopes, request/process/remote traversal, fail-open reads, publication boundaries |
-| [`dialcache-runtime-policy.qnt`](./dialcache-runtime-policy.qnt) | Sparse overlays across eight policy leaves, immutable pending snapshots, preserved insertion/physical TTLs |
-| [`dialcache-coalescing-liveness.qnt`](./dialcache-coalescing-liveness.qnt) | Flight admission, followers, fallback deadlines, timeout cleanup, late settlement, publication |
-| [`dialcache-tracked-invalidation.qnt`](./dialcache-tracked-invalidation.qnt) | Atomic tracked snapshots, monotonic watermarks, delayed stale writes, conditional refills |
-| [`dialcache-stale-recovery.qnt`](./dialcache-stale-recovery.qnt) | Fresh/stale age boundaries, one-read retained snapshots, authorized recovery, no shared publication |
-| [`dialcache-shadow-validation.qnt`](./dialcache-shadow-validation.qnt) | Overlapping dark reads/source work, accepted-source gating, C0/S/C1, diagnostic-only mismatches, source errors/deadlines |
-| [`dialcache-redis-protocol.qnt`](./dialcache-redis-protocol.qnt) | Frame/watermark validation and decoder classification precedence |
-
-These are abstractions, not exhaustive translations of every feature. The coalescing model explores deadline safety but does not prove eventual progress under arbitrary scheduling. The policy model represents selected valid overlays; it does not enumerate all validation failures or feature combinations.
-
-## External assumptions and allowed races
-
-Models describe an environmental observation, DialCache's transition, and its observable effects. They do not model Redis internals, TCP, a language event loop, Promises, or compression algorithms. Relevant assumptions include:
-
-- A tracked Redis read atomically observes value and watermark on a primary.
-- Application wall clocks supply frame/invalidation timestamps; monotonic clocks supply deadlines and local TTL age.
-- The invalidation future buffer bounds delayed stale writes plus writer-clock lead.
-- Watermarks remain available for the required fencing lifetime; state loss needs deployment-level protection.
-- External operations can fail, be delayed, or settle after DialCache stops accepting their results. Application-owned serialization/write work requires its own resource budgets.
-
-The suite deliberately allows previously acquired snapshots, retained stale candidates, local values, and existing flights to survive a later invalidation according to their respective contracts. Timeout removes a registered/coalescible flight without cancelling its underlying loader, so old external work can overlap a new flight. Accepted source results may continue through serialization/publication after the fallback deadline. Shadow mismatch is diagnostic evidence, not repair or an atomic cross-system snapshot.
-
-Stale age is checked when the candidate is retained and again when recovery accepts it, including after asynchronous decoding. The return-time invariant records that observation: time advancing after a value was returned cannot retroactively make the return invalid. Exact maximum age is already too old.
-
-## Protocol interoperability
-
-[`protocol-vectors.json`](./protocol-vectors.json) schema version 3 contains 134 deterministic cases: keys, argument normalization, frame bytes, timestamp acceptance, tracked/untracked decoding, compression envelopes, fixed zstd decoding, deterministic serving/shadow cohorts, invalid key identities, physical-duration bounds, and compression representation selection. `test/formal-protocol-vectors.test.ts` executes them against the existing TypeScript functions. No new production exports are required.
-
-Ports consume the same JSON. Normalization preserves UTF-16 code-unit ordering and JavaScript-compatible scalar string formatting. `bigintArgs` encodes arbitrary integers as decimal strings; `specialArgs` names `-0`, `NaN`, and infinities that ordinary JSON cannot represent. URI component escaping preserves `~!*'()-._`. Decoder cases deliberately distinguish frame decoding from core timestamp validation: unsafe decoded timestamps remain visible to core, which rejects them before deserialization. The mutation encoder rejects unsafe timestamps immediately.
-
-Envelope vectors cover raw-byte escaping and reader marker behavior. Compression-write vectors check UTF-8 byte thresholds, only-when-smaller selection, marker type, and round-trip preservation without prescribing exact compressed bytes. Fixed compressed frames test decoding; compressor byte identity is not required because valid zstd encoders can produce different bytes. Rollout vectors use the stable FNV-1a 32-bit hash over UTF-16 units of the logical key plus the layer/shadow discriminator, divided by 2^32 and multiplied by 100. These are finite examples, not exhaustive input coverage.
-
-[`invalidation-vectors.json`](./invalidation-vectors.json) schema version 2 adds 49 portable state transitions for absent/valid/malformed/wrong-type markers, monotonicity, persistence, retention, safe numeric limits, and rejection before mutation. `test/redis-real.integration.test.ts` runs the actual exported invalidation protocol on Redis 6.2 and Valkey 8. Fixture setup, transition, and observation run atomically. Redis 6.2 can advance TTL time within a script, so finite TTL assertions allow only the elapsed server time measured around that script; watermark values and persistence remain exact. These vectors check DialCache's protocol, not Redis implementation correctness. A port using another implementation of the transition must produce the same resulting state.
-
-Invalidation schema 2 uses the same tagged vocabulary for `existing` and `expected.state`: absent (`ttlMs: -2`), string (`value`), or list (`values` in order), with persistent TTL `-1` or a positive finite TTL. Raw argument text avoids host coercion. Rejection must preserve the entire state before any repair; successful transitions return numeric `1`. Invalid arguments are crossed with absent, valid/malformed string, and ordered-list initial states. [`PROTOCOL.md`](./PROTOCOL.md) defines the schema and exact malformed UTF-8 replacement rule. Integration observations account only for measured physical expiry.
-
-## Running and reproducing checks
-
-Use a supported Node.js version, install repository dependencies with `corepack pnpm install --frozen-lockfile`, and install the CI-pinned Quint version:
+Use the supported Node/Go versions and Quint version pinned by CI. Install
+repository dependencies with `corepack pnpm install --frozen-lockfile`, then:
 
 ```sh
 npm install --global @informalsystems/quint@0.32.0
@@ -91,68 +111,112 @@ DIALCACHE_EFFECTS_TRACE_DIR=.formal-traces/effects \
 DIALCACHE_FEATURE_TRACE_DIR=.formal-traces/features \
 DIALCACHE_COVERAGE_EVIDENCE_DIR=.formal-traces/go-parity-witnesses \
   corepack pnpm exec vitest run test/formal-conformance.test.ts test/formal-effects.test.ts \
-  test/formal-features.test.ts test/formal-behavior.test.ts test/formal-protocol-vectors.test.ts --coverage.enabled=false
-node formal/measure-semantics.mjs
+  test/formal-features.test.ts test/formal-local-clock.test.ts \
+  test/formal-behavior.test.ts test/formal-protocol-vectors.test.ts --coverage.enabled=false
 ```
 
-[`execution.json`](./execution.json) schedules all 16 models, 117 selected invariants, 219 named regressions, and generation settings for the nine profiles. The shell entrypoints delegate to `run-models.mjs`; checking and generation share the invariant lists. `node formal/execution.mjs` validates the schedule without Quint, and `node formal/run-models.mjs check --dry-run` or `generate --dry-run` displays the ordered commands. Validation checks the model/library inventory, property declarations, complete regression names, profile mappings, and output bounds. Semantic evidence must reference a scheduled property. It cannot be satisfied by a declaration in a comment or by an unscheduled helper.
+Checking typechecks every scheduled model, explores its invariants and runs its
+named regressions. Generation follows the same manifest and checks committed
+Quint-derived wire artifacts. `QUINT_SEED` overrides the exploration seed; the
+manifest records the default backend, thread count, sample and transition bounds.
+These are bounded simulations, not exhaustive mathematical proofs.
 
-`check.sh` typechecks all seven verification models plus all nine conformance models and checks their scheduled invariants using the Rust simulator: **2,000 sampled traces per model, up to 40 transitions per trace**, seed `0xd1a1ca`, one evaluator thread. It also executes 219 deterministic model regressions, including witnesses that deliberately corrupt TTL or decoder outcomes and require the strengthened invariants to reject them. This is bounded sampling, not exhaustive mathematical proof.
+For `explicit-v1` profiles, every public transition records
+`input: { name, choice }`. Named regressions use those same public actions and
+export under `.formal-traces/regressions/<profile>/<test>.itf.json`. The exporter
+normalizes that explicit input into the common replay envelope; it never infers
+commands from expected state differences. Private state-patch regressions remain
+model-only and must not be exported as implementation histories.
 
-`generate-traces.sh` uses the same pinned version/backend/seed with one thread. It exports 32 core traces from 256 samples (up to 30 transitions), 512 effects and 512 recovery traces from 4,096 samples each, 512 policy and 512 independent-caller traces from 2,048 samples each, 1,024 dark-shadow traces from 4,096 samples, and 256 request-scope / 128 served-hit admission traces from 1,024 samples each (up to 60 transitions). An additional layer-composition profile exports 512 traces from 2,048 samples, up to 80 transitions. All **4,000 generated traces** replay against real TypeScript and Go DialCache using [Quint's model-based testing interface](https://quint.sh/docs/model-based-testing). Required witnesses now include separate read/source budgets, held decoding and publication, cancellation requests, observer failure isolation, wall rollback at the second fence check, timeout recovery and late sources, and empty/falsy/absent cache hits in all three layers. These conformance models remain separate from the seven verification models because replayable public operations and reasoning-oriented transitions serve different purposes.
+Both ports replay the sampled corpus **and** the exact scheduled regression
+inventory. Regressions guarantee reviewed exact boundaries independently of
+random reachability. Sampled traces explore additional schedules; required
+witness gates check their consequences across the combined corpus. Without
+trace selectors, ordinary tests use committed smoke traces and fixed portable
+scenarios. A smoke pass cannot satisfy the full corpus completion gate.
 
-Both scripts accept `QUINT_SEED` for exploratory runs. The generated directory is replaced on each generation. CI runs on every PR and main push, including implementation-only changes, and uploads `.formal-traces/` as the `formal-traces` artifact for 14 days even after failure. `verification/` contains model samples or counterexamples; `conformance/`, `effects/`, and `features/{scope,recovery,policy,shadow,admission,layers,independent}/` contain the generated corpora. Replay requires every named action and 344 catalogued race/outcome witnesses across the eight effects/feature profiles, including scope closure/replacement and nested memo reuse, recovery across invalidation and decoding age boundaries, policy changes during overlapping calls, per-source publication snapshots, reverse source settlement, independent reads with distinct budgets and retained recovery/error identities, both dark C0/source orders, UTF-8 text/binary C1 equivalence and same-value/different-byte supersession, comparison consuming the job deadline, C1 failures, writes completing after shadow timeout, and served-hit shadow capacity retained through pending source/decode/confirmation work.
-
-A replay failure prints the trace path, step, action, expected model observation, actual implementation observation, and a reproduction command. After downloading a failing artifact, replay just the relevant conformance file:
+Replay one failing feature history with either language:
 
 ```sh
-DIALCACHE_MBT_TRACE_FILE=.formal-traces/conformance/trace_0.itf.json \
-  corepack pnpm exec vitest run test/formal-conformance.test.ts --coverage.enabled=false
-DIALCACHE_EFFECTS_TRACE_FILE=.formal-traces/effects/trace_0.itf.json \
-  corepack pnpm exec vitest run test/formal-effects.test.ts --coverage.enabled=false
-```
-
-Feature failures use the same public driver and can be replayed individually:
-
-```sh
-DIALCACHE_FEATURE_TRACE_FILE=.formal-traces/features/shadow/trace_0.itf.json \
+DIALCACHE_FEATURE_TRACE_FILE=.formal-traces/regressions/shadow/confirmationPastFreshnessKeepsOriginalPayloadAndAgeTest.itf.json \
   corepack pnpm exec vitest run test/formal-features.test.ts --coverage.enabled=false
+DIALCACHE_FEATURE_TRACE_FILE="$PWD/.formal-traces/regressions/shadow/confirmationPastFreshnessKeepsOriginalPayloadAndAgeTest.itf.json" \
+  go -C go test -race -count=1 -run '^TestFeatureConformance$' ./...
 ```
 
-Without these environment variables, ordinary TypeScript tests replay all nine committed smoke traces through their generated-trace parsers, with no Quint installation. They run all 244 portable feature scenarios, reject malformed traces, and prove the harness detects lost local caching, coalescing, Redis writes, and invalidation. All 134 key/frame/codec/cohort/compression cases run in ordinary CI too. The 49 invalidation vectors run on both engines via `corepack pnpm test:integration` in the regular CI job.
+Core/effects failures use `DIALCACHE_MBT_TRACE_FILE` or
+`DIALCACHE_EFFECTS_TRACE_FILE` and their corresponding test files. Local-clock
+uses the feature selectors with `test/formal-local-clock.test.ts` and the Go
+local-clock replay. Failures print the input, expected observation, actual
+observation and reproduction command.
 
-Model-checker exploration is separate from CI's sampled runs. For example, `quint verify` supports a TLC backend; any reported result must include the backend/version, model bounds, assumptions, and invariant. No exhaustive result is claimed here.
+## Wire artifacts and native boundaries
 
-## Checked properties and Go parity
+Scheduled `vectorExport` entries identify the Quint model, generator, artifact,
+source hashes and case count. Frame/text/duration, invalidation and key/cohort
+models compute their own expected outputs. Exporters translate representation;
+they do not call production transforms to obtain expected bytes or states.
+Envelope expansion adds marker/threshold/selection behavior with independently
+verified native codec outcomes and encoded sizes as environmental inputs.
+[PROTOCOL.md](./PROTOCOL.md) describes the exact scopes and remaining boundaries.
 
-`formal/check-model-properties.mjs` challenges C23 with a compiling model mutation that incorrectly starts the source budget at model initialization. CI requires an invariant counterexample and preserves it. Separate source-duration and source-ownership monitors check actual public effect histories without reading expected state. The ownership monitor associates writes with actual source callbacks using fixture context, including overlapping calls; this is a necessary publication condition, not full refinement or liveness proof.
+The fixed [protocol-vectors.json](./protocol-vectors.json) and
+[invalidation-vectors.json](./invalidation-vectors.json) remain complementary
+examples. Actual invalidation transitions run on Redis/Valkey, with atomic
+fixture setup and observation and only measured server elapsed time subtracted
+from finite TTL expectations. Integration also checks primary routing, cluster
+hash tags and bidirectional TypeScript/Go payload and invalidation behavior.
+
+Native tests retain API registration, borrowed-reference behavior, custom clock
+resolution, exporter registration, codec resources and adapter cancellation.
+The local-clock profile connects a fractional-time Quint contract to real
+default clock construction. Local-failure connects portable failure effects to
+native fault injection; neither seam changes the production API. Full IEEE754
+shortest decimal formatting, arbitrary integer widths, native zstd stream quirks
+and actual resource ceilings retain their separately stated binding evidence.
+
+## Go completion and fault challenges
+
+After the TypeScript replay records exact corpus/witness fingerprints:
 
 ```sh
-go -C go test -race -count=1 ./...
-# After the TypeScript replay creates exact corpus/witness fingerprints:
 DIALCACHE_MBT_TRACE_DIR="$PWD/.formal-traces/conformance" \
 DIALCACHE_EFFECTS_TRACE_DIR="$PWD/.formal-traces/effects" \
 DIALCACHE_FEATURE_TRACE_DIR="$PWD/.formal-traces/features" \
 DIALCACHE_WITNESS_EVIDENCE_DIR="$PWD/.formal-traces/go-parity-witnesses" \
   go -C go test -race -count=1 -json ./... > .formal-traces/go-replay.jsonl
 node formal/check-go-replay.mjs
-go -C go test -race -tags integration -run '^TestRedisIntegration$' ./...
+go -C go test -race -tags integration -count=1 -run '^TestRedisIntegration$' ./...
+node formal/measure-semantics.mjs
 node formal/measure-go-semantics.mjs
 ```
 
-CI generates one corpus and replays it in both languages. `check-go-replay.mjs` requires a completed passing Go package report, the exact 4,000 generated trace leaves, all 244 scenarios, all 134 protocol cases, and all eight witness gates; partial, skipped, or smoke-only runs cannot satisfy it. The Go job verifies witness metadata against the current models, registry, classifier and exact trace files; a stale classification cannot satisfy reachability. Go and TypeScript fault catalogs challenge the same 13 representative obligations. Parse/build errors, missing witnesses, crashes and watchdog failures are infrastructure failures, not detections.
+The completion checker derives required replay leaves, regression inventory,
+protocol cases and witness gates from current metadata. A partial, skipped or
+smoke-only run cannot pass. Mutation runners compile each reviewed fault and
+retain raw assertion reports in isolated copies. Compile/import failures,
+missing witnesses, crashes and watchdog failures are infrastructure failures,
+not detections. Reports retain exact revisions, source/configuration hashes,
+corpus hashes, tool versions, counts and survivors.
 
-After the checked corpus is available, TypeScript mutation measurement and Go
-validation run in parallel. The final `quint` gate requires successful corpus,
-TypeScript, and Go jobs, including when a dependency fails or is skipped.
-Artifacts retain `formal-traces`, `typescript-semantic-evidence`, and
-`go-parity-evidence` separately for 14 days. To reproduce mutation reports,
-download the TypeScript artifact into `.formal-traces/semantic/`.
+Source-duration and source-ownership monitors also inspect actual effect
+histories without expected state. A compiling model mutation challenges the
+source-relative deadline invariant. These checks establish selected safety
+clauses, not full refinement, arbitrary scheduling fairness or eventual progress.
 
-## Source audit
+## Assumptions and maintenance
 
-[`source-audit.json`](./source-audit.json) assigns 564 ordinary test declarations and 172 documentation sections across 44 files to explicit contract/binding/assumption dispositions. Normal CI rejects source drift until the affected audit is reviewed. [`TEST-AUDIT.md`](./TEST-AUDIT.md) explains the 55 added caller-level scenarios and local-storage failure model regressions found by this pass. This is source accounting with executable evidence, not a percentage of semantic completeness or a claim that every Vitest assertion has an equivalent formal test.
+Tracked reads require an atomic primary observation. Wall clocks supply frame
+and invalidation stamps; monotonic clocks govern local expiry and deadlines.
+Stable retained bytes, immutable reused values, executor progress, suitable
+application-owned resource budgets and watermark durability are environmental
+obligations. Invalidation deliberately does not revoke already acquired bytes,
+request memo, local values or registered work. Shadow mismatch is diagnostic,
+not repair or a linearizable source/cache snapshot.
 
-## Maintenance
-
-For every changed rule, review its `source-audit.json` disposition and fingerprint, then update the classification and evidence in `CONTRACTS.md` and its coverage summary in `TEST-MAP.md`. Review intended behavior in Quint first. Use existing focused tests and implementation to identify discrepancies, retain a distinguishing model regression and generated witness, then update both implementations and explanatory documentation. Keep the driver independent: expected model state belongs in assertions, never in the code that executes the implementation or records its observations.
+For a changed rule, update Quint and its independent check, retain a
+consequential replay, update both implementations as needed, and review the
+case/audit/native mappings. [source-audit.json](./source-audit.json) accounts for
+reviewed test declarations and documentation sections; it does not imply that
+every assertion has a formal equivalent. Preserve historical reports after
+input changes until fresh execution completes.

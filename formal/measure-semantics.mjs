@@ -18,9 +18,9 @@ rmSync(resolve(output, 'report.md'), { force: true });
 const declaredCoverage = checkSemanticCoverage();
 const catalog = JSON.parse(read('formal/semantic-mutations.json'));
 if (catalog.schemaVersion !== 1 || catalog.mutations.length === 0) throw new Error('Expected semantic mutation catalog');
-const formalTests = ['test/formal-conformance.test.ts', 'test/formal-effects.test.ts', 'test/formal-features.test.ts'];
+const formalTests = ['test/formal-conformance.test.ts', 'test/formal-effects.test.ts', 'test/formal-features.test.ts', 'test/formal-local-clock.test.ts', 'test/formal-protocol-vectors.test.ts'];
 const portableTests = ['test/formal-behavior.test.ts', 'test/formal-protocol-vectors.test.ts'];
-const generatedPattern = 'replays |reaches every action|covers every action';
+const generatedPattern = 'replays |reaches every action|covers every action|reaches fractional expiry and shared instance grid|formal protocol conformance vectors (?!keeps |requires )';
 // Fixed scenario names carry a feature prefix. Protocol schema/audit checks
 // start with "keeps"/"requires" and must not count as behavioral detections.
 const portablePattern = 'portable behavioral scenarios [\\w-]+: |formal protocol conformance vectors (?!keeps |requires )';
@@ -30,8 +30,8 @@ const cohorts = {
   fixed: [...portableTests, `--testNamePattern=${portablePattern}`],
 };
 const comparisons = ['ordinary', 'generated', 'portable'];
-// These test-file sets are disjoint and use Vitest's normal file isolation.
-// Their union measures the full portable suite without replaying every trace
+// Generated and fixed cohorts select disjoint protocol rows. Their union
+// measures the full portable suite without replaying any history or vector
 // twice. Keep both component reports, including every failing assertion.
 function portableResult({ generated, fixed }) {
   return { state: generated.failed + fixed.failed > 0 ? 'detected' : 'survived',
@@ -94,7 +94,7 @@ function run(label, cohort, baseline) {
     // Vitest bail can cancel workers before their failing assertions reach the
     // JSON reporter. Complete each cohort so detection has recorded evidence.
     '--coverage.enabled=false', '--reporter=json', '--reporter=./formal/semantic-reporter.mjs', `--outputFile=${json}`], {
-    cwd: workspace, env: { ...env, DIALCACHE_SEMANTIC_RUN_META: meta, ...(baseline ? { DIALCACHE_COVERAGE_EVIDENCE_DIR: resolve(output, 'witnesses') } : {}) },
+    cwd: workspace, env: { ...env, DIALCACHE_PROTOCOL_CORPUS: cohort === 'generated' ? 'generated' : 'fixed', DIALCACHE_SEMANTIC_RUN_META: meta, ...(baseline ? { DIALCACHE_COVERAGE_EVIDENCE_DIR: resolve(output, 'witnesses') } : {}) },
     encoding: 'utf8', timeout: 180_000, maxBuffer: 32 * 1024 * 1024,
   });
   writeFileSync(resolve(output, `${label}-${cohort}.log`), (result.stdout ?? '') + (result.stderr ?? ''));
@@ -127,7 +127,7 @@ try {
   symlinkSync(resolve(root, 'node_modules'), resolve(workspace, 'node_modules'), 'dir');
   report.inputs = fingerprint(['src', 'test', 'formal']);
   report.configurationSha256 = Object.fromEntries(['package.json', 'pnpm-lock.yaml', 'tsconfig.json', 'vitest.config.ts'].map(path => [path, createHash('sha256').update(read(path)).digest('hex')]));
-  report.corpus = fingerprint(['.formal-traces/conformance', '.formal-traces/effects', '.formal-traces/features']);
+  report.corpus = fingerprint(['.formal-traces/conformance', '.formal-traces/effects', '.formal-traces/features', '.formal-traces/regressions']);
   rmSync(resolve(output, 'witnesses'), { recursive: true, force: true });
   for (const cohort of Object.keys(cohorts)) {
     report.baselines[cohort] = run('baseline', cohort, true);

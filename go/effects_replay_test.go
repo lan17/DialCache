@@ -39,27 +39,28 @@ func parseEffectsTrace(raw []byte, path string) (behaviorTrace, error) {
 	}
 	for i, rawState := range states {
 		step := bm(rawState)
-		action := bs(step["mbt::actionTaken"])
+		input := bm(step["input"])
+		if behaviorKeys(input) != "choice,name" {
+			return trace, fmt.Errorf("invalid explicit effect input")
+		}
+		action := bs(input["name"])
 		if !bhas(effectsActions, action) || (i == 0) != (action == "init") {
 			return trace, fmt.Errorf("unknown/misplaced effects action %s", action)
 		}
-		picks := bm(step["mbt::nondetPicks"])
-		if behaviorKeys(picks) != "choice" {
-			return trace, fmt.Errorf("unsupported effect choices")
-		}
-		pick := bm(picks["choice"])
 		chosen := bhas([]string{"init", "adapterReply", "readBudgetPolicy", "observerFault", "resolveLoader", "rejectLoader", "releaseRead", "failRead"}, action)
-		var choice int64
+		n, ok := input["choice"].(float64)
+		if !ok || n != math.Trunc(n) || n < -1 || n > 9007199254740991 {
+			return trace, fmt.Errorf("invalid effect choice")
+		}
+		choice := int64(n)
 		if chosen {
-			n, ok := pick["value"].(float64)
-			if pick["tag"] != "Some" || !ok || n < 0 || n != math.Trunc(n) {
+			if choice < 0 {
 				return trace, fmt.Errorf("missing effect choice")
 			}
-			choice = int64(n)
 			if action == "init" && choice > 5 || action == "readBudgetPolicy" && choice > 4 || action == "observerFault" && choice > 1 || action == "adapterReply" && (choice < 1 || choice > 16) {
 				return trace, fmt.Errorf("unsupported effect choice")
 			}
-		} else if pick["tag"] != "None" || bjson(pick["value"]) != "{\"#tup\":[]}" {
+		} else if choice != -1 {
 			return trace, fmt.Errorf("unexpected effect choice")
 		}
 		state := bm(step["s"])
@@ -373,6 +374,11 @@ func TestEffectsConformance(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		regressions, err := featureRegressionPaths("effects", dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		paths = append(paths, regressions...)
 	}
 	if len(paths) == 0 {
 		t.Fatal("empty effects corpus")
@@ -407,7 +413,7 @@ func TestEffectsConformance(t *testing.T) {
 			}
 		}
 	}
-	t.Logf("specification=0.1.0 effectsProfile=1 traces=%d", len(paths))
+	t.Logf("specification=0.1.0 effectsProfile=2 traces=%d", len(paths))
 }
 func TestEffectsParserRejectsMissingDiagnostics(t *testing.T) {
 	raw, err := os.ReadFile("../formal/effects-smoke.itf.json")

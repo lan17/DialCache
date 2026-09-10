@@ -15,3 +15,13 @@ export function itfInteger(value: unknown, context: string): number {
   }
   return Number(text);
 }
+
+export function itfSignedInteger(value: unknown, context: string): number {
+  const encoded = record(value, context);
+  const text = encoded["#bigint"];
+  if (Object.keys(encoded).join() !== "#bigint" || typeof text !== "string"
+    || !/^(0|-?[1-9][0-9]*)$/.test(text) || !Number.isSafeInteger(Number(text))) {
+    throw new Error(`${context}: expected a signed safe ITF integer`);
+  }
+  return Number(text);
+}

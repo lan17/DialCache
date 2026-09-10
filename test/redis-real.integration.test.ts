@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readGeneratedInvalidationVectors } from "../formal/generate-invalidation-vectors.mjs";
 import { readFileSync } from "node:fs";
 
 import * as valkeyGlide from "@valkey/valkey-glide";
@@ -198,7 +199,8 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
       expected: { error?: boolean; state: InvalidationVectorState };
     }>;
   };
-  for (const vector of invalidationVectors.vectors) {
+  const generatedInvalidationVectors = readGeneratedInvalidationVectors();
+  for (const vector of [...invalidationVectors.vectors, ...generatedInvalidationVectors.vectors]) {
     it(`portable invalidation: ${vector.name}`, async () => {
       if (admin === undefined) throw new Error("Redis test client did not start");
       expect(invalidationVectors.schemaVersion).toBe(2);

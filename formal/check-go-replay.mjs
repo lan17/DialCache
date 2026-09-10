@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readExecution, root, validateExecution } from './execution.mjs';
+import { protocolCorpus } from './vector-artifacts.mjs';
 
 // These are the reviewed Go test bindings for every protocol vector group.
 // Adding a vector changes the expected leaves automatically; adding a group
@@ -48,8 +49,13 @@ export function buildGoReplayInventory({ execution, scenarios, protocol, package
         !Number.isSafeInteger(generate?.traces) || generate.traces <= 0) throw new Error('Invalid generated profile count');
     profiles[profile] = generate.traces;
     const prefix = profile === 'core' ? 'TestCoreConformance'
+      : profile === 'local-clock' ? 'TestLocalClockConformance'
       : profile === 'effects' ? 'TestEffectsConformance' : `TestFeatureConformance/${profile}`;
     for (let i = 0; i < generate.traces; i++) add(`${prefix}/trace_${i}.itf.json`, `generated:${profile}`);
+    for (const regression of model.replayRegressions ?? []) {
+      if (!model.regressions?.includes(regression)) throw new Error('Unscheduled Quint regression replay');
+      add(`${prefix}/${regression}.itf.json`, `quint-regression:${profile}`);
+    }
   }
   if (!profiles.core || !profiles.effects) throw new Error('Core and effects replay profiles are required');
   for (const scenario of scenarios.scenarios) {
@@ -74,7 +80,7 @@ export function loadGoReplayInventory() {
   const packageName = /^module\s+(\S+)\s*$/m.exec(read('go/go.mod'))?.[1];
   return buildGoReplayInventory({ execution, packageName,
     scenarios: JSON.parse(read('formal/behavioral-scenarios.json')),
-    protocol: JSON.parse(read('formal/protocol-vectors.json')) });
+    protocol: protocolCorpus(execution) });
 }
 
 /** Pure completed-report gate. Counts only exact passed case leaves, never log summaries. */
@@ -140,8 +146,10 @@ export function checkGoReplay(report, inventory) {
   }
   const count = category => inventory.required.filter(entry => entry.category === category).length;
   const generated = Object.fromEntries(Object.keys(inventory.profiles).map(profile => [profile, count(`generated:${profile}`)]));
+  const quintRegressions = Object.fromEntries(Object.keys(inventory.profiles).map(profile => [profile, count(`quint-regression:${profile}`)]));
   return { schemaVersion: 1, package: inventory.packageName, status: 'pass',
     generated, generatedTraces: Object.values(generated).reduce((sum, n) => sum + n, 0),
+    quintRegressions, quintRegressionTraces: Object.values(quintRegressions).reduce((sum, n) => sum + n, 0),
     fixedScenarios: count('fixed'), protocolVectors: count('protocol'), witnessProfiles: inventory.witnessProfiles,
     executedTests: tests.size, passedLeaves: leaves.length };
 }

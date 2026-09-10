@@ -9,19 +9,18 @@ as an alternative behavioral oracle.
 
 [`go-parity.json`](go-parity.json) records the reviewed implementation mappings,
 shared execution evidence, native adaptations, and remaining assurance gaps.
-Its status is `finite-portable-contract-inventory`. Current requirements are
-4,000 generated histories across nine profiles, 244 fixed scenarios, 134
-protocol vectors, and 344 required witnesses. The [feature map](FEATURE-COVERAGE.md)
-accounts for 261 behavioral/protocol cases and 33 separate native cases.
+Its status describes a finite portable contract inventory. Current profile,
+regression, vector and witness requirements come from [execution.json](execution.json),
+[profiles.json](profiles.json) and [coverage-witnesses.json](coverage-witnesses.json).
+The [feature map](FEATURE-COVERAGE.md) accounts for behavioral/wire cases and
+separate native obligations. All reviewed behavioral cases now have checked
+Quint definitions and Quint-driven implementation evidence.
 
-The ledger retains a **historical acceptance record** from before this
-behavioral expansion: both implementations passed the same 4,000 generated
-histories, 238 fixed scenarios, and 134 protocol vectors, with Go under the
-race detector. That record does not validate the changed models, witnesses,
-cases, or native tests; fresh reports must identify the expanded inputs.
-Inventory counts account for what was reviewed; they are neither a coverage percentage nor a
-proof. A source declaration, a test name, and a model file are not
-interchangeable units of behavior.
+Earlier acceptance records remain **historical**. Their source revisions,
+corpora and report hashes describe the exact runs that passed; changed models,
+regressions, drivers or wire artifacts require fresh reports. The final combined
+CI and mutation run for this expansion is still pending. Inventory totals are
+accounting, not coverage percentages or proofs.
 
 The local validation record identifies its base revision and dirty source
 snapshot, report hashes, and execution-input manifest. CI repeats generation,
@@ -38,14 +37,17 @@ covered by generated histories, the ledger must link:
 
 1. The precise Quint transition or independently checked property expressing
    the obligation, with the model's bounds and assumptions made explicit.
-2. Required generated witnesses that reach the consequential branch and expose
-   its result through public observations. A witness for entering a branch is
+2. A required consequential witness or exported public-action Quint regression
+   that exposes the result through public observations. A witness for entering a branch is
    insufficient when the contract concerns a later read, timeout, or write.
 3. Successful replays of the **same generated histories** through the actual
    TypeScript and Go APIs, recording the corpus hash, repository revision,
    checker settings, and both implementation reports.
 
-Fixed scenarios remain useful for a known failure or a narrow boundary.
+Named Quint regressions are exported alongside sampled histories. The completion
+gates require every scheduled regression in both ports, so exact boundaries do
+not depend on a random seed reaching them. Fixed scenarios remain useful for a
+known failure or a narrow complementary example.
 Protocol vectors and native integration tests are appropriate evidence for
 byte encodings, host numeric limits, backend registration, and actual Redis
 execution. Acceptance does not require every fixed case to become a generated
@@ -74,15 +76,14 @@ they do not establish unmodeled interactions among portable state machines.
 gap, not necessarily a Go implementation gap. A known implementation gap
 requires a specific unsupported portable behavior or a failing behavioral
 comparison. A rule already supported by fixed, vector, or native evidence can
-instead be a candidate for additional generated assurance. Current expansion
-candidates are the explicitly retained limits in [FEATURE-COVERAGE.md](FEATURE-COVERAGE.md):
-larger feature combinations, additional shadow confirmation/physical-expiry
-schedules, and shared malformed-compression vectors. Sparse policy, default
-boundaries, multi-layer publication, and retained shadow ownership now have
-more specific evidence; that evidence still has the bounds recorded for each
-case. Review remaining work by consequence and interaction risk; do not
-manufacture one model per fixed test or label every remaining fixed case as
-missing Go parity.
+instead be a candidate for additional generated assurance. Current finite limits are recorded in
+[FEATURE-COVERAGE.md](FEATURE-COVERAGE.md) and [PROTOCOL.md](PROTOCOL.md): larger
+feature products, unbounded scheduling/state spaces, full host numeric formatting
+and codec/resource behavior. The new composition profiles cover local failures,
+marker lifetime, fractional local clocks, runtime/default policy boundaries,
+source budgets and mixed dark/served ownership. Each claim retains its precise
+bounds. Do not label a missing witness as an implementation difference or
+manufacture a separate model for every fixed test.
 
 ## Reading and updating the ledger
 
@@ -113,10 +114,10 @@ refresh the input hashes, case inventory, required witnesses, and reports
 together. Preserve the existing execution-manifest validation and scheduled
 invariant/regression checks.
 
-`sourceInventory` lists 772 declarations across 27 TypeScript production files.
+`sourceInventory` lists reviewed TypeScript production declarations.
 Each inherits its reviewed source-file mapping to named Go symbols, with hashes
-that reject stale mappings. These are navigation and review records, not 772
-independent equivalence claims. The linked source audit's 44 test and
+that reject stale mappings. These are navigation and review records, not
+independent equivalence claims. The linked source audit's test and
 documentation files also have explicit Go-applicability reviews. Native
 adaptations retain their rationale and evidence rather than being counted as
 identical language APIs.
@@ -146,15 +147,18 @@ clock to whole milliseconds at insertion and lookup. Go follows those same
 whole-millisecond observations. For example, insertion at 0.7 ms with a 1,000 ms
 TTL expires at the observed clock value 1,000 ms. Applying precise elapsed
 subtraction to local storage would retain that entry beyond TypeScript's
-boundary. Native tests distinguish this rule from precise source/read/shadow
-budgets; integer-tick Quint traces alone cannot distinguish the bindings.
+boundary. The local-clock profile now defines this rule using fractional environment
+advances and whole-millisecond observations. It also checks that default instances
+constructed at different fractional times share one process grid. Native tests
+separately distinguish precise source/read/shadow budgets; integer-tick traces
+in other profiles cannot establish these binding boundaries.
 
 [`clock_precision_test.go`](../go/clock_precision_test.go) uses deterministic
 native clock phases to exercise source and read completion before and at their
 budgets, served and dark shadow deadlines, insertion expiry, coalescing age,
-early timer delivery, and integer-clock compatibility. These are native
-regressions for existing obligations, recorded under C23/C25 and B02; they add
-no generated witnesses or model coverage. Their execution and any new full-run
+early timer delivery, and integer-clock compatibility. These native regressions retain their own C23/C25 and B02 evidence. The separate
+local-clock model/replay adds only its stated local-expiry and shared-grid scope;
+it does not turn every clock precision test into a Quint-driven case. Their execution and any new full-run
 results must retain their own revision and input identities rather than reuse
 a previous implementation's validation record.
 

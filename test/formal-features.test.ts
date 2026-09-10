@@ -4,15 +4,26 @@ import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BehaviorDriver, emptyObservation, type Fixture, type Input, type Observation, type Policy } from "./formal/behavior-driver.js";
-import { itfInteger, record } from "./formal/itf.js";
+import { itfInteger, itfSignedInteger, record } from "./formal/itf.js";
 
 import { recordWitnesses } from "./formal/coverage-evidence.js";
 import { runtimeWitnesses } from "./formal/runtime-witnesses.js";
 import { recoveryShadowWitnesses } from "./formal/recovery-shadow-witnesses.js";
+import type { Action, Profile } from "./formal/feature-profile.js";
+import { recoveryReadProfile } from "./formal/recovery-read-profile.js";
+import { localFailureProfile } from "./formal/local-failure-profile.js";
+import { runtimeBoundariesProfile } from "./formal/runtime-boundaries-profile.js";
+import { shadowLayersProfile } from "./formal/shadow-layers-profile.js";
+import { sourceBudgetsProfile } from "./formal/source-budgets-profile.js";
+import { recoveryAdmissionWitnesses } from "./formal/recovery-admission-witnesses.js";
+import { recoveryReadWitnesses } from "./formal/recovery-read-witnesses.js";
+import { runtimeBoundaryWitnesses } from "./formal/runtime-boundary-witnesses.js";
+import { localFailureWitnesses } from "./formal/local-failure-witnesses.js";
+import { sourceBudgetsWitnesses } from "./formal/source-budgets-witnesses.js";
+import { shadowDiagnosticsWitnesses } from "./formal/shadow-diagnostics-witnesses.js";
+import { shadowLayersWitnesses } from "./formal/shadow-layers-witnesses.js";
 
 type Projected = Omit<Observation, "calls"> & { calls: number[] };
-type Action = { choices?: readonly number[]; input: (choice: number, observed: Observation) => Input };
-interface Profile { readIO?: boolean; diagnosticConfigErrors?: boolean; diagnosticAge?: "shadowAge" | "recoveryAge" | "none"; fixture: Fixture | ((choice: number) => Fixture); initChoices?: readonly number[]; setup: Input[]; actions: Record<string, Action> }
 const settle = (op: "resolve" | "reject"): Action => ({
   ...(op === "resolve" ? { choices: [1, 2] } : {}),
   input: (choice, o) => op === "resolve" ? { op, loader: o.loaders - 1, value: choice } : { op, loader: o.loaders - 1 },
@@ -51,7 +62,13 @@ const shadowSeed: Action = { choices: [1, 2, 3, 4, 5, 6, 7, 8], input: (choice) 
         : choice === 8 ? { op: "seed", payloadHex: "22636166c3a922" } : choice === 6 ? { op: "seed", payloadText: " 1" }
         : { op: "seed", payloadHex: choice === 3 ? "31" : choice === 4 ? "32" : "2031" } };
 const profiles: Record<string, Profile> = {
+  "source-budgets": sourceBudgetsProfile,
+  "runtime-boundaries": runtimeBoundariesProfile,
+  "shadow-layers": shadowLayersProfile,
+  "local-failure": localFailureProfile,
+  "recovery-read": recoveryReadProfile,
   independent: {
+    explicitInputs: true,
     readIO: true,
     fixture: { policy: { ttlSec: { remote: 1 }, staleOnErrorMaxAgeSec: 5, coalesce: false },
       tracked: true, readTimeoutMs: 5, fallbackTimeoutMs: 10, recovery: "allow", observe: ["readContext", "readAbort"] },
@@ -73,9 +90,10 @@ const profiles: Record<string, Profile> = {
     },
   },
   layers: {
-    initChoices: [0, 1, 2, 3, 4],
+    explicitInputs: true,
+    initChoices: [0, 1, 2, 3, 4, 5],
     fixture: (choice) => ({ policy: { requestLocal: true, ttlSec: { local: 60, remote: 60 } },
-      tracked: choice % 2 === 1, remote: choice !== 4, localMaxSize: choice < 2 || choice === 4 ? 2 : 0, fallbackTimeoutMs: null }),
+      tracked: choice % 2 === 1, remote: choice < 4, localMaxSize: choice === 2 || choice === 3 ? 0 : 2, fallbackTimeoutMs: null }),
     setup: [0, 1, 2].map(scope => ({ op: "openScope", id: String(scope), instance: scope === 2 ? "1" : "0" })),
     actions: {
       beginCall: { choices: Array.from({ length: 20 }, (_, i) => i), input: (choice) => {
@@ -115,6 +133,7 @@ const profiles: Record<string, Profile> = {
     },
   },
   scope: {
+    explicitInputs: true,
     diagnosticAge: "none",
     fixture: { policy: { requestLocal: true }, remote: false, fallbackTimeoutMs: null, probeSourceScope: true, observe: ["coalesced", "error"] },
     setup: [{ op: "openScope", id: "0" }, { op: "faults", value: { holdPolicies: true } }],
@@ -153,7 +172,9 @@ const profiles: Record<string, Profile> = {
     },
   },
   policy: {
-    fixture: { policy: { ttlSec: { local: 1, remote: 1 }, staleOnErrorMaxAgeSec: 5 }, localMaxSize: 1, fallbackTimeoutMs: null },
+    explicitInputs: true,
+    policyErrorIO: true,
+    fixture: { policy: { ttlSec: { local: 1, remote: 1 }, staleOnErrorMaxAgeSec: 5 }, localMaxSize: 1, fallbackTimeoutMs: null, observe: ["error"] },
     setup: [{ op: "faults", value: { holdPolicies: true } }],
     actions: {
       beginCall: { choices: [0, 1], input: (choice) => ({ op: "begin", key: String(choice) }) },
@@ -167,13 +188,14 @@ const profiles: Record<string, Profile> = {
     },
   },
   shadow: {
+    explicitInputs: true, diagnosticFutureOffsets: true,
     diagnosticAge: "shadowAge", diagnosticConfigErrors: true, initChoices: Array.from({ length: 13 }, (_, i) => i),
     fixture: (choice) => ({ policy: { ttlSec: { remote: 60 }, ramp: { remote: 0 },
       shadow: { ramp: 100, ...(choice < 4 || choice >= 8 ? {} : { logMismatches: true }) } }, tracked: true, shadowHook: choice !== 8,
       ...(choice % 4 === 0 || choice >= 11 ? {} : { comparator: (["equal", "unequal", "error"] as const)[choice === 10 ? 2 : choice % 4 - 1]! }),
       ...(choice === 9 || choice === 10 ? { comparisonMs: 10 } : {}),
       ...(choice >= 11 ? { sourceWorkMs: choice === 11 ? 9 : 10 } : {}),
-      observe: ["shadowAge", "mismatchWarning", "coalesced", "error"] }),
+      observe: ["shadowAge", "mismatchWarning", "coalesced", "error", "futureOffset"] }),
     setup: [{ op: "faults", value: { holdReads: true, holdLoads: true, holdDumps: true, holdWrites: true } }],
     actions: {
       beginCall: { input: () => ({ op: "begin" }) }, resolveLoader: settle("resolve"), rejectLoader: settle("reject"),
@@ -183,15 +205,17 @@ const profiles: Record<string, Profile> = {
       invalidate: { choices: [0, 20], input: (choice) => ({ op: "invalidate", futureBufferMs: choice }) },
       readFault: fault("read"), loadFault: fault("load"), dumpFault: fault("dump"), writeFault: fault("write"),
       rollbackWall: { input: () => ({ op: "shiftWall", ms: -1000 }) },
+      advanceWall: { choices: [1, 60000], input: choice => ({ op: "shiftWall", ms: choice }) },
       shadowPolicy: { choices: [0, 1, 2], input: (choice) => ({ op: "policy", value: { shadow: { ramp: [100, 0, 101][choice]! } } }) },
       logPolicy: { choices: [0, 1, 2], input: (choice) => ({ op: "policy", value: { shadow: { logMismatches: choice === 2 ? "invalid" as unknown as boolean : choice === 1 } } }) },
     },
   },
 };
 
-interface Diagnostics { warnings: number; ages: number[]; coalesced: string[]; fallbackErrors: string[]; configErrors?: number }
+interface Diagnostics { warnings: number; ages: number[]; coalesced: string[]; fallbackErrors: string[]; configErrors?: number; futureOffsets?: Array<{ layer: string; offsetMs: number }> }
 interface ReadIO { budgets: number[]; aborted: number[]; sourceErrors: number[] }
-interface Step { io?: ReadIO; action: string; choice: number; expected: Projected; diagnostics?: Diagnostics }
+interface Marker { cutoffMs: number; ttlMs: number }
+interface Step { policyErrors?: Array<{ layer: string; errorType: string }>; compression?: string[]; markers?: Marker[]; io?: ReadIO; action: string; choice: number; expected: Projected; diagnostics?: Diagnostics }
 interface Trace { path: string; steps: Step[] }
 function observation(raw: unknown, context: string): Projected {
   const value = record(raw, context);
@@ -204,7 +228,7 @@ function observation(raw: unknown, context: string): Projected {
     return [key, item.map((entry) => {
       if (key === "calls" || key === "writeTtls") {
         const integer = itfInteger(entry, context);
-        if (key === "calls" && integer > 9) throw new Error(`${context}: unsupported caller outcome`);
+        if (key === "calls" && (integer < 0 || integer > 9 && integer !== 11)) throw new Error(`${context}: unsupported caller outcome`);
         return integer;
       }
       if (typeof entry !== (key === "sourceScopes" ? "boolean" : "string")) throw new Error(`${context}: invalid ${key} entry`);
@@ -213,24 +237,43 @@ function observation(raw: unknown, context: string): Projected {
   }));
   return result as Projected;
 }
-function diagnostics(raw: unknown, context: string, configErrors = false): Diagnostics {
+function diagnostics(raw: unknown, context: string, configErrors = false, futureOffsets = false): Diagnostics {
   const value = record(raw, context);
-  if (Object.keys(value).sort().join() !== (configErrors ? "ages,coalesced,configErrors,fallbackErrors,warnings" : "ages,coalesced,fallbackErrors,warnings") || !Array.isArray(value.ages)) throw new Error(`${context}: invalid diagnostics`);
+  const fields = ["ages", "coalesced", "fallbackErrors", "warnings", ...(configErrors ? ["configErrors"] : []), ...(futureOffsets ? ["futureOffsets"] : [])];
+  if (Object.keys(value).sort().join() !== fields.sort().join() || !Array.isArray(value.ages)) throw new Error(`${context}: invalid diagnostics`);
   const labels = (items: unknown, allowed: string[]): string[] => {
     if (!Array.isArray(items) || items.some(item => typeof item !== "string" || !allowed.includes(item))) throw new Error(`${context}: invalid diagnostic labels`);
     return items as string[];
   };
-  return { ...(configErrors ? { configErrors: itfInteger(value.configErrors, context) } : {}), warnings: itfInteger(value.warnings, context), ages: value.ages.map(age => itfInteger(age, context) / 1000),
+  const offsets = futureOffsets ? (() => {
+    if (!Array.isArray(value.futureOffsets)) throw new Error(`${context}: missing future offsets`);
+    return value.futureOffsets.map(raw => {
+      const offset = record(raw, context);
+      if (Object.keys(offset).sort().join() !== "layer,offsetMs" || offset.layer !== "remote_shadow") throw new Error(`${context}: invalid future offset layer`);
+      const offsetMs = itfInteger(offset.offsetMs, context);
+      if (offsetMs <= 0) throw new Error(`${context}: future offset must be positive`);
+      return { layer: offset.layer, offsetMs };
+    });
+  })() : [];
+  return { ...(futureOffsets ? { futureOffsets: offsets } : {}), ...(configErrors ? { configErrors: itfInteger(value.configErrors, context) } : {}), warnings: itfInteger(value.warnings, context), ages: value.ages.map(age => itfInteger(age, context) / 1000),
     coalesced: labels(value.coalesced, ["process", "request_local"]), fallbackErrors: labels(value.fallbackErrors, ["noop", "local", "remote", "request_local"]) };
 }
-function readIO(raw: unknown, context: string): ReadIO {
+function readIO(raw: unknown, context: string, callCount: number): ReadIO {
   const value = record(raw, context);
   if (Object.keys(value).sort().join() !== "aborted,budgets,sourceErrors" || !Array.isArray(value.budgets) || !Array.isArray(value.aborted) || !Array.isArray(value.sourceErrors)) throw new Error(`${context}: invalid read observations`);
   const budgets = value.budgets.map(v => itfInteger(v, context)), aborted = value.aborted.map(v => itfInteger(v, context));
   if (budgets.some(v => v <= 0) || aborted.some(v => v >= budgets.length) || new Set(aborted).size !== aborted.length) throw new Error(`${context}: invalid read budget or cancellation`);
   const sourceErrors = value.sourceErrors.map(v => itfInteger(v, context));
-  if (sourceErrors.length !== budgets.length) throw new Error(`${context}: missing caller error identities`);
+  if (sourceErrors.length !== callCount) throw new Error(`${context}: missing caller error identities`);
   return { budgets, aborted, sourceErrors };
+}
+function markerIO(raw: unknown, context: string): Marker[] {
+  if (!Array.isArray(raw)) throw new Error(`${context}: missing marker observations`);
+  return raw.map(item => {
+    const marker = record(item, context);
+    if (Object.keys(marker).sort().join() !== "cutoffMs,ttlMs") throw new Error(`${context}: invalid marker observation`);
+    return { cutoffMs: itfSignedInteger(marker.cutoffMs, context), ttlMs: itfSignedInteger(marker.ttlMs, context) };
+  });
 }
 function parseTrace(raw: unknown, path: string, profile: Profile): Trace {
   const states = record(raw, path).states;
@@ -238,25 +281,37 @@ function parseTrace(raw: unknown, path: string, profile: Profile): Trace {
   return { path, steps: states.map((rawState, i) => {
     const context = `${path} step ${i}`;
     const state = record(rawState, context);
-    const action = state["mbt::actionTaken"];
+    // Explicit inputs are recorded by the Quint transition itself, including
+    // deterministic regressions where Quint emits no MBT metadata. Never infer
+    // a command from differences in expected state.
+    const input = profile.explicitInputs ? record(state.input, context) : undefined;
+    if (input !== undefined && Object.keys(input).sort().join() !== "choice,name") throw new Error(`${context}: invalid explicit input`);
+    const action = input === undefined ? state["mbt::actionTaken"] : input.name;
     if (typeof action !== "string" || (i === 0 ? action !== "init" : !Object.hasOwn(profile.actions, action))) {
       throw new Error(`${context}: unknown or misplaced action`);
     }
-    const picks = record(state["mbt::nondetPicks"], context);
-    if (Object.keys(picks).join() !== "choice") throw new Error(`${context}: unsupported choices`);
-    const pick = record(picks.choice, context);
+    const picks = input === undefined ? record(state["mbt::nondetPicks"], context) : undefined;
+    if (picks !== undefined && Object.keys(picks).join() !== "choice") throw new Error(`${context}: unsupported choices`);
+    const pick = picks === undefined ? undefined : record(picks.choice, context);
     const choices = action === "init" ? profile.initChoices : profile.actions[action]?.choices;
     let choice = 0;
-    if (choices !== undefined) {
-      if (pick.tag !== "Some") throw new Error(`${context}: missing choice`);
+    if (input !== undefined) {
+      choice = itfSignedInteger(input.choice, context);
+      if (choices === undefined ? choice !== -1 : !choices.includes(choice)) throw new Error(`${context}: unsupported explicit choice`);
+    } else if (choices !== undefined) {
+      if (pick?.tag !== "Some") throw new Error(`${context}: missing choice`);
       choice = itfInteger(pick.value, context);
       if (!choices.includes(choice)) throw new Error(`${context}: unsupported choice`);
-    } else if (pick.tag !== "None" || JSON.stringify(pick.value) !== '{"#tup":[]}') {
+    } else if (pick?.tag !== "None" || JSON.stringify(pick.value) !== '{"#tup":[]}') {
       throw new Error(`${context}: unexpected choice`);
     }
-    return { action, choice, expected: observation(record(state.s, context).o, context),
-      ...(profile.readIO ? { io: readIO(record(state.s, context).io, context) } : {}),
-      ...(profile.diagnosticAge === undefined ? {} : { diagnostics: diagnostics(record(state.s, context).d, context, profile.diagnosticConfigErrors) }) };
+    const expected = observation(record(state.s, context).o, context);
+    return { action, choice, expected,
+      ...(profile.policyErrorIO ? { policyErrors: policyErrors(record(state.s, context).policyErrors, context) } : {}),
+      ...(profile.compressionIO ? { compression: compressionIO(record(state.s, context).compression, context) } : {}),
+      ...(profile.markerIO ? { markers: markerIO(record(state.s, context).markers, context) } : {}),
+      ...(profile.readIO ? { io: readIO(record(state.s, context).io, context, expected.calls.length) } : {}),
+      ...(profile.diagnosticAge === undefined ? {} : { diagnostics: diagnostics(record(state.s, context).d, context, profile.diagnosticConfigErrors, profile.diagnosticFutureOffsets) }) };
   }) };
 }
 function valueCode(value: Observation["calls"][number] & { status: "value" }): number {
@@ -266,6 +321,7 @@ function valueCode(value: Observation["calls"][number] & { status: "value" }): n
   if (v === false) return 7;
   if (v === 0) return 8;
   if (v === "") return 9;
+  if (v === "undefined") return 11;
   if (typeof v === "object" && v.absent === true) return 5;
   return 10;
 }
@@ -275,6 +331,46 @@ function project(o: Observation): Projected {
     : c.error.startsWith("source:") ? 3 : c.error.startsWith("timeout:") ? 4 : 10) };
 }
 function projectObservation(profile: Profile, observed: Observation) {
+  if (profile.policyErrorIO) {
+    if (observed.events === undefined) throw new Error("Missing actual policy diagnostics");
+    const selected = observed.events.filter(event => event.event === "error" && event.layer === "noop" && event.error === "config_resolution");
+    for (const event of selected) expect(event).toMatchObject({ cacheNamespace: "urn", useCase: "Behavior", keyType: "id", inFallback: false });
+    const { events: _events, ...base } = observed;
+    return { ...projectBaseObservation(profile, base), policyErrors: selected.map(() => ({ layer: "noop", errorType: "config_resolution" })) };
+  }
+  if (!profile.markerIO && !profile.compressionIO) return projectBaseObservation(profile, observed);
+  const markers: Marker[] = [];
+  const compression: string[] = [];
+  const events = observed.events?.filter(event => {
+    if (profile.compressionIO && event.event === "compression") {
+      expect(event).toMatchObject({ cacheNamespace: "urn", useCase: "Behavior", keyType: "id", layer: "remote" });
+      if (event.outcome !== "decompressed" && event.outcome !== "fallback_raw") throw new Error("Invalid actual compression outcome");
+      compression.push(event.outcome);
+      return false;
+    }
+    if (!profile.markerIO || event.event !== "marker") return true;
+    if (typeof event.cutoffMs !== "number" || typeof event.ttlMs !== "number") throw new Error("Invalid actual marker observation");
+    markers.push({ cutoffMs: event.cutoffMs, ttlMs: event.ttlMs });
+    return false;
+  });
+  if (events === undefined) throw new Error("Missing actual marker observations");
+  const { events: _events, ...base } = observed;
+  return { ...projectBaseObservation(profile, profile.readIO || profile.diagnosticAge !== undefined ? { ...base, events } : base),
+    ...(profile.markerIO ? { markers } : {}), ...(profile.compressionIO ? { compression } : {}) };
+}
+function policyErrors(raw: unknown, context: string): Array<{ layer: string; errorType: string }> {
+  if (!Array.isArray(raw)) throw new Error(`${context}: missing policy errors`);
+  return raw.map(item => {
+    const error = record(item, context);
+    if (Object.keys(error).sort().join() !== "errorType,layer" || error.layer !== "noop" || error.errorType !== "config_resolution") throw new Error(`${context}: invalid policy error`);
+    return { layer: error.layer, errorType: error.errorType };
+  });
+}
+function compressionIO(raw: unknown, context: string): string[] {
+  if (!Array.isArray(raw) || raw.some(value => value !== "decompressed" && value !== "fallback_raw")) throw new Error(`${context}: invalid compression observations`);
+  return raw as string[];
+}
+function projectBaseObservation(profile: Profile, observed: Observation) {
   if (profile.readIO) {
     const { events, ...base } = observed;
     if (events === undefined) throw new Error("Missing actual read observations");
@@ -300,6 +396,7 @@ function projectObservation(profile: Profile, observed: Observation) {
   const { events, ...base } = observed;
   if (events === undefined) throw new Error("Missing actual diagnostic observations");
   const ages: number[] = [];
+  const futureOffsets: Array<{ layer: string; offsetMs: number }> = [];
   let warnings = 0, configErrors = 0;
   const coalesced: string[] = [], fallbackErrors: string[] = [];
   const outcomes = profile.diagnosticAge === "shadowAge" ? observed.shadow.filter(x => x === "match" || x === "mismatch")
@@ -325,6 +422,10 @@ function projectObservation(profile: Profile, observed: Observation) {
         if (typeof event.layer !== "string") throw new Error("Missing source failure layer");
         fallbackErrors.push(event.layer);
       }
+    } else if (event.event === "futureOffset" && profile.diagnosticFutureOffsets) {
+      if (event.layer !== "remote_shadow") throw new Error("Invalid actual future offset layer");
+      if (typeof event.seconds !== "number" || !Number.isSafeInteger(event.seconds * 1000) || event.seconds <= 0) throw new Error("Invalid actual future offset");
+      futureOffsets.push({ layer: event.layer, offsetMs: event.seconds * 1000 });
     } else if (event.event === "mismatchWarning") { expect(event.outcome).toBe("mismatch"); warnings++; }
     else {
       expect(event.event).toBe(profile.diagnosticAge);
@@ -333,7 +434,7 @@ function projectObservation(profile: Profile, observed: Observation) {
       ages.push(event.seconds);
     }
   }
-  return { o: project(base), d: { warnings, ages, coalesced, fallbackErrors, ...(profile.diagnosticConfigErrors ? { configErrors } : {}) } };
+  return { o: project(base), d: { warnings, ages, coalesced, fallbackErrors, ...(profile.diagnosticFutureOffsets ? { futureOffsets } : {}), ...(profile.diagnosticConfigErrors ? { configErrors } : {}) } };
 }
 async function replay(profile: Profile, trace: Trace) {
   const driver = new BehaviorDriver(typeof profile.fixture === "function" ? profile.fixture(trace.steps[0]!.choice) : profile.fixture);
@@ -345,7 +446,7 @@ async function replay(profile: Profile, trace: Trace) {
         // Only named actions/choices and actual effect IDs enter the driver.
         // The model observation and its private state cannot control execution.
         if (action !== "init") await driver.apply(profile.actions[action]!.input(choice, driver.snapshot()));
-        expect(projectObservation(profile, driver.snapshot())).toEqual({ o: step.expected, ...(step.diagnostics === undefined ? {} : { d: step.diagnostics }), ...(step.io === undefined ? {} : { io: step.io }) });
+        expect(projectObservation(profile, driver.snapshot())).toEqual({ o: step.expected, ...(step.policyErrors === undefined ? {} : { policyErrors: step.policyErrors }), ...(step.diagnostics === undefined ? {} : { d: step.diagnostics }), ...(step.io === undefined ? {} : { io: step.io }), ...(step.markers === undefined ? {} : { markers: step.markers }), ...(step.compression === undefined ? {} : { compression: step.compression }) });
       } catch (cause) {
         throw new Error(`${trace.path} step ${i} action ${action} choice ${choice}\nexpected: ${JSON.stringify({ o: step.expected, d: step.diagnostics, io: step.io })}\nactual: ${JSON.stringify(driver.snapshot())}\nreplay: DIALCACHE_FEATURE_TRACE_FILE=${JSON.stringify(trace.path)} corepack pnpm exec vitest run test/formal-features.test.ts --coverage.enabled=false`, { cause });
       }
@@ -849,6 +950,11 @@ function independentWitnesses(traces: Trace[]): Set<string> {
   return seen;
 }
 function witnesses(name: string, traces: Trace[]): Set<string> {
+  if (["recovery-read", "shadow-layers", "local-failure", "source-budgets"].includes(name)) {
+    const paths = traces.map(trace => trace.path);
+    return new Set([...traces.flatMap(trace => trace.steps.map(step => `action:${step.action}`)),
+      ...(name === "recovery-read" ? recoveryReadWitnesses(paths) : name === "shadow-layers" ? shadowLayersWitnesses(paths) : name === "local-failure" ? localFailureWitnesses(paths) : sourceBudgetsWitnesses(paths))]);
+  }
   if (name === "independent") return independentWitnesses(traces);
   if (name === "layers") return layersWitnesses(traces);
   if (name === "admission") return admissionWitnesses(traces);
@@ -1020,10 +1126,20 @@ afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 const single = process.env.DIALCACHE_FEATURE_TRACE_FILE;
 const directory = process.env.DIALCACHE_FEATURE_TRACE_DIR;
+const selectedProfile = process.env.DIALCACHE_FEATURE_PROFILE;
+if (selectedProfile !== undefined && !Object.hasOwn(profiles, selectedProfile)) throw new Error(`Unknown selected feature profile: ${selectedProfile}`);
+const execution = JSON.parse(readFileSync(new URL("../formal/execution.json", import.meta.url), "utf8")) as {
+  models: Array<{ profile?: string; replayRegressions?: string[] }>;
+};
 for (const [name, profile] of Object.entries(profiles)) {
+  if (selectedProfile !== undefined && selectedProfile !== name) continue;
   const paths = single !== undefined ? (single.includes(`/${name}/`) || single.endsWith(`${name}-smoke.itf.json`) ? [resolve(single)] : [])
     : directory === undefined ? [resolve(`formal/${name}-smoke.itf.json`)]
     : readdirSync(resolve(directory, name)).filter((file) => file.endsWith(".itf.json")).sort().map((file) => resolve(directory, name, file));
+  if (directory !== undefined && single === undefined) {
+    const regressions = execution.models.find(model => model.profile === name)?.replayRegressions ?? [];
+    for (const regression of regressions) paths.push(resolve(directory, "..", "regressions", name, `${regression}.itf.json`));
+  }
   if (single === undefined && paths.length === 0) throw new Error(`No ${name} traces found`);
   if (paths.length === 0) continue;
   const traces = paths.map((path) => parseTrace(JSON.parse(readFileSync(path, "utf8")), path, profile));
@@ -1031,21 +1147,26 @@ for (const [name, profile] of Object.entries(profiles)) {
     for (const trace of traces) it(`replays ${trace.path}`, async () => { await replay(profile, trace); });
     if (directory !== undefined && single === undefined) it("reaches every action and required outcome or race", () => {
       const paths = traces.map(trace => trace.path);
-      const seen = new Set([...witnesses(name, traces), ...runtimeWitnesses(name, paths), ...recoveryShadowWitnesses(name, paths)]);
+      const seen = new Set([...witnesses(name, traces), ...runtimeWitnesses(name, paths), ...runtimeBoundaryWitnesses(name, paths), ...recoveryShadowWitnesses(name, paths), ...(name === "recovery-read" ? recoveryAdmissionWitnesses(paths) : []), ...(name === "shadow" ? shadowDiagnosticsWitnesses(paths) : [])]);
       const wanted = Object.keys(profile.actions).map((action) => `action:${action}`).concat(required[name]!);
       expect(wanted.filter((witness) => !seen.has(witness)), `Missing ${name} coverage witnesses`).toEqual([]);
       recordWitnesses(name, seen, required[name]!, traces);
-    });
+    }, 30_000);
     if (traces.length > 0) {
       it("rejects missing observations, unknown actions and invalid choices", () => {
         const raw = JSON.parse(readFileSync(traces[0]!.path, "utf8"));
         delete raw.states[0].s.o.reads;
         expect(() => parseTrace(raw, "missing-observation", profile)).toThrow(/observation fields/);
         raw.states[0].s.o.reads = { "#bigint": "0" };
-        raw.states[1]["mbt::actionTaken"] = "unknown";
+        if (profile.explicitInputs) raw.states[1].input.name = "unknown";
+        else raw.states[1]["mbt::actionTaken"] = "unknown";
         expect(() => parseTrace(raw, "unknown-action", profile)).toThrow(/unknown/);
-        raw.states[1]["mbt::actionTaken"] = Object.keys(profile.actions).find((action) => profile.actions[action]!.choices !== undefined)!;
-        raw.states[1]["mbt::nondetPicks"].choice = { tag: "Some", value: { "#bigint": "9007199254740993" } };
+        const chosenAction = Object.keys(profile.actions).find((action) => profile.actions[action]!.choices !== undefined)!;
+        if (profile.explicitInputs) raw.states[1].input = { name: chosenAction, choice: { "#bigint": "9007199254740993" } };
+        else {
+          raw.states[1]["mbt::actionTaken"] = chosenAction;
+          raw.states[1]["mbt::nondetPicks"].choice = { tag: "Some", value: { "#bigint": "9007199254740993" } };
+        }
         expect(() => parseTrace(raw, "unsafe-choice", profile)).toThrow(/safe ITF integer/);
       });
       if (profile.readIO) it("rejects missing read observations and detects corrupted budgets", async () => {

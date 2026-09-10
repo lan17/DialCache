@@ -11,6 +11,7 @@ import {
 import { encodeFrame, FakeRedis } from "../fake-redis.js";
 import type { EffectsContractEvent } from "./effects-contract.js";
 import { assertPublicationCausality, type CausalEvent } from "./causal-contract.js";
+import { LocalCache } from "../../src/internal/local-cache.js";
 
 export type Policy = ConstructorParameters<typeof DialCacheKeyConfig>[0];
 export type Value = number | boolean | string | null;
@@ -18,12 +19,13 @@ export type Recovery = "allow" | "deny" | "error";
 export type EventName = "readContext" | "readAbort" | "request" | "miss" | "disabled" | "error"
   | "coalesced" | "invalidation" | "shadowAge" | "recoveryAge" | "futureOffset"
   | "size" | "storedSize" | "compression" | "get" | "fallback" | "serialization"
-  | "mismatchWarning" | "writeDispatch";
+  | "mismatchWarning" | "writeDispatch" | "marker";
 export interface ObservedEvent { event: EventName; [field: string]: string | number | boolean | null }
 // JSON-shaped adapter observations deliberately include malformed replies. A
 // strongly typed port can reject these at its adapter boundary instead.
 export type AdapterReply = null | number | string | boolean | { [field: string]: unknown };
 export interface Fixture {
+  localFaultInjection?: boolean;
   policy: Policy;
   tracked?: boolean;
   fallbackTimeoutMs?: number | null | "default";
@@ -41,6 +43,7 @@ export interface Fixture {
   observe?: EventName[];
 }
 export interface Faults {
+  localStorage: boolean;
   read: boolean; write: boolean; dump: boolean; load: boolean; policy: boolean; observer: boolean;
   holdReads: boolean; holdWrites: boolean; holdDumps: boolean; holdLoads: boolean; holdPolicies: boolean;
 }
@@ -52,6 +55,7 @@ export type Input =
   | { op: "shiftWall"; ms: number }
   | { op: "seed"; useCase?: string; key?: string; value?: Value; ageMs?: number; frameHex?: string; payloadText?: string; payloadHex?: string; ttlMs?: number }
   | { op: "invalidate"; key?: string; futureBufferMs?: number }
+  | { op: "observeMarker"; key?: string }
   | { op: "adapterReply"; value: AdapterReply }
   | { op: "policy"; value: Policy | null }
   | { op: "faults"; value: Partial<Faults> }
@@ -116,10 +120,11 @@ export class BehaviorDriver {
   private readonly scopes = new Map<string, Scope>();
   private readonly effects = { read: new Map<number, Gate>(), write: new Map<number, Gate>(),
     dump: new Map<number, Gate>(), load: new Map<number, Gate>(), policy: new Map<number, Gate>() };
-  private readonly faults: Faults = { read: false, write: false, dump: false, load: false, policy: false, observer: false,
+  private readonly faults: Faults = { localStorage: false, read: false, write: false, dump: false, load: false, policy: false, observer: false,
     holdReads: false, holdWrites: false, holdDumps: false, holdLoads: false, holdPolicies: false };
   private runtimePolicy: Policy | null = {};
   private wallOffset = 0;
+  private readonly wallOrigin = Date.now();
   private readonly instances = new Map<string, DialCache>();
   private readonly maintenanceError = new Error("Controlled mutation failure");
   readonly redis: FakeRedis;
@@ -127,6 +132,21 @@ export class BehaviorDriver {
 
   constructor(private readonly fixture: Fixture, private readonly overrides: DialCacheConfig = {}) {
     this.observed = emptyObservation(fixture);
+    if (fixture.localFaultInjection) {
+      // Native binding for the model's fallible local-storage boundary. These
+      // hooks inject an exception only; successful calls still use real storage.
+      const owner = this;
+      const get = LocalCache.prototype.getWithResolvedConfig;
+      const put = LocalCache.prototype.put;
+      vi.spyOn(LocalCache.prototype, "getWithResolvedConfig").mockImplementation(function (this: LocalCache, key, config) {
+        if (owner.faults.localStorage) throw new Error("Controlled local storage failure");
+        return get.call(this, key, config);
+      });
+      vi.spyOn(LocalCache.prototype, "put").mockImplementation(function (this: LocalCache, key, value, config) {
+        if (owner.faults.localStorage) throw new Error("Controlled local storage failure");
+        return put.call(this, key, value, config);
+      });
+    }
     const origin = Date.now();
     vi.spyOn(performance, "now").mockImplementation(() => Date.now() - origin - this.wallOffset);
     // Sinon delivers fake immediates outside the async context in which they
@@ -343,6 +363,15 @@ export class BehaviorDriver {
           else throw error;
         }
         break;
+      case "observeMarker": {
+        // Observe the controlled Redis environment, never DialCache's internal
+        // state. The fixed origin makes the timestamp portable across runtimes.
+        const key = new DialCacheKey({ useCase: "Behavior", keyType: "id", id: input.key ?? "1", trackForInvalidation: true });
+        const watermarkKey = `${key.prefix}#watermark`;
+        const cutoff = this.redis.readWatermarkValue(watermarkKey);
+        this.record("marker", { cutoffMs: cutoff === null ? -1 : cutoff - this.wallOrigin, ttlMs: this.redis.ttlMs(watermarkKey) });
+        break;
+      }
       case "adapterReply":
         if (this.adapterReply !== undefined) throw new Error("Unconsumed adapter reply");
         this.adapterReply = { value: input.value };

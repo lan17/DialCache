@@ -256,9 +256,11 @@
         }
       ],
       "requiredDetections": [
+        "generated",
         "portable"
       ],
       "typescriptRequiredDetections": [
+        "generated",
         "portable"
       ]
     },

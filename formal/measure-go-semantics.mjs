@@ -8,8 +8,9 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const json = file => JSON.parse(readFileSync(file, 'utf8'));
-const generatedNames = ['TestCoreConformance', 'TestEffectsConformance', 'TestFeatureConformance', 'TestGeneratedWitnessEvidence'];
-const fixedNames = ['TestBehaviorConformance', 'TestProtocolKeys', 'TestProtocolFrames', 'TestProtocolDecoders', 'TestProtocolCohorts', 'TestProtocolRemainingVectors'];
+const protocolNames = ['TestProtocolKeys', 'TestProtocolFrames', 'TestProtocolDecoders', 'TestProtocolCohorts', 'TestProtocolRemainingVectors'];
+const generatedNames = ['TestCoreConformance', 'TestEffectsConformance', 'TestFeatureConformance', 'TestLocalClockConformance', 'TestGeneratedWitnessEvidence', ...protocolNames];
+const fixedNames = ['TestBehaviorConformance', ...protocolNames];
 const infrastructureTestFile = /(?:replay|driver|protocol|profile|registry|witness_evidence|integration)_test\.go$/;
 
 // The monitor emits this discriminator only after validating its journal.
@@ -83,7 +84,7 @@ export function evaluateGoTestEvents(lines, exitCode) {
   for (const name of failedLeaves) {
     const output = outputs.get(name) ?? '';
     if (!/\b[\w-]+_test\.go:\d+:/.test(output)) throw new Error(`failure has no assertion location: ${name}`);
-    if (/^Test(?:Core|Effects|Feature|Behavior)Conformance(?:\/|$)/.test(name)) {
+    if (/^Test(?:Core|Effects|Feature|Behavior|LocalClock)Conformance(?:\/|$)/.test(name)) {
       if (/expected:[\s\S]*actual:/.test(output)) assertionKinds[name] = 'observation-mismatch';
       else if (causalPropertyAssertion(output)) assertionKinds[name] = 'causal-property';
       else throw new Error(`replay failure lacks observation or validated causal property evidence: ${name}`);
@@ -171,7 +172,7 @@ export function measureGoSemantics() {
     report.node = process.version;
     report.catalogSha256 = hash(readFileSync(catalogPath));
     report.inputs = fingerprint(workspace, ['formal', 'go', 'test', 'src']);
-    report.corpus = fingerprint(root, ['.formal-traces/conformance', '.formal-traces/effects', '.formal-traces/features']);
+    report.corpus = fingerprint(root, ['.formal-traces/conformance', '.formal-traces/effects', '.formal-traces/features', '.formal-traces/regressions']);
     report.witnesses = fingerprint(witnessDirectory, ['.']);
     report.sourceSha256 = Object.fromEntries([...originals].map(([path, text]) => [path, hash(text)]));
     report.selections = cohorts;
@@ -183,7 +184,7 @@ export function measureGoSemantics() {
     };
     const run = (label, cohort, baseline) => {
       const result = spawnSync(go, ['test', '-json', '-count=1', '-timeout=150s', '-run', `^(${cohorts[cohort].join('|')})$`, '.'], {
-        cwd: moduleDirectory, env, encoding: 'utf8', timeout, maxBuffer: 128 * 1024 * 1024,
+        cwd: moduleDirectory, env: { ...env, DIALCACHE_PROTOCOL_CORPUS: cohort === 'generated' ? 'generated' : 'fixed' }, encoding: 'utf8', timeout, maxBuffer: 128 * 1024 * 1024,
       });
       writeFileSync(resolve(output, `${label}-${cohort}.jsonl`), result.stdout ?? '');
       writeFileSync(resolve(output, `${label}-${cohort}.stderr.log`), result.stderr ?? '');

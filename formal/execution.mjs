@@ -98,6 +98,8 @@ export function validateExecution(manifest = readExecution(), {
       new Set(paths).size !== paths.length || !sameMembers(paths, files)) throw new Error('Model/library file inventory changed; review the execution schedule');
   const profileIds = [], outputDirectories = new Set([check.outputDirectory]);
   let invariants = 0, regressions = 0, generatedTraces = 0, challenges = 0;
+  let exportedRegressionTraces = 0, generatedVectors = 0, vectorModels = 0;
+  const vectorPaths = new Set();
   for (const model of manifest.models) {
     const declarations = scanDeclarations(readSource(model.path));
     if (declarations.get('init') !== 'action' || declarations.get('step') !== 'action') throw new Error(`${model.path}: scheduled model needs init and step actions`);
@@ -131,6 +133,29 @@ export function validateExecution(manifest = readExecution(), {
       outputDirectories.add(generation.outputDirectory);
       generatedTraces += generation.traces;
     }
+    if (model.replayRegressions !== undefined) {
+      names(model.replayRegressions, `${model.path} replay regressions`);
+      exportedRegressionTraces += model.replayRegressions.length;
+      if (!model.profile || declarations.get('input') !== 'var' ||
+          model.replayRegressions.some(name => !model.regressions.includes(name))) throw new Error(`${model.path}: replay regressions need declared input and scheduled tests`);
+    }
+    if (model.vectorExport !== undefined) {
+      const vector = model.vectorExport;
+      if (model.profile !== undefined || !['protocol', 'invalidation'].includes(vector.kind)
+        || !/^formal\/generate-[\w-]+-vectors\.mjs$/.test(vector.generator)
+        || !/^formal\/quint-[\w-]+-vectors\.json$/.test(vector.artifact)
+        || !Array.isArray(vector.sources) || new Set(vector.sources).size !== vector.sources.length
+        || !vector.sources.includes(model.path) || !vector.sources.includes(vector.generator)
+        || vector.sources.some(path => path !== model.path && path !== vector.generator && !manifest.libraries.includes(path))) {
+        throw new Error(`${model.path}: invalid vector export boundary`);
+      }
+      positiveInteger(vector.cases, `${model.path} vector cases`);
+      if (vectorPaths.has(vector.generator) || vectorPaths.has(vector.artifact)) throw new Error('Duplicate vector generator or artifact');
+      vectorPaths.add(vector.generator); vectorPaths.add(vector.artifact);
+      generatedVectors += vector.cases;
+      vectorModels++;
+      for (const path of vector.sources) read(path);
+    }
   }
   for (const path of manifest.libraries) {
     const declarations = scanDeclarations(readSource(path));
@@ -138,7 +163,7 @@ export function validateExecution(manifest = readExecution(), {
   }
   if (!sameMembers(profileIds, profiles.map(profile => profile.id))) throw new Error('Generated profile inventory differs from claim registry');
   if (challenges !== 1) throw new Error('Source deadline model property challenge is missing');
-  return { models: manifest.models.length, libraries: manifest.libraries.length, profiles: profileIds.length, invariants, regressions, generatedTraces };
+  return { models: manifest.models.length, libraries: manifest.libraries.length, profiles: profileIds.length, invariants, regressions, generatedTraces, exportedRegressionTraces, vectorModels, generatedVectors };
 }
 
 // Call after validateExecution: coverage links must name checks that run, not

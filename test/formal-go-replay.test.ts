@@ -9,10 +9,10 @@ type Inventory = {
   required: Array<{ name: string; category: string }>;
 };
 type Event = { Action: string; Package: string; Test?: string };
-type Result = { status: string; generatedTraces: number; fixedScenarios: number; protocolVectors: number; witnessProfiles: string[] };
+type Result = { status: string; generatedTraces: number; quintRegressionTraces: number; fixedScenarios: number; protocolVectors: number; witnessProfiles: string[] };
 type InventoryInputs = {
   packageName: string;
-  execution: { models: Array<{ profile?: string; generate?: { traces: number } }> };
+  execution: { models: Array<{ profile?: string; generate?: { traces: number }; regressions?: string[]; replayRegressions?: string[] }> };
   scenarios: { scenarios: Array<{ feature: string; name: string }> };
   protocol: Record<string, unknown>;
 };
@@ -21,6 +21,9 @@ const { checkGoReplay, loadGoReplayInventory, buildGoReplayInventory } = await i
   loadGoReplayInventory(): Inventory;
   buildGoReplayInventory(input: InventoryInputs): Inventory;
   checkGoReplay(report: string, inventory: Inventory): Result;
+};
+const { protocolCorpus } = await import(new URL("../formal/vector-artifacts.mjs", import.meta.url).href) as {
+  protocolCorpus(manifest?: InventoryInputs["execution"]): InventoryInputs["protocol"];
 };
 const inventory = loadGoReplayInventory();
 const event = (Action: string, Test?: string): Event => ({ Action, Package: inventory.packageName, ...(Test ? { Test } : {}) });
@@ -43,14 +46,15 @@ const inventoryInputs = (): InventoryInputs => ({
   packageName: inventory.packageName,
   execution: readFixture("execution.json") as InventoryInputs["execution"],
   scenarios: readFixture("behavioral-scenarios.json") as InventoryInputs["scenarios"],
-  protocol: readFixture("protocol-vectors.json") as InventoryInputs["protocol"],
+  protocol: protocolCorpus(),
 });
 
 describe("completed Go conformance report", () => {
   it("requires the exact current trace, fixed, protocol, and witness inventories", () => {
     const result = check(completed());
-    expect(result).toMatchObject({ status: "pass", generatedTraces: 4000, fixedScenarios: 244, protocolVectors: 134 });
-    expect(result.witnessProfiles).toEqual(["admission", "effects", "independent", "layers", "policy", "recovery", "scope", "shadow"]);
+    expect(result).toMatchObject({ status: "pass", generatedTraces: 5280, quintRegressionTraces: 165, fixedScenarios: 244, protocolVectors: 1477 });
+    expect(result.witnessProfiles).toEqual(["admission", "effects", "independent", "layers", "local-clock", "local-failure", "policy",
+      "recovery", "recovery-read", "runtime-boundaries", "scope", "shadow", "shadow-layers", "source-budgets"]);
   });
 
   it("rejects a partial report even if every completed leaf passed", () => {
@@ -65,6 +69,8 @@ describe("completed Go conformance report", () => {
     { omitted: "the policy witness gate", prefix: "TestGeneratedWitnessEvidence/policy" },
     { omitted: "enablement scenarios", prefix: "TestBehaviorConformance/enablement/" },
     { omitted: "tracked protocol vectors", prefix: "TestProtocolDecoders/trackedDecodeVectors/" },
+    { omitted: "the native local-clock corpus", prefix: "TestLocalClockConformance/" },
+    { omitted: "the shared source-budget regression", prefix: "TestFeatureConformance/source-budgets/lateFollowerUsesLeadersRemainingBudgetTest.itf.json" },
   ])("rejects a report missing $omitted", ({ prefix }) => {
     const events = completed().filter(e => !e.Test?.startsWith(prefix));
     expect(() => check(events)).toThrow(/Missing completed Go replay leaf/);
@@ -102,7 +108,7 @@ describe("completed Go conformance report", () => {
     expect(() => check([event("run", "TestExample")])).toThrow(/precedes package start/);
     expect(() => check([event("start"), event("start")])).toThrow(/invalid Go package start/);
     expect(() => check([event("start", "TestExample")])).toThrow(/invalid Go package start/);
-    expect(() => check([event("start"), { ...event("output"), Output: "PASS: all 4000 traces" }, event("pass")]))
+    expect(() => check([event("start"), { ...event("output"), Output: "PASS: all required histories" }, event("pass")]))
       .toThrow(/completed with unfinished tests/);
   });
 
@@ -143,6 +149,20 @@ describe("Go conformance fixture inventory boundaries", () => {
     const inputs = inventoryInputs();
     inputs.scenarios.scenarios.push({ feature: "enablement", name: "new portable behavior" });
     expect(() => checkGoReplay(encode(completed()), buildGoReplayInventory(inputs))).toThrow(/Missing completed Go replay leaf.*new_portable_behavior/);
+  });
+
+  it("requires generated primitive rows and notices a newly added vector", () => {
+    const inputs = inventoryInputs();
+    expect(buildGoReplayInventory(inputs).required).toEqual(inventory.required);
+    const generated = inventory.required.filter(entry => entry.category === "protocol" && entry.name.includes("/Quint"));
+    expect(generated).toHaveLength(1343);
+    for (const prefix of ["TestProtocolKeys/", "TestProtocolFrames/", "TestProtocolDecoders/", "TestProtocolRemainingVectors/"]) {
+      const leaf = generated.find(entry => entry.name.startsWith(prefix))!.name;
+      expect(() => check(completed().filter(event => event.Test !== leaf))).toThrow(/Missing completed Go replay leaf/);
+    }
+    (inputs.protocol.frameVectors as Array<{ name: string }>).push({ name: "new generated frame boundary" });
+    expect(() => checkGoReplay(encode(completed()), buildGoReplayInventory(inputs)))
+      .toThrow(/Missing completed Go replay leaf.*new_generated_frame_boundary/);
   });
 
   it("requires review for new or removed protocol groups and rejects empty groups", () => {
@@ -189,5 +209,19 @@ describe("Go conformance fixture inventory boundaries", () => {
       inputs.execution.models.find(model => model.profile === "core")!.generate!.traces = traces;
       expect(() => buildGoReplayInventory(inputs)).toThrow(/Invalid generated profile count/);
     }
+  });
+
+  it("requires newly exported Quint regressions and rejects unscheduled or duplicate names", () => {
+    const inputs = inventoryInputs();
+    const model = inputs.execution.models.find(model => model.profile === "source-budgets")!;
+    model.regressions!.push("newBoundaryTest");
+    model.replayRegressions!.push("newBoundaryTest");
+    expect(() => checkGoReplay(encode(completed()), buildGoReplayInventory(inputs)))
+      .toThrow(/Missing completed Go replay leaf.*newBoundaryTest/);
+    model.regressions!.pop();
+    expect(() => buildGoReplayInventory(inputs)).toThrow(/Unscheduled Quint regression replay/);
+    model.replayRegressions!.pop();
+    model.replayRegressions!.push(model.replayRegressions![0]!);
+    expect(() => buildGoReplayInventory(inputs)).toThrow(/Duplicate normalized Go case name/);
   });
 });
