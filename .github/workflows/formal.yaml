@@ -32,6 +32,18 @@ jobs:
           cache: false
       - name: Install Quint
         run: npm install --global @informalsystems/quint@0.32.0
+      - name: Install pinned Quint Rust evaluator
+        shell: bash
+        # Quint 0.32.0 downloads anonymously through the GitHub API on a cache miss.
+        # Seed its cache from the fixed release asset to avoid shared-runner rate limits.
+        run: |
+          quint_archive="$RUNNER_TEMP/quint-evaluator.tar.gz"
+          curl --fail --location --retry 3 --output "$quint_archive" https://github.com/quint-co/quint/releases/download/evaluator/v0.6.0/quint_evaluator-x86_64-unknown-linux-gnu.tar.gz
+          printf '%s  %s\n' '61755a09d5052d93a4e75e840059edfd0d3674aeda164b9d2464be3d6e21b1c2' "$quint_archive" | sha256sum --check
+          quint_directory="$HOME/.quint/rust-evaluator-v0.6.0"
+          mkdir -p "$quint_directory"
+          tar -xzf "$quint_archive" -C "$quint_directory"
+          chmod +x "$quint_directory/quint_evaluator"
       - name: Check executable specifications
         run: bash formal/check.sh
       - name: Generate model-based conformance traces
