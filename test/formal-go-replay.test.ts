@@ -60,12 +60,14 @@ describe("completed Go conformance report", () => {
     expect(() => check(events)).toThrow(/unfinished tests/);
   });
 
-  it("rejects an omitted profile, required witness gate, or fixed/vector leaf", () => {
-    for (const prefix of ["TestFeatureConformance/shadow/", "TestGeneratedWitnessEvidence/policy",
-      "TestBehaviorConformance/enablement/", "TestProtocolDecoders/trackedDecodeVectors/"]) {
-      const events = completed().filter(e => !e.Test?.startsWith(prefix));
-      expect(() => check(events)).toThrow(/Missing completed Go replay leaf/);
-    }
+  it.each([
+    { omitted: "the shadow profile", prefix: "TestFeatureConformance/shadow/" },
+    { omitted: "the policy witness gate", prefix: "TestGeneratedWitnessEvidence/policy" },
+    { omitted: "enablement scenarios", prefix: "TestBehaviorConformance/enablement/" },
+    { omitted: "tracked protocol vectors", prefix: "TestProtocolDecoders/trackedDecodeVectors/" },
+  ])("rejects a report missing $omitted", ({ prefix }) => {
+    const events = completed().filter(e => !e.Test?.startsWith(prefix));
+    expect(() => check(events)).toThrow(/Missing completed Go replay leaf/);
   });
 
   it("rejects duplicate executions and added smoke or renamed trace leaves", () => {
