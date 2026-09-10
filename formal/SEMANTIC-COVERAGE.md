@@ -63,16 +63,16 @@ Policy and shadow profile version 2 close the three prior generated-behavior sur
 
 The other nine faults are detected by all three cohorts. Mutation IDs identify faults, not proofs of an entire case: shared helper changes can be detected through another affected behavior. The report preserves the actual failing test names and trace diagnostics so detection can be reviewed.
 
-The independent Go measurement compiled all 13 equivalent faults and completed all unmodified baselines: 72 ordinary native tests, 4,008 generated replays/witness gates, and 372 fixed scenarios/protocol vectors. Its completed report records:
+The independent Go measurement compiled all 13 equivalent faults and completed all unmodified baselines: 93 ordinary native tests, 4,008 generated replays/witness gates, and 372 fixed scenarios/protocol vectors. Its completed report records:
 
 | Go cohort | Selected faults detected |
 | --- | ---: |
-| Ordinary native | 3/13 |
+| Ordinary native | 5/13 |
 | Quint-generated | 12/13 |
 | Fixed scenarios/protocol vectors | 12/13 |
 | Portable union | 13/13 |
 
-All 11 Go behavioral faults are detected by generated tests. M12 remains a protocol-vector detection; M09 (omitted mismatch-logging flag) is detected by generated tests but survives the fixed cohort. The native TypeScript and Go suites differ in size and scope, so their ordinary detection ratios are not equivalent denominators of implementation quality. Both ports require the same generated and portable detections in CI. This makes Quint-generated tests the main behavioral regression suite for the new Go implementation while native tests cover its language and integration boundaries.
+The native clock regressions also detect M03 (late source acceptance) and M11 (renewed insertion TTL). All 11 Go behavioral faults are detected by generated tests. M12 remains a protocol-vector detection; M09 (omitted mismatch-logging flag) is detected by generated tests but survives the fixed cohort. The native TypeScript and Go suites differ in size and scope, so their ordinary detection ratios are not equivalent denominators of implementation quality. Both ports require the same generated and portable detections in CI. This makes Quint-generated tests the main behavioral regression suite for the new Go implementation while native tests cover its language and integration boundaries.
 
 ## Reproduction and CI
 

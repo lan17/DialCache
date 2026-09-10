@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync/atomic"
+	"time"
 )
 
 type execution[T any] struct {
@@ -48,14 +49,14 @@ func (x *execution[T]) event(kind, layer string, extra map[string]any) {
 func (x *execution[T]) errorEvent(layer, kind string, inFallback bool) {
 	x.event("error", layer, map[string]any{"error": kind, "inFallback": inFallback})
 }
-func (x *execution[T]) elapsed(start int64) float64 {
-	n := x.cache.options.Clock.ElapsedMS() - start
+func (x *execution[T]) elapsed(start time.Duration) float64 {
+	n := elapsedNow(x.cache.options.Clock) - start
 	if n < 0 {
 		n = 0
 	}
-	return float64(n) / 1000
+	return n.Seconds()
 }
-func (x *execution[T]) duration(kind, layer string, start int64, extra map[string]any) {
+func (x *execution[T]) duration(kind, layer string, start time.Duration, extra map[string]any) {
 	if extra == nil {
 		extra = map[string]any{}
 	}
@@ -137,7 +138,7 @@ func (c *Cache[T]) GetOrLoad(ctx context.Context, op Operation, load func(contex
 	}
 	state, _ := ctx.Value(c).(scopeState[T])
 	run := func() (T, error) {
-		start := c.options.Clock.ElapsedMS()
+		start := elapsedNow(c.options.Clock)
 		c.mu.Lock()
 		v, found := state.owner.memo[key]
 		live := state.owner.live
@@ -178,7 +179,7 @@ func (x *execution[T]) singleFlight(flights map[string]*flight[T], owner *scope[
 		<-f.done
 		return f.value, f.err
 	}
-	f := &flight[T]{done: make(chan struct{}), started: c.options.Clock.ElapsedMS()}
+	f := &flight[T]{done: make(chan struct{}), started: elapsedNow(c.options.Clock)}
 	flights[x.key] = f
 	c.mu.Unlock()
 	f.value, f.err = callSafely(run)
@@ -206,7 +207,7 @@ func (x *execution[T]) shared(fallbackLayer string) (T, error) {
 	run := func() (T, error) {
 		localMiss := false
 		if p.Local.Enabled {
-			start := c.options.Clock.ElapsedMS()
+			start := elapsedNow(c.options.Clock)
 			item, readErr := callSafely(func() (localResult[T], error) {
 				value, found := c.localGet(x.key)
 				return localResult[T]{value, found}, nil
@@ -314,7 +315,7 @@ func (x *execution[T]) budget() int64 {
 }
 func (x *execution[T]) source(layer string) (T, error) {
 	clock := x.cache.options.Clock
-	start := clock.ElapsedMS()
+	start := elapsedNow(clock)
 	budget := x.budget()
 	p := startPending(func() (T, error) { return x.load(x.ctx) })
 	v, err := awaitDeadline(clock, p, start, budget, func() error { return &FallbackTimeoutError{UseCase: x.op.Identity.UseCase, TimeoutMS: budget} }, func() { x.timedOut.Store(true) })
@@ -335,7 +336,7 @@ type remoteValue[T any] struct {
 func (x *execution[T]) rawRead() (*pending[ReadResult], *pending[ReadResult]) {
 	ctx, cancel := context.WithCancel(context.WithValue(context.WithoutCancel(x.ctx), readBudgetKey{}, x.policy.RemoteReadTimeoutMS))
 	clock := x.cache.options.Clock
-	start := clock.ElapsedMS()
+	start := elapsedNow(clock)
 	raw := startPending(func() (ReadResult, error) { return x.cache.options.Remote.Read(ctx, x.remoteKey, x.watermark) })
 	bounded := startPending(func() (ReadResult, error) {
 		r, e := awaitDeadline(clock, raw, start, x.policy.RemoteReadTimeoutMS, func() error { return &RemoteReadTimeoutError{TimeoutMS: x.policy.RemoteReadTimeoutMS} }, cancel)
@@ -359,7 +360,7 @@ func (x *execution[T]) frameAge(frame *Frame, layer string) (int64, bool) {
 	return age, true
 }
 func (x *execution[T]) readServing() remoteValue[T] {
-	start := x.cache.options.Clock.ElapsedMS()
+	start := elapsedNow(x.cache.options.Clock)
 	x.event("request", "remote", nil)
 	defer x.duration("get", "remote", start, nil)
 	p, _ := x.rawRead()
@@ -406,13 +407,13 @@ func (x *execution[T]) readServing() remoteValue[T] {
 
 func (x *execution[T]) decode(frame Frame, layer string) (T, error) {
 	payload := Payload{Bytes: frame.Payload, Binary: frame.Binary}
-	decompressStarted := x.cache.options.Clock.ElapsedMS()
+	decompressStarted := elapsedNow(x.cache.options.Clock)
 	expanded := DecompressPayload(payload)
 	if expanded.Outcome != "passthrough" {
 		x.event("compression", layer, map[string]any{"outcome": expanded.Outcome})
 		x.duration("compressionDuration", layer, decompressStarted, map[string]any{"operation": "decompress"})
 	}
-	start := x.cache.options.Clock.ElapsedMS()
+	start := elapsedNow(x.cache.options.Clock)
 	value, err := callSafely(func() (T, error) {
 		if codec, ok := x.codec().(ContextCodec[T]); ok {
 			return codec.DecodeContext(x.ctx, expanded.Payload)
@@ -439,7 +440,7 @@ func (x *execution[T]) putRemote(value T, fence *uint64, layer string, allowed f
 			return false, nil
 		}
 	}
-	start := clock.ElapsedMS()
+	start := elapsedNow(clock)
 	payload, err := callSafely(func() (Payload, error) {
 		if codec, ok := x.codec().(ContextCodec[T]); ok {
 			return codec.EncodeContext(x.ctx, value)
@@ -455,7 +456,7 @@ func (x *execution[T]) putRemote(value T, fence *uint64, layer string, allowed f
 	}
 	x.event("size", layer, map[string]any{"bytes": int64(len(payload.Bytes))})
 	if !x.cache.options.DisableCompression {
-		compressStarted := clock.ElapsedMS()
+		compressStarted := elapsedNow(clock)
 		compressed, compressionErr := CompressPayload(payload, *x.cache.options.Compression)
 		if compressionErr != nil {
 			x.errorEvent(layer, "compression", false)

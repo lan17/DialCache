@@ -29,33 +29,54 @@ func startPending[T any](f func() (T, error)) *pending[T] {
 	return p
 }
 
-func after(clock Clock, ms int64, f func()) Timer {
-	if ms < 0 {
-		ms = 0
+func elapsedNow(clock Clock) time.Duration {
+	if precise, ok := clock.(PreciseClock); ok {
+		return precise.ElapsedTime()
+	}
+	return time.Duration(clock.ElapsedMS()) * time.Millisecond
+}
+
+func after(clock Clock, delay time.Duration, f func()) Timer {
+	if delay < 0 {
+		delay = 0
 	}
 	if timers, ok := clock.(TimerClock); ok {
+		// A millisecond timer must never shorten a fractional remaining budget.
+		ms := int64(delay / time.Millisecond)
+		if delay%time.Millisecond != 0 {
+			ms++
+		}
 		return timers.AfterFunc(ms, f)
 	}
-	return time.AfterFunc(time.Duration(ms)*time.Millisecond, f)
+	return time.AfterFunc(delay, f)
 }
 
 // awaitDeadline accepts only results observed strictly before the deadline.
 // Raw work keeps ownership of its resources after the caller stops waiting.
-func awaitDeadline[T any](clock Clock, p *pending[T], started, budget int64, timeout func() error, onTimeout func()) (T, error) {
+func awaitDeadline[T any](clock Clock, p *pending[T], started time.Duration, budget int64, timeout func() error, onTimeout func()) (T, error) {
 	if budget < 0 {
 		<-p.done
 		return p.result.value, p.result.err
 	}
-	var once sync.Once
-	expired := make(chan struct{})
-	timer := after(clock, budget-(clock.ElapsedMS()-started), func() { once.Do(func() { close(expired) }) })
-	defer timer.Stop()
-	select {
-	case <-p.done:
-		if clock.ElapsedMS()-started < budget {
-			return p.result.value, p.result.err
+	duration := time.Duration(budget) * time.Millisecond
+	for {
+		var once sync.Once
+		expired := make(chan struct{})
+		timer := after(clock, duration-(elapsedNow(clock)-started), func() { once.Do(func() { close(expired) }) })
+		select {
+		case <-p.done:
+			timer.Stop()
+			if elapsedNow(clock)-started < duration {
+				return p.result.value, p.result.err
+			}
+		case <-expired:
+			timer.Stop()
+			// Timer precision and delivery do not define the semantic boundary.
+			if elapsedNow(clock)-started < duration {
+				continue
+			}
 		}
-	case <-expired:
+		break
 	}
 	if onTimeout != nil {
 		onTimeout()

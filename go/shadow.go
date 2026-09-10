@@ -5,6 +5,7 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 type shadowFlight struct {
@@ -22,7 +23,7 @@ type shadowVerdict struct {
 }
 
 func (x *execution[T]) darkSource(layer string, localMiss bool) (T, error) {
-	start := x.cache.options.Clock.ElapsedMS()
+	start := elapsedNow(x.cache.options.Clock)
 	source := startPending(func() (T, error) { return x.source(layer) })
 	x.scheduleShadow(nil, source, start)
 	<-source.done
@@ -33,7 +34,7 @@ func (x *execution[T]) darkSource(layer string, localMiss bool) (T, error) {
 	return v, e
 }
 
-func (x *execution[T]) scheduleShadow(frame *Frame, source *pending[T], started int64) {
+func (x *execution[T]) scheduleShadow(frame *Frame, source *pending[T], started time.Duration) {
 	c := x.cache
 	p := x.policy.Shadow
 	if p.ConfigError {
@@ -96,24 +97,24 @@ func (x *execution[T]) shadowEvent(v shadowVerdict) {
 	}
 }
 
-func (x *execution[T]) runShadow(f *shadowFlight, frame *Frame, source *pending[T], started int64) {
+func (x *execution[T]) runShadow(f *shadowFlight, frame *Frame, source *pending[T], started time.Duration) {
 	clock := x.cache.options.Clock
 	if source == nil {
-		started = clock.ElapsedMS()
+		started = elapsedNow(clock)
 	}
 	budget := x.budget()
 	if budget < 0 {
 		budget = 60000
 	}
 	expired := func() bool {
-		if clock.ElapsedMS()-started >= budget {
+		if elapsedNow(clock)-started >= time.Duration(budget)*time.Millisecond {
 			f.abandon()
 		}
 		return f.abandoned.Load()
 	}
 	var reads []*pending[ReadResult]
 	read := func(maxAge bool, retainFuture bool) (ReadResult, error) {
-		begin := clock.ElapsedMS()
+		begin := elapsedNow(clock)
 		x.event("request", "remote_shadow", nil)
 		bounded, raw := x.rawRead()
 		reads = append(reads, raw)

@@ -53,8 +53,8 @@
       "edits": [
         {
           "path": "go/deadline.go",
-          "before": "if clock.ElapsedMS()-started < budget {",
-          "after": "if true {"
+          "before": "case <-p.done:\n\t\t\ttimer.Stop()\n\t\t\tif elapsedNow(clock)-started < duration {",
+          "after": "case <-p.done:\n\t\t\ttimer.Stop()\n\t\t\tif true {"
         }
       ],
       "requiredDetections": [
@@ -229,18 +229,8 @@
       "edits": [
         {
           "path": "go/cache.go",
-          "before": "type entry[T any] struct {\n\tvalue   T",
-          "after": "type entry[T any] struct {\n\tttlMS int64\n\tvalue   T"
-        },
-        {
-          "path": "go/cache.go",
           "before": "item.used = c.sequence\n\t\tc.local[key] = item",
-          "after": "item.used = c.sequence\n\t\titem.expires = c.options.Clock.ElapsedMS() + item.ttlMS\n\t\tc.local[key] = item"
-        },
-        {
-          "path": "go/cache.go",
-          "before": "entry[T]{value: value, expires: c.options.Clock.ElapsedMS() + ttl, used: c.sequence}",
-          "after": "entry[T]{value: value, expires: c.options.Clock.ElapsedMS() + ttl, ttlMS: ttl, used: c.sequence}"
+          "after": "item.used = c.sequence\n\t\titem.inserted = elapsedNow(c.options.Clock)\n\t\tc.local[key] = item"
         }
       ],
       "requiredDetections": [

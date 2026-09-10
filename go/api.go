@@ -13,6 +13,13 @@ type Clock interface {
 	ElapsedMS() int64
 }
 
+// PreciseClock optionally preserves fractional milliseconds for elapsed-time
+// decisions. ElapsedTime and ElapsedMS must use the same monotonic origin.
+// Existing integer clocks remain supported through Clock.ElapsedMS.
+type PreciseClock interface {
+	ElapsedTime() time.Duration
+}
+
 type Timer interface{ Stop() bool }
 
 // TimerClock lets applications supply the timer source corresponding to Clock.
@@ -26,8 +33,9 @@ type DeferredExecutor interface{ Defer(func()) }
 
 type systemClock struct{ origin time.Time }
 
-func (c systemClock) WallMS() int64    { return time.Now().UnixMilli() }
-func (c systemClock) ElapsedMS() int64 { return time.Since(c.origin).Milliseconds() }
+func (c systemClock) WallMS() int64              { return time.Now().UnixMilli() }
+func (c systemClock) ElapsedTime() time.Duration { return time.Since(c.origin) }
+func (c systemClock) ElapsedMS() int64           { return c.ElapsedTime().Milliseconds() }
 func (c systemClock) AfterFunc(ms int64, f func()) Timer {
 	return time.AfterFunc(time.Duration(ms)*time.Millisecond, f)
 }

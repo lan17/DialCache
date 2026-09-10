@@ -104,8 +104,13 @@ Source/codec/provider/comparator panics become `CallbackPanicError`; telemetry
 panics are ignored. Cache plumbing fails open while explicit maintenance errors
 are returned. Applications still own cancellation of the source context.
 
-`Clock` separates wall time from elapsed time. A custom clock should implement
-`TimerClock` for corresponding deadline delivery; `DeferredExecutor` provides
+`Clock` separates wall time from elapsed time. The default clock preserves
+fractional milliseconds through `PreciseClock.ElapsedTime`. Custom clocks can
+implement that optional interface; existing `ElapsedMS`-only clocks retain their
+supplied integer resolution. Deadlines and local expiry compare elapsed durations without rounding absolute
+timestamps, and millisecond timers round remaining delays upward. A timer
+callback rechecks elapsed time before declaring a timeout. A custom clock should
+implement `TimerClock` for corresponding deadline delivery; `DeferredExecutor` provides
 an optional executor for detached work. Normal use needs none of these hooks.
 Owned unfinished shadow work retains its capacity after a reported timeout,
 and abandoned work cannot initiate a later fill or confirmation.

@@ -11,15 +11,16 @@ import (
 )
 
 type entry[T any] struct {
-	value   T
-	expires int64
-	used    uint64
+	value    T
+	inserted time.Duration
+	ttl      time.Duration
+	used     uint64
 }
 type flight[T any] struct {
 	done      chan struct{}
 	value     T
 	err       error
-	started   int64
+	started   time.Duration
 	followers int
 }
 type scope[T any] struct {
@@ -127,7 +128,7 @@ func (c *Cache[T]) localGet(key string) (T, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	item, found := c.local[key]
-	if found && c.options.Clock.ElapsedMS() >= item.expires {
+	if found && elapsedNow(c.options.Clock)-item.inserted >= item.ttl {
 		delete(c.local, key)
 		found = false
 	}
@@ -145,7 +146,7 @@ func (c *Cache[T]) localPut(key string, value T, ttl int64) {
 		return
 	}
 	c.sequence++
-	c.local[key] = entry[T]{value: value, expires: c.options.Clock.ElapsedMS() + ttl, used: c.sequence}
+	c.local[key] = entry[T]{value: value, inserted: elapsedNow(c.options.Clock), ttl: time.Duration(ttl) * time.Millisecond, used: c.sequence}
 	if len(c.local) > c.options.LocalCapacity {
 		var oldest string
 		stamp := ^uint64(0)

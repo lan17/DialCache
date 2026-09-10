@@ -2291,8 +2291,11 @@
       "evidence": {
         "typescript": ".formal-traces/ts-replay.json",
         "go": ".formal-traces/go-replay.jsonl",
-        "nativeGo": [],
-        "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
+        "nativeGo": [
+          "go/clock_precision_test.go"
+        ],
+        "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof.",
+        "nativeScope": "Native TestPreciseSourceDeadline preserves the full source-relative budget when an invocation begins between millisecond boundaries, including submillisecond success/error completion and source-relative diagnostics; TestPreciseDeadlineRechecksEarlyTimer rejects early timer delivery as an independent deadline authority. This supplements the existing Quint source-start obligation; it does not add generated witnesses or independently prove exclusion of earlier cache-read time."
       },
       "quintDefinitions": [],
       "scopeAudit": "formal/quint-case-audit.json"
@@ -2453,8 +2456,11 @@
       "evidence": {
         "typescript": ".formal-traces/ts-replay.json",
         "go": ".formal-traces/go-replay.jsonl",
-        "nativeGo": [],
-        "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
+        "nativeGo": [
+          "go/clock_precision_test.go"
+        ],
+        "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof.",
+        "nativeScope": "Native TestPreciseSourceDeadline supplements the existing exclusive settlement boundary with fractional invocation origins and success at or after the exact budget. This is clock-binding evidence; the existing Quint histories separately cover late settlement before timer delivery. No new generated coverage is claimed."
       },
       "quintDefinitions": [],
       "scopeAudit": "formal/quint-case-audit.json"
@@ -2487,8 +2493,11 @@
       "evidence": {
         "typescript": ".formal-traces/ts-replay.json",
         "go": ".formal-traces/go-replay.jsonl",
-        "nativeGo": [],
-        "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
+        "nativeGo": [
+          "go/clock_precision_test.go"
+        ],
+        "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof.",
+        "nativeScope": "Native TestPreciseSourceDeadline preserves the original source error before the full source-relative budget and returns timeout at or after its exact boundary from a fractional invocation origin. This is clock-binding evidence; the existing Quint histories separately cover delayed timer delivery. No new generated coverage is claimed."
       },
       "quintDefinitions": [],
       "scopeAudit": "formal/quint-case-audit.json"
@@ -6344,14 +6353,15 @@
       },
       {
         "id": "B02",
-        "rationale": "Explicit context propagation, live callback-scoped holders, channels, goroutines and TimerClock/DeferredExecutor replace AsyncLocalStorage, promises and Node timer handles. Callback panics become typed errors, telemetry failures are contained, and abandonment cannot prove raw work or a Redis command stopped. Shared histories check deadline, ownership and failure consequences; native race and callback tests complement them.",
+        "rationale": "Explicit context propagation, live callback-scoped holders, channels, goroutines and TimerClock/DeferredExecutor replace AsyncLocalStorage, promises and Node timer handles. Callback panics become typed errors, telemetry failures are contained, and abandonment cannot prove raw work or a Redis command stopped. Shared histories check deadline, ownership and failure consequences; native race and callback tests complement them. Native precision tests additionally bind the existing C23/C25 elapsed-time rules to fractional invocation origins: the default clock retains monotonic duration precision before subtraction, while legacy custom clocks retain their declared integer-millisecond resolution. These tests supplement the existing integer-tick histories and add no generated coverage.",
         "references": [
           "go/README.md",
           "go/cache.go",
           "go/deadline.go",
           "go/cache_test.go",
           "go/api_boundary_test.go",
-          "go/redis_adapter_test.go"
+          "go/redis_adapter_test.go",
+          "go/clock_precision_test.go"
         ]
       },
       {
@@ -6656,7 +6666,7 @@
               "Logger",
               "RecoveryPredicate"
             ],
-            "sha256": "df8d11e99024f24b81fdcf4075beb33007062354b9a1617e17748344b0c37b71"
+            "sha256": "1f9d5f56d609b16b5cc1c5c2c7f318c2d8f1930e7a8f002cb26b3459c72fd3af"
           }
         ]
       }
@@ -6855,7 +6865,7 @@
               "Disable",
               "IsEnabled"
             ],
-            "sha256": "22e52c7b8db26be9628c7f88cc78d96d886e60735fe9da1c54554ba2313d2834"
+            "sha256": "c01d9cd8a814f1bf8aac2bb22408d17993a136b508a83d716f55f81748e41219"
           },
           {
             "path": "go/bindings.go",
@@ -6863,7 +6873,7 @@
               "WithEnabled",
               "WithDisabled"
             ],
-            "sha256": "6bf94dff35b2983b174b4d679041e24a67f6c26332599db8cb02ba2d7c1897d5"
+            "sha256": "dac9d96d1e115c3fb7c261ebb0240c4a148a7a606828f955e980c88a2b6618cf"
           }
         ]
       }
@@ -8087,7 +8097,7 @@
               "IsEnabled",
               "Invalidate"
             ],
-            "sha256": "22e52c7b8db26be9628c7f88cc78d96d886e60735fe9da1c54554ba2313d2834"
+            "sha256": "c01d9cd8a814f1bf8aac2bb22408d17993a136b508a83d716f55f81748e41219"
           },
           {
             "path": "go/bindings.go",
@@ -8096,7 +8106,7 @@
               "GetCoalescingState",
               "codec"
             ],
-            "sha256": "6bf94dff35b2983b174b4d679041e24a67f6c26332599db8cb02ba2d7c1897d5"
+            "sha256": "dac9d96d1e115c3fb7c261ebb0240c4a148a7a606828f955e980c88a2b6618cf"
           },
           {
             "path": "go/engine.go",
@@ -8109,7 +8119,7 @@
               "putRemote",
               "recover"
             ],
-            "sha256": "f870f27f33941fce84ea091d2cb556baa6e00a5d90936afc84548909f9053bda"
+            "sha256": "cde64ae32089281452430d3f49aefaa15e8c2bd0435f17c133356630e49bac9d"
           },
           {
             "path": "go/deadline.go",
@@ -8117,7 +8127,7 @@
               "awaitDeadline",
               "callSafely"
             ],
-            "sha256": "e14087801a4593445a564bf4597d89088adbfbcc995bffaa7cd8c7b4e2056f53"
+            "sha256": "4c96942152e994adc4171e4d30de2de8be83ab6b3a33ed62793cc86819ce2b97"
           },
           {
             "path": "go/shadow.go",
@@ -8126,7 +8136,7 @@
               "scheduleShadow",
               "runShadow"
             ],
-            "sha256": "08fe71a62cb1e012aea02df0aef48d4ba01418dd6f894ab2e31dfb49b8c2b434"
+            "sha256": "4809a554ee5b39fb4ee5a2a0ef5660a3425b29385aeea8790f3ad5775bb220ce"
           },
           {
             "path": "go/api.go",
@@ -8135,7 +8145,7 @@
               "Operation",
               "Event"
             ],
-            "sha256": "df8d11e99024f24b81fdcf4075beb33007062354b9a1617e17748344b0c37b71"
+            "sha256": "1f9d5f56d609b16b5cc1c5c2c7f318c2d8f1930e7a8f002cb26b3459c72fd3af"
           },
           {
             "path": "go/logging.go",
@@ -8256,7 +8266,7 @@
               "CallbackPanicError",
               "MissingRemoteError"
             ],
-            "sha256": "df8d11e99024f24b81fdcf4075beb33007062354b9a1617e17748344b0c37b71"
+            "sha256": "1f9d5f56d609b16b5cc1c5c2c7f318c2d8f1930e7a8f002cb26b3459c72fd3af"
           },
           {
             "path": "go/redis_adapter.go",
@@ -8296,21 +8306,21 @@
               "Codec",
               "Remote"
             ],
-            "sha256": "df8d11e99024f24b81fdcf4075beb33007062354b9a1617e17748344b0c37b71"
+            "sha256": "1f9d5f56d609b16b5cc1c5c2c7f318c2d8f1930e7a8f002cb26b3459c72fd3af"
           },
           {
             "path": "go/bindings.go",
             "symbols": [
               "Cached"
             ],
-            "sha256": "6bf94dff35b2983b174b4d679041e24a67f6c26332599db8cb02ba2d7c1897d5"
+            "sha256": "dac9d96d1e115c3fb7c261ebb0240c4a148a7a606828f955e980c88a2b6618cf"
           },
           {
             "path": "go/cache.go",
             "symbols": [
               "New"
             ],
-            "sha256": "22e52c7b8db26be9628c7f88cc78d96d886e60735fe9da1c54554ba2313d2834"
+            "sha256": "c01d9cd8a814f1bf8aac2bb22408d17993a136b508a83d716f55f81748e41219"
           },
           {
             "path": "go/policy.go",
@@ -8506,7 +8516,7 @@
               "remoteValue",
               "localResult"
             ],
-            "sha256": "f870f27f33941fce84ea091d2cb556baa6e00a5d90936afc84548909f9053bda"
+            "sha256": "cde64ae32089281452430d3f49aefaa15e8c2bd0435f17c133356630e49bac9d"
           }
         ]
       }
@@ -8751,7 +8761,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "Go pending results use channels and optional TimerClock hooks. awaitDeadline measures elapsed time and applies the exclusive settlement boundary even if timer delivery is delayed. Abandonment stops publication but does not pretend that a goroutine or dispatched command was cancelled.",
+        "rationale": "Go pending results use channels and optional TimerClock hooks. awaitDeadline subtracts precise monotonic instants before comparing its full duration budget and applies the exclusive settlement boundary even if timer delivery is delayed. Early timer delivery is rechecked against elapsed time. Legacy Clock implementations retain integer-millisecond resolution; optional PreciseClock and the default clock preserve fractional milliseconds. Abandonment stops publication but does not pretend that a goroutine or dispatched command was cancelled.",
         "nativeAdaptations": [
           "B02"
         ],
@@ -8761,20 +8771,22 @@
             "symbols": [
               "pending",
               "startPending",
+              "elapsedNow",
               "after",
               "awaitDeadline",
               "deferWork"
             ],
-            "sha256": "e14087801a4593445a564bf4597d89088adbfbcc995bffaa7cd8c7b4e2056f53"
+            "sha256": "4c96942152e994adc4171e4d30de2de8be83ab6b3a33ed62793cc86819ce2b97"
           },
           {
             "path": "go/api.go",
             "symbols": [
               "Clock",
+              "PreciseClock",
               "TimerClock",
               "DeferredExecutor"
             ],
-            "sha256": "df8d11e99024f24b81fdcf4075beb33007062354b9a1617e17748344b0c37b71"
+            "sha256": "1f9d5f56d609b16b5cc1c5c2c7f318c2d8f1930e7a8f002cb26b3459c72fd3af"
           }
         ]
       }
@@ -8925,7 +8937,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "The local cache uses a mutex-protected map and explicit LRU order with per-entry insertion expiry. Reads promote recency without renewing TTL, zero capacity still permits coalescing, and process-local values are outside synchronous remote invalidation.",
+        "rationale": "The local cache uses a mutex-protected map and explicit LRU order with a captured insertion instant and TTL duration. Expiration compares their elapsed difference, preserving fractional insertion time and avoiding absolute-expiry wrap for a large-origin legacy clock. Reads promote recency without renewing TTL, zero capacity still permits coalescing, and process-local values are outside synchronous remote invalidation.",
         "nativeAdaptations": [
           "B02",
           "B03",
@@ -8939,7 +8951,7 @@
               "localGet",
               "localPut"
             ],
-            "sha256": "22e52c7b8db26be9628c7f88cc78d96d886e60735fe9da1c54554ba2313d2834"
+            "sha256": "c01d9cd8a814f1bf8aac2bb22408d17993a136b508a83d716f55f81748e41219"
           },
           {
             "path": "go/engine.go",
@@ -8947,7 +8959,7 @@
               "putLocal",
               "shared"
             ],
-            "sha256": "f870f27f33941fce84ea091d2cb556baa6e00a5d90936afc84548909f9053bda"
+            "sha256": "cde64ae32089281452430d3f49aefaa15e8c2bd0435f17c133356630e49bac9d"
           }
         ]
       }
@@ -9379,14 +9391,14 @@
               "canRecover",
               "recover"
             ],
-            "sha256": "f870f27f33941fce84ea091d2cb556baa6e00a5d90936afc84548909f9053bda"
+            "sha256": "cde64ae32089281452430d3f49aefaa15e8c2bd0435f17c133356630e49bac9d"
           },
           {
             "path": "go/shadow.go",
             "symbols": [
               "runShadow"
             ],
-            "sha256": "08fe71a62cb1e012aea02df0aef48d4ba01418dd6f894ab2e31dfb49b8c2b434"
+            "sha256": "4809a554ee5b39fb4ee5a2a0ef5660a3425b29385aeea8790f3ad5775bb220ce"
           },
           {
             "path": "go/codec.go",
@@ -9447,7 +9459,7 @@
             "symbols": [
               "Invalidate"
             ],
-            "sha256": "22e52c7b8db26be9628c7f88cc78d96d886e60735fe9da1c54554ba2313d2834"
+            "sha256": "c01d9cd8a814f1bf8aac2bb22408d17993a136b508a83d716f55f81748e41219"
           },
           {
             "path": "go/redis_adapter.go",
@@ -10712,7 +10724,7 @@
               "Options",
               "Logger"
             ],
-            "sha256": "df8d11e99024f24b81fdcf4075beb33007062354b9a1617e17748344b0c37b71"
+            "sha256": "1f9d5f56d609b16b5cc1c5c2c7f318c2d8f1930e7a8f002cb26b3459c72fd3af"
           },
           {
             "path": "go/metrics.go",
@@ -10730,14 +10742,14 @@
               "errorEvent",
               "duration"
             ],
-            "sha256": "f870f27f33941fce84ea091d2cb556baa6e00a5d90936afc84548909f9053bda"
+            "sha256": "cde64ae32089281452430d3f49aefaa15e8c2bd0435f17c133356630e49bac9d"
           },
           {
             "path": "go/shadow.go",
             "symbols": [
               "shadowEvent"
             ],
-            "sha256": "08fe71a62cb1e012aea02df0aef48d4ba01418dd6f894ab2e31dfb49b8c2b434"
+            "sha256": "4809a554ee5b39fb4ee5a2a0ef5660a3425b29385aeea8790f3ad5775bb220ce"
           }
         ]
       }
@@ -11728,7 +11740,7 @@
               "Remote",
               "ReadBudget"
             ],
-            "sha256": "df8d11e99024f24b81fdcf4075beb33007062354b9a1617e17748344b0c37b71"
+            "sha256": "1f9d5f56d609b16b5cc1c5c2c7f318c2d8f1930e7a8f002cb26b3459c72fd3af"
           },
           {
             "path": "go/protocol.go",
@@ -11849,7 +11861,7 @@
               "Codec",
               "ContextCodec"
             ],
-            "sha256": "df8d11e99024f24b81fdcf4075beb33007062354b9a1617e17748344b0c37b71"
+            "sha256": "1f9d5f56d609b16b5cc1c5c2c7f318c2d8f1930e7a8f002cb26b3459c72fd3af"
           },
           {
             "path": "go/codec.go",
@@ -13467,7 +13479,17 @@
       "boundary": "Host execution mechanics",
       "existingTreatment": "Promise identity, exceptions/thenables and rejection consumption, Node timer handles, synchronous event-loop blocking, and native buffer views remain binding tests. Their deadline, failure-isolation, and retained-snapshot consequences are represented above.",
       "goStatus": "reviewed-native-binding",
-      "goTreatment": "Goroutines, contexts, timers and completion channels replace JavaScript promises and AsyncLocalStorage. Shared generated histories exercise deadlines, late work, ownership and publication. Primitive promise identity and scheduling APIs are native mechanisms."
+      "goTreatment": "Goroutines, contexts, timers and completion channels replace JavaScript promises and AsyncLocalStorage. Shared generated histories exercise deadlines, late work, ownership and publication. Primitive promise identity and scheduling APIs are native mechanisms. The default monotonic clock preserves fractional milliseconds for source/read/shadow deadlines, local insertion TTLs and elapsed diagnostics; only reported integer ages are rounded after subtraction. Native tests start between millisecond boundaries, check before/exact deadline outcomes and early timer rechecking, and retain compatibility with integer custom clocks including large origins. Integer-tick Quint histories did not expose the earlier rounded-absolute-clock defect; these native regressions bind existing C23/C25 obligations without expanding generated coverage.",
+      "nativeTests": [
+        "go/clock_precision_test.go:TestPreciseSourceDeadline",
+        "go/clock_precision_test.go:TestPreciseRemoteReadDeadline",
+        "go/clock_precision_test.go:TestPreciseShadowDeadline",
+        "go/clock_precision_test.go:TestPreciseLocalInsertionExpiry",
+        "go/clock_precision_test.go:TestPreciseCoalescingAge",
+        "go/clock_precision_test.go:TestPreciseDeadlineRechecksEarlyTimer",
+        "go/clock_precision_test.go:TestPreciseClockPreservesIntegerClockCompatibility",
+        "go/clock_precision_test.go:TestPreciseLocalTTLAcceptsLargeIntegerClockOrigin"
+      ]
     },
     {
       "id": "B03",
@@ -13501,15 +13523,15 @@
   ],
   "scopedQuintAudit": "formal/quint-case-audit.json",
   "lastLocalValidation": {
-    "baseRevision": "baa6f2dd9b4a05ad97d11f7d62cf0e784ce8ccb1",
+    "baseRevision": "757a34b6c8cf9c045dc950972fe7c551b5c96b95",
     "dirtyWorktree": true,
-    "identity": "The source/corpus hashes identify this local snapshot; CI repeats execution on the committed PR revision.",
+    "identity": "Go reports identify the precision-fix dirty source snapshot through the execution-input manifest and report hashes. TypeScript replay and mutation reports retain their earlier source snapshot: TypeScript production, Quint models, shared corpus and replay inputs are unchanged. CI repeats both implementations and both measurements on the committed PR revision.",
     "generatedHistories": 4000,
     "requiredWitnesses": 276,
     "fixedScenarios": 238,
     "protocolVectors": 134,
     "invalidationVectorsPerEngine": 49,
-    "goIntegrationLeaves": 153,
+    "goIntegrationLeaves": 154,
     "typescriptMutationDetections": {
       "generated": 12,
       "portable": 13,
@@ -13518,32 +13540,39 @@
     "goMutationDetections": {
       "generated": 12,
       "portable": 13,
-      "total": 13
+      "total": 13,
+      "ordinary": 5
     },
     "reports": [
       {
         "path": ".formal-traces/ts-replay.json",
-        "sha256": "24e348576fbe32aa518062cc03255229db46e2e998a1f46c90b133a74d636903"
+        "sha256": "24e348576fbe32aa518062cc03255229db46e2e998a1f46c90b133a74d636903",
+        "baseRevision": "baa6f2dd9b4a05ad97d11f7d62cf0e784ce8ccb1"
       },
       {
         "path": ".formal-traces/go-replay.jsonl",
-        "sha256": "842eba0284731a5e72321d771c2510b044d43ecbef4489f7bf70314f11d5dc49"
+        "sha256": "cf5362777e6cf416f342603cf6dd269a6f701221d3cb8feac874d92895b66319",
+        "baseRevision": "757a34b6c8cf9c045dc950972fe7c551b5c96b95"
       },
       {
         "path": ".formal-traces/go-replay-inputs.json",
-        "sha256": "6db3bf5cc3e98a6cb41d2128fc0a6ce954825425ba263ab108223e36a9610b11"
+        "sha256": "e802b6707907a7e0b640a9825bbb251e3a0c52d27fcd9c6fb6c89aaf7e35e44d",
+        "baseRevision": "757a34b6c8cf9c045dc950972fe7c551b5c96b95"
       },
       {
         "path": ".formal-traces/semantic/report.json",
-        "sha256": "8f99d7627f9d67434c6a7cb36311c0271387dd9aaec8ef895a4a3e9260e4d6c0"
+        "sha256": "8f99d7627f9d67434c6a7cb36311c0271387dd9aaec8ef895a4a3e9260e4d6c0",
+        "baseRevision": "baa6f2dd9b4a05ad97d11f7d62cf0e784ce8ccb1"
       },
       {
         "path": ".formal-traces/go-semantic/report.json",
-        "sha256": "be0cb3218fc4f9b10b962ae55e5323fb0356bae50dc763fd9cd2c3efbfd1bfb1"
+        "sha256": "2661676546971f0ff5da6757b271184dfc2a5598e55db58e285878d7a610502e",
+        "baseRevision": "757a34b6c8cf9c045dc950972fe7c551b5c96b95"
       },
       {
         "path": ".formal-traces/go-integration.jsonl",
-        "sha256": "e860aa443afba4da657056d65dd13ac08ae1c1c633dd3e381bef31b7edd087c7"
+        "sha256": "69e7e3348fa1538eb0cf540d316e223318df4238b2105ac64b63cfda84b1103d",
+        "baseRevision": "757a34b6c8cf9c045dc950972fe7c551b5c96b95"
       }
     ],
     "limits": [
@@ -13552,6 +13581,8 @@
       "JSON string interoperability uses Unicode scalars. Go rejects unsupported lone UTF-16 surrogate escapes; custom codecs can define another value domain.",
       "Native Prometheus external histogram reuse requires an explicit accurate construction schema.",
       "Watermark availability and external clock/progress assumptions remain deployment responsibilities."
-    ]
+    ],
+    "typescriptEvidenceBaseRevision": "baa6f2dd9b4a05ad97d11f7d62cf0e784ce8ccb1",
+    "nativeClockPrecisionLeaves": 21
   }
 }

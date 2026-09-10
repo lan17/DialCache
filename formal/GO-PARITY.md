@@ -117,6 +117,30 @@ new implementation has a similarly named function. Conversely, do not
 require Go to reproduce a JavaScript-only API shape when an explicit Go
 binding preserves its portable consequences.
 
+## Native clock precision
+
+C23 grants the source its full budget from source start; C25 accepts a source
+settlement only strictly before that deadline. The existing Quint models and
+shared histories express these rules in integer ticks. Their replays did not
+expose a Go clock-binding defect: rounding two absolute elapsed readings before
+subtracting them could reject work completed within its full source budget.
+
+The default Go clock now retains monotonic `time.Duration` precision before
+subtraction. The optional `PreciseClock` interface supports the same precision
+for custom clocks; existing integer clocks retain their declared millisecond
+resolution. Timer delivery is checked against elapsed time, and local expiry
+compares elapsed time since insertion with its captured TTL, preserving
+fractional insertion times without relying on an absolute expiry sum.
+
+[`clock_precision_test.go`](../go/clock_precision_test.go) uses deterministic
+native clock phases to exercise source and read completion before and at their
+budgets, served and dark shadow deadlines, insertion expiry, coalescing age,
+early timer delivery, and integer-clock compatibility. These are native
+regressions for existing obligations, recorded under C23/C25 and B02; they add
+no generated witnesses or model coverage. Their execution and any new full-run
+results must retain their own revision and input identities rather than reuse
+a previous implementation's validation record.
+
 ## Current configuration and observability bindings
 
 `ParsePolicy` validates JSON-shaped static configuration. `SnapshotPolicy`

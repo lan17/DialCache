@@ -18,7 +18,7 @@ func (c *Cache[T]) GetCoalescingState() CoalescingState {
 	state := ProcessCoalescingState{ActiveLeaders: len(c.flights)}
 	for _, f := range c.flights {
 		state.ActiveFollowers += f.followers
-		age := c.options.Clock.ElapsedMS() - f.started
+		age := (elapsedNow(c.options.Clock) - f.started).Milliseconds()
 		if age < 0 {
 			age = 0
 		}
