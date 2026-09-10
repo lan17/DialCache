@@ -239,8 +239,8 @@
     {
       "name": "number formatting boundaries",
       "input": {
-        "small": 1e-06,
-        "tiny": 1e-07,
+        "small": 0.000001,
+        "tiny": 1e-7,
         "large": 1e+21,
         "integer": 9007199254740991,
         "fraction": 1.25
@@ -351,6 +351,20 @@
       "payloadType": "binary",
       "frameHex": "01000000000000000101",
       "payloadHex": ""
+    },
+    {
+      "name": "isolated high surrogate in text is replaced before UTF-8 encoding",
+      "createdAtMs": 1,
+      "payloadType": "string",
+      "payloadUtf8": "A\ud800B",
+      "frameHex": "0100000000000000010041efbfbd42"
+    },
+    {
+      "name": "isolated low surrogate in text is replaced before UTF-8 encoding",
+      "createdAtMs": 1,
+      "payloadType": "string",
+      "payloadUtf8": "A\udc00B",
+      "frameHex": "0100000000000000010041efbfbd42"
     }
   ],
   "trackedDecodeVectors": [
@@ -634,6 +648,105 @@
         "kind": "miss",
         "reason": "unclassified"
       }
+    },
+    {
+      "name": "invalid lead preserves surrounding JSON quotes",
+      "frameHex": "0100000000000000010022ff22",
+      "watermarkUtf8": "0",
+      "expected": {
+        "kind": "hit",
+        "createdAtMs": 1,
+        "payloadType": "string",
+        "payloadUtf8": "\"�\""
+      }
+    },
+    {
+      "name": "isolated continuation bytes replace separately",
+      "frameHex": "0100000000000000010080bf",
+      "watermarkUtf8": "0",
+      "expected": {
+        "kind": "hit",
+        "createdAtMs": 1,
+        "payloadType": "string",
+        "payloadUtf8": "��"
+      }
+    },
+    {
+      "name": "truncated valid prefix is one replacement",
+      "frameHex": "01000000000000000100e282",
+      "watermarkUtf8": "0",
+      "expected": {
+        "kind": "hit",
+        "createdAtMs": 1,
+        "payloadType": "string",
+        "payloadUtf8": "�"
+      }
+    },
+    {
+      "name": "interrupted valid prefix preserves ASCII",
+      "frameHex": "01000000000000000100e28241",
+      "watermarkUtf8": "0",
+      "expected": {
+        "kind": "hit",
+        "createdAtMs": 1,
+        "payloadType": "string",
+        "payloadUtf8": "�A"
+      }
+    },
+    {
+      "name": "overlong sequences replace each invalid subpart",
+      "frameHex": "01000000000000000100c0afe08080",
+      "watermarkUtf8": "0",
+      "expected": {
+        "kind": "hit",
+        "createdAtMs": 1,
+        "payloadType": "string",
+        "payloadUtf8": "�����"
+      }
+    },
+    {
+      "name": "UTF-8 encoded surrogate replaces each invalid subpart",
+      "frameHex": "01000000000000000100eda080",
+      "watermarkUtf8": "0",
+      "expected": {
+        "kind": "hit",
+        "createdAtMs": 1,
+        "payloadType": "string",
+        "payloadUtf8": "���"
+      }
+    },
+    {
+      "name": "above Unicode maximum replaces each invalid subpart",
+      "frameHex": "01000000000000000100f4908080",
+      "watermarkUtf8": "0",
+      "expected": {
+        "kind": "hit",
+        "createdAtMs": 1,
+        "payloadType": "string",
+        "payloadUtf8": "����"
+      }
+    },
+    {
+      "name": "UTF-8 BOM remains payload data",
+      "frameHex": "01000000000000000100efbbbf61",
+      "watermarkUtf8": "0",
+      "expected": {
+        "kind": "hit",
+        "createdAtMs": 1,
+        "payloadType": "string",
+        "payloadUtf8": "﻿a"
+      }
+    },
+    {
+      "name": "valid UTF-8 scalar boundaries and noncharacters",
+      "frameHex": "01000000000000000100c280dfbfe0a080ed9fbfee8080efbfbff0908080f48fbfbf",
+      "watermarkUtf8": "0",
+      "expected": {
+        "kind": "hit",
+        "createdAtMs": 1,
+        "payloadType": "string",
+        "payloadUtf8": "߿ࠀ퟿￿𐀀􏿿"
+      }
     }
   ],
   "invalidTimestampVectors": [
@@ -729,6 +842,96 @@
         "payloadType": "string",
         "payloadUtf8": ""
       }
+    },
+    {
+      "name": "invalid lead preserves surrounding JSON quotes",
+      "frameHex": "0100000000000000010022ff22",
+      "expected": {
+        "kind": "hit",
+        "createdAtMs": 1,
+        "payloadType": "string",
+        "payloadUtf8": "\"�\""
+      }
+    },
+    {
+      "name": "isolated continuation bytes replace separately",
+      "frameHex": "0100000000000000010080bf",
+      "expected": {
+        "kind": "hit",
+        "createdAtMs": 1,
+        "payloadType": "string",
+        "payloadUtf8": "��"
+      }
+    },
+    {
+      "name": "truncated valid prefix is one replacement",
+      "frameHex": "01000000000000000100e282",
+      "expected": {
+        "kind": "hit",
+        "createdAtMs": 1,
+        "payloadType": "string",
+        "payloadUtf8": "�"
+      }
+    },
+    {
+      "name": "interrupted valid prefix preserves ASCII",
+      "frameHex": "01000000000000000100e28241",
+      "expected": {
+        "kind": "hit",
+        "createdAtMs": 1,
+        "payloadType": "string",
+        "payloadUtf8": "�A"
+      }
+    },
+    {
+      "name": "overlong sequences replace each invalid subpart",
+      "frameHex": "01000000000000000100c0afe08080",
+      "expected": {
+        "kind": "hit",
+        "createdAtMs": 1,
+        "payloadType": "string",
+        "payloadUtf8": "�����"
+      }
+    },
+    {
+      "name": "UTF-8 encoded surrogate replaces each invalid subpart",
+      "frameHex": "01000000000000000100eda080",
+      "expected": {
+        "kind": "hit",
+        "createdAtMs": 1,
+        "payloadType": "string",
+        "payloadUtf8": "���"
+      }
+    },
+    {
+      "name": "above Unicode maximum replaces each invalid subpart",
+      "frameHex": "01000000000000000100f4908080",
+      "expected": {
+        "kind": "hit",
+        "createdAtMs": 1,
+        "payloadType": "string",
+        "payloadUtf8": "����"
+      }
+    },
+    {
+      "name": "UTF-8 BOM remains payload data",
+      "frameHex": "01000000000000000100efbbbf61",
+      "expected": {
+        "kind": "hit",
+        "createdAtMs": 1,
+        "payloadType": "string",
+        "payloadUtf8": "﻿a"
+      }
+    },
+    {
+      "name": "valid UTF-8 scalar boundaries and noncharacters",
+      "frameHex": "01000000000000000100c280dfbfe0a080ed9fbfee8080efbfbff0908080f48fbfbf",
+      "expected": {
+        "kind": "hit",
+        "createdAtMs": 1,
+        "payloadType": "string",
+        "payloadUtf8": "߿ࠀ퟿￿𐀀􏿿"
+      }
     }
   ],
   "envelopeVectors": [
@@ -794,6 +997,66 @@
       "inputHex": "0228b52ffd2003190000616263",
       "payloadType": "binary",
       "payloadHex": "616263"
+    },
+    {
+      "name": "zstd UTF-8 invalid lead preserves surrounding JSON quotes",
+      "inputHex": "0128b52ffd200319000022ff22",
+      "payloadType": "string",
+      "payloadUtf8": "\"�\""
+    },
+    {
+      "name": "zstd UTF-8 isolated continuation bytes replace separately",
+      "inputHex": "0128b52ffd200211000080bf",
+      "payloadType": "string",
+      "payloadUtf8": "��"
+    },
+    {
+      "name": "zstd UTF-8 truncated valid prefix is one replacement",
+      "inputHex": "0128b52ffd2002110000e282",
+      "payloadType": "string",
+      "payloadUtf8": "�"
+    },
+    {
+      "name": "zstd UTF-8 interrupted valid prefix preserves ASCII",
+      "inputHex": "0128b52ffd2003190000e28241",
+      "payloadType": "string",
+      "payloadUtf8": "�A"
+    },
+    {
+      "name": "zstd UTF-8 overlong sequences replace each invalid subpart",
+      "inputHex": "0128b52ffd2005290000c0afe08080",
+      "payloadType": "string",
+      "payloadUtf8": "�����"
+    },
+    {
+      "name": "zstd UTF-8 UTF-8 encoded surrogate replaces each invalid subpart",
+      "inputHex": "0128b52ffd2003190000eda080",
+      "payloadType": "string",
+      "payloadUtf8": "���"
+    },
+    {
+      "name": "zstd UTF-8 above Unicode maximum replaces each invalid subpart",
+      "inputHex": "0128b52ffd2004210000f4908080",
+      "payloadType": "string",
+      "payloadUtf8": "����"
+    },
+    {
+      "name": "zstd UTF-8 UTF-8 BOM remains payload data",
+      "inputHex": "0128b52ffd2004210000efbbbf61",
+      "payloadType": "string",
+      "payloadUtf8": "﻿a"
+    },
+    {
+      "name": "zstd UTF-8 valid UTF-8 scalar boundaries and noncharacters",
+      "inputHex": "0128b52ffd2018c10000c280dfbfe0a080ed9fbfee8080efbfbff0908080f48fbfbf",
+      "payloadType": "string",
+      "payloadUtf8": "߿ࠀ퟿￿𐀀􏿿"
+    },
+    {
+      "name": "zstd binary malformed UTF-8 stays exact bytes",
+      "inputHex": "0228b52ffd200319000022ff22",
+      "payloadType": "binary",
+      "payloadHex": "22ff22"
     }
   ],
   "rampVectors": [
@@ -1176,6 +1439,28 @@
         "id": "bad}id",
         "useCase": "GetUser",
         "trackForInvalidation": true,
+        "args": []
+      }
+    },
+    {
+      "name": "untracked ID rejects isolated high surrogate",
+      "input": {
+        "namespace": "urn",
+        "keyType": "id",
+        "id": "\ud800",
+        "useCase": "Get",
+        "trackForInvalidation": false,
+        "args": []
+      }
+    },
+    {
+      "name": "untracked ID rejects isolated low surrogate",
+      "input": {
+        "namespace": "urn",
+        "keyType": "id",
+        "id": "\udc00",
+        "useCase": "Get",
+        "trackForInvalidation": false,
         "args": []
       }
     }

@@ -6,7 +6,7 @@ This file maps each formal slice to the existing tests that most directly exerci
 
 See [`CONTRACTS.md`](./CONTRACTS.md) for the rule inventory, named executable evidence, revision-pinned test/section audit, and binding/assumption/exclusion decisions. The table below is a summary; linking a test file never means every assertion in it is modeled.
 
-[`SEMANTIC-COVERAGE.md`](./SEMANTIC-COVERAGE.md) adds finer case accounting and an executable mutation comparison. Of 164 named behavioral cases, 157 cite portable execution and 108 cite required generated witnesses; five remain model-only and two lack portable executable evidence. All 21 named protocol cases cite vectors. The measured fault catalog additionally identifies fixed-only TTL-renewal detection and a protocol-ordering defect missed by ordinary tests. These denominators are reviewed cases and selected faults, not all possible behavior.
+[`SEMANTIC-COVERAGE.md`](./SEMANTIC-COVERAGE.md) adds finer case accounting and an executable mutation comparison. Of 167 named behavioral cases, 165 cite portable execution and 108 cite required generated witnesses; local read/write failures remain model-only. All 22 named protocol cases cite vectors. The nine new fixed scenarios close the earlier sparse/default-policy and logging/deferred-start gaps. The measured fault catalog additionally identifies fixed-only TTL-renewal detection and a protocol-ordering defect missed by ordinary tests. These denominators are reviewed cases and selected faults, not all possible behavior.
 
 ## Coverage matrix
 
@@ -61,11 +61,11 @@ The oracles are `dialcache-liveness`, `dialcache-redis`, `dialcache-invalidation
 
 ## Executable implementation coverage
 
-- `invalidation-vectors.json` adds 19 portable state transitions exercised against the actual exported protocol on both Redis and Valkey, including watermark repair/persistence/retention and invalid-argument atomicity. This checks the requested protocol state; deployment preservation remains an assumption.
+- `invalidation-vectors.json` adds 49 portable state transitions exercised against the actual exported protocol on both Redis and Valkey, including watermark repair/persistence/retention and invalid-argument atomicity. This checks the requested protocol state; deployment preservation remains an assumption.
 
 - [`CONFORMANCE.md`](./CONFORMANCE.md) defines the original core profile. [`BEHAVIOR.md`](./BEHAVIOR.md) defines the shared portable scenario/feature driver, action boundaries, clocks, and independently observed outputs.
 - `formal/generate-traces.sh` exports 32 core, 512 pending-effect, 256 scope, 512 recovery, 512 policy, 1,024 dark-shadow, 128 served-hit admission, 512 layer-composition, and 512 independent-caller ITF traces. Three replay test files execute every action through public calls. Effects and feature CI require named actions plus explicit race/outcome witnesses, rather than relying on trace count alone.
-- The 229 portable scenarios cover 12 behavior families. After every input, the driver compares all outputs/effect counts against assertion-side expected patches. Expected fields never enter execution.
+- The 238 portable scenarios cover 12 behavior families. After every input, the driver compares all outputs/effect counts against assertion-side expected patches. Expected fields never enter execution.
 - Model cache-presence, fence, and flight fields predict later behavior but are excluded from implementation projection. Negative checks remove local caching/coalescing/recovery or acknowledge lost writes/invalidation and require an observable failure.
 - All nine committed ITF smokes, all feature scenarios, and all protocol vectors run in ordinary TypeScript CI without Quint. Parser checks reject empty/unknown/misplaced traces, missing choices/observations, unsupported arguments, and unsafe integers.
 - CI artifacts retain model counterexamples and generated replay inputs. Failures include file/scenario, step/action, and both observations. Automatic shrinking is not implemented.
@@ -92,7 +92,7 @@ The earlier interaction audit added 30 fixed scenarios, bringing the corpus to 1
 | Coalescing policy and scopes | Uncoalesced request calls still memoize their last publication. Reenabled coalescing joins a registered flight before reading a newer local value. Runtime policy overrides a disabled default. Concurrent outer request scopes remain independent. | `dialcache-coalescing`, `dialcache-request-local`; `docs/coalescing.md` |
 | Remote age versus local insertion age | A nearly expired Redis hit warms local storage for its full configured insertion TTL, which may outlive the remote entry. | `dialcache-local`, `dialcache-redis`; `docs/stale-on-error.md` |
 
-Some schedules combine independently established rules rather than duplicate one existing test. Their expected results are authored from the contracts, never recorded from the driver. This closes specific portable witnesses; arbitrary feature products, larger concurrent histories, larger mixed dark/served capacity schedules, and validation by a second-language driver remain open.
+Some schedules combine independently established rules rather than duplicate one existing test. Their expected results are authored from the contracts, never recorded from the driver. This closes specific portable witnesses; arbitrary feature products, larger concurrent histories, larger mixed dark/served capacity schedules, and second-language validation of the feature profiles remain open.
 
 ## `dialcache-core.qnt`
 
@@ -340,7 +340,7 @@ After the generated behavior expansion, fresh Vitest 4.1.10/V8 measurements use 
 | --- | --- | --- | --- | --- |
 | 660 ordinary unit tests | 97.96% | 97.06% | 96.16% | 95.35% |
 | 4,000 configured generated traces | 70.71% | 71.62% | 83.94% | 84.59% |
-| 229 scenarios + 102 protocol cases + 4 schema/audit checks | 72.54% | 72.50% | 82.72% | 79.21% |
+| Review-baseline 229 scenarios + 102 protocol cases + 4 schema/audit checks | 72.54% | 72.50% | 82.72% | 79.21% |
 | Generated + portable (4,335 positive tests) | 75.00% | 77.49% | 85.34% | 85.33% |
 
 The table separates generated execution from the combined generated/fixed corpus. Moving already-covered boundary rules into nondeterministic generated schedules improves reusable behavioral testing without necessarily reaching a new code branch. The formal corpus still misses 205 outcomes reached by ordinary tests (44 in the main engine), and reaches five outcomes absent from those tests. These counts describe execution paths, not bugs or semantic obligations.
@@ -362,7 +362,7 @@ The remaining 44 outcomes in `src/dialcache.ts` are accounted for below. Locatio
 | 989 | 1 | Invalid runtime logging policy falls back to logging off without disabling an otherwise eligible shadow job. Current generated logging/invalid-admission cases do not assert this exact combination. Keep this as a concrete portable replay gap, including its configuration-error diagnostic. |
 | 1097 | 1 | A dark shadow job whose deadline already elapsed before deferred work starts must stop before its Redis read. Ordinary `dialcache-shadow-confirmation` tests cover this; the generated comparison/held-effect timeout cases do not exercise the initial delayed-start boundary. |
 
-The last two rows are explicit next generated-replay targets. They are not silently excluded as language-specific merely because TypeScript tests reach them through invalid objects or synchronous executor delay. Larger mixed dark/served capacity histories and a second-language driver also remain open. The source inventory still cannot establish assertion-by-assertion equivalence with Vitest.
+The last two rows remain explicit next generated-replay targets; fixed portable scenarios now cover invalid logging and deferred dark start. They are not silently excluded as language-specific merely because TypeScript tests reach them through invalid objects or synchronous executor delay. Larger mixed dark/served capacity histories and second-language feature-profile drivers also remain open. The source inventory still cannot establish assertion-by-assertion equivalence with Vitest.
 
 ### Reproduce the execution coverage comparison
 
@@ -395,3 +395,7 @@ coverage_cohort formal test/formal-conformance.test.ts \
   test/formal-behavior.test.ts test/formal-protocol-vectors.test.ts \
   --testNamePattern='replays |portable behavioral scenarios|formal protocol conformance vectors'
 ```
+
+## Go milestone
+
+Specification 0.1.0 adds `SPEC.md` and `profiles.json`, fixes C16/C31 wording, adds nine portable scenarios (238 total), expands protocol vectors to 134 and invalidation transitions to 49 (schema 2), and supplies a Go core driver plus 93 cases across six protocol groups. Go does not yet execute the feature profiles. The source-deadline model mutation and actual-effects history monitor check a bounded property connection; see `SEMANTIC-COVERAGE.md`. Code-coverage tables above retain the explicitly recorded earlier instrumentation corpus; they are not regenerated percentages for this milestone.

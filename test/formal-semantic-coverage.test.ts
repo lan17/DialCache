@@ -10,6 +10,16 @@ const inventory = JSON.parse(readFileSync(new URL("../formal/semantic-cases.json
 const check = (value: unknown) => execFileSync(process.execPath, [script, "--stdin"], { input: JSON.stringify(value), stdio: ["pipe", "pipe", "pipe"] }).toString();
 
 describe("semantic coverage accounting", () => {
+  it("rejects incompatible profile registries and schema drift", () => {
+    const registry = JSON.parse(readFileSync(new URL("../formal/profiles.json", import.meta.url), "utf8"));
+    const checkProfiles = (value: unknown) => execFileSync(process.execPath, [script, "--profiles-stdin"], {
+      input: JSON.stringify(value), stdio: ["pipe", "pipe", "pipe"],
+    });
+    expect(() => checkProfiles(registry)).not.toThrow();
+    expect(() => checkProfiles({ ...registry, protocolSchemaVersion: 99 })).toThrow();
+    expect(() => checkProfiles({ ...registry, profiles: registry.profiles.slice(1) })).toThrow();
+    expect(() => checkProfiles({ ...registry, specificationVersion: "unrecognized" })).toThrow();
+  });
   it("resolves contract, scenario, model, vector and witness references", () => {
     const result = JSON.parse(check(inventory));
     expect(result.contracts).toBe(69);

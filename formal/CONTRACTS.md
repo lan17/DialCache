@@ -1,5 +1,8 @@
 # Portable contract inventory
 
+[`SPEC.md`](./SPEC.md) defines the normative transition and conformance semantics.
+This inventory names their obligations and executable evidence.
+
 This is the scope audit of the existing DialCache documentation and implementation tests. The revision-pinned [source audit](./source-audit.json) assigns every ordinary test declaration and documentation section an explicit disposition; [audit maintenance](./TEST-AUDIT.md) explains how to review changes. It accounts for their distinct semantic obligations, consolidating repeated assertions and API variants. The source index below accounts for every current documentation page and implementation test file; it is not a claim that each assertion has its own Quint transition or that every schedule is explored.
 
 ## Where the boundary lies
@@ -53,7 +56,7 @@ Exporter compatibility and resource-exhaustion limits remain optional integratio
 
 | ID | Obligation | Executable evidence |
 | --- | --- | --- |
-| C16 | Sparse runtime fields override operation defaults independently; omission/null inherits; configured TTL defaults to full ramp | Policy model; S: `null provider inherits operation defaults`, `runtime ramp changes preserve existing entries`; V: `rampVectors`; G: policy |
+| C16 | Omitted runtime leaves inherit operation defaults independently; a whole-provider null/absent reply inherits the baseline; explicit null leaves follow invalid-policy handling; configured TTL defaults to full ramp | Policy model; S: `null provider inherits operation defaults`, `null coalesce leaf bypasses caching without replacing retained entries`, both `sparse …` scenarios, `runtime TTLs without ramps enable both serving layers`; V: `rampVectors`; G: policy |
 | C17 | Request-local/recovery/shadow default off; coalescing defaults on; turning serving off neither evicts nor cancels admitted work | Policy model defaults; S: `inactive serving layers do not coalesce`, `runtime ramp changes preserve existing entries` |
 | C18 | Resolve policy once per enabled invocation; pending work and eligible followers keep the accepted leader policy | Policy model snapshot invariant; S: `pending invocation keeps insertion TTL snapshot`, `runtime changes preserve in-flight physical TTL and affect later freshness`, deadline follower scenarios, `runtime reenabling joins the registered flight before a newer local hit`, `dark fill preserves accepted runtime TTL and retention after policy changes`; G: policy (per-source snapshots, joins after policy changes, publication during another policy fetch) |
 | C19 | Request-local policy bypass preserves existing memo for later reenablement | S: `request policy bypass retains memo for later reenabling`; G: scope |
@@ -73,7 +76,7 @@ Exporter compatibility and resource-exhaustion limits remain optional integratio
 
 | ID | Obligation | Executable evidence |
 | --- | --- | --- |
-| C31 | Tracked fallback suppresses direct local publication; a validated Redis hit can warm it | Core model; S: `tracked refill suppresses local until a Redis hit warms it`; G: layers |
+| C31 | Fallback after tracked remote serving suppresses direct local publication, including read failure/deadline; tracked local-only or remote-disabled/ramped-down paths retain eligible local publication; a validated Redis hit can warm local | Core model; S: `tracked refill suppresses local until a Redis hit warms it`, `tracked local-only calls publish and reuse source values`, `tracked remote ramp zero retains local source publication`; G: layers |
 | C32 | Invalidation groups all tracked operation/argument variants of one namespace/type/id; untracked entries ignore it | S: `one invalidation fences all tracked operation variants only for its entity`, `untracked Redis values ignore invalidation markers`; V: `keyVectors`; G: layers |
 | C33 | A tracked value must clear the observed watermark strictly; zero/missing/malformed watermark handling has defined precedence | Protocol and tracked models; V: `trackedDecodeVectors`; generated effects |
 | C34 | Conditional refill checks the same observed fence before preparation and again before dispatch; the final timestamp starts freshness | S: `observed future fence suppresses serialization and refill`, `tracked refill rechecks clock after serialization`, `admitted tracked refill timestamps after serialization`; G: effects (held serialization and wall rollback), shadow |
@@ -116,7 +119,7 @@ Exporter compatibility and resource-exhaustion limits remain optional integratio
 | W01 | Result identity includes namespace/type/id/use case/args; tracked keys share an entity hash tag and values use the frame suffix | V: `keyVectors`, `invalidKeyVectors` |
 | W02 | Normalize scalars, omit absent arguments, sort by UTF-16 units, and escape components; direct ordered pairs retain their order | V: `normalizeArgsVectors`, `keyVectors` |
 | W03 | Stable serving/shadow cohorts depend on exact identity and their independent discriminator | V: `rampVectors`; policy model ramp extremes |
-| W04 | Version-1 header, uint64 timestamp domain, UTF-8/binary payload tags, empty data, and encoding/fence precedence | V: `frameVectors`, `invalidTimestampVectors`, `trackedDecodeVectors`, `untrackedDecodeVectors`; protocol model |
+| W04 | Version-1 header, uint64 timestamp domain, UTF-8/binary payload tags, empty data, encoding/fence precedence, and maximal-subpart text replacement without BOM removal | V: `frameVectors`, `invalidTimestampVectors`, `trackedDecodeVectors`, `untrackedDecodeVectors`; protocol model; normative text domain: `PROTOCOL.md` |
 | W05 | Native write TTLs have a fixed ceiling and are rounded up in milliseconds | V: `durationVectors`; adapter dispatch validation tests |
 | W06 | Payload markers distinguish escaped raw, compressed UTF-8, and compressed binary; readers also accept legacy raw input | V: `envelopeVectors`, `compressedDecodeVectors` |
 | W07 | Compression threshold counts serialized bytes; write compression must shrink stored data and preserve decoded type/value | V: `compressionWriteVectors`; compressor output bytes are not prescribed |
@@ -182,4 +185,4 @@ Each row identifies where the source's semantic rules land. Repeated tests in di
 
 When adding or changing a rule, place it in this inventory, name its implementation-test/doc evidence, and add the relevant portable scenario/vector/model or explain its binding/assumption/exclusion boundary. Do not copy expected model state into execution or call a host-specific test a portable trace. The three-state callback outcomes deliberately avoid building a second callback language.
 
-The inventory completes the current source-family accounting, not exhaustive state-space coverage. The remaining assurance work is broader multi-key/multi-instance and request-scope combinations, larger mixed dark/served capacity schedules, an independent language driver, and optional integration profiles. Generated coverage now includes core, effects, request scopes, recovery, policy/storage, dark shadow validation, served-hit admission, and layer composition; passing these plus the fixed corpus does not certify arbitrary interleavings, all malformed host values, fairness, performance, or every external fault. No percentage of behavioral completeness or universal certification is claimed. Measured code execution coverage is reported separately in `TEST-MAP.md`.
+The inventory completes the current source-family accounting, not exhaustive state-space coverage. The remaining assurance work is broader multi-key/multi-instance and request-scope combinations, larger mixed dark/served capacity schedules, second-language feature drivers, and optional integration profiles. The Go reference now executes core traces and six protocol groups. Generated coverage includes core, effects, request scopes, recovery, policy/storage, dark shadow validation, served-hit admission, layer composition, and independent callers; passing these plus the fixed corpus does not certify arbitrary interleavings, all malformed host values, fairness, performance, or every external fault. No percentage of behavioral completeness or universal certification is claimed. Measured code execution coverage is reported separately in `TEST-MAP.md`.

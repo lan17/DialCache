@@ -100,7 +100,7 @@ describe("formal protocol conformance vectors", () => {
     const corpus = JSON.parse(readFileSync(new URL("../formal/invalidation-vectors.json", import.meta.url), "utf8")) as {
       schemaVersion: number; vectors: Array<{ name: string }>;
     };
-    expect(corpus.schemaVersion).toBe(1);
+    expect(corpus.schemaVersion).toBe(2);
     expect(corpus.vectors.length).toBeGreaterThan(0);
     expect(new Set(corpus.vectors.map(({ name }) => name)).size).toBe(corpus.vectors.length);
   });

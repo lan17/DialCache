@@ -52,6 +52,7 @@ check formal/dialcache-coalescing-liveness.qnt \
   abandonedSourceIsNotAFlight
 
 quint test formal/dialcache-coalescing-liveness.qnt --backend=rust --max-samples=1
+node formal/check-model-properties.mjs
 
 check formal/dialcache-tracked-invalidation.qnt \
   servedSnapshotClearedObservedFence \

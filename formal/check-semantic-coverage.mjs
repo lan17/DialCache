@@ -12,7 +12,29 @@ const protocol = parse('formal/protocol-vectors.json');
 const invalidation = parse('formal/invalidation-vectors.json').vectors;
 const escapeRegex = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+export function checkProfiles(registry = parse('formal/profiles.json')) {
+  if (registry.schemaVersion !== 1 || registry.specificationVersion !== '0.1.0' || registry.status !== 'experimental') throw new Error('Unsupported specification/profile registry');
+  if (registry.behavioralSchemaVersion !== parse('formal/behavioral-scenarios.json').schemaVersion ||
+    registry.protocolSchemaVersion !== protocol.schemaVersion || registry.invalidationSchemaVersion !== parse('formal/invalidation-vectors.json').schemaVersion) throw new Error('Profile registry schema versions have drifted');
+  const expected = ['admission', 'core', 'effects', 'independent', 'layers', 'policy', 'recovery', 'scope', 'shadow'];
+  if (!Array.isArray(registry.profiles) || JSON.stringify(registry.profiles.map(p => p.id).sort()) !== JSON.stringify(expected)) throw new Error('Profile inventory changed; review claims');
+  read(registry.normativeDefinition);
+  for (const profile of registry.profiles) {
+    if (profile.version !== 1) throw new Error(`${profile.id}: unsupported profile version`);
+    read(profile.definition); read(profile.model);
+    const smoke = parse(profile.smoke);
+    if (!Array.isArray(smoke.states) || !smoke.states.length) throw new Error(`${profile.id}: missing smoke evidence`);
+    for (const id of profile.historyContracts ?? []) if (!contractIds.includes(id)) throw new Error(`${profile.id}: unknown history contract`);
+  }
+  for (const implementation of registry.implementations) {
+    if (!Array.isArray(implementation.profiles) || implementation.profiles.some(id => !expected.includes(id)) || !implementation.limits) throw new Error('Unsupported implementation claim');
+    if (implementation.definition) read(implementation.definition);
+  }
+  return { specificationVersion: registry.specificationVersion, profiles: expected.length };
+}
+
 export function checkSemanticCoverage(catalog = parse('formal/semantic-cases.json')) {
+  const profiles = checkProfiles();
   const sourceAccounting = checkSourceAudit();
   if (catalog.schemaVersion !== 1 || !Array.isArray(catalog.cases) || !catalog.cases.length) throw new Error('Invalid semantic case inventory');
   const ids = new Set(), parents = new Set();
@@ -56,10 +78,12 @@ export function checkSemanticCoverage(catalog = parse('formal/semantic-cases.jso
     portable: cases.filter(portable).length, generated: cases.filter(c => c.generated.length).length,
     modelOnly: cases.filter(c => c.models.length && !portable(c)).map(c => c.id),
     uncovered: cases.filter(c => !c.models.length && !portable(c)).map(c => c.id) });
-  return { sourceAccounting, contracts: parents.size, cases: count(catalog.cases), behavioral: count(behavioral),
+  return { profiles, sourceAccounting, contracts: parents.size, cases: count(catalog.cases), behavioral: count(behavioral),
     protocol: count(catalog.cases.filter(c => c.vectors.length)), mutations: mutations.mutations.length };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  console.log(JSON.stringify(checkSemanticCoverage(process.argv.includes('--stdin') ? JSON.parse(readFileSync(0, 'utf8')) : undefined), null, 2));
+  console.log(JSON.stringify(process.argv.includes('--profiles-stdin')
+    ? checkProfiles(JSON.parse(readFileSync(0, 'utf8')))
+    : checkSemanticCoverage(process.argv.includes('--stdin') ? JSON.parse(readFileSync(0, 'utf8')) : undefined), null, 2));
 }

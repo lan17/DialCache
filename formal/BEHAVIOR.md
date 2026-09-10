@@ -44,9 +44,11 @@ Names are a trace vocabulary, not required language method names. All selected e
 
 Other fixture fields are `tracked` (default false), `fallbackTimeoutMs` (fixture default 10, null disables, `"default"` omits the operation override to exercise the library's 60-second default), `readTimeoutMs` (fixture default 50; `"default"` omits the adapter option to exercise the library default), `localMaxSize` (default 10,000), `shadowMaxInFlight` (default 1), and `recovery` (`allow`, `deny`, `error`, or default timeout-only classification). An operation can override the instance classifier with `begin.recovery`. Optional `comparator` supplies `equal`, `unequal`, or `error`; omitted comparison uses ordinary value equality. Optional `comparisonMs` makes that external callback consume the specified elapsed time before returning or failing, without delivering timers. These are controlled callback outcomes, not an expression language. `shadowHook: false` omits the required outcome observer; `observerFailure: true` makes installed observers fail; `remote: false` omits the Redis adapter. `probeSourceScope: true` records whether caching is enabled when each actual source invocation begins. Shadow/recovery hooks always record terminal diagnostic outcomes. Optional `observe` selects additional public events (see below); it does not change policy or execution. Compression writes are disabled; existing compressed entries can be seeded to check decoding and recovery. Envelope interoperability is also covered separately by protocol vectors.
 
+Optional `sourceWorkMs` consumes that many milliseconds of elapsed external work inside each actual source invocation before it returns its unresolved fixture gate. Wall and elapsed clocks advance together; no timers or scheduled cache work run during this segment. This supplies a schedule in which the dark-shadow budget can expire before its deferred job starts, while the source remains independently settleable. Ports provide the same external callback/executor ordering through their controlled environment; neither expected observations nor private cache state select when the job runs. The default is zero work.
+
 Keys use namespace `urn`, key type `id`, use case `Behavior`, and ID `1` unless an input overrides `useCase` or `key`. The fixture value domain is JSON scalars (numbers, strings, booleans, null) plus an absent value. The test serializer uses JSON for scalars and the unquoted literal `undefined` for absence. An omitted input value denotes absence, represented in observations by `{"absent": true}`; the ordinary string `"undefined"` stays a string and cannot be mistaken for it. A port may use an option/unit value or its own fixture sentinel. This custom serializer tests cacheability without prescribing a language's JSON API or reference identity.
 
-Wall time starts at `2026-09-08T12:00:00Z`; monotonic time starts at zero. Elapsed time advances through `advance` or configured external comparison work; `shiftWall` changes application wall time independently, preserving monotonic time and Redis physical expiry. Local entries use monotonic age; frame age and watermark proposals use application wall time. The fake Redis expiration clock advances with elapsed time independently of application wall-clock steps. Tracked reads atomically acquire a value and watermark. Watermarks remain available through the trace. A native write's frame timestamp is captured when the adapter receives it, before any held transport completion.
+Wall time starts at `2026-09-08T12:00:00Z`; monotonic time starts at zero. Elapsed time advances through `advance` or configured external source/comparison work; `shiftWall` changes application wall time independently, preserving monotonic time and Redis physical expiry. Local entries use monotonic age; frame age and watermark proposals use application wall time. The fake Redis expiration clock advances with elapsed time independently of application wall-clock steps. Tracked reads atomically acquire a value and watermark. Watermarks remain available through the trace. A native write's frame timestamp is captured when the adapter receives it, before any held transport completion.
 
 ## Inputs and completion boundaries
 
@@ -66,6 +68,15 @@ Wall time starts at `2026-09-08T12:00:00Z`; monotonic time starts at zero. Elaps
 | `closeScope` | Complete context `id`. Retain its context handle so later `begin` inputs can exercise detached work after closure. Nested scopes reuse the outer request memo lifetime. |
 
 Only unresolved external operations are gated. A port can use its own executor and explicit request-context handles. It must not reproduce Node Promise turns. The TypeScript driver captures its execution context inside public enable/disable calls; it does not read DialCache's context internals.
+
+Gates delay external completion, not DialCache policy capture. A held policy
+provider observes the current runtime overlay and provider-failure flag **when
+released**; the invocation captures that reply afterward. Read/write/codec fault
+flags are likewise observed after the corresponding gate releases. Serializer
+arguments and a dispatched write's bytes/timestamp are captured at invocation;
+a released read instead acquires the then-current atomic remote snapshot. This
+defines the fixture environment; production providers may choose their own
+reply values and only their delivered replies determine policy.
 
 Calls may remain pending at a scenario's end. Drivers release fixture-owned work during cleanup; cleanup effects are outside the trace and cannot satisfy its assertions. Unknown operations, missing effects, and repeated settlement fail replay.
 
@@ -336,4 +347,4 @@ The committed `admission-smoke.itf.json` retains actions, choices, and observati
 4. Replay the same core, pending-effect, scope, recovery, policy, shadow, admission, layers, and independent ITF corpora used by TypeScript.
 5. Report passing behavior families, specification revision, seed, bounds, and tool versions.
 
-Passing covers the supplied observations and scenarios. It does not establish every feature interaction, fairness/liveness, arbitrary resource limits, or all external failures. A second-language driver has not yet validated the portability of this interface. See [`TEST-MAP.md`](./TEST-MAP.md) for the remaining boundaries.
+Passing covers the supplied observations and scenarios. It does not establish every feature interaction, fairness/liveness, arbitrary resource limits, or all external failures. The Go reference validates the separate core profile and selected protocol groups; this full feature interface has no second-language driver yet. See [`TEST-MAP.md`](./TEST-MAP.md) for the remaining boundaries.

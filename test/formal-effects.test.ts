@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BehaviorDriver, type Input, type Fixture, type Observation, type AdapterReply } from "./formal/behavior-driver.js";
 import { itfInteger, record } from "./formal/itf.js";
+import { assertEffectsHistory } from "./formal/effects-contract.js";
 
 const actions = ["init", "beginCall", "resolveLoader", "rejectLoader", "releaseRead", "failRead", "releaseLoad", "failLoad", "releaseDump", "failDump", "releaseWrite", "failWrite", "seedRemote", "tick", "jumpClock", "rollbackWall", "observerFault", "readBudgetPolicy", "adapterReply", "invalidate", "futureFence"] as const;
 type Action = typeof actions[number];
@@ -186,6 +187,9 @@ async function replay(trace: Trace) {
         // Only the action/choice and independently observed effect index enter execution.
         const inputs = inputsFor({ action: step.action, ...(step.choice === undefined ? {} : { choice: step.choice }) }, driver);
         for (const input of inputs) await driver.apply(input);
+        // Check C23/C25/C26 directly on observed history, independently of
+        // expected Quint phases, timestamps, and outcome predictions.
+        assertEffectsHistory(driver.contractHistory());
         expect(project(driver), context).toEqual(expected);
       } catch (cause) {
         throw new Error(`${context}\nexpected: ${JSON.stringify(expected)}\nactual: ${JSON.stringify(driver.snapshot())}\nreplay: DIALCACHE_EFFECTS_TRACE_FILE=${JSON.stringify(trace.path)} corepack pnpm exec vitest run test/formal-effects.test.ts`, { cause });

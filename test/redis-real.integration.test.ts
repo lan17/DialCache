@@ -186,18 +186,22 @@ describe.each(engines)("DialCache Redis protocol on $name", ({ image }) => {
   // drift by measured server time, never a fixed CI/network tolerance.
   // Only the setup/observation wrapper is test-owned; the transition is the
   // same exported Lua used by both production adapters.
+  type InvalidationVectorState =
+    | { kind: "absent"; ttlMs: -2 }
+    | { kind: "string"; value: string; ttlMs: number }
+    | { kind: "list"; values: string[]; ttlMs: number };
   const invalidationVectors = JSON.parse(readFileSync(new URL("../formal/invalidation-vectors.json", import.meta.url), "utf8")) as {
     schemaVersion: number;
     vectors: Array<{
-      name: string; existing: { kind: "absent" | "string" | "list"; value?: string; ttlMs?: number };
+      name: string; existing: InvalidationVectorState;
       futureBufferMs: string; invalidatedAtMs: string;
-      expected: { error?: boolean; watermark: string; ttlMs: number };
+      expected: { error?: boolean; state: InvalidationVectorState };
     }>;
   };
   for (const vector of invalidationVectors.vectors) {
     it(`portable invalidation: ${vector.name}`, async () => {
       if (admin === undefined) throw new Error("Redis test client did not start");
-      expect(invalidationVectors.schemaVersion).toBe(1);
+      expect(invalidationVectors.schemaVersion).toBe(2);
       const script = `
 redis.replicate_commands()
 local function now_ms()
@@ -207,30 +211,40 @@ end
 local started_at = now_ms()
 redis.call("DEL", KEYS[1])
 if ARGV[3] == "string" then redis.call("SET", KEYS[1], ARGV[4]) end
-if ARGV[3] == "list" then redis.call("LPUSH", KEYS[1], "unrelated") end
+if ARGV[3] == "list" then
+  for _, value in ipairs(cjson.decode(ARGV[4])) do redis.call("RPUSH", KEYS[1], value) end
+end
 if tonumber(ARGV[5]) > 0 then redis.call("PEXPIRE", KEYS[1], ARGV[5]) end
 local result = (function()
 ${INVALIDATE_CACHE_SCRIPT}
 end)()
 local status = result == 1 and "ok" or (type(result) == "table" and result.err and "error" or "unexpected_reply")
-local watermark = redis.call("GET", KEYS[1])
+local kind = redis.call("TYPE", KEYS[1]).ok
+local content = {}
+if kind == "string" then content = redis.call("GET", KEYS[1]) end
+if kind == "list" then content = redis.call("LRANGE", KEYS[1], 0, -1) end
+if kind == "none" then kind = "absent" end
 local ttl_ms = redis.call("PTTL", KEYS[1])
-return {status, watermark, ttl_ms, now_ms() - started_at}
+return {status, kind, content, ttl_ms, now_ms() - started_at}
 `;
+      const initial = vector.existing;
+      const expected = vector.expected.state;
       const observed = await admin.eval(script, {
         keys: ["{portable-invalidation}#watermark"],
-        arguments: [vector.futureBufferMs, vector.invalidatedAtMs, vector.existing.kind,
-          vector.existing.value ?? "", String(vector.existing.ttlMs ?? -2)],
+        arguments: [vector.futureBufferMs, vector.invalidatedAtMs, initial.kind,
+          initial.kind === "string" ? initial.value : initial.kind === "list" ? JSON.stringify(initial.values) : "",
+          String(initial.ttlMs)],
       });
-      expect(observed).toEqual([vector.expected.error ? "error" : "ok", vector.expected.watermark,
+      expect(observed).toEqual([vector.expected.error ? "error" : "ok", expected.kind,
+        expected.kind === "string" ? expected.value : expected.kind === "list" ? expected.values : [],
         expect.any(Number), expect.any(Number)]);
-      const [, , ttlMs, elapsedMs] = observed as [string, string, number, number];
+      const [, , , ttlMs, elapsedMs] = observed as [string, string, string | string[], number, number];
       expect(elapsedMs).toBeGreaterThanOrEqual(0);
-      if (vector.expected.ttlMs < 0) {
-        expect(ttlMs).toBe(vector.expected.ttlMs);
+      if (expected.ttlMs < 0) {
+        expect(ttlMs).toBe(expected.ttlMs);
       } else {
-        expect(ttlMs).toBeGreaterThanOrEqual(Math.max(0, vector.expected.ttlMs - elapsedMs));
-        expect(ttlMs).toBeLessThanOrEqual(vector.expected.ttlMs);
+        expect(ttlMs).toBeGreaterThanOrEqual(Math.max(0, expected.ttlMs - elapsedMs));
+        expect(ttlMs).toBeLessThanOrEqual(expected.ttlMs);
       }
     });
   }

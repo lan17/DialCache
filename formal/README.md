@@ -1,6 +1,6 @@
 # Executable DialCache specification
 
-This suite formalizes DialCache behavior for better implementation testing and future language ports. It has three complementary parts:
+This suite formalizes DialCache behavior for implementation testing and language ports. [`SPEC.md`](./SPEC.md) defines normative behavior and conformance; [`profiles.json`](./profiles.json) registers experimental specification 0.1.0 and bounded profile versions. It has three complementary parts:
 
 | Part | Execution | What passing establishes |
 | --- | --- | --- |
@@ -24,9 +24,9 @@ Seven verification models                 Conformance models
 Protocol JSON vectors ────────────────> exact key / frame / decoder checks
 ```
 
-The TypeScript driver exists today. Other language drivers and exhaustive feature combinations are future work. [`TEST-MAP.md`](./TEST-MAP.md) distinguishes implemented coverage from remaining gaps; [`CONFORMANCE.md`](./CONFORMANCE.md) defines the core profile; [`BEHAVIOR.md`](./BEHAVIOR.md) defines the shared feature-scenario/effects driver and porting workflow.
+The TypeScript driver covers all nine profiles. A separately implemented [Go reference](./go/README.md) replays the same core traces and checks 93 cases across six protocol vector groups. It uses explicit contexts, goroutines, and mutexes, with real observations and deterministic external gates; CI runs it with the race detector. It is a bounded specification consumer, not a production port, a clean-room implementation, or evidence for the other eight profiles. Exhaustive feature combinations remain future work. [`TEST-MAP.md`](./TEST-MAP.md) distinguishes implemented coverage from remaining gaps; [`CONFORMANCE.md`](./CONFORMANCE.md) defines the core profile; [`BEHAVIOR.md`](./BEHAVIOR.md) defines the shared feature-scenario/effects driver and porting workflow.
 
-[`SEMANTIC-COVERAGE.md`](./SEMANTIC-COVERAGE.md) measures 185 named contract cases, required generated witnesses, and detection of 13 intentional behavioral/protocol faults. CI compares ordinary Vitest, generated replay, and the positive portable suite in isolated source copies and preserves the reports. These measures expose gaps; they do not establish exhaustive semantic completeness.
+[`SEMANTIC-COVERAGE.md`](./SEMANTIC-COVERAGE.md) measures 189 named contract cases, required generated witnesses, and detection of 13 intentional behavioral/protocol faults. CI compares ordinary Vitest, generated replay, and the positive portable suite in isolated source copies and preserves the reports. These measures expose gaps; they do not establish exhaustive semantic completeness.
 
 ## Portable scope
 
@@ -66,15 +66,15 @@ Stale age is checked when the candidate is retained and again when recovery acce
 
 ## Protocol interoperability
 
-[`protocol-vectors.json`](./protocol-vectors.json) schema version 3 contains 102 deterministic cases: keys, argument normalization, frame bytes, timestamp acceptance, tracked/untracked decoding, compression envelopes, fixed zstd decoding, deterministic serving/shadow cohorts, invalid key identities, physical-duration bounds, and compression representation selection. `test/formal-protocol-vectors.test.ts` executes them against the existing TypeScript functions. No new production exports are required.
+[`protocol-vectors.json`](./protocol-vectors.json) schema version 3 contains 134 deterministic cases: keys, argument normalization, frame bytes, timestamp acceptance, tracked/untracked decoding, compression envelopes, fixed zstd decoding, deterministic serving/shadow cohorts, invalid key identities, physical-duration bounds, and compression representation selection. `test/formal-protocol-vectors.test.ts` executes them against the existing TypeScript functions. No new production exports are required.
 
 Ports consume the same JSON. Normalization preserves UTF-16 code-unit ordering and JavaScript-compatible scalar string formatting. `bigintArgs` encodes arbitrary integers as decimal strings; `specialArgs` names `-0`, `NaN`, and infinities that ordinary JSON cannot represent. URI component escaping preserves `~!*'()-._`. Decoder cases deliberately distinguish frame decoding from core timestamp validation: unsafe decoded timestamps remain visible to core, which rejects them before deserialization. The mutation encoder rejects unsafe timestamps immediately.
 
 Envelope vectors cover raw-byte escaping and reader marker behavior. Compression-write vectors check UTF-8 byte thresholds, only-when-smaller selection, marker type, and round-trip preservation without prescribing exact compressed bytes. Fixed compressed frames test decoding; compressor byte identity is not required because valid zstd encoders can produce different bytes. Rollout vectors use the stable FNV-1a 32-bit hash over UTF-16 units of the logical key plus the layer/shadow discriminator, divided by 2^32 and multiplied by 100. These are finite examples, not exhaustive input coverage.
 
-[`invalidation-vectors.json`](./invalidation-vectors.json) schema version 1 adds 19 portable state transitions for absent/valid/malformed/wrong-type markers, monotonicity, persistence, retention, safe numeric limits, and rejection before mutation. `test/redis-real.integration.test.ts` runs the actual exported invalidation protocol on Redis 6.2 and Valkey 8. Fixture setup, transition, and observation run atomically. Redis 6.2 can advance TTL time within a script, so finite TTL assertions allow only the elapsed server time measured around that script; watermark values and persistence remain exact. These vectors check DialCache's protocol, not Redis implementation correctness. A port using another implementation of the transition must produce the same resulting state.
+[`invalidation-vectors.json`](./invalidation-vectors.json) schema version 2 adds 49 portable state transitions for absent/valid/malformed/wrong-type markers, monotonicity, persistence, retention, safe numeric limits, and rejection before mutation. `test/redis-real.integration.test.ts` runs the actual exported invalidation protocol on Redis 6.2 and Valkey 8. Fixture setup, transition, and observation run atomically. Redis 6.2 can advance TTL time within a script, so finite TTL assertions allow only the elapsed server time measured around that script; watermark values and persistence remain exact. These vectors check DialCache's protocol, not Redis implementation correctness. A port using another implementation of the transition must produce the same resulting state.
 
-Invalidation vectors specify `existing.kind` (`absent`, `string`, or an unrelated `list`), optional string `value`, and `ttlMs` (`-1` means persistent). `futureBufferMs` and `invalidatedAtMs` are raw argument text so invalid numeric spellings can be tested without host coercion. Expected state contains the resulting decimal watermark and remaining TTL; `error: true` requires rejection with that original state preserved. Successful transitions return numeric `1`. The vectors specify logical transition TTLs. Integration observations account for measured physical expiry without adding a fixed network or CI timing tolerance.
+Invalidation schema 2 uses the same tagged vocabulary for `existing` and `expected.state`: absent (`ttlMs: -2`), string (`value`), or list (`values` in order), with persistent TTL `-1` or a positive finite TTL. Raw argument text avoids host coercion. Rejection must preserve the entire state before any repair; successful transitions return numeric `1`. Invalid arguments are crossed with absent, valid/malformed string, and ordered-list initial states. [`PROTOCOL.md`](./PROTOCOL.md) defines the schema and exact malformed UTF-8 replacement rule. Integration observations account only for measured physical expiry.
 
 ## Running and reproducing checks
 
@@ -92,7 +92,7 @@ DIALCACHE_FEATURE_TRACE_DIR=.formal-traces/features \
 node formal/measure-semantics.mjs
 ```
 
-`check.sh` typechecks all seven verification models plus all nine conformance models and checks their listed invariants using the Rust simulator: **2,000 sampled traces per model, up to 40 transitions per trace**, seed `0xd1a1ca`, one evaluator thread. It also executes 112 deterministic model regressions, including witnesses that deliberately corrupt TTL or decoder outcomes and require the strengthened invariants to reject them. This is bounded sampling, not exhaustive mathematical proof.
+`check.sh` typechecks all seven verification models plus all nine conformance models and checks their listed invariants using the Rust simulator: **2,000 sampled traces per model, up to 40 transitions per trace**, seed `0xd1a1ca`, one evaluator thread. It also executes 114 deterministic model regressions, including witnesses that deliberately corrupt TTL or decoder outcomes and require the strengthened invariants to reject them. This is bounded sampling, not exhaustive mathematical proof.
 
 `generate-traces.sh` uses the same pinned version/backend/seed with one thread. It exports 32 core traces from 256 samples (up to 30 transitions), 512 effects and 512 recovery traces from 4,096 samples each, 512 policy and 512 independent-caller traces from 2,048 samples each, 1,024 dark-shadow traces from 4,096 samples, and 256 request-scope / 128 served-hit admission traces from 1,024 samples each (up to 60 transitions). An additional layer-composition profile exports 512 traces from 2,048 samples, up to 80 transitions. All **4,000 generated traces** replay against real TypeScript DialCache using [Quint's model-based testing interface](https://quint.sh/docs/model-based-testing). Required witnesses now include separate read/source budgets, held decoding and publication, cancellation requests, observer failure isolation, wall rollback at the second fence check, timeout recovery and late sources, and empty/falsy/absent cache hits in all three layers. These conformance models remain separate from the seven verification models because replayable public operations and reasoning-oriented transitions serve different purposes.
 
@@ -114,9 +114,23 @@ DIALCACHE_FEATURE_TRACE_FILE=.formal-traces/features/shadow/trace_0.itf.json \
   corepack pnpm exec vitest run test/formal-features.test.ts --coverage.enabled=false
 ```
 
-Without these environment variables, ordinary TypeScript tests replay all nine committed smoke traces through their generated-trace parsers, with no Quint installation. They run all 229 portable feature scenarios, reject malformed traces, and prove the harness detects lost local caching, coalescing, Redis writes, and invalidation. All 102 key/frame/codec/cohort/compression cases run in ordinary CI too. The 19 invalidation vectors run on both engines via `corepack pnpm test:integration` in the regular CI job.
+Without these environment variables, ordinary TypeScript tests replay all nine committed smoke traces through their generated-trace parsers, with no Quint installation. They run all 238 portable feature scenarios, reject malformed traces, and prove the harness detects lost local caching, coalescing, Redis writes, and invalidation. All 134 key/frame/codec/cohort/compression cases run in ordinary CI too. The 49 invalidation vectors run on both engines via `corepack pnpm test:integration` in the regular CI job.
 
 Model-checker exploration is separate from CI's sampled runs. For example, `quint verify` supports a TLC backend; any reported result must include the backend/version, model bounds, assumptions, and invariant. No exhaustive result is claimed here.
+
+## Checked properties and the Go reference
+
+`formal/check-model-properties.mjs` challenges C23 with a compiling model mutation that incorrectly starts the source budget at model initialization. CI requires an invariant counterexample and preserves it. `test/formal/effects-contract.ts` also checks source-relative duration, deadline acceptance, and prior-success publication on actual TypeScript source/adapter/diagnostic history during every effects replay. It consumes no expected model state. This checked subset does not prove full refinement or causal write ownership; see `SPEC.md`.
+
+```sh
+# Go 1.27.1 is pinned in CI; no third-party Go dependencies.
+go -C formal/go test -race -count=1 ./...
+# After generating the corpus, point DIALCACHE_MBT_TRACE_DIR at its absolute path.
+DIALCACHE_MBT_TRACE_DIR="$PWD/.formal-traces/conformance" \
+  go -C formal/go test -race -count=1 ./...
+```
+
+The core profile and supported protocol groups now have a second-language execution witness. Feature scenarios, deadlines, recovery, shadow, compression, full invalidation transitions, and real Redis adapters remain outside the Go claim. The Go README records specification questions resolved during this milestone.
 
 ## Source audit
 

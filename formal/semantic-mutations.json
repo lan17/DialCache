@@ -100,7 +100,8 @@
       "before": "this.recordError(key, CacheLayer.REMOTE, \"config_resolution\");\n      return false;\n    }\n    return configuredLogMismatches;",
       "after": "this.recordError(key, CacheLayer.REMOTE, \"config_resolution\");\n      return true;\n    }\n    return configuredLogMismatches;",
       "requiredDetections": [
-        "ordinary"
+        "ordinary",
+        "portable"
       ]
     },
     {
@@ -160,7 +161,8 @@
       "before": "        try {\n          if (abandonIfExpired()) {\n            return \"timeout\";\n          }\n\n          let shadowFillConfig:",
       "after": "        try {\n          let shadowFillConfig:",
       "requiredDetections": [
-        "ordinary"
+        "ordinary",
+        "portable"
       ]
     }
   ]

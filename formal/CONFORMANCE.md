@@ -16,7 +16,12 @@ Create a fresh implementation instance and independently controlled environment 
 
 The model also keeps `localCached`, `localValue`, `coalescedCached`, `coalescedValue`, `remoteReadable`, and `remoteValue`. These predict later returns and loader counts; they are **not implementation observations**. A loader invocation does not prove cache publication, nor does an acknowledged write prove later readability. Subsequent public calls test those effects. Drivers must not read or modify private cache/flight maps to match the model.
 
-This profile evolves with the specification files in this repository. Pin the repository revision and Quint version with a result; there is no stable released spec-version/feature-claim registry yet. Incompatible action/state additions require corresponding driver changes and should fail old parsers visibly.
+This profile is registered as `core` version 1 in [`profiles.json`](./profiles.json),
+under experimental specification 0.1.0. Pin the repository revision and Quint
+version with a result. Incompatible action/state changes require a profile
+version increment and corresponding driver changes; old parsers must fail
+visibly. This registry identifies formats and bounded claims, not a stable
+production API or a claim of exhaustive conformance.
 
 ## Controlled environment
 

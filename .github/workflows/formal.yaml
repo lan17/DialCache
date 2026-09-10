@@ -26,6 +26,10 @@ jobs:
           node-version: "24"
           cache: "pnpm"
       - run: pnpm install --frozen-lockfile
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: "1.27.1"
+          cache: false
       - name: Install Quint
         run: npm install --global @informalsystems/quint@0.32.0
       - name: Check executable specifications
@@ -38,6 +42,11 @@ jobs:
           DIALCACHE_EFFECTS_TRACE_DIR: .formal-traces/effects
           DIALCACHE_FEATURE_TRACE_DIR: .formal-traces/features
         run: pnpm exec vitest run test/formal-conformance.test.ts test/formal-effects.test.ts test/formal-features.test.ts test/formal-behavior.test.ts test/formal-protocol-vectors.test.ts --coverage.enabled=false
+      - name: Replay core and protocol vectors against the Go reference
+        shell: bash
+        env:
+          DIALCACHE_MBT_TRACE_DIR: ${{ github.workspace }}/.formal-traces/conformance
+        run: go -C formal/go test -race -count=1 -v ./... | tee .formal-traces/go-reference.log
       - name: Measure semantic cases and retain behavioral fault detection
         run: node formal/measure-semantics.mjs
       - name: Preserve formal traces and counterexamples

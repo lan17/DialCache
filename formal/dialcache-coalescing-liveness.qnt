@@ -19,6 +19,7 @@ module dialcache_coalescing_liveness {
     sourceExecutions: int,
     independentExecutions: int,
     fallbackDeadline: int,
+    fallbackStartedAt: int,
     fallbackDeadlineStarted: bool,
     activeSourceRunning: bool,
     abandonedSources: int,
@@ -41,6 +42,7 @@ module dialcache_coalescing_liveness {
     sourceExecutions: 0,
     independentExecutions: 0,
     fallbackDeadline: 0,
+    fallbackStartedAt: 0,
     fallbackDeadlineStarted: false,
     activeSourceRunning: false,
     abandonedSources: 0,
@@ -120,6 +122,7 @@ module dialcache_coalescing_liveness {
       sourceExecutions: s.sourceExecutions + 1,
       activeSourceRunning: true,
       fallbackDeadlineStarted: true,
+      fallbackStartedAt: s.now,
       fallbackDeadline: s.now + FALLBACK_TIMEOUT,
       phase: FallbackRunning,
       ...s
@@ -246,7 +249,9 @@ module dialcache_coalescing_liveness {
 
   val fallbackDeadlineStartsWithFallback =
     not(s.fallbackDeadlineStarted) or
-      s.phase == FallbackRunning or s.phase == Publication or s.phase == FlightDone
+      ((s.phase == FallbackRunning or s.phase == Publication or s.phase == FlightDone) and
+       s.fallbackStartedAt <= s.now and
+       s.fallbackDeadline == s.fallbackStartedAt + FALLBACK_TIMEOUT)
 
   val timedOutSourceCannotPublish =
     s.outcome != SourceTimeout or
@@ -287,4 +292,20 @@ module dialcache_coalescing_liveness {
     .then(advanceTime).then(advanceTime).then(advanceTime)
     .then(dispatchPublication)
     .expect(s.publicationDispatched and s.outcome == SourceSuccess)
+
+  // C23: time spent reading the cache must not consume the source budget.
+  run delayedLookupKeepsFullSourceBudgetTest = init
+    .then(toggleEnabled).then(toggleSharedLayer).then(startLeader)
+    .then(advanceTime).then(advanceTime)
+    .then(cacheMissStartsFallback)
+    .expect(s.fallbackStartedAt == 2 and s.fallbackDeadline == 5)
+    .expect(fallbackDeadlineStartsWithFallback)
+    .then(advanceTime).then(sourceSucceedsBeforeDeadline)
+    .expect(s.outcome == SourceSuccess)
+
+  run deadlineEpochMutationIsDetectedTest = init
+    .then(toggleEnabled).then(toggleSharedLayer).then(startLeader)
+    .then(advanceTime).then(advanceTime).then(cacheMissStartsFallback)
+    .then(all { s' = { fallbackDeadline: FALLBACK_TIMEOUT, ...s } })
+    .expect(not(fallbackDeadlineStartsWithFallback))
 }

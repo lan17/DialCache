@@ -9,6 +9,7 @@ import {
   type RedisWriteRequest, type RedisInvalidationRequest, type Serializer,
 } from "../../src/index.js";
 import { encodeFrame, FakeRedis } from "../fake-redis.js";
+import type { EffectsContractEvent } from "./effects-contract.js";
 
 export type Policy = ConstructorParameters<typeof DialCacheKeyConfig>[0];
 export type Value = number | boolean | string | null;
@@ -31,6 +32,7 @@ export interface Fixture {
   recovery?: Recovery | "default";
   comparator?: "equal" | "unequal" | "error";
   comparisonMs?: number;
+  sourceWorkMs?: number;
   shadowHook?: boolean;
   observerFailure?: boolean;
   remote?: boolean;
@@ -99,6 +101,10 @@ type Scope = { instance: string; run: <T>(fn: () => T) => T; gate: Gate; lifetim
 // or resolved policy, and no expected observation is passed to this class.
 export class BehaviorDriver {
   private readonly observed: Observation;
+  // Independent event journal for bounded contract monitors. Entries come
+  // only from external callbacks, settlements, and public diagnostics.
+  private readonly history: EffectsContractEvent[] = [];
+  private fallbackFailed = false;
   private adapterReply: { value: AdapterReply } | undefined;
   private readonly loaders: Array<ReturnType<typeof deferred<Value | undefined>>> = [];
   private readonly sourceErrors: Error[] = [];
@@ -138,6 +144,7 @@ export class BehaviorDriver {
       }
       override async write(request: RedisWriteRequest): Promise<void> {
         const index = owner.observed.writes++;
+        owner.history.push({ event: "writeDispatch", atMs: performance.now() });
         owner.record("writeDispatch", { index });
         owner.observed.writeTtls.push(request.cacheTtlMs);
         // A native adapter stamps the complete frame before its SET is delayed.
@@ -176,7 +183,7 @@ export class BehaviorDriver {
         request: (labels) => { this.record("request", labels); noop(); },
         miss: (labels) => { this.record("miss", labels); noop(); },
         disabled: (labels) => { this.record("disabled", labels); noop(); },
-        error: (labels) => { this.record("error", labels); noop(); },
+        error: (labels) => { if (labels.inFallback && labels.error === "fallback") this.fallbackFailed = true; this.record("error", labels); noop(); },
         invalidation: (labels) => { this.record("invalidation", labels); noop(); },
         coalesced: (labels) => { this.record("coalesced", labels); noop(); },
         observeShadowValueAge: (labels, seconds) => { this.record("shadowAge", { ...labels, seconds }); noop(); },
@@ -186,7 +193,11 @@ export class BehaviorDriver {
         observeStoredSize: (labels, bytes) => { this.record("storedSize", { ...labels, bytes }); noop(); },
         compression: (labels) => { this.record("compression", labels); noop(); },
         observeGet: (labels, seconds) => { this.record("get", { ...labels, seconds }); noop(); },
-        observeFallback: (labels, seconds) => { this.record("fallback", { ...labels, seconds }); noop(); },
+        observeFallback: (labels, seconds) => {
+          this.history.push({ event: "fallbackCompletion", atMs: performance.now(), durationMs: seconds * 1000, failed: this.fallbackFailed });
+          this.fallbackFailed = false;
+          this.record("fallback", { ...labels, seconds }); noop();
+        },
         observeSerialization: (labels, seconds) => { this.record("serialization", { ...labels, seconds }); noop(); },
         ...(fixture.shadowHook === false ? {} : { shadowValidation: ({ outcome }: { outcome: string }) => { this.observed.shadow.push(outcome); noop(); } }),
         staleRecovery: ({ outcome }) => { this.observed.recovery.push(outcome); noop(); } },
@@ -234,11 +245,15 @@ export class BehaviorDriver {
         const scope = input.scope === undefined ? undefined : this.scope(input.scope);
         const cache = this.instance(input.instance ?? scope?.instance ?? "default");
         const call = () => cache.getOrLoad(() => {
+          this.history.push({ event: "sourceStart", id: this.loaders.length, atMs: performance.now() });
           if (this.fixture.probeSourceScope) this.observed.sourceScopes.push(cache.isEnabled());
           const gate = deferred<Value | undefined>();
           this.loaders.push(gate);
           this.sourceErrors.push(new Error(`Source failure ${this.sourceErrors.length}`));
           this.observed.loaders++;
+          // Consume elapsed external source work before returning its gate,
+          // without delivering timers or scheduled cache work during that work.
+          if (this.fixture.sourceWorkMs !== undefined) vi.setSystemTime(Date.now() + this.fixture.sourceWorkMs);
           return gate.promise;
         }, { keyType: "id", key: input.key ?? "1", useCase: input.useCase ?? "Behavior", serializer: this.serializer,
           ...(input.recovery === undefined ? {} : { shouldAttemptStaleRecovery: this.classifier(input.recovery) }),
@@ -264,10 +279,14 @@ export class BehaviorDriver {
         );
         break;
       }
-      case "resolve": this.loader(input.loader).resolve(input.value); break;
+      case "resolve":
+        this.loader(input.loader).resolve(input.value);
+        this.history.push({ event: "sourceSettlement", id: input.loader, atMs: performance.now(), outcome: "resolve" });
+        break;
       case "reject": {
         if (input.error === "timeout") this.sourceErrors[input.loader] = new FallbackTimeoutError("NestedSource", 10);
         this.loader(input.loader).reject(this.sourceErrors[input.loader]);
+        this.history.push({ event: "sourceSettlement", id: input.loader, atMs: performance.now(), outcome: "reject" });
         break;
       }
       case "advance":
@@ -348,6 +367,8 @@ export class BehaviorDriver {
   }
 
   snapshot(): Observation { return structuredClone(this.observed); }
+
+  contractHistory(): readonly EffectsContractEvent[] { return structuredClone(this.history); }
 
   async dispose(): Promise<void> {
     Object.assign(this.faults, { holdReads: false, holdWrites: false, holdDumps: false, holdLoads: false, holdPolicies: false });

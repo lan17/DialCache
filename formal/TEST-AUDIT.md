@@ -35,7 +35,7 @@ Run:
 node formal/check-source-audit.mjs
 ```
 
-Normal TypeScript tests run the check too, without Quint. It fails when a source file is added/removed, its contents change, a test/section is added or moved, or an entry lacks a known contract disposition. SHA-256 fingerprints include fixture and assertion changes, not just test titles. This prevents a green *stale inventory* from silently being reused after source drift; it cannot judge whether a mapping is correct.
+Normal TypeScript tests run the check too, without Quint. It fails when a source file is added/removed, its contents change, a test/section is added or moved, or an entry lacks a known contract disposition. SHA-256 fingerprints include inline fixture and assertion changes, not just test titles. Shared helper changes must still be reviewed with their consuming tests; helpers are not independently fingerprinted. This prevents a green *stale inventory* from silently being reused after source drift; it cannot judge whether a mapping is correct.
 
 For a changed file, read the changed assertions/prose and any affected fixtures, then:
 
@@ -50,6 +50,8 @@ The inventory covers `README.md`, every current top-level `docs/*.md` page, and 
 
 All inventoried sources have an explicit disposition. This does **not** mean all Vitest assertions are formalized or every implementation branch is exercised by portable replay. Local storage exception injection currently has verification-model coverage plus ordinary TypeScript tests; it is not a public-driver capability. Exporter schemas/registries, exact JSON logging truncation, compression implementation/resource ceilings, transport/connection lifecycle, and TypeScript API/type/Promise details still use the documented B/E/X boundaries. Porting those integrations requires their own checks.
 
-Within the portable scope, the inventory now names 60 behavioral and nine protocol obligations with executable evidence. Remaining assurance work includes larger mixed-feature histories, broader generated exploration, and an independent language driver. No finite source inventory or sampled trace count proves semantic completeness.
+Within the portable scope, the inventory now names 60 behavioral and nine protocol obligations with executable evidence. Remaining assurance work includes larger mixed-feature histories, broader generated exploration, and a second-language driver for the feature profiles. The bounded Go core/protocol reference now provides initial portability evidence. No finite source inventory or sampled trace count proves semantic completeness.
 
 The [semantic coverage measurement](./SEMANTIC-COVERAGE.md) refines those broad obligations into named cases and checks explicit evidence links. Its isolated mutation comparison challenges actual assertions and reports ordinary/generated/portable detection separately. Full disposition of source declarations must not be confused with full generated coverage: the finer inventory and surviving mutations retain specific gaps.
+
+The subsequent Go milestone adds nine fixed scenarios (238 total), including tracked-local exceptions, explicit null leaves, sparse/default policy, malformed logging, and expired deferred dark work. Those additions are separate from the 55-scenario source audit above. The real-server vector wrapper now observes preserved key types/contents on rejected invalidations; its source fingerprint and unchanged W09 declaration disposition were reviewed together.
