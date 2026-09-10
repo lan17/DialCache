@@ -168,7 +168,7 @@ func TestGeneratedWitnessEvidence(t *testing.T) {
 	directory := os.Getenv("DIALCACHE_WITNESS_EVIDENCE_DIR")
 	profiles := map[string][]string{}
 	if dir := os.Getenv("DIALCACHE_EFFECTS_TRACE_DIR"); dir != "" && os.Getenv("DIALCACHE_EFFECTS_TRACE_FILE") == "" {
-		paths, err := filepath.Glob(filepath.Join(dir, "*.itf.json"))
+		paths, err := effectsPaths()
 		if err != nil {
 			t.Fatal(err)
 		}

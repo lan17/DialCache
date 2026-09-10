@@ -362,9 +362,11 @@ func replayEffects(d *behaviorDriver, trace behaviorTrace) error {
 	}
 	return nil
 }
-func TestEffectsConformance(t *testing.T) {
-	requireRegistry(t)
-	requireBehaviorProfile(t, "effects")
+
+// Both public replay and witness validation consume this exact inventory.
+// Scheduled regressions are part of the corpus, including when their witness
+// consequence is absent from every randomly sampled history.
+func effectsPaths() ([]string, error) {
 	paths := []string{"../formal/effects-smoke.itf.json"}
 	if file := os.Getenv("DIALCACHE_EFFECTS_TRACE_FILE"); file != "" {
 		paths = []string{file}
@@ -372,16 +374,34 @@ func TestEffectsConformance(t *testing.T) {
 		var err error
 		paths, err = filepath.Glob(filepath.Join(dir, "*.itf.json"))
 		if err != nil {
-			t.Fatal(err)
+			return nil, err
 		}
 		regressions, err := featureRegressionPaths("effects", dir)
 		if err != nil {
-			t.Fatal(err)
+			return nil, err
 		}
 		paths = append(paths, regressions...)
 	}
 	if len(paths) == 0 {
-		t.Fatal("empty effects corpus")
+		return nil, fmt.Errorf("empty effects corpus")
+	}
+	return paths, nil
+}
+
+func TestEffectsPathsRejectMissingScheduledRegressions(t *testing.T) {
+	t.Setenv("DIALCACHE_EFFECTS_TRACE_FILE", "")
+	t.Setenv("DIALCACHE_EFFECTS_TRACE_DIR", t.TempDir())
+	if _, err := effectsPaths(); err == nil || !strings.Contains(err.Error(), "missing Quint regression") {
+		t.Fatalf("missing scheduled histories must fail corpus selection: %v", err)
+	}
+}
+
+func TestEffectsConformance(t *testing.T) {
+	requireRegistry(t)
+	requireBehaviorProfile(t, "effects")
+	paths, err := effectsPaths()
+	if err != nil {
+		t.Fatal(err)
 	}
 	seen := map[string]bool{}
 	for _, path := range paths {
