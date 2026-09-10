@@ -13525,13 +13525,13 @@
   "lastLocalValidation": {
     "baseRevision": "757a34b6c8cf9c045dc950972fe7c551b5c96b95",
     "dirtyWorktree": true,
-    "identity": "Go reports identify the precision-fix dirty source snapshot through the execution-input manifest and report hashes. TypeScript replay and mutation reports retain their earlier source snapshot: TypeScript production, Quint models, shared corpus and replay inputs are unchanged. CI repeats both implementations and both measurements on the committed PR revision.",
+    "identity": "The Go replay and mutation reports identify the precision-fix dirty source snapshot through the execution-input manifest and report hashes. The integration report separately records the later cluster-startup fixture fix. TypeScript replay and mutation reports retain their earlier source snapshot: TypeScript production, Quint models, shared corpus and replay inputs are unchanged. Each report retains its own base revision; CI repeats both implementations and both measurements on the committed PR revision.",
     "generatedHistories": 4000,
     "requiredWitnesses": 276,
     "fixedScenarios": 238,
     "protocolVectors": 134,
     "invalidationVectorsPerEngine": 49,
-    "goIntegrationLeaves": 154,
+    "goIntegrationLeaves": 155,
     "typescriptMutationDetections": {
       "generated": 12,
       "portable": 13,
@@ -13570,9 +13570,9 @@
         "baseRevision": "757a34b6c8cf9c045dc950972fe7c551b5c96b95"
       },
       {
-        "path": ".formal-traces/go-integration.jsonl",
-        "sha256": "69e7e3348fa1538eb0cf540d316e223318df4238b2105ac64b63cfda84b1103d",
-        "baseRevision": "757a34b6c8cf9c045dc950972fe7c551b5c96b95"
+        "path": ".formal-traces/go-integration-cluster-readiness.jsonl",
+        "sha256": "68ecc11b9d1989eaf245ee3ecedf21f983fb18c679558063bcd1a32832740801",
+        "baseRevision": "c29a09b54e6ee9c08c985a51d14b03bd6d4d25aa"
       }
     ],
     "limits": [

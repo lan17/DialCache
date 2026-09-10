@@ -116,6 +116,83 @@ func standaloneEnvironment(t *testing.T, image string) redisEnvironment {
 	t.Cleanup(func() { _ = client.Close() })
 	return redisEnvironment{client: client, endpoint: endpoint}
 }
+
+func waitForCluster(ctx context.Context, nodes []string, inspect func(context.Context, string) (string, error)) error {
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		ready := true
+		var diagnostics []string
+		for _, node := range nodes {
+			info, err := inspect(ctx, node)
+			diagnostics = append(diagnostics, fmt.Sprintf("node %s: error=%v\n%s", node, err, info))
+			fields := make(map[string]string)
+			for _, line := range strings.Split(info, "\n") {
+				if key, value, ok := strings.Cut(strings.TrimSpace(line), ":"); ok {
+					fields[key] = value
+				}
+			}
+			if err != nil || fields["cluster_state"] != "ok" ||
+				fields["cluster_slots_assigned"] != "16384" || fields["cluster_slots_ok"] != "16384" ||
+				fields["cluster_slots_pfail"] != "0" || fields["cluster_slots_fail"] != "0" ||
+				fields["cluster_known_nodes"] != "6" || fields["cluster_size"] != "3" {
+				ready = false
+			}
+		}
+		if ready {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("cluster did not become ready: %w\n%s", ctx.Err(), strings.Join(diagnostics, "\n"))
+		case <-ticker.C:
+		}
+	}
+}
+
+func testClusterReadiness(t *testing.T) {
+	const healthy = "cluster_state:ok\r\ncluster_slots_assigned:16384\r\ncluster_slots_ok:16384\r\ncluster_slots_pfail:0\r\ncluster_slots_fail:0\r\ncluster_known_nodes:6\r\ncluster_size:3\r\n"
+	nodes := []string{"node0", "node1", "node2", "node3", "node4", "node5"}
+	counts := make(map[string]int)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	err := waitForCluster(ctx, nodes, func(_ context.Context, node string) (string, error) {
+		counts[node]++
+		if counts[node] == 1 && node != nodes[0] {
+			return strings.Replace(healthy, "cluster_state:ok", "cluster_state:fail", 1), nil
+		}
+		if counts[node] == 2 && node == nodes[5] {
+			return strings.Replace(healthy, "cluster_slots_ok:16384", "cluster_slots_ok:16383", 1), nil
+		}
+		return healthy, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, node := range nodes {
+		if counts[node] != 3 {
+			t.Fatalf("startup accepted an incomplete cluster: %s inspected %d times, want 3", node, counts[node])
+		}
+	}
+
+	failedContext, stop := context.WithCancel(context.Background())
+	defer stop()
+	err = waitForCluster(failedContext, nodes, func(_ context.Context, node string) (string, error) {
+		if node == nodes[5] {
+			stop()
+		}
+		return "", fmt.Errorf("probe unavailable for %s", node)
+	})
+	if err == nil || !strings.Contains(err.Error(), "context canceled") {
+		t.Fatalf("startup did not terminate with its context: %v", err)
+	}
+	for _, node := range nodes {
+		if !strings.Contains(err.Error(), "probe unavailable for "+node) {
+			t.Fatalf("startup diagnostic omitted %s: %v", node, err)
+		}
+	}
+}
+
 func clusterEnvironment(t *testing.T) redisEnvironment {
 	network := dockerCommand(t, "network", "create", fmt.Sprintf("dialcache-go-%d", time.Now().UnixNano()))
 	t.Cleanup(func() { _ = exec.Command("docker", "network", "rm", network).Run() })
@@ -135,16 +212,20 @@ func clusterEnvironment(t *testing.T) redisEnvironment {
 	args := append([]string{"exec", ids[0], "redis-cli", "--cluster", "create"}, internal...)
 	args = append(args, "--cluster-replicas", "1", "--cluster-yes")
 	dockerCommand(t, args...)
-	deadline := time.Now().Add(15 * time.Second)
-	for {
-		info := dockerCommand(t, "exec", ids[0], "redis-cli", "cluster", "info")
-		if strings.Contains(info, "cluster_state:ok") {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("Cluster not ready")
-		}
-		time.Sleep(50 * time.Millisecond)
+	// Cluster creation and PING can succeed while other nodes still reject key
+	// commands with CLUSTERDOWN. Wait for every primary and replica's slot view.
+	probes := make(map[string]*redis.Client)
+	for _, endpoint := range external {
+		probe := redis.NewClient(&redis.Options{Addr: endpoint, MaxRetries: -1, DialTimeout: 2 * time.Second, ReadTimeout: 2 * time.Second, WriteTimeout: 2 * time.Second, ContextTimeoutEnabled: true})
+		defer probe.Close()
+		probes[endpoint] = probe
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := waitForCluster(ctx, external, func(ctx context.Context, node string) (string, error) {
+		return probes[node].ClusterInfo(ctx).Result()
+	}); err != nil {
+		t.Fatal(err)
 	}
 	client := redis.NewClusterClient(&redis.ClusterOptions{Addrs: external, ReadOnly: true, RouteRandomly: true, MaxRetries: -1, DialTimeout: 2 * time.Second, ReadTimeout: 2 * time.Second, WriteTimeout: 2 * time.Second, ContextTimeoutEnabled: true, Dialer: func(ctx context.Context, network, address string) (net.Conn, error) {
 		if mapped, ok := routes[address]; ok {
@@ -172,6 +253,7 @@ func primaryCommands(t *testing.T, environment redisEnvironment, key string) red
 
 func TestRedisIntegration(t *testing.T) {
 	t.Run("docker-command-output", testDockerCommandOutput)
+	t.Run("cluster-readiness", testClusterReadiness)
 	for _, kind := range []string{"redis6.2", "valkey8", "cluster"} {
 		t.Run(kind, func(t *testing.T) {
 			var environment redisEnvironment
