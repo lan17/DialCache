@@ -22,12 +22,21 @@ const portableTests = ['test/formal-behavior.test.ts', 'test/formal-protocol-vec
 const generatedPattern = 'replays |reaches every action|covers every action';
 // Fixed scenario names carry a feature prefix. Protocol schema/audit checks
 // start with "keeps"/"requires" and must not count as behavioral detections.
-const portablePattern = `${generatedPattern}|portable behavioral scenarios [\\w-]+: |formal protocol conformance vectors (?!keeps |requires )`;
+const portablePattern = 'portable behavioral scenarios [\\w-]+: |formal protocol conformance vectors (?!keeps |requires )';
 const cohorts = {
   ordinary: ['--exclude=test/formal*.test.ts'],
   generated: [...formalTests, `--testNamePattern=${generatedPattern}`],
-  portable: [...formalTests, ...portableTests, `--testNamePattern=${portablePattern}`],
+  fixed: [...portableTests, `--testNamePattern=${portablePattern}`],
 };
+const comparisons = ['ordinary', 'generated', 'portable'];
+// These test-file sets are disjoint and use Vitest's normal file isolation.
+// Their union measures the full portable suite without replaying every trace
+// twice. Keep both component reports, including every failing assertion.
+function portableResult({ generated, fixed }) {
+  return { state: generated.failed + fixed.failed > 0 ? 'detected' : 'survived',
+    passed: generated.passed + fixed.passed, failed: generated.failed + fixed.failed,
+    failingTests: [...generated.failingTests, ...fixed.failingTests], components: ['generated', 'fixed'] };
+}
 const sourceText = new Map();
 const ids = new Set();
 for (const mutation of catalog.mutations) {
@@ -36,7 +45,7 @@ for (const mutation of catalog.mutations) {
   if (!/^src\/[\w/-]+\.ts$/.test(mutation.path) || mutation.before === mutation.after || !mutation.before) throw new Error(`Invalid edit: ${mutation.id}`);
   const original = read(mutation.path);
   if (original.split(mutation.before).length !== 2) throw new Error(`${mutation.id}: mutation anchor must match exactly once; review source drift`);
-  if (!mutation.requiredDetections.every(c => Object.hasOwn(cohorts, c))) throw new Error(`Unknown cohort: ${mutation.id}`);
+  if (!mutation.requiredDetections.every(c => comparisons.includes(c))) throw new Error(`Unknown cohort: ${mutation.id}`);
   sourceText.set(mutation.path, original);
 }
 const workspace = mkdtempSync(resolve(output, 'work-'));
@@ -122,6 +131,7 @@ try {
     console.log(`baseline ${cohort}: ${report.baselines[cohort].passed} passed`);
     save();
   }
+  report.baselines.portable = portableResult(report.baselines);
   const witnesses = JSON.parse(read('formal/coverage-witnesses.json'));
   report.reachedWitnesses = {};
   for (const [profile, required] of Object.entries(witnesses)) {
@@ -137,6 +147,7 @@ try {
       if (compile.status !== 0 || compile.error) throw new Error(`${mutation.id}: invalid/noncompiling mutant\n${compile.stdout ?? ''}${compile.stderr ?? ''}`);
       const result = { id: mutation.id, case: mutation.case, description: mutation.description, cohorts: {} };
       for (const cohort of Object.keys(cohorts)) result.cohorts[cohort] = run(mutation.id, cohort, false);
+      result.cohorts.portable = portableResult(result.cohorts);
       report.mutations.push(result);
       console.log(`${mutation.id}: ${Object.entries(result.cohorts).map(([name, run]) => `${name}=${run.state}`).join(', ')}`);
       save();
@@ -145,7 +156,7 @@ try {
   const regressions = catalog.mutations.flatMap(m => m.requiredDetections.filter(c => report.mutations.find(r => r.id === m.id).cohorts[c].state !== 'detected').map(c => `${m.id}/${c}`));
   if (regressions.length) throw new Error(`Lost required detections: ${regressions.join(', ')}`);
   const cases = JSON.parse(read('formal/semantic-cases.json')).cases;
-  const score = mutations => Object.fromEntries(Object.keys(cohorts).map(cohort => {
+  const score = mutations => Object.fromEntries(comparisons.map(cohort => {
     const detected = mutations.filter(m => m.cohorts[cohort].state === 'detected');
     const ordinary = mutations.filter(m => m.cohorts.ordinary.state === 'detected');
     return [cohort, { detected: detected.length, total: mutations.length,
