@@ -196,6 +196,7 @@
     "captured-logging:false",
     "mismatch-logging:true",
     "mismatch-logging:false",
+    "omitted-logging-defaults-off",
     "age-clamped-after-rollback",
     "age-at-verdict"
   ],

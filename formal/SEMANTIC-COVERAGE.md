@@ -22,7 +22,7 @@ This is a reviewed, finite case inventory, not an exhaustive enumeration of asse
 
 [`coverage-witnesses.json`](./coverage-witnesses.json) names the required boundary/outcome/race witnesses for eight feature profiles. The core profile has replay and action checks but no case-level witness gate. Reachability is checked on generated traces, and every trace must independently replay against the real implementation. Expected model state is used only for assertions and reachability classification; it never supplies implementation observations.
 
-A case links to a specific required witness, not merely an action name or the presence of a test file. For example, read-budget precedence requires a first read before runtime policy changes, late source fulfillment and rejection have separate witnesses, and failed recovery requires the original source-error identity. Multiple witness references are all required, but do not imply that all those events occurred in one history; use a dedicated interaction witness for that claim.
+A case links to a specific required witness, not merely an action name or the presence of a test file. For example, read-budget precedence requires a first read before runtime policy changes, late source fulfillment and rejection have separate witnesses, and failed recovery requires the original source-error identity. Default-off logging requires an actually omitted flag; the fixed "warning omitted" scenario explicitly sets `false` and is not credited for that default. Multiple witness references are all required, but do not imply that all those events occurred in one history; use a dedicated interaction witness for that claim.
 
 ## Behavioral mutation comparison
 

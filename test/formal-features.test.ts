@@ -845,6 +845,7 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
     if (name === "recovery" || name === "shadow") seen.add(`fixture:${trace.steps[0]!.choice}`);
     let logging = trace.steps[0]!.choice >= 4 && trace.steps[0]!.choice < 8;
     const defaultLogging = logging;
+    let sawShadowPolicy = false, acceptedDefaultLogging = false;
     let shadowPolicy = 0, jobAdmitted = false, changedAdmittedJob = false;
     let acceptedLogging = false;
     // Model-private values classify reached comparison schedules only; replay
@@ -918,12 +919,14 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
       if (name === "shadow") {
         if (step.action === "beginCall") {
           acceptedLogging = logging; wallRolledAfterC0 = false;
+          acceptedDefaultLogging = !defaultLogging && !sawShadowPolicy;
           jobAdmitted = o.reads > previous.reads; changedAdmittedJob = false;
           if (!jobAdmitted && o.loaders > previous.loaders) {
             if (trace.steps[0]!.choice === 8) seen.add("missing-hook-skips-job");
             else if (shadowPolicy > 0) seen.add(`shadow-policy-skips-job:${shadowPolicy}`);
           }
         }
+        if (step.action === "logPolicy" || step.action === "shadowPolicy") sawShadowPolicy = true;
         if (step.action === "logPolicy") { logging = step.choice === 1; shadowPolicy = 0; }
         if (step.action === "shadowPolicy") {
           shadowPolicy = step.choice; logging = defaultLogging;
@@ -949,6 +952,7 @@ function witnesses(name: string, traces: Trace[]): Set<string> {
           if (outcome === "mismatch" && c0Value === sourceValue && trace.steps[0]!.choice % 4 === 2) seen.add("custom-unequal-confirms-equal-values");
           if (outcome === "mismatch" && acceptedLogging !== logging) seen.add(`captured-logging:${acceptedLogging}`);
           if (outcome === "mismatch") seen.add(`mismatch-logging:${acceptedLogging}`);
+          if (outcome === "mismatch" && acceptedDefaultLogging && step.diagnostics!.warnings === trace.steps[i - 1]!.diagnostics!.warnings) seen.add("omitted-logging-defaults-off");
           if (step.diagnostics!.ages.length > trace.steps[i - 1]!.diagnostics!.ages.length) {
             if (wallRolledAfterC0 && step.diagnostics!.ages.at(-1) === 0) seen.add("age-clamped-after-rollback");
             if (step.diagnostics!.ages.at(-1)! > 0) seen.add("age-at-verdict");
