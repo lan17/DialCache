@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
@@ -23,11 +22,12 @@ type Ledger = {
 
 const ledger = () => JSON.parse(readFileSync(new URL("../formal/go-parity.json", import.meta.url), "utf8")) as Ledger;
 const checker = new URL("../formal/check-go-parity.mjs", import.meta.url).href;
-const validate = (input: Ledger): unknown => JSON.parse(execFileSync(process.execPath, ["--input-type=module", "--eval", `
-  import { readFileSync } from 'node:fs';
-  import { checkGoParity } from ${JSON.stringify(checker)};
-  console.log(JSON.stringify(checkGoParity(JSON.parse(readFileSync(0, 'utf8')))));
-`], { input: JSON.stringify(input), stdio: ["pipe", "pipe", "pipe"] }).toString());
+// Keep the large ledger in-process: a synchronous child reading a piped JSON
+// input can stall on host pipe transfer. These assertions test the exported
+// accounting checker, so a subprocess adds no behavioral coverage.
+const { checkGoParity: validate } = await import(checker) as {
+  checkGoParity(input: Ledger): unknown;
+};
 
 describe("Go parity ledger freshness", () => {
   it("validates reviewed inventory without claiming executed parity", () => {
