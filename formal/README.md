@@ -142,6 +142,13 @@ node formal/measure-go-semantics.mjs
 
 CI generates one corpus and replays it in both languages. `check-go-replay.mjs` requires a completed passing Go package report, the exact 4,000 generated trace leaves, all 238 scenarios, all 134 protocol cases, and all eight witness gates; partial, skipped, or smoke-only runs cannot satisfy it. The Go job verifies witness metadata against the current models, registry, classifier and exact trace files; a stale classification cannot satisfy reachability. Go and TypeScript fault catalogs challenge the same 13 representative obligations. Parse/build errors, missing witnesses, crashes and watchdog failures are infrastructure failures, not detections.
 
+After the checked corpus is available, TypeScript mutation measurement and Go
+validation run in parallel. The final `quint` gate requires successful corpus,
+TypeScript, and Go jobs, including when a dependency fails or is skipped.
+Artifacts retain `formal-traces`, `typescript-semantic-evidence`, and
+`go-parity-evidence` separately for 14 days. To reproduce mutation reports,
+download the TypeScript artifact into `.formal-traces/semantic/`.
+
 ## Source audit
 
 [`source-audit.json`](./source-audit.json) assigns 564 ordinary test declarations and 172 documentation sections across 44 files to explicit contract/binding/assumption dispositions. Normal CI rejects source drift until the affected audit is reviewed. [`TEST-AUDIT.md`](./TEST-AUDIT.md) explains the 55 added caller-level scenarios and local-storage failure model regressions found by this pass. This is source accounting with executable evidence, not a percentage of semantic completeness or a claim that every Vitest assertion has an equivalent formal test.

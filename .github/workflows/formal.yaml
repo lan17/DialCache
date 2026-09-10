@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  quint:
+  corpus:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -51,8 +51,6 @@ jobs:
           DIALCACHE_FEATURE_TRACE_DIR: .formal-traces/features
           DIALCACHE_COVERAGE_EVIDENCE_DIR: .formal-traces/go-parity-witnesses
         run: pnpm exec vitest run test/formal-conformance.test.ts test/formal-effects.test.ts test/formal-features.test.ts test/formal-behavior.test.ts test/formal-protocol-vectors.test.ts --coverage.enabled=false
-      - name: Measure semantic cases and retain behavioral fault detection
-        run: node formal/measure-semantics.mjs
       - name: Preserve formal traces and counterexamples
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -63,8 +61,38 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  typescript-mutations:
+    needs: corpus
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "24"
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: formal-traces
+          path: .formal-traces
+      - name: Measure semantic cases and retain behavioral fault detection
+        run: node formal/measure-semantics.mjs
+      - name: Preserve TypeScript mutation evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: typescript-semantic-evidence
+          path: .formal-traces/semantic/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14
+
   go-parity:
-    needs: quint
+    needs: corpus
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -90,6 +118,9 @@ jobs:
           node formal/check-go-parity.mjs
           go -C go vet ./...
           test -z "$(gofmt -l go)"
+      - name: Check Redis, Valkey, Cluster and TypeScript interoperability
+        shell: bash
+        run: go -C go test -race -tags integration -count=1 -run '^TestRedisIntegration$' -json ./... | tee .formal-traces/go-integration.jsonl
       - name: Replay the same generated corpus against Go with race detection
         shell: bash
         env:
@@ -102,9 +133,6 @@ jobs:
           go -C go test -race -count=1 -json ./... | tee .formal-traces/go-replay.jsonl
       - name: Require complete generated, fixed, protocol and witness replay
         run: node formal/check-go-replay.mjs > .formal-traces/go-replay-summary.json
-      - name: Check Redis, Valkey, Cluster and TypeScript interoperability
-        shell: bash
-        run: go -C go test -race -tags integration -count=1 -run '^TestRedisIntegration$' -json ./... | tee .formal-traces/go-integration.jsonl
       - name: Require assertion-based Go fault detection
         run: node formal/measure-go-semantics.mjs
       - name: Preserve Go parity evidence
@@ -120,3 +148,22 @@ jobs:
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 14
+
+  # Preserve the existing required check name and require every parity stage.
+  # Run after failures too: skipped dependencies must not make this gate green.
+  quint:
+    needs: [corpus, typescript-mutations, go-parity]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require complete formal and cross-language validation
+        if: always()
+        env:
+          CORPUS_RESULT: ${{ needs.corpus.result }}
+          TYPESCRIPT_RESULT: ${{ needs.typescript-mutations.result }}
+          GO_RESULT: ${{ needs.go-parity.result }}
+        run: |
+          test "$CORPUS_RESULT" = success
+          test "$TYPESCRIPT_RESULT" = success
+          test "$GO_RESULT" = success

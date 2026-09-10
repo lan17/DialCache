@@ -33,11 +33,47 @@ func dockerCommand(t *testing.T, args ...string) string {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
-	raw, err := exec.CommandContext(ctx, "docker", args...).CombinedOutput()
+	command := exec.CommandContext(ctx, "docker", args...)
+	var stderr bytes.Buffer
+	command.Stderr = &stderr
+	raw, err := command.Output()
 	if err != nil {
-		t.Fatalf("docker %v: %v\n%s", args, err, raw)
+		t.Fatalf("docker %v: %v\nstdout:\n%s\nstderr:\n%s", args, err, raw, stderr.String())
 	}
 	return strings.TrimSpace(string(raw))
+}
+
+func testDockerCommandOutput(t *testing.T) {
+	// A cold docker run writes pull progress to stderr and the container ID to
+	// stdout. Exercise that boundary without removing any existing Docker image.
+	directory := t.TempDir()
+	fixture := `#!/bin/sh
+case "$1" in
+  run)
+    printf '%s\n' "Unable to find image 'redis:cold-fixture' locally" "Pulling image layers..." >&2
+    printf '%s\n' "fixture-container-id"
+    ;;
+  port)
+    if [ "$2" != "fixture-container-id" ]; then
+      printf '%s\n' "container ID was polluted by pull progress" >&2
+      exit 1
+    fi
+    printf '%s\n' "127.0.0.1:16379"
+    ;;
+  *) exit 2 ;;
+esac
+`
+	if err := os.WriteFile(filepath.Join(directory, "docker"), []byte(fixture), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
+	id := dockerCommand(t, "run", "-d", "redis:cold-fixture")
+	if id != "fixture-container-id" {
+		t.Fatalf("cold-pull command returned %q instead of its stdout container ID", id)
+	}
+	if endpoint := dockerCommand(t, "port", id, "6379/tcp"); endpoint != "127.0.0.1:16379" {
+		t.Fatalf("port lookup returned %q", endpoint)
+	}
 }
 func startRedisContainer(t *testing.T, image, network string, cluster bool) (string, string, string) {
 	t.Helper()
@@ -135,6 +171,7 @@ func primaryCommands(t *testing.T, environment redisEnvironment, key string) red
 }
 
 func TestRedisIntegration(t *testing.T) {
+	t.Run("docker-command-output", testDockerCommandOutput)
 	for _, kind := range []string{"redis6.2", "valkey8", "cluster"} {
 		t.Run(kind, func(t *testing.T) {
 			var environment redisEnvironment
