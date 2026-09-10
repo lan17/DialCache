@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { resolve, relative } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { checkSemanticCoverage } from './check-semantic-coverage.mjs';
 
@@ -48,7 +49,9 @@ for (const mutation of catalog.mutations) {
   if (!mutation.requiredDetections.every(c => comparisons.includes(c))) throw new Error(`Unknown cohort: ${mutation.id}`);
   sourceText.set(mutation.path, original);
 }
-const workspace = mkdtempSync(resolve(output, 'work-'));
+// A hard CI cancellation may bypass finally. Keep temporary dependency links
+// outside the artifact tree even when that happens.
+const workspace = mkdtempSync(resolve(tmpdir(), 'dialcache-semantic-'));
 const report = {
   schemaVersion: 1,
   complete: false,
