@@ -96,21 +96,25 @@ Decode them exactly and reject unsupported ranges. `choice: -1` denotes no
 external choice. An action's integer encoding belongs to its profile; the same
 integer is not a universal operation or result code.
 
-The common normalized envelope also contains `mbt::actionTaken` and
-`mbt::nondetPicks.choice` (`Some` with an integer or `None`). All current profiles
-declare explicit inputs. Core actions have no external arguments and use
-`choice: -1`.
-[replay-inputs.mjs](./replay-inputs.mjs) translates explicit inputs into that
-envelope without comparing predicted states. Prefer the explicit input when
-the profile declares it, and reject contradictory encodings.
+All current profiles declare explicit inputs. The coordinator reads `input`
+directly, including raw Quint regression exports. Core actions have no external
+arguments and use `choice: -1`. Optional `mbt::actionTaken` and
+`mbt::nondetPicks.choice` annotations (`Some` with an integer or `None`) must agree
+with the input when present. Core also accepts an empty picks record.
+[run-models.mjs](./run-models.mjs) uses
+[replay-inputs.mjs](./replay-inputs.mjs) to add compatibility annotations to
+scheduled exports. A native driver using the coordinator needs no translation
+step and must never infer commands from predicted states.
 
-The controlled fixtures, action mappings and compared fields are documented in
-[CONFORMANCE.md](./CONFORMANCE.md) for core and
-[BEHAVIOR.md](./BEHAVIOR.md) for pending effects, feature profiles and the six
-additional composition profiles. [conformance-observations.qnt](./conformance-observations.qnt)
-names shared outcome encodings. Read a profile's initialization and public
-actions alongside its table; the profile's declared units and choices are part
-of the versioned input contract.
+[CONFORMANCE.md](./CONFORMANCE.md) describes the core fixture, actions and
+observations. [BEHAVIOR.md](./BEHAVIOR.md) describes the common environment,
+pending effects and feature profiles; its composition table summarizes six
+additional profiles and links their executable mappings. Exact fixtures,
+choices and projections are connected by
+[replay/bindings.mjs](./replay/bindings.mjs).
+[conformance-observations.qnt](./conformance-observations.qnt) names shared
+outcome encodings. Read a profile's initialization and public actions alongside
+its binding; the declared units and choices are part of the versioned contract.
 
 The `causally-ready-v1` settlement contract requires each command's authorized
 native work to finish or reach a declared external gate or timer boundary before
@@ -174,16 +178,18 @@ from the repository root:
 
 ```sh
 make check         # Fast native checks and committed smoke; not full acceptance.
-make formal        # Full model/corpus checks, then prepared TS and Go replay.
+make formal        # Rust model/corpus checks, then prepared TS and Go replay.
+make model-check   # Separate finite symbolic checks; requires Java 21 and tar.
 make mutations     # Requires valid completion reports from the full run.
 make integration   # Real-server interoperability; requires Docker.
 ```
 
 `make ci NODE22_BIN=/path/to/node22/bin/node` runs all local lanes in order,
-including the exact Node 22.15.0 package floor. `make formal-corpus` produces the full
-corpus and completed TS evidence; `make formal-go` validates that evidence and
+including symbolic checks and the exact Node 22.15.0 package floor.
+`make formal-corpus` produces the full corpus and completed TS evidence;
+`make formal-go` validates that evidence and
 then prepares Go's run. These are the same entry points used by hosted CI.
-The manual/weekly full workflow performs the complete formal and mutation
+The manual/weekly full workflow performs the complete formal, symbolic and mutation
 checks; PR CI keeps native/race/smoke/audit and real-server integration checks,
 with conditional artifact recomputation. Behavior/model changes require full
 validation before merge, and every release or new-port acceptance requires the

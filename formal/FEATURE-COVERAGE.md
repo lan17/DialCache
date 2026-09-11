@@ -155,7 +155,7 @@ checks source results, later local publication and separate-request probes.
 Recovery-read observes actual marker existence and TTL before and after value
 work, and composes retained bytes with physical expiry and compressed recovery.
 Shadow-layers covers mixed served/dark capacity, request/local publication and
-captured fill policy. Named public-action regressions guarantee these corners
+captured fill policy. Scheduled public-action regressions anchor these corners
 without relying on random selection.
 
 Those additions do not enumerate arbitrary request trees, operation/key/instance

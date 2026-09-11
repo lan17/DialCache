@@ -3481,6 +3481,30 @@
       "reference": "formal/dialcache-recovery-conformance.qnt:recoveredFlightMemoIsReusedByBothRequestsTest",
       "kind": "regression",
       "scope": "Two request scopes sharing recovery each reuse the recovered result in a subsequent public call, with one read/source/decode and no shared writes."
+    },
+    {
+      "case": "C22.freshness-boundary",
+      "reference": "formal/dialcache-policy-conformance.qnt:remoteHitsRespectAcquiredFreshness",
+      "kind": "invariant",
+      "scope": "For each policy-profile read receipt, a remote hit requires eligible physically retained storage and nonnegative acquired wall-clock age strictly below the captured fresh TTL. The assertion states the age inequalities independently of the transition helper; it does not cover tracked frame decoding or shadow admission."
+    },
+    {
+      "case": "C22.freshness-boundary",
+      "reference": "formal/dialcache-policy-conformance.qnt:remoteHitBeforeBoundaryDoesNotRenewFreshnessTest",
+      "kind": "regression",
+      "scope": "A public untracked remote read hits at age 500 ms, then the same retained frame misses at exact age 1000 ms without renewal from the first hit. One source refills with a distinct value and a later read reuses it; local caching is disabled."
+    },
+    {
+      "case": "C52.expired-miss-may-fill",
+      "reference": "formal/dialcache-shadow-conformance.qnt:c0AcquisitionsRespectFreshness",
+      "kind": "invariant",
+      "scope": "Each successful non-abandoned shadow C0 acquisition records its readable snapshot, acquisition wall time, fresh ceiling and acceptance. Acceptance requires nonnegative age strictly below that ceiling; later comparison and C1 confirmation do not reclassify the recorded decision."
+    },
+    {
+      "case": "C52.expired-miss-may-fill",
+      "reference": "formal/dialcache-shadow-conformance.qnt:c0AtExactFreshnessBoundaryRefillsTest",
+      "kind": "regression",
+      "scope": "A public C1 confirmation completes using retained bytes at age 60000 ms. A subsequent job reacquires the same stored bytes as C0 at exact freshness age 60000 ms, does not decode them, and fills once from the accepted caller source. This checks C0 reacquisition rather than changing the prior job's retained decision."
     }
   ],
   "definitions": [

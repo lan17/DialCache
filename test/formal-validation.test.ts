@@ -137,12 +137,16 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     expect(() => checkPrerequisites("ci", { directory, environment, nodeVersion: "v24.20.0" })).not.toThrow();
   });
 
-  it("requires Java 21 for symbolic lanes without requiring it for routine native checks", () => {
+  it("isolates Java and symbolic checks from corpus generation and exploration", () => {
     fakeTool("java", 'console.log("openjdk 17.0.12")');
-    for (const target of ["model-check", "formal-corpus", "explore"]) {
+    for (const target of ["model-check", "ci"]) {
       expect(() => checkPrerequisites(target, { directory, environment, nodeVersion: "v24.20.0" })).toThrow(/requires Java 21/);
     }
-    expect(() => checkPrerequisites("check-ts", { directory, environment, nodeVersion: "v24.20.0" })).not.toThrow();
+    for (const target of ["check-ts", "formal", "formal-corpus", "explore"]) {
+      expect(() => checkPrerequisites(target, { directory, environment, nodeVersion: "v24.20.0" })).not.toThrow();
+      expect(validationPlan(target, { directory }).some(step => step.args?.[0] === "formal/check-symbolic-models.mjs")).toBe(false);
+    }
+    expect(validationPlan("ci", { directory }).filter(step => step.args?.[0] === "formal/check-symbolic-models.mjs")).toHaveLength(1);
     fakeTool("java", 'console.log("openjdk 21.0.11 2026-04-21 LTS")');
     expect(() => checkPrerequisites("model-check", { directory, environment, nodeVersion: "v24.20.0" })).not.toThrow();
   });

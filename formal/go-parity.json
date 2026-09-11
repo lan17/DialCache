@@ -8,10 +8,10 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "f6a9c877799200ca0c4b1d2f7769b809df417baad6dc24ff03cfaa65685994a9",
-    "executionSha256": "07fcb6b6f0876e1cefad9bace82aeb20f87c16d20496e662be6ab2720cc25d4e",
-    "sourceAuditSha256": "32b459e21f86ad882215dc40484e2e3e4e295a651658f37c794574a2ed9f25ec",
-    "quintCaseAuditSha256": "5cfeca45726ca11e426afb3fa8c7ac0bdaec956273684d442e9e6fd6f3f69b9c",
+    "semanticCasesSha256": "2e18fcb7d8344cff80d4c9ef2a2291dd4e04474a5b4e05ea65869c57f5a30af7",
+    "executionSha256": "fa0e1f076b05d63943b45ee49e5c3e67dfc0b5988aef75449fdd05e7fa7f9ed3",
+    "sourceAuditSha256": "bebecb2fa792de04ee004b1582b50b0ce432f5bf11c917f3eb1812e2416e43fa",
+    "quintCaseAuditSha256": "be457d451c8530c8297507ad9f4b8cc7a1ee7270684ca088fc929aa7808156a4",
     "featureCoverageSha256": "2e59570c657a6393d5f1bf2f33e27e3825c84a15ed54f902543327fcc08439a0",
     "coverageWitnessesSha256": "8fc8ab123150fdec059f5b75f84172d39af80d08d7a4211fa88c63c5a3f2874b",
     "profilesSha256": "6dffed03ebb8e916731bd2f34f81cd7cb6f1905a21ccc83b185c77f234b7455c"
@@ -45,12 +45,12 @@
     "casesWithQuintGeneratedVectors": 22,
     "withoutModelDrivenReplay": [],
     "quintModels": 32,
-    "scheduledInvariants": 212,
-    "scheduledRegressions": 399,
+    "scheduledInvariants": 214,
+    "scheduledRegressions": 401,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
     "caseReferencedWitnesses": 285,
-    "exportedRegressionHistories": 208
+    "exportedRegressionHistories": 234
   },
   "profiles": [
     {
@@ -94,7 +94,28 @@
         "unsafeFenceRefillsAndIsReadableTest",
         "observerFailuresCannotReplaceSourceErrorTest",
         "libraryReadBudgetIsFiftyMillisecondsTest",
-        "untrackedFencedReplyRefillsAndIsReadableTest"
+        "untrackedFencedReplyRefillsAndIsReadableTest",
+        "readDurationIncludesDecodeTest",
+        "sourceDurationExcludesPublicationTest",
+        "lateSourceCannotRepeatFailureMetricTest",
+        "timedOutLoaderOverlapsNewFlightTest",
+        "acceptedWriteOutlivesDeadlineTest",
+        "delayedWriteRemainsFencedTest",
+        "readTimeoutStartsIndependentSourceDeadlineTest",
+        "lateReadCannotBecomeHitTest",
+        "acquiredDecodeSurvivesInvalidationAndDeadlineTest",
+        "readFailureNeverRefillsTest",
+        "decodeFailureMayRefillTest",
+        "dumpFailurePreservesSourceTest",
+        "writeFailurePreservesSourceTest",
+        "rollbackDuringDumpRechecksObservedFenceTest",
+        "rollbackDoesNotExtendSourceDeadlineTest",
+        "lateReadRejectionUsesDeadlineCategoryTest",
+        "successfulReadClearsDeadlineBeforeDecodeTest",
+        "readFailureKeepsCategoryAndDeniesRefillTest",
+        "decodeFailureKeepsCategoryAndAllowsRefillTest",
+        "dumpFailureKeepsCategoryAndSourceValueTest",
+        "writeFailureKeepsCategoryAndSourceValueTest"
       ],
       "status": "executable-profile-schedule",
       "witnessSources": [
@@ -213,7 +234,8 @@
         "invalidLocalTtlStillServesFreshRemoteTest",
         "recoveryAgeEqualToFreshTtlStillServesFreshRemoteTest",
         "negativeRecoveryAgeStillServesFreshRemoteTest",
-        "providerFailureReportsStablePolicyCategoryTest"
+        "providerFailureReportsStablePolicyCategoryTest",
+        "remoteHitBeforeBoundaryDoesNotRenewFreshnessTest"
       ],
       "status": "executable-profile-schedule",
       "witnessSources": [
@@ -236,7 +258,8 @@
         "confirmationPastFreshnessKeepsOriginalPayloadAndAgeTest",
         "confirmationRollbackKeepsPayloadAndClampsAgeTest",
         "futureDarkAcquisitionReportsOffsetAndFillsMissTest",
-        "futureLateDarkReadKeepsTimeoutAndReportsOffsetTest"
+        "futureLateDarkReadKeepsTimeoutAndReportsOffsetTest",
+        "c0AtExactFreshnessBoundaryRefillsTest"
       ],
       "status": "executable-profile-schedule",
       "witnessSources": [
@@ -311,7 +334,10 @@
       "scheduledRegressions": [
         "staggeredSourceStartsKeepIndependentBudgetsTest",
         "staggeredSourcesExpireAtTheirOwnDeadlineTest",
-        "independentRecoveryAtCapturedAgeBoundaryTest"
+        "independentRecoveryAtCapturedAgeBoundaryTest",
+        "independentReadDeadlinesStartSeparateSourcesTest",
+        "timedOutReadCannotAffectAnotherCallTest",
+        "readFailureCannotBorrowAnotherCallsRefillTest"
       ],
       "status": "executable-profile-schedule",
       "witnessSources": [
@@ -2789,7 +2815,9 @@
         "formal/dialcache-stale-recovery.qnt:lastFreshAgeSkipsSourceTest",
         "formal/dialcache-recovery-conformance.qnt:lastFreshReadDoesNotInvokeSourceTest",
         "formal/dialcache-policy-conformance.qnt:exactRemoteFreshBoundaryStartsSourceTest",
-        "formal/dialcache-rule-checks.qnt:freshBoundaryIsExclusive"
+        "formal/dialcache-rule-checks.qnt:freshBoundaryIsExclusive",
+        "formal/dialcache-policy-conformance.qnt:remoteHitsRespectAcquiredFreshness",
+        "formal/dialcache-policy-conformance.qnt:remoteHitBeforeBoundaryDoesNotRenewFreshnessTest"
       ],
       "requiredGenerated": [
         {
@@ -2826,7 +2854,8 @@
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
         "policy/exactRemoteFreshBoundaryStartsSourceTest",
-        "recovery/lastFreshReadDoesNotInvokeSourceTest"
+        "recovery/lastFreshReadDoesNotInvokeSourceTest",
+        "policy/remoteHitBeforeBoundaryDoesNotRenewFreshnessTest"
       ],
       "generatedVectors": []
     },
@@ -10655,7 +10684,9 @@
       "rule": "An expired C0 is a semantic miss; a dark job may fill from the accepted caller source.",
       "kind": "portable-behavior",
       "quintProperties": [
-        "formal/dialcache-shadow-layers-conformance.qnt:expiredC0CanFillAndServeNewValueTest"
+        "formal/dialcache-shadow-layers-conformance.qnt:expiredC0CanFillAndServeNewValueTest",
+        "formal/dialcache-shadow-conformance.qnt:c0AcquisitionsRespectFreshness",
+        "formal/dialcache-shadow-conformance.qnt:c0AtExactFreshnessBoundaryRefillsTest"
       ],
       "requiredGenerated": [
         {
@@ -10677,7 +10708,8 @@
       "status": "executable-generated",
       "gaps": [],
       "quintReplays": [
-        "shadow-layers/expiredC0CanFillAndServeNewValueTest"
+        "shadow-layers/expiredC0CanFillAndServeNewValueTest",
+        "shadow/c0AtExactFreshnessBoundaryRefillsTest"
       ],
       "generatedVectors": []
     },
@@ -18210,7 +18242,7 @@
   ],
   "reviewedTestAndDocumentationAudit": {
     "path": "formal/source-audit.json",
-    "sha256": "32b459e21f86ad882215dc40484e2e3e4e295a651658f37c794574a2ed9f25ec",
+    "sha256": "bebecb2fa792de04ee004b1582b50b0ce432f5bf11c917f3eb1812e2416e43fa",
     "sourceFiles": 44,
     "status": "reviewed-applicability-not-execution",
     "limitations": "These rows review Go applicability for the public documentation and ordinary test files in source-audit.json sources, inheriting their C/W/E/B/X classifications. They map subjects to native artifacts without claiming one Go test per TypeScript assertion or turning documentation counts into executed coverage. The same audit hash also binds reviewedGuides for formal and Go documentation; those guide reviews are freshness/scope records, not additional behavioral applicability rows. Per-case Quint and replay evidence is recorded separately.",

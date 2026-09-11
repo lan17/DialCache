@@ -171,7 +171,7 @@ module dialcache_tracked_invalidation {
   // Invariants
   val servedSnapshotClearedObservedFence =
     s.readPhase != ReadServed or
-      (s.snapshotPresent and fenceAllows(s.snapshotCreatedAt, s.snapshotWatermark))
+      (s.snapshotPresent and s.snapshotCreatedAt > s.snapshotWatermark)
 
   val staleValueAfterInvalidationIsFenced =
     not(bufferCoversStaleWrites) or

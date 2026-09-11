@@ -91,36 +91,47 @@ encodings, smoke traces and implementation declarations.
 Use Node 24, pnpm 10.33.0 and Go 1.27.1 to match CI. Install dependencies with
 `corepack pnpm install --frozen-lockfile`. Model work requires Quint 0.32.0 and
 Rust evaluator 0.6.0 (`npm install --global @informalsystems/quint@0.32.0`).
-Symbolic model checking also needs Java 21; Quint uses pinned Apalache 0.56.1.
+`make formal` and `make explore` use the Rust evaluator and do not need Java.
+The separate `make model-check` target needs Java 21 and `tar`. Its standalone
+Apalache 0.56.1 runner downloads the versioned release, verifies the SHA-256 in
+[execution.json](./execution.json), and extracts those verified bytes afresh.
+The archive is cached under `~/.cache/dialcache/apalache/0.56.1/`; for offline
+use, supply `APALACHE_ARCHIVE=/absolute/path/to/apalache-0.56.1.tgz`. Supplied
+archives must pass the same checksum check.
+
 Real-server tests require Docker. The package floor requires exact Node 22.15.0
-provided through `NODE22_BIN`. Make targets check prerequisites; they do not
-install tools.
+provided through `NODE22_BIN`. Make targets check the installed prerequisites;
+only the symbolic runner downloads its pinned solver archive.
 
 ```sh
 make help          # Targets and prerequisites.
 make check         # Native checks, package, docs and inventories.
 make smoke         # Committed Quint-derived histories in both ports.
-make formal        # Models, full generated corpus and both-port completion.
-make model-check   # Focused symbolic rule checks (also part of make formal).
+make formal        # Rust model checks, full corpus and both-port completion.
+make model-check   # Separate finite symbolic checks; Java 21 and tar required.
 make mutations     # Challenge assertions after full replay has passed.
 make integration   # Real Redis/Valkey/Cluster and interoperability.
 make explore       # Fresh recorded seed in an isolated source snapshot.
 make ci NODE22_BIN=/absolute/path/to/node22/bin/node
 ```
 
-`make formal-corpus` runs models, generation and TS completion; `make formal-go`
-resumes with Go against that exact corpus. `make mutations-ts` and
+`make formal-corpus` runs Rust model checks, generation and TS completion;
+`make formal-go` resumes with Go against that exact corpus. `make mutations-ts` and
 `make mutations-go` split the fault campaigns. `make fixtures-check` recomputes
 committed artifacts; after an intentional model edit, update them with
-`node formal/generate-artifacts.mjs --write` first.
+`node formal/generate-artifacts.mjs --write` first. `make ci` includes the
+separate symbolic checks after `make formal`, as well as the other local lanes.
 
 Pinned acceptance clears inherited trace selectors and `QUINT_SEED`. Exploration
 keeps a separate source snapshot, seed, corpus and diagnostic replay evidence. See
 [VALIDATION.md](./VALIDATION.md) for CI policy and report interpretation.
 
-Named public-action Quint regressions guarantee reviewed boundaries independently
-of sampling. Both ports replay those histories and the complete sampled corpus.
-Private state-patch checks stay model-only unless rewritten as public actions.
+Scheduled named public-action Quint regressions exercise their declared
+boundaries independently of sampling. Both ports replay those histories and the
+complete sampled corpus; required witness coverage is checked across their
+union. A model regression reaches implementations only when registered for
+replay in `execution.json`. Private state-patch checks stay model-only unless
+rewritten as public actions.
 
 Replay one failing feature history:
 

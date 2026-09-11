@@ -106,6 +106,8 @@ export function validateExecution(manifest = readExecution(), {
     names(model.invariants, `${model.path} invariants`);
     if (model.symbolic !== undefined) {
       if (manifest.symbolic?.backend !== 'apalache' || manifest.symbolic.version !== '0.56.1') throw new Error('Unsupported symbolic backend or version');
+      if (manifest.symbolic.archive?.url !== 'https://github.com/apalache-mc/apalache/releases/download/v0.56.1/apalache-0.56.1.tgz'
+        || !/^[a-f0-9]{64}$/.test(manifest.symbolic.archive.sha256)) throw new Error('Symbolic checking requires a versioned release archive and approved SHA-256');
       positiveInteger(model.symbolic.maxSteps, `${model.path} symbolic.maxSteps`);
       positiveInteger(model.symbolic.timeoutMs, `${model.path} symbolic.timeoutMs`);
     }

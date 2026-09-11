@@ -69,6 +69,7 @@ module dialcache_shadow_conformance {
     coalesced: List[str], fallbackErrors: List[str],
     futureOffsets: List[{ layer: str, offsetMs: int }]
   }
+  type C0ReadReceipt = { readable: bool, created: int, observed: int, fresh: int, accepted: bool }
 
   // State: diagnostics, independent source/job lifecycles, and remote bytes.
   type State = {
@@ -77,6 +78,7 @@ module dialcache_shadow_conformance {
     hook: bool, shadowActive: bool, defaultLog: bool, log: bool, acceptedLog: bool,
     invalidShadow: bool, invalidLog: bool, acceptedInvalidLog: bool,
     mismatchAuthorizations: List[bool],
+    c0ReadReceipts: List[C0ReadReceipt],
     c0Created: int, deadline: int, phase: int, source: int,
     sourcePending: bool, sourceValue: int, abandoned: bool,
     frame: int, created: int, watermark: int, c0: int, fence: int, writeStamp: int,
@@ -146,7 +148,7 @@ module dialcache_shadow_conformance {
       defaultLog: choice >= FIRST_LOGGING_FIXTURE and choice < FIXTURE_NO_HOOK,
       log: choice >= FIRST_LOGGING_FIXTURE and choice < FIXTURE_NO_HOOK,
       acceptedLog: false, invalidShadow: false, invalidLog: false, acceptedInvalidLog: false,
-      mismatchAuthorizations: List(), c0Created: 0, deadline: 0,
+      mismatchAuthorizations: List(), c0ReadReceipts: List(), c0Created: 0, deadline: 0,
       phase: IDLE, source: SOURCE_NOT_STARTED,
       sourcePending: false, sourceValue: 0, abandoned: false,
       frame: NO_PAYLOAD, created: 0, watermark: 0, c0: NO_PAYLOAD, fence: 0, writeStamp: 0,
@@ -225,6 +227,7 @@ module dialcache_shadow_conformance {
     s.phase == C0_READ or s.phase == CONFIRMATION_READ,
     val readable = s.frame > NO_PAYLOAD and fenceAllows(s.created, s.watermark)
     val snapshot = if (readable) s.frame else NO_PAYLOAD
+    val acquired = if (freshAgeAllowed(s.created, s.wall, FRESHNESS_MS)) snapshot else NO_PAYLOAD
     // Raw read validation has its own read budget. Within this profile's
     // elapsed-time bounds it may report a future timestamp even after the
     // shorter job budget expired; the abandoned job still cannot continue.
@@ -239,8 +242,11 @@ module dialcache_shadow_conformance {
       else if (s.readFailed) done(measured, "redis_error")
       else continueJob({
         phase: SOURCE_WAIT,
-        c0: if (not(freshAgeAllowed(s.created, s.wall, FRESHNESS_MS)))
-          NO_PAYLOAD else snapshot,
+        c0: acquired,
+        c0ReadReceipts: s.c0ReadReceipts.append({
+          readable: readable, created: s.created, observed: s.wall,
+          fresh: FRESHNESS_MS, accepted: acquired > NO_PAYLOAD
+        }),
         c0Created: s.created,
         fence: if (readable) 0 else s.watermark,
         ...measured
@@ -454,6 +460,13 @@ module dialcache_shadow_conformance {
   val warningsRequireValidCapturedPolicy = s.d.warnings == s.mismatchAuthorizations.select(allowed => allowed).length()
   val invalidLoggingCannotBeCaptured = not(s.acceptedInvalidLog and s.acceptedLog)
   val expiredSourceWorkSkipsRedis = s.sourceWorkMs < JOB_BUDGET_MS or s.o.reads == 0
+  // Only C0 acquisition classifies freshness. Later comparison and C1 reads
+  // keep that decision, even when the wall clock passes the original bound.
+  val c0AcquisitionsRespectFreshness = s.c0ReadReceipts.indices().forall(index => {
+    val receipt = s.c0ReadReceipts.nth(index)
+    receipt.accepted == (receipt.readable and receipt.created <= receipt.observed
+      and receipt.observed - receipt.created < receipt.fresh)
+  })
 
   // Deterministic model regressions ------------------------------------------
   // Fixtures can patch ownership to challenge a property. They preserve the
@@ -641,6 +654,18 @@ module dialcache_shadow_conformance {
     .expect(s.o.calls == List(VALUE_TWO) and s.o.shadow == List("mismatch")
       and s.o.reads == 2 and s.o.loads == 1 and s.o.writes == 0
       and s.d.ages == List(60000) and s.d.warnings == 1 and s.d.futureOffsets == List())
+
+  // C1 may finish with its retained bytes at the boundary. The next job's C0
+  // must classify those same stored bytes again and refill instead of decoding.
+  run c0AtExactFreshnessBoundaryRefillsTest = initialize(COMPARE_UNEQUAL)
+    .then(seedAt(TEXT_ONE)).then(beginCall).then(releaseRead).then(resolveAt(VALUE_TWO))
+    .then(releaseLoad).then(advanceWallBy(FRESHNESS_MS)).then(releaseRead)
+    .expect(s.o.shadow == List("mismatch") and s.o.loads == 1 and s.o.writes == 0)
+    .then(beginCall).then(releaseRead).then(resolveAt(VALUE_TWO))
+    .expect(s.o.calls == List(VALUE_TWO, VALUE_TWO) and s.o.loads == 1 and s.o.dumps == 1)
+    .then(releaseDump).then(releaseWrite)
+    .expect(s.o.shadow == List("mismatch", "filled") and s.o.reads == 3
+      and s.o.loads == 1 and s.o.writes == 1 and s.d.ages == List(FRESHNESS_MS))
 
   run confirmationRollbackKeepsPayloadAndClampsAgeTest = initialize(FIRST_LOGGING_FIXTURE + COMPARE_UNEQUAL)
     .then(seedAt(TEXT_ONE)).then(beginCall).then(releaseRead).then(resolveAt(VALUE_TWO))

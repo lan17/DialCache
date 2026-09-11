@@ -38,13 +38,17 @@ caller ownership and permitted acceptance for the named scope:
 | effects | [Source start and accepted publication timing](./dialcache-effects-connection.qnt) |
 | source-budgets | [Captured source origin, budget and follower ownership](./dialcache-source-connection.qnt) |
 
-Independent properties retain their own acceptance receipts and directly state
-the required inequalities/effects. They do not call the transition helper they
-are intended to challenge. [Finite symbolic checks](./dialcache-rule-checks.qnt)
-cover the shared decision boundaries; compiling model mutations challenge both
-rule properties and profile connections. These connections check the listed
-obligations under each profile's bounds; other contracts retain their focused
-models and replay evidence. Full-system refinement and fairness are not claimed.
+Properties have different roles. The boundary assertions in
+[dialcache-rule-checks.qnt](./dialcache-rule-checks.qnt) state inequalities
+directly to challenge the shared predicates. Selected receipt invariants, such
+as recovery age and local-hit expiry, also compare independently retained facts.
+Connection and composition properties may reuse canonical predicates through
+`cache-contract.qnt`; they check capture, ownership and history against those
+definitions, rather than independently validating each predicate's meaning.
+Compiling model mutations challenge the particular rule or connection property
+named in the catalog. Connections establish only their listed obligations under
+each profile's bounds; other contracts retain focused models and replay
+evidence. Full-system refinement and fairness are not claimed.
 
 ## Meaning of conformance
 

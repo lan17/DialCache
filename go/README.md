@@ -166,31 +166,35 @@ Go's native registry cannot expose empty histogram buckets; see the precise
 ## Validation and reproducing a trace
 
 Use the repository [Make targets](../Makefile) from its root. CI pins Go
-1.27.1, Node 24 and pnpm 10.33.0. Full generation additionally needs Quint
-0.32.0 with Rust evaluator 0.6.0 and Java 21 for symbolic checks; integration
-needs Docker. Go conformance tests use the shared Node replay coordinator for
-command mappings and assertions. The cache library itself has no Node dependency.
+1.27.1, Node 24 and pnpm 10.33.0. Full generation and exploration additionally
+need Quint 0.32.0 with Rust evaluator 0.6.0, but no Java. The separate
+`make model-check` target needs Java 21 and `tar` for checksummed standalone
+Apalache; integration needs Docker. Go conformance tests use the shared Node
+replay coordinator for command mappings and assertions. The cache library itself
+has no Node dependency.
 Follow the
 [shared prerequisite guide](../formal/README.md#generating-and-replaying-behavior)
 once, then:
 
 ```sh
 make check-go      # Native checks, committed cases/smoke and race detection.
-make formal        # Full models/corpus and prepared TS replay, then Go replay.
+make formal        # Rust model/corpus checks and prepared TS replay, then Go replay.
+make model-check   # Separate finite symbolic checks.
 make mutations-go  # Requires current full TS and Go completion reports.
 make integration-go
 ```
 
 `make check` runs both languages' fast checks.
 `make ci NODE22_BIN=/path/to/node22/bin/node` runs all local lanes in order,
-including the exact Node 22.15.0 packed-package floor. For a full run resumed after `make formal-corpus`, use
-`make formal-go`; it validates the completed TS evidence before preparing Go.
+including symbolic checks and the exact Node 22.15.0 packed-package floor. For a
+full run resumed after `make formal-corpus`, use `make formal-go`; it validates
+the completed TS evidence before preparing Go.
 Reports and traces are kept in `.formal-traces/`. Source, corpus or witness
 changes invalidate completion reports; mutation targets reject stale evidence.
 
 The same targets run in CI. PRs retain native/race/smoke/audit and real-server
 integration checks; model/generator changes trigger fixture recomputation.
-The complete formal and mutation workflow runs manually and weekly. A smoke
+The complete formal, symbolic and mutation workflow runs manually and weekly. A smoke
 pass does not satisfy the full parity inventory. Behavior/model changes
 still need full validation before merge, as do releases and new ports.
 

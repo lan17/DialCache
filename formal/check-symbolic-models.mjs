@@ -1,12 +1,12 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { accessSync, closeSync, constants, mkdirSync, openSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
+import { closeSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
-import { basename, delimiter, dirname, resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { readExecution, validateExecution } from './execution.mjs';
+import { prepareApalache } from './apalache.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const hash = path => createHash('sha256').update(readFileSync(path)).digest('hex');
@@ -88,20 +88,6 @@ export async function startSymbolicServer({ launcher, jar, version, output, endp
   } catch (error) { await stop(); throw error; }
 }
 
-async function installedApalache(version) {
-  // Use the pinned Quint installation's cache/downloader, including first use.
-  // This small dependency on Quint 0.32's internal API must be reviewed on upgrade.
-  const executable = (process.env.PATH ?? '').split(delimiter).map(path => resolve(path, 'quint')).find(path => {
-    try { accessSync(path, constants.X_OK); return true; } catch { return false; }
-  });
-  if (!executable) throw new Error('Cannot locate the pinned Quint executable');
-  const require = createRequire(realpathSync(executable));
-  const result = await require('./apalache.js').fetchApalache(version, 0);
-  if (result.isLeft()) throw new Error(`Cannot prepare Apalache ${version}: ${JSON.stringify(result.value)}`);
-  const launcher = realpathSync(result.value);
-  return { launcher, jar: resolve(dirname(launcher), '../lib/apalache.jar') };
-}
-
 export async function checkSymbolicModels({ directory = root } = {}) {
   const output = resolve(directory, '.formal-traces/symbolic');
   mkdirSync(output, { recursive: true });
@@ -110,21 +96,23 @@ export async function checkSymbolicModels({ directory = root } = {}) {
   const save = () => writeFileSync(resolve(output, 'report.json'), JSON.stringify(report, null, 2) + '\n');
   // Invalidate a previous pass before even reading or validating the manifest.
   save();
-  let server;
+  let server, installation;
   try {
     const manifest = JSON.parse(readFileSync(resolve(directory, 'formal/execution.json'), 'utf8'));
     validateExecution(manifest);
     const plan = symbolicPlan(manifest);
     report.backend = manifest.symbolic;
     const sources = ['formal/execution.json', 'formal/execution.mjs', 'formal/generated-fixtures.lock.json',
-      'formal/check-symbolic-models.mjs', ...manifest.libraries, ...manifest.models.map(model => model.path)];
+      'formal/check-symbolic-models.mjs', 'formal/apalache.mjs', ...manifest.libraries, ...manifest.models.map(model => model.path)];
     report.sources = Object.fromEntries(sources.map(path => [path, hash(resolve(directory, path))]));
     save();
     const version = spawnSync('quint', ['--version'], { cwd: directory, encoding: 'utf8', timeout: 15_000 });
     const pinned = JSON.parse(readFileSync(resolve(directory, 'formal/generated-fixtures.lock.json'), 'utf8')).quintVersion;
     if (version.error || version.status !== 0 || version.stdout.trim() !== pinned) throw new Error(`Symbolic checking requires Quint ${pinned}.`);
     report.quintVersion = version.stdout.trim();
-    server = await startSymbolicServer({ ...await installedApalache(manifest.symbolic.version),
+    installation = await prepareApalache(manifest.symbolic, { output });
+    report.archive = installation.archive;
+    server = await startSymbolicServer({ ...installation,
       version: manifest.symbolic.version, output });
     report.solver = server.evidence;
     save();
@@ -148,7 +136,7 @@ export async function checkSymbolicModels({ directory = root } = {}) {
     save();
     return report;
   } catch (error) { report.error = String(error); save(); throw error; }
-  finally { if (server) await server.stop(); }
+  finally { try { if (server) await server.stop(); } finally { installation?.cleanup(); } }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) await checkSymbolicModels();

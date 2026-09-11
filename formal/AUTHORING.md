@@ -108,6 +108,9 @@ predicate. For example, the transition can use a named recovery-age predicate,
 while its invariant independently compares the retained timestamp with the
 recorded acceptance time and exclusive maximum age. This intentional repetition
 provides evidence; it is not duplicate behavior to remove mechanically.
+Connection and composition checks can reuse a canonical predicate to check
+capture, ownership or history. State that dependency explicitly and keep a
+separate boundary property for faults in the predicate itself.
 
 ## Codifying the next behavior
 
@@ -159,8 +162,9 @@ follow recorded external inputs and actual effect ownership.
 
 ## Exporting a deterministic regression
 
-Sampled histories explore combinations. Named Quint regressions guarantee that
-a reviewed boundary is exercised even when a random seed does not reach it.
+Sampled histories explore combinations. Exported and scheduled named Quint
+regressions guarantee that their reviewed boundary is exercised in both ports
+even when a random seed does not reach it.
 Keep the expected result in Quint; do not copy it into a hand-maintained JSON
 scenario and call that Quint-driven evidence.
 
@@ -178,9 +182,11 @@ assignment to private model state is not an executable input.
 
 List exportable runs in the model's `replayRegressions` in `execution.json`.
 Generation exports them under `regressions/<profile>/` alongside the sampled
-corpus. Quint's deterministic test export omits MBT action metadata, so
-`replay-inputs.mjs` normalizes only the explicit input record into the common
-envelope. It never infers commands from differences in expected state.
+corpus. Quint's deterministic test export omits MBT action metadata.
+`replay-inputs.mjs` adds compatibility annotations derived only from the explicit
+input record to scheduled exports; it never infers commands from expected state.
+The coordinator also accepts raw regression exports directly. `input` remains
+authoritative, and any optional MBT annotations must agree with it.
 
 Each implementation validates the input domain, performs the real public
 operation, and compares its own observations after every step. Both completion

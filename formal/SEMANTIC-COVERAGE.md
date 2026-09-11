@@ -60,11 +60,17 @@ histories against those records.
 | Exported boundary regressions | The exact public command sequence is checked in Quint and against both implementations |
 
 `make model-check` runs the symbolic checks declared in `execution.json` through
-pinned Apalache. The model-property challenge catalog in
+checksummed standalone Apalache; see the [tool prerequisites](./README.md#generating-and-replaying-behavior).
+This lane is separate from `make formal` and included in `make ci`.
+The model-property challenge catalog in
 [model-property-challenges.mjs](./model-property-challenges.mjs) runs with the
 scheduled model checks and records its independent baseline and counterexample
 for each fault. Model receipts preserve the timestamp, captured policy and owner
-at acceptance; invariants use those facts without reusing the eligibility helper.
+at acceptance. Boundary properties can challenge an eligibility helper by
+stating the inequality directly. Connection and composition properties may
+reuse that helper while checking independently captured inputs, ownership and
+history; they do not thereby validate the helper itself. Each challenge's named
+property and scope determine what its detection establishes.
 
 Keep structural invariants because they expose broken model state, but report
 semantic obligations and mutation sensitivity separately. Sharing transition

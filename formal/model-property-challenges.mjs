@@ -180,5 +180,32 @@ export const modelPropertyChallenges = [
     "invariant": "independentSourceOriginsMatchContract",
     "before": "sources: x.sources.append({ caller: caller, active: true, pending: true,",
     "after": "sources: x.sources.append({ caller: 0, active: true, pending: true,"
+  },
+  {
+    "id": "tracked-read-inclusive-fence",
+    "contract": "C33",
+    "source": "formal/cache-rules.qnt",
+    "model": "formal/dialcache-tracked-invalidation.qnt",
+    "invariant": "servedSnapshotClearedObservedFence",
+    "before": "pure def fenceAllows(created: int, watermark: int): bool = created > watermark",
+    "after": "pure def fenceAllows(created: int, watermark: int): bool = created >= watermark"
+  },
+  {
+    "id": "policy-inclusive-remote-freshness",
+    "contract": "C22",
+    "source": "formal/dialcache-policy-conformance.qnt",
+    "model": "formal/dialcache-policy-conformance.qnt",
+    "invariant": "remoteHitsRespectAcquiredFreshness",
+    "before": "remoteEligible and freshAgeAllowed(s.remoteCreated.nth(s.key), s.wall, remoteTtl)",
+    "after": "remoteEligible and s.remoteCreated.nth(s.key) <= s.wall and s.wall - s.remoteCreated.nth(s.key) <= remoteTtl"
+  },
+  {
+    "id": "shadow-inclusive-c0-freshness",
+    "contract": "C49",
+    "source": "formal/dialcache-shadow-conformance.qnt",
+    "model": "formal/dialcache-shadow-conformance.qnt",
+    "invariant": "c0AcquisitionsRespectFreshness",
+    "before": "val acquired = if (freshAgeAllowed(s.created, s.wall, FRESHNESS_MS)) snapshot else NO_PAYLOAD",
+    "after": "val acquired = if (s.created <= s.wall and s.wall - s.created <= FRESHNESS_MS) snapshot else NO_PAYLOAD"
   }
 ];
