@@ -172,8 +172,8 @@ recovery configuration errors, and shadow configuration errors. Whole-second
 TTLs and millisecond deadlines retain distinct validation rules. Invalid
 shadow logging policy is reported only after actual shadow admission. These
 bindings have focused native tests and share the generated policy and shadow
-replay evidence above; the ledger identifies cases supported only by fixed or
-native evidence.
+replay evidence above. The ledger and feature inventory distinguish each
+portable case's Quint evidence from its additional native binding requirements.
 
 `MetricsAdapter.ObserveEvent` accepts backend-neutral diagnostics.
 `FailureIsolatedObserver` and `FailureIsolatedLogger` prevent exporter errors

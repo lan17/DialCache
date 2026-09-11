@@ -1,6 +1,6 @@
 # Core behavioral conformance profile
 
-This document specifies the current contract for `dialcache-conformance.qnt` and `test/formal-conformance.test.ts`. It is a first executable profile for implementation testing and porting, not a claim that all seven verification models already have language drivers.
+This document specifies the bounded `core` profile implemented by the TypeScript and Go replay drivers. Its model is `dialcache-conformance.qnt`; the full port target also requires the other profiles registered in [execution.json](./execution.json).
 
 ## Trace format and trust boundary
 
@@ -74,8 +74,8 @@ All counters are cumulative within a trace. These are adapter-level operations, 
 1. Run `protocol-vectors.json` against the implementation's keys and frame/decoder routines.
 2. Implement the environment/actions above against public operations and report the compared observations from real calls and adapter effects.
 3. Replay the committed smoke trace, then the same generated ITF corpus as TypeScript.
-4. Add profiles for additional features, with separately controlled external observations, deadlines, and loader settlement where races matter.
-   The [portable feature scenarios and pending-effect profile](./BEHAVIOR.md) already supply additional coverage for these boundaries.
+4. Implement the remaining registered profiles, with separately controlled external observations, deadlines, and loader settlement where races matter.
+   [BEHAVIOR.md](./BEHAVIOR.md) defines those profiles; [PORTING.md](./PORTING.md) defines the complete acceptance checks. Adding a new behavior requires updating Quint and its evidence before extending each port's driver.
 5. Record only passing profiles, the spec revision, generation seed/bounds, and backend/tool versions. Passing core does not establish stale recovery, shadow validation, runtime-policy, deadline, or delayed-invalidation conformance.
 
 Keep minimized or otherwise useful failing scenarios as regressions. Automatic shrinking is not implemented. The CI artifact and single-file replay command provide the current reproduction path.

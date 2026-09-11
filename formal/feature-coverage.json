@@ -1716,7 +1716,7 @@
     },
     {
       "id": "X02.malformed-compression-retains-raw",
-      "rule": "Malformed/truncated marked compression bodies degrade to unchanged raw data; valid streams consume the first frame under the declared native decoder semantics.",
+      "rule": "A marked body rejected by the native decoder is returned unchanged; an accepted body within the output cap uses the decoded result and the marker's text/binary conversion. Empty/truncated input acceptance and first-frame/trailing-byte handling follow the declared native decoder semantics.",
       "contracts": [
         "X02"
       ],
@@ -1729,19 +1729,19 @@
         {
           "test": "falls back to the raw payload when a marked Buffer is not zstd",
           "path": "test/compression.test.ts",
-          "scope": "Asserts that the TypeScript binding falls back to the raw payload when a marked Buffer is not zstd.",
+          "scope": "The tested invalid-zstd marked buffers return fallback_raw with the original payload reference.",
           "sha256": "f959a21148ad1803f7c4870ee0ceacf494a1b43aa6b558974541dd9dab7612bf"
         },
         {
           "test": "degrades marked payloads with empty or truncated bodies without throwing",
           "path": "test/compression.test.ts",
-          "scope": "Asserts that the TypeScript binding degrades marked payloads with empty or truncated bodies without throwing.",
+          "scope": "The tested empty and truncated marked bodies do not throw. Either decompressed or fallback_raw is accepted according to the native codec; fallback_raw must return the original payload reference.",
           "sha256": "f959a21148ad1803f7c4870ee0ceacf494a1b43aa6b558974541dd9dab7612bf"
         },
         {
           "test": "pins the legacy residual: a marker followed by a valid zstd stream is misread",
           "path": "test/compression.test.ts",
-          "scope": "Asserts that the TypeScript binding pins the legacy residual: a marker followed by a valid zstd stream is misread.",
+          "scope": "A legacy binary marker followed by the tested valid zstd stream is decoded; adding the tested CRC! trailer leaves that decoded payload unchanged.",
           "sha256": "f959a21148ad1803f7c4870ee0ceacf494a1b43aa6b558974541dd9dab7612bf"
         }
       ],
@@ -1749,13 +1749,13 @@
         {
           "test": "TestZstdFirstFrameAndMalformedBodies",
           "path": "go/codec_test.go",
-          "scope": "Trailing garbage and concatenated zstd data preserve first-frame decoding; empty/truncated marked bodies return their unchanged raw payload.",
+          "scope": "The tested CRC! trailer and concatenated copy preserve the first decoded frame. The tested empty bodies for both markers and truncated compressed body return fallback_raw with unchanged bytes.",
           "sha256": "c50ea59c78bfe50e1182c347bd2918d99e0598a52d463b116e6ab33f671e2e0a"
         }
       ],
-      "adaptation": "Legacy marker collisions can be indistinguishable from envelopes; first-frame and trailing-byte behavior is a documented decoder adaptation. Evidence gaps: No shared protocol vectors currently encode malformed/truncated zstd bodies, trailing garbage or concatenated streams; evidence is native tests.",
+      "adaptation": "Legacy marker collisions can be indistinguishable from envelopes. Native codecs can differ in whether empty or truncated input is accepted; rejection preserves the marked bytes, while acceptance follows the decoder result and envelope type. Shared Quint envelope cases 135-170 cover rejected ff, 28b5 and 28b52ffd bodies under both markers, with native runners verifying the codec inputs before checking wrapper fallback. Selected first-frame and trailing-byte behaviors remain native adaptation evidence.",
       "gaps": [
-        "No shared protocol vectors currently encode malformed/truncated zstd bodies, trailing garbage or concatenated streams; evidence is native tests."
+        "Shared Quint wrapper evidence covers selected invalid/truncated headers, not arbitrary malformed streams, trailers, concatenated streams, dictionaries or windows. Their codec acceptance and resource boundaries remain native evidence; the listed tests establish only their specific fixtures."
       ]
     },
     {

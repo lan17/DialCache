@@ -1074,13 +1074,13 @@
       "case": "C45.recheck-before-decode",
       "reference": "formal/dialcache-recovery-conformance.qnt:maximumAgeBeforeDecodePreservesSourceTest",
       "kind": "regression",
-      "scope": "A classifier exists for maximum-age-before-decode-skips-load, but unchanged generated corpus does not reach it; fixed scenario and checked regression only. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+      "scope": "This bounded regression retains a candidate at M-1, advances to M before source rejection, and checks a source-error result with no load and one recovery miss. The separate recovery-read replay and required witness additionally bind compressed bytes and original source-error identity."
     },
     {
       "case": "C45.recheck-before-decode",
       "reference": "formal/dialcache-stale-recovery.qnt:maximumAgeBeforeDecodeSkipsLoadingTest",
       "kind": "regression",
-      "scope": "A classifier exists for maximum-age-before-decode-skips-load, but unchanged generated corpus does not reach it; fixed scenario and checked regression only. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+      "scope": "This abstract regression advances a retained candidate to its maximum age before the recovery check, preserving the source-rejection category without decoding or request publication. The separate recovery-read replay and required witness additionally bind compressed bytes and original source-error identity."
     },
     {
       "case": "C45.preserve-source-error",
@@ -1248,7 +1248,7 @@
       "case": "C54.unowned-caller-releases-slot",
       "reference": "formal/dialcache-shadow-validation.qnt:timedOutShadowStillAllowsCallerResultTest",
       "kind": "regression",
-      "scope": "Abstract verification allows independent caller settlement after diagnostic timeout. Slot release and finite-vs-unbounded source distinctions remain in fixed native/portable scenarios. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+      "scope": "This abstract regression allows independent caller settlement after diagnostic timeout and checks no fill or detached source; it does not model slot reuse or finite-versus-unbounded source budgets. The separate shadow-layers regression and required witness establish slot release with an explicitly unbounded caller by admitting a second same-key dark read."
     },
     {
       "case": "C51.changed-confirmation",
@@ -1314,7 +1314,7 @@
       "case": "C38.value-work-does-not-extend-marker",
       "reference": "formal/dialcache-tracked-invalidation.qnt:readsAndValueWritesDoNotMoveWatermarkTest",
       "kind": "regression",
-      "scope": "The model checks cutoff preservation. Marker existence/TTL preservation requires wire/native integration and existing fixed scenarios. This cited bounded model clause complements the fixed and generated consequences; it does not prove every host input or scheduling combination."
+      "scope": "This regression checks cutoff preservation only; it does not model marker existence or TTL. The separate recovery-read regressions and required witnesses probe continued marker absence or unchanged cutoff and expiry across ordinary reads and value writes, with real-server protocol integration remaining additional evidence."
     },
     {
       "case": "C51.changed-confirmation",

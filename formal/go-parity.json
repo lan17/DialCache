@@ -8,11 +8,11 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "63ca6519fe7671d428a1740ddbe0e6a16cf4e112056535416d184bd83eeb7365",
+    "semanticCasesSha256": "072f43aa19d9977f08946e0bb5ef74b10008d3f0954dc165fa6fab0a7a67d9e5",
     "executionSha256": "b483b5708aae5ba8add03d08d39136023e63d271e95dadbdbf99209aebc38d84",
-    "sourceAuditSha256": "323ba7a4abcf34b5efb265de9840e3ad92a4fc2b8aea182d67980d97dd9096f3",
-    "quintCaseAuditSha256": "d63bb18300099f43970410f37f39fe71cd1ae965e06372bf4466637d60e29ea9",
-    "featureCoverageSha256": "69d5276e324c75c6a21305f10432f994c863587a0f7bf800b23ce05278bcb11d",
+    "sourceAuditSha256": "72fc9dcefcf73f1f86983e38f439189e2bac2167ae6491bbcefacac0164ef393",
+    "quintCaseAuditSha256": "817edb12bcf9f18571d95c123fe25a6377e2064129f50e2ed89d896ff835dafc",
+    "featureCoverageSha256": "2e59570c657a6393d5f1bf2f33e27e3825c84a15ed54f902543327fcc08439a0",
     "coverageWitnessesSha256": "8fc8ab123150fdec059f5b75f84172d39af80d08d7a4211fa88c63c5a3f2874b",
     "profilesSha256": "1c6d623da751ba743fc5c39dc91f6b617e344a8cdd87268990693ff489a64aa5"
   },
@@ -3560,7 +3560,7 @@
         "typescript": ".formal-traces/ts-replay.json",
         "go": ".formal-traces/go-replay.jsonl",
         "nativeGo": [],
-        "scope": "The concrete Go local map has no fallible read operation under its clock/ownership preconditions. The portable local-read fault remains a model-only injection boundary; Go retains a fail-open panic guard."
+        "scope": "The local-failure profile injects a panic through Go's local-storage integer-clock boundary while successful operations use real local storage. Shared histories and public-action regressions observe fall-through, preservation of the prior local value, suppression of later local publication, and request memoization through public probes. This is a bounded fault seam, not arbitrary resource-failure coverage."
       },
       "quintDefinitions": [
         "formal/dialcache-local-failure-conformance.qnt:acquired"
@@ -12291,7 +12291,7 @@
       },
       {
         "id": "B02",
-        "rationale": "Explicit context propagation, live callback-scoped holders, channels, goroutines and TimerClock/DeferredExecutor replace AsyncLocalStorage, promises and Node timer handles. Callback panics become typed errors, telemetry failures are contained, and abandonment cannot prove raw work or a Redis command stopped. Shared histories check deadline, ownership and failure consequences; native race and callback tests complement them. Native precision tests additionally bind the existing C23/C25 elapsed-time rules to fractional invocation origins: the default clock retains monotonic duration precision before subtraction, while legacy custom clocks retain their declared integer-millisecond resolution. These tests supplement the existing integer-tick histories and add no generated coverage.",
+        "rationale": "Explicit context propagation, live callback-scoped holders, channels, goroutines and TimerClock/DeferredExecutor replace AsyncLocalStorage, promises and Node timer handles. Callback panics become typed errors, telemetry failures are contained, and abandonment cannot prove raw work or a Redis command stopped. Shared histories check deadline, ownership and failure consequences; native race and callback tests complement them. Native precision tests additionally bind the existing C23/C25 elapsed-time rules to fractional invocation origins: the default clock retains monotonic duration precision before subtraction, while legacy custom clocks retain their declared integer-millisecond resolution. The local-clock profile separately supplies fractional insertion/expiry and shared-instance-grid histories. Native tests supplement that generated local scope with precise source/read/shadow deadlines, early timer delivery and custom-clock compatibility; integer-tick profiles do not establish those additional precision boundaries.",
         "references": [
           "go/README.md",
           "go/cache.go",
@@ -18063,10 +18063,10 @@
   ],
   "reviewedTestAndDocumentationAudit": {
     "path": "formal/source-audit.json",
-    "sha256": "323ba7a4abcf34b5efb265de9840e3ad92a4fc2b8aea182d67980d97dd9096f3",
+    "sha256": "72fc9dcefcf73f1f86983e38f439189e2bac2167ae6491bbcefacac0164ef393",
     "sourceFiles": 44,
     "status": "reviewed-applicability-not-execution",
-    "limitations": "These rows review Go applicability by audited file and inherit the precise C/W/E/B/X classifications from source-audit.json. They map subjects to native artifacts without claiming one Go test for every TypeScript assertion or turning documentation counts into executed coverage. Per-case Quint and replay evidence is recorded separately.",
+    "limitations": "These rows review Go applicability for the public documentation and ordinary test files in source-audit.json sources, inheriting their C/W/E/B/X classifications. They map subjects to native artifacts without claiming one Go test per TypeScript assertion or turning documentation counts into executed coverage. The same audit hash also binds reviewedGuides for formal and Go documentation; those guide reviews are freshness/scope records, not additional behavioral applicability rows. Per-case Quint and replay evidence is recorded separately.",
     "sources": [
       {
         "path": "README.md",
@@ -18424,6 +18424,9 @@
           "B01",
           "B03",
           "C23",
+          "C27",
+          "C45",
+          "C52",
           "C55",
           "C56",
           "E01",
@@ -18452,7 +18455,7 @@
       },
       {
         "path": "docs/shadow-validation.md",
-        "sha256": "6103e0b2bbf0d11a651880fab98a19f957c03b7d9089ce151a0895ba447e47a6",
+        "sha256": "cce3d8468164483cec29162fcb860246e44c3b0a2a5a657bcad4f0d78c7cb4a2",
         "entries": 16,
         "contracts": [
           "B03",
@@ -19426,7 +19429,7 @@
       "boundary": "Host execution mechanics",
       "existingTreatment": "Promise identity, exceptions/thenables and rejection consumption, Node timer handles, synchronous event-loop blocking, and native buffer views remain binding tests. Their deadline, failure-isolation, and retained-snapshot consequences are represented above.",
       "goStatus": "reviewed-native-binding",
-      "goTreatment": "Goroutines, contexts, timers and completion channels replace JavaScript promises and AsyncLocalStorage. Shared generated histories exercise deadlines, late work, ownership and publication. Primitive promise identity and scheduling APIs are native mechanisms. Source/read/shadow budgets and elapsed diagnostics retain fractional milliseconds before subtraction. Local cache insertion and lookup use whole monotonic milliseconds, matching TypeScript; default instances share the same millisecond grid. Native tests distinguish before/exact boundaries, early timer delivery and local quantization, including fractional construction phases and custom integer clocks with large origins. Integer-tick Quint histories cannot expose these fractional host-clock distinctions; native regressions bind existing obligations without expanding generated coverage.",
+      "goTreatment": "Goroutines, contexts, timers and completion channels replace JavaScript promises and AsyncLocalStorage. Shared generated histories exercise deadlines, late work, ownership and publication. Primitive promise identity and scheduling APIs are native mechanisms. Source/read/shadow budgets and elapsed diagnostics retain fractional milliseconds before subtraction. Local cache insertion and lookup use whole monotonic milliseconds, matching TypeScript; default instances share the same millisecond grid. Native tests distinguish before/exact boundaries, early timer delivery and local quantization, including fractional construction phases and custom integer clocks with large origins. The local-clock profile now supplies fractional insertion/expiry and shared-instance-grid histories. Fractional source/read/shadow deadlines, early timer delivery and custom-clock compatibility retain additional native evidence; other integer-tick profiles do not establish those precision boundaries.",
       "nativeTests": [
         "go/clock_precision_test.go:TestPreciseSourceDeadline",
         "go/clock_precision_test.go:TestPreciseRemoteReadDeadline",

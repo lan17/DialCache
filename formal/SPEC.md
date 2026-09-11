@@ -104,9 +104,9 @@ does not establish readability.
 | --- | --- |
 | Request memoization | Off; invalid flag bypasses caching for the invocation |
 | Coalescing | On; invalid flag bypasses caching for the invocation |
-| Local/remote TTL | Omitted disables the layer; valid seconds are finite and in [1, 31,536,000]; invalid TTL disables only that layer |
+| Local/remote TTL | Omitted disables the layer; valid seconds are safe integers in [1, 31,536,000]; invalid TTL disables only that layer |
 | Serving ramp | A configured valid TTL implies 100 unless a ramp is supplied; finite [0, 100], admission is sample strictly less than ramp; invalid ramp disables only that layer |
-| Recovery | Off; zero disables inheritance; a positive maximum age must exceed remote TTL and be at most 31,536,000 seconds; invalid optional age disables recovery |
+| Recovery | Off; zero disables inheritance; a positive maximum age must be a safe integer greater than remote TTL and at most 31,536,000 seconds; invalid optional age disables recovery |
 | Shadow | Off; valid independent ramp, outcome hook, and capacity are required; invalid optional policy preserves ordinary serving |
 | Mismatch logging | Off; malformed logging flag disables warnings |
 | Read deadline | Runtime -> operation -> instance -> 50 ms; positive safe integer at most 2,147,483,647 ms; invalid runtime budget bypasses caching |

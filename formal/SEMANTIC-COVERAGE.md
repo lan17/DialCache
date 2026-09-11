@@ -68,7 +68,27 @@ Execution partitions protocol rows with `DIALCACHE_PROTOCOL_CORPUS=generated` or
 
 Negative harness tests and inventory checks are excluded from detection cohorts: a test that expects a deliberately broken driver to fail must not count as behavioral fault detection. Real-server integration/Lua tests are outside this local mutation comparison; they have their own completion evidence. All unmodified baselines must pass. Compile/import errors, crashes, timeouts, missing reports, empty runs, and incomplete surviving runs fail measurement rather than counting as detections.
 
-The following is a **historical measurement from the earlier Go parity milestone, before the current case/witness expansion and generated primitive cohort**. Its completed TypeScript measurement produced this comparison. All unmodified baselines passed: 660 ordinary tests, 4,008 generated replays/witness gates, and 372 fixed scenarios/protocol vectors (4,380 positive portable tests/gates in their union). Exact source, input, and corpus fingerprints are retained in that report. These counts and detections describe that snapshot; later changes require fresh reports. The completed expansion is recorded in [VALIDATION.md](./VALIDATION.md). CI repeats measurement on the committed revision.
+### Latest recorded measurement
+
+[VALIDATION.md](./VALIDATION.md#mutation-evidence) records the latest completed
+measurements and their exact source revisions, corpus fingerprints, cohort
+counts and surviving faults. Both TypeScript and Go detected **13/13 selected
+faults in the generated cohort and 13/13 in the portable union**. The generated
+cohort includes Quint-derived protocol vectors, which now detect M12's reversed
+argument ordering. Ordinary and fixed cohorts retain the survivors listed in
+that validation record. These are recorded runs, not a claim that a subsequent
+documentation or source change has been remeasured.
+
+### Historical comparison before generated primitive vectors
+
+The tables in this section preserve the **earlier Go parity milestone, before
+the current case/witness expansion and generated primitive cohort**. They do
+not describe current detection. Its completed TypeScript measurement passed
+all unmodified baselines: 660 ordinary tests, 4,008 generated replays/witness
+gates, and 372 fixed scenarios/protocol vectors (4,380 positive portable
+tests/gates in their union). Exact source, input, and corpus fingerprints are
+retained in that report. Later changes require fresh reports; CI repeats
+measurement on the committed revision.
 
 | Mutant scope | Ordinary detected | Generated detected | Portable detected |
 | --- | ---: | ---: | ---: |
@@ -76,9 +96,9 @@ The following is a **historical measurement from the earlier Go parity milestone
 | Protocol faults | 1/2 | 1/2 | 2/2 |
 | All selected faults | 12/13 | 12/13 | 13/13 |
 
-Generated replay is not required to replace protocol vectors. Among the 12 faults ordinary tests detect, generated replay and portable tests detect all 12. These are detection/parity ratios for this catalog, not percentages of all possible defects. No survivor is automatically labeled equivalent or excluded from the denominator.
+In that historical snapshot, generated replay and portable tests detected all 12 faults detected by ordinary tests. The generated cohort did not yet include the primitive vectors that distinguish M12. These are detection/parity ratios for this catalog, not percentages of all possible defects. No survivor is automatically labeled equivalent or excluded from the denominator.
 
-Policy and shadow profile version 2 close the three prior generated-behavior survivors. All three detections are required in CI for both TypeScript and Go:
+Policy and shadow profile version 2 had closed three earlier generated-behavior survivors. The historical fault details were:
 
 | Fault | Ordinary TypeScript | Generated TypeScript | Portable TypeScript | Distinguishing evidence |
 | --- | --- | --- | --- | --- |
@@ -87,7 +107,7 @@ Policy and shadow profile version 2 close the three prior generated-behavior sur
 | M12: argument order is reversed | Survives | Survives | Detected | Exact ordering is checked by protocol vectors |
 | M13: expired dark job starts Redis work | Detected | Detected | Detected | Source work exhausts the job budget before deferred dispatch; no Redis read may start |
 
-The other nine faults are detected by all three cohorts. Mutation IDs identify faults, not proofs of an entire case: shared helper changes can be detected through another affected behavior. The report preserves the actual failing test names and trace diagnostics so detection can be reviewed.
+The other nine faults were detected by all three cohorts in that snapshot. Mutation IDs identify faults, not proofs of an entire case: shared helper changes can be detected through another affected behavior. The report preserves the actual failing test names and trace diagnostics so detection can be reviewed.
 
 The independent Go measurement from that historical milestone compiled all 13 equivalent faults and completed all unmodified baselines: 93 ordinary native tests, 4,008 generated replays/witness gates, and 372 fixed scenarios/protocol vectors. Its completed report records:
 
@@ -98,7 +118,11 @@ The independent Go measurement from that historical milestone compiled all 13 eq
 | Fixed scenarios/protocol vectors | 12/13 |
 | Portable union | 13/13 |
 
-The native clock regressions also detect M03 (late source acceptance) and M11 (renewed insertion TTL). All 11 Go behavioral faults are detected by generated tests. M12 remains a protocol-vector detection; M09 (omitted mismatch-logging flag) is detected by generated tests but survives the fixed cohort. The native TypeScript and Go suites differ in size and scope, so their ordinary detection ratios are not equivalent denominators of implementation quality. Both ports require the same generated and portable detections in CI. This makes Quint-generated tests the main behavioral regression suite for the new Go implementation while native tests cover its language and integration boundaries.
+In that historical Go run, native clock regressions detected M03 (late source acceptance) and M11 (renewed insertion TTL). All 11 behavioral faults were detected by generated tests. M12 was detected only by the fixed protocol vectors; M09 (omitted mismatch-logging flag) was detected by generated tests but survived the fixed cohort. The native TypeScript and Go suites differed in size and scope, so their ordinary detection ratios were not equivalent denominators of implementation quality.
+
+Current CI requires every catalog entry's declared generated and portable
+detections in each language. Quint-driven tests provide the main portable
+regression suite; native tests cover language and integration boundaries.
 
 ## Reproduction and CI
 
