@@ -1005,17 +1005,17 @@
   "reviewedGuides": [
     {
       "path": "formal/AUTHORING.md",
-      "sha256": "f526c295ab56ff1a65d5a66a850aa62938ec51381fbc6b063f52aedab0c5cb53",
+      "sha256": "b382c672ca3cde7ce1ca52edd33861a5157e8b1b9be71ed0977de95b364da977",
       "entries": [
         {"line":1,"title":"Reading and extending the DialCache models"},
         {"line":16,"title":"Reading a model"},
         {"line":56,"title":"Writing conventions"},
-        {"line":105,"title":"Codifying the next behavior"},
-        {"line":138,"title":"Give reviewers focused context"},
-        {"line":153,"title":"Exporting a deterministic regression"},
-        {"line":186,"title":"Maintaining case and witness evidence"},
-        {"line":227,"title":"Reproducible committed fixtures"},
-        {"line":237,"title":"Refactoring and execution"}
+        {"line":112,"title":"Codifying the next behavior"},
+        {"line":145,"title":"Give reviewers focused context"},
+        {"line":160,"title":"Exporting a deterministic regression"},
+        {"line":193,"title":"Maintaining case and witness evidence"},
+        {"line":234,"title":"Reproducible committed fixtures"},
+        {"line":244,"title":"Refactoring and execution"}
       ],
       "review": {
         "kind": "tooling-guide",

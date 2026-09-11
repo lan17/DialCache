@@ -3,6 +3,7 @@ package dialcache
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -513,5 +514,109 @@ func TestReplayCoordinatorBoundsFramesBeforeBuffering(t *testing.T) {
 	reader = bufio.NewReaderSize(strings.NewReader("{\"value\":1}"), 16)
 	if _, err := readReplayLine(reader, 32); err != io.EOF {
 		t.Fatalf("unterminated frame accepted: %v", err)
+	}
+}
+
+func TestReplayCoordinatorMutationEvidence(t *testing.T) {
+	// Exercise the real native replay, test2json stream, coordinator subprocess,
+	// and unchanged mutation evaluator. Reusing this test binary avoids a second
+	// compilation and keeps the TypeScript-only checks independent of Go.
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	original, err := os.ReadFile("../formal/conformance-smoke.itf.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	evaluator, err := filepath.Abs("../formal/measure-go-semantics.mjs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, mode := range []string{"baseline", "observation", "malformed", "missing-file", "unknown-action"} {
+		t.Run(mode, func(t *testing.T) {
+			var trace obj
+			if err := json.Unmarshal(original, &trace); err != nil {
+				t.Fatal(err)
+			}
+			trace["states"] = ba(trace["states"])[:2]
+			second := bm(ba(trace["states"])[1])
+			if mode == "observation" {
+				bm(second["s"])["redisReads"] = obj{"#bigint": "999"}
+			}
+			if mode == "unknown-action" {
+				bm(second["input"])["name"] = "unsupportedAction"
+			}
+			raw, err := json.Marshal(trace)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if mode == "malformed" {
+				raw = []byte("{")
+			}
+			path := filepath.Join(t.TempDir(), "control.itf.json")
+			if mode != "missing-file" {
+				if err := os.WriteFile(path, raw, 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			command := exec.CommandContext(ctx, "go", "tool", "test2json", "-t", "-p", "github.com/lan17/DialCache/go", executable,
+				"-test.v=test2json", "-test.run=^TestCoreConformance$", "-test.count=1")
+			for _, value := range os.Environ() {
+				if !strings.HasPrefix(value, "DIALCACHE_") {
+					command.Env = append(command.Env, value)
+				}
+			}
+			command.Env = append(command.Env, "DIALCACHE_MBT_TRACE_FILE="+path)
+			var stderr bytes.Buffer
+			command.Stderr = &stderr
+			events, runError := command.Output()
+			exitCode := 0
+			if runError != nil {
+				exit, ok := runError.(*exec.ExitError)
+				if !ok || exit.ExitCode() != 1 {
+					t.Fatalf("native control could not finish: %v\n%s", runError, stderr.String())
+				}
+				exitCode = 1
+			}
+			program := `import {readFileSync} from "node:fs";
+import {pathToFileURL} from "node:url";
+const {evaluateGoTestEvents} = await import(pathToFileURL(process.argv[2]).href);
+try { console.log(JSON.stringify({valid:true, result:evaluateGoTestEvents(readFileSync(0,"utf8"), Number(process.argv[3]))})); }
+catch(error) { console.log(JSON.stringify({valid:false, error:error.message})); }`
+			// Keep argv[1] distinct from the imported path so its CLI main guard
+			// cannot start a mutation campaign while evaluating these events.
+			check := exec.CommandContext(ctx, "node", "--input-type=module", "-e", program, "mutation-evidence-control", evaluator, fmt.Sprint(exitCode))
+			check.Stdin = bytes.NewReader(events)
+			output, err := check.CombinedOutput()
+			if err != nil {
+				t.Fatalf("mutation evaluator could not finish: %v\n%s", err, output)
+			}
+			var result obj
+			if err := json.Unmarshal(output, &result); err != nil {
+				t.Fatalf("invalid evaluator output: %v\n%s", err, output)
+			}
+			switch mode {
+			case "baseline":
+				if result["valid"] != true || bm(result["result"])["state"] != "survived" {
+					t.Fatalf("baseline was not accepted: %s\n%s", output, events)
+				}
+			case "observation":
+				measurement := bm(result["result"])
+				kind := bm(measurement["assertionKinds"])["TestCoreConformance/control.itf.json"]
+				if result["valid"] != true || measurement["state"] != "detected" || kind != "observation-mismatch" {
+					t.Fatalf("real replay mismatch was not credited: %s\n%s", output, events)
+				}
+			default:
+				if result["valid"] != false || !strings.Contains(bs(result["error"]), "replay failure lacks observation") {
+					t.Fatalf("infrastructure failure was credited: %s\n%s", output, events)
+				}
+				if matched, _ := regexp.Match(`expected:[\s\S]*actual:`, events); matched {
+					t.Fatalf("infrastructure failure acquired comparison markers: %s", events)
+				}
+			}
+		})
 	}
 }

@@ -87,6 +87,13 @@ Where representations differ, add an executable projection/connection check
 that compares profile history with the contract. Give the projection an explicit
 scope and challenge mistakes in policy capture, event timing or ownership.
 
+Connection models advance the imported profile and save its preceding context
+in the same `all` action. Views such as `acquired` and `observedSources` combine
+that context with the latest recorded input to reconstruct the current contract
+record. Invariants check this view immediately; the next step persists it.
+Quint assignments in `all` are simultaneous, so changing their textual order
+does not change which state they read.
+
 Small
 representation helpers such as completing callers owned by one source belong
 in [conformance-observations.qnt](./conformance-observations.qnt). Name repeated

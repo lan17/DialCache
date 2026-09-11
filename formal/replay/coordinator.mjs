@@ -1,3 +1,4 @@
+import { AssertionError } from "node:assert";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { profileActions, bindTrace } from "./bindings.mjs";
@@ -48,7 +49,17 @@ export class ReplayCoordinator {
     const { binding, trace, index } = session;
     try {
       if (request.index !== index) throw new Error("Duplicate or skipped replay observation");
-      binding.assert(index, request.observed);
+      try {
+        binding.assert(index, request.observed);
+      } catch (cause) {
+        // Mutation attribution requires actual comparison evidence. Format only
+        // an assertion raised while comparing observations; parsing, transport,
+        // mapping and lifecycle errors retain their infrastructure diagnostics.
+        if (!(cause instanceof AssertionError)) throw cause;
+        const expected = JSON.stringify(cause.expected) ?? '{"absent":true}';
+        const actual = JSON.stringify(cause.actual) ?? '{"absent":true}';
+        throw new Error(`Observation mismatch\nexpected: ${expected}\nactual: ${actual}`, { cause });
+      }
       const nextIndex = index + 1;
       if (nextIndex === trace.steps.length) {
         this.#sessions.delete(request.session);

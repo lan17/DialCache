@@ -72,7 +72,7 @@ describe("shared replay input and expectation boundary", () => {
     expect(second.observe(0, expected[0])).toEqual(next);
     expect(JSON.stringify(next)).not.toMatch(/expected|prediction|localCached|redisReads/);
     expect(first.observe(1, expected[1])).toEqual({ complete: true, steps: 2 });
-    expect(() => second.observe(1, expected[1])).toThrow(/step 1 action outsideCall/);
+    expect(() => second.observe(1, expected[1])).toThrow(/step 1 action outsideCall: Observation mismatch\nexpected: .*"redisReads":999.*\nactual: .*"redisReads":0/);
     expect(() => second.observe(1, expected[1])).toThrow(/Unknown replay session/);
   });
 
@@ -162,6 +162,11 @@ describe("versioned replay protocol", () => {
     const session = coreSession(smoke("core"));
     const base = { op: "observe", session: session.prepared.session, index: 0, settlement, observed: {}, environment };
     expect(() => session.request({ ...base, settlement: "advance-until-equal" })).toThrow(/Malformed replay request/);
+    try {
+      session.request({ ...base, settlement: "advance-until-equal" });
+    } catch (cause) {
+      expect(String(cause)).not.toMatch(/expected:[\s\S]*actual:/);
+    }
     expect(() => session.request({ ...base, environment: { wallMs: Number.MAX_SAFE_INTEGER + 1 } })).toThrow(/Malformed replay request/);
     expect(() => assertSchema({ op: "release", effect: "read", index: -1 }, "command")).toThrow();
     expect(() => assertSchema({ op: "begin", expected: { calls: [] } }, "command")).toThrow();
