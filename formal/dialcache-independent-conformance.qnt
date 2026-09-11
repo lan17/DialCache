@@ -378,7 +378,8 @@ module dialcache_independent_conformance {
 
   // Deterministic model regressions ------------------------------------------
   run independentReadDeadlinesStartSeparateSourcesTest = init.then(beginCall).then(advanceBy(1)).then(beginCall)
-    .then(advanceBy(4)).expect(s.io.aborted == List(0) and s.o.loaders == 1)
+    .then(advanceBy(1)).then(advanceBy(1)).then(advanceBy(1)).then(advanceBy(1))
+    .expect(s.io.aborted == List(0) and s.o.loaders == 1)
     .then(advanceBy(1)).expect(s.io.aborted == List(0, 1) and s.o.loaders == 2)
   run independentRecoveryKeepsDistinctSnapshotsTest = init.then(beginCall).then(readAt(0))
     .then(all { input' = input, s' = { frame: VALUE_TWO, ...s } }).then(beginCall).then(readAt(1))
