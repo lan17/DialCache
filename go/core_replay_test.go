@@ -509,14 +509,17 @@ func TestCoreParserAndObservationBoundary(t *testing.T) {
 	for name, malformed := range map[string][]byte{
 		"empty":               []byte(`{"states":[]}`),
 		"init only":           initOnly,
-		"unknown action":      bytes.Replace(raw, []byte(`"outsideCall"`), []byte(`"inventedAction"`), 1),
-		"missing init":        bytes.Replace(raw, []byte(`"init"`), []byte(`"localCall"`), 1),
+		"unknown action":      bytes.Replace(raw, []byte(`"mbt::actionTaken": "outsideCall"`), []byte(`"mbt::actionTaken": "inventedAction"`), 1),
+		"missing init":        bytes.Replace(raw, []byte(`"mbt::actionTaken": "init"`), []byte(`"mbt::actionTaken": "localCall"`), 1),
 		"arguments":           bytes.Replace(raw, []byte(`"mbt::nondetPicks": {}`), []byte(`"mbt::nondetPicks": {"choice":1}`), 1),
 		"unsafe integer":      bytes.Replace(raw, []byte(`"#bigint": "1"`), []byte(`"#bigint": "9007199254740992"`), 1),
 		"missing observation": bytes.Replace(raw, []byte(`"sourceVersion"`), []byte(`"missingField"`), 1),
 		"duplicate action":    bytes.Replace(raw, []byte(`"mbt::actionTaken": "init"`), []byte(`"mbt::actionTaken": "init", "mbt::actionTaken": "init"`), 1),
 	} {
 		t.Run(name, func(t *testing.T) {
+			if bytes.Equal(raw, malformed) {
+				t.Fatal("negative control did not change its target field")
+			}
 			if _, err := parseCore(malformed); err == nil {
 				t.Fatal("malformed trace accepted")
 			}
