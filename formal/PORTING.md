@@ -141,7 +141,8 @@ separate from implementation assertions. Current Go validation consumes the
 shared witness evidence produced during TS replay, checking exact corpus and
 definition hashes. Go independently executes and asserts every history.
 
-Before running a port, prepare an execution context:
+Prepare each port immediately before its native tests. Complete TypeScript
+witness generation before preparing Go, which consumes that evidence:
 
 ```sh
 node formal/conformance.mjs prepare typescript .formal-traces/ts-context.json
@@ -161,9 +162,8 @@ preparation time, specification/source fingerprints, the exact corpus bytes,
 and the required case inventory. A port's source manifest is a reviewed input
 declaration; the checker cannot discover an omitted native dependency itself.
 Go's default inputs also include the shared source/fixture definitions and the
-evaluated witness JSON under `.formal-traces/go-parity-witnesses/`. Complete
-TypeScript witness generation before preparing Go's context. Another port that
-consumes auxiliary evidence must include those files in its input manifest.
+evaluated witness JSON under `.formal-traces/go-parity-witnesses/`. Another port
+that consumes auxiliary evidence must include those files in its input manifest.
 
 Run native tests with complete trace directory selectors. Preserve the original
 assertion report and its timestamps. The supplied report adapters accept
