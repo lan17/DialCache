@@ -7,10 +7,11 @@ deadlines, stale recovery, dark and served-hit shadow validation, compression,
 and failure-isolated observability.
 
 The [Quint models](../formal/README.md) are the behavioral source of truth. Both
-implementations are required to replay the same nine generated profiles and
-244 fixed scenarios. All 134 protocol vectors also run in Go. Real integration checks
-exercise the 49 invalidation transitions on Redis, Valkey and Redis Cluster,
-plus bidirectional TypeScript/Go payload and invalidation interoperability.
+implementations replay the same sampled histories and named public-action
+regressions, plus fixed scenarios and Quint-derived protocol vectors. The current
+inventory comes from [execution.json](../formal/execution.json); real integration
+checks run invalidation cases on Redis, Valkey and Redis Cluster and exercise
+bidirectional TypeScript/Go payload and invalidation interoperability.
 These are finite checks of the documented contract, not proof of every
 possible input or schedule. See [parity acceptance](../formal/GO-PARITY.md)
 and the [feature and corner-case map](../formal/FEATURE-COVERAGE.md).
@@ -175,7 +176,7 @@ DIALCACHE_EFFECTS_TRACE_DIR=.formal-traces/effects \
 DIALCACHE_FEATURE_TRACE_DIR=.formal-traces/features \
 DIALCACHE_COVERAGE_EVIDENCE_DIR=.formal-traces/go-parity-witnesses \
   corepack pnpm exec vitest run test/formal-conformance.test.ts \
-  test/formal-effects.test.ts test/formal-features.test.ts --coverage.enabled=false
+  test/formal-effects.test.ts test/formal-features.test.ts test/formal-local-clock.test.ts --coverage.enabled=false
 
 DIALCACHE_MBT_TRACE_DIR="$PWD/.formal-traces/conformance" \
 DIALCACHE_EFFECTS_TRACE_DIR="$PWD/.formal-traces/effects" \
@@ -186,7 +187,7 @@ go -C go test -tags integration -count=1 -run '^TestRedisIntegration$' ./...
 node formal/measure-go-semantics.mjs
 ```
 
-Without overrides, Go runs fixed scenarios, protocol vectors and all nine
+Without overrides, Go runs fixed scenarios, protocol vectors and the registered
 committed smoke traces. `_TRACE_FILE` overrides reproduce one trace instead
 of a directory. Full directory replay rejects empty/incompatible corpora and
 requires exact witness/corpus/definition hashes. It never calls TypeScript to
@@ -198,3 +199,6 @@ The Go implementation was developed from the models and contracts with
 TypeScript source review; it is not a clean-room implementation. Race detection
 and sampled histories provide evidence for exercised executions, not exhaustive
 concurrency verification or an external Redis durability guarantee.
+
+For complete artifact regeneration, driver requirements and the reusable
+language-neutral completion report, see [PORTING.md](../formal/PORTING.md).

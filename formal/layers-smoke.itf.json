@@ -1,24 +1,22 @@
 {
   "#meta": {
     "format": "ITF",
-    "format-description": "https://apalache-mc.org/docs/adr/015adr-trace.html",
     "source": "formal/dialcache-layers-conformance.qnt",
-    "status": "ok",
-    "description": "Created by Quint on Wed Sep 09 2026 15:43:55 GMT-0700 (Pacific Daylight Time)",
-    "timestamp": 1788993835021
+    "recipe": "formal/fixture-recipes.json#formal/layers-smoke.itf.json/smoke"
   },
   "vars": [
-    "mbt::actionTaken",
-    "mbt::nondetPicks",
+    "input",
     "s",
     "mbt::actionTaken",
-    "mbt::nondetPicks",
-    "input"
+    "mbt::nondetPicks"
   ],
   "states": [
     {
-      "#meta": {
-        "index": 0
+      "input": {
+        "choice": {
+          "#bigint": "4"
+        },
+        "name": "init"
       },
       "mbt::actionTaken": "init",
       "mbt::nondetPicks": {
@@ -65,17 +63,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "init",
-        "choice": {
-          "#bigint": "4"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 1
+      "input": {
+        "choice": {
+          "#bigint": "16"
+        },
+        "name": "beginCall"
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -126,17 +121,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "beginCall",
-        "choice": {
-          "#bigint": "16"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 2
+      "input": {
+        "choice": {
+          "#bigint": "3"
+        },
+        "name": "beginCall"
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -190,17 +182,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "beginCall",
-        "choice": {
-          "#bigint": "3"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 3
+      "input": {
+        "choice": {
+          "#bigint": "4"
+        },
+        "name": "resolveLoader"
       },
       "mbt::actionTaken": "resolveLoader",
       "mbt::nondetPicks": {
@@ -254,17 +243,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "resolveLoader",
-        "choice": {
-          "#bigint": "4"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 4
+      "input": {
+        "choice": {
+          "#bigint": "2"
+        },
+        "name": "resolveLoader"
       },
       "mbt::actionTaken": "resolveLoader",
       "mbt::nondetPicks": {
@@ -318,17 +304,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "resolveLoader",
-        "choice": {
-          "#bigint": "2"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 5
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "tick"
       },
       "mbt::actionTaken": "tick",
       "mbt::nondetPicks": {
@@ -382,17 +365,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "tick",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 6
+      "input": {
+        "choice": {
+          "#bigint": "0"
+        },
+        "name": "invalidate"
       },
       "mbt::actionTaken": "invalidate",
       "mbt::nondetPicks": {
@@ -448,17 +428,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "invalidate",
-        "choice": {
-          "#bigint": "0"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 7
+      "input": {
+        "choice": {
+          "#bigint": "0"
+        },
+        "name": "beginCall"
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -517,96 +494,21 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "beginCall",
-        "choice": {
-          "#bigint": "0"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 8
-      },
-      "mbt::actionTaken": "beginCall",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "12"
-          }
-        }
-      },
-      "s": {
-        "o": {
-          "calls": [
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "0"
-            },
-            {
-              "#bigint": "0"
-            }
-          ],
-          "classifications": {
-            "#bigint": "0"
-          },
-          "comparisons": {
-            "#bigint": "0"
-          },
-          "dumps": {
-            "#bigint": "0"
-          },
-          "invalidations": {
-            "#bigint": "0"
-          },
-          "loaders": {
-            "#bigint": "3"
-          },
-          "loads": {
-            "#bigint": "0"
-          },
-          "maintenance": [
-            "missing_remote"
-          ],
-          "policyCalls": {
-            "#bigint": "4"
-          },
-          "reads": {
-            "#bigint": "0"
-          },
-          "recovery": [],
-          "shadow": [],
-          "sourceScopes": [],
-          "writeTtls": [],
-          "writes": {
-            "#bigint": "0"
-          }
-        }
-      },
       "input": {
-        "name": "beginCall",
         "choice": {
           "#bigint": "12"
-        }
-      }
-    },
-    {
-      "#meta": {
-        "index": 9
+        },
+        "name": "beginCall"
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
         "choice": {
           "tag": "Some",
           "value": {
-            "#bigint": "10"
+            "#bigint": "12"
           }
         }
       },
@@ -618,9 +520,6 @@
             },
             {
               "#bigint": "2"
-            },
-            {
-              "#bigint": "0"
             },
             {
               "#bigint": "0"
@@ -642,7 +541,7 @@
             "#bigint": "0"
           },
           "loaders": {
-            "#bigint": "4"
+            "#bigint": "3"
           },
           "loads": {
             "#bigint": "0"
@@ -651,7 +550,7 @@
             "missing_remote"
           ],
           "policyCalls": {
-            "#bigint": "5"
+            "#bigint": "4"
           },
           "reads": {
             "#bigint": "0"
@@ -664,17 +563,86 @@
             "#bigint": "0"
           }
         }
-      },
+      }
+    },
+    {
       "input": {
-        "name": "beginCall",
         "choice": {
           "#bigint": "10"
+        },
+        "name": "beginCall"
+      },
+      "mbt::actionTaken": "beginCall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "10"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "4"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [
+            "missing_remote"
+          ],
+          "policyCalls": {
+            "#bigint": "5"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
         }
       }
     },
     {
-      "#meta": {
-        "index": 10
+      "input": {
+        "choice": {
+          "#bigint": "6"
+        },
+        "name": "resolveLoader"
       },
       "mbt::actionTaken": "resolveLoader",
       "mbt::nondetPicks": {
@@ -739,17 +707,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "resolveLoader",
-        "choice": {
-          "#bigint": "6"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 11
+      "input": {
+        "choice": {
+          "#bigint": "16"
+        },
+        "name": "beginCall"
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -817,17 +782,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "beginCall",
-        "choice": {
-          "#bigint": "16"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 12
+      "input": {
+        "choice": {
+          "#bigint": "1"
+        },
+        "name": "beginCall"
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -898,17 +860,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "beginCall",
-        "choice": {
-          "#bigint": "1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 13
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "tick"
       },
       "mbt::actionTaken": "tick",
       "mbt::nondetPicks": {
@@ -979,17 +938,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "tick",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 14
+      "input": {
+        "choice": {
+          "#bigint": "7"
+        },
+        "name": "beginCall"
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -1063,17 +1019,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "beginCall",
-        "choice": {
-          "#bigint": "7"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 15
+      "input": {
+        "choice": {
+          "#bigint": "18"
+        },
+        "name": "beginCall"
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -1150,17 +1103,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "beginCall",
-        "choice": {
-          "#bigint": "18"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 16
+      "input": {
+        "choice": {
+          "#bigint": "15"
+        },
+        "name": "beginCall"
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -1240,17 +1190,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "beginCall",
-        "choice": {
-          "#bigint": "15"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 17
+      "input": {
+        "choice": {
+          "#bigint": "8"
+        },
+        "name": "beginCall"
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -1333,17 +1280,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "beginCall",
-        "choice": {
-          "#bigint": "8"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 18
+      "input": {
+        "choice": {
+          "#bigint": "1"
+        },
+        "name": "beginCall"
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -1429,17 +1373,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "beginCall",
-        "choice": {
-          "#bigint": "1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 19
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "tick"
       },
       "mbt::actionTaken": "tick",
       "mbt::nondetPicks": {
@@ -1525,17 +1466,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "tick",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 20
+      "input": {
+        "choice": {
+          "#bigint": "4"
+        },
+        "name": "seed"
       },
       "mbt::actionTaken": "seed",
       "mbt::nondetPicks": {
@@ -1621,17 +1559,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "seed",
-        "choice": {
-          "#bigint": "4"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 21
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "tick"
       },
       "mbt::actionTaken": "tick",
       "mbt::nondetPicks": {
@@ -1717,17 +1652,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "tick",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 22
+      "input": {
+        "choice": {
+          "#bigint": "0"
+        },
+        "name": "beginCall"
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -1816,17 +1748,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "beginCall",
-        "choice": {
-          "#bigint": "0"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 23
+      "input": {
+        "choice": {
+          "#bigint": "5"
+        },
+        "name": "seed"
       },
       "mbt::actionTaken": "seed",
       "mbt::nondetPicks": {
@@ -1915,17 +1844,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "seed",
-        "choice": {
-          "#bigint": "5"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 24
+      "input": {
+        "choice": {
+          "#bigint": "9"
+        },
+        "name": "resolveLoader"
       },
       "mbt::actionTaken": "resolveLoader",
       "mbt::nondetPicks": {
@@ -2014,17 +1940,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "resolveLoader",
-        "choice": {
-          "#bigint": "9"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 25
+      "input": {
+        "choice": {
+          "#bigint": "1"
+        },
+        "name": "beginCall"
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -2116,17 +2039,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "beginCall",
-        "choice": {
-          "#bigint": "1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 26
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "tick"
       },
       "mbt::actionTaken": "tick",
       "mbt::nondetPicks": {
@@ -2218,17 +2138,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "tick",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 27
+      "input": {
+        "choice": {
+          "#bigint": "7"
+        },
+        "name": "resolveLoader"
       },
       "mbt::actionTaken": "resolveLoader",
       "mbt::nondetPicks": {
@@ -2320,17 +2237,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "resolveLoader",
-        "choice": {
-          "#bigint": "7"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 28
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "tick"
       },
       "mbt::actionTaken": "tick",
       "mbt::nondetPicks": {
@@ -2422,17 +2336,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "tick",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 29
+      "input": {
+        "choice": {
+          "#bigint": "1"
+        },
+        "name": "invalidate"
       },
       "mbt::actionTaken": "invalidate",
       "mbt::nondetPicks": {
@@ -2525,17 +2436,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "invalidate",
-        "choice": {
-          "#bigint": "1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 30
+      "input": {
+        "choice": {
+          "#bigint": "0"
+        },
+        "name": "beginCall"
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -2631,17 +2539,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "beginCall",
-        "choice": {
-          "#bigint": "0"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 31
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "tick"
       },
       "mbt::actionTaken": "tick",
       "mbt::nondetPicks": {
@@ -2737,17 +2642,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "tick",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 32
+      "input": {
+        "choice": {
+          "#bigint": "11"
+        },
+        "name": "beginCall"
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -2846,17 +2748,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "beginCall",
-        "choice": {
-          "#bigint": "11"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 33
+      "input": {
+        "choice": {
+          "#bigint": "13"
+        },
+        "name": "beginCall"
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -2958,17 +2857,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "beginCall",
-        "choice": {
-          "#bigint": "13"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 34
+      "input": {
+        "choice": {
+          "#bigint": "1"
+        },
+        "name": "invalidate"
       },
       "mbt::actionTaken": "invalidate",
       "mbt::nondetPicks": {
@@ -3071,17 +2967,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "invalidate",
-        "choice": {
-          "#bigint": "1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 35
+      "input": {
+        "choice": {
+          "#bigint": "18"
+        },
+        "name": "beginCall"
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -3187,17 +3080,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "beginCall",
-        "choice": {
-          "#bigint": "18"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 36
+      "input": {
+        "choice": {
+          "#bigint": "7"
+        },
+        "name": "seed"
       },
       "mbt::actionTaken": "seed",
       "mbt::nondetPicks": {
@@ -3303,17 +3193,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "seed",
-        "choice": {
-          "#bigint": "7"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 37
+      "input": {
+        "choice": {
+          "#bigint": "11"
+        },
+        "name": "resolveLoader"
       },
       "mbt::actionTaken": "resolveLoader",
       "mbt::nondetPicks": {
@@ -3419,17 +3306,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "resolveLoader",
-        "choice": {
-          "#bigint": "11"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 38
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "tick"
       },
       "mbt::actionTaken": "tick",
       "mbt::nondetPicks": {
@@ -3535,17 +3419,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "tick",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 39
+      "input": {
+        "choice": {
+          "#bigint": "2"
+        },
+        "name": "policy"
       },
       "mbt::actionTaken": "policy",
       "mbt::nondetPicks": {
@@ -3651,17 +3532,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "policy",
-        "choice": {
-          "#bigint": "2"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 40
+      "input": {
+        "choice": {
+          "#bigint": "16"
+        },
+        "name": "beginCall"
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -3770,17 +3648,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "beginCall",
-        "choice": {
-          "#bigint": "16"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 41
+      "input": {
+        "choice": {
+          "#bigint": "13"
+        },
+        "name": "resolveLoader"
       },
       "mbt::actionTaken": "resolveLoader",
       "mbt::nondetPicks": {
@@ -3889,17 +3764,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "resolveLoader",
-        "choice": {
-          "#bigint": "13"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 42
+      "input": {
+        "choice": {
+          "#bigint": "0"
+        },
+        "name": "invalidate"
       },
       "mbt::actionTaken": "invalidate",
       "mbt::nondetPicks": {
@@ -4009,17 +3881,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "invalidate",
-        "choice": {
-          "#bigint": "0"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 43
+      "input": {
+        "choice": {
+          "#bigint": "14"
+        },
+        "name": "beginCall"
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -4132,17 +4001,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "beginCall",
-        "choice": {
-          "#bigint": "14"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 44
+      "input": {
+        "choice": {
+          "#bigint": "3"
+        },
+        "name": "policy"
       },
       "mbt::actionTaken": "policy",
       "mbt::nondetPicks": {
@@ -4255,17 +4121,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "policy",
-        "choice": {
-          "#bigint": "3"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 45
+      "input": {
+        "choice": {
+          "#bigint": "7"
+        },
+        "name": "rejectLoader"
       },
       "mbt::actionTaken": "rejectLoader",
       "mbt::nondetPicks": {
@@ -4378,2367 +4241,2307 @@
             "#bigint": "0"
           }
         }
-      },
+      }
+    },
+    {
       "input": {
-        "name": "rejectLoader",
+        "choice": {
+          "#bigint": "3"
+        },
+        "name": "policy"
+      },
+      "mbt::actionTaken": "policy",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "3"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "3"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "8"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote"
+          ],
+          "policyCalls": {
+            "#bigint": "20"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "1"
+        },
+        "name": "seed"
+      },
+      "mbt::actionTaken": "seed",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "3"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "8"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote"
+          ],
+          "policyCalls": {
+            "#bigint": "20"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "tick"
+      },
+      "mbt::actionTaken": "tick",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "3"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "8"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote"
+          ],
+          "policyCalls": {
+            "#bigint": "20"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "2"
+        },
+        "name": "seed"
+      },
+      "mbt::actionTaken": "seed",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "2"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "3"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "8"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote"
+          ],
+          "policyCalls": {
+            "#bigint": "20"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "2"
+        },
+        "name": "closeScope"
+      },
+      "mbt::actionTaken": "closeScope",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "2"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "3"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "8"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote"
+          ],
+          "policyCalls": {
+            "#bigint": "20"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "0"
+        },
+        "name": "seed"
+      },
+      "mbt::actionTaken": "seed",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "3"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "8"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote"
+          ],
+          "policyCalls": {
+            "#bigint": "20"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "3"
+        },
+        "name": "policy"
+      },
+      "mbt::actionTaken": "policy",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "3"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "3"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "8"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote"
+          ],
+          "policyCalls": {
+            "#bigint": "20"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "tick"
+      },
+      "mbt::actionTaken": "tick",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "3"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "8"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote"
+          ],
+          "policyCalls": {
+            "#bigint": "20"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "3"
+        },
+        "name": "seed"
+      },
+      "mbt::actionTaken": "seed",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "3"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "3"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "8"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote"
+          ],
+          "policyCalls": {
+            "#bigint": "20"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "tick"
+      },
+      "mbt::actionTaken": "tick",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "3"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "8"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote"
+          ],
+          "policyCalls": {
+            "#bigint": "20"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "1"
+        },
+        "name": "invalidate"
+      },
+      "mbt::actionTaken": "invalidate",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "3"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "8"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote"
+          ],
+          "policyCalls": {
+            "#bigint": "20"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "tick"
+      },
+      "mbt::actionTaken": "tick",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "3"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "8"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote"
+          ],
+          "policyCalls": {
+            "#bigint": "20"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "tick"
+      },
+      "mbt::actionTaken": "tick",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "3"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "8"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote"
+          ],
+          "policyCalls": {
+            "#bigint": "20"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "1"
+        },
+        "name": "closeScope"
+      },
+      "mbt::actionTaken": "closeScope",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "3"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "8"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote"
+          ],
+          "policyCalls": {
+            "#bigint": "20"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "tick"
+      },
+      "mbt::actionTaken": "tick",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "3"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "8"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote"
+          ],
+          "policyCalls": {
+            "#bigint": "20"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "1"
+        },
+        "name": "invalidate"
+      },
+      "mbt::actionTaken": "invalidate",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "3"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "8"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote"
+          ],
+          "policyCalls": {
+            "#bigint": "20"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "tick"
+      },
+      "mbt::actionTaken": "tick",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "3"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "8"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote"
+          ],
+          "policyCalls": {
+            "#bigint": "20"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "0"
+        },
+        "name": "policy"
+      },
+      "mbt::actionTaken": "policy",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "3"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "8"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote"
+          ],
+          "policyCalls": {
+            "#bigint": "20"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "2"
+        },
+        "name": "policy"
+      },
+      "mbt::actionTaken": "policy",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "2"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "3"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "8"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote",
+            "missing_remote"
+          ],
+          "policyCalls": {
+            "#bigint": "20"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
         "choice": {
           "#bigint": "7"
-        }
-      }
-    },
-    {
-      "#meta": {
-        "index": 46
-      },
-      "mbt::actionTaken": "policy",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "3"
-          }
-        }
-      },
-      "s": {
-        "o": {
-          "calls": [
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "3"
-            }
-          ],
-          "classifications": {
-            "#bigint": "0"
-          },
-          "comparisons": {
-            "#bigint": "0"
-          },
-          "dumps": {
-            "#bigint": "0"
-          },
-          "invalidations": {
-            "#bigint": "0"
-          },
-          "loaders": {
-            "#bigint": "8"
-          },
-          "loads": {
-            "#bigint": "0"
-          },
-          "maintenance": [
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote"
-          ],
-          "policyCalls": {
-            "#bigint": "20"
-          },
-          "reads": {
-            "#bigint": "0"
-          },
-          "recovery": [],
-          "shadow": [],
-          "sourceScopes": [],
-          "writeTtls": [],
-          "writes": {
-            "#bigint": "0"
-          }
-        }
-      },
-      "input": {
-        "name": "policy",
-        "choice": {
-          "#bigint": "3"
-        }
-      }
-    },
-    {
-      "#meta": {
-        "index": 47
-      },
-      "mbt::actionTaken": "seed",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "1"
-          }
-        }
-      },
-      "s": {
-        "o": {
-          "calls": [
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "3"
-            }
-          ],
-          "classifications": {
-            "#bigint": "0"
-          },
-          "comparisons": {
-            "#bigint": "0"
-          },
-          "dumps": {
-            "#bigint": "0"
-          },
-          "invalidations": {
-            "#bigint": "0"
-          },
-          "loaders": {
-            "#bigint": "8"
-          },
-          "loads": {
-            "#bigint": "0"
-          },
-          "maintenance": [
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote"
-          ],
-          "policyCalls": {
-            "#bigint": "20"
-          },
-          "reads": {
-            "#bigint": "0"
-          },
-          "recovery": [],
-          "shadow": [],
-          "sourceScopes": [],
-          "writeTtls": [],
-          "writes": {
-            "#bigint": "0"
-          }
-        }
-      },
-      "input": {
-        "name": "seed",
-        "choice": {
-          "#bigint": "1"
-        }
-      }
-    },
-    {
-      "#meta": {
-        "index": 48
-      },
-      "mbt::actionTaken": "tick",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "None",
-          "value": {
-            "#tup": []
-          }
-        }
-      },
-      "s": {
-        "o": {
-          "calls": [
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "3"
-            }
-          ],
-          "classifications": {
-            "#bigint": "0"
-          },
-          "comparisons": {
-            "#bigint": "0"
-          },
-          "dumps": {
-            "#bigint": "0"
-          },
-          "invalidations": {
-            "#bigint": "0"
-          },
-          "loaders": {
-            "#bigint": "8"
-          },
-          "loads": {
-            "#bigint": "0"
-          },
-          "maintenance": [
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote"
-          ],
-          "policyCalls": {
-            "#bigint": "20"
-          },
-          "reads": {
-            "#bigint": "0"
-          },
-          "recovery": [],
-          "shadow": [],
-          "sourceScopes": [],
-          "writeTtls": [],
-          "writes": {
-            "#bigint": "0"
-          }
-        }
-      },
-      "input": {
-        "name": "tick",
-        "choice": {
-          "#bigint": "-1"
-        }
-      }
-    },
-    {
-      "#meta": {
-        "index": 49
-      },
-      "mbt::actionTaken": "seed",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "2"
-          }
-        }
-      },
-      "s": {
-        "o": {
-          "calls": [
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "3"
-            }
-          ],
-          "classifications": {
-            "#bigint": "0"
-          },
-          "comparisons": {
-            "#bigint": "0"
-          },
-          "dumps": {
-            "#bigint": "0"
-          },
-          "invalidations": {
-            "#bigint": "0"
-          },
-          "loaders": {
-            "#bigint": "8"
-          },
-          "loads": {
-            "#bigint": "0"
-          },
-          "maintenance": [
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote"
-          ],
-          "policyCalls": {
-            "#bigint": "20"
-          },
-          "reads": {
-            "#bigint": "0"
-          },
-          "recovery": [],
-          "shadow": [],
-          "sourceScopes": [],
-          "writeTtls": [],
-          "writes": {
-            "#bigint": "0"
-          }
-        }
-      },
-      "input": {
-        "name": "seed",
-        "choice": {
-          "#bigint": "2"
-        }
-      }
-    },
-    {
-      "#meta": {
-        "index": 50
-      },
-      "mbt::actionTaken": "closeScope",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "2"
-          }
-        }
-      },
-      "s": {
-        "o": {
-          "calls": [
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "3"
-            }
-          ],
-          "classifications": {
-            "#bigint": "0"
-          },
-          "comparisons": {
-            "#bigint": "0"
-          },
-          "dumps": {
-            "#bigint": "0"
-          },
-          "invalidations": {
-            "#bigint": "0"
-          },
-          "loaders": {
-            "#bigint": "8"
-          },
-          "loads": {
-            "#bigint": "0"
-          },
-          "maintenance": [
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote"
-          ],
-          "policyCalls": {
-            "#bigint": "20"
-          },
-          "reads": {
-            "#bigint": "0"
-          },
-          "recovery": [],
-          "shadow": [],
-          "sourceScopes": [],
-          "writeTtls": [],
-          "writes": {
-            "#bigint": "0"
-          }
-        }
-      },
-      "input": {
-        "name": "closeScope",
-        "choice": {
-          "#bigint": "2"
-        }
-      }
-    },
-    {
-      "#meta": {
-        "index": 51
-      },
-      "mbt::actionTaken": "seed",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "0"
-          }
-        }
-      },
-      "s": {
-        "o": {
-          "calls": [
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "3"
-            }
-          ],
-          "classifications": {
-            "#bigint": "0"
-          },
-          "comparisons": {
-            "#bigint": "0"
-          },
-          "dumps": {
-            "#bigint": "0"
-          },
-          "invalidations": {
-            "#bigint": "0"
-          },
-          "loaders": {
-            "#bigint": "8"
-          },
-          "loads": {
-            "#bigint": "0"
-          },
-          "maintenance": [
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote"
-          ],
-          "policyCalls": {
-            "#bigint": "20"
-          },
-          "reads": {
-            "#bigint": "0"
-          },
-          "recovery": [],
-          "shadow": [],
-          "sourceScopes": [],
-          "writeTtls": [],
-          "writes": {
-            "#bigint": "0"
-          }
-        }
-      },
-      "input": {
-        "name": "seed",
-        "choice": {
-          "#bigint": "0"
-        }
-      }
-    },
-    {
-      "#meta": {
-        "index": 52
-      },
-      "mbt::actionTaken": "policy",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "3"
-          }
-        }
-      },
-      "s": {
-        "o": {
-          "calls": [
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "3"
-            }
-          ],
-          "classifications": {
-            "#bigint": "0"
-          },
-          "comparisons": {
-            "#bigint": "0"
-          },
-          "dumps": {
-            "#bigint": "0"
-          },
-          "invalidations": {
-            "#bigint": "0"
-          },
-          "loaders": {
-            "#bigint": "8"
-          },
-          "loads": {
-            "#bigint": "0"
-          },
-          "maintenance": [
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote"
-          ],
-          "policyCalls": {
-            "#bigint": "20"
-          },
-          "reads": {
-            "#bigint": "0"
-          },
-          "recovery": [],
-          "shadow": [],
-          "sourceScopes": [],
-          "writeTtls": [],
-          "writes": {
-            "#bigint": "0"
-          }
-        }
-      },
-      "input": {
-        "name": "policy",
-        "choice": {
-          "#bigint": "3"
-        }
-      }
-    },
-    {
-      "#meta": {
-        "index": 53
-      },
-      "mbt::actionTaken": "tick",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "None",
-          "value": {
-            "#tup": []
-          }
-        }
-      },
-      "s": {
-        "o": {
-          "calls": [
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "3"
-            }
-          ],
-          "classifications": {
-            "#bigint": "0"
-          },
-          "comparisons": {
-            "#bigint": "0"
-          },
-          "dumps": {
-            "#bigint": "0"
-          },
-          "invalidations": {
-            "#bigint": "0"
-          },
-          "loaders": {
-            "#bigint": "8"
-          },
-          "loads": {
-            "#bigint": "0"
-          },
-          "maintenance": [
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote"
-          ],
-          "policyCalls": {
-            "#bigint": "20"
-          },
-          "reads": {
-            "#bigint": "0"
-          },
-          "recovery": [],
-          "shadow": [],
-          "sourceScopes": [],
-          "writeTtls": [],
-          "writes": {
-            "#bigint": "0"
-          }
-        }
-      },
-      "input": {
-        "name": "tick",
-        "choice": {
-          "#bigint": "-1"
-        }
-      }
-    },
-    {
-      "#meta": {
-        "index": 54
-      },
-      "mbt::actionTaken": "seed",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "3"
-          }
-        }
-      },
-      "s": {
-        "o": {
-          "calls": [
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "3"
-            }
-          ],
-          "classifications": {
-            "#bigint": "0"
-          },
-          "comparisons": {
-            "#bigint": "0"
-          },
-          "dumps": {
-            "#bigint": "0"
-          },
-          "invalidations": {
-            "#bigint": "0"
-          },
-          "loaders": {
-            "#bigint": "8"
-          },
-          "loads": {
-            "#bigint": "0"
-          },
-          "maintenance": [
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote"
-          ],
-          "policyCalls": {
-            "#bigint": "20"
-          },
-          "reads": {
-            "#bigint": "0"
-          },
-          "recovery": [],
-          "shadow": [],
-          "sourceScopes": [],
-          "writeTtls": [],
-          "writes": {
-            "#bigint": "0"
-          }
-        }
-      },
-      "input": {
-        "name": "seed",
-        "choice": {
-          "#bigint": "3"
-        }
-      }
-    },
-    {
-      "#meta": {
-        "index": 55
-      },
-      "mbt::actionTaken": "tick",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "None",
-          "value": {
-            "#tup": []
-          }
-        }
-      },
-      "s": {
-        "o": {
-          "calls": [
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "3"
-            }
-          ],
-          "classifications": {
-            "#bigint": "0"
-          },
-          "comparisons": {
-            "#bigint": "0"
-          },
-          "dumps": {
-            "#bigint": "0"
-          },
-          "invalidations": {
-            "#bigint": "0"
-          },
-          "loaders": {
-            "#bigint": "8"
-          },
-          "loads": {
-            "#bigint": "0"
-          },
-          "maintenance": [
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote"
-          ],
-          "policyCalls": {
-            "#bigint": "20"
-          },
-          "reads": {
-            "#bigint": "0"
-          },
-          "recovery": [],
-          "shadow": [],
-          "sourceScopes": [],
-          "writeTtls": [],
-          "writes": {
-            "#bigint": "0"
-          }
-        }
-      },
-      "input": {
-        "name": "tick",
-        "choice": {
-          "#bigint": "-1"
-        }
-      }
-    },
-    {
-      "#meta": {
-        "index": 56
-      },
-      "mbt::actionTaken": "invalidate",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "1"
-          }
-        }
-      },
-      "s": {
-        "o": {
-          "calls": [
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "3"
-            }
-          ],
-          "classifications": {
-            "#bigint": "0"
-          },
-          "comparisons": {
-            "#bigint": "0"
-          },
-          "dumps": {
-            "#bigint": "0"
-          },
-          "invalidations": {
-            "#bigint": "0"
-          },
-          "loaders": {
-            "#bigint": "8"
-          },
-          "loads": {
-            "#bigint": "0"
-          },
-          "maintenance": [
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote"
-          ],
-          "policyCalls": {
-            "#bigint": "20"
-          },
-          "reads": {
-            "#bigint": "0"
-          },
-          "recovery": [],
-          "shadow": [],
-          "sourceScopes": [],
-          "writeTtls": [],
-          "writes": {
-            "#bigint": "0"
-          }
-        }
-      },
-      "input": {
-        "name": "invalidate",
-        "choice": {
-          "#bigint": "1"
-        }
-      }
-    },
-    {
-      "#meta": {
-        "index": 57
-      },
-      "mbt::actionTaken": "tick",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "None",
-          "value": {
-            "#tup": []
-          }
-        }
-      },
-      "s": {
-        "o": {
-          "calls": [
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "3"
-            }
-          ],
-          "classifications": {
-            "#bigint": "0"
-          },
-          "comparisons": {
-            "#bigint": "0"
-          },
-          "dumps": {
-            "#bigint": "0"
-          },
-          "invalidations": {
-            "#bigint": "0"
-          },
-          "loaders": {
-            "#bigint": "8"
-          },
-          "loads": {
-            "#bigint": "0"
-          },
-          "maintenance": [
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote"
-          ],
-          "policyCalls": {
-            "#bigint": "20"
-          },
-          "reads": {
-            "#bigint": "0"
-          },
-          "recovery": [],
-          "shadow": [],
-          "sourceScopes": [],
-          "writeTtls": [],
-          "writes": {
-            "#bigint": "0"
-          }
-        }
-      },
-      "input": {
-        "name": "tick",
-        "choice": {
-          "#bigint": "-1"
-        }
-      }
-    },
-    {
-      "#meta": {
-        "index": 58
-      },
-      "mbt::actionTaken": "tick",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "None",
-          "value": {
-            "#tup": []
-          }
-        }
-      },
-      "s": {
-        "o": {
-          "calls": [
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "3"
-            }
-          ],
-          "classifications": {
-            "#bigint": "0"
-          },
-          "comparisons": {
-            "#bigint": "0"
-          },
-          "dumps": {
-            "#bigint": "0"
-          },
-          "invalidations": {
-            "#bigint": "0"
-          },
-          "loaders": {
-            "#bigint": "8"
-          },
-          "loads": {
-            "#bigint": "0"
-          },
-          "maintenance": [
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote"
-          ],
-          "policyCalls": {
-            "#bigint": "20"
-          },
-          "reads": {
-            "#bigint": "0"
-          },
-          "recovery": [],
-          "shadow": [],
-          "sourceScopes": [],
-          "writeTtls": [],
-          "writes": {
-            "#bigint": "0"
-          }
-        }
-      },
-      "input": {
-        "name": "tick",
-        "choice": {
-          "#bigint": "-1"
-        }
-      }
-    },
-    {
-      "#meta": {
-        "index": 59
-      },
-      "mbt::actionTaken": "closeScope",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "1"
-          }
-        }
-      },
-      "s": {
-        "o": {
-          "calls": [
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "3"
-            }
-          ],
-          "classifications": {
-            "#bigint": "0"
-          },
-          "comparisons": {
-            "#bigint": "0"
-          },
-          "dumps": {
-            "#bigint": "0"
-          },
-          "invalidations": {
-            "#bigint": "0"
-          },
-          "loaders": {
-            "#bigint": "8"
-          },
-          "loads": {
-            "#bigint": "0"
-          },
-          "maintenance": [
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote"
-          ],
-          "policyCalls": {
-            "#bigint": "20"
-          },
-          "reads": {
-            "#bigint": "0"
-          },
-          "recovery": [],
-          "shadow": [],
-          "sourceScopes": [],
-          "writeTtls": [],
-          "writes": {
-            "#bigint": "0"
-          }
-        }
-      },
-      "input": {
-        "name": "closeScope",
-        "choice": {
-          "#bigint": "1"
-        }
-      }
-    },
-    {
-      "#meta": {
-        "index": 60
-      },
-      "mbt::actionTaken": "tick",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "None",
-          "value": {
-            "#tup": []
-          }
-        }
-      },
-      "s": {
-        "o": {
-          "calls": [
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "3"
-            }
-          ],
-          "classifications": {
-            "#bigint": "0"
-          },
-          "comparisons": {
-            "#bigint": "0"
-          },
-          "dumps": {
-            "#bigint": "0"
-          },
-          "invalidations": {
-            "#bigint": "0"
-          },
-          "loaders": {
-            "#bigint": "8"
-          },
-          "loads": {
-            "#bigint": "0"
-          },
-          "maintenance": [
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote"
-          ],
-          "policyCalls": {
-            "#bigint": "20"
-          },
-          "reads": {
-            "#bigint": "0"
-          },
-          "recovery": [],
-          "shadow": [],
-          "sourceScopes": [],
-          "writeTtls": [],
-          "writes": {
-            "#bigint": "0"
-          }
-        }
-      },
-      "input": {
-        "name": "tick",
-        "choice": {
-          "#bigint": "-1"
-        }
-      }
-    },
-    {
-      "#meta": {
-        "index": 61
-      },
-      "mbt::actionTaken": "invalidate",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "1"
-          }
-        }
-      },
-      "s": {
-        "o": {
-          "calls": [
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "3"
-            }
-          ],
-          "classifications": {
-            "#bigint": "0"
-          },
-          "comparisons": {
-            "#bigint": "0"
-          },
-          "dumps": {
-            "#bigint": "0"
-          },
-          "invalidations": {
-            "#bigint": "0"
-          },
-          "loaders": {
-            "#bigint": "8"
-          },
-          "loads": {
-            "#bigint": "0"
-          },
-          "maintenance": [
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote"
-          ],
-          "policyCalls": {
-            "#bigint": "20"
-          },
-          "reads": {
-            "#bigint": "0"
-          },
-          "recovery": [],
-          "shadow": [],
-          "sourceScopes": [],
-          "writeTtls": [],
-          "writes": {
-            "#bigint": "0"
-          }
-        }
-      },
-      "input": {
-        "name": "invalidate",
-        "choice": {
-          "#bigint": "1"
-        }
-      }
-    },
-    {
-      "#meta": {
-        "index": 62
-      },
-      "mbt::actionTaken": "tick",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "None",
-          "value": {
-            "#tup": []
-          }
-        }
-      },
-      "s": {
-        "o": {
-          "calls": [
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "3"
-            }
-          ],
-          "classifications": {
-            "#bigint": "0"
-          },
-          "comparisons": {
-            "#bigint": "0"
-          },
-          "dumps": {
-            "#bigint": "0"
-          },
-          "invalidations": {
-            "#bigint": "0"
-          },
-          "loaders": {
-            "#bigint": "8"
-          },
-          "loads": {
-            "#bigint": "0"
-          },
-          "maintenance": [
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote"
-          ],
-          "policyCalls": {
-            "#bigint": "20"
-          },
-          "reads": {
-            "#bigint": "0"
-          },
-          "recovery": [],
-          "shadow": [],
-          "sourceScopes": [],
-          "writeTtls": [],
-          "writes": {
-            "#bigint": "0"
-          }
-        }
-      },
-      "input": {
-        "name": "tick",
-        "choice": {
-          "#bigint": "-1"
-        }
-      }
-    },
-    {
-      "#meta": {
-        "index": 63
-      },
-      "mbt::actionTaken": "policy",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "0"
-          }
-        }
-      },
-      "s": {
-        "o": {
-          "calls": [
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "3"
-            }
-          ],
-          "classifications": {
-            "#bigint": "0"
-          },
-          "comparisons": {
-            "#bigint": "0"
-          },
-          "dumps": {
-            "#bigint": "0"
-          },
-          "invalidations": {
-            "#bigint": "0"
-          },
-          "loaders": {
-            "#bigint": "8"
-          },
-          "loads": {
-            "#bigint": "0"
-          },
-          "maintenance": [
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote"
-          ],
-          "policyCalls": {
-            "#bigint": "20"
-          },
-          "reads": {
-            "#bigint": "0"
-          },
-          "recovery": [],
-          "shadow": [],
-          "sourceScopes": [],
-          "writeTtls": [],
-          "writes": {
-            "#bigint": "0"
-          }
-        }
-      },
-      "input": {
-        "name": "policy",
-        "choice": {
-          "#bigint": "0"
-        }
-      }
-    },
-    {
-      "#meta": {
-        "index": 64
-      },
-      "mbt::actionTaken": "policy",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "2"
-          }
-        }
-      },
-      "s": {
-        "o": {
-          "calls": [
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "3"
-            }
-          ],
-          "classifications": {
-            "#bigint": "0"
-          },
-          "comparisons": {
-            "#bigint": "0"
-          },
-          "dumps": {
-            "#bigint": "0"
-          },
-          "invalidations": {
-            "#bigint": "0"
-          },
-          "loaders": {
-            "#bigint": "8"
-          },
-          "loads": {
-            "#bigint": "0"
-          },
-          "maintenance": [
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote",
-            "missing_remote"
-          ],
-          "policyCalls": {
-            "#bigint": "20"
-          },
-          "reads": {
-            "#bigint": "0"
-          },
-          "recovery": [],
-          "shadow": [],
-          "sourceScopes": [],
-          "writeTtls": [],
-          "writes": {
-            "#bigint": "0"
-          }
-        }
-      },
-      "input": {
-        "name": "policy",
-        "choice": {
-          "#bigint": "2"
-        }
-      }
-    },
-    {
-      "#meta": {
-        "index": 65
+        },
+        "name": "seed"
       },
       "mbt::actionTaken": "seed",
       "mbt::nondetPicks": {
@@ -6853,17 +6656,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "seed",
-        "choice": {
-          "#bigint": "7"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 66
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "tick"
       },
       "mbt::actionTaken": "tick",
       "mbt::nondetPicks": {
@@ -6978,17 +6778,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "tick",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 67
+      "input": {
+        "choice": {
+          "#bigint": "0"
+        },
+        "name": "closeScope"
       },
       "mbt::actionTaken": "closeScope",
       "mbt::nondetPicks": {
@@ -7103,17 +6900,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "closeScope",
-        "choice": {
-          "#bigint": "0"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 68
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "tick"
       },
       "mbt::actionTaken": "tick",
       "mbt::nondetPicks": {
@@ -7228,17 +7022,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "tick",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 69
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "tick"
       },
       "mbt::actionTaken": "tick",
       "mbt::nondetPicks": {
@@ -7353,17 +7144,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "tick",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 70
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "tick"
       },
       "mbt::actionTaken": "tick",
       "mbt::nondetPicks": {
@@ -7478,17 +7266,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "tick",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 71
+      "input": {
+        "choice": {
+          "#bigint": "5"
+        },
+        "name": "policy"
       },
       "mbt::actionTaken": "policy",
       "mbt::nondetPicks": {
@@ -7603,17 +7388,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "policy",
-        "choice": {
-          "#bigint": "5"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 72
+      "input": {
+        "choice": {
+          "#bigint": "4"
+        },
+        "name": "seed"
       },
       "mbt::actionTaken": "seed",
       "mbt::nondetPicks": {
@@ -7728,17 +7510,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "seed",
-        "choice": {
-          "#bigint": "4"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 73
+      "input": {
+        "choice": {
+          "#bigint": "1"
+        },
+        "name": "policy"
       },
       "mbt::actionTaken": "policy",
       "mbt::nondetPicks": {
@@ -7853,17 +7632,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "policy",
-        "choice": {
-          "#bigint": "1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 74
+      "input": {
+        "choice": {
+          "#bigint": "0"
+        },
+        "name": "invalidate"
       },
       "mbt::actionTaken": "invalidate",
       "mbt::nondetPicks": {
@@ -7979,17 +7755,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "invalidate",
-        "choice": {
-          "#bigint": "0"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 75
+      "input": {
+        "choice": {
+          "#bigint": "4"
+        },
+        "name": "seed"
       },
       "mbt::actionTaken": "seed",
       "mbt::nondetPicks": {
@@ -8105,17 +7878,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "seed",
-        "choice": {
-          "#bigint": "4"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 76
+      "input": {
+        "choice": {
+          "#bigint": "1"
+        },
+        "name": "seed"
       },
       "mbt::actionTaken": "seed",
       "mbt::nondetPicks": {
@@ -8231,17 +8001,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "seed",
-        "choice": {
-          "#bigint": "1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 77
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "tick"
       },
       "mbt::actionTaken": "tick",
       "mbt::nondetPicks": {
@@ -8357,17 +8124,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "tick",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 78
+      "input": {
+        "choice": {
+          "#bigint": "3"
+        },
+        "name": "policy"
       },
       "mbt::actionTaken": "policy",
       "mbt::nondetPicks": {
@@ -8483,17 +8247,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "policy",
-        "choice": {
-          "#bigint": "3"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 79
+      "input": {
+        "choice": {
+          "#bigint": "0"
+        },
+        "name": "invalidate"
       },
       "mbt::actionTaken": "invalidate",
       "mbt::nondetPicks": {
@@ -8610,17 +8371,14 @@
             "#bigint": "0"
           }
         }
-      },
-      "input": {
-        "name": "invalidate",
-        "choice": {
-          "#bigint": "0"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 80
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "tick"
       },
       "mbt::actionTaken": "tick",
       "mbt::nondetPicks": {
@@ -8736,12 +8494,6 @@
           "writes": {
             "#bigint": "0"
           }
-        }
-      },
-      "input": {
-        "name": "tick",
-        "choice": {
-          "#bigint": "-1"
         }
       }
     }

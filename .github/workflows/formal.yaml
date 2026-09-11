@@ -44,13 +44,21 @@ jobs:
         run: bash formal/check.sh
       - name: Generate model-based conformance traces
         run: bash formal/generate-traces.sh
+      - name: Recompute committed Quint smoke and witness fixtures
+        run: node formal/generated-fixtures.mjs --check
+      - name: Bind TypeScript replay to its exact inputs
+        run: node formal/conformance.mjs prepare typescript .formal-traces/ts-context.json
       - name: Replay generated traces against TypeScript
         env:
           DIALCACHE_MBT_TRACE_DIR: .formal-traces/conformance
           DIALCACHE_EFFECTS_TRACE_DIR: .formal-traces/effects
           DIALCACHE_FEATURE_TRACE_DIR: .formal-traces/features
           DIALCACHE_COVERAGE_EVIDENCE_DIR: .formal-traces/go-parity-witnesses
-        run: pnpm exec vitest run test/formal-conformance.test.ts test/formal-effects.test.ts test/formal-features.test.ts test/formal-local-clock.test.ts test/formal-behavior.test.ts test/formal-protocol-vectors.test.ts --coverage.enabled=false
+        run: pnpm exec vitest run test/formal-conformance.test.ts test/formal-effects.test.ts test/formal-features.test.ts test/formal-local-clock.test.ts test/formal-behavior.test.ts test/formal-protocol-vectors.test.ts --coverage.enabled=false --reporter=default --reporter=json --outputFile=.formal-traces/ts-replay.json
+      - name: Require complete TypeScript replay through the shared contract
+        run: |
+          node formal/conformance-adapters.mjs typescript .formal-traces/ts-replay.json .formal-traces/ts-context.json > .formal-traces/ts-completion.json
+          node formal/conformance.mjs check .formal-traces/ts-completion.json .formal-traces/ts-context.json
       - name: Preserve formal traces and counterexamples
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -121,6 +129,8 @@ jobs:
       - name: Check Redis, Valkey, Cluster and TypeScript interoperability
         shell: bash
         run: go -C go test -race -tags integration -count=1 -run '^TestRedisIntegration$' -json ./... | tee .formal-traces/go-integration.jsonl
+      - name: Bind Go replay to its exact inputs
+        run: node formal/conformance.mjs prepare go .formal-traces/go-context.json
       - name: Replay the same generated corpus against Go with race detection
         shell: bash
         env:
@@ -132,7 +142,10 @@ jobs:
           go -C go test -count=1 -run '^TestGeneratedWitnessEvidence$' ./...
           go -C go test -race -count=1 -json ./... | tee .formal-traces/go-replay.jsonl
       - name: Require complete generated, fixed, protocol and witness replay
-        run: node formal/check-go-replay.mjs > .formal-traces/go-replay-summary.json
+        run: |
+          node formal/check-go-replay.mjs > .formal-traces/go-replay-summary.json
+          node formal/conformance-adapters.mjs go .formal-traces/go-replay.jsonl .formal-traces/go-context.json > .formal-traces/go-completion.json
+          node formal/conformance.mjs check .formal-traces/go-completion.json .formal-traces/go-context.json
       - name: Require assertion-based Go fault detection
         run: node formal/measure-go-semantics.mjs
       - name: Preserve Go parity evidence
@@ -143,6 +156,8 @@ jobs:
           path: |
             .formal-traces/go-replay.jsonl
             .formal-traces/go-replay-summary.json
+            .formal-traces/go-context.json
+            .formal-traces/go-completion.json
             .formal-traces/go-integration.jsonl
             .formal-traces/go-semantic/
           include-hidden-files: true

@@ -2,6 +2,10 @@
   {
     "regression": "localReadFailureFallsThroughAndPreservesOldLocalTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-local-failure-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/local-failure-witnesses.json/localReadFailureFallsThroughAndPreservesOldLocalTest"
+      },
       "states": [
         {
           "input": {
@@ -9,6 +13,15 @@
               "#bigint": "-1"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -54,6 +67,15 @@
               "#bigint": "2"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
           },
           "s": {
             "o": {
@@ -103,6 +125,15 @@
               "#bigint": "1"
             },
             "name": "resolveLoader"
+          },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
           },
           "s": {
             "o": {
@@ -157,6 +188,15 @@
             },
             "name": "seed"
           },
+          "mbt::actionTaken": "seed",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -210,6 +250,15 @@
             },
             "name": "localFault"
           },
+          "mbt::actionTaken": "localFault",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -262,6 +311,15 @@
               "#bigint": "0"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -318,6 +376,15 @@
               "#bigint": "0"
             },
             "name": "localFault"
+          },
+          "mbt::actionTaken": "localFault",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -374,6 +441,15 @@
               "#bigint": "2"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
           },
           "s": {
             "o": {
@@ -433,6 +509,15 @@
               "#bigint": "0"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -495,6 +580,10 @@
   {
     "regression": "localReadFailureSkipsSourcePublicationButMemoizesTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-local-failure-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/local-failure-witnesses.json/localReadFailureSkipsSourcePublicationButMemoizesTest"
+      },
       "states": [
         {
           "input": {
@@ -502,6 +591,15 @@
               "#bigint": "-1"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -547,6 +645,15 @@
               "#bigint": "2"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
           },
           "s": {
             "o": {
@@ -596,6 +703,15 @@
               "#bigint": "1"
             },
             "name": "resolveLoader"
+          },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
           },
           "s": {
             "o": {
@@ -650,6 +766,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -703,6 +828,15 @@
             },
             "name": "localFault"
           },
+          "mbt::actionTaken": "localFault",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -755,6 +889,15 @@
               "#bigint": "0"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -811,6 +954,15 @@
               "#bigint": "0"
             },
             "name": "localFault"
+          },
+          "mbt::actionTaken": "localFault",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -867,6 +1019,15 @@
               "#bigint": "2"
             },
             "name": "resolveLoader"
+          },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
           },
           "s": {
             "o": {
@@ -923,6 +1084,15 @@
               "#bigint": "2"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
           },
           "s": {
             "o": {
@@ -982,6 +1152,15 @@
               "#bigint": "0"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -1044,6 +1223,10 @@
   {
     "regression": "localWriteFailureKeepsSourceAndRequestMemoTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-local-failure-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/local-failure-witnesses.json/localWriteFailureKeepsSourceAndRequestMemoTest"
+      },
       "states": [
         {
           "input": {
@@ -1051,6 +1234,15 @@
               "#bigint": "-1"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -1096,6 +1288,15 @@
               "#bigint": "0"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -1146,6 +1347,15 @@
             },
             "name": "localFault"
           },
+          "mbt::actionTaken": "localFault",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -1194,6 +1404,15 @@
               "#bigint": "1"
             },
             "name": "resolveLoader"
+          },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
           },
           "s": {
             "o": {
@@ -1247,6 +1466,15 @@
               "#bigint": "0"
             },
             "name": "localFault"
+          },
+          "mbt::actionTaken": "localFault",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -1301,6 +1529,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -1353,6 +1590,15 @@
               "#bigint": "0"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -1409,6 +1655,15 @@
               "#bigint": "2"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
           },
           "s": {
             "o": {
@@ -1468,6 +1723,15 @@
               "#bigint": "2"
             },
             "name": "resolveLoader"
+          },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
           },
           "s": {
             "o": {
@@ -1527,6 +1791,15 @@
               "#bigint": "2"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
           },
           "s": {
             "o": {
@@ -1589,6 +1862,10 @@
   {
     "regression": "sourceFailureKeepsPreviouslyAcceptedStorageTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-local-failure-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/local-failure-witnesses.json/sourceFailureKeepsPreviouslyAcceptedStorageTest"
+      },
       "states": [
         {
           "input": {
@@ -1596,6 +1873,15 @@
               "#bigint": "-1"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -1641,6 +1927,15 @@
               "#bigint": "2"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
           },
           "s": {
             "o": {
@@ -1690,6 +1985,15 @@
               "#bigint": "1"
             },
             "name": "resolveLoader"
+          },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
           },
           "s": {
             "o": {
@@ -1744,6 +2048,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -1797,6 +2110,15 @@
             },
             "name": "localFault"
           },
+          "mbt::actionTaken": "localFault",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -1849,6 +2171,15 @@
               "#bigint": "0"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -1906,6 +2237,15 @@
             },
             "name": "rejectLoader"
           },
+          "mbt::actionTaken": "rejectLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -1962,6 +2302,15 @@
             },
             "name": "localFault"
           },
+          "mbt::actionTaken": "localFault",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -2017,6 +2366,15 @@
               "#bigint": "2"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
           },
           "s": {
             "o": {

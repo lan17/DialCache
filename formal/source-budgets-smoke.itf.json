@@ -1,11 +1,8 @@
 {
   "#meta": {
     "format": "ITF",
-    "format-description": "https://apalache-mc.org/docs/adr/015adr-trace.html",
     "source": "formal/dialcache-source-budgets-conformance.qnt",
-    "status": "ok",
-    "description": "Created by Quint on Thu Sep 10 2026 13:55:15 GMT-0700 (Pacific Daylight Time)",
-    "timestamp": 1789073715911
+    "recipe": "formal/fixture-recipes.json#formal/source-budgets-smoke.itf.json/smoke"
   },
   "vars": [
     "input",
@@ -15,14 +12,20 @@
   ],
   "states": [
     {
-      "#meta": {
-        "index": 0
-      },
       "input": {
         "choice": {
           "#bigint": "2"
         },
         "name": "init"
+      },
+      "mbt::actionTaken": "init",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "2"
+          }
+        }
       },
       "s": {
         "kinds": [],
@@ -82,26 +85,23 @@
           "#bigint": "-1"
         },
         "sources": []
-      },
-      "mbt::actionTaken": "init",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "2"
-          }
-        }
       }
     },
     {
-      "#meta": {
-        "index": 1
-      },
       "input": {
         "choice": {
           "#bigint": "0"
         },
         "name": "beginCall"
+      },
+      "mbt::actionTaken": "beginCall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "0"
+          }
+        }
       },
       "s": {
         "kinds": [
@@ -177,119 +177,14 @@
           "#bigint": "-1"
         },
         "sources": []
-      },
-      "mbt::actionTaken": "beginCall",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "0"
-          }
-        }
       }
     },
     {
-      "#meta": {
-        "index": 2
-      },
       "input": {
         "choice": {
           "#bigint": "0"
         },
         "name": "releasePolicy"
-      },
-      "s": {
-        "kinds": [
-          {
-            "#bigint": "0"
-          }
-        ],
-        "localExpires": {
-          "#bigint": "0"
-        },
-        "localValue": {
-          "#bigint": "0"
-        },
-        "localWriter": {
-          "#bigint": "-1"
-        },
-        "mode": {
-          "#bigint": "2"
-        },
-        "now": {
-          "#bigint": "0"
-        },
-        "o": {
-          "calls": [
-            {
-              "#bigint": "0"
-            }
-          ],
-          "classifications": {
-            "#bigint": "0"
-          },
-          "comparisons": {
-            "#bigint": "0"
-          },
-          "dumps": {
-            "#bigint": "0"
-          },
-          "invalidations": {
-            "#bigint": "0"
-          },
-          "loaders": {
-            "#bigint": "1"
-          },
-          "loads": {
-            "#bigint": "0"
-          },
-          "maintenance": [],
-          "policyCalls": {
-            "#bigint": "1"
-          },
-          "reads": {
-            "#bigint": "0"
-          },
-          "recovery": [],
-          "shadow": [],
-          "sourceScopes": [],
-          "writeTtls": [],
-          "writes": {
-            "#bigint": "0"
-          }
-        },
-        "owners": [
-          {
-            "#bigint": "0"
-          }
-        ],
-        "policyOwners": [
-          {
-            "#bigint": "-1"
-          }
-        ],
-        "registered": {
-          "#bigint": "0"
-        },
-        "sources": [
-          {
-            "budget": {
-              "#bigint": "10"
-            },
-            "cacheable": true,
-            "outside": false,
-            "rawPending": true,
-            "result": {
-              "#bigint": "0"
-            },
-            "settled": {
-              "#bigint": "-1"
-            },
-            "started": {
-              "#bigint": "0"
-            }
-          }
-        ]
       },
       "mbt::actionTaken": "releasePolicy",
       "mbt::nondetPicks": {
@@ -299,17 +194,6 @@
             "#bigint": "0"
           }
         }
-      }
-    },
-    {
-      "#meta": {
-        "index": 3
-      },
-      "input": {
-        "choice": {
-          "#bigint": "6"
-        },
-        "name": "advance"
       },
       "s": {
         "kinds": [
@@ -330,7 +214,7 @@
           "#bigint": "2"
         },
         "now": {
-          "#bigint": "6"
+          "#bigint": "0"
         },
         "o": {
           "calls": [
@@ -403,6 +287,14 @@
             }
           }
         ]
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "6"
+        },
+        "name": "advance"
       },
       "mbt::actionTaken": "advance",
       "mbt::nondetPicks": {
@@ -412,23 +304,9 @@
             "#bigint": "6"
           }
         }
-      }
-    },
-    {
-      "#meta": {
-        "index": 4
-      },
-      "input": {
-        "choice": {
-          "#bigint": "0"
-        },
-        "name": "beginCall"
       },
       "s": {
         "kinds": [
-          {
-            "#bigint": "0"
-          },
           {
             "#bigint": "0"
           }
@@ -450,9 +328,6 @@
         },
         "o": {
           "calls": [
-            {
-              "#bigint": "0"
-            },
             {
               "#bigint": "0"
             }
@@ -477,7 +352,7 @@
           },
           "maintenance": [],
           "policyCalls": {
-            "#bigint": "2"
+            "#bigint": "1"
           },
           "reads": {
             "#bigint": "0"
@@ -493,17 +368,11 @@
         "owners": [
           {
             "#bigint": "0"
-          },
-          {
-            "#bigint": "-1"
           }
         ],
         "policyOwners": [
           {
             "#bigint": "-1"
-          },
-          {
-            "#bigint": "1"
           }
         ],
         "registered": {
@@ -528,6 +397,14 @@
             }
           }
         ]
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "0"
+        },
+        "name": "beginCall"
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -537,17 +414,128 @@
             "#bigint": "0"
           }
         }
+      },
+      "s": {
+        "kinds": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "localExpires": {
+          "#bigint": "0"
+        },
+        "localValue": {
+          "#bigint": "0"
+        },
+        "localWriter": {
+          "#bigint": "-1"
+        },
+        "mode": {
+          "#bigint": "2"
+        },
+        "now": {
+          "#bigint": "6"
+        },
+        "o": {
+          "calls": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "2"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "owners": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "-1"
+          }
+        ],
+        "policyOwners": [
+          {
+            "#bigint": "-1"
+          },
+          {
+            "#bigint": "1"
+          }
+        ],
+        "registered": {
+          "#bigint": "0"
+        },
+        "sources": [
+          {
+            "budget": {
+              "#bigint": "10"
+            },
+            "cacheable": true,
+            "outside": false,
+            "rawPending": true,
+            "result": {
+              "#bigint": "0"
+            },
+            "settled": {
+              "#bigint": "-1"
+            },
+            "started": {
+              "#bigint": "0"
+            }
+          }
+        ]
       }
     },
     {
-      "#meta": {
-        "index": 5
-      },
       "input": {
         "choice": {
           "#bigint": "1"
         },
         "name": "releasePolicy"
+      },
+      "mbt::actionTaken": "releasePolicy",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
       },
       "s": {
         "kinds": [
@@ -653,26 +641,23 @@
             }
           }
         ]
-      },
-      "mbt::actionTaken": "releasePolicy",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "1"
-          }
-        }
       }
     },
     {
-      "#meta": {
-        "index": 6
-      },
       "input": {
         "choice": {
           "#bigint": "3"
         },
         "name": "advance"
+      },
+      "mbt::actionTaken": "advance",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "3"
+          }
+        }
       },
       "s": {
         "kinds": [
@@ -778,26 +763,23 @@
             }
           }
         ]
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "1"
+        },
+        "name": "advance"
       },
       "mbt::actionTaken": "advance",
       "mbt::nondetPicks": {
         "choice": {
           "tag": "Some",
           "value": {
-            "#bigint": "3"
+            "#bigint": "1"
           }
         }
-      }
-    },
-    {
-      "#meta": {
-        "index": 7
-      },
-      "input": {
-        "choice": {
-          "#bigint": "1"
-        },
-        "name": "advance"
       },
       "s": {
         "kinds": [
@@ -903,15 +885,6 @@
             }
           }
         ]
-      },
-      "mbt::actionTaken": "advance",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "1"
-          }
-        }
       }
     }
   ]

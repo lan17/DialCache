@@ -2,6 +2,10 @@
   {
     "regression": "recoveredAbsenceSkipsSelectedShadowTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-recovery-read-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/recovery-admission-witnesses.json/recoveredAbsenceSkipsSelectedShadowTest"
+      },
       "states": [
         {
           "input": {
@@ -9,6 +13,15 @@
               "#bigint": "2"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
           },
           "s": {
             "o": {
@@ -55,6 +68,15 @@
             },
             "name": "seed"
           },
+          "mbt::actionTaken": "seed",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "18"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -99,6 +121,15 @@
               "#bigint": "0"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -149,6 +180,15 @@
             },
             "name": "releaseRead"
           },
+          "mbt::actionTaken": "releaseRead",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -198,6 +238,15 @@
             },
             "name": "rejectLoader"
           },
+          "mbt::actionTaken": "rejectLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -246,6 +295,15 @@
               "#bigint": "-1"
             },
             "name": "releaseLoad"
+          },
+          "mbt::actionTaken": "releaseLoad",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -297,6 +355,15 @@
               "#bigint": "0"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -352,6 +419,15 @@
             },
             "name": "beginCall"
           },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -408,6 +484,15 @@
               "#bigint": "-1"
             },
             "name": "releaseRead"
+          },
+          "mbt::actionTaken": "releaseRead",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -466,6 +551,15 @@
             },
             "name": "rejectLoader"
           },
+          "mbt::actionTaken": "rejectLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -522,6 +616,15 @@
               "#bigint": "-1"
             },
             "name": "releaseLoad"
+          },
+          "mbt::actionTaken": "releaseLoad",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -580,6 +683,10 @@
   {
     "regression": "recoveredValueSkipsSelectedShadowTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-recovery-read-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/recovery-admission-witnesses.json/recoveredValueSkipsSelectedShadowTest"
+      },
       "states": [
         {
           "input": {
@@ -587,6 +694,15 @@
               "#bigint": "2"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
           },
           "s": {
             "o": {
@@ -633,6 +749,15 @@
             },
             "name": "seed"
           },
+          "mbt::actionTaken": "seed",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -677,6 +802,15 @@
               "#bigint": "0"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -727,6 +861,15 @@
             },
             "name": "releaseRead"
           },
+          "mbt::actionTaken": "releaseRead",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -776,6 +919,15 @@
             },
             "name": "rejectLoader"
           },
+          "mbt::actionTaken": "rejectLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -824,6 +976,15 @@
               "#bigint": "-1"
             },
             "name": "releaseLoad"
+          },
+          "mbt::actionTaken": "releaseLoad",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -875,6 +1036,15 @@
               "#bigint": "0"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {

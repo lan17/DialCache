@@ -1,11 +1,8 @@
 {
   "#meta": {
     "format": "ITF",
-    "format-description": "https://apalache-mc.org/docs/adr/015adr-trace.html",
     "source": "formal/dialcache-runtime-boundaries-conformance.qnt",
-    "status": "ok",
-    "description": "Created by Quint on Thu Sep 10 2026 14:06:33 GMT-0700 (Pacific Daylight Time)",
-    "timestamp": 1789074393680
+    "recipe": "formal/fixture-recipes.json#formal/runtime-boundaries-smoke.itf.json/smoke"
   },
   "vars": [
     "input",
@@ -15,14 +12,20 @@
   ],
   "states": [
     {
-      "#meta": {
-        "index": 0
-      },
       "input": {
         "choice": {
           "#bigint": "2"
         },
         "name": "init"
+      },
+      "mbt::actionTaken": "init",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "2"
+          }
+        }
       },
       "s": {
         "admissions": [],
@@ -84,26 +87,23 @@
         "waitingPolicy": {
           "#bigint": "-1"
         }
-      },
-      "mbt::actionTaken": "init",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "2"
-          }
-        }
       }
     },
     {
-      "#meta": {
-        "index": 1
-      },
       "input": {
         "choice": {
           "#bigint": "5"
         },
         "name": "policy"
+      },
+      "mbt::actionTaken": "policy",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "5"
+          }
+        }
       },
       "s": {
         "admissions": [],
@@ -165,26 +165,23 @@
         "waitingPolicy": {
           "#bigint": "-1"
         }
-      },
-      "mbt::actionTaken": "policy",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "5"
-          }
-        }
       }
     },
     {
-      "#meta": {
-        "index": 2
-      },
       "input": {
         "choice": {
           "#bigint": "-1"
         },
         "name": "beginCall"
+      },
+      "mbt::actionTaken": "beginCall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
       },
       "s": {
         "admissions": [],
@@ -254,8 +251,16 @@
         "waitingPolicy": {
           "#bigint": "0"
         }
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "releasePolicy"
       },
-      "mbt::actionTaken": "beginCall",
+      "mbt::actionTaken": "releasePolicy",
       "mbt::nondetPicks": {
         "choice": {
           "tag": "None",
@@ -263,23 +268,13 @@
             "#tup": []
           }
         }
-      }
-    },
-    {
-      "#meta": {
-        "index": 3
-      },
-      "input": {
-        "choice": {
-          "#bigint": "-1"
-        },
-        "name": "releasePolicy"
       },
       "s": {
         "admissions": [
           {
             "cacheHit": false,
             "joined": false,
+            "localHit": false,
             "open": true,
             "policy": {
               "#bigint": "5"
@@ -354,6 +349,7 @@
         "sources": [
           {
             "caches": false,
+            "localCaches": false,
             "result": {
               "#bigint": "0"
             },
@@ -363,32 +359,30 @@
         "waitingPolicy": {
           "#bigint": "-1"
         }
-      },
-      "mbt::actionTaken": "releasePolicy",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "None",
-          "value": {
-            "#tup": []
-          }
-        }
       }
     },
     {
-      "#meta": {
-        "index": 4
-      },
       "input": {
         "choice": {
           "#bigint": "0"
         },
         "name": "resolveLoader"
       },
+      "mbt::actionTaken": "resolveLoader",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "0"
+          }
+        }
+      },
       "s": {
         "admissions": [
           {
             "cacheHit": false,
             "joined": false,
+            "localHit": false,
             "open": true,
             "policy": {
               "#bigint": "5"
@@ -467,6 +461,7 @@
         "sources": [
           {
             "caches": false,
+            "localCaches": false,
             "result": {
               "#bigint": "1"
             },
@@ -476,32 +471,30 @@
         "waitingPolicy": {
           "#bigint": "-1"
         }
-      },
-      "mbt::actionTaken": "resolveLoader",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "0"
-          }
-        }
       }
     },
     {
-      "#meta": {
-        "index": 5
-      },
       "input": {
         "choice": {
           "#bigint": "8"
         },
         "name": "policy"
       },
+      "mbt::actionTaken": "policy",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "8"
+          }
+        }
+      },
       "s": {
         "admissions": [
           {
             "cacheHit": false,
             "joined": false,
+            "localHit": false,
             "open": true,
             "policy": {
               "#bigint": "5"
@@ -580,6 +573,7 @@
         "sources": [
           {
             "caches": false,
+            "localCaches": false,
             "result": {
               "#bigint": "1"
             },
@@ -589,32 +583,30 @@
         "waitingPolicy": {
           "#bigint": "-1"
         }
-      },
-      "mbt::actionTaken": "policy",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "8"
-          }
-        }
       }
     },
     {
-      "#meta": {
-        "index": 6
-      },
       "input": {
         "choice": {
           "#bigint": "-1"
         },
         "name": "beginCall"
       },
+      "mbt::actionTaken": "beginCall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
       "s": {
         "admissions": [
           {
             "cacheHit": false,
             "joined": false,
+            "localHit": false,
             "open": true,
             "policy": {
               "#bigint": "5"
@@ -699,6 +691,7 @@
         "sources": [
           {
             "caches": false,
+            "localCaches": false,
             "result": {
               "#bigint": "1"
             },
@@ -708,8 +701,16 @@
         "waitingPolicy": {
           "#bigint": "1"
         }
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "releasePolicy"
       },
-      "mbt::actionTaken": "beginCall",
+      "mbt::actionTaken": "releasePolicy",
       "mbt::nondetPicks": {
         "choice": {
           "tag": "None",
@@ -717,23 +718,13 @@
             "#tup": []
           }
         }
-      }
-    },
-    {
-      "#meta": {
-        "index": 7
-      },
-      "input": {
-        "choice": {
-          "#bigint": "-1"
-        },
-        "name": "releasePolicy"
       },
       "s": {
         "admissions": [
           {
             "cacheHit": false,
             "joined": false,
+            "localHit": false,
             "open": true,
             "policy": {
               "#bigint": "5"
@@ -745,6 +736,7 @@
           {
             "cacheHit": false,
             "joined": false,
+            "localHit": false,
             "open": true,
             "policy": {
               "#bigint": "8"
@@ -829,6 +821,7 @@
         "sources": [
           {
             "caches": false,
+            "localCaches": false,
             "result": {
               "#bigint": "1"
             },
@@ -836,6 +829,7 @@
           },
           {
             "caches": true,
+            "localCaches": false,
             "result": {
               "#bigint": "0"
             },
@@ -845,32 +839,30 @@
         "waitingPolicy": {
           "#bigint": "-1"
         }
-      },
-      "mbt::actionTaken": "releasePolicy",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "None",
-          "value": {
-            "#tup": []
-          }
-        }
       }
     },
     {
-      "#meta": {
-        "index": 8
-      },
       "input": {
         "choice": {
           "#bigint": "9"
         },
         "name": "resolveLoader"
       },
+      "mbt::actionTaken": "resolveLoader",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "9"
+          }
+        }
+      },
       "s": {
         "admissions": [
           {
             "cacheHit": false,
             "joined": false,
+            "localHit": false,
             "open": true,
             "policy": {
               "#bigint": "5"
@@ -882,6 +874,7 @@
           {
             "cacheHit": false,
             "joined": false,
+            "localHit": false,
             "open": true,
             "policy": {
               "#bigint": "8"
@@ -973,6 +966,7 @@
         "sources": [
           {
             "caches": false,
+            "localCaches": false,
             "result": {
               "#bigint": "1"
             },
@@ -980,6 +974,7 @@
           },
           {
             "caches": true,
+            "localCaches": false,
             "result": {
               "#bigint": "2"
             },
@@ -989,32 +984,30 @@
         "waitingPolicy": {
           "#bigint": "-1"
         }
-      },
-      "mbt::actionTaken": "resolveLoader",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "9"
-          }
-        }
       }
     },
     {
-      "#meta": {
-        "index": 9
-      },
       "input": {
         "choice": {
           "#bigint": "-1"
         },
         "name": "beginCall"
       },
+      "mbt::actionTaken": "beginCall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
       "s": {
         "admissions": [
           {
             "cacheHit": false,
             "joined": false,
+            "localHit": false,
             "open": true,
             "policy": {
               "#bigint": "5"
@@ -1026,6 +1019,7 @@
           {
             "cacheHit": false,
             "joined": false,
+            "localHit": false,
             "open": true,
             "policy": {
               "#bigint": "8"
@@ -1123,6 +1117,7 @@
         "sources": [
           {
             "caches": false,
+            "localCaches": false,
             "result": {
               "#bigint": "1"
             },
@@ -1130,6 +1125,7 @@
           },
           {
             "caches": true,
+            "localCaches": false,
             "result": {
               "#bigint": "2"
             },
@@ -1139,8 +1135,16 @@
         "waitingPolicy": {
           "#bigint": "2"
         }
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "releasePolicy"
       },
-      "mbt::actionTaken": "beginCall",
+      "mbt::actionTaken": "releasePolicy",
       "mbt::nondetPicks": {
         "choice": {
           "tag": "None",
@@ -1148,23 +1152,13 @@
             "#tup": []
           }
         }
-      }
-    },
-    {
-      "#meta": {
-        "index": 10
-      },
-      "input": {
-        "choice": {
-          "#bigint": "-1"
-        },
-        "name": "releasePolicy"
       },
       "s": {
         "admissions": [
           {
             "cacheHit": false,
             "joined": false,
+            "localHit": false,
             "open": true,
             "policy": {
               "#bigint": "5"
@@ -1176,6 +1170,7 @@
           {
             "cacheHit": false,
             "joined": false,
+            "localHit": false,
             "open": true,
             "policy": {
               "#bigint": "8"
@@ -1187,6 +1182,7 @@
           {
             "cacheHit": true,
             "joined": false,
+            "localHit": false,
             "open": true,
             "policy": {
               "#bigint": "8"
@@ -1284,6 +1280,7 @@
         "sources": [
           {
             "caches": false,
+            "localCaches": false,
             "result": {
               "#bigint": "1"
             },
@@ -1291,6 +1288,7 @@
           },
           {
             "caches": true,
+            "localCaches": false,
             "result": {
               "#bigint": "2"
             },
@@ -1299,15 +1297,6 @@
         ],
         "waitingPolicy": {
           "#bigint": "-1"
-        }
-      },
-      "mbt::actionTaken": "releasePolicy",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "None",
-          "value": {
-            "#tup": []
-          }
         }
       }
     }

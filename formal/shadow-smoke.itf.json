@@ -1,24 +1,22 @@
 {
   "#meta": {
     "format": "ITF",
-    "format-description": "https://apalache-mc.org/docs/adr/015adr-trace.html",
     "source": "formal/dialcache-shadow-conformance.qnt",
-    "status": "ok",
-    "description": "Created by Quint on Wed Sep 09 2026 21:53:33 GMT-0700 (Pacific Daylight Time)",
-    "timestamp": 1789016013952
+    "recipe": "formal/fixture-recipes.json#formal/shadow-smoke.itf.json/smoke"
   },
   "vars": [
-    "mbt::actionTaken",
-    "mbt::nondetPicks",
+    "input",
     "s",
     "mbt::actionTaken",
-    "mbt::nondetPicks",
-    "input"
+    "mbt::nondetPicks"
   ],
   "states": [
     {
-      "#meta": {
-        "index": 0
+      "input": {
+        "choice": {
+          "#bigint": "0"
+        },
+        "name": "init"
       },
       "mbt::actionTaken": "init",
       "mbt::nondetPicks": {
@@ -77,17 +75,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "init",
-        "choice": {
-          "#bigint": "0"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 1
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "beginCall"
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -150,17 +145,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "beginCall",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 2
+      "input": {
+        "choice": {
+          "#bigint": "1"
+        },
+        "name": "resolveLoader"
       },
       "mbt::actionTaken": "resolveLoader",
       "mbt::nondetPicks": {
@@ -223,17 +215,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "resolveLoader",
-        "choice": {
-          "#bigint": "1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 3
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "releaseRead"
       },
       "mbt::actionTaken": "releaseRead",
       "mbt::nondetPicks": {
@@ -296,17 +285,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "releaseRead",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 4
+      "input": {
+        "choice": {
+          "#bigint": "20"
+        },
+        "name": "invalidate"
       },
       "mbt::actionTaken": "invalidate",
       "mbt::nondetPicks": {
@@ -371,17 +357,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "invalidate",
-        "choice": {
-          "#bigint": "20"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 5
+      "input": {
+        "choice": {
+          "#bigint": "10"
+        },
+        "name": "advance"
       },
       "mbt::actionTaken": "advance",
       "mbt::nondetPicks": {
@@ -448,94 +431,88 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "advance",
-        "choice": {
-          "#bigint": "10"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 6
-      },
-      "mbt::actionTaken": "shadowPolicy",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "0"
-          }
-        }
-      },
-      "s": {
-        "o": {
-          "calls": [
-            {
-              "#bigint": "1"
-            }
-          ],
-          "classifications": {
-            "#bigint": "0"
-          },
-          "comparisons": {
-            "#bigint": "0"
-          },
-          "dumps": {
-            "#bigint": "1"
-          },
-          "invalidations": {
-            "#bigint": "1"
-          },
-          "loaders": {
-            "#bigint": "1"
-          },
-          "loads": {
-            "#bigint": "0"
-          },
-          "maintenance": [
-            "ok"
-          ],
-          "policyCalls": {
-            "#bigint": "1"
-          },
-          "reads": {
-            "#bigint": "1"
-          },
-          "recovery": [],
-          "shadow": [
-            "timeout"
-          ],
-          "sourceScopes": [],
-          "writeTtls": [],
-          "writes": {
-            "#bigint": "0"
-          }
-        },
-        "d": {
-          "ages": [],
-          "coalesced": [],
-          "configErrors": {
-            "#bigint": "0"
-          },
-          "fallbackErrors": [],
-          "warnings": {
-            "#bigint": "0"
-          },
-          "futureOffsets": []
-        }
-      },
       "input": {
-        "name": "shadowPolicy",
         "choice": {
           "#bigint": "0"
+        },
+        "name": "shadowPolicy"
+      },
+      "mbt::actionTaken": "shadowPolicy",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "1"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "1"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [
+            "timeout"
+          ],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [],
+          "configErrors": {
+            "#bigint": "0"
+          },
+          "fallbackErrors": [],
+          "warnings": {
+            "#bigint": "0"
+          },
+          "futureOffsets": []
         }
       }
     },
     {
-      "#meta": {
-        "index": 7
+      "input": {
+        "choice": {
+          "#bigint": "1"
+        },
+        "name": "shadowPolicy"
       },
       "mbt::actionTaken": "shadowPolicy",
       "mbt::nondetPicks": {
@@ -602,17 +579,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "shadowPolicy",
-        "choice": {
-          "#bigint": "1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 8
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "releaseDump"
       },
       "mbt::actionTaken": "releaseDump",
       "mbt::nondetPicks": {
@@ -679,17 +653,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "releaseDump",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 9
+      "input": {
+        "choice": {
+          "#bigint": "1"
+        },
+        "name": "writeFault"
       },
       "mbt::actionTaken": "writeFault",
       "mbt::nondetPicks": {
@@ -756,17 +727,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "writeFault",
-        "choice": {
-          "#bigint": "1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 10
+      "input": {
+        "choice": {
+          "#bigint": "2"
+        },
+        "name": "logPolicy"
       },
       "mbt::actionTaken": "logPolicy",
       "mbt::nondetPicks": {
@@ -833,17 +801,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "logPolicy",
-        "choice": {
-          "#bigint": "2"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 11
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "beginCall"
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -913,17 +878,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "beginCall",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 12
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "releaseRead"
       },
       "mbt::actionTaken": "releaseRead",
       "mbt::nondetPicks": {
@@ -993,17 +955,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "releaseRead",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 13
+      "input": {
+        "choice": {
+          "#bigint": "0"
+        },
+        "name": "loadFault"
       },
       "mbt::actionTaken": "loadFault",
       "mbt::nondetPicks": {
@@ -1073,17 +1032,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "loadFault",
-        "choice": {
-          "#bigint": "0"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 14
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "rejectLoader"
       },
       "mbt::actionTaken": "rejectLoader",
       "mbt::nondetPicks": {
@@ -1156,183 +1112,174 @@
           },
           "futureOffsets": []
         }
-      },
+      }
+    },
+    {
       "input": {
-        "name": "rejectLoader",
+        "choice": {
+          "#bigint": "6"
+        },
+        "name": "seed"
+      },
+      "mbt::actionTaken": "seed",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "6"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "3"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "2"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [],
+          "shadow": [
+            "timeout",
+            "source_error"
+          ],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [],
+          "configErrors": {
+            "#bigint": "1"
+          },
+          "fallbackErrors": [
+            "local"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          },
+          "futureOffsets": []
+        }
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "6"
+        },
+        "name": "seed"
+      },
+      "mbt::actionTaken": "seed",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "6"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "3"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "2"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [],
+          "shadow": [
+            "timeout",
+            "source_error"
+          ],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [],
+          "configErrors": {
+            "#bigint": "1"
+          },
+          "fallbackErrors": [
+            "local"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          },
+          "futureOffsets": []
+        }
+      }
+    },
+    {
+      "input": {
         "choice": {
           "#bigint": "-1"
-        }
-      }
-    },
-    {
-      "#meta": {
-        "index": 15
-      },
-      "mbt::actionTaken": "seed",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "6"
-          }
-        }
-      },
-      "s": {
-        "o": {
-          "calls": [
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "3"
-            }
-          ],
-          "classifications": {
-            "#bigint": "0"
-          },
-          "comparisons": {
-            "#bigint": "0"
-          },
-          "dumps": {
-            "#bigint": "1"
-          },
-          "invalidations": {
-            "#bigint": "1"
-          },
-          "loaders": {
-            "#bigint": "2"
-          },
-          "loads": {
-            "#bigint": "0"
-          },
-          "maintenance": [
-            "ok"
-          ],
-          "policyCalls": {
-            "#bigint": "2"
-          },
-          "reads": {
-            "#bigint": "2"
-          },
-          "recovery": [],
-          "shadow": [
-            "timeout",
-            "source_error"
-          ],
-          "sourceScopes": [],
-          "writeTtls": [],
-          "writes": {
-            "#bigint": "0"
-          }
         },
-        "d": {
-          "ages": [],
-          "coalesced": [],
-          "configErrors": {
-            "#bigint": "1"
-          },
-          "fallbackErrors": [
-            "local"
-          ],
-          "warnings": {
-            "#bigint": "0"
-          },
-          "futureOffsets": []
-        }
-      },
-      "input": {
-        "name": "seed",
-        "choice": {
-          "#bigint": "6"
-        }
-      }
-    },
-    {
-      "#meta": {
-        "index": 16
-      },
-      "mbt::actionTaken": "seed",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "6"
-          }
-        }
-      },
-      "s": {
-        "o": {
-          "calls": [
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "3"
-            }
-          ],
-          "classifications": {
-            "#bigint": "0"
-          },
-          "comparisons": {
-            "#bigint": "0"
-          },
-          "dumps": {
-            "#bigint": "1"
-          },
-          "invalidations": {
-            "#bigint": "1"
-          },
-          "loaders": {
-            "#bigint": "2"
-          },
-          "loads": {
-            "#bigint": "0"
-          },
-          "maintenance": [
-            "ok"
-          ],
-          "policyCalls": {
-            "#bigint": "2"
-          },
-          "reads": {
-            "#bigint": "2"
-          },
-          "recovery": [],
-          "shadow": [
-            "timeout",
-            "source_error"
-          ],
-          "sourceScopes": [],
-          "writeTtls": [],
-          "writes": {
-            "#bigint": "0"
-          }
-        },
-        "d": {
-          "ages": [],
-          "coalesced": [],
-          "configErrors": {
-            "#bigint": "1"
-          },
-          "fallbackErrors": [
-            "local"
-          ],
-          "warnings": {
-            "#bigint": "0"
-          },
-          "futureOffsets": []
-        }
-      },
-      "input": {
-        "name": "seed",
-        "choice": {
-          "#bigint": "6"
-        }
-      }
-    },
-    {
-      "#meta": {
-        "index": 17
+        "name": "beginCall"
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -1408,17 +1355,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "beginCall",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 18
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "rejectLoader"
       },
       "mbt::actionTaken": "rejectLoader",
       "mbt::nondetPicks": {
@@ -1495,17 +1439,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "rejectLoader",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 19
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "releaseRead"
       },
       "mbt::actionTaken": "releaseRead",
       "mbt::nondetPicks": {
@@ -1583,17 +1524,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "releaseRead",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 20
+      "input": {
+        "choice": {
+          "#bigint": "4"
+        },
+        "name": "seed"
       },
       "mbt::actionTaken": "seed",
       "mbt::nondetPicks": {
@@ -1671,17 +1609,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "seed",
-        "choice": {
-          "#bigint": "4"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 21
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "beginCall"
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -1762,17 +1697,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "beginCall",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 22
+      "input": {
+        "choice": {
+          "#bigint": "1"
+        },
+        "name": "resolveLoader"
       },
       "mbt::actionTaken": "resolveLoader",
       "mbt::nondetPicks": {
@@ -1853,17 +1785,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "resolveLoader",
-        "choice": {
-          "#bigint": "1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 23
+      "input": {
+        "choice": {
+          "#bigint": "1"
+        },
+        "name": "writeFault"
       },
       "mbt::actionTaken": "writeFault",
       "mbt::nondetPicks": {
@@ -1944,17 +1873,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "writeFault",
-        "choice": {
-          "#bigint": "1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 24
+      "input": {
+        "choice": {
+          "#bigint": "8"
+        },
+        "name": "seedUnicode"
       },
       "mbt::actionTaken": "seedUnicode",
       "mbt::nondetPicks": {
@@ -2035,17 +1961,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "seedUnicode",
-        "choice": {
-          "#bigint": "8"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 25
+      "input": {
+        "choice": {
+          "#bigint": "7"
+        },
+        "name": "seed"
       },
       "mbt::actionTaken": "seed",
       "mbt::nondetPicks": {
@@ -2126,17 +2049,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "seed",
-        "choice": {
-          "#bigint": "7"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 26
+      "input": {
+        "choice": {
+          "#bigint": "1"
+        },
+        "name": "advance"
       },
       "mbt::actionTaken": "advance",
       "mbt::nondetPicks": {
@@ -2217,17 +2137,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "advance",
-        "choice": {
-          "#bigint": "1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 27
+      "input": {
+        "choice": {
+          "#bigint": "1"
+        },
+        "name": "dumpFault"
       },
       "mbt::actionTaken": "dumpFault",
       "mbt::nondetPicks": {
@@ -2308,17 +2225,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "dumpFault",
-        "choice": {
-          "#bigint": "1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 28
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "releaseRead"
       },
       "mbt::actionTaken": "releaseRead",
       "mbt::nondetPicks": {
@@ -2400,17 +2314,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "releaseRead",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 29
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "beginCall"
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -2495,17 +2406,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "beginCall",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 30
+      "input": {
+        "choice": {
+          "#bigint": "0"
+        },
+        "name": "readFault"
       },
       "mbt::actionTaken": "readFault",
       "mbt::nondetPicks": {
@@ -2590,17 +2498,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "readFault",
-        "choice": {
-          "#bigint": "0"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 31
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "releaseRead"
       },
       "mbt::actionTaken": "releaseRead",
       "mbt::nondetPicks": {
@@ -2685,17 +2590,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "releaseRead",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 32
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "rejectLoader"
       },
       "mbt::actionTaken": "rejectLoader",
       "mbt::nondetPicks": {
@@ -2782,17 +2684,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "rejectLoader",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 33
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "beginCall"
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -2882,17 +2781,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "beginCall",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 34
+      "input": {
+        "choice": {
+          "#bigint": "2"
+        },
+        "name": "resolveLoader"
       },
       "mbt::actionTaken": "resolveLoader",
       "mbt::nondetPicks": {
@@ -2982,17 +2878,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "resolveLoader",
-        "choice": {
-          "#bigint": "2"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 35
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "releaseRead"
       },
       "mbt::actionTaken": "releaseRead",
       "mbt::nondetPicks": {
@@ -3083,17 +2976,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "releaseRead",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 36
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "beginCall"
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -3187,17 +3077,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "beginCall",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 37
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "releaseRead"
       },
       "mbt::actionTaken": "releaseRead",
       "mbt::nondetPicks": {
@@ -3291,17 +3178,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "releaseRead",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 38
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "rejectLoader"
       },
       "mbt::actionTaken": "rejectLoader",
       "mbt::nondetPicks": {
@@ -3397,17 +3281,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "rejectLoader",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 39
+      "input": {
+        "choice": {
+          "#bigint": "1"
+        },
+        "name": "advance"
       },
       "mbt::actionTaken": "advance",
       "mbt::nondetPicks": {
@@ -3503,17 +3384,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "advance",
-        "choice": {
-          "#bigint": "1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 40
+      "input": {
+        "choice": {
+          "#bigint": "10"
+        },
+        "name": "advance"
       },
       "mbt::actionTaken": "advance",
       "mbt::nondetPicks": {
@@ -3609,17 +3487,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "advance",
-        "choice": {
-          "#bigint": "10"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 41
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "beginCall"
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -3718,17 +3593,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "beginCall",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 42
+      "input": {
+        "choice": {
+          "#bigint": "8"
+        },
+        "name": "seedUnicode"
       },
       "mbt::actionTaken": "seedUnicode",
       "mbt::nondetPicks": {
@@ -3827,17 +3699,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "seedUnicode",
-        "choice": {
-          "#bigint": "8"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 43
+      "input": {
+        "choice": {
+          "#bigint": "20"
+        },
+        "name": "invalidate"
       },
       "mbt::actionTaken": "invalidate",
       "mbt::nondetPicks": {
@@ -3937,17 +3806,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "invalidate",
-        "choice": {
-          "#bigint": "20"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 44
+      "input": {
+        "choice": {
+          "#bigint": "0"
+        },
+        "name": "loadFault"
       },
       "mbt::actionTaken": "loadFault",
       "mbt::nondetPicks": {
@@ -4047,17 +3913,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "loadFault",
-        "choice": {
-          "#bigint": "0"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 45
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "releaseRead"
       },
       "mbt::actionTaken": "releaseRead",
       "mbt::nondetPicks": {
@@ -4157,17 +4020,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "releaseRead",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 46
+      "input": {
+        "choice": {
+          "#bigint": "1"
+        },
+        "name": "logPolicy"
       },
       "mbt::actionTaken": "logPolicy",
       "mbt::nondetPicks": {
@@ -4267,17 +4127,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "logPolicy",
-        "choice": {
-          "#bigint": "1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 47
+      "input": {
+        "choice": {
+          "#bigint": "2"
+        },
+        "name": "resolveLoader"
       },
       "mbt::actionTaken": "resolveLoader",
       "mbt::nondetPicks": {
@@ -4377,17 +4234,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "resolveLoader",
-        "choice": {
-          "#bigint": "2"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 48
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "releaseLoad"
       },
       "mbt::actionTaken": "releaseLoad",
       "mbt::nondetPicks": {
@@ -4487,17 +4341,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "releaseLoad",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 49
+      "input": {
+        "choice": {
+          "#bigint": "8"
+        },
+        "name": "seed"
       },
       "mbt::actionTaken": "seed",
       "mbt::nondetPicks": {
@@ -4597,17 +4448,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "seed",
-        "choice": {
-          "#bigint": "8"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 50
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "releaseRead"
       },
       "mbt::actionTaken": "releaseRead",
       "mbt::nondetPicks": {
@@ -4712,17 +4560,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "releaseRead",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 51
+      "input": {
+        "choice": {
+          "#bigint": "0"
+        },
+        "name": "logPolicy"
       },
       "mbt::actionTaken": "logPolicy",
       "mbt::nondetPicks": {
@@ -4827,17 +4672,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "logPolicy",
-        "choice": {
-          "#bigint": "0"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 52
+      "input": {
+        "choice": {
+          "#bigint": "2"
+        },
+        "name": "seed"
       },
       "mbt::actionTaken": "seed",
       "mbt::nondetPicks": {
@@ -4942,17 +4784,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "seed",
-        "choice": {
-          "#bigint": "2"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 53
+      "input": {
+        "choice": {
+          "#bigint": "20"
+        },
+        "name": "invalidate"
       },
       "mbt::actionTaken": "invalidate",
       "mbt::nondetPicks": {
@@ -5058,17 +4897,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "invalidate",
-        "choice": {
-          "#bigint": "20"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 54
+      "input": {
+        "choice": {
+          "#bigint": "1"
+        },
+        "name": "readFault"
       },
       "mbt::actionTaken": "readFault",
       "mbt::nondetPicks": {
@@ -5174,17 +5010,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "readFault",
-        "choice": {
-          "#bigint": "1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 55
+      "input": {
+        "choice": {
+          "#bigint": "0"
+        },
+        "name": "shadowPolicy"
       },
       "mbt::actionTaken": "shadowPolicy",
       "mbt::nondetPicks": {
@@ -5290,17 +5123,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "shadowPolicy",
-        "choice": {
-          "#bigint": "0"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 56
+      "input": {
+        "choice": {
+          "#bigint": "0"
+        },
+        "name": "loadFault"
       },
       "mbt::actionTaken": "loadFault",
       "mbt::nondetPicks": {
@@ -5406,17 +5236,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "loadFault",
-        "choice": {
-          "#bigint": "0"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 57
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "rollbackWall"
       },
       "mbt::actionTaken": "rollbackWall",
       "mbt::nondetPicks": {
@@ -5522,17 +5349,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "rollbackWall",
-        "choice": {
-          "#bigint": "-1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 58
+      "input": {
+        "choice": {
+          "#bigint": "1"
+        },
+        "name": "shadowPolicy"
       },
       "mbt::actionTaken": "shadowPolicy",
       "mbt::nondetPicks": {
@@ -5638,17 +5462,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "shadowPolicy",
-        "choice": {
-          "#bigint": "1"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 59
+      "input": {
+        "choice": {
+          "#bigint": "0"
+        },
+        "name": "readFault"
       },
       "mbt::actionTaken": "readFault",
       "mbt::nondetPicks": {
@@ -5754,17 +5575,14 @@
           },
           "futureOffsets": []
         }
-      },
-      "input": {
-        "name": "readFault",
-        "choice": {
-          "#bigint": "0"
-        }
       }
     },
     {
-      "#meta": {
-        "index": 60
+      "input": {
+        "choice": {
+          "#bigint": "0"
+        },
+        "name": "dumpFault"
       },
       "mbt::actionTaken": "dumpFault",
       "mbt::nondetPicks": {
@@ -5869,12 +5687,6 @@
             "#bigint": "0"
           },
           "futureOffsets": []
-        }
-      },
-      "input": {
-        "name": "dumpFault",
-        "choice": {
-          "#bigint": "0"
         }
       }
     }

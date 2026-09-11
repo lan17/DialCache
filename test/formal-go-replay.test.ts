@@ -131,6 +131,12 @@ describe("completed Go conformance report", () => {
       .toThrow(/parent completed before its children/);
   });
 
+  it("rejects a child started after its intermediate parent completed", () => {
+    expect(() => check([event("start"), event("run", "TestRoot"), event("run", "TestRoot/parent"),
+      event("pass", "TestRoot/parent"), event("run", "TestRoot/parent/late")]))
+      .toThrow(/parent already completed/);
+  });
+
   it("accepts legal parallel scheduling but rejects impossible pause and resume transitions", () => {
     const events: unknown[] = completed();
     events.splice(2, 0, event("pause", "TestCoreConformance"),

@@ -2,7 +2,10 @@
   {
     "witness": "recovery-age-sampled-at-successful-decode",
     "profile": "recovery",
-    "source": ".formal-traces/features/recovery/trace_101.itf.json:15",
+    "provenance": {
+      "model": "formal/dialcache-recovery-conformance.qnt",
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-witness-attribution.json/recovery-age-sampled-at-successful-decode"
+    },
     "initialState": {
       "acceptedMaxAge": 5000,
       "candidate": 0,
@@ -166,7 +169,10 @@
   {
     "witness": "fenced-read-does-not-retain",
     "profile": "recovery",
-    "source": ".formal-traces/features/recovery/trace_106.itf.json:6",
+    "provenance": {
+      "model": "formal/dialcache-recovery-conformance.qnt",
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-witness-attribution.json/fenced-read-does-not-retain"
+    },
     "initialState": {
       "acceptedMaxAge": 5000,
       "candidate": 0,
@@ -237,7 +243,10 @@
   {
     "witness": "future-read-preserves-source-error",
     "profile": "recovery",
-    "source": ".formal-traces/features/recovery/trace_110.itf.json:5",
+    "provenance": {
+      "model": "formal/dialcache-recovery-conformance.qnt",
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-witness-attribution.json/future-read-preserves-source-error"
+    },
     "initialState": {
       "acceptedMaxAge": 5000,
       "candidate": 0,
@@ -308,7 +317,10 @@
   {
     "witness": "classifier-error-keeps-error-without-decode",
     "profile": "recovery",
-    "source": ".formal-traces/features/recovery/trace_115.itf.json:2",
+    "provenance": {
+      "model": "formal/dialcache-recovery-conformance.qnt",
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-witness-attribution.json/classifier-error-keeps-error-without-decode"
+    },
     "initialState": {
       "acceptedMaxAge": 5000,
       "candidate": 0,
@@ -375,7 +387,10 @@
   {
     "witness": "maximum-age-read-preserves-source-error",
     "profile": "recovery",
-    "source": ".formal-traces/features/recovery/trace_126.itf.json:21",
+    "provenance": {
+      "model": "formal/dialcache-recovery-conformance.qnt",
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-witness-attribution.json/maximum-age-read-preserves-source-error"
+    },
     "initialState": {
       "acceptedMaxAge": 5000,
       "candidate": 1,
@@ -486,7 +501,10 @@
   {
     "witness": "fenced-c1-supersedes-without-repair",
     "profile": "shadow",
-    "source": ".formal-traces/features/shadow/trace_233.itf.json:14",
+    "provenance": {
+      "model": "formal/dialcache-shadow-conformance.qnt",
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-witness-attribution.json/fenced-c1-supersedes-without-repair"
+    },
     "initialState": {
       "abandoned": true,
       "c0": 0,

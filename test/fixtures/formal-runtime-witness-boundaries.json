@@ -1,12 +1,11 @@
 [
   {
     "title": "memo-created-after-invalidation",
-    "profile": "layers",
     "witness": "invalidation-preserves-request-hit",
+    "profile": "layers",
     "provenance": {
-      "path": ".formal-traces/features/layers/trace_135.itf.json",
-      "sha256": "d63f40ec0b8eabf25e0bc89ff65a78b8bcaa977c9d07297abdc26f53fe48cb9e",
-      "lastState": 5
+      "model": "formal/dialcache-layers-conformance.qnt",
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-runtime-witness-boundaries.json/memo-created-after-invalidation"
     },
     "initialState": {
       "capacity": {
@@ -641,12 +640,11 @@
   },
   {
     "title": "preexisting-memo-survives",
-    "profile": "layers",
     "witness": "invalidation-preserves-request-hit",
+    "profile": "layers",
     "provenance": {
-      "path": ".formal-traces/features/layers/trace_84.itf.json",
-      "sha256": "89662f41acd473c4d9d6ca2bcdcfad89f36e80e6b22d4a1a0143ed69e4532f38",
-      "lastState": 9
+      "model": "formal/dialcache-layers-conformance.qnt",
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-runtime-witness-boundaries.json/preexisting-memo-survives"
     },
     "initialState": {
       "capacity": {

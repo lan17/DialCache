@@ -1,11 +1,8 @@
 {
   "#meta": {
     "format": "ITF",
-    "format-description": "https://apalache-mc.org/docs/adr/015adr-trace.html",
     "source": "formal/dialcache-recovery-read-conformance.qnt",
-    "status": "ok",
-    "description": "Created by Quint on Thu Sep 10 2026 13:41:13 GMT-0700 (Pacific Daylight Time)",
-    "timestamp": 1789072873509
+    "recipe": "formal/fixture-recipes.json#formal/recovery-read-smoke.itf.json/smoke"
   },
   "vars": [
     "input",
@@ -15,14 +12,20 @@
   ],
   "states": [
     {
-      "#meta": {
-        "index": 0
-      },
       "input": {
         "choice": {
           "#bigint": "1"
         },
         "name": "init"
+      },
+      "mbt::actionTaken": "init",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
       },
       "s": {
         "acceptedFresh": {
@@ -146,26 +149,23 @@
         },
         "writeFailed": false,
         "writeReceipts": []
-      },
-      "mbt::actionTaken": "init",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "1"
-          }
-        }
       }
     },
     {
-      "#meta": {
-        "index": 1
-      },
       "input": {
         "choice": {
           "#bigint": "-1"
         },
         "name": "invalidate"
+      },
+      "mbt::actionTaken": "invalidate",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
       },
       "s": {
         "acceptedFresh": {
@@ -291,8 +291,16 @@
         },
         "writeFailed": false,
         "writeReceipts": []
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "observeMarker"
       },
-      "mbt::actionTaken": "invalidate",
+      "mbt::actionTaken": "observeMarker",
       "mbt::nondetPicks": {
         "choice": {
           "tag": "None",
@@ -300,17 +308,6 @@
             "#tup": []
           }
         }
-      }
-    },
-    {
-      "#meta": {
-        "index": 2
-      },
-      "input": {
-        "choice": {
-          "#bigint": "-1"
-        },
-        "name": "observeMarker"
       },
       "s": {
         "acceptedFresh": {
@@ -445,26 +442,23 @@
         },
         "writeFailed": false,
         "writeReceipts": []
-      },
-      "mbt::actionTaken": "observeMarker",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "None",
-          "value": {
-            "#tup": []
-          }
-        }
       }
     },
     {
-      "#meta": {
-        "index": 3
-      },
       "input": {
         "choice": {
           "#bigint": "1"
         },
         "name": "advance"
+      },
+      "mbt::actionTaken": "advance",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
       },
       "s": {
         "acceptedFresh": {
@@ -599,26 +593,23 @@
         },
         "writeFailed": false,
         "writeReceipts": []
-      },
-      "mbt::actionTaken": "advance",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "1"
-          }
-        }
       }
     },
     {
-      "#meta": {
-        "index": 4
-      },
       "input": {
         "choice": {
           "#bigint": "2"
         },
         "name": "policy"
+      },
+      "mbt::actionTaken": "policy",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "2"
+          }
+        }
       },
       "s": {
         "acceptedFresh": {
@@ -753,8 +744,16 @@
         },
         "writeFailed": false,
         "writeReceipts": []
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "2"
+        },
+        "name": "beginCall"
       },
-      "mbt::actionTaken": "policy",
+      "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
         "choice": {
           "tag": "Some",
@@ -762,17 +761,6 @@
             "#bigint": "2"
           }
         }
-      }
-    },
-    {
-      "#meta": {
-        "index": 5
-      },
-      "input": {
-        "choice": {
-          "#bigint": "2"
-        },
-        "name": "beginCall"
       },
       "s": {
         "acceptedFresh": {
@@ -919,26 +907,23 @@
         },
         "writeFailed": false,
         "writeReceipts": []
-      },
-      "mbt::actionTaken": "beginCall",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "2"
-          }
-        }
       }
     },
     {
-      "#meta": {
-        "index": 6
-      },
       "input": {
         "choice": {
           "#bigint": "-1"
         },
         "name": "releaseRead"
+      },
+      "mbt::actionTaken": "releaseRead",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
       },
       "s": {
         "acceptedFresh": {
@@ -1096,197 +1081,14 @@
         },
         "writeFailed": false,
         "writeReceipts": []
-      },
-      "mbt::actionTaken": "releaseRead",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "None",
-          "value": {
-            "#tup": []
-          }
-        }
       }
     },
     {
-      "#meta": {
-        "index": 7
-      },
       "input": {
         "choice": {
           "#bigint": "-1"
         },
         "name": "resolveLoader"
-      },
-      "s": {
-        "acceptedFresh": {
-          "#bigint": "7200000"
-        },
-        "acceptedMaximum": {
-          "#bigint": "14400000"
-        },
-        "activeSource": {
-          "#bigint": "0"
-        },
-        "canRecover": true,
-        "canWrite": true,
-        "candidate": {
-          "#bigint": "0"
-        },
-        "candidateCreated": {
-          "#bigint": "0"
-        },
-        "closed": [
-          false,
-          false
-        ],
-        "compression": [],
-        "created": {
-          "#bigint": "1000000001"
-        },
-        "expires": {
-          "#bigint": "3600001"
-        },
-        "frame": {
-          "#bigint": "2"
-        },
-        "freshMs": {
-          "#bigint": "7200000"
-        },
-        "io": {
-          "aborted": [],
-          "budgets": [
-            {
-              "#bigint": "30000000"
-            }
-          ],
-          "sourceErrors": [
-            {
-              "#bigint": "0"
-            }
-          ]
-        },
-        "localExpires": {
-          "#bigint": "0"
-        },
-        "localValue": {
-          "#bigint": "0"
-        },
-        "localVersion": {
-          "#bigint": "0"
-        },
-        "markerExpires": {
-          "#bigint": "7200000"
-        },
-        "markers": [
-          {
-            "cutoffMs": {
-              "#bigint": "0"
-            },
-            "ttlMs": {
-              "#bigint": "7200000"
-            }
-          }
-        ],
-        "maximumMs": {
-          "#bigint": "14400000"
-        },
-        "memo": [
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          }
-        ],
-        "now": {
-          "#bigint": "1"
-        },
-        "o": {
-          "calls": [
-            {
-              "#bigint": "2"
-            }
-          ],
-          "classifications": {
-            "#bigint": "0"
-          },
-          "comparisons": {
-            "#bigint": "0"
-          },
-          "dumps": {
-            "#bigint": "1"
-          },
-          "invalidations": {
-            "#bigint": "1"
-          },
-          "loaders": {
-            "#bigint": "1"
-          },
-          "loads": {
-            "#bigint": "0"
-          },
-          "maintenance": [
-            "ok"
-          ],
-          "policyCalls": {
-            "#bigint": "1"
-          },
-          "reads": {
-            "#bigint": "1"
-          },
-          "recovery": [],
-          "shadow": [],
-          "sourceScopes": [],
-          "writeTtls": [
-            {
-              "#bigint": "3600000"
-            }
-          ],
-          "writes": {
-            "#bigint": "1"
-          }
-        },
-        "observedFence": {
-          "#bigint": "1000000000"
-        },
-        "phase": {
-          "#bigint": "0"
-        },
-        "readReceipts": [
-          {
-            "age": {
-              "#bigint": "1000000001"
-            },
-            "freshDecode": false,
-            "freshMs": {
-              "#bigint": "7200000"
-            },
-            "validFrame": false
-          }
-        ],
-        "recoveryReceipts": [],
-        "scope": {
-          "#bigint": "2"
-        },
-        "tracked": true,
-        "wall": {
-          "#bigint": "1000000001"
-        },
-        "watermark": {
-          "#bigint": "1000000000"
-        },
-        "writeFailed": false,
-        "writeReceipts": [
-          {
-            "requested": {
-              "#bigint": "14400000"
-            },
-            "tracked": true,
-            "ttl": {
-              "#bigint": "3600000"
-            }
-          }
-        ]
       },
       "mbt::actionTaken": "resolveLoader",
       "mbt::nondetPicks": {
@@ -1296,17 +1098,6 @@
             "#tup": []
           }
         }
-      }
-    },
-    {
-      "#meta": {
-        "index": 8
-      },
-      "input": {
-        "choice": {
-          "#bigint": "-1"
-        },
-        "name": "observeMarker"
       },
       "s": {
         "acceptedFresh": {
@@ -1375,14 +1166,6 @@
             },
             "ttlMs": {
               "#bigint": "7200000"
-            }
-          },
-          {
-            "cutoffMs": {
-              "#bigint": "0"
-            },
-            "ttlMs": {
-              "#bigint": "7199999"
             }
           }
         ],
@@ -1486,6 +1269,14 @@
             }
           }
         ]
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "observeMarker"
       },
       "mbt::actionTaken": "observeMarker",
       "mbt::nondetPicks": {
@@ -1495,17 +1286,202 @@
             "#tup": []
           }
         }
+      },
+      "s": {
+        "acceptedFresh": {
+          "#bigint": "7200000"
+        },
+        "acceptedMaximum": {
+          "#bigint": "14400000"
+        },
+        "activeSource": {
+          "#bigint": "0"
+        },
+        "canRecover": true,
+        "canWrite": true,
+        "candidate": {
+          "#bigint": "0"
+        },
+        "candidateCreated": {
+          "#bigint": "0"
+        },
+        "closed": [
+          false,
+          false
+        ],
+        "compression": [],
+        "created": {
+          "#bigint": "1000000001"
+        },
+        "expires": {
+          "#bigint": "3600001"
+        },
+        "frame": {
+          "#bigint": "2"
+        },
+        "freshMs": {
+          "#bigint": "7200000"
+        },
+        "io": {
+          "aborted": [],
+          "budgets": [
+            {
+              "#bigint": "30000000"
+            }
+          ],
+          "sourceErrors": [
+            {
+              "#bigint": "0"
+            }
+          ]
+        },
+        "localExpires": {
+          "#bigint": "0"
+        },
+        "localValue": {
+          "#bigint": "0"
+        },
+        "localVersion": {
+          "#bigint": "0"
+        },
+        "markerExpires": {
+          "#bigint": "7200000"
+        },
+        "markers": [
+          {
+            "cutoffMs": {
+              "#bigint": "0"
+            },
+            "ttlMs": {
+              "#bigint": "7200000"
+            }
+          },
+          {
+            "cutoffMs": {
+              "#bigint": "0"
+            },
+            "ttlMs": {
+              "#bigint": "7199999"
+            }
+          }
+        ],
+        "maximumMs": {
+          "#bigint": "14400000"
+        },
+        "memo": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "now": {
+          "#bigint": "1"
+        },
+        "o": {
+          "calls": [
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "1"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "3600000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "observedFence": {
+          "#bigint": "1000000000"
+        },
+        "phase": {
+          "#bigint": "0"
+        },
+        "readReceipts": [
+          {
+            "age": {
+              "#bigint": "1000000001"
+            },
+            "freshDecode": false,
+            "freshMs": {
+              "#bigint": "7200000"
+            },
+            "validFrame": false
+          }
+        ],
+        "recoveryReceipts": [],
+        "scope": {
+          "#bigint": "2"
+        },
+        "tracked": true,
+        "wall": {
+          "#bigint": "1000000001"
+        },
+        "watermark": {
+          "#bigint": "1000000000"
+        },
+        "writeFailed": false,
+        "writeReceipts": [
+          {
+            "requested": {
+              "#bigint": "14400000"
+            },
+            "tracked": true,
+            "ttl": {
+              "#bigint": "3600000"
+            }
+          }
+        ]
       }
     },
     {
-      "#meta": {
-        "index": 9
-      },
       "input": {
         "choice": {
           "#bigint": "2"
         },
         "name": "beginCall"
+      },
+      "mbt::actionTaken": "beginCall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "2"
+          }
+        }
       },
       "s": {
         "acceptedFresh": {
@@ -1694,26 +1670,23 @@
             }
           }
         ]
-      },
-      "mbt::actionTaken": "beginCall",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "2"
-          }
-        }
       }
     },
     {
-      "#meta": {
-        "index": 10
-      },
       "input": {
         "choice": {
           "#bigint": "-1"
         },
         "name": "releaseRead"
+      },
+      "mbt::actionTaken": "releaseRead",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
       },
       "s": {
         "acceptedFresh": {
@@ -1912,8 +1885,16 @@
             }
           }
         ]
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "releaseLoad"
       },
-      "mbt::actionTaken": "releaseRead",
+      "mbt::actionTaken": "releaseLoad",
       "mbt::nondetPicks": {
         "choice": {
           "tag": "None",
@@ -1921,17 +1902,6 @@
             "#tup": []
           }
         }
-      }
-    },
-    {
-      "#meta": {
-        "index": 11
-      },
-      "input": {
-        "choice": {
-          "#bigint": "-1"
-        },
-        "name": "releaseLoad"
       },
       "s": {
         "acceptedFresh": {
@@ -2130,26 +2100,23 @@
             }
           }
         ]
-      },
-      "mbt::actionTaken": "releaseLoad",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "None",
-          "value": {
-            "#tup": []
-          }
-        }
       }
     },
     {
-      "#meta": {
-        "index": 12
-      },
       "input": {
         "choice": {
           "#bigint": "999"
         },
         "name": "advance"
+      },
+      "mbt::actionTaken": "advance",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "999"
+          }
+        }
       },
       "s": {
         "acceptedFresh": {
@@ -2348,26 +2315,23 @@
             }
           }
         ]
-      },
-      "mbt::actionTaken": "advance",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "999"
-          }
-        }
       }
     },
     {
-      "#meta": {
-        "index": 13
-      },
       "input": {
         "choice": {
           "#bigint": "-1"
         },
         "name": "observeMarker"
+      },
+      "mbt::actionTaken": "observeMarker",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
       },
       "s": {
         "acceptedFresh": {
@@ -2574,15 +2538,6 @@
             }
           }
         ]
-      },
-      "mbt::actionTaken": "observeMarker",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "None",
-          "value": {
-            "#tup": []
-          }
-        }
       }
     }
   ]

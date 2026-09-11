@@ -2,6 +2,10 @@
   {
     "regression": "acquiredMissDoesNotRereadBeforeFillTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/shadow-layers-witnesses.json/acquiredMissDoesNotRereadBeforeFillTest"
+      },
       "states": [
         {
           "input": {
@@ -9,6 +13,15 @@
               "#bigint": "-1"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -55,6 +68,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "3"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -99,6 +121,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -151,6 +182,15 @@
             },
             "name": "seed"
           },
+          "mbt::actionTaken": "seed",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -202,6 +242,15 @@
             },
             "name": "resolveLoader"
           },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -252,6 +301,15 @@
               "#bigint": "0"
             },
             "name": "releaseDump"
+          },
+          "mbt::actionTaken": "releaseDump",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -307,6 +365,15 @@
               "#bigint": "0"
             },
             "name": "releaseWrite"
+          },
+          "mbt::actionTaken": "releaseWrite",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -365,6 +432,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "5"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -421,6 +497,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -481,6 +566,10 @@
   {
     "regression": "darkFailureDoesNotUseEligibleStaleBytesTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/shadow-layers-witnesses.json/darkFailureDoesNotUseEligibleStaleBytesTest"
+      },
       "states": [
         {
           "input": {
@@ -488,6 +577,15 @@
               "#bigint": "-1"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -534,6 +632,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "3"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -579,6 +686,15 @@
             },
             "name": "seed"
           },
+          "mbt::actionTaken": "seed",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "3"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -623,6 +739,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -674,6 +799,15 @@
               "#bigint": "0"
             },
             "name": "rejectLoader"
+          },
+          "mbt::actionTaken": "rejectLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -727,6 +861,10 @@
   {
     "regression": "darkFillRetainsPolicyThroughSerializationTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/shadow-layers-witnesses.json/darkFillRetainsPolicyThroughSerializationTest"
+      },
       "states": [
         {
           "input": {
@@ -734,6 +872,15 @@
               "#bigint": "-1"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -780,6 +927,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "3"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -824,6 +980,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -876,6 +1041,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "8"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -926,6 +1100,15 @@
               "#bigint": "1"
             },
             "name": "resolveLoader"
+          },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
           },
           "s": {
             "o": {
@@ -978,6 +1161,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "13"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -1028,6 +1220,15 @@
               "#bigint": "0"
             },
             "name": "releaseDump"
+          },
+          "mbt::actionTaken": "releaseDump",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -1083,6 +1284,15 @@
               "#bigint": "0"
             },
             "name": "releaseWrite"
+          },
+          "mbt::actionTaken": "releaseWrite",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -1141,6 +1351,15 @@
             },
             "name": "advance"
           },
+          "mbt::actionTaken": "advance",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "120000"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -1198,6 +1417,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "13"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -1254,6 +1482,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -1315,6 +1552,15 @@
               "#bigint": "1"
             },
             "name": "rejectLoader"
+          },
+          "mbt::actionTaken": "rejectLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
           },
           "s": {
             "o": {
@@ -1378,6 +1624,10 @@
   {
     "regression": "darkPresentC0NeverBecomesLocalPublicationTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/shadow-layers-witnesses.json/darkPresentC0NeverBecomesLocalPublicationTest"
+      },
       "states": [
         {
           "input": {
@@ -1385,6 +1635,15 @@
               "#bigint": "-1"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -1431,6 +1690,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -1476,6 +1744,15 @@
             },
             "name": "seed"
           },
+          "mbt::actionTaken": "seed",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -1520,6 +1797,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -1571,6 +1857,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -1628,6 +1923,15 @@
               "#bigint": "2"
             },
             "name": "resolveLoader"
+          },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
           },
           "s": {
             "o": {
@@ -1687,6 +1991,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "12"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -1744,6 +2057,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -1805,6 +2127,10 @@
   {
     "regression": "darkPresentC0NeverBecomesRequestPublicationTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/shadow-layers-witnesses.json/darkPresentC0NeverBecomesRequestPublicationTest"
+      },
       "states": [
         {
           "input": {
@@ -1812,6 +2138,15 @@
               "#bigint": "-1"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -1858,6 +2193,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -1903,6 +2247,15 @@
             },
             "name": "seed"
           },
+          "mbt::actionTaken": "seed",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -1947,6 +2300,15 @@
               "#bigint": "0"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -1998,6 +2360,15 @@
               "#bigint": "0"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -2055,6 +2426,15 @@
               "#bigint": "2"
             },
             "name": "resolveLoader"
+          },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
           },
           "s": {
             "o": {
@@ -2114,6 +2494,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "12"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -2171,6 +2560,15 @@
               "#bigint": "0"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -2232,6 +2630,15 @@
               "#bigint": "1"
             },
             "name": "policy"
+          },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
           },
           "s": {
             "o": {
@@ -2293,6 +2700,15 @@
               "#bigint": "3"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "3"
+              }
+            }
           },
           "s": {
             "o": {
@@ -2358,6 +2774,10 @@
   {
     "regression": "darkPropagatedTimeoutIsSourceFailureTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/shadow-layers-witnesses.json/darkPropagatedTimeoutIsSourceFailureTest"
+      },
       "states": [
         {
           "input": {
@@ -2365,6 +2785,15 @@
               "#bigint": "-1"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -2411,6 +2840,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "3"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -2455,6 +2893,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -2506,6 +2953,15 @@
               "#bigint": "0"
             },
             "name": "rejectTimeout"
+          },
+          "mbt::actionTaken": "rejectTimeout",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -2559,6 +3015,10 @@
   {
     "regression": "darkSourcePublishesLocalBeforeShadowWriteTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/shadow-layers-witnesses.json/darkSourcePublishesLocalBeforeShadowWriteTest"
+      },
       "states": [
         {
           "input": {
@@ -2566,6 +3026,15 @@
               "#bigint": "-1"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -2612,6 +3081,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -2656,6 +3134,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -2708,6 +3195,15 @@
             },
             "name": "resolveLoader"
           },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -2759,6 +3255,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "12"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -2809,6 +3314,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -2863,6 +3377,10 @@
   {
     "regression": "darkSourcePublishesRequestBeforeShadowWriteTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/shadow-layers-witnesses.json/darkSourcePublishesRequestBeforeShadowWriteTest"
+      },
       "states": [
         {
           "input": {
@@ -2870,6 +3388,15 @@
               "#bigint": "-1"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -2916,6 +3443,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -2960,6 +3496,15 @@
               "#bigint": "0"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -3012,6 +3557,15 @@
             },
             "name": "resolveLoader"
           },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -3063,6 +3617,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "12"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -3113,6 +3676,15 @@
               "#bigint": "0"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -3167,6 +3739,15 @@
               "#bigint": "1"
             },
             "name": "policy"
+          },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
           },
           "s": {
             "o": {
@@ -3221,6 +3802,15 @@
               "#bigint": "3"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "3"
+              }
+            }
           },
           "s": {
             "o": {
@@ -3281,6 +3871,10 @@
   {
     "regression": "deduplicatedJobKeepsIndependentCallerSourcesTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/shadow-layers-witnesses.json/deduplicatedJobKeepsIndependentCallerSourcesTest"
+      },
       "states": [
         {
           "input": {
@@ -3288,6 +3882,15 @@
               "#bigint": "-1"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -3334,6 +3937,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "3"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -3378,6 +3990,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -3429,6 +4050,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -3487,6 +4117,15 @@
             },
             "name": "resolveLoader"
           },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "4"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -3544,6 +4183,15 @@
             },
             "name": "resolveLoader"
           },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -3600,6 +4248,15 @@
               "#bigint": "0"
             },
             "name": "releaseDump"
+          },
+          "mbt::actionTaken": "releaseDump",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -3661,6 +4318,15 @@
               "#bigint": "0"
             },
             "name": "releaseWrite"
+          },
+          "mbt::actionTaken": "releaseWrite",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -3724,6 +4390,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "5"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -3785,6 +4460,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -3850,6 +4534,10 @@
   {
     "regression": "expiredC0CanFillAndServeNewValueTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/shadow-layers-witnesses.json/expiredC0CanFillAndServeNewValueTest"
+      },
       "states": [
         {
           "input": {
@@ -3857,6 +4545,15 @@
               "#bigint": "-1"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -3903,6 +4600,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "3"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -3948,6 +4654,15 @@
             },
             "name": "seed"
           },
+          "mbt::actionTaken": "seed",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "3"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -3992,6 +4707,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -4044,6 +4768,15 @@
             },
             "name": "resolveLoader"
           },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -4094,6 +4827,15 @@
               "#bigint": "0"
             },
             "name": "releaseDump"
+          },
+          "mbt::actionTaken": "releaseDump",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -4149,6 +4891,15 @@
               "#bigint": "0"
             },
             "name": "releaseWrite"
+          },
+          "mbt::actionTaken": "releaseWrite",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -4207,6 +4958,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "5"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -4263,6 +5023,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -4323,6 +5092,10 @@
   {
     "regression": "fullMixedInstanceDoesNotBlockAnotherInstanceTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/shadow-layers-witnesses.json/fullMixedInstanceDoesNotBlockAnotherInstanceTest"
+      },
       "states": [
         {
           "input": {
@@ -4330,6 +5103,15 @@
               "#bigint": "-1"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -4376,6 +5158,15 @@
             },
             "name": "seed"
           },
+          "mbt::actionTaken": "seed",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -4421,6 +5212,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "4"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -4465,6 +5265,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -4517,6 +5326,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "3"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -4567,6 +5385,15 @@
               "#bigint": "10"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "10"
+              }
+            }
           },
           "s": {
             "o": {
@@ -4622,6 +5449,15 @@
               "#bigint": "11"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "11"
+              }
+            }
           },
           "s": {
             "o": {
@@ -4683,6 +5519,15 @@
               "#bigint": "14"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "14"
+              }
+            }
           },
           "s": {
             "o": {
@@ -4748,6 +5593,10 @@
   {
     "regression": "invalidShadowKeepsLocalPublicationTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/shadow-layers-witnesses.json/invalidShadowKeepsLocalPublicationTest"
+      },
       "states": [
         {
           "input": {
@@ -4755,6 +5604,15 @@
               "#bigint": "-1"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -4801,6 +5659,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "7"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -4845,6 +5712,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -4897,6 +5773,15 @@
             },
             "name": "resolveLoader"
           },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -4948,6 +5833,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "12"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -4998,6 +5892,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -5052,6 +5955,10 @@
   {
     "regression": "ordinaryServingMissDoesNotAdmitDiagnosticSourceTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/shadow-layers-witnesses.json/ordinaryServingMissDoesNotAdmitDiagnosticSourceTest"
+      },
       "states": [
         {
           "input": {
@@ -5059,6 +5966,15 @@
               "#bigint": "-1"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -5105,6 +6021,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "4"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -5149,6 +6074,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -5201,6 +6135,15 @@
             },
             "name": "resolveLoader"
           },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -5251,6 +6194,15 @@
               "#bigint": "0"
             },
             "name": "releaseDump"
+          },
+          "mbt::actionTaken": "releaseDump",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -5307,6 +6259,15 @@
             },
             "name": "releaseWrite"
           },
+          "mbt::actionTaken": "releaseWrite",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -5362,6 +6323,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "5"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -5416,6 +6386,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -5474,6 +6453,10 @@
   {
     "regression": "retainedFreshC0StillComparesAfterFreshnessBoundaryTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/shadow-layers-witnesses.json/retainedFreshC0StillComparesAfterFreshnessBoundaryTest"
+      },
       "states": [
         {
           "input": {
@@ -5481,6 +6464,15 @@
               "#bigint": "-1"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -5527,6 +6519,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "3"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -5572,6 +6573,15 @@
             },
             "name": "seed"
           },
+          "mbt::actionTaken": "seed",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -5616,6 +6626,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -5668,6 +6687,15 @@
             },
             "name": "advance"
           },
+          "mbt::actionTaken": "advance",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -5718,6 +6746,15 @@
               "#bigint": "2"
             },
             "name": "resolveLoader"
+          },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
           },
           "s": {
             "o": {
@@ -5771,6 +6808,10 @@
   {
     "regression": "servedAndDarkJobsShareCapacityButNotSourceOwnershipTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/shadow-layers-witnesses.json/servedAndDarkJobsShareCapacityButNotSourceOwnershipTest"
+      },
       "states": [
         {
           "input": {
@@ -5778,6 +6819,15 @@
               "#bigint": "-1"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -5824,6 +6874,15 @@
             },
             "name": "seed"
           },
+          "mbt::actionTaken": "seed",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -5869,6 +6928,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "4"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -5913,6 +6981,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -5965,6 +7042,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "3"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -6015,6 +7101,15 @@
               "#bigint": "10"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "10"
+              }
+            }
           },
           "s": {
             "o": {
@@ -6070,6 +7165,15 @@
               "#bigint": "11"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "11"
+              }
+            }
           },
           "s": {
             "o": {
@@ -6132,6 +7236,15 @@
             },
             "name": "advance"
           },
+          "mbt::actionTaken": "advance",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "60000"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -6194,6 +7307,15 @@
               "#bigint": "11"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "11"
+              }
+            }
           },
           "s": {
             "o": {
@@ -6261,6 +7383,15 @@
               "#bigint": "10"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "10"
+              }
+            }
           },
           "s": {
             "o": {
@@ -6334,6 +7465,15 @@
             },
             "name": "resolveLoader"
           },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -6405,6 +7545,15 @@
               "#bigint": "10"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "10"
+              }
+            }
           },
           "s": {
             "o": {
@@ -6481,6 +7630,15 @@
               "#bigint": "4"
             },
             "name": "resolveLoader"
+          },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "4"
+              }
+            }
           },
           "s": {
             "o": {
@@ -6557,6 +7715,10 @@
   {
     "regression": "servedDiagnosticSourceDoesNotPopulateLocalTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/shadow-layers-witnesses.json/servedDiagnosticSourceDoesNotPopulateLocalTest"
+      },
       "states": [
         {
           "input": {
@@ -6564,6 +7726,15 @@
               "#bigint": "-1"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -6610,6 +7781,15 @@
             },
             "name": "seed"
           },
+          "mbt::actionTaken": "seed",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -6655,6 +7835,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "4"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -6699,6 +7888,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -6751,6 +7949,15 @@
             },
             "name": "resolveLoader"
           },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -6804,6 +8011,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -6856,6 +8072,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -6913,6 +8138,10 @@
   {
     "regression": "servedPropagatedTimeoutPreservesHitTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/shadow-layers-witnesses.json/servedPropagatedTimeoutPreservesHitTest"
+      },
       "states": [
         {
           "input": {
@@ -6920,6 +8149,15 @@
               "#bigint": "-1"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -6966,6 +8204,15 @@
             },
             "name": "seed"
           },
+          "mbt::actionTaken": "seed",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -7011,6 +8258,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "4"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -7055,6 +8311,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -7106,6 +8371,15 @@
               "#bigint": "0"
             },
             "name": "rejectTimeout"
+          },
+          "mbt::actionTaken": "rejectTimeout",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -7159,6 +8433,10 @@
   {
     "regression": "shadowCohortAboveAdmitsTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/shadow-layers-witnesses.json/shadowCohortAboveAdmitsTest"
+      },
       "states": [
         {
           "input": {
@@ -7166,6 +8444,15 @@
               "#bigint": "-1"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -7212,6 +8499,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "11"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -7256,6 +8552,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -7307,6 +8612,15 @@
               "#bigint": "1"
             },
             "name": "resolveLoader"
+          },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
           },
           "s": {
             "o": {
@@ -7358,6 +8672,10 @@
   {
     "regression": "shadowCohortBelowDoesNotAdmitTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/shadow-layers-witnesses.json/shadowCohortBelowDoesNotAdmitTest"
+      },
       "states": [
         {
           "input": {
@@ -7365,6 +8683,15 @@
               "#bigint": "-1"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -7411,6 +8738,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -7455,6 +8791,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -7506,6 +8851,15 @@
               "#bigint": "1"
             },
             "name": "resolveLoader"
+          },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
           },
           "s": {
             "o": {
@@ -7557,6 +8911,10 @@
   {
     "regression": "shadowCohortEqualityDoesNotAdmitTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/shadow-layers-witnesses.json/shadowCohortEqualityDoesNotAdmitTest"
+      },
       "states": [
         {
           "input": {
@@ -7564,6 +8922,15 @@
               "#bigint": "-1"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -7610,6 +8977,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "10"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -7654,6 +9030,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -7706,6 +9091,15 @@
             },
             "name": "resolveLoader"
           },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -7756,6 +9150,10 @@
   {
     "regression": "unboundedCallerSurvivesDarkJobDeadlineTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/shadow-layers-witnesses.json/unboundedCallerSurvivesDarkJobDeadlineTest"
+      },
       "states": [
         {
           "input": {
@@ -7763,6 +9161,15 @@
               "#bigint": "-1"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -7809,6 +9216,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "3"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -7853,6 +9269,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -7904,6 +9329,15 @@
               "#bigint": "60000"
             },
             "name": "advance"
+          },
+          "mbt::actionTaken": "advance",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "60000"
+              }
+            }
           },
           "s": {
             "o": {
@@ -7957,6 +9391,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -8014,6 +9457,15 @@
               "#bigint": "1"
             },
             "name": "resolveLoader"
+          },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
           },
           "s": {
             "o": {
@@ -8071,6 +9523,15 @@
               "#bigint": "4"
             },
             "name": "resolveLoader"
+          },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "4"
+              }
+            }
           },
           "s": {
             "o": {
@@ -8128,6 +9589,10 @@
   {
     "regression": "validatedRemoteHitStopsFurtherShadowTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-shadow-layers-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/shadow-layers-witnesses.json/validatedRemoteHitStopsFurtherShadowTest"
+      },
       "states": [
         {
           "input": {
@@ -8135,6 +9600,15 @@
               "#bigint": "-1"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -8181,6 +9655,15 @@
             },
             "name": "seed"
           },
+          "mbt::actionTaken": "seed",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -8226,6 +9709,15 @@
             },
             "name": "policy"
           },
+          "mbt::actionTaken": "policy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "12"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -8270,6 +9762,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -8321,6 +9822,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {
@@ -8375,6 +9885,15 @@
               "#bigint": "2"
             },
             "name": "resolveLoader"
+          },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
           },
           "s": {
             "o": {
@@ -8431,6 +9950,15 @@
               "#bigint": "9"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "9"
+              }
+            }
           },
           "s": {
             "o": {

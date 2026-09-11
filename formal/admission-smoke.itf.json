@@ -1,23 +1,22 @@
 {
   "#meta": {
     "format": "ITF",
-    "format-description": "https://apalache-mc.org/docs/adr/015adr-trace.html",
     "source": "formal/dialcache-admission-conformance.qnt",
-    "status": "ok",
-    "description": "Created by Quint on Tue Sep 08 2026 23:40:06 GMT-0700 (Pacific Daylight Time)",
-    "timestamp": 1788936006095
+    "recipe": "formal/fixture-recipes.json#formal/admission-smoke.itf.json/smoke"
   },
   "vars": [
-    "mbt::actionTaken",
-    "mbt::nondetPicks",
+    "input",
     "s",
     "mbt::actionTaken",
     "mbt::nondetPicks"
   ],
   "states": [
     {
-      "#meta": {
-        "index": 0
+      "input": {
+        "name": "init",
+        "choice": {
+          "#bigint": "-1"
+        }
       },
       "mbt::actionTaken": "init",
       "mbt::nondetPicks": {
@@ -67,8 +66,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 1
+      "input": {
+        "name": "beginCall",
+        "choice": {
+          "#bigint": "4"
+        }
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -122,8 +124,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 2
+      "input": {
+        "name": "beginCall",
+        "choice": {
+          "#bigint": "4"
+        }
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -180,8 +185,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 3
+      "input": {
+        "name": "advance",
+        "choice": {
+          "#bigint": "10"
+        }
       },
       "mbt::actionTaken": "advance",
       "mbt::nondetPicks": {
@@ -238,8 +246,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 4
+      "input": {
+        "name": "beginCall",
+        "choice": {
+          "#bigint": "0"
+        }
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -299,8 +310,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 5
+      "input": {
+        "name": "releaseRead",
+        "choice": {
+          "#bigint": "1"
+        }
       },
       "mbt::actionTaken": "releaseRead",
       "mbt::nondetPicks": {
@@ -360,8 +374,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 6
+      "input": {
+        "name": "seed",
+        "choice": {
+          "#bigint": "4"
+        }
       },
       "mbt::actionTaken": "seed",
       "mbt::nondetPicks": {
@@ -421,8 +438,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 7
+      "input": {
+        "name": "releaseRead",
+        "choice": {
+          "#bigint": "0"
+        }
       },
       "mbt::actionTaken": "releaseRead",
       "mbt::nondetPicks": {
@@ -482,8 +502,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 8
+      "input": {
+        "name": "advance",
+        "choice": {
+          "#bigint": "10"
+        }
       },
       "mbt::actionTaken": "advance",
       "mbt::nondetPicks": {
@@ -543,8 +566,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 9
+      "input": {
+        "name": "policy",
+        "choice": {
+          "#bigint": "2"
+        }
       },
       "mbt::actionTaken": "policy",
       "mbt::nondetPicks": {
@@ -604,8 +630,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 10
+      "input": {
+        "name": "beginCall",
+        "choice": {
+          "#bigint": "5"
+        }
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -668,8 +697,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 11
+      "input": {
+        "name": "beginCall",
+        "choice": {
+          "#bigint": "4"
+        }
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -735,8 +767,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 12
+      "input": {
+        "name": "beginCall",
+        "choice": {
+          "#bigint": "4"
+        }
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -805,8 +840,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 13
+      "input": {
+        "name": "releaseLoad",
+        "choice": {
+          "#bigint": "1"
+        }
       },
       "mbt::actionTaken": "releaseLoad",
       "mbt::nondetPicks": {
@@ -877,8 +915,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 14
+      "input": {
+        "name": "rejectLoader",
+        "choice": {
+          "#bigint": "0"
+        }
       },
       "mbt::actionTaken": "rejectLoader",
       "mbt::nondetPicks": {
@@ -951,8 +992,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 15
+      "input": {
+        "name": "beginCall",
+        "choice": {
+          "#bigint": "3"
+        }
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -1028,8 +1072,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 16
+      "input": {
+        "name": "beginCall",
+        "choice": {
+          "#bigint": "4"
+        }
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -1108,8 +1155,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 17
+      "input": {
+        "name": "releaseRead",
+        "choice": {
+          "#bigint": "5"
+        }
       },
       "mbt::actionTaken": "releaseRead",
       "mbt::nondetPicks": {
@@ -1188,8 +1238,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 18
+      "input": {
+        "name": "releaseRead",
+        "choice": {
+          "#bigint": "3"
+        }
       },
       "mbt::actionTaken": "releaseRead",
       "mbt::nondetPicks": {
@@ -1268,8 +1321,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 19
+      "input": {
+        "name": "beginCall",
+        "choice": {
+          "#bigint": "1"
+        }
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -1351,8 +1407,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 20
+      "input": {
+        "name": "releaseLoad",
+        "choice": {
+          "#bigint": "0"
+        }
       },
       "mbt::actionTaken": "releaseLoad",
       "mbt::nondetPicks": {
@@ -1435,8 +1494,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 21
+      "input": {
+        "name": "beginCall",
+        "choice": {
+          "#bigint": "0"
+        }
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -1522,8 +1584,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 22
+      "input": {
+        "name": "advance",
+        "choice": {
+          "#bigint": "10"
+        }
       },
       "mbt::actionTaken": "advance",
       "mbt::nondetPicks": {
@@ -1610,8 +1675,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 23
+      "input": {
+        "name": "beginCall",
+        "choice": {
+          "#bigint": "1"
+        }
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -1701,8 +1769,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 24
+      "input": {
+        "name": "releaseLoad",
+        "choice": {
+          "#bigint": "2"
+        }
       },
       "mbt::actionTaken": "releaseLoad",
       "mbt::nondetPicks": {
@@ -1793,8 +1864,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 25
+      "input": {
+        "name": "advance",
+        "choice": {
+          "#bigint": "10"
+        }
       },
       "mbt::actionTaken": "advance",
       "mbt::nondetPicks": {
@@ -1886,8 +1960,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 26
+      "input": {
+        "name": "policy",
+        "choice": {
+          "#bigint": "2"
+        }
       },
       "mbt::actionTaken": "policy",
       "mbt::nondetPicks": {
@@ -1979,8 +2056,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 27
+      "input": {
+        "name": "seed",
+        "choice": {
+          "#bigint": "5"
+        }
       },
       "mbt::actionTaken": "seed",
       "mbt::nondetPicks": {
@@ -2072,8 +2152,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 28
+      "input": {
+        "name": "beginCall",
+        "choice": {
+          "#bigint": "3"
+        }
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -2168,8 +2251,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 29
+      "input": {
+        "name": "beginCall",
+        "choice": {
+          "#bigint": "0"
+        }
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -2267,8 +2353,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 30
+      "input": {
+        "name": "releaseRead",
+        "choice": {
+          "#bigint": "9"
+        }
       },
       "mbt::actionTaken": "releaseRead",
       "mbt::nondetPicks": {
@@ -2366,8 +2455,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 31
+      "input": {
+        "name": "releaseLoad",
+        "choice": {
+          "#bigint": "3"
+        }
       },
       "mbt::actionTaken": "releaseLoad",
       "mbt::nondetPicks": {
@@ -2466,8 +2558,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 32
+      "input": {
+        "name": "releaseLoad",
+        "choice": {
+          "#bigint": "4"
+        }
       },
       "mbt::actionTaken": "releaseLoad",
       "mbt::nondetPicks": {
@@ -2567,8 +2662,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 33
+      "input": {
+        "name": "beginCall",
+        "choice": {
+          "#bigint": "0"
+        }
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -2671,8 +2769,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 34
+      "input": {
+        "name": "releaseRead",
+        "choice": {
+          "#bigint": "11"
+        }
       },
       "mbt::actionTaken": "releaseRead",
       "mbt::nondetPicks": {
@@ -2775,8 +2876,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 35
+      "input": {
+        "name": "resolveLoader",
+        "choice": {
+          "#bigint": "3"
+        }
       },
       "mbt::actionTaken": "resolveLoader",
       "mbt::nondetPicks": {
@@ -2879,8 +2983,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 36
+      "input": {
+        "name": "seed",
+        "choice": {
+          "#bigint": "3"
+        }
       },
       "mbt::actionTaken": "seed",
       "mbt::nondetPicks": {
@@ -2983,8 +3090,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 37
+      "input": {
+        "name": "resolveLoader",
+        "choice": {
+          "#bigint": "10"
+        }
       },
       "mbt::actionTaken": "resolveLoader",
       "mbt::nondetPicks": {
@@ -3087,8 +3197,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 38
+      "input": {
+        "name": "releaseLoad",
+        "choice": {
+          "#bigint": "5"
+        }
       },
       "mbt::actionTaken": "releaseLoad",
       "mbt::nondetPicks": {
@@ -3192,8 +3305,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 39
+      "input": {
+        "name": "rejectLoader",
+        "choice": {
+          "#bigint": "2"
+        }
       },
       "mbt::actionTaken": "rejectLoader",
       "mbt::nondetPicks": {
@@ -3297,8 +3413,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 40
+      "input": {
+        "name": "releaseRead",
+        "choice": {
+          "#bigint": "4"
+        }
       },
       "mbt::actionTaken": "releaseRead",
       "mbt::nondetPicks": {
@@ -3402,8 +3521,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 41
+      "input": {
+        "name": "beginCall",
+        "choice": {
+          "#bigint": "1"
+        }
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -3510,8 +3632,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 42
+      "input": {
+        "name": "resolveLoader",
+        "choice": {
+          "#bigint": "11"
+        }
       },
       "mbt::actionTaken": "resolveLoader",
       "mbt::nondetPicks": {
@@ -3618,8 +3743,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 43
+      "input": {
+        "name": "beginCall",
+        "choice": {
+          "#bigint": "5"
+        }
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -3729,8 +3857,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 44
+      "input": {
+        "name": "rejectLoader",
+        "choice": {
+          "#bigint": "3"
+        }
       },
       "mbt::actionTaken": "rejectLoader",
       "mbt::nondetPicks": {
@@ -3841,8 +3972,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 45
+      "input": {
+        "name": "releaseRead",
+        "choice": {
+          "#bigint": "12"
+        }
       },
       "mbt::actionTaken": "releaseRead",
       "mbt::nondetPicks": {
@@ -3953,8 +4087,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 46
+      "input": {
+        "name": "releaseRead",
+        "choice": {
+          "#bigint": "14"
+        }
       },
       "mbt::actionTaken": "releaseRead",
       "mbt::nondetPicks": {
@@ -4065,8 +4202,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 47
+      "input": {
+        "name": "advance",
+        "choice": {
+          "#bigint": "10"
+        }
       },
       "mbt::actionTaken": "advance",
       "mbt::nondetPicks": {
@@ -4179,8 +4319,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 48
+      "input": {
+        "name": "releaseLoad",
+        "choice": {
+          "#bigint": "9"
+        }
       },
       "mbt::actionTaken": "releaseLoad",
       "mbt::nondetPicks": {
@@ -4294,8 +4437,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 49
+      "input": {
+        "name": "releaseRead",
+        "choice": {
+          "#bigint": "6"
+        }
       },
       "mbt::actionTaken": "releaseRead",
       "mbt::nondetPicks": {
@@ -4409,8 +4555,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 50
+      "input": {
+        "name": "advance",
+        "choice": {
+          "#bigint": "10"
+        }
       },
       "mbt::actionTaken": "advance",
       "mbt::nondetPicks": {
@@ -4524,8 +4673,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 51
+      "input": {
+        "name": "releaseLoad",
+        "choice": {
+          "#bigint": "8"
+        }
       },
       "mbt::actionTaken": "releaseLoad",
       "mbt::nondetPicks": {
@@ -4639,8 +4791,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 52
+      "input": {
+        "name": "releaseRead",
+        "choice": {
+          "#bigint": "10"
+        }
       },
       "mbt::actionTaken": "releaseRead",
       "mbt::nondetPicks": {
@@ -4754,8 +4909,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 53
+      "input": {
+        "name": "releaseRead",
+        "choice": {
+          "#bigint": "8"
+        }
       },
       "mbt::actionTaken": "releaseRead",
       "mbt::nondetPicks": {
@@ -4869,8 +5027,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 54
+      "input": {
+        "name": "releaseLoad",
+        "choice": {
+          "#bigint": "12"
+        }
       },
       "mbt::actionTaken": "releaseLoad",
       "mbt::nondetPicks": {
@@ -4985,8 +5146,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 55
+      "input": {
+        "name": "rejectLoader",
+        "choice": {
+          "#bigint": "6"
+        }
       },
       "mbt::actionTaken": "rejectLoader",
       "mbt::nondetPicks": {
@@ -5102,8 +5266,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 56
+      "input": {
+        "name": "releaseLoad",
+        "choice": {
+          "#bigint": "13"
+        }
       },
       "mbt::actionTaken": "releaseLoad",
       "mbt::nondetPicks": {

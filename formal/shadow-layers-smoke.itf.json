@@ -1,11 +1,8 @@
 {
   "#meta": {
     "format": "ITF",
-    "format-description": "https://apalache-mc.org/docs/adr/015adr-trace.html",
     "source": "formal/dialcache-shadow-layers-conformance.qnt",
-    "status": "ok",
-    "description": "Created by Quint on Thu Sep 10 2026 13:51:06 GMT-0700 (Pacific Daylight Time)",
-    "timestamp": 1789073466091
+    "recipe": "formal/fixture-recipes.json#formal/shadow-layers-smoke.itf.json/smoke"
   },
   "vars": [
     "input",
@@ -15,197 +12,11 @@
   ],
   "states": [
     {
-      "#meta": {
-        "index": 0
-      },
       "input": {
         "choice": {
           "#bigint": "-1"
         },
         "name": "init"
-      },
-      "s": {
-        "calls": [],
-        "dumps": [],
-        "jobs": [],
-        "localExpires": [
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          }
-        ],
-        "localValues": [
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          }
-        ],
-        "localWriters": [
-          {
-            "#bigint": "-1"
-          },
-          {
-            "#bigint": "-1"
-          },
-          {
-            "#bigint": "-1"
-          },
-          {
-            "#bigint": "-1"
-          },
-          {
-            "#bigint": "-1"
-          },
-          {
-            "#bigint": "-1"
-          }
-        ],
-        "memo": [
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          }
-        ],
-        "now": {
-          "#bigint": "100000"
-        },
-        "o": {
-          "calls": [],
-          "classifications": {
-            "#bigint": "0"
-          },
-          "comparisons": {
-            "#bigint": "0"
-          },
-          "dumps": {
-            "#bigint": "0"
-          },
-          "invalidations": {
-            "#bigint": "0"
-          },
-          "loaders": {
-            "#bigint": "0"
-          },
-          "loads": {
-            "#bigint": "0"
-          },
-          "maintenance": [],
-          "policyCalls": {
-            "#bigint": "0"
-          },
-          "reads": {
-            "#bigint": "0"
-          },
-          "recovery": [],
-          "shadow": [],
-          "sourceScopes": [],
-          "writeTtls": [],
-          "writes": {
-            "#bigint": "0"
-          }
-        },
-        "policy": {
-          "choice": {
-            "#bigint": "0"
-          },
-          "freshMs": {
-            "#bigint": "60000"
-          },
-          "local": true,
-          "request": true,
-          "retainedMs": {
-            "#bigint": "120000"
-          },
-          "serving": false,
-          "shadow": true
-        },
-        "remoteCreated": [
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          }
-        ],
-        "remoteExpires": [
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          }
-        ],
-        "remoteValues": [
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          }
-        ],
-        "sources": [],
-        "work": [],
-        "writes": []
       },
       "mbt::actionTaken": "init",
       "mbt::nondetPicks": {
@@ -215,17 +26,206 @@
             "#tup": []
           }
         }
+      },
+      "s": {
+        "calls": [],
+        "dumps": [],
+        "jobs": [],
+        "localExpires": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "localValues": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "localWriters": [
+          {
+            "#bigint": "-1"
+          },
+          {
+            "#bigint": "-1"
+          },
+          {
+            "#bigint": "-1"
+          },
+          {
+            "#bigint": "-1"
+          },
+          {
+            "#bigint": "-1"
+          },
+          {
+            "#bigint": "-1"
+          }
+        ],
+        "memo": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "now": {
+          "#bigint": "100000"
+        },
+        "o": {
+          "calls": [],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "0"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "0"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "policy": {
+          "choice": {
+            "#bigint": "0"
+          },
+          "freshMs": {
+            "#bigint": "60000"
+          },
+          "local": true,
+          "request": true,
+          "retainedMs": {
+            "#bigint": "120000"
+          },
+          "serving": false,
+          "shadow": true
+        },
+        "remoteCreated": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "remoteExpires": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "remoteValues": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "sources": [],
+        "work": [],
+        "writes": []
       }
     },
     {
-      "#meta": {
-        "index": 1
-      },
       "input": {
         "choice": {
           "#bigint": "2"
         },
         "name": "policy"
+      },
+      "mbt::actionTaken": "policy",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "2"
+          }
+        }
       },
       "s": {
         "calls": [],
@@ -409,26 +409,23 @@
         "sources": [],
         "work": [],
         "writes": []
-      },
-      "mbt::actionTaken": "policy",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "2"
-          }
-        }
       }
     },
     {
-      "#meta": {
-        "index": 2
-      },
       "input": {
         "choice": {
           "#bigint": "9"
         },
         "name": "beginCall"
+      },
+      "mbt::actionTaken": "beginCall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "9"
+          }
+        }
       },
       "s": {
         "calls": [
@@ -688,26 +685,23 @@
         ],
         "work": [],
         "writes": []
-      },
-      "mbt::actionTaken": "beginCall",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "9"
-          }
-        }
       }
     },
     {
-      "#meta": {
-        "index": 3
-      },
       "input": {
         "choice": {
           "#bigint": "1"
         },
         "name": "resolveLoader"
+      },
+      "mbt::actionTaken": "resolveLoader",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
       },
       "s": {
         "calls": [
@@ -992,26 +986,23 @@
           }
         ],
         "writes": []
-      },
-      "mbt::actionTaken": "resolveLoader",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "1"
-          }
-        }
       }
     },
     {
-      "#meta": {
-        "index": 4
-      },
       "input": {
         "choice": {
           "#bigint": "12"
         },
         "name": "policy"
+      },
+      "mbt::actionTaken": "policy",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "12"
+          }
+        }
       },
       "s": {
         "calls": [
@@ -1296,26 +1287,23 @@
           }
         ],
         "writes": []
-      },
-      "mbt::actionTaken": "policy",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "12"
-          }
-        }
       }
     },
     {
-      "#meta": {
-        "index": 5
-      },
       "input": {
         "choice": {
           "#bigint": "9"
         },
         "name": "beginCall"
+      },
+      "mbt::actionTaken": "beginCall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "9"
+          }
+        }
       },
       "s": {
         "calls": [
@@ -1614,15 +1602,6 @@
           }
         ],
         "writes": []
-      },
-      "mbt::actionTaken": "beginCall",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "9"
-          }
-        }
       }
     }
   ]

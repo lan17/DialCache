@@ -1,11 +1,8 @@
 {
   "#meta": {
     "format": "ITF",
-    "format-description": "https://apalache-mc.org/docs/adr/015adr-trace.html",
     "source": "formal/dialcache-policy-conformance.qnt",
-    "status": "ok",
-    "description": "Created by Quint on Thu Sep 10 2026 14:14:16 GMT-0700 (Pacific Daylight Time)",
-    "timestamp": 1789074856476
+    "recipe": "formal/fixture-recipes.json#formal/policy-smoke.itf.json/smoke"
   },
   "vars": [
     "input",
@@ -15,14 +12,20 @@
   ],
   "states": [
     {
-      "#meta": {
-        "index": 0
-      },
       "input": {
         "choice": {
           "#bigint": "-1"
         },
         "name": "init"
+      },
+      "mbt::actionTaken": "init",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
       },
       "s": {
         "dumpFailed": false,
@@ -124,26 +127,23 @@
           "#bigint": "100000"
         },
         "writeFailed": false
-      },
-      "mbt::actionTaken": "init",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "None",
-          "value": {
-            "#tup": []
-          }
-        }
       }
     },
     {
-      "#meta": {
-        "index": 1
-      },
       "input": {
         "choice": {
           "#bigint": "0"
         },
         "name": "beginCall"
+      },
+      "mbt::actionTaken": "beginCall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "0"
+          }
+        }
       },
       "s": {
         "dumpFailed": false,
@@ -253,26 +253,23 @@
           "#bigint": "100000"
         },
         "writeFailed": false
-      },
-      "mbt::actionTaken": "beginCall",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "0"
-          }
-        }
       }
     },
     {
-      "#meta": {
-        "index": 2
-      },
       "input": {
         "choice": {
           "#bigint": "-1"
         },
         "name": "releasePolicy"
+      },
+      "mbt::actionTaken": "releasePolicy",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
       },
       "s": {
         "dumpFailed": false,
@@ -406,26 +403,23 @@
           "#bigint": "100000"
         },
         "writeFailed": false
-      },
-      "mbt::actionTaken": "releasePolicy",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "None",
-          "value": {
-            "#tup": []
-          }
-        }
       }
     },
     {
-      "#meta": {
-        "index": 3
-      },
       "input": {
         "choice": {
           "#bigint": "1"
         },
         "name": "resolveLoader"
+      },
+      "mbt::actionTaken": "resolveLoader",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
       },
       "s": {
         "dumpFailed": false,
@@ -563,8 +557,16 @@
           "#bigint": "100000"
         },
         "writeFailed": false
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "1"
+        },
+        "name": "providerFault"
       },
-      "mbt::actionTaken": "resolveLoader",
+      "mbt::actionTaken": "providerFault",
       "mbt::nondetPicks": {
         "choice": {
           "tag": "Some",
@@ -572,17 +574,6 @@
             "#bigint": "1"
           }
         }
-      }
-    },
-    {
-      "#meta": {
-        "index": 4
-      },
-      "input": {
-        "choice": {
-          "#bigint": "1"
-        },
-        "name": "providerFault"
       },
       "s": {
         "dumpFailed": false,
@@ -720,169 +711,14 @@
           "#bigint": "100000"
         },
         "writeFailed": false
-      },
-      "mbt::actionTaken": "providerFault",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "1"
-          }
-        }
       }
     },
     {
-      "#meta": {
-        "index": 5
-      },
       "input": {
         "choice": {
           "#bigint": "0"
         },
         "name": "beginCall"
-      },
-      "s": {
-        "dumpFailed": false,
-        "key": {
-          "#bigint": "0"
-        },
-        "localExpires": {
-          "#bigint": "1000"
-        },
-        "localKey": {
-          "#bigint": "0"
-        },
-        "localValue": {
-          "#bigint": "1"
-        },
-        "now": {
-          "#bigint": "0"
-        },
-        "o": {
-          "calls": [
-            {
-              "#bigint": "1"
-            },
-            {
-              "#bigint": "0"
-            }
-          ],
-          "classifications": {
-            "#bigint": "0"
-          },
-          "comparisons": {
-            "#bigint": "0"
-          },
-          "dumps": {
-            "#bigint": "1"
-          },
-          "invalidations": {
-            "#bigint": "0"
-          },
-          "loaders": {
-            "#bigint": "1"
-          },
-          "loads": {
-            "#bigint": "0"
-          },
-          "maintenance": [],
-          "policyCalls": {
-            "#bigint": "2"
-          },
-          "reads": {
-            "#bigint": "1"
-          },
-          "recovery": [],
-          "shadow": [],
-          "sourceScopes": [],
-          "writeTtls": [
-            {
-              "#bigint": "5000"
-            }
-          ],
-          "writes": {
-            "#bigint": "1"
-          }
-        },
-        "overlay": {
-          "#bigint": "0"
-        },
-        "owners": [
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "-1"
-          }
-        ],
-        "policyCall": {
-          "#bigint": "1"
-        },
-        "policyErrors": [],
-        "policyReplies": [
-          {
-            "invalidBudget": false,
-            "providerFailed": false
-          }
-        ],
-        "providerFailed": true,
-        "readFailed": false,
-        "registered": [
-          {
-            "#bigint": "-1"
-          },
-          {
-            "#bigint": "-1"
-          }
-        ],
-        "remoteCreated": [
-          {
-            "#bigint": "100000"
-          },
-          {
-            "#bigint": "0"
-          }
-        ],
-        "remoteExpires": [
-          {
-            "#bigint": "5000"
-          },
-          {
-            "#bigint": "0"
-          }
-        ],
-        "remoteValues": [
-          {
-            "#bigint": "1"
-          },
-          {
-            "#bigint": "0"
-          }
-        ],
-        "sources": [
-          {
-            "key": {
-              "#bigint": "0"
-            },
-            "localTtl": {
-              "#bigint": "1000"
-            },
-            "remoteTtl": {
-              "#bigint": "1000"
-            },
-            "result": {
-              "#bigint": "1"
-            },
-            "retention": {
-              "#bigint": "5000"
-            },
-            "shared": true
-          }
-        ],
-        "wall": {
-          "#bigint": "100000"
-        },
-        "writeFailed": false
       },
       "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
@@ -892,17 +728,6 @@
             "#bigint": "0"
           }
         }
-      }
-    },
-    {
-      "#meta": {
-        "index": 6
-      },
-      "input": {
-        "choice": {
-          "#bigint": "-1"
-        },
-        "name": "releasePolicy"
       },
       "s": {
         "dumpFailed": false,
@@ -943,7 +768,7 @@
             "#bigint": "0"
           },
           "loaders": {
-            "#bigint": "2"
+            "#bigint": "1"
           },
           "loads": {
             "#bigint": "0"
@@ -975,26 +800,17 @@
             "#bigint": "0"
           },
           {
-            "#bigint": "1"
+            "#bigint": "-1"
           }
         ],
         "policyCall": {
-          "#bigint": "-1"
+          "#bigint": "1"
         },
-        "policyErrors": [
-          {
-            "errorType": "config_resolution",
-            "layer": "noop"
-          }
-        ],
+        "policyErrors": [],
         "policyReplies": [
           {
             "invalidBudget": false,
             "providerFailed": false
-          },
-          {
-            "invalidBudget": false,
-            "providerFailed": true
           }
         ],
         "providerFailed": true,
@@ -1049,30 +865,20 @@
               "#bigint": "5000"
             },
             "shared": true
-          },
-          {
-            "key": {
-              "#bigint": "0"
-            },
-            "localTtl": {
-              "#bigint": "0"
-            },
-            "remoteTtl": {
-              "#bigint": "0"
-            },
-            "result": {
-              "#bigint": "0"
-            },
-            "retention": {
-              "#bigint": "5000"
-            },
-            "shared": false
           }
         ],
         "wall": {
           "#bigint": "100000"
         },
         "writeFailed": false
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "-1"
+        },
+        "name": "releasePolicy"
       },
       "mbt::actionTaken": "releasePolicy",
       "mbt::nondetPicks": {
@@ -1082,17 +888,193 @@
             "#tup": []
           }
         }
+      },
+      "s": {
+        "dumpFailed": false,
+        "key": {
+          "#bigint": "0"
+        },
+        "localExpires": {
+          "#bigint": "1000"
+        },
+        "localKey": {
+          "#bigint": "0"
+        },
+        "localValue": {
+          "#bigint": "1"
+        },
+        "now": {
+          "#bigint": "0"
+        },
+        "o": {
+          "calls": [
+            {
+              "#bigint": "1"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "2"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "overlay": {
+          "#bigint": "0"
+        },
+        "owners": [
+          {
+            "#bigint": "0"
+          },
+          {
+            "#bigint": "1"
+          }
+        ],
+        "policyCall": {
+          "#bigint": "-1"
+        },
+        "policyErrors": [
+          {
+            "errorType": "config_resolution",
+            "layer": "noop"
+          }
+        ],
+        "policyReplies": [
+          {
+            "invalidBudget": false,
+            "providerFailed": false
+          },
+          {
+            "invalidBudget": false,
+            "providerFailed": true
+          }
+        ],
+        "providerFailed": true,
+        "readFailed": false,
+        "registered": [
+          {
+            "#bigint": "-1"
+          },
+          {
+            "#bigint": "-1"
+          }
+        ],
+        "remoteCreated": [
+          {
+            "#bigint": "100000"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "remoteExpires": [
+          {
+            "#bigint": "5000"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "remoteValues": [
+          {
+            "#bigint": "1"
+          },
+          {
+            "#bigint": "0"
+          }
+        ],
+        "sources": [
+          {
+            "key": {
+              "#bigint": "0"
+            },
+            "localTtl": {
+              "#bigint": "1000"
+            },
+            "remoteTtl": {
+              "#bigint": "1000"
+            },
+            "result": {
+              "#bigint": "1"
+            },
+            "retention": {
+              "#bigint": "5000"
+            },
+            "shared": true
+          },
+          {
+            "key": {
+              "#bigint": "0"
+            },
+            "localTtl": {
+              "#bigint": "0"
+            },
+            "remoteTtl": {
+              "#bigint": "0"
+            },
+            "result": {
+              "#bigint": "0"
+            },
+            "retention": {
+              "#bigint": "5000"
+            },
+            "shared": false
+          }
+        ],
+        "wall": {
+          "#bigint": "100000"
+        },
+        "writeFailed": false
       }
     },
     {
-      "#meta": {
-        "index": 7
-      },
       "input": {
         "choice": {
           "#bigint": "9"
         },
         "name": "resolveLoader"
+      },
+      "mbt::actionTaken": "resolveLoader",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "9"
+          }
+        }
       },
       "s": {
         "dumpFailed": false,
@@ -1263,26 +1245,23 @@
           "#bigint": "100000"
         },
         "writeFailed": false
-      },
-      "mbt::actionTaken": "resolveLoader",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "9"
-          }
-        }
       }
     },
     {
-      "#meta": {
-        "index": 8
-      },
       "input": {
         "choice": {
           "#bigint": "0"
         },
         "name": "providerFault"
+      },
+      "mbt::actionTaken": "providerFault",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "0"
+          }
+        }
       },
       "s": {
         "dumpFailed": false,
@@ -1453,8 +1432,16 @@
           "#bigint": "100000"
         },
         "writeFailed": false
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "0"
+        },
+        "name": "beginCall"
       },
-      "mbt::actionTaken": "providerFault",
+      "mbt::actionTaken": "beginCall",
       "mbt::nondetPicks": {
         "choice": {
           "tag": "Some",
@@ -1462,17 +1449,6 @@
             "#bigint": "0"
           }
         }
-      }
-    },
-    {
-      "#meta": {
-        "index": 9
-      },
-      "input": {
-        "choice": {
-          "#bigint": "0"
-        },
-        "name": "beginCall"
       },
       "s": {
         "dumpFailed": false,
@@ -1649,26 +1625,23 @@
           "#bigint": "100000"
         },
         "writeFailed": false
-      },
-      "mbt::actionTaken": "beginCall",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "Some",
-          "value": {
-            "#bigint": "0"
-          }
-        }
       }
     },
     {
-      "#meta": {
-        "index": 10
-      },
       "input": {
         "choice": {
           "#bigint": "-1"
         },
         "name": "releasePolicy"
+      },
+      "mbt::actionTaken": "releasePolicy",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
       },
       "s": {
         "dumpFailed": false,
@@ -1849,15 +1822,6 @@
           "#bigint": "100000"
         },
         "writeFailed": false
-      },
-      "mbt::actionTaken": "releasePolicy",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "None",
-          "value": {
-            "#tup": []
-          }
-        }
       }
     }
   ]

@@ -2,8 +2,7 @@
   "disabledBaselineRampedUpKeepsDefaultSharingTest": {
     "source": {
       "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "regression": "disabledBaselineRampedUpKeepsDefaultSharingTest",
-      "sha256": "6a7f96eeb90d6e253b55b8b21722facbe948aee7060db72af3276de470604189"
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-runtime-boundary-witnesses.json/disabledBaselineRampedUpKeepsDefaultSharingTest"
     },
     "states": [
       {
@@ -12,6 +11,15 @@
             "#bigint": "8"
           },
           "name": "init"
+        },
+        "mbt::actionTaken": "init",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "8"
+            }
+          }
         },
         "s": {
           "o": {
@@ -57,6 +65,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -106,6 +123,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -156,6 +182,15 @@
           },
           "name": "resolveLoader"
         },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "0"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -205,6 +240,15 @@
           },
           "name": "policy"
         },
+        "mbt::actionTaken": "policy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "20"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -253,6 +297,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -306,6 +359,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -357,6 +419,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -412,6 +483,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -468,6 +548,15 @@
           },
           "name": "resolveLoader"
         },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "9"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -522,6 +611,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -580,6 +678,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -637,8 +744,7 @@
   "explicitNullCoalesceBypassesWithoutReplacingRemoteTest": {
     "source": {
       "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "regression": "explicitNullCoalesceBypassesWithoutReplacingRemoteTest",
-      "sha256": "8c829ea2d848b5a08717d7954a4c18142aac51ac77d7d261ad8fc007a4257b1e"
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-runtime-boundary-witnesses.json/explicitNullCoalesceBypassesWithoutReplacingRemoteTest"
     },
     "states": [
       {
@@ -647,6 +753,15 @@
             "#bigint": "5"
           },
           "name": "init"
+        },
+        "mbt::actionTaken": "init",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "5"
+            }
+          }
         },
         "s": {
           "o": {
@@ -692,6 +807,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -742,6 +866,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -790,6 +923,15 @@
             "#bigint": "0"
           },
           "name": "resolveLoader"
+        },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "0"
+            }
+          }
         },
         "s": {
           "o": {
@@ -844,6 +986,15 @@
           },
           "name": "policy"
         },
+        "mbt::actionTaken": "policy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "16"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -896,6 +1047,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -953,6 +1113,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -1008,6 +1177,15 @@
             "#bigint": "9"
           },
           "name": "resolveLoader"
+        },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "9"
+            }
+          }
         },
         "s": {
           "o": {
@@ -1065,6 +1243,15 @@
           },
           "name": "policy"
         },
+        "mbt::actionTaken": "policy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "9"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -1120,6 +1307,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -1179,6 +1375,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -1237,8 +1442,7 @@
   "explicitNullRequestLocalBypassesWithoutReplacingRemoteTest": {
     "source": {
       "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "regression": "explicitNullRequestLocalBypassesWithoutReplacingRemoteTest",
-      "sha256": "ac90be1ed4e90987d7818c6719deb99ab0eb1f2c3138a78e6bca6acf1b4eb803"
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-runtime-boundary-witnesses.json/explicitNullRequestLocalBypassesWithoutReplacingRemoteTest"
     },
     "states": [
       {
@@ -1247,6 +1451,15 @@
             "#bigint": "5"
           },
           "name": "init"
+        },
+        "mbt::actionTaken": "init",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "5"
+            }
+          }
         },
         "s": {
           "o": {
@@ -1292,6 +1505,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -1342,6 +1564,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -1390,6 +1621,15 @@
             "#bigint": "0"
           },
           "name": "resolveLoader"
+        },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "0"
+            }
+          }
         },
         "s": {
           "o": {
@@ -1444,6 +1684,15 @@
           },
           "name": "policy"
         },
+        "mbt::actionTaken": "policy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "17"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -1496,6 +1745,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -1553,6 +1811,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -1608,6 +1875,15 @@
             "#bigint": "9"
           },
           "name": "resolveLoader"
+        },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "9"
+            }
+          }
         },
         "s": {
           "o": {
@@ -1665,6 +1941,15 @@
           },
           "name": "policy"
         },
+        "mbt::actionTaken": "policy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "9"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -1720,6 +2005,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -1779,6 +2073,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -1837,8 +2140,7 @@
   "falseRequestLeafPreservesMemoForReenablementTest": {
     "source": {
       "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "regression": "falseRequestLeafPreservesMemoForReenablementTest",
-      "sha256": "14860364b8b6ac2caa84a0597f31b5069ac83707d8af87e32afb9132265014e1"
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-runtime-boundary-witnesses.json/falseRequestLeafPreservesMemoForReenablementTest"
     },
     "states": [
       {
@@ -1847,6 +2149,15 @@
             "#bigint": "3"
           },
           "name": "init"
+        },
+        "mbt::actionTaken": "init",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "3"
+            }
+          }
         },
         "s": {
           "o": {
@@ -1892,6 +2203,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -1941,6 +2261,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -1991,6 +2320,15 @@
           },
           "name": "resolveLoader"
         },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "0"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -2040,6 +2378,15 @@
           },
           "name": "policy"
         },
+        "mbt::actionTaken": "policy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "13"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -2088,6 +2435,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -2141,6 +2497,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -2192,6 +2557,15 @@
             "#bigint": "9"
           },
           "name": "resolveLoader"
+        },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "9"
+            }
+          }
         },
         "s": {
           "o": {
@@ -2245,6 +2619,15 @@
           },
           "name": "policy"
         },
+        "mbt::actionTaken": "policy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "9"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -2296,6 +2679,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -2351,6 +2743,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -2405,8 +2806,7 @@
   "fullFeatureKillSwitchKeepsOmittedSharingAndRetainedMemoTest": {
     "source": {
       "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "regression": "fullFeatureKillSwitchKeepsOmittedSharingAndRetainedMemoTest",
-      "sha256": "a7c6349b9d1dd98d94231d66e3f31b34dc5029416d986d5fb9797ddb3d9d74f2"
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-runtime-boundary-witnesses.json/fullFeatureKillSwitchKeepsOmittedSharingAndRetainedMemoTest"
     },
     "states": [
       {
@@ -2415,6 +2815,15 @@
             "#bigint": "9"
           },
           "name": "init"
+        },
+        "mbt::actionTaken": "init",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "9"
+            }
+          }
         },
         "s": {
           "o": {
@@ -2460,6 +2869,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -2510,6 +2928,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -2558,6 +2985,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -2610,6 +3046,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -2662,6 +3107,15 @@
             "#bigint": "0"
           },
           "name": "resolveLoader"
+        },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "0"
+            }
+          }
         },
         "s": {
           "o": {
@@ -2719,6 +3173,15 @@
           },
           "name": "policy"
         },
+        "mbt::actionTaken": "policy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "21"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -2774,6 +3237,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -2834,6 +3306,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -2892,6 +3373,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -2954,6 +3444,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -3016,6 +3515,15 @@
             "#bigint": "9"
           },
           "name": "resolveLoader"
+        },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "9"
+            }
+          }
         },
         "s": {
           "o": {
@@ -3079,6 +3587,15 @@
           },
           "name": "resolveLoader"
         },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "19"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -3141,6 +3658,15 @@
           },
           "name": "policy"
         },
+        "mbt::actionTaken": "policy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "9"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -3202,6 +3728,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -3267,6 +3802,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -3331,8 +3875,7 @@
   "inheritedFalseKeepsIndependentMemoizingSourcesTest": {
     "source": {
       "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "regression": "inheritedFalseKeepsIndependentMemoizingSourcesTest",
-      "sha256": "9a6f0c10c77e7b50f37795ab8f0be1fcef4f220303fe40d69e633ecd6a4e9741"
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-runtime-boundary-witnesses.json/inheritedFalseKeepsIndependentMemoizingSourcesTest"
     },
     "states": [
       {
@@ -3341,6 +3884,15 @@
             "#bigint": "0"
           },
           "name": "init"
+        },
+        "mbt::actionTaken": "init",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "0"
+            }
+          }
         },
         "s": {
           "o": {
@@ -3386,6 +3938,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -3436,6 +3997,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -3484,6 +4054,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -3536,6 +4115,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -3589,6 +4177,15 @@
           },
           "name": "resolveLoader"
         },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "9"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -3641,6 +4238,15 @@
           },
           "name": "resolveLoader"
         },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "0"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -3692,6 +4298,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -3747,6 +4362,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -3801,8 +4425,7 @@
   "invalidCoalesceBypassesWithoutReplacingRemoteTest": {
     "source": {
       "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "regression": "invalidCoalesceBypassesWithoutReplacingRemoteTest",
-      "sha256": "328f3147a8c77be42c10a8f60d450232ae000f896d9b82df0f008d093079f025"
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-runtime-boundary-witnesses.json/invalidCoalesceBypassesWithoutReplacingRemoteTest"
     },
     "states": [
       {
@@ -3811,6 +4434,15 @@
             "#bigint": "5"
           },
           "name": "init"
+        },
+        "mbt::actionTaken": "init",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "5"
+            }
+          }
         },
         "s": {
           "o": {
@@ -3856,6 +4488,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -3906,6 +4547,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -3954,6 +4604,15 @@
             "#bigint": "0"
           },
           "name": "resolveLoader"
+        },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "0"
+            }
+          }
         },
         "s": {
           "o": {
@@ -4008,6 +4667,15 @@
           },
           "name": "policy"
         },
+        "mbt::actionTaken": "policy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "14"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -4060,6 +4728,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -4117,6 +4794,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -4172,6 +4858,15 @@
             "#bigint": "9"
           },
           "name": "resolveLoader"
+        },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "9"
+            }
+          }
         },
         "s": {
           "o": {
@@ -4229,6 +4924,15 @@
           },
           "name": "policy"
         },
+        "mbt::actionTaken": "policy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "9"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -4284,6 +4988,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -4343,6 +5056,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -4401,8 +5123,7 @@
   "invalidRequestLocalBypassesWithoutReplacingRemoteTest": {
     "source": {
       "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "regression": "invalidRequestLocalBypassesWithoutReplacingRemoteTest",
-      "sha256": "c3fc8b15e2b7e53d48f8bcfe89befcfdde1ef4f64af6de984bc8187fd73219f2"
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-runtime-boundary-witnesses.json/invalidRequestLocalBypassesWithoutReplacingRemoteTest"
     },
     "states": [
       {
@@ -4411,6 +5132,15 @@
             "#bigint": "5"
           },
           "name": "init"
+        },
+        "mbt::actionTaken": "init",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "5"
+            }
+          }
         },
         "s": {
           "o": {
@@ -4456,6 +5186,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -4506,6 +5245,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -4554,6 +5302,15 @@
             "#bigint": "0"
           },
           "name": "resolveLoader"
+        },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "0"
+            }
+          }
         },
         "s": {
           "o": {
@@ -4608,6 +5365,15 @@
           },
           "name": "policy"
         },
+        "mbt::actionTaken": "policy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "15"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -4660,6 +5426,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -4717,6 +5492,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -4772,6 +5556,15 @@
             "#bigint": "9"
           },
           "name": "resolveLoader"
+        },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "9"
+            }
+          }
         },
         "s": {
           "o": {
@@ -4829,6 +5622,15 @@
           },
           "name": "policy"
         },
+        "mbt::actionTaken": "policy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "9"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -4884,6 +5686,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -4943,6 +5754,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -5001,8 +5821,7 @@
   "localAbsenceAndLiteralTextStayDistinctTest": {
     "source": {
       "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "regression": "localAbsenceAndLiteralTextStayDistinctTest",
-      "sha256": "00e8e40bfeecadec13956f83394168aa7593214c6023782204ca1c49e6b7ec36"
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-runtime-boundary-witnesses.json/localAbsenceAndLiteralTextStayDistinctTest"
     },
     "states": [
       {
@@ -5011,6 +5830,15 @@
             "#bigint": "1"
           },
           "name": "init"
+        },
+        "mbt::actionTaken": "init",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "1"
+            }
+          }
         },
         "s": {
           "o": {
@@ -5056,6 +5884,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -5106,6 +5943,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -5154,6 +6000,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -5206,6 +6061,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -5259,6 +6123,15 @@
           },
           "name": "resolveLoader"
         },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "3"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -5311,6 +6184,15 @@
           },
           "name": "resolveLoader"
         },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "10"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -5362,6 +6244,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -5417,6 +6308,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -5471,8 +6371,7 @@
   "localCohortEqualityBypassesBeforeAboveSampleCachesTest": {
     "source": {
       "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "regression": "localCohortEqualityBypassesBeforeAboveSampleCachesTest",
-      "sha256": "ac0385d512bdd8a3a6242e07383648d704c32f009390732a298f286e59e7ffde"
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-runtime-boundary-witnesses.json/localCohortEqualityBypassesBeforeAboveSampleCachesTest"
     },
     "states": [
       {
@@ -5481,6 +6380,15 @@
             "#bigint": "1"
           },
           "name": "init"
+        },
+        "mbt::actionTaken": "init",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "1"
+            }
+          }
         },
         "s": {
           "o": {
@@ -5527,6 +6435,15 @@
           },
           "name": "policy"
         },
+        "mbt::actionTaken": "policy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "5"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [],
@@ -5571,6 +6488,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -5621,6 +6547,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -5669,6 +6604,15 @@
             "#bigint": "0"
           },
           "name": "resolveLoader"
+        },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "0"
+            }
+          }
         },
         "s": {
           "o": {
@@ -5719,6 +6663,15 @@
           },
           "name": "policy"
         },
+        "mbt::actionTaken": "policy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "8"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -5767,6 +6720,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -5819,6 +6781,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -5872,6 +6843,15 @@
           },
           "name": "resolveLoader"
         },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "9"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -5923,6 +6903,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -5978,6 +6967,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -6032,8 +7030,7 @@
   "localFalsyValuesRemainDistinctAndReusableTest": {
     "source": {
       "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "regression": "localFalsyValuesRemainDistinctAndReusableTest",
-      "sha256": "1c38b69f14881e4466dda9f7c6ffabcf26b3dd4423a70a79bfc79d8c101b4772"
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-runtime-boundary-witnesses.json/localFalsyValuesRemainDistinctAndReusableTest"
     },
     "states": [
       {
@@ -6042,6 +7039,15 @@
             "#bigint": "1"
           },
           "name": "init"
+        },
+        "mbt::actionTaken": "init",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "1"
+            }
+          }
         },
         "s": {
           "o": {
@@ -6088,6 +7094,15 @@
           },
           "name": "beginCall"
         },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -6137,6 +7152,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -6185,6 +7209,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -6238,6 +7271,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -6289,6 +7331,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -6345,6 +7396,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -6399,6 +7459,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -6457,6 +7526,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -6516,6 +7594,15 @@
           },
           "name": "resolveLoader"
         },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "4"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -6573,6 +7660,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -6634,6 +7730,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -6696,6 +7801,15 @@
           },
           "name": "resolveLoader"
         },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "13"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -6756,6 +7870,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -6820,6 +7943,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -6885,6 +8017,15 @@
           },
           "name": "resolveLoader"
         },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "22"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -6948,6 +8089,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -7015,6 +8165,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -7083,6 +8242,15 @@
           },
           "name": "resolveLoader"
         },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "31"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -7149,6 +8317,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -7219,6 +8396,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -7288,8 +8474,7 @@
   "nullProviderInheritsConfiguredServingAndDefaultSharingTest": {
     "source": {
       "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "regression": "nullProviderInheritsConfiguredServingAndDefaultSharingTest",
-      "sha256": "6cc06f258e3349f367b87a0595c779588b1d15d1106ed32c749bb6e866336e11"
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-runtime-boundary-witnesses.json/nullProviderInheritsConfiguredServingAndDefaultSharingTest"
     },
     "states": [
       {
@@ -7298,6 +8483,15 @@
             "#bigint": "5"
           },
           "name": "init"
+        },
+        "mbt::actionTaken": "init",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "5"
+            }
+          }
         },
         "s": {
           "o": {
@@ -7344,6 +8538,15 @@
           },
           "name": "policy"
         },
+        "mbt::actionTaken": "policy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "12"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [],
@@ -7388,6 +8591,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -7438,6 +8650,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -7486,6 +8707,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -7538,6 +8768,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -7590,6 +8829,15 @@
             "#bigint": "0"
           },
           "name": "resolveLoader"
+        },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "0"
+            }
+          }
         },
         "s": {
           "o": {
@@ -7646,6 +8894,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -7705,6 +8962,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -7763,8 +9029,7 @@
   "omittedRampAndSharingUseLibraryDefaultsTest": {
     "source": {
       "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "regression": "omittedRampAndSharingUseLibraryDefaultsTest",
-      "sha256": "7967038e8ca5896c1a2f44bc2bd1c1d6aa812a9e58eff78ce5826fb69e6684db"
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-runtime-boundary-witnesses.json/omittedRampAndSharingUseLibraryDefaultsTest"
     },
     "states": [
       {
@@ -7773,6 +9038,15 @@
             "#bigint": "5"
           },
           "name": "init"
+        },
+        "mbt::actionTaken": "init",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "5"
+            }
+          }
         },
         "s": {
           "o": {
@@ -7818,6 +9092,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -7868,6 +9151,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -7916,6 +9208,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -7968,6 +9269,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -8020,6 +9330,15 @@
             "#bigint": "0"
           },
           "name": "resolveLoader"
+        },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "0"
+            }
+          }
         },
         "s": {
           "o": {
@@ -8076,6 +9395,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -8135,6 +9463,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -8193,8 +9530,7 @@
   "reenablingSharingUsesTheOmittedTrueDefaultTest": {
     "source": {
       "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "regression": "reenablingSharingUsesTheOmittedTrueDefaultTest",
-      "sha256": "8be86c40867f91551e9c42e398bad1bbe65bd4cf277f353114de05f7a0200ac7"
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-runtime-boundary-witnesses.json/reenablingSharingUsesTheOmittedTrueDefaultTest"
     },
     "states": [
       {
@@ -8203,6 +9539,15 @@
             "#bigint": "3"
           },
           "name": "init"
+        },
+        "mbt::actionTaken": "init",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "3"
+            }
+          }
         },
         "s": {
           "o": {
@@ -8249,6 +9594,15 @@
           },
           "name": "policy"
         },
+        "mbt::actionTaken": "policy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "10"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [],
@@ -8293,6 +9647,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -8342,6 +9705,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -8392,6 +9764,15 @@
           },
           "name": "policy"
         },
+        "mbt::actionTaken": "policy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "9"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -8440,6 +9821,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -8493,6 +9883,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -8544,6 +9943,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -8599,6 +10007,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -8654,6 +10071,15 @@
             "#bigint": "9"
           },
           "name": "resolveLoader"
+        },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "9"
+            }
+          }
         },
         "s": {
           "o": {
@@ -8710,6 +10136,15 @@
           },
           "name": "resolveLoader"
         },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "0"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -8764,6 +10199,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -8822,6 +10266,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -8879,8 +10332,7 @@
   "remoteAbsenceAndLiteralTextStayDistinctTest": {
     "source": {
       "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "regression": "remoteAbsenceAndLiteralTextStayDistinctTest",
-      "sha256": "f217b6361efc1f8eaa36a90f6be53f80299ed4a3cc7c339e794e715550aa7b58"
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-runtime-boundary-witnesses.json/remoteAbsenceAndLiteralTextStayDistinctTest"
     },
     "states": [
       {
@@ -8889,6 +10341,15 @@
             "#bigint": "2"
           },
           "name": "init"
+        },
+        "mbt::actionTaken": "init",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "2"
+            }
+          }
         },
         "s": {
           "o": {
@@ -8934,6 +10395,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -8984,6 +10454,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -9032,6 +10511,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -9084,6 +10572,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -9136,6 +10633,15 @@
             "#bigint": "2"
           },
           "name": "resolveLoader"
+        },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "2"
+            }
+          }
         },
         "s": {
           "o": {
@@ -9192,6 +10698,15 @@
             "#bigint": "11"
           },
           "name": "resolveLoader"
+        },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "11"
+            }
+          }
         },
         "s": {
           "o": {
@@ -9251,6 +10766,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -9313,6 +10837,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -9374,8 +10907,7 @@
   "remoteCohortEqualityBypassesBeforeAboveSampleCachesTest": {
     "source": {
       "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "regression": "remoteCohortEqualityBypassesBeforeAboveSampleCachesTest",
-      "sha256": "9b5d6b1dc830081418d1bed302c46b32db51ebdbfd666233a7ae824a24bea21a"
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-runtime-boundary-witnesses.json/remoteCohortEqualityBypassesBeforeAboveSampleCachesTest"
     },
     "states": [
       {
@@ -9384,6 +10916,15 @@
             "#bigint": "2"
           },
           "name": "init"
+        },
+        "mbt::actionTaken": "init",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "2"
+            }
+          }
         },
         "s": {
           "o": {
@@ -9430,6 +10971,15 @@
           },
           "name": "policy"
         },
+        "mbt::actionTaken": "policy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "5"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [],
@@ -9474,6 +11024,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -9524,6 +11083,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -9572,6 +11140,15 @@
             "#bigint": "0"
           },
           "name": "resolveLoader"
+        },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "0"
+            }
+          }
         },
         "s": {
           "o": {
@@ -9622,6 +11199,15 @@
           },
           "name": "policy"
         },
+        "mbt::actionTaken": "policy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "8"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -9670,6 +11256,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -9722,6 +11317,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -9774,6 +11378,15 @@
             "#bigint": "9"
           },
           "name": "resolveLoader"
+        },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "9"
+            }
+          }
         },
         "s": {
           "o": {
@@ -9830,6 +11443,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -9889,6 +11511,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -9947,8 +11578,7 @@
   "remoteFalsyValuesRemainDistinctAndReusableTest": {
     "source": {
       "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "regression": "remoteFalsyValuesRemainDistinctAndReusableTest",
-      "sha256": "a1fbec699c1f7bc50f4e8d7b0bd398b1aad306fa4b5badb2ba89cf93b2ece1b7"
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-runtime-boundary-witnesses.json/remoteFalsyValuesRemainDistinctAndReusableTest"
     },
     "states": [
       {
@@ -9957,6 +11587,15 @@
             "#bigint": "2"
           },
           "name": "init"
+        },
+        "mbt::actionTaken": "init",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "2"
+            }
+          }
         },
         "s": {
           "o": {
@@ -10003,6 +11642,15 @@
           },
           "name": "beginCall"
         },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -10051,6 +11699,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -10101,6 +11758,15 @@
           },
           "name": "beginCall"
         },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -10152,6 +11818,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -10205,6 +11880,15 @@
           },
           "name": "beginCall"
         },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -10260,6 +11944,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -10314,6 +12007,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -10372,6 +12074,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -10430,6 +12141,15 @@
             "#bigint": "4"
           },
           "name": "resolveLoader"
+        },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "4"
+            }
+          }
         },
         "s": {
           "o": {
@@ -10492,6 +12212,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -10557,6 +12286,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -10622,6 +12360,15 @@
             "#bigint": "13"
           },
           "name": "resolveLoader"
+        },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "13"
+            }
+          }
         },
         "s": {
           "o": {
@@ -10690,6 +12437,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -10761,6 +12517,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -10832,6 +12597,15 @@
             "#bigint": "22"
           },
           "name": "resolveLoader"
+        },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "22"
+            }
+          }
         },
         "s": {
           "o": {
@@ -10906,6 +12680,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -10983,6 +12766,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -11060,6 +12852,15 @@
             "#bigint": "31"
           },
           "name": "resolveLoader"
+        },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "31"
+            }
+          }
         },
         "s": {
           "o": {
@@ -11140,6 +12941,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -11223,6 +13033,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -11305,8 +13124,7 @@
   "requestAbsenceAndLiteralTextStayDistinctTest": {
     "source": {
       "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "regression": "requestAbsenceAndLiteralTextStayDistinctTest",
-      "sha256": "9593ce8694870ec746fa679589a3877ee16d07bd6263004b1cb9d57225244a38"
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-runtime-boundary-witnesses.json/requestAbsenceAndLiteralTextStayDistinctTest"
     },
     "states": [
       {
@@ -11315,6 +13133,15 @@
             "#bigint": "0"
           },
           "name": "init"
+        },
+        "mbt::actionTaken": "init",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "0"
+            }
+          }
         },
         "s": {
           "o": {
@@ -11360,6 +13187,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -11410,6 +13246,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -11458,6 +13303,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -11510,6 +13364,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -11563,6 +13426,15 @@
           },
           "name": "resolveLoader"
         },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "2"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -11615,6 +13487,15 @@
           },
           "name": "resolveLoader"
         },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "11"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -11666,6 +13547,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -11721,6 +13611,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -11775,8 +13674,7 @@
   "requestFalsyValuesRemainDistinctAndReusableTest": {
     "source": {
       "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "regression": "requestFalsyValuesRemainDistinctAndReusableTest",
-      "sha256": "5a4b80fdfa6b5d921399b9c4d6849eb40946ab32927556e92e4856d6e39d267e"
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-runtime-boundary-witnesses.json/requestFalsyValuesRemainDistinctAndReusableTest"
     },
     "states": [
       {
@@ -11785,6 +13683,15 @@
             "#bigint": "0"
           },
           "name": "init"
+        },
+        "mbt::actionTaken": "init",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "0"
+            }
+          }
         },
         "s": {
           "o": {
@@ -11831,6 +13738,15 @@
           },
           "name": "beginCall"
         },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -11880,6 +13796,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -11928,6 +13853,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -11981,6 +13915,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -12032,6 +13975,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -12088,6 +14040,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -12142,6 +14103,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -12200,6 +14170,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -12259,6 +14238,15 @@
           },
           "name": "resolveLoader"
         },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "4"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -12316,6 +14304,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -12377,6 +14374,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -12439,6 +14445,15 @@
           },
           "name": "resolveLoader"
         },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "13"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -12499,6 +14514,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -12563,6 +14587,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -12628,6 +14661,15 @@
           },
           "name": "resolveLoader"
         },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "22"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -12691,6 +14733,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -12758,6 +14809,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -12826,6 +14886,15 @@
           },
           "name": "resolveLoader"
         },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "31"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -12892,6 +14961,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -12962,6 +15040,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -13031,8 +15118,7 @@
   "runtimeLocalTtlWithoutRampActivatesLayerTest": {
     "source": {
       "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "regression": "runtimeLocalTtlWithoutRampActivatesLayerTest",
-      "sha256": "dd12e13aa4bcac0ebdd2d1bd73820e09a17c3a9e5fcbbee12cda2f2280e292b5"
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-runtime-boundary-witnesses.json/runtimeLocalTtlWithoutRampActivatesLayerTest"
     },
     "states": [
       {
@@ -13041,6 +15127,15 @@
             "#bigint": "6"
           },
           "name": "init"
+        },
+        "mbt::actionTaken": "init",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "6"
+            }
+          }
         },
         "s": {
           "o": {
@@ -13086,6 +15181,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -13136,6 +15240,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -13184,6 +15297,15 @@
             "#bigint": "0"
           },
           "name": "resolveLoader"
+        },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "0"
+            }
+          }
         },
         "s": {
           "o": {
@@ -13234,6 +15356,15 @@
           },
           "name": "policy"
         },
+        "mbt::actionTaken": "policy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "18"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -13282,6 +15413,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -13334,6 +15474,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -13387,6 +15536,15 @@
           },
           "name": "resolveLoader"
         },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "9"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -13438,6 +15596,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -13493,6 +15660,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -13547,8 +15723,7 @@
   "runtimeRemoteTtlWithoutRampActivatesLayerTest": {
     "source": {
       "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "regression": "runtimeRemoteTtlWithoutRampActivatesLayerTest",
-      "sha256": "3b1a23cd74f25163ac6ec0c13ef6546370c3f98c772424e11c5a7c7166d75dab"
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-runtime-boundary-witnesses.json/runtimeRemoteTtlWithoutRampActivatesLayerTest"
     },
     "states": [
       {
@@ -13557,6 +15732,15 @@
             "#bigint": "7"
           },
           "name": "init"
+        },
+        "mbt::actionTaken": "init",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "7"
+            }
+          }
         },
         "s": {
           "o": {
@@ -13602,6 +15786,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -13652,6 +15845,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -13700,6 +15902,15 @@
             "#bigint": "0"
           },
           "name": "resolveLoader"
+        },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "0"
+            }
+          }
         },
         "s": {
           "o": {
@@ -13750,6 +15961,15 @@
           },
           "name": "policy"
         },
+        "mbt::actionTaken": "policy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "19"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -13798,6 +16018,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -13850,6 +16079,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -13902,6 +16140,15 @@
             "#bigint": "9"
           },
           "name": "resolveLoader"
+        },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "9"
+            }
+          }
         },
         "s": {
           "o": {
@@ -13958,6 +16205,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -14017,6 +16273,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -14075,8 +16340,7 @@
   "runtimeTrueEnablesSharingOverFalseDefaultTest": {
     "source": {
       "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
-      "regression": "runtimeTrueEnablesSharingOverFalseDefaultTest",
-      "sha256": "2f2e1f27da9d09f8a96ffcfe8de6e142e8490fc0b03a14f4271cc95b2bc6e754"
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-runtime-boundary-witnesses.json/runtimeTrueEnablesSharingOverFalseDefaultTest"
     },
     "states": [
       {
@@ -14085,6 +16349,15 @@
             "#bigint": "0"
           },
           "name": "init"
+        },
+        "mbt::actionTaken": "init",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "0"
+            }
+          }
         },
         "s": {
           "o": {
@@ -14131,6 +16404,15 @@
           },
           "name": "policy"
         },
+        "mbt::actionTaken": "policy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "11"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [],
@@ -14175,6 +16457,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -14225,6 +16516,15 @@
           },
           "name": "releasePolicy"
         },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -14273,6 +16573,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -14325,6 +16634,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -14378,6 +16696,15 @@
           },
           "name": "resolveLoader"
         },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "0"
+            }
+          }
+        },
         "s": {
           "o": {
             "calls": [
@@ -14429,6 +16756,15 @@
             "#bigint": "-1"
           },
           "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {
@@ -14484,6 +16820,15 @@
             "#bigint": "-1"
           },
           "name": "releasePolicy"
+        },
+        "mbt::actionTaken": "releasePolicy",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
         },
         "s": {
           "o": {

@@ -2,17 +2,21 @@
   "#meta": {
     "format": "ITF",
     "source": "formal/dialcache-conformance.qnt",
-    "description": "Portable core smoke scenario; same ITF input format as generated traces."
+    "recipe": "formal/fixture-recipes.json#formal/conformance-smoke.itf.json/smoke"
   },
   "vars": [
+    "input",
     "s",
     "mbt::actionTaken",
     "mbt::nondetPicks"
   ],
   "states": [
     {
-      "#meta": {
-        "index": 0
+      "input": {
+        "name": "init",
+        "choice": {
+          "#bigint": "-1"
+        }
       },
       "mbt::actionTaken": "init",
       "mbt::nondetPicks": {},
@@ -59,8 +63,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 1
+      "input": {
+        "name": "outsideCall",
+        "choice": {
+          "#bigint": "-1"
+        }
       },
       "mbt::actionTaken": "outsideCall",
       "mbt::nondetPicks": {},
@@ -107,8 +114,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 2
+      "input": {
+        "name": "requestLocalPair",
+        "choice": {
+          "#bigint": "-1"
+        }
       },
       "mbt::actionTaken": "requestLocalPair",
       "mbt::nondetPicks": {},
@@ -155,8 +165,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 3
+      "input": {
+        "name": "localCall",
+        "choice": {
+          "#bigint": "-1"
+        }
       },
       "mbt::actionTaken": "localCall",
       "mbt::nondetPicks": {},
@@ -203,8 +216,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 4
+      "input": {
+        "name": "bumpSource",
+        "choice": {
+          "#bigint": "-1"
+        }
       },
       "mbt::actionTaken": "bumpSource",
       "mbt::nondetPicks": {},
@@ -251,8 +267,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 5
+      "input": {
+        "name": "localCall",
+        "choice": {
+          "#bigint": "-1"
+        }
       },
       "mbt::actionTaken": "localCall",
       "mbt::nondetPicks": {},
@@ -299,8 +318,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 6
+      "input": {
+        "name": "coalescedLocalPair",
+        "choice": {
+          "#bigint": "-1"
+        }
       },
       "mbt::actionTaken": "coalescedLocalPair",
       "mbt::nondetPicks": {},
@@ -347,8 +369,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 7
+      "input": {
+        "name": "remoteCall",
+        "choice": {
+          "#bigint": "-1"
+        }
       },
       "mbt::actionTaken": "remoteCall",
       "mbt::nondetPicks": {},
@@ -395,8 +420,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 8
+      "input": {
+        "name": "bumpSource",
+        "choice": {
+          "#bigint": "-1"
+        }
       },
       "mbt::actionTaken": "bumpSource",
       "mbt::nondetPicks": {},
@@ -443,8 +471,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 9
+      "input": {
+        "name": "remoteCall",
+        "choice": {
+          "#bigint": "-1"
+        }
       },
       "mbt::actionTaken": "remoteCall",
       "mbt::nondetPicks": {},
@@ -491,8 +522,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 10
+      "input": {
+        "name": "invalidateRemote",
+        "choice": {
+          "#bigint": "-1"
+        }
       },
       "mbt::actionTaken": "invalidateRemote",
       "mbt::nondetPicks": {},
@@ -539,8 +573,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 11
+      "input": {
+        "name": "remoteCall",
+        "choice": {
+          "#bigint": "-1"
+        }
       },
       "mbt::actionTaken": "remoteCall",
       "mbt::nondetPicks": {},
@@ -587,8 +624,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 12
+      "input": {
+        "name": "bumpSource",
+        "choice": {
+          "#bigint": "-1"
+        }
       },
       "mbt::actionTaken": "bumpSource",
       "mbt::nondetPicks": {},
@@ -635,8 +675,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 13
+      "input": {
+        "name": "remoteReadFailureCall",
+        "choice": {
+          "#bigint": "-1"
+        }
       },
       "mbt::actionTaken": "remoteReadFailureCall",
       "mbt::nondetPicks": {},
@@ -683,8 +726,11 @@
       }
     },
     {
-      "#meta": {
-        "index": 14
+      "input": {
+        "name": "requestLocalPair",
+        "choice": {
+          "#bigint": "-1"
+        }
       },
       "mbt::actionTaken": "requestLocalPair",
       "mbt::nondetPicks": {},

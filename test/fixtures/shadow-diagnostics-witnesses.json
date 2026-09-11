@@ -2,6 +2,10 @@
   {
     "regression": "omittedLoggingKeepsMismatchMetricsOnlyTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-shadow-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/shadow-diagnostics-witnesses.json/omittedLoggingKeepsMismatchMetricsOnlyTest"
+      },
       "states": [
         {
           "input": {
@@ -9,6 +13,15 @@
               "#bigint": "2"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
           },
           "s": {
             "o": {
@@ -53,10 +66,10 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
-              }
+              },
+              "futureOffsets": []
             }
           }
         },
@@ -67,6 +80,15 @@
             },
             "name": "seed"
           },
+          "mbt::actionTaken": "seed",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -110,10 +132,10 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
-              }
+              },
+              "futureOffsets": []
             }
           }
         },
@@ -124,66 +146,14 @@
             },
             "name": "beginCall"
           },
-          "s": {
-            "o": {
-              "calls": [
-                {
-                  "#bigint": "0"
-                }
-              ],
-              "classifications": {
-                "#bigint": "0"
-              },
-              "comparisons": {
-                "#bigint": "0"
-              },
-              "dumps": {
-                "#bigint": "0"
-              },
-              "invalidations": {
-                "#bigint": "0"
-              },
-              "loaders": {
-                "#bigint": "1"
-              },
-              "loads": {
-                "#bigint": "0"
-              },
-              "maintenance": [],
-              "policyCalls": {
-                "#bigint": "1"
-              },
-              "reads": {
-                "#bigint": "1"
-              },
-              "recovery": [],
-              "shadow": [],
-              "sourceScopes": [],
-              "writeTtls": [],
-              "writes": {
-                "#bigint": "0"
-              }
-            },
-            "d": {
-              "ages": [],
-              "coalesced": [],
-              "configErrors": {
-                "#bigint": "0"
-              },
-              "fallbackErrors": [],
-              "futureOffsets": [],
-              "warnings": {
-                "#bigint": "0"
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
               }
             }
-          }
-        },
-        {
-          "input": {
-            "choice": {
-              "#bigint": "-1"
-            },
-            "name": "releaseRead"
           },
           "s": {
             "o": {
@@ -232,10 +202,80 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
+              },
+              "futureOffsets": []
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "releaseRead"
+          },
+          "mbt::actionTaken": "releaseRead",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
               }
+            }
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "0"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "warnings": {
+                "#bigint": "0"
+              },
+              "futureOffsets": []
             }
           }
         },
@@ -245,6 +285,15 @@
               "#bigint": "2"
             },
             "name": "resolveLoader"
+          },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
           },
           "s": {
             "o": {
@@ -293,10 +342,10 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
-              }
+              },
+              "futureOffsets": []
             }
           }
         },
@@ -306,6 +355,15 @@
               "#bigint": "-1"
             },
             "name": "releaseLoad"
+          },
+          "mbt::actionTaken": "releaseLoad",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -354,10 +412,10 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
-              }
+              },
+              "futureOffsets": []
             }
           }
         },
@@ -367,6 +425,15 @@
               "#bigint": "-1"
             },
             "name": "releaseRead"
+          },
+          "mbt::actionTaken": "releaseRead",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -421,10 +488,10 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
-              }
+              },
+              "futureOffsets": []
             }
           }
         }
@@ -434,6 +501,10 @@
   {
     "regression": "explicitFalseLoggingOverridesEnabledDefaultTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-shadow-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/shadow-diagnostics-witnesses.json/explicitFalseLoggingOverridesEnabledDefaultTest"
+      },
       "states": [
         {
           "input": {
@@ -441,6 +512,15 @@
               "#bigint": "6"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "6"
+              }
+            }
           },
           "s": {
             "o": {
@@ -485,10 +565,10 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
-              }
+              },
+              "futureOffsets": []
             }
           }
         },
@@ -499,6 +579,15 @@
             },
             "name": "logPolicy"
           },
+          "mbt::actionTaken": "logPolicy",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -542,10 +631,10 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
-              }
+              },
+              "futureOffsets": []
             }
           }
         },
@@ -556,6 +645,15 @@
             },
             "name": "seed"
           },
+          "mbt::actionTaken": "seed",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -599,10 +697,10 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
-              }
+              },
+              "futureOffsets": []
             }
           }
         },
@@ -613,66 +711,14 @@
             },
             "name": "beginCall"
           },
-          "s": {
-            "o": {
-              "calls": [
-                {
-                  "#bigint": "0"
-                }
-              ],
-              "classifications": {
-                "#bigint": "0"
-              },
-              "comparisons": {
-                "#bigint": "0"
-              },
-              "dumps": {
-                "#bigint": "0"
-              },
-              "invalidations": {
-                "#bigint": "0"
-              },
-              "loaders": {
-                "#bigint": "1"
-              },
-              "loads": {
-                "#bigint": "0"
-              },
-              "maintenance": [],
-              "policyCalls": {
-                "#bigint": "1"
-              },
-              "reads": {
-                "#bigint": "1"
-              },
-              "recovery": [],
-              "shadow": [],
-              "sourceScopes": [],
-              "writeTtls": [],
-              "writes": {
-                "#bigint": "0"
-              }
-            },
-            "d": {
-              "ages": [],
-              "coalesced": [],
-              "configErrors": {
-                "#bigint": "0"
-              },
-              "fallbackErrors": [],
-              "futureOffsets": [],
-              "warnings": {
-                "#bigint": "0"
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
               }
             }
-          }
-        },
-        {
-          "input": {
-            "choice": {
-              "#bigint": "-1"
-            },
-            "name": "releaseRead"
           },
           "s": {
             "o": {
@@ -721,10 +767,80 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
+              },
+              "futureOffsets": []
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "releaseRead"
+          },
+          "mbt::actionTaken": "releaseRead",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
               }
+            }
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "0"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "warnings": {
+                "#bigint": "0"
+              },
+              "futureOffsets": []
             }
           }
         },
@@ -734,6 +850,15 @@
               "#bigint": "2"
             },
             "name": "resolveLoader"
+          },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
           },
           "s": {
             "o": {
@@ -782,10 +907,10 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
-              }
+              },
+              "futureOffsets": []
             }
           }
         },
@@ -795,6 +920,15 @@
               "#bigint": "-1"
             },
             "name": "releaseLoad"
+          },
+          "mbt::actionTaken": "releaseLoad",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -843,10 +977,10 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
-              }
+              },
+              "futureOffsets": []
             }
           }
         },
@@ -856,6 +990,15 @@
               "#bigint": "-1"
             },
             "name": "releaseRead"
+          },
+          "mbt::actionTaken": "releaseRead",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -910,10 +1053,10 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
-              }
+              },
+              "futureOffsets": []
             }
           }
         }
@@ -923,6 +1066,10 @@
   {
     "regression": "confirmationPastFreshnessKeepsOriginalPayloadAndAgeTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-shadow-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/shadow-diagnostics-witnesses.json/confirmationPastFreshnessKeepsOriginalPayloadAndAgeTest"
+      },
       "states": [
         {
           "input": {
@@ -930,6 +1077,15 @@
               "#bigint": "6"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "6"
+              }
+            }
           },
           "s": {
             "o": {
@@ -974,10 +1130,10 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
-              }
+              },
+              "futureOffsets": []
             }
           }
         },
@@ -988,6 +1144,15 @@
             },
             "name": "seed"
           },
+          "mbt::actionTaken": "seed",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -1031,10 +1196,10 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
-              }
+              },
+              "futureOffsets": []
             }
           }
         },
@@ -1045,66 +1210,14 @@
             },
             "name": "beginCall"
           },
-          "s": {
-            "o": {
-              "calls": [
-                {
-                  "#bigint": "0"
-                }
-              ],
-              "classifications": {
-                "#bigint": "0"
-              },
-              "comparisons": {
-                "#bigint": "0"
-              },
-              "dumps": {
-                "#bigint": "0"
-              },
-              "invalidations": {
-                "#bigint": "0"
-              },
-              "loaders": {
-                "#bigint": "1"
-              },
-              "loads": {
-                "#bigint": "0"
-              },
-              "maintenance": [],
-              "policyCalls": {
-                "#bigint": "1"
-              },
-              "reads": {
-                "#bigint": "1"
-              },
-              "recovery": [],
-              "shadow": [],
-              "sourceScopes": [],
-              "writeTtls": [],
-              "writes": {
-                "#bigint": "0"
-              }
-            },
-            "d": {
-              "ages": [],
-              "coalesced": [],
-              "configErrors": {
-                "#bigint": "0"
-              },
-              "fallbackErrors": [],
-              "futureOffsets": [],
-              "warnings": {
-                "#bigint": "0"
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
               }
             }
-          }
-        },
-        {
-          "input": {
-            "choice": {
-              "#bigint": "-1"
-            },
-            "name": "releaseRead"
           },
           "s": {
             "o": {
@@ -1153,10 +1266,80 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
+              },
+              "futureOffsets": []
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "releaseRead"
+          },
+          "mbt::actionTaken": "releaseRead",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
               }
+            }
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "0"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "warnings": {
+                "#bigint": "0"
+              },
+              "futureOffsets": []
             }
           }
         },
@@ -1167,6 +1350,15 @@
             },
             "name": "resolveLoader"
           },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -1214,10 +1406,10 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
-              }
+              },
+              "futureOffsets": []
             }
           }
         },
@@ -1228,66 +1420,14 @@
             },
             "name": "releaseLoad"
           },
-          "s": {
-            "o": {
-              "calls": [
-                {
-                  "#bigint": "2"
-                }
-              ],
-              "classifications": {
-                "#bigint": "0"
-              },
-              "comparisons": {
-                "#bigint": "1"
-              },
-              "dumps": {
-                "#bigint": "0"
-              },
-              "invalidations": {
-                "#bigint": "0"
-              },
-              "loaders": {
-                "#bigint": "1"
-              },
-              "loads": {
-                "#bigint": "1"
-              },
-              "maintenance": [],
-              "policyCalls": {
-                "#bigint": "1"
-              },
-              "reads": {
-                "#bigint": "2"
-              },
-              "recovery": [],
-              "shadow": [],
-              "sourceScopes": [],
-              "writeTtls": [],
-              "writes": {
-                "#bigint": "0"
-              }
-            },
-            "d": {
-              "ages": [],
-              "coalesced": [],
-              "configErrors": {
-                "#bigint": "0"
-              },
-              "fallbackErrors": [],
-              "futureOffsets": [],
-              "warnings": {
-                "#bigint": "0"
+          "mbt::actionTaken": "releaseLoad",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
               }
             }
-          }
-        },
-        {
-          "input": {
-            "choice": {
-              "#bigint": "60000"
-            },
-            "name": "advanceWall"
           },
           "s": {
             "o": {
@@ -1336,10 +1476,80 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
+              },
+              "futureOffsets": []
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "60000"
+            },
+            "name": "advanceWall"
+          },
+          "mbt::actionTaken": "advanceWall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "60000"
               }
+            }
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "2"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "1"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "1"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "2"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "warnings": {
+                "#bigint": "0"
+              },
+              "futureOffsets": []
             }
           }
         },
@@ -1349,6 +1559,15 @@
               "#bigint": "-1"
             },
             "name": "releaseRead"
+          },
+          "mbt::actionTaken": "releaseRead",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -1403,10 +1622,10 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "1"
-              }
+              },
+              "futureOffsets": []
             }
           }
         }
@@ -1416,6 +1635,10 @@
   {
     "regression": "confirmationRollbackKeepsPayloadAndClampsAgeTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-shadow-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/shadow-diagnostics-witnesses.json/confirmationRollbackKeepsPayloadAndClampsAgeTest"
+      },
       "states": [
         {
           "input": {
@@ -1423,6 +1646,15 @@
               "#bigint": "6"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "6"
+              }
+            }
           },
           "s": {
             "o": {
@@ -1467,10 +1699,10 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
-              }
+              },
+              "futureOffsets": []
             }
           }
         },
@@ -1481,6 +1713,15 @@
             },
             "name": "seed"
           },
+          "mbt::actionTaken": "seed",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -1524,10 +1765,10 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
-              }
+              },
+              "futureOffsets": []
             }
           }
         },
@@ -1538,66 +1779,14 @@
             },
             "name": "beginCall"
           },
-          "s": {
-            "o": {
-              "calls": [
-                {
-                  "#bigint": "0"
-                }
-              ],
-              "classifications": {
-                "#bigint": "0"
-              },
-              "comparisons": {
-                "#bigint": "0"
-              },
-              "dumps": {
-                "#bigint": "0"
-              },
-              "invalidations": {
-                "#bigint": "0"
-              },
-              "loaders": {
-                "#bigint": "1"
-              },
-              "loads": {
-                "#bigint": "0"
-              },
-              "maintenance": [],
-              "policyCalls": {
-                "#bigint": "1"
-              },
-              "reads": {
-                "#bigint": "1"
-              },
-              "recovery": [],
-              "shadow": [],
-              "sourceScopes": [],
-              "writeTtls": [],
-              "writes": {
-                "#bigint": "0"
-              }
-            },
-            "d": {
-              "ages": [],
-              "coalesced": [],
-              "configErrors": {
-                "#bigint": "0"
-              },
-              "fallbackErrors": [],
-              "futureOffsets": [],
-              "warnings": {
-                "#bigint": "0"
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
               }
             }
-          }
-        },
-        {
-          "input": {
-            "choice": {
-              "#bigint": "-1"
-            },
-            "name": "releaseRead"
           },
           "s": {
             "o": {
@@ -1646,10 +1835,80 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
+              },
+              "futureOffsets": []
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "releaseRead"
+          },
+          "mbt::actionTaken": "releaseRead",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
               }
+            }
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "0"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "warnings": {
+                "#bigint": "0"
+              },
+              "futureOffsets": []
             }
           }
         },
@@ -1660,6 +1919,15 @@
             },
             "name": "resolveLoader"
           },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [
@@ -1707,10 +1975,10 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
-              }
+              },
+              "futureOffsets": []
             }
           }
         },
@@ -1721,66 +1989,14 @@
             },
             "name": "releaseLoad"
           },
-          "s": {
-            "o": {
-              "calls": [
-                {
-                  "#bigint": "2"
-                }
-              ],
-              "classifications": {
-                "#bigint": "0"
-              },
-              "comparisons": {
-                "#bigint": "1"
-              },
-              "dumps": {
-                "#bigint": "0"
-              },
-              "invalidations": {
-                "#bigint": "0"
-              },
-              "loaders": {
-                "#bigint": "1"
-              },
-              "loads": {
-                "#bigint": "1"
-              },
-              "maintenance": [],
-              "policyCalls": {
-                "#bigint": "1"
-              },
-              "reads": {
-                "#bigint": "2"
-              },
-              "recovery": [],
-              "shadow": [],
-              "sourceScopes": [],
-              "writeTtls": [],
-              "writes": {
-                "#bigint": "0"
-              }
-            },
-            "d": {
-              "ages": [],
-              "coalesced": [],
-              "configErrors": {
-                "#bigint": "0"
-              },
-              "fallbackErrors": [],
-              "futureOffsets": [],
-              "warnings": {
-                "#bigint": "0"
+          "mbt::actionTaken": "releaseLoad",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
               }
             }
-          }
-        },
-        {
-          "input": {
-            "choice": {
-              "#bigint": "-1"
-            },
-            "name": "rollbackWall"
           },
           "s": {
             "o": {
@@ -1829,10 +2045,80 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
+              },
+              "futureOffsets": []
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "rollbackWall"
+          },
+          "mbt::actionTaken": "rollbackWall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
               }
+            }
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "2"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "1"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "1"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "2"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "warnings": {
+                "#bigint": "0"
+              },
+              "futureOffsets": []
             }
           }
         },
@@ -1842,6 +2128,15 @@
               "#bigint": "-1"
             },
             "name": "releaseRead"
+          },
+          "mbt::actionTaken": "releaseRead",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -1896,6 +2191,9 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
+              "warnings": {
+                "#bigint": "1"
+              },
               "futureOffsets": [
                 {
                   "layer": "remote_shadow",
@@ -1903,10 +2201,7 @@
                     "#bigint": "1000"
                   }
                 }
-              ],
-              "warnings": {
-                "#bigint": "1"
-              }
+              ]
             }
           }
         }
@@ -1916,6 +2211,10 @@
   {
     "regression": "futureDarkAcquisitionReportsOffsetAndFillsMissTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-shadow-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/shadow-diagnostics-witnesses.json/futureDarkAcquisitionReportsOffsetAndFillsMissTest"
+      },
       "states": [
         {
           "input": {
@@ -1923,6 +2222,15 @@
               "#bigint": "0"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -1967,10 +2275,10 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
-              }
+              },
+              "futureOffsets": []
             }
           }
         },
@@ -1981,6 +2289,15 @@
             },
             "name": "seed"
           },
+          "mbt::actionTaken": "seed",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -2024,10 +2341,10 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
-              }
+              },
+              "futureOffsets": []
             }
           }
         },
@@ -2038,6 +2355,15 @@
             },
             "name": "rollbackWall"
           },
+          "mbt::actionTaken": "rollbackWall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
+          },
           "s": {
             "o": {
               "calls": [],
@@ -2081,10 +2407,10 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
-              }
+              },
+              "futureOffsets": []
             }
           }
         },
@@ -2095,66 +2421,14 @@
             },
             "name": "beginCall"
           },
-          "s": {
-            "o": {
-              "calls": [
-                {
-                  "#bigint": "0"
-                }
-              ],
-              "classifications": {
-                "#bigint": "0"
-              },
-              "comparisons": {
-                "#bigint": "0"
-              },
-              "dumps": {
-                "#bigint": "0"
-              },
-              "invalidations": {
-                "#bigint": "0"
-              },
-              "loaders": {
-                "#bigint": "1"
-              },
-              "loads": {
-                "#bigint": "0"
-              },
-              "maintenance": [],
-              "policyCalls": {
-                "#bigint": "1"
-              },
-              "reads": {
-                "#bigint": "1"
-              },
-              "recovery": [],
-              "shadow": [],
-              "sourceScopes": [],
-              "writeTtls": [],
-              "writes": {
-                "#bigint": "0"
-              }
-            },
-            "d": {
-              "ages": [],
-              "coalesced": [],
-              "configErrors": {
-                "#bigint": "0"
-              },
-              "fallbackErrors": [],
-              "futureOffsets": [],
-              "warnings": {
-                "#bigint": "0"
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
               }
             }
-          }
-        },
-        {
-          "input": {
-            "choice": {
-              "#bigint": "-1"
-            },
-            "name": "releaseRead"
           },
           "s": {
             "o": {
@@ -2203,6 +2477,79 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
+              "warnings": {
+                "#bigint": "0"
+              },
+              "futureOffsets": []
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "releaseRead"
+          },
+          "mbt::actionTaken": "releaseRead",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "0"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "warnings": {
+                "#bigint": "0"
+              },
               "futureOffsets": [
                 {
                   "layer": "remote_shadow",
@@ -2210,10 +2557,7 @@
                     "#bigint": "1000"
                   }
                 }
-              ],
-              "warnings": {
-                "#bigint": "0"
-              }
+              ]
             }
           }
         },
@@ -2223,6 +2567,15 @@
               "#bigint": "2"
             },
             "name": "resolveLoader"
+          },
+          "mbt::actionTaken": "resolveLoader",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "2"
+              }
+            }
           },
           "s": {
             "o": {
@@ -2271,6 +2624,9 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
+              "warnings": {
+                "#bigint": "0"
+              },
               "futureOffsets": [
                 {
                   "layer": "remote_shadow",
@@ -2278,10 +2634,7 @@
                     "#bigint": "1000"
                   }
                 }
-              ],
-              "warnings": {
-                "#bigint": "0"
-              }
+              ]
             }
           }
         },
@@ -2291,6 +2644,15 @@
               "#bigint": "-1"
             },
             "name": "releaseDump"
+          },
+          "mbt::actionTaken": "releaseDump",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -2343,6 +2705,9 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
+              "warnings": {
+                "#bigint": "0"
+              },
               "futureOffsets": [
                 {
                   "layer": "remote_shadow",
@@ -2350,10 +2715,7 @@
                     "#bigint": "1000"
                   }
                 }
-              ],
-              "warnings": {
-                "#bigint": "0"
-              }
+              ]
             }
           }
         },
@@ -2363,6 +2725,15 @@
               "#bigint": "-1"
             },
             "name": "releaseWrite"
+          },
+          "mbt::actionTaken": "releaseWrite",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -2417,6 +2788,9 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
+              "warnings": {
+                "#bigint": "0"
+              },
               "futureOffsets": [
                 {
                   "layer": "remote_shadow",
@@ -2424,10 +2798,7 @@
                     "#bigint": "1000"
                   }
                 }
-              ],
-              "warnings": {
-                "#bigint": "0"
-              }
+              ]
             }
           }
         }
@@ -2437,6 +2808,10 @@
   {
     "regression": "futureLateDarkReadKeepsTimeoutAndReportsOffsetTest",
     "trace": {
+      "source": {
+        "model": "formal/dialcache-shadow-conformance.qnt",
+        "recipe": "formal/fixture-recipes.json#test/fixtures/shadow-diagnostics-witnesses.json/futureLateDarkReadKeepsTimeoutAndReportsOffsetTest"
+      },
       "states": [
         {
           "input": {
@@ -2444,6 +2819,15 @@
               "#bigint": "0"
             },
             "name": "init"
+          },
+          "mbt::actionTaken": "init",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "0"
+              }
+            }
           },
           "s": {
             "o": {
@@ -2488,10 +2872,10 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
-              }
+              },
+              "futureOffsets": []
             }
           }
         },
@@ -2502,62 +2886,14 @@
             },
             "name": "seed"
           },
-          "s": {
-            "o": {
-              "calls": [],
-              "classifications": {
-                "#bigint": "0"
-              },
-              "comparisons": {
-                "#bigint": "0"
-              },
-              "dumps": {
-                "#bigint": "0"
-              },
-              "invalidations": {
-                "#bigint": "0"
-              },
-              "loaders": {
-                "#bigint": "0"
-              },
-              "loads": {
-                "#bigint": "0"
-              },
-              "maintenance": [],
-              "policyCalls": {
-                "#bigint": "0"
-              },
-              "reads": {
-                "#bigint": "0"
-              },
-              "recovery": [],
-              "shadow": [],
-              "sourceScopes": [],
-              "writeTtls": [],
-              "writes": {
-                "#bigint": "0"
-              }
-            },
-            "d": {
-              "ages": [],
-              "coalesced": [],
-              "configErrors": {
-                "#bigint": "0"
-              },
-              "fallbackErrors": [],
-              "futureOffsets": [],
-              "warnings": {
-                "#bigint": "0"
+          "mbt::actionTaken": "seed",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "1"
               }
             }
-          }
-        },
-        {
-          "input": {
-            "choice": {
-              "#bigint": "-1"
-            },
-            "name": "rollbackWall"
           },
           "s": {
             "o": {
@@ -2602,10 +2938,76 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
+              },
+              "futureOffsets": []
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "rollbackWall"
+          },
+          "mbt::actionTaken": "rollbackWall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
               }
+            }
+          },
+          "s": {
+            "o": {
+              "calls": [],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "0"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "0"
+              },
+              "reads": {
+                "#bigint": "0"
+              },
+              "recovery": [],
+              "shadow": [],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [],
+              "warnings": {
+                "#bigint": "0"
+              },
+              "futureOffsets": []
             }
           }
         },
@@ -2615,6 +3017,15 @@
               "#bigint": "-1"
             },
             "name": "beginCall"
+          },
+          "mbt::actionTaken": "beginCall",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
           },
           "s": {
             "o": {
@@ -2663,10 +3074,10 @@
                 "#bigint": "0"
               },
               "fallbackErrors": [],
-              "futureOffsets": [],
               "warnings": {
                 "#bigint": "0"
-              }
+              },
+              "futureOffsets": []
             }
           }
         },
@@ -2677,70 +3088,14 @@
             },
             "name": "advance"
           },
-          "s": {
-            "o": {
-              "calls": [
-                {
-                  "#bigint": "4"
-                }
-              ],
-              "classifications": {
-                "#bigint": "0"
-              },
-              "comparisons": {
-                "#bigint": "0"
-              },
-              "dumps": {
-                "#bigint": "0"
-              },
-              "invalidations": {
-                "#bigint": "0"
-              },
-              "loaders": {
-                "#bigint": "1"
-              },
-              "loads": {
-                "#bigint": "0"
-              },
-              "maintenance": [],
-              "policyCalls": {
-                "#bigint": "1"
-              },
-              "reads": {
-                "#bigint": "1"
-              },
-              "recovery": [],
-              "shadow": [
-                "timeout"
-              ],
-              "sourceScopes": [],
-              "writeTtls": [],
-              "writes": {
-                "#bigint": "0"
-              }
-            },
-            "d": {
-              "ages": [],
-              "coalesced": [],
-              "configErrors": {
-                "#bigint": "0"
-              },
-              "fallbackErrors": [
-                "local"
-              ],
-              "futureOffsets": [],
-              "warnings": {
-                "#bigint": "0"
+          "mbt::actionTaken": "advance",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "Some",
+              "value": {
+                "#bigint": "10"
               }
             }
-          }
-        },
-        {
-          "input": {
-            "choice": {
-              "#bigint": "-1"
-            },
-            "name": "releaseRead"
           },
           "s": {
             "o": {
@@ -2793,6 +3148,83 @@
               "fallbackErrors": [
                 "local"
               ],
+              "warnings": {
+                "#bigint": "0"
+              },
+              "futureOffsets": []
+            }
+          }
+        },
+        {
+          "input": {
+            "choice": {
+              "#bigint": "-1"
+            },
+            "name": "releaseRead"
+          },
+          "mbt::actionTaken": "releaseRead",
+          "mbt::nondetPicks": {
+            "choice": {
+              "tag": "None",
+              "value": {
+                "#tup": []
+              }
+            }
+          },
+          "s": {
+            "o": {
+              "calls": [
+                {
+                  "#bigint": "4"
+                }
+              ],
+              "classifications": {
+                "#bigint": "0"
+              },
+              "comparisons": {
+                "#bigint": "0"
+              },
+              "dumps": {
+                "#bigint": "0"
+              },
+              "invalidations": {
+                "#bigint": "0"
+              },
+              "loaders": {
+                "#bigint": "1"
+              },
+              "loads": {
+                "#bigint": "0"
+              },
+              "maintenance": [],
+              "policyCalls": {
+                "#bigint": "1"
+              },
+              "reads": {
+                "#bigint": "1"
+              },
+              "recovery": [],
+              "shadow": [
+                "timeout"
+              ],
+              "sourceScopes": [],
+              "writeTtls": [],
+              "writes": {
+                "#bigint": "0"
+              }
+            },
+            "d": {
+              "ages": [],
+              "coalesced": [],
+              "configErrors": {
+                "#bigint": "0"
+              },
+              "fallbackErrors": [
+                "local"
+              ],
+              "warnings": {
+                "#bigint": "0"
+              },
               "futureOffsets": [
                 {
                   "layer": "remote_shadow",
@@ -2800,10 +3232,7 @@
                     "#bigint": "990"
                   }
                 }
-              ],
-              "warnings": {
-                "#bigint": "0"
-              }
+              ]
             }
           }
         }

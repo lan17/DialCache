@@ -1,63 +1,5977 @@
-{"#meta":{"format":"ITF","format-description":"https://apalache-mc.org/docs/adr/015adr-trace.html","source":"formal/dialcache-recovery-conformance.qnt","status":"ok","description":"Created by Quint on Wed Sep 09 2026 11:28:26 GMT-0700 (Pacific Daylight Time)","timestamp":1788978506372},"vars":["mbt::actionTaken","mbt::nondetPicks","s","mbt::actionTaken","mbt::nondetPicks"],"states":[
-{"#meta":{"index":0},"mbt::actionTaken":"init","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"6"}}},"s":{"o":{"calls":[],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"0"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"0"},"reads":{"#bigint":"0"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":1},"mbt::actionTaken":"beginCall","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"1"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"1"},"reads":{"#bigint":"1"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":[],"fallbackErrors":[],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":2},"mbt::actionTaken":"joinCall","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"1"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"2"},"reads":{"#bigint":"1"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":["process"],"fallbackErrors":[],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":3},"mbt::actionTaken":"joinCall","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"1"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"3"},"reads":{"#bigint":"1"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":["process","request_local"],"fallbackErrors":[],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":4},"mbt::actionTaken":"joinCall","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"0"},"loaders":{"#bigint":"1"},"loads":{"#bigint":"0"},"maintenance":[],"policyCalls":{"#bigint":"4"},"reads":{"#bigint":"1"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":["process","request_local","request_local"],"fallbackErrors":[],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":5},"mbt::actionTaken":"invalidate","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"classifications":{"#bigint":"0"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"1"},"loaders":{"#bigint":"1"},"loads":{"#bigint":"0"},"maintenance":["ok"],"policyCalls":{"#bigint":"4"},"reads":{"#bigint":"1"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":["process","request_local","request_local"],"fallbackErrors":[],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":6},"mbt::actionTaken":"advance","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"10"}}},"s":{"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"1"},"loaders":{"#bigint":"1"},"loads":{"#bigint":"1"},"maintenance":["ok"],"policyCalls":{"#bigint":"4"},"reads":{"#bigint":"1"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":["process","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":7},"mbt::actionTaken":"seed","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"1"},"loaders":{"#bigint":"1"},"loads":{"#bigint":"1"},"maintenance":["ok"],"policyCalls":{"#bigint":"4"},"reads":{"#bigint":"1"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":["process","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":8},"mbt::actionTaken":"policy","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"5000"}}},"s":{"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"1"},"loaders":{"#bigint":"1"},"loads":{"#bigint":"1"},"maintenance":["ok"],"policyCalls":{"#bigint":"4"},"reads":{"#bigint":"1"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":["process","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":9},"mbt::actionTaken":"readFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"1"},"loaders":{"#bigint":"1"},"loads":{"#bigint":"1"},"maintenance":["ok"],"policyCalls":{"#bigint":"4"},"reads":{"#bigint":"1"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":["process","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":10},"mbt::actionTaken":"loadFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"1"},"loaders":{"#bigint":"1"},"loads":{"#bigint":"1"},"maintenance":["ok"],"policyCalls":{"#bigint":"4"},"reads":{"#bigint":"1"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":["process","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":11},"mbt::actionTaken":"joinCall","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"1"},"loaders":{"#bigint":"1"},"loads":{"#bigint":"1"},"maintenance":["ok"],"policyCalls":{"#bigint":"5"},"reads":{"#bigint":"1"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":12},"mbt::actionTaken":"rejectLoader","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"1"},"loaders":{"#bigint":"1"},"loads":{"#bigint":"1"},"maintenance":["ok"],"policyCalls":{"#bigint":"5"},"reads":{"#bigint":"1"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":13},"mbt::actionTaken":"readFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"1"},"loaders":{"#bigint":"1"},"loads":{"#bigint":"1"},"maintenance":["ok"],"policyCalls":{"#bigint":"5"},"reads":{"#bigint":"1"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":14},"mbt::actionTaken":"closeScope","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"1"},"loaders":{"#bigint":"1"},"loads":{"#bigint":"1"},"maintenance":["ok"],"policyCalls":{"#bigint":"5"},"reads":{"#bigint":"1"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":15},"mbt::actionTaken":"rollbackWall","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"1"},"loaders":{"#bigint":"1"},"loads":{"#bigint":"1"},"maintenance":["ok"],"policyCalls":{"#bigint":"5"},"reads":{"#bigint":"1"},"recovery":[],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":16},"mbt::actionTaken":"releaseLoad","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"1"},"loaders":{"#bigint":"1"},"loads":{"#bigint":"1"},"maintenance":["ok"],"policyCalls":{"#bigint":"5"},"reads":{"#bigint":"1"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":17},"mbt::actionTaken":"advance","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"4000"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"1"},"loaders":{"#bigint":"1"},"loads":{"#bigint":"1"},"maintenance":["ok"],"policyCalls":{"#bigint":"5"},"reads":{"#bigint":"1"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":18},"mbt::actionTaken":"beginCall","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"4"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"0"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"1"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok"],"policyCalls":{"#bigint":"6"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":19},"mbt::actionTaken":"joinCall","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"0"},{"#bigint":"0"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"1"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok"],"policyCalls":{"#bigint":"7"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":20},"mbt::actionTaken":"loadFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"0"},{"#bigint":"0"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"1"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok"],"policyCalls":{"#bigint":"7"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":21},"mbt::actionTaken":"rollbackWall","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"0"},{"#bigint":"0"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"1"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok"],"policyCalls":{"#bigint":"7"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":22},"mbt::actionTaken":"joinCall","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"0"},{"#bigint":"0"},{"#bigint":"0"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"0"},"invalidations":{"#bigint":"1"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[],"writes":{"#bigint":"0"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":23},"mbt::actionTaken":"resolveLoader","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"1"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":24},"mbt::actionTaken":"readFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"1"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":25},"mbt::actionTaken":"readFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"1"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":26},"mbt::actionTaken":"seed","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"4"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"1"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":27},"mbt::actionTaken":"policy","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"5000"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"1"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":28},"mbt::actionTaken":"closeScope","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"1"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":29},"mbt::actionTaken":"rollbackWall","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"1"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":30},"mbt::actionTaken":"loadFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"1"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":31},"mbt::actionTaken":"policy","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"5000"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"1"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":32},"mbt::actionTaken":"rollbackWall","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"1"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":33},"mbt::actionTaken":"invalidate","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"2"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok","ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":34},"mbt::actionTaken":"advance","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"4000"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"2"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok","ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":35},"mbt::actionTaken":"readFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"2"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok","ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":36},"mbt::actionTaken":"loadFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"2"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok","ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":37},"mbt::actionTaken":"rollbackWall","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"2"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok","ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":38},"mbt::actionTaken":"rollbackWall","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"2"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok","ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":39},"mbt::actionTaken":"readFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"2"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok","ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":40},"mbt::actionTaken":"loadFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"2"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok","ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":41},"mbt::actionTaken":"advance","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"10"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"2"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok","ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":42},"mbt::actionTaken":"seed","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"3"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"2"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok","ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":43},"mbt::actionTaken":"loadFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"2"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok","ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":44},"mbt::actionTaken":"advance","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"4000"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"2"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok","ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":45},"mbt::actionTaken":"invalidate","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"3"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok","ok","ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":46},"mbt::actionTaken":"seed","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"3"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok","ok","ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":47},"mbt::actionTaken":"policy","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"5000"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"3"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok","ok","ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":48},"mbt::actionTaken":"readFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"3"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok","ok","ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":49},"mbt::actionTaken":"readFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"3"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok","ok","ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":50},"mbt::actionTaken":"loadFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"3"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok","ok","ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":51},"mbt::actionTaken":"invalidate","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"4"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok","ok","ok","ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":52},"mbt::actionTaken":"seed","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"4"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"4"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok","ok","ok","ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":53},"mbt::actionTaken":"invalidate","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"5"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok","ok","ok","ok","ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":54},"mbt::actionTaken":"rollbackWall","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"5"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok","ok","ok","ok","ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":55},"mbt::actionTaken":"invalidate","mbt::nondetPicks":{"choice":{"tag":"None","value":{"#tup":[]}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"6"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok","ok","ok","ok","ok","ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":56},"mbt::actionTaken":"readFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"6"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok","ok","ok","ok","ok","ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":57},"mbt::actionTaken":"loadFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"6"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok","ok","ok","ok","ok","ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":58},"mbt::actionTaken":"readFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"1"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"6"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok","ok","ok","ok","ok","ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":59},"mbt::actionTaken":"policy","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"5000"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"6"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok","ok","ok","ok","ok","ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}},
-{"#meta":{"index":60},"mbt::actionTaken":"loadFault","mbt::nondetPicks":{"choice":{"tag":"Some","value":{"#bigint":"0"}}},"s":{"o":{"calls":[{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"4"},{"#bigint":"2"},{"#bigint":"2"},{"#bigint":"2"}],"classifications":{"#bigint":"1"},"comparisons":{"#bigint":"0"},"dumps":{"#bigint":"1"},"invalidations":{"#bigint":"6"},"loaders":{"#bigint":"2"},"loads":{"#bigint":"1"},"maintenance":["ok","ok","ok","ok","ok","ok"],"policyCalls":{"#bigint":"8"},"reads":{"#bigint":"2"},"recovery":["deserialization_error"],"shadow":[],"sourceScopes":[],"writeTtls":[{"#bigint":"5000"}],"writes":{"#bigint":"1"}},"d":{"ages":[],"coalesced":["process","request_local","request_local","request_local","request_local","request_local"],"fallbackErrors":["remote"],"warnings":{"#bigint":"0"}}}}
-]}
+{
+  "#meta": {
+    "format": "ITF",
+    "source": "formal/dialcache-recovery-conformance.qnt",
+    "recipe": "formal/fixture-recipes.json#formal/recovery-smoke.itf.json/smoke"
+  },
+  "vars": [
+    "input",
+    "s",
+    "mbt::actionTaken",
+    "mbt::nondetPicks"
+  ],
+  "states": [
+    {
+      "input": {
+        "name": "init",
+        "choice": {
+          "#bigint": "6"
+        }
+      },
+      "mbt::actionTaken": "init",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "6"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "0"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "0"
+          },
+          "reads": {
+            "#bigint": "0"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [],
+          "fallbackErrors": [],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "beginCall",
+        "choice": {
+          "#bigint": "0"
+        }
+      },
+      "mbt::actionTaken": "beginCall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "1"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [],
+          "fallbackErrors": [],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "joinCall",
+        "choice": {
+          "#bigint": "1"
+        }
+      },
+      "mbt::actionTaken": "joinCall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "2"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process"
+          ],
+          "fallbackErrors": [],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "joinCall",
+        "choice": {
+          "#bigint": "0"
+        }
+      },
+      "mbt::actionTaken": "joinCall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "3"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local"
+          ],
+          "fallbackErrors": [],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "joinCall",
+        "choice": {
+          "#bigint": "1"
+        }
+      },
+      "mbt::actionTaken": "joinCall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "0"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [],
+          "policyCalls": {
+            "#bigint": "4"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "invalidate",
+        "choice": {
+          "#bigint": "-1"
+        }
+      },
+      "mbt::actionTaken": "invalidate",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "0"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "4"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "advance",
+        "choice": {
+          "#bigint": "10"
+        }
+      },
+      "mbt::actionTaken": "advance",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "10"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "4"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "seed",
+        "choice": {
+          "#bigint": "0"
+        }
+      },
+      "mbt::actionTaken": "seed",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "4"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "policy",
+        "choice": {
+          "#bigint": "5000"
+        }
+      },
+      "mbt::actionTaken": "policy",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "5000"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "4"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "readFault",
+        "choice": {
+          "#bigint": "0"
+        }
+      },
+      "mbt::actionTaken": "readFault",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "4"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "loadFault",
+        "choice": {
+          "#bigint": "1"
+        }
+      },
+      "mbt::actionTaken": "loadFault",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "4"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "joinCall",
+        "choice": {
+          "#bigint": "1"
+        }
+      },
+      "mbt::actionTaken": "joinCall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "5"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "rejectLoader",
+        "choice": {
+          "#bigint": "0"
+        }
+      },
+      "mbt::actionTaken": "rejectLoader",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "5"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "readFault",
+        "choice": {
+          "#bigint": "0"
+        }
+      },
+      "mbt::actionTaken": "readFault",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "5"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "closeScope",
+        "choice": {
+          "#bigint": "0"
+        }
+      },
+      "mbt::actionTaken": "closeScope",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "5"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "rollbackWall",
+        "choice": {
+          "#bigint": "-1"
+        }
+      },
+      "mbt::actionTaken": "rollbackWall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "5"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "releaseLoad",
+        "choice": {
+          "#bigint": "-1"
+        }
+      },
+      "mbt::actionTaken": "releaseLoad",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "5"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "advance",
+        "choice": {
+          "#bigint": "4000"
+        }
+      },
+      "mbt::actionTaken": "advance",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "4000"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "5"
+          },
+          "reads": {
+            "#bigint": "1"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "beginCall",
+        "choice": {
+          "#bigint": "4"
+        }
+      },
+      "mbt::actionTaken": "beginCall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "4"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "6"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "joinCall",
+        "choice": {
+          "#bigint": "1"
+        }
+      },
+      "mbt::actionTaken": "joinCall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "7"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "loadFault",
+        "choice": {
+          "#bigint": "0"
+        }
+      },
+      "mbt::actionTaken": "loadFault",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "7"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "rollbackWall",
+        "choice": {
+          "#bigint": "-1"
+        }
+      },
+      "mbt::actionTaken": "rollbackWall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "7"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "joinCall",
+        "choice": {
+          "#bigint": "1"
+        }
+      },
+      "mbt::actionTaken": "joinCall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "0"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [],
+          "writes": {
+            "#bigint": "0"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "resolveLoader",
+        "choice": {
+          "#bigint": "1"
+        }
+      },
+      "mbt::actionTaken": "resolveLoader",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "readFault",
+        "choice": {
+          "#bigint": "1"
+        }
+      },
+      "mbt::actionTaken": "readFault",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "readFault",
+        "choice": {
+          "#bigint": "1"
+        }
+      },
+      "mbt::actionTaken": "readFault",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "seed",
+        "choice": {
+          "#bigint": "4"
+        }
+      },
+      "mbt::actionTaken": "seed",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "4"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "policy",
+        "choice": {
+          "#bigint": "5000"
+        }
+      },
+      "mbt::actionTaken": "policy",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "5000"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "closeScope",
+        "choice": {
+          "#bigint": "1"
+        }
+      },
+      "mbt::actionTaken": "closeScope",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "rollbackWall",
+        "choice": {
+          "#bigint": "-1"
+        }
+      },
+      "mbt::actionTaken": "rollbackWall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "loadFault",
+        "choice": {
+          "#bigint": "0"
+        }
+      },
+      "mbt::actionTaken": "loadFault",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "policy",
+        "choice": {
+          "#bigint": "5000"
+        }
+      },
+      "mbt::actionTaken": "policy",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "5000"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "rollbackWall",
+        "choice": {
+          "#bigint": "-1"
+        }
+      },
+      "mbt::actionTaken": "rollbackWall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "invalidate",
+        "choice": {
+          "#bigint": "-1"
+        }
+      },
+      "mbt::actionTaken": "invalidate",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "2"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok",
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "advance",
+        "choice": {
+          "#bigint": "4000"
+        }
+      },
+      "mbt::actionTaken": "advance",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "4000"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "2"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok",
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "readFault",
+        "choice": {
+          "#bigint": "1"
+        }
+      },
+      "mbt::actionTaken": "readFault",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "2"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok",
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "loadFault",
+        "choice": {
+          "#bigint": "0"
+        }
+      },
+      "mbt::actionTaken": "loadFault",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "2"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok",
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "rollbackWall",
+        "choice": {
+          "#bigint": "-1"
+        }
+      },
+      "mbt::actionTaken": "rollbackWall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "2"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok",
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "rollbackWall",
+        "choice": {
+          "#bigint": "-1"
+        }
+      },
+      "mbt::actionTaken": "rollbackWall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "2"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok",
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "readFault",
+        "choice": {
+          "#bigint": "1"
+        }
+      },
+      "mbt::actionTaken": "readFault",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "2"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok",
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "loadFault",
+        "choice": {
+          "#bigint": "1"
+        }
+      },
+      "mbt::actionTaken": "loadFault",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "2"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok",
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "advance",
+        "choice": {
+          "#bigint": "10"
+        }
+      },
+      "mbt::actionTaken": "advance",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "10"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "2"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok",
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "seed",
+        "choice": {
+          "#bigint": "3"
+        }
+      },
+      "mbt::actionTaken": "seed",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "3"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "2"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok",
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "loadFault",
+        "choice": {
+          "#bigint": "1"
+        }
+      },
+      "mbt::actionTaken": "loadFault",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "2"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok",
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "advance",
+        "choice": {
+          "#bigint": "4000"
+        }
+      },
+      "mbt::actionTaken": "advance",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "4000"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "2"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok",
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "invalidate",
+        "choice": {
+          "#bigint": "-1"
+        }
+      },
+      "mbt::actionTaken": "invalidate",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "3"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "seed",
+        "choice": {
+          "#bigint": "1"
+        }
+      },
+      "mbt::actionTaken": "seed",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "3"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "policy",
+        "choice": {
+          "#bigint": "5000"
+        }
+      },
+      "mbt::actionTaken": "policy",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "5000"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "3"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "readFault",
+        "choice": {
+          "#bigint": "0"
+        }
+      },
+      "mbt::actionTaken": "readFault",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "3"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "readFault",
+        "choice": {
+          "#bigint": "0"
+        }
+      },
+      "mbt::actionTaken": "readFault",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "3"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "loadFault",
+        "choice": {
+          "#bigint": "1"
+        }
+      },
+      "mbt::actionTaken": "loadFault",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "3"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "invalidate",
+        "choice": {
+          "#bigint": "-1"
+        }
+      },
+      "mbt::actionTaken": "invalidate",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "4"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok",
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "seed",
+        "choice": {
+          "#bigint": "4"
+        }
+      },
+      "mbt::actionTaken": "seed",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "4"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "4"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok",
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "invalidate",
+        "choice": {
+          "#bigint": "-1"
+        }
+      },
+      "mbt::actionTaken": "invalidate",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "5"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok",
+            "ok",
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "rollbackWall",
+        "choice": {
+          "#bigint": "-1"
+        }
+      },
+      "mbt::actionTaken": "rollbackWall",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "5"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok",
+            "ok",
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "invalidate",
+        "choice": {
+          "#bigint": "-1"
+        }
+      },
+      "mbt::actionTaken": "invalidate",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "6"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok",
+            "ok",
+            "ok",
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "readFault",
+        "choice": {
+          "#bigint": "1"
+        }
+      },
+      "mbt::actionTaken": "readFault",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "6"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok",
+            "ok",
+            "ok",
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "loadFault",
+        "choice": {
+          "#bigint": "1"
+        }
+      },
+      "mbt::actionTaken": "loadFault",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "6"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok",
+            "ok",
+            "ok",
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "readFault",
+        "choice": {
+          "#bigint": "1"
+        }
+      },
+      "mbt::actionTaken": "readFault",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "1"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "6"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok",
+            "ok",
+            "ok",
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "policy",
+        "choice": {
+          "#bigint": "5000"
+        }
+      },
+      "mbt::actionTaken": "policy",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "5000"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "6"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok",
+            "ok",
+            "ok",
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "name": "loadFault",
+        "choice": {
+          "#bigint": "0"
+        }
+      },
+      "mbt::actionTaken": "loadFault",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "Some",
+          "value": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "4"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "1"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "6"
+          },
+          "loaders": {
+            "#bigint": "2"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok",
+            "ok",
+            "ok",
+            "ok",
+            "ok",
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "8"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [
+            "deserialization_error"
+          ],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "5000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
+        },
+        "d": {
+          "ages": [],
+          "coalesced": [
+            "process",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local",
+            "request_local"
+          ],
+          "fallbackErrors": [
+            "remote"
+          ],
+          "warnings": {
+            "#bigint": "0"
+          }
+        }
+      }
+    }
+  ]
+}

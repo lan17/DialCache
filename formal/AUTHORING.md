@@ -12,7 +12,7 @@ definition of the same portable rule.
 Start with the file's scope and assumptions. Each model deliberately covers a
 bounded part of DialCache. The verification models emphasize rules; conformance
 profiles describe external actions that a language driver can replay. The
-[model inventory](./README.md#verification-models) and [profile registry](./profiles.json)
+[model inventory](./README.md#models-and-composition-profiles) and [profile registry](./profiles.json)
 identify the relevant starting point.
 
 Read the types and state next. Distinguish three kinds of information:
@@ -187,6 +187,16 @@ replace model checks, generation, both implementation replays, or real/native
 integration checks. Refresh execution fingerprints and reports after changed
 inputs. Preserve previous measurements as historical until fresh runs finish.
 
+## Reproducible committed fixtures
+
+Add a named public Quint run or external-action recipe to
+[fixture-recipes.json](./fixture-recipes.json), then run
+`node formal/generate-artifacts.mjs --write`. Expected state must come from
+Quint; recipes contain only external choices, selection bounds and projection
+field names. Ordinary tests check artifact/source fingerprints; CI regenerates
+and byte-compares predictions. See [PORTING.md](./PORTING.md) for the precise
+driver, fixture and completion contracts.
+
 ## Refactoring and execution
 
 [`execution.json`](./execution.json) is the execution schedule: invariant and
@@ -203,7 +213,7 @@ source expression moves or changes; its failure must never count as detection.
 
 For a model refactor, run the scheduled model checks/regressions, generation,
 implementation replay, evidence validation, and relevant mutation gates using
-the [documented commands](./README.md#running-and-reproducing-checks). Keep the
+the [documented commands](./README.md#generating-and-replaying-behavior). Keep the
 committed smoke expectations unchanged. Compare pre/post generated action and
 state histories when preserving a fixed seed and schedule is intended, and
 investigate differences rather than replacing expectations to obtain a pass.

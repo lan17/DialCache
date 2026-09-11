@@ -20,6 +20,9 @@ testing; passing finite executions is not a proof over every input or schedule.
    and mutation measurement. [GO-PARITY.md](./GO-PARITY.md) defines acceptance
    and native adaptations; [TEST-MAP.md](./TEST-MAP.md) helps locate evidence.
 
+For another language, follow [PORTING.md](./PORTING.md): it defines driver
+responsibilities, one-command artifact regeneration and shared completion checks.
+
 ## What the suite checks
 
 | Evidence | Execution | Meaning of a pass |
@@ -118,7 +121,9 @@ DIALCACHE_COVERAGE_EVIDENCE_DIR=.formal-traces/go-parity-witnesses \
 
 Checking typechecks every scheduled model, explores its invariants and runs its
 named regressions. Generation follows the same manifest and checks committed
-Quint-derived wire artifacts. `QUINT_SEED` overrides the exploration seed; the
+Quint-derived wire artifacts. Run `node formal/generated-fixtures.mjs --check`
+to recompute the committed smoke and witness snapshots. Regenerate all committed
+model-derived artifacts with `node formal/generate-artifacts.mjs --write`. `QUINT_SEED` overrides the exploration seed; the
 manifest records the default backend, thread count, sample and transition bounds.
 These are bounded simulations, not exhaustive mathematical proofs.
 

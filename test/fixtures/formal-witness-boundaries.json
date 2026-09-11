@@ -3,11 +3,8 @@
     "witness": "first-stale-age-recovers-without-publication",
     "profile": "recovery",
     "provenance": {
-      "source": ".formal-traces/features/recovery/trace_101.itf.json",
-      "sha256": "03f6b9276578819d95eae30425a402410692ad2f5fe3734457d9867920e09f1a",
-      "startState": 0,
-      "endState": 15,
-      "projection": "Complete state from a real generated ITF excerpt. Patches encode repeated state without duplication; action order, private inputs, and public observations are unchanged."
+      "model": "formal/dialcache-recovery-conformance.qnt",
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-witness-boundaries.json/first-stale-age-recovers-without-publication"
     },
     "initialState": {
       "acceptedMaxAge": {
@@ -377,11 +374,8 @@
     "witness": "last-recovery-age-serves",
     "profile": "recovery",
     "provenance": {
-      "source": ".formal-traces/features/recovery/trace_335.itf.json",
-      "sha256": "cb233bed3f0e17d32a41417b67f435be81333c6b00a9ab4e29ba7fc77ba2fd50",
-      "startState": 7,
-      "endState": 16,
-      "projection": "Complete state from a real generated ITF excerpt. Patches encode repeated state without duplication; action order, private inputs, and public observations are unchanged."
+      "model": "formal/dialcache-recovery-conformance.qnt",
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-witness-boundaries.json/last-recovery-age-serves"
     },
     "initialState": {
       "acceptedMaxAge": {
@@ -796,11 +790,8 @@
     "witness": "exact-maximum-after-decode-rejects",
     "profile": "recovery",
     "provenance": {
-      "source": ".formal-traces/features/recovery/trace_196.itf.json",
-      "sha256": "205cd22d5e5291b1ec41afb561d0660c6c7ff069eb6b6a6a702b09452415d2d3",
-      "startState": 0,
-      "endState": 13,
-      "projection": "Complete state from a real generated ITF excerpt. Patches encode repeated state without duplication; action order, private inputs, and public observations are unchanged."
+      "model": "formal/dialcache-recovery-conformance.qnt",
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-witness-boundaries.json/exact-maximum-after-decode-rejects"
     },
     "initialState": {
       "acceptedMaxAge": {
@@ -1209,11 +1200,8 @@
     "witness": "failed-fresh-decode-is-not-recovery",
     "profile": "recovery",
     "provenance": {
-      "source": ".formal-traces/features/recovery/trace_117.itf.json",
-      "sha256": "3c2764713962fa0fd6f093aad2acec944888dff91a316e4d903542902c898460",
-      "startState": 13,
-      "endState": 21,
-      "projection": "Complete state from a real generated ITF excerpt. Patches encode repeated state without duplication; action order, private inputs, and public observations are unchanged."
+      "model": "formal/dialcache-recovery-conformance.qnt",
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-witness-boundaries.json/failed-fresh-decode-is-not-recovery"
     },
     "initialState": {
       "acceptedMaxAge": {
@@ -1589,11 +1577,8 @@
     "witness": "classifier-error-keeps-error-without-decode",
     "profile": "recovery",
     "provenance": {
-      "source": ".formal-traces/features/recovery/trace_115.itf.json",
-      "sha256": "6bc5aae9667ebbbbf941fbab9d672f6880412f3c337dec76ac6b8a069daa9a39",
-      "startState": 0,
-      "endState": 2,
-      "projection": "Complete state from a real generated ITF excerpt. Patches encode repeated state without duplication; action order, private inputs, and public observations are unchanged."
+      "model": "formal/dialcache-recovery-conformance.qnt",
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-witness-boundaries.json/classifier-error-keeps-error-without-decode"
     },
     "initialState": {
       "acceptedMaxAge": {
@@ -1795,11 +1780,8 @@
     "witness": "same-c1-bytes-confirm-mismatch",
     "profile": "shadow",
     "provenance": {
-      "source": ".formal-traces/features/shadow/trace_1003.itf.json",
-      "sha256": "30e1b3202f60b50f5bf6d5a3cae3df0c368cd5c5abe747d4a2c0dfa5d854386a",
-      "startState": 27,
-      "endState": 35,
-      "projection": "Complete state from a real generated ITF excerpt. Patches encode repeated state without duplication; action order, private inputs, and public observations are unchanged."
+      "model": "formal/dialcache-shadow-conformance.qnt",
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-witness-boundaries.json/same-c1-bytes-confirm-mismatch"
     },
     "initialState": {
       "abandoned": false,
@@ -2133,11 +2115,8 @@
     "witness": "different-c1-bytes-supersede",
     "profile": "shadow",
     "provenance": {
-      "source": ".formal-traces/features/shadow/trace_1009.itf.json",
-      "sha256": "dc3c70f363d6cef612c47668fd999bc529473135c4c9a57d74329654ecc8c3a6",
-      "startState": 30,
-      "endState": 37,
-      "projection": "Complete state from a real generated ITF excerpt. Patches encode repeated state without duplication; action order, private inputs, and public observations are unchanged."
+      "model": "formal/dialcache-shadow-conformance.qnt",
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-witness-boundaries.json/different-c1-bytes-supersede"
     },
     "initialState": {
       "abandoned": false,
@@ -2438,11 +2417,8 @@
     "witness": "late-shadow-dump-cannot-dispatch-write",
     "profile": "shadow",
     "provenance": {
-      "source": ".formal-traces/features/shadow/trace_1013.itf.json",
-      "sha256": "a3bd3cc86c28366083ba5a99ccf9987b3044ec631585ab814a93f71151b99abf",
-      "startState": 47,
-      "endState": 56,
-      "projection": "Complete state from a real generated ITF excerpt. Patches encode repeated state without duplication; action order, private inputs, and public observations are unchanged."
+      "model": "formal/dialcache-shadow-conformance.qnt",
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-witness-boundaries.json/late-shadow-dump-cannot-dispatch-write"
     },
     "initialState": {
       "abandoned": false,
@@ -2765,11 +2741,8 @@
     "witness": "fill-write-error-preserves-caller",
     "profile": "shadow",
     "provenance": {
-      "source": ".formal-traces/features/shadow/trace_1.itf.json",
-      "sha256": "42090f3b2bc2dcc0c2334c14c9c5b99eb1df3d363947ca368645cb8c79e285e9",
-      "startState": 2,
-      "endState": 12,
-      "projection": "Complete state from a real generated ITF excerpt. Patches encode repeated state without duplication; action order, private inputs, and public observations are unchanged."
+      "model": "formal/dialcache-shadow-conformance.qnt",
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-witness-boundaries.json/fill-write-error-preserves-caller"
     },
     "initialState": {
       "abandoned": false,
@@ -3015,11 +2988,8 @@
     "witness": "dark-read-error-still-allows-source-result",
     "profile": "shadow",
     "provenance": {
-      "source": ".formal-traces/features/shadow/trace_1000.itf.json",
-      "sha256": "6414f8b37aa4627d1dd39bd384bba3957cf56d0b1707edb93e0c07f0cc7d87ab",
-      "startState": 22,
-      "endState": 27,
-      "projection": "Complete state from a real generated ITF excerpt. Patches encode repeated state without duplication; action order, private inputs, and public observations are unchanged."
+      "model": "formal/dialcache-shadow-conformance.qnt",
+      "recipe": "formal/fixture-recipes.json#test/fixtures/formal-witness-boundaries.json/dark-read-error-still-allows-source-result"
     },
     "initialState": {
       "abandoned": false,
