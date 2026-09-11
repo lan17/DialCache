@@ -182,7 +182,7 @@ describe("conformance harness trust boundary", () => {
   const smokePath = resolve("formal/conformance-smoke.itf.json");
   const smoke = readItfTrace(smokePath);
 
-  it("replays explicit commands without MBT metadata", async () => {
+  it("accepts explicit commands without MBT metadata", async () => {
     const trace = JSON.parse(readFileSync(smokePath, "utf8")) as { states: Record<string, unknown>[] };
     for (const state of trace.states) {
       delete state["mbt::actionTaken"];
