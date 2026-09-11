@@ -1,4 +1,5 @@
 module dialcache_shadow_conformance {
+  import cache_rules.* from "./cache-rules"
   import conformance_observations.* from "./conformance-observations"
   // Model boundary -----------------------------------------------------------
   // One ramped-down caller source and its selected dark C0/source/C1 job.
@@ -120,7 +121,7 @@ module dialcache_shadow_conformance {
     else if (st.source == SOURCE_FAILED) done(st, "source_error")
     else if (st.source == SOURCE_TIMED_OUT) done(st, "timeout")
     else if (st.c0 > NO_PAYLOAD) { phase: SNAPSHOT_DECODE, o: { loads: st.o.loads + 1, ...st.o }, ...st }
-    else if (st.wall <= st.fence) done(st, "fill_fenced")
+    else if (not(fenceAllows(st.wall, st.fence))) done(st, "fill_fenced")
     else { phase: FILL_SERIALIZE, o: { dumps: st.o.dumps + 1, ...st.o }, ...st }
 
   // Initial fixture ----------------------------------------------------------
@@ -161,7 +162,7 @@ module dialcache_shadow_conformance {
   action beginCall = all {
     input' = { name: "beginCall", choice: -1 },
     (s.phase == IDLE or s.phase == JOB_DONE), not(s.sourcePending), s.o.calls.length() < MAX_CALLS,
-    val jobExpired = s.shadowActive and s.sourceWorkMs >= JOB_BUDGET_MS
+    val jobExpired = s.shadowActive and not(deadlinePendingAt(s.sourceWorkMs, JOB_BUDGET_MS))
     s' = {
       now: s.now + s.sourceWorkMs, wall: s.wall + s.sourceWorkMs,
       phase: if (s.shadowActive and not(jobExpired)) C0_READ else JOB_DONE,
@@ -185,7 +186,7 @@ module dialcache_shadow_conformance {
   action resolveAt(choice: int): bool = all {
       input' = { name: "resolveLoader", choice: choice },
       s.sourcePending,
-      val expired = s.source == SOURCE_TIMED_OUT or s.now >= s.deadline
+      val expired = s.source == SOURCE_TIMED_OUT or not(deadlinePendingAt(s.now, s.deadline))
       s' = continueJob({
         sourcePending: false,
         source: if (expired) SOURCE_TIMED_OUT else SOURCE_ACCEPTED, sourceValue: choice,
@@ -205,7 +206,7 @@ module dialcache_shadow_conformance {
   action rejectLoader = all {
     input' = { name: "rejectLoader", choice: -1 },
     s.sourcePending,
-    val expired = s.source == SOURCE_TIMED_OUT or s.now >= s.deadline
+    val expired = s.source == SOURCE_TIMED_OUT or not(deadlinePendingAt(s.now, s.deadline))
     s' = continueJob({
       sourcePending: false, source: if (expired) SOURCE_TIMED_OUT else SOURCE_FAILED,
       o: finishPendingCalls(s.o, if (expired) DEADLINE_ERROR else SOURCE_ERROR),
@@ -222,7 +223,7 @@ module dialcache_shadow_conformance {
   action releaseRead = all {
     input' = { name: "releaseRead", choice: -1 },
     s.phase == C0_READ or s.phase == CONFIRMATION_READ,
-    val readable = s.frame > NO_PAYLOAD and s.created > s.watermark
+    val readable = s.frame > NO_PAYLOAD and fenceAllows(s.created, s.watermark)
     val snapshot = if (readable) s.frame else NO_PAYLOAD
     // Raw read validation has its own read budget. Within this profile's
     // elapsed-time bounds it may report a future timestamp even after the
@@ -238,7 +239,7 @@ module dialcache_shadow_conformance {
       else if (s.readFailed) done(measured, "redis_error")
       else continueJob({
         phase: SOURCE_WAIT,
-        c0: if (s.created > s.wall or s.wall - s.created >= FRESHNESS_MS)
+        c0: if (not(freshAgeAllowed(s.created, s.wall, FRESHNESS_MS)))
           NO_PAYLOAD else snapshot,
         c0Created: s.created,
         fence: if (readable) 0 else s.watermark,
@@ -257,7 +258,7 @@ module dialcache_shadow_conformance {
       (s.comparator == COMPARE_DEFAULT and payloadValue(s.c0) == s.sourceValue)
     s' = if (s.abandoned) { phase: JOB_DONE, ...s }
       else if (s.loadFailed) done(s, "deserialization_error")
-      else if (compared.now >= s.deadline) done({ abandoned: true, ...compared }, "timeout")
+      else if (not(deadlinePendingAt(compared.now, s.deadline))) done({ abandoned: true, ...compared }, "timeout")
       else if (s.comparator == COMPARE_ERROR) done(compared, "comparison_error")
       else if (valuesMatch) done(compared, "match")
       else { phase: CONFIRMATION_READ, o: { reads: s.o.reads + 1, ...compared.o }, ...compared }
@@ -269,7 +270,7 @@ module dialcache_shadow_conformance {
     s.phase == FILL_SERIALIZE,
     s' = if (s.abandoned) { phase: JOB_DONE, ...s }
       else if (s.dumpFailed) done(s, "fill_error")
-      else if (s.wall <= s.fence) done(s, "fill_fenced")
+      else if (not(fenceAllows(s.wall, s.fence))) done(s, "fill_fenced")
       else {
         phase: FILL_WRITE, writeStamp: s.wall,
         o: { writes: s.o.writes + 1, writeTtls: s.o.writeTtls.append(60000), ...s.o },
@@ -290,7 +291,7 @@ module dialcache_shadow_conformance {
 
   // Environmental clocks, storage, policy, and failures -----------------------
   action advanceBy(choice: int): bool = {
-    val expired = s.now + choice >= s.deadline
+    val expired = not(deadlinePendingAt(s.now + choice, s.deadline))
     val callerTimeout = s.source == SOURCE_PENDING and expired
     val jobTimeout = s.phase > IDLE and s.phase < JOB_DONE and not(s.abandoned) and expired
     all {

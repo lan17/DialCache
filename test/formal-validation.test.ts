@@ -59,6 +59,7 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     fakeTool("corepack", 'console.log("10.33.0")');
     fakeTool("go", 'console.log("go version go1.27.1 test/test")');
     fakeTool("quint", 'console.log("0.32.0")');
+    fakeTool("java", 'console.log("openjdk 21.0.11")');
     fakeTool("docker", 'console.log("running")');
     environment.PATH = `${join(directory, "bin")}${delimiter}${process.env.PATH ?? ""}`;
   });
@@ -134,6 +135,16 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     expect(() => checkPrerequisites("ci", { directory, environment, nodeVersion: "v24.20.0" })).toThrow(/exact Node 22.15.0/);
     environment.NODE22_BIN = fakeTool("node22", 'console.log("v22.15.0")');
     expect(() => checkPrerequisites("ci", { directory, environment, nodeVersion: "v24.20.0" })).not.toThrow();
+  });
+
+  it("requires Java 21 for symbolic lanes without requiring it for routine native checks", () => {
+    fakeTool("java", 'console.log("openjdk 17.0.12")');
+    for (const target of ["model-check", "formal-corpus", "explore"]) {
+      expect(() => checkPrerequisites(target, { directory, environment, nodeVersion: "v24.20.0" })).toThrow(/requires Java 21/);
+    }
+    expect(() => checkPrerequisites("check-ts", { directory, environment, nodeVersion: "v24.20.0" })).not.toThrow();
+    fakeTool("java", 'console.log("openjdk 21.0.11 2026-04-21 LTS")');
+    expect(() => checkPrerequisites("model-check", { directory, environment, nodeVersion: "v24.20.0" })).not.toThrow();
   });
 
   it("allows the standalone floor target on Node 22.15 and propagates its PATH without reintroducing selectors", async () => {

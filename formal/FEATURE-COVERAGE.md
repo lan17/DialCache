@@ -37,9 +37,8 @@ Use these sources for current totals and execution requirements:
 several histories, and one history can support several cases. Those citations
 are not independent proofs, and native tests do not inflate portable counts.
 
-The inventory describes requirements; [VALIDATION.md](./VALIDATION.md) records
-the completed local expansion snapshot. Earlier reports remain historical with
-their actual input fingerprints, and future changes require new execution.
+The inventory describes requirements; [VALIDATION.md](./VALIDATION.md) explains
+how to execute them and interpret current acceptance reports.
 
 ## Feature map
 

@@ -24,6 +24,8 @@ export const targetDescriptions = {
   'formal-corpus': 'Check models, generate/recompute artifacts and complete TypeScript replay with witnesses',
   'formal-go': 'Require current TypeScript completion, then complete Go replay with race detection',
   'fixtures-check': 'Recompute every committed model-derived artifact with pinned Quint',
+  explore: 'Explore a new recorded seed and replay both ports in an isolated source snapshot',
+  'model-check': 'Symbolically verify the scheduled finite rules with pinned Quint/Apalache (Java 21)',
   mutations: 'Require both current completions, then measure TypeScript and Go semantic mutations',
   'mutations-ts': 'Require current TypeScript completion, then measure its semantic mutations',
   'mutations-go': 'Require both current completions, then measure Go semantic mutations',
@@ -95,7 +97,10 @@ export function validationPlan(target, { directory = root, environment = process
         node('Check conditional fixture regeneration scope', '--test', '.github/scripts/fixture-scope.test.mjs')),
     smoke: [tsReplay(false), nativeGo(false)],
     'fixtures-check': [node('Recompute all committed Quint artifacts', 'formal/generate-artifacts.mjs', '--check')],
+    explore: [node('Explore and replay an isolated alternate-seed corpus', 'formal/explore.mjs')],
+    'model-check': [node('Symbolically verify the scheduled finite rules', 'formal/check-symbolic-models.mjs')],
     'formal-corpus': [invalidate('ts', 'go'), node('Check every scheduled Quint model', 'formal/run-models.mjs', 'check'),
+      node('Symbolically verify the scheduled finite rules', 'formal/check-symbolic-models.mjs'),
       node('Generate complete corpus and recompute wire artifacts', 'formal/run-models.mjs', 'generate'),
       node('Recompute committed Quint smoke and witness fixtures', 'formal/generated-fixtures.mjs', '--check'),
       node('Prepare TypeScript execution context', 'formal/conformance.mjs', 'prepare', 'typescript', reportPath('ts', 'context')),
@@ -129,14 +134,18 @@ export function checkPrerequisites(target, { directory = root, environment = pro
   const requiredPnpm = JSON.parse(readFileSync(resolve(directory, 'package.json'), 'utf8')).packageManager?.replace(/^pnpm@/, '');
   const pnpm = probe('corepack', ['pnpm', '--version'], { directory, environment });
   if (!requiredPnpm || pnpm !== requiredPnpm) throw new Error(`Expected pinned pnpm ${requiredPnpm}; found ${pnpm}. Use corepack pnpm and install the frozen lockfile.`);
-  if (targets.some(name => ['check-go', 'smoke', 'formal-go', 'mutations-go', 'integration-go'].includes(name))) {
+  if (targets.some(name => ['check-go', 'smoke', 'formal-go', 'mutations-go', 'integration-go', 'explore'].includes(name))) {
     const version = probe('go', ['version'], { directory, environment });
     if (!/^go version go1\.27\.1\s/.test(version)) throw new Error(`Validation requires Go 1.27.1; found ${version}. Put the pinned Go toolchain on PATH.`);
   }
-  if (targets.some(name => ['formal-corpus', 'fixtures-check'].includes(name))) {
+  if (targets.some(name => ['formal-corpus', 'fixtures-check', 'explore', 'model-check'].includes(name))) {
     const requiredQuint = JSON.parse(readFileSync(resolve(directory, 'formal/generated-fixtures.lock.json'), 'utf8')).quintVersion;
     const version = probe('quint', ['--version'], { directory, environment });
     if (version !== requiredQuint) throw new Error(`Expected Quint ${requiredQuint}; found ${version}. Install the pinned Quint CLI before recomputing artifacts.`);
+  }
+  if (targets.some(name => ['formal-corpus', 'explore', 'model-check'].includes(name))) {
+    const version = probe('java', ['--version'], { directory, environment });
+    if (!/^(?:openjdk|java) 21(?:\.|\s)/.test(version)) throw new Error(`Symbolic checking requires Java 21; found ${version.split('\n')[0]}. Put Java 21 on PATH.`);
   }
   if (targets.some(name => name.startsWith('integration-'))) probe('docker', ['info', '--format', '{{.ServerVersion}}'], { directory, environment });
   if (targets.includes('package-floor')) {

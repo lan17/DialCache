@@ -104,6 +104,11 @@ export function validateExecution(manifest = readExecution(), {
     const declarations = scanDeclarations(readSource(model.path));
     if (declarations.get('init') !== 'action' || declarations.get('step') !== 'action') throw new Error(`${model.path}: scheduled model needs init and step actions`);
     names(model.invariants, `${model.path} invariants`);
+    if (model.symbolic !== undefined) {
+      if (manifest.symbolic?.backend !== 'apalache' || manifest.symbolic.version !== '0.56.1') throw new Error('Unsupported symbolic backend or version');
+      positiveInteger(model.symbolic.maxSteps, `${model.path} symbolic.maxSteps`);
+      positiveInteger(model.symbolic.timeoutMs, `${model.path} symbolic.timeoutMs`);
+    }
     for (const name of model.invariants) {
       if (declarations.get(name) !== 'val') throw new Error(`${model.path}: scheduled invariant is not a declared val: ${name}`);
     }
@@ -115,7 +120,7 @@ export function validateExecution(manifest = readExecution(), {
     invariants += model.invariants.length;
     regressions += model.regressions.length;
     if (model.propertyChallenge !== undefined) {
-      if (model.path !== 'formal/dialcache-coalescing-liveness.qnt' || model.propertyChallenge !== 'formal/check-model-properties.mjs') throw new Error('Unsupported model property challenge');
+      if (model.path !== 'formal/dialcache-flight-deadlines.qnt' || model.propertyChallenge !== 'formal/check-model-properties.mjs') throw new Error('Unsupported model property challenge');
       challenges++;
     }
     if (model.profile !== undefined || model.generate !== undefined) {

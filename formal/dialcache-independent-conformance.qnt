@@ -1,4 +1,5 @@
 module dialcache_independent_conformance {
+  import cache_rules.* from "./cache-rules"
   import conformance_observations.* from "./conformance-observations"
   // Model boundary -----------------------------------------------------------
   // Six same-key callers with coalescing disabled exercise selected aspects of
@@ -93,7 +94,7 @@ module dialcache_independent_conformance {
   }
   pure def validCandidate(x: State, caller: int): bool = {
     val call = x.calls.nth(caller)
-    call.candidate > NO_CANDIDATE and call.created <= x.wall and x.wall - call.created < call.maxAge
+    call.candidate > NO_CANDIDATE and recoveryAgeAllowed(call.created, x.wall, call.maxAge)
   }
   pure def rejected(x: State, caller: int, error: int): State = {
     val call = x.calls.nth(caller)
@@ -159,10 +160,10 @@ module dialcache_independent_conformance {
       ...x
     }
     val call = x.calls.nth(read.caller)
-    val readable = x.frame > 0 and x.now < x.expires and x.created > x.watermark
-    val fresh = readable and x.created <= x.wall and x.wall - x.created < FRESH_AGE_MS
+    val readable = x.frame > 0 and x.now < x.expires and fenceAllows(x.created, x.watermark)
+    val fresh = readable and freshAgeAllowed(x.created, x.wall, FRESH_AGE_MS)
     val stale = readable and x.created <= x.wall and
-      x.wall - x.created >= FRESH_AGE_MS and x.wall - x.created < call.maxAge
+      retainedAgeAllowed(x.created, x.wall, FRESH_AGE_MS, call.maxAge)
     val observed = {
       calls: settled.calls.replaceAt(read.caller, {
         canWrite: not(failed), canRecover: not(failed) and not(fresh),
@@ -200,7 +201,7 @@ module dialcache_independent_conformance {
         outcome: if (source.active) value else source.outcome, ...source }),
       ...x
     }
-    val mayWrite = call.canWrite and x.wall > call.fence
+    val mayWrite = call.canWrite and fenceAllows(x.wall, call.fence)
     if (not(source.active)) settled
     else if (value == SOURCE_ERROR) rejected(settled, source.caller, SOURCE_ERROR)
     else finished({

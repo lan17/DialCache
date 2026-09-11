@@ -13,6 +13,29 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  exploration:
+    if: github.event_name == 'schedule' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: ./.github/actions/setup-validation
+        with:
+          quint: "true"
+          go: "true"
+          java: "true"
+      - name: Explore a fresh recorded seed and replay both ports
+        run: make explore
+      - name: Preserve exploratory sources, seed and counterexamples
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: formal-exploration
+          path: .formal-traces/exploration/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14
+
   corpus:
     # Scheduled workflows run the default branch; keep the intended main scope explicit.
     if: github.event_name != 'schedule' || github.ref == 'refs/heads/main'
@@ -23,6 +46,7 @@ jobs:
       - uses: ./.github/actions/setup-validation
         with:
           quint: "true"
+          java: "true"
       - name: Check models, regenerate artifacts and require full TypeScript replay
         run: make formal-corpus
       - name: Preserve formal corpus, completion and counterexamples

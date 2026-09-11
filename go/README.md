@@ -167,7 +167,10 @@ Go's native registry cannot expose empty histogram buckets; see the precise
 
 Use the repository [Make targets](../Makefile) from its root. CI pins Go
 1.27.1, Node 24 and pnpm 10.33.0. Full generation additionally needs Quint
-0.32.0 with Rust evaluator 0.6.0; integration needs Docker. Follow the
+0.32.0 with Rust evaluator 0.6.0 and Java 21 for symbolic checks; integration
+needs Docker. Go conformance tests use the shared Node replay coordinator for
+command mappings and assertions. The cache library itself has no Node dependency.
+Follow the
 [shared prerequisite guide](../formal/README.md#generating-and-replaying-behavior)
 once, then:
 
@@ -188,16 +191,17 @@ changes invalidate completion reports; mutation targets reject stale evidence.
 The same targets run in CI. PRs retain native/race/smoke/audit and real-server
 integration checks; model/generator changes trigger fixture recomputation.
 The complete formal and mutation workflow runs manually and weekly. A smoke
-pass does not satisfy the full 7,180-check parity gate. Behavior/model changes
+pass does not satisfy the full parity inventory. Behavior/model changes
 still need full validation before merge, as do releases and new ports.
 
 Without overrides, Go runs fixed scenarios, protocol vectors and the registered
 committed smoke traces. `_TRACE_FILE` overrides reproduce one trace instead
 of a directory. Full directory replay rejects empty/incompatible corpora and
-requires exact witness/corpus/definition hashes. It never calls TypeScript to
-execute cache behavior: the shared witness report only certifies reachability.
-Action inputs and actual source/adapter gates drive execution; expected states
-belong exclusively to assertions. Negative harness tests challenge that split.
+requires exact witness/corpus/definition hashes. The shared coordinator supplies
+external commands and checks observations; all cache behavior executes in Go.
+Native source/adapter gates and clocks control the run. Expected states stay in
+the coordinator and never enter the native driver. The shared witness report
+certifies reached boundaries. Negative harness tests challenge those boundaries.
 
 The Go implementation was developed from the models and contracts with
 TypeScript source review; it is not a clean-room implementation. Race detection

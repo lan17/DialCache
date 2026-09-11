@@ -16,8 +16,13 @@ behavior.
 ## Reading a model
 
 Start with the file's scope and assumptions. Each model deliberately covers a
-bounded part of DialCache. The verification models emphasize rules; conformance
-profiles describe external actions that a language driver can replay. The
+bounded part of DialCache. Begin with [cache-rules.qnt](./cache-rules.qnt) for
+shared age, expiry, deadline and fence judgments, and
+[cache-contract.qnt](./cache-contract.qnt) for acquired recovery and source
+ownership records. Verification models and conformance profiles consume these
+definitions. Connection models check selected profile histories against the
+acquired contracts. Conformance profiles also expose external actions that a
+language driver can replay. The
 [model inventory](./README.md#models-and-composition-profiles) and [profile registry](./profiles.json)
 identify the relevant starting point.
 
@@ -74,7 +79,15 @@ and use named constants, so a readability edit does not silently change the
 portable trace interface. An integer can have a different meaning in another
 profile; do not share a constant merely because its numeric value matches.
 
-Keep repeated definitions DRY when they express the same operation. Small
+Keep repeated definitions DRY when they express the same operation. Shared
+acceptance judgments belong in `cache-rules.qnt`; acquired snapshot and source
+ownership contracts belong in `cache-contract.qnt`. A profile supplies its
+normalized policy, clocks and environment; it must not restate those decisions.
+Where representations differ, add an executable projection/connection check
+that compares profile history with the contract. Give the projection an explicit
+scope and challenge mistakes in policy capture, event timing or ownership.
+
+Small
 representation helpers such as completing callers owned by one source belong
 in [conformance-observations.qnt](./conformance-observations.qnt). Name repeated
 transition conditions locally, including the time or snapshot they inspect.
@@ -99,9 +112,12 @@ For each new rule or interaction:
 2. **Model the smallest relevant boundary.** Extend the appropriate model with
    readable state, inputs, and transitions. Add another profile only when an
    existing one cannot express the necessary ownership or scheduling boundary.
-3. **Challenge the rule.** Add an independently stated invariant or regression,
-   and a representative fault when it adds useful evidence. Merely declaring a
-   property is insufficient: schedule it in `execution.json`.
+3. **Challenge the rule.** Add an independently stated semantic invariant and
+   deterministic boundary histories. Add a compiling model mutation for a
+   plausible wrong implementation of the rule; require an invariant violation,
+   not merely a compiler error or failed bookkeeping check. Use symbolic checking
+   for tractable finite modules and sample larger compositions. Schedule every
+   property and regression in `execution.json`.
 4. **Exercise both implementations.** Require a generated witness or exported
    Quint regression that exposes the rule's consequence, and replay the same
    history in TypeScript and Go. Fixed scenarios preserve narrow regressions;

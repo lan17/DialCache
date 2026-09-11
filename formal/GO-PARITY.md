@@ -19,8 +19,8 @@ Quint definitions and Quint-driven implementation evidence.
 Earlier acceptance records remain **historical**. Their source revisions,
 corpora and report hashes describe the exact runs that passed; changed models,
 regressions, drivers or wire artifacts require fresh reports.
-[VALIDATION.md](VALIDATION.md) records the completed local expansion snapshot
-and the exact scope of its shared and native evidence. Inventory totals are
+[VALIDATION.md](VALIDATION.md) documents current validation commands and
+links the historical acceptance record. Inventory totals are
 accounting, not coverage percentages or proofs.
 
 Each validation record identifies its actual revision/input snapshot, report
@@ -34,7 +34,7 @@ for pinned prerequisites and individual targets.
 Hosted PR checks run native/race tests, committed smoke, audits and real
 integration; model/generator input changes also trigger artifact recomputation.
 The full formal/mutation workflow runs manually and weekly. Fast PR checks do
-not replace the full 7,180-check acceptance requirement: behavior/model changes
+not replace the full acceptance inventory: behavior/model changes
 need full validation for their exact inputs before merge, and release/new-port
 acceptance needs the full evidence. Reports under `.formal-traces/` bind their
 source, corpus and witness fingerprints; changed inputs invalidate an old pass.

@@ -8,13 +8,13 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "072f43aa19d9977f08946e0bb5ef74b10008d3f0954dc165fa6fab0a7a67d9e5",
-    "executionSha256": "b483b5708aae5ba8add03d08d39136023e63d271e95dadbdbf99209aebc38d84",
-    "sourceAuditSha256": "c90d77de5c3424f880b5dce31f81b09b138d2289e46c08795af7724b3a815877",
-    "quintCaseAuditSha256": "817edb12bcf9f18571d95c123fe25a6377e2064129f50e2ed89d896ff835dafc",
+    "semanticCasesSha256": "a596571f0538c4117fdde625c2b9651e3595f5934e6423db7a64bf2f1cbb5447",
+    "executionSha256": "fdc5335baa236aaf41af739e33cf61c28268dc2638ae9937540f63e6a57bfb40",
+    "sourceAuditSha256": "7d78c6a332e9322afd8bdbc5ec00a59baa95e27d8e7b0d5b3f523d3540eb29c9",
+    "quintCaseAuditSha256": "4a14919f0df510ba571b1c3b136e2ebd4fd3ceab5edea8327b5e54c7edfa1ec5",
     "featureCoverageSha256": "2e59570c657a6393d5f1bf2f33e27e3825c84a15ed54f902543327fcc08439a0",
     "coverageWitnessesSha256": "8fc8ab123150fdec059f5b75f84172d39af80d08d7a4211fa88c63c5a3f2874b",
-    "profilesSha256": "1c6d623da751ba743fc5c39dc91f6b617e344a8cdd87268990693ff489a64aa5"
+    "profilesSha256": "6dffed03ebb8e916731bd2f34f81cd7cb6f1905a21ccc83b185c77f234b7455c"
   },
   "inventory": {
     "behavioralCases": 240,
@@ -41,16 +41,16 @@
     "sourceDeclarations": 772,
     "casesWithScheduledChecks": 262,
     "requiredWitnesses": 435,
-    "casesWithQuintRegressionReplay": 137,
+    "casesWithQuintRegressionReplay": 162,
     "casesWithQuintGeneratedVectors": 22,
     "withoutModelDrivenReplay": [],
-    "quintModels": 26,
-    "scheduledInvariants": 189,
-    "scheduledRegressions": 388,
+    "quintModels": 32,
+    "scheduledInvariants": 212,
+    "scheduledRegressions": 396,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
     "caseReferencedWitnesses": 285,
-    "exportedRegressionHistories": 165
+    "exportedRegressionHistories": 205
   },
   "profiles": [
     {
@@ -59,7 +59,13 @@
       "model": "formal/dialcache-conformance.qnt",
       "smoke": "formal/conformance-smoke.itf.json",
       "plannedTraces": 32,
-      "scheduledRegressions": [],
+      "scheduledRegressions": [
+        "disabledAndRequestCallsKeepTheirOwnLifetimesTest",
+        "localValueSurvivesSourceChangeTest",
+        "coalescedPairPublishesOneReusableValueTest",
+        "invalidationRefillsFromCurrentSourceTest",
+        "failedReadPreservesPreviouslyStoredBytesTest"
+      ],
       "status": "executable-profile-schedule",
       "witnessSources": []
     },
@@ -133,7 +139,37 @@
       "model": "formal/dialcache-recovery-conformance.qnt",
       "smoke": "formal/recovery-smoke.itf.json",
       "plannedTraces": 512,
-      "scheduledRegressions": [],
+      "scheduledRegressions": [
+        "futureFrameDoesNotCarryMissFenceTest",
+        "defaultRecoversOwnTimeoutTest",
+        "explicitDenialReplacesDefaultTest",
+        "defaultRejectsOrdinaryFailureTest",
+        "defaultRecoversPropagatedTimeoutTest",
+        "lateSuccessCannotReplaceRecoveredValueTest",
+        "failedRecoveryPreservesDeadlineErrorTest",
+        "recoveredValueMemoizesOnlyInAttachedRequestTest",
+        "crossRequestRecoveryMemoizesBothScopesTest",
+        "closedRequestCannotReceiveLateRecoveryMemoTest",
+        "rollbackCannotLowerInvalidationWatermarkTest",
+        "rollbackDuringRetainedDecodeRejectsFutureSnapshotTest",
+        "instanceAllowReplacesTimeoutOnlyDefaultTest",
+        "instanceDenialReplacesTimeoutOnlyDefaultTest",
+        "operationDenialReplacesInstanceAllowTest",
+        "lastFreshReadDoesNotInvokeSourceTest",
+        "lastRecoveryMillisecondIsServedTest",
+        "maximumAgeAtReadDoesNotDecodeTest",
+        "fencedInitialBytesNeverRecoverTest",
+        "classifierErrorPreservesSourceWithoutDecodeTest",
+        "freshDecodeFailureCannotBeRetriedAsRecoveryTest",
+        "initialReadFailureSkipsRecoveryClassificationTest",
+        "rollbackBelowFreshCeilingStillRecoversTest",
+        "replacementDoesNotChangeRetainedRecoveryTest",
+        "maximumAgeBeforeDecodePreservesSourceTest",
+        "maximumAgeAfterDecodePreservesSourceTest",
+        "operationAllowReplacesInstanceDenialTest",
+        "coalescedRecoveryClassifiesAndDecodesOnceTest",
+        "recoveredValueKeepsOriginalFallbackDiagnosticTest"
+      ],
       "status": "executable-profile-schedule",
       "witnessSources": [
         "test/formal/itf.ts",
@@ -217,7 +253,14 @@
       "model": "formal/dialcache-admission-conformance.qnt",
       "smoke": "formal/admission-smoke.itf.json",
       "plannedTraces": 128,
-      "scheduledRegressions": [],
+      "scheduledRegressions": [
+        "coalescedHitAdmitsOneJobTest",
+        "duplicateDropsBeforeCapacityIsFullTest",
+        "timeoutRetainsSourceCapacityTest",
+        "timeoutRetainsDecodeCapacityTest",
+        "timeoutRetainsConfirmationCapacityTest",
+        "fullInstanceDoesNotBlockOtherInstanceTest"
+      ],
       "status": "executable-profile-schedule",
       "witnessSources": [
         "test/formal/itf.ts",
@@ -490,7 +533,8 @@
       "kind": "portable-behavior",
       "group": "request-and-layers",
       "quintProperties": [
-        "formal/dialcache-core.qnt:passThroughSkipsCacheMachinery"
+        "formal/dialcache-core.qnt:passThroughSkipsCacheMachinery",
+        "formal/dialcache-conformance.qnt:disabledAndRequestCallsKeepTheirOwnLifetimesTest"
       ],
       "requiredGenerated": [
         {
@@ -513,7 +557,9 @@
       },
       "quintDefinitions": [],
       "scopeAudit": "formal/quint-case-audit.json",
-      "quintReplays": [],
+      "quintReplays": [
+        "core/disabledAndRequestCallsKeepTheirOwnLifetimesTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -525,8 +571,8 @@
       "kind": "portable-behavior",
       "group": "request-and-layers",
       "quintProperties": [
-        "formal/dialcache-coalescing-liveness.qnt:outsideSourceHasNoDeadline",
-        "formal/dialcache-coalescing-liveness.qnt:outsideCallsIgnoreConfiguredSourceDeadlineTest",
+        "formal/dialcache-flight-deadlines.qnt:outsideSourceHasNoDeadline",
+        "formal/dialcache-flight-deadlines.qnt:outsideCallsIgnoreConfiguredSourceDeadlineTest",
         "formal/dialcache-source-budgets-conformance.qnt:outsideSourcesHaveNoDeadline",
         "formal/dialcache-source-budgets-conformance.qnt:outsideAndInvalidOutsideCallsIgnoreDeadlineAndSharingTest"
       ],
@@ -1664,7 +1710,10 @@
       "kind": "portable-behavior",
       "group": "request-and-layers",
       "quintProperties": [
-        "formal/dialcache-policy-conformance.qnt:localHitDoesNotRenewInsertionTtlTest"
+        "formal/dialcache-policy-conformance.qnt:localHitDoesNotRenewInsertionTtlTest",
+        "formal/dialcache-policy-conformance.qnt:localHitsRespectInsertionExpiry",
+        "formal/dialcache-rule-checks.qnt:localBoundaryIsExclusive",
+        "formal/dialcache-rule-checks.qnt:localGridUsesWholeMilliseconds"
       ],
       "requiredGenerated": [
         {
@@ -1861,8 +1910,9 @@
       "group": "request-and-layers",
       "quintProperties": [
         "formal/dialcache-effects-conformance.qnt:oneRegisteredSource",
-        "formal/dialcache-coalescing-liveness.qnt:oneSourcePerRegisteredFlight",
-        "formal/dialcache-runtime-boundaries-conformance.qnt:runtimeLocalTtlEnablesSharingWithoutRemoteTtlTest"
+        "formal/dialcache-flight-deadlines.qnt:oneSourcePerRegisteredFlight",
+        "formal/dialcache-runtime-boundaries-conformance.qnt:runtimeLocalTtlEnablesSharingWithoutRemoteTtlTest",
+        "formal/dialcache-conformance.qnt:coalescedPairPublishesOneReusableValueTest"
       ],
       "requiredGenerated": [
         {
@@ -1884,7 +1934,8 @@
       "quintDefinitions": [],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
-        "runtime-boundaries/runtimeLocalTtlEnablesSharingWithoutRemoteTtlTest"
+        "runtime-boundaries/runtimeLocalTtlEnablesSharingWithoutRemoteTtlTest",
+        "core/coalescedPairPublishesOneReusableValueTest"
       ],
       "generatedVectors": []
     },
@@ -2061,9 +2112,9 @@
       "kind": "portable-behavior",
       "group": "request-and-layers",
       "quintProperties": [
-        "formal/dialcache-coalescing-liveness.qnt:flightsRequireEligibleCaching",
-        "formal/dialcache-coalescing-liveness.qnt:noFlightWhenCoalescingIneligible",
-        "formal/dialcache-coalescing-liveness.qnt:inactiveServingLayersKeepConcurrentCallsIndependentTest"
+        "formal/dialcache-flight-deadlines.qnt:flightsRequireEligibleCaching",
+        "formal/dialcache-flight-deadlines.qnt:noFlightWhenCoalescingIneligible",
+        "formal/dialcache-flight-deadlines.qnt:inactiveServingLayersKeepConcurrentCallsIndependentTest"
       ],
       "requiredGenerated": [
         {
@@ -2734,7 +2785,8 @@
       "quintProperties": [
         "formal/dialcache-stale-recovery.qnt:lastFreshAgeSkipsSourceTest",
         "formal/dialcache-recovery-conformance.qnt:lastFreshReadDoesNotInvokeSourceTest",
-        "formal/dialcache-policy-conformance.qnt:exactRemoteFreshBoundaryStartsSourceTest"
+        "formal/dialcache-policy-conformance.qnt:exactRemoteFreshBoundaryStartsSourceTest",
+        "formal/dialcache-rule-checks.qnt:freshBoundaryIsExclusive"
       ],
       "requiredGenerated": [
         {
@@ -2770,7 +2822,8 @@
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
-        "policy/exactRemoteFreshBoundaryStartsSourceTest"
+        "policy/exactRemoteFreshBoundaryStartsSourceTest",
+        "recovery/lastFreshReadDoesNotInvokeSourceTest"
       ],
       "generatedVectors": []
     },
@@ -2989,9 +3042,10 @@
       "kind": "portable-behavior",
       "group": "deadlines-and-fail-open",
       "quintProperties": [
-        "formal/dialcache-coalescing-liveness.qnt:fallbackDeadlineStartsWithFallback",
-        "formal/dialcache-coalescing-liveness.qnt:delayedLookupKeepsFullSourceBudgetTest",
-        "formal/dialcache-effects-conformance.qnt:readTimeoutStartsIndependentSourceDeadlineTest"
+        "formal/dialcache-flight-deadlines.qnt:fallbackDeadlineStartsWithFallback",
+        "formal/dialcache-flight-deadlines.qnt:delayedLookupKeepsFullSourceBudgetTest",
+        "formal/dialcache-effects-conformance.qnt:readTimeoutStartsIndependentSourceDeadlineTest",
+        "formal/dialcache-effects-connection.qnt:effectsDeadlineMatchesSourceStart"
       ],
       "requiredGenerated": [
         {
@@ -3029,8 +3083,8 @@
       "kind": "portable-behavior",
       "group": "deadlines-and-fail-open",
       "quintProperties": [
-        "formal/dialcache-coalescing-liveness.qnt:omittedSourceBudgetUsesSixtySeconds",
-        "formal/dialcache-coalescing-liveness.qnt:librarySourceDeadlineIsSixtySecondsTest",
+        "formal/dialcache-flight-deadlines.qnt:omittedSourceBudgetUsesSixtySeconds",
+        "formal/dialcache-flight-deadlines.qnt:librarySourceDeadlineIsSixtySecondsTest",
         "formal/dialcache-source-budgets-conformance.qnt:defaultSourceBudgetExpiresAtSixtySecondsTest"
       ],
       "requiredGenerated": [
@@ -3103,9 +3157,11 @@
       "kind": "portable-behavior",
       "group": "deadlines-and-fail-open",
       "quintProperties": [
-        "formal/dialcache-coalescing-liveness.qnt:lateFollowerKeepsLeaderSourceDeadlineTest",
+        "formal/dialcache-flight-deadlines.qnt:lateFollowerKeepsLeaderSourceDeadlineTest",
         "formal/dialcache-source-budgets-conformance.qnt:followersKeepTheirOwnersOutcome",
-        "formal/dialcache-source-budgets-conformance.qnt:lateFollowerUsesLeadersRemainingBudgetTest"
+        "formal/dialcache-source-budgets-conformance.qnt:lateFollowerUsesLeadersRemainingBudgetTest",
+        "formal/dialcache-source-connection.qnt:sourceOwnersMatchContract",
+        "formal/dialcache-source-connection.qnt:followerKeepsAcquiredOwner"
       ],
       "requiredGenerated": [
         {
@@ -3127,7 +3183,7 @@
         "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
       },
       "quintDefinitions": [
-        "formal/dialcache-coalescing-liveness.qnt:joinFollower"
+        "formal/dialcache-flight-deadlines.qnt:joinFollower"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -3184,8 +3240,10 @@
       "kind": "portable-behavior",
       "group": "deadlines-and-fail-open",
       "quintProperties": [
-        "formal/dialcache-coalescing-liveness.qnt:timedOutSourceCannotPublish",
-        "formal/dialcache-coalescing-liveness.qnt:lateSettlementBeforeTimerTest"
+        "formal/dialcache-flight-deadlines.qnt:timedOutSourceCannotPublish",
+        "formal/dialcache-flight-deadlines.qnt:lateSettlementBeforeTimerTest",
+        "formal/dialcache-rule-checks.qnt:sourceBoundaryIsExclusive",
+        "formal/dialcache-source-connection.qnt:acceptedSourcesMatchContract"
       ],
       "requiredGenerated": [
         {
@@ -3223,8 +3281,8 @@
       "kind": "portable-behavior",
       "group": "deadlines-and-fail-open",
       "quintProperties": [
-        "formal/dialcache-coalescing-liveness.qnt:timedOutSourceCannotPublish",
-        "formal/dialcache-coalescing-liveness.qnt:lateSettlementBeforeTimerTest"
+        "formal/dialcache-flight-deadlines.qnt:timedOutSourceCannotPublish",
+        "formal/dialcache-flight-deadlines.qnt:lateSettlementBeforeTimerTest"
       ],
       "requiredGenerated": [
         {
@@ -3262,7 +3320,7 @@
       "kind": "portable-behavior",
       "group": "deadlines-and-fail-open",
       "quintProperties": [
-        "formal/dialcache-coalescing-liveness.qnt:abandonedSourceMayOverlapNewFlightTest",
+        "formal/dialcache-flight-deadlines.qnt:abandonedSourceMayOverlapNewFlightTest",
         "formal/dialcache-effects-conformance.qnt:timedOutLoaderOverlapsNewFlightTest",
         "formal/dialcache-source-budgets-conformance.qnt:abandonedSourceCannotReplaceSuccessfulRetryTest"
       ],
@@ -3306,8 +3364,8 @@
       "kind": "portable-behavior",
       "group": "deadlines-and-fail-open",
       "quintProperties": [
-        "formal/dialcache-coalescing-liveness.qnt:disabledSourceDeadlineNeverTimesOut",
-        "formal/dialcache-coalescing-liveness.qnt:explicitlyUnboundedEnabledSourceAcceptsLateValueTest",
+        "formal/dialcache-flight-deadlines.qnt:disabledSourceDeadlineNeverTimesOut",
+        "formal/dialcache-flight-deadlines.qnt:explicitlyUnboundedEnabledSourceAcceptsLateValueTest",
         "formal/dialcache-source-budgets-conformance.qnt:unboundedEnabledSourcePublishesAfterSixtySecondsTest"
       ],
       "requiredGenerated": [
@@ -3345,8 +3403,8 @@
       "kind": "portable-behavior",
       "group": "deadlines-and-fail-open",
       "quintProperties": [
-        "formal/dialcache-coalescing-liveness.qnt:publicationRequiresAcceptedSource",
-        "formal/dialcache-coalescing-liveness.qnt:acceptedPublicationOutlivesDeadlineTest",
+        "formal/dialcache-flight-deadlines.qnt:publicationRequiresAcceptedSource",
+        "formal/dialcache-flight-deadlines.qnt:acceptedPublicationOutlivesDeadlineTest",
         "formal/dialcache-effects-conformance.qnt:writeRequiresAcceptedSource",
         "formal/dialcache-effects-conformance.qnt:acceptedWriteOutlivesDeadlineTest"
       ],
@@ -3423,8 +3481,8 @@
       "kind": "portable-behavior",
       "group": "deadlines-and-fail-open",
       "quintProperties": [
-        "formal/dialcache-coalescing-liveness.qnt:keyFailureKeepsEnabledSourceDeadlineTest",
-        "formal/dialcache-coalescing-liveness.qnt:independentAcceptanceChecksCapturedDeadline",
+        "formal/dialcache-flight-deadlines.qnt:keyFailureKeepsEnabledSourceDeadlineTest",
+        "formal/dialcache-flight-deadlines.qnt:independentAcceptanceChecksCapturedDeadline",
         "formal/dialcache-source-budgets-conformance.qnt:onlyEnabledValidCallsResolvePolicy",
         "formal/dialcache-source-budgets-conformance.qnt:invalidKeyStillKeepsEnabledSourceDeadlineTest"
       ],
@@ -3626,7 +3684,8 @@
       "quintProperties": [
         "formal/dialcache-core.qnt:remoteFailureNeverRefills",
         "formal/dialcache-effects-conformance.qnt:readTimeoutStartsIndependentSourceDeadlineTest",
-        "formal/dialcache-effects-conformance.qnt:lateReadCannotBecomeHitTest"
+        "formal/dialcache-effects-conformance.qnt:lateReadCannotBecomeHitTest",
+        "formal/dialcache-conformance.qnt:failedReadPreservesPreviouslyStoredBytesTest"
       ],
       "requiredGenerated": [
         {
@@ -3655,7 +3714,9 @@
       },
       "quintDefinitions": [],
       "scopeAudit": "formal/quint-case-audit.json",
-      "quintReplays": [],
+      "quintReplays": [
+        "core/failedReadPreservesPreviouslyStoredBytesTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -3934,7 +3995,8 @@
       "kind": "portable-behavior",
       "group": "invalidation",
       "quintProperties": [
-        "formal/dialcache-layers-conformance.qnt:invalidationGroupsOperationsButPreservesAcquiredCachesTest"
+        "formal/dialcache-layers-conformance.qnt:invalidationGroupsOperationsButPreservesAcquiredCachesTest",
+        "formal/dialcache-conformance.qnt:invalidationRefillsFromCurrentSourceTest"
       ],
       "requiredGenerated": [
         {
@@ -3961,7 +4023,8 @@
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
-        "layers/invalidationGroupsOperationsButPreservesAcquiredCachesTest"
+        "layers/invalidationGroupsOperationsButPreservesAcquiredCachesTest",
+        "core/invalidationRefillsFromCurrentSourceTest"
       ],
       "generatedVectors": []
     },
@@ -4367,7 +4430,7 @@
       "vectorEvidence": [
         "invalidation/existing future cutoff never moves backwards"
       ],
-      "status": "executable-quint-vector",
+      "status": "executable-quint-regression",
       "gaps": [],
       "evidence": {
         "typescript": ".formal-traces/ts-replay.json",
@@ -4380,7 +4443,9 @@
         "formal/dialcache-invalidation-transition.qnt:invalidated"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
-      "quintReplays": [],
+      "quintReplays": [
+        "recovery/rollbackCannotLowerInvalidationWatermarkTest"
+      ],
       "generatedVectors": [
         {
           "artifact": "formal/quint-invalidation-vectors.json",
@@ -5269,7 +5334,8 @@
       "quintProperties": [
         "formal/dialcache-stale-recovery.qnt:recoveredStaleHasNoSharedPublication",
         "formal/dialcache-stale-recovery.qnt:servedValueCanAgeTest",
-        "formal/dialcache-stale-recovery.qnt:firstStaleAgeRetainsWithoutDecodingTest"
+        "formal/dialcache-stale-recovery.qnt:firstStaleAgeRetainsWithoutDecodingTest",
+        "formal/dialcache-rule-checks.qnt:retentionStartsAtFreshBoundary"
       ],
       "requiredGenerated": [
         {
@@ -5332,7 +5398,9 @@
         "formal/dialcache-stale-recovery.qnt:candidateLoadSucceeds"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
-      "quintReplays": [],
+      "quintReplays": [
+        "recovery/lastRecoveryMillisecondIsServedTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -5371,7 +5439,9 @@
       },
       "quintDefinitions": [],
       "scopeAudit": "formal/quint-case-audit.json",
-      "quintReplays": [],
+      "quintReplays": [
+        "recovery/maximumAgeAtReadDoesNotDecodeTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -5481,7 +5551,9 @@
       },
       "quintDefinitions": [],
       "scopeAudit": "formal/quint-case-audit.json",
-      "quintReplays": [],
+      "quintReplays": [
+        "recovery/operationDenialReplacesInstanceAllowTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -5517,7 +5589,9 @@
       },
       "quintDefinitions": [],
       "scopeAudit": "formal/quint-case-audit.json",
-      "quintReplays": [],
+      "quintReplays": [
+        "recovery/classifierErrorPreservesSourceWithoutDecodeTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -5555,7 +5629,9 @@
         "formal/dialcache-recovery-conformance.qnt:rejected"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
-      "quintReplays": [],
+      "quintReplays": [
+        "recovery/operationAllowReplacesInstanceDenialTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -5590,7 +5666,9 @@
       },
       "quintDefinitions": [],
       "scopeAudit": "formal/quint-case-audit.json",
-      "quintReplays": [],
+      "quintReplays": [
+        "recovery/defaultRejectsOrdinaryFailureTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -5625,7 +5703,9 @@
       },
       "quintDefinitions": [],
       "scopeAudit": "formal/quint-case-audit.json",
-      "quintReplays": [],
+      "quintReplays": [
+        "recovery/defaultRecoversPropagatedTimeoutTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -5661,7 +5741,10 @@
       },
       "quintDefinitions": [],
       "scopeAudit": "formal/quint-case-audit.json",
-      "quintReplays": [],
+      "quintReplays": [
+        "recovery/explicitDenialReplacesDefaultTest",
+        "recovery/instanceDenialReplacesTimeoutOnlyDefaultTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -5700,7 +5783,9 @@
         "formal/dialcache-recovery-conformance.qnt:releaseLoad"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
-      "quintReplays": [],
+      "quintReplays": [
+        "recovery/coalescedRecoveryClassifiesAndDecodesOnceTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -5717,7 +5802,8 @@
         "formal/dialcache-recovery-conformance.qnt:closedRequestCannotReceiveLateRecoveryMemoTest",
         "formal/dialcache-stale-recovery.qnt:recoveredStaleHasNoSharedPublication",
         "formal/dialcache-recovery-read-conformance.qnt:recoveredResultsNeverPublishShared",
-        "formal/dialcache-recovery-read-conformance.qnt:compressedRecoveryMemoizesWithoutLocalPublicationTest"
+        "formal/dialcache-recovery-read-conformance.qnt:compressedRecoveryMemoizesWithoutLocalPublicationTest",
+        "formal/dialcache-legacy-recovery-connection.qnt:flightRecoveryMatchesContract"
       ],
       "requiredGenerated": [
         {
@@ -5753,7 +5839,9 @@
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
-        "recovery-read/compressedRecoveryMemoizesWithoutLocalPublicationTest"
+        "recovery-read/compressedRecoveryMemoizesWithoutLocalPublicationTest",
+        "recovery/recoveredValueMemoizesOnlyInAttachedRequestTest",
+        "recovery/closedRequestCannotReceiveLateRecoveryMemoTest"
       ],
       "generatedVectors": []
     },
@@ -5809,7 +5897,9 @@
         "formal/dialcache-independent-conformance.qnt:independentRecoveryKeepsDistinctSnapshotsTest",
         "formal/dialcache-recovery-conformance.qnt:replacementDoesNotChangeRetainedRecoveryTest",
         "formal/dialcache-stale-recovery.qnt:retainedBytesSurviveRedisDeletionAndFenceTest",
-        "formal/dialcache-recovery-read-conformance.qnt:retainedCompressedRecoverySurvivesInvalidationTest"
+        "formal/dialcache-recovery-read-conformance.qnt:retainedCompressedRecoverySurvivesInvalidationTest",
+        "formal/dialcache-recovery-connection.qnt:retainedSnapshotMatchesAcquisition",
+        "formal/dialcache-legacy-recovery-connection.qnt:flightKeepsAcquiredSnapshot"
       ],
       "requiredGenerated": [
         {
@@ -5845,7 +5935,8 @@
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
-        "recovery-read/retainedCompressedRecoverySurvivesInvalidationTest"
+        "recovery-read/retainedCompressedRecoverySurvivesInvalidationTest",
+        "recovery/replacementDoesNotChangeRetainedRecoveryTest"
       ],
       "generatedVectors": []
     },
@@ -5926,7 +6017,9 @@
       },
       "quintDefinitions": [],
       "scopeAudit": "formal/quint-case-audit.json",
-      "quintReplays": [],
+      "quintReplays": [
+        "recovery/initialReadFailureSkipsRecoveryClassificationTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -5940,7 +6033,9 @@
       "quintProperties": [
         "formal/dialcache-stale-recovery.qnt:servedStaleIsStrictlyWithinMaxAge",
         "formal/dialcache-stale-recovery.qnt:decodingAtMaxAgeRejectsTest",
-        "formal/dialcache-recovery-conformance.qnt:maximumAgeAfterDecodePreservesSourceTest"
+        "formal/dialcache-recovery-conformance.qnt:maximumAgeAfterDecodePreservesSourceTest",
+        "formal/dialcache-recovery-conformance.qnt:recoveredValueWasWithinAcceptedAge",
+        "formal/dialcache-rule-checks.qnt:recoveryBoundaryIsExclusive"
       ],
       "requiredGenerated": [
         {
@@ -5963,7 +6058,9 @@
       },
       "quintDefinitions": [],
       "scopeAudit": "formal/quint-case-audit.json",
-      "quintReplays": [],
+      "quintReplays": [
+        "recovery/maximumAgeAfterDecodePreservesSourceTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -6011,7 +6108,9 @@
       "kind": "portable-behavior",
       "group": "recovery",
       "quintProperties": [
-        "formal/dialcache-independent-conformance.qnt:recoveryPolicyIsCapturedPerCallerTest"
+        "formal/dialcache-independent-conformance.qnt:recoveryPolicyIsCapturedPerCallerTest",
+        "formal/dialcache-recovery-connection.qnt:recoveryReturnMatchesAcquiredContract",
+        "formal/dialcache-independent-connection.qnt:independentRecoveryMatchesContract"
       ],
       "requiredGenerated": [
         {
@@ -6070,7 +6169,9 @@
       },
       "quintDefinitions": [],
       "scopeAudit": "formal/quint-case-audit.json",
-      "quintReplays": [],
+      "quintReplays": [
+        "recovery/failedRecoveryPreservesDeadlineErrorTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -6106,7 +6207,9 @@
       },
       "quintDefinitions": [],
       "scopeAudit": "formal/quint-case-audit.json",
-      "quintReplays": [],
+      "quintReplays": [
+        "recovery/rollbackDuringRetainedDecodeRejectsFutureSnapshotTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -6144,7 +6247,9 @@
         "formal/dialcache-recovery-conformance.qnt:rejected"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
-      "quintReplays": [],
+      "quintReplays": [
+        "recovery/freshDecodeFailureCannotBeRetriedAsRecoveryTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -6184,7 +6289,9 @@
       },
       "quintDefinitions": [],
       "scopeAudit": "formal/quint-case-audit.json",
-      "quintReplays": [],
+      "quintReplays": [
+        "recovery/lateSuccessCannotReplaceRecoveredValueTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -6268,7 +6375,8 @@
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
-        "shadow-layers/servedAndDarkJobsShareCapacityButNotSourceOwnershipTest"
+        "shadow-layers/servedAndDarkJobsShareCapacityButNotSourceOwnershipTest",
+        "admission/fullInstanceDoesNotBlockOtherInstanceTest"
       ],
       "generatedVectors": []
     },
@@ -6973,7 +7081,8 @@
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
-        "shadow-layers/deduplicatedJobKeepsIndependentCallerSourcesTest"
+        "shadow-layers/deduplicatedJobKeepsIndependentCallerSourcesTest",
+        "admission/duplicateDropsBeforeCapacityIsFullTest"
       ],
       "generatedVectors": []
     },
@@ -7020,7 +7129,8 @@
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
-        "shadow-layers/servedAndDarkJobsShareCapacityButNotSourceOwnershipTest"
+        "shadow-layers/servedAndDarkJobsShareCapacityButNotSourceOwnershipTest",
+        "admission/timeoutRetainsSourceCapacityTest"
       ],
       "generatedVectors": []
     },
@@ -7062,7 +7172,9 @@
       },
       "quintDefinitions": [],
       "scopeAudit": "formal/quint-case-audit.json",
-      "quintReplays": [],
+      "quintReplays": [
+        "admission/timeoutRetainsDecodeCapacityTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -7672,7 +7784,9 @@
         "formal/dialcache-recovery-conformance.qnt:rejected"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
-      "quintReplays": [],
+      "quintReplays": [
+        "recovery/recoveredValueKeepsOriginalFallbackDiagnosticTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -7720,7 +7834,8 @@
       "kind": "portable-behavior",
       "group": "diagnostics",
       "quintProperties": [
-        "formal/dialcache-effects-conformance.qnt:sourceDurationExcludesPublicationTest"
+        "formal/dialcache-effects-conformance.qnt:sourceDurationExcludesPublicationTest",
+        "formal/dialcache-effects-connection.qnt:effectsPublicationMatchesAcceptedSource"
       ],
       "requiredGenerated": [
         {
@@ -8500,7 +8615,8 @@
         "formal/dialcache-redis-protocol.qnt:trackedZeroTimestampIsNotHit",
         "formal/dialcache-tracked-invalidation.qnt:servedSnapshotClearedObservedFence",
         "formal/dialcache-frame-vectors.qnt:trackedHitsStrictlyClearValidFence",
-        "formal/dialcache-frame-vectors.qnt:trackedFencePrecedesEncodingErrorTest"
+        "formal/dialcache-frame-vectors.qnt:trackedFencePrecedesEncodingErrorTest",
+        "formal/dialcache-rule-checks.qnt:fenceBoundaryIsExclusive"
       ],
       "requiredGenerated": [],
       "fixedRegressions": [],
@@ -9456,7 +9572,9 @@
       "quintDefinitions": [],
       "status": "executable-generated",
       "gaps": [],
-      "quintReplays": [],
+      "quintReplays": [
+        "recovery/futureFrameDoesNotCarryMissFenceTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -9576,7 +9694,8 @@
       "status": "executable-generated",
       "gaps": [],
       "quintReplays": [
-        "recovery-read/maximumAgeBeforeDecodeKeepsOriginalErrorTest"
+        "recovery-read/maximumAgeBeforeDecodeKeepsOriginalErrorTest",
+        "recovery/maximumAgeBeforeDecodePreservesSourceTest"
       ],
       "generatedVectors": []
     },
@@ -9788,7 +9907,9 @@
       "quintDefinitions": [],
       "status": "executable-generated",
       "gaps": [],
-      "quintReplays": [],
+      "quintReplays": [
+        "recovery/operationDenialReplacesInstanceAllowTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -9946,11 +10067,13 @@
       "rule": "Uncoalesced same-key callers each receive their full source budget from their own source start; one timeout does not shorten another budget.",
       "kind": "portable-behavior",
       "quintProperties": [
-        "formal/dialcache-coalescing-liveness.qnt:independentAcceptanceChecksCapturedDeadline",
+        "formal/dialcache-flight-deadlines.qnt:independentAcceptanceChecksCapturedDeadline",
         "formal/dialcache-independent-conformance.qnt:eachSourceKeepsItsFullBudget",
         "formal/dialcache-independent-conformance.qnt:sourceSettlementsRespectOwnDeadline",
         "formal/dialcache-independent-conformance.qnt:staggeredSourceStartsKeepIndependentBudgetsTest",
-        "formal/dialcache-independent-conformance.qnt:staggeredSourcesExpireAtTheirOwnDeadlineTest"
+        "formal/dialcache-independent-conformance.qnt:staggeredSourcesExpireAtTheirOwnDeadlineTest",
+        "formal/dialcache-independent-connection.qnt:independentSourceOriginsMatchContract",
+        "formal/dialcache-independent-connection.qnt:independentSourceMatchesTimerContract"
       ],
       "requiredGenerated": [],
       "fixedRegressions": [
@@ -9985,9 +10108,10 @@
       "rule": "Waiting for runtime policy does not consume the subsequent source budget.",
       "kind": "portable-behavior",
       "quintProperties": [
-        "formal/dialcache-coalescing-liveness.qnt:delayedLookupKeepsFullSourceBudgetTest",
+        "formal/dialcache-flight-deadlines.qnt:delayedLookupKeepsFullSourceBudgetTest",
         "formal/dialcache-source-budgets-conformance.qnt:acceptedSourceRespectsItsOwnStart",
-        "formal/dialcache-source-budgets-conformance.qnt:heldPolicyDoesNotSpendSourceBudgetTest"
+        "formal/dialcache-source-budgets-conformance.qnt:heldPolicyDoesNotSpendSourceBudgetTest",
+        "formal/dialcache-source-connection.qnt:sourceOriginsMatchContract"
       ],
       "requiredGenerated": [
         {
@@ -10465,7 +10589,9 @@
       "quintDefinitions": [],
       "status": "executable-generated",
       "gaps": [],
-      "quintReplays": [],
+      "quintReplays": [
+        "admission/coalescedHitAdmitsOneJobTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -10738,7 +10864,8 @@
       "status": "executable-generated",
       "gaps": [],
       "quintReplays": [
-        "recovery-read/closedRequestCannotReceiveCompressedRecoveryTest"
+        "recovery-read/closedRequestCannotReceiveCompressedRecoveryTest",
+        "recovery/closedRequestCannotReceiveLateRecoveryMemoTest"
       ],
       "generatedVectors": []
     },
@@ -10789,7 +10916,8 @@
       "status": "executable-generated",
       "gaps": [],
       "quintReplays": [
-        "shadow-layers/fullMixedInstanceDoesNotBlockAnotherInstanceTest"
+        "shadow-layers/fullMixedInstanceDoesNotBlockAnotherInstanceTest",
+        "admission/fullInstanceDoesNotBlockOtherInstanceTest"
       ],
       "generatedVectors": []
     },
@@ -10848,7 +10976,8 @@
       "rule": "Independent tracked reads acquired before and after invalidation keep their own snapshot and fencing outcomes.",
       "kind": "portable-behavior",
       "quintProperties": [
-        "formal/dialcache-independent-conformance.qnt:acceptedFreshDecodeSurvivesOtherInvalidationTest"
+        "formal/dialcache-independent-conformance.qnt:acceptedFreshDecodeSurvivesOtherInvalidationTest",
+        "formal/dialcache-independent-connection.qnt:independentSnapshotsMatchAcquisition"
       ],
       "requiredGenerated": [
         {
@@ -11511,7 +11640,9 @@
       "quintDefinitions": [],
       "status": "executable-generated",
       "gaps": [],
-      "quintReplays": [],
+      "quintReplays": [
+        "recovery/fencedInitialBytesNeverRecoverTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -11530,7 +11661,8 @@
       "kind": "portable-behavior",
       "quintProperties": [
         "formal/dialcache-recovery-conformance.qnt:rollbackBelowFreshCeilingStillRecoversTest",
-        "formal/dialcache-stale-recovery.qnt:rollbackBelowFreshAgeStillRecoversTest"
+        "formal/dialcache-stale-recovery.qnt:rollbackBelowFreshAgeStillRecoversTest",
+        "formal/dialcache-rule-checks.qnt:rollbackCanRecoverRetainedBytesTest"
       ],
       "requiredGenerated": [
         {
@@ -11545,7 +11677,9 @@
       "quintDefinitions": [],
       "status": "executable-generated",
       "gaps": [],
-      "quintReplays": [],
+      "quintReplays": [
+        "recovery/rollbackBelowFreshCeilingStillRecoversTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -11987,7 +12121,8 @@
         "formal/dialcache-core.qnt:firstHitStopsLowerTraversal",
         "formal/dialcache-core.qnt:localHitWarmsRequestAndSkipsRemoteTest",
         "formal/dialcache-runtime-boundaries-conformance.qnt:runtimeLocalTtlAddsEarlierLayerToRemoteFixtureTest",
-        "formal/dialcache-runtime-boundaries-conformance.qnt:earlierLocalHitStopsRemoteTraversal"
+        "formal/dialcache-runtime-boundaries-conformance.qnt:earlierLocalHitStopsRemoteTraversal",
+        "formal/dialcache-conformance.qnt:localValueSurvivesSourceChangeTest"
       ],
       "requiredGenerated": [
         {
@@ -12003,7 +12138,8 @@
       "status": "executable-generated",
       "gaps": [],
       "quintReplays": [
-        "runtime-boundaries/runtimeLocalTtlAddsEarlierLayerToRemoteFixtureTest"
+        "runtime-boundaries/runtimeLocalTtlAddsEarlierLayerToRemoteFixtureTest",
+        "core/localValueSurvivesSourceChangeTest"
       ],
       "generatedVectors": []
     },
@@ -18063,7 +18199,7 @@
   ],
   "reviewedTestAndDocumentationAudit": {
     "path": "formal/source-audit.json",
-    "sha256": "c90d77de5c3424f880b5dce31f81b09b138d2289e46c08795af7724b3a815877",
+    "sha256": "7d78c6a332e9322afd8bdbc5ec00a59baa95e27d8e7b0d5b3f523d3540eb29c9",
     "sourceFiles": 44,
     "status": "reviewed-applicability-not-execution",
     "limitations": "These rows review Go applicability for the public documentation and ordinary test files in source-audit.json sources, inheriting their C/W/E/B/X classifications. They map subjects to native artifacts without claiming one Go test per TypeScript assertion or turning documentation counts into executed coverage. The same audit hash also binds reviewedGuides for formal and Go documentation; those guide reviews are freshness/scope records, not additional behavioral applicability rows. Per-case Quint and replay evidence is recorded separately.",
@@ -19689,10 +19825,11 @@
         "sources": [
           "formal/dialcache-frame-vectors.qnt",
           "formal/wire-text.qnt",
-          "formal/generate-frame-vectors.mjs"
+          "formal/generate-frame-vectors.mjs",
+          "formal/cache-rules.qnt"
         ]
       },
-      "artifactSha256": "92db5d2844e0da63344f9abfe972628e66f6d4777641d44e3b45a3da5a94dd6d",
+      "artifactSha256": "05c7c83ab42a95bf264590a67f6136240d47b0aa39acd93eb0af567eb210010c",
       "status": "executable-vector-schedule"
     },
     {
