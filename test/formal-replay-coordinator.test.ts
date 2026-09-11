@@ -1,3 +1,4 @@
+import { AssertionError } from "node:assert";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { Readable } from "node:stream";
@@ -23,11 +24,11 @@ function smoke(profile: string): Raw {
 const environment = { wallMs: 1_725_000_000_123 };
 const roundtrip = (value: unknown) => parseJSON(JSON.stringify(value));
 
-function coreSession(raw: Raw) {
+function replaySession(raw: Raw, profile = "core") {
   const coordinator = new ReplayCoordinator();
   let id = 0;
   const request = (fields: Record<string, unknown>) => coordinator.dispatch(roundtrip({ version: 1, id: ++id, ...fields }));
-  const prepared = request({ op: "prepare", profile: "core", path: "control.itf.json", raw: JSON.stringify(raw) });
+  const prepared = request({ op: "prepare", profile, path: "control.itf.json", raw: JSON.stringify(raw) });
   const observe = (index: number, observed: unknown) => request({
     op: "observe", session: prepared.session, index, settlement, observed, environment,
   });
@@ -51,7 +52,9 @@ describe("shared replay input and expectation boundary", () => {
       ? expectedCoreObservation(parseItfTrace(original, "original").states[0]!.state)
       : emptyObservation(baseline.fixture as unknown as Fixture);
     expect(() => baseline.assert(0, actual)).not.toThrow();
-    expect(() => corrupted.assert(0, actual)).toThrow();
+    expect(() => corrupted.assert(0, actual)).toThrow(AssertionError);
+    const session = replaySession(changed, profile);
+    expect(() => session.observe(0, actual)).toThrow(/Observation mismatch\nexpected: [^\n]+\nactual: [^\n]+/);
     // Deliberately supply independently selected actual counters. Both bindings
     // must issue identical commands even when every prediction has changed.
     const observed = { ...actual, loaders: 16, reads: 16, writes: 16, loads: 16, dumps: 16, policyCalls: 16 };
@@ -66,8 +69,8 @@ describe("shared replay input and expectation boundary", () => {
     const changed = structuredClone(original);
     changed.states[1]!.s.redisReads = { "#bigint": "999" };
     const expected = parseItfTrace(original, "original").states.map(step => expectedCoreObservation(step.state));
-    const first = coreSession(original);
-    const second = coreSession(changed);
+    const first = replaySession(original);
+    const second = replaySession(changed);
     const next = first.observe(0, expected[0]);
     expect(second.observe(0, expected[0])).toEqual(next);
     expect(JSON.stringify(next)).not.toMatch(/expected|prediction|localCached|redisReads/);
@@ -105,6 +108,52 @@ describe("shared replay input and expectation boundary", () => {
   });
 });
 
+describe("shared observation assertion attribution", () => {
+  const labels = { cacheNamespace: "urn", useCase: "Behavior", keyType: "id" };
+  const cases = [
+    { name: "compression outcome", profile: "recovery-read", field: "outcome",
+      event: { event: "compression", layer: "remote", outcome: "compressed" } },
+    { name: "read event kind", profile: "independent", field: "event",
+      event: { event: "marker" } },
+    { name: "future offset layer", profile: "shadow", field: "layer",
+      event: { event: "futureOffset", layer: "remote", seconds: 1 } },
+    { name: "nonpositive future offset", profile: "shadow", field: "seconds",
+      event: { event: "futureOffset", layer: "remote_shadow", seconds: 0 } },
+    { name: "fractional millisecond future offset", profile: "shadow", field: "seconds",
+      event: { event: "futureOffset", layer: "remote_shadow", seconds: 0.0005 } },
+  ];
+  const failureOf = (action: () => unknown) => {
+    try { action(); }
+    catch (error) { return error; }
+    throw new Error("Expected observation validation to fail");
+  };
+
+  it.each(cases)("attributes a well-shaped invalid $name to the observation", ({ profile, field, event }) => {
+    const raw = smoke(profile);
+    const binding = bindTrace(profile, raw, "domain-control");
+    const observed = { ...emptyObservation(binding.fixture as unknown as Fixture), events: [{ ...labels, ...event }] };
+    const error = failureOf(() => binding.assert(0, observed));
+    expect(error).toBeInstanceOf(AssertionError);
+    expect(error).toMatchObject({ actual: expect.objectContaining({ [field]: event[field as keyof typeof event] }) });
+    const session = replaySession(raw, profile);
+    const rendered = String(failureOf(() => session.observe(0, observed)));
+    expect(rendered).toMatch(/Observation mismatch\nexpected: [^\n]+\nactual: [^\n]+/);
+    expect(rendered).toContain(`"${field}"`);
+  });
+
+  it.each(cases)("keeps a malformed $name record as infrastructure failure", ({ profile, field, event }) => {
+    const raw = smoke(profile);
+    const binding = bindTrace(profile, raw, "shape-control");
+    const malformed: Record<string, unknown> = { ...labels, ...event, [field]: null };
+    const observed = { ...emptyObservation(binding.fixture as unknown as Fixture), events: [malformed] };
+    const error = failureOf(() => binding.assert(0, observed));
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(AssertionError);
+    const session = replaySession(raw, profile);
+    expect(String(failureOf(() => session.observe(0, observed)))).not.toMatch(/expected:[\s\S]*actual:/);
+  });
+});
+
 describe("versioned replay protocol", () => {
   it("preserves absence, strings, null, false, zero and empty strings across JSON", () => {
     const values = [undefined, "undefined", null, false, 0, ""];
@@ -139,7 +188,7 @@ describe("versioned replay protocol", () => {
   });
 
   it.each([-1, 0.5, 1, 99])("rejects invalid/skipped initial observation index %s", index => {
-    const session = coreSession(smoke("core"));
+    const session = replaySession(smoke("core"));
     expect(() => session.observe(index, {})).toThrow(/Malformed replay request|skipped replay observation/);
   });
 
@@ -147,19 +196,19 @@ describe("versioned replay protocol", () => {
     const raw = smoke("core");
     raw.states = raw.states.slice(0, 2);
     const states = parseItfTrace(raw, "core").states;
-    const session = coreSession(raw);
+    const session = replaySession(raw);
     session.observe(0, expectedCoreObservation(states[0]!.state));
     expect(() => session.observe(0, {})).toThrow(/Duplicate or skipped/);
     expect(() => session.observe(1, {})).toThrow(/Unknown replay session/);
     expect(() => session.coordinator.dispatch({ version: 1, id: 1, op: "profiles" })).toThrow(/out-of-order/);
-    const completed = coreSession(raw);
+    const completed = replaySession(raw);
     completed.observe(0, expectedCoreObservation(states[0]!.state));
     completed.observe(1, expectedCoreObservation(states[1]!.state));
     expect(() => completed.observe(1, {})).toThrow(/Unknown replay session/);
   });
 
   it("rejects a different settlement rule, unsafe clock, and expectation fields on commands", () => {
-    const session = coreSession(smoke("core"));
+    const session = replaySession(smoke("core"));
     const base = { op: "observe", session: session.prepared.session, index: 0, settlement, observed: {}, environment };
     expect(() => session.request({ ...base, settlement: "advance-until-equal" })).toThrow(/Malformed replay request/);
     try {

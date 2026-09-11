@@ -56,10 +56,6 @@ export function localClockInput(action, choice) {
   }
 }
 export function assertLocalClockObservation(step, observed) {
-  for (const key of Object.keys(step.expected)) {
-    try { assert.deepEqual(observed[key], step.expected[key]); }
-    catch { throw new Error(`${key}: expected ${JSON.stringify(step.expected[key])}, actual ${JSON.stringify(observed[key])}`); }
-  }
   assert.deepEqual(observed, step.expected);
 }
 export const localClockActions = Object.keys(choices).filter(action => action !== "init");

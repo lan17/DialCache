@@ -325,6 +325,12 @@ function project(o) {
       : c.status === "value" ? valueCode(c)
         : c.error.startsWith("source:") ? 3 : c.error.startsWith("timeout:") ? 4 : 10) };
 }
+// Well-shaped observations outside a declared value domain are semantic
+// failures. Keep their evidence typed so the coordinator can distinguish them
+// from missing fields or malformed driver records.
+function assertObservedDomain(valid, actual, expected) {
+  if (!valid) throw new assert.AssertionError({ actual, expected, operator: "observed value domain" });
+}
 export function projectObservation(profile, observed) {
   if (profile.policyErrorIO) {
     if (observed.events === undefined)
@@ -342,8 +348,10 @@ export function projectObservation(profile, observed) {
   const events = observed.events?.filter(event => {
     if (profile.compressionIO && event.event === "compression") {
       assertSubset(event, { cacheNamespace: "urn", useCase: "Behavior", keyType: "id", layer: "remote" });
-      if (event.outcome !== "decompressed" && event.outcome !== "fallback_raw")
-        throw new Error("Invalid actual compression outcome");
+      if (typeof event.outcome !== "string")
+        throw new Error("Invalid actual compression outcome shape");
+      assertObservedDomain(event.outcome === "decompressed" || event.outcome === "fallback_raw",
+        { outcome: event.outcome }, { outcome: ["decompressed", "fallback_raw"] });
       compression.push(event.outcome);
       return false;
     }
@@ -400,8 +408,11 @@ function projectBaseObservation(profile, observed) {
           throw new Error("Missing actual cancellation identity");
         io.aborted.push(event.index);
       }
-      else
-        throw new Error("Unexpected read observation");
+      else {
+        if (typeof event.event !== "string")
+          throw new Error("Missing actual read event kind");
+        assertObservedDomain(false, { event: event.event }, { event: ["readContext", "readAbort"] });
+      }
     }
     return { o: project(base), io };
   }
@@ -443,10 +454,13 @@ function projectBaseObservation(profile, observed) {
       }
     }
     else if (event.event === "futureOffset" && profile.diagnosticFutureOffsets) {
-      if (event.layer !== "remote_shadow")
-        throw new Error("Invalid actual future offset layer");
-      if (typeof event.seconds !== "number" || !Number.isSafeInteger(event.seconds * 1000) || event.seconds <= 0)
-        throw new Error("Invalid actual future offset");
+      if (typeof event.layer !== "string")
+        throw new Error("Invalid actual future offset layer shape");
+      if (typeof event.seconds !== "number")
+        throw new Error("Invalid actual future offset shape");
+      assert.deepEqual({ layer: event.layer }, { layer: "remote_shadow" });
+      assertObservedDomain(Number.isSafeInteger(event.seconds * 1000) && event.seconds > 0,
+        { seconds: event.seconds }, { seconds: "positive time in whole milliseconds" });
       futureOffsets.push({ layer: event.layer, offsetMs: event.seconds * 1000 });
     }
     else if (event.event === "mismatchWarning") {
