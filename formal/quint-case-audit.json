@@ -3463,6 +3463,24 @@
       "reference": "formal/dialcache-legacy-recovery-connection.qnt:flightRecoveryMatchesContract",
       "kind": "invariant",
       "scope": "After a served recovery decode, every previously pending caller in the acquired flight returns its captured modeled payload within the accepted age bound. This establishes shared caller results; request-memo publication remains covered by the case's other evidence."
+    },
+    {
+      "case": "C55.ignore-untracked-fence",
+      "reference": "formal/dialcache-effects-conformance.qnt:untrackedFencedReplyRefillsAndIsReadableTest",
+      "kind": "regression",
+      "scope": "An untracked watermark-fenced reply is normalized to an unclassified miss with zero fence; one source refill is subsequently readable without a second source."
+    },
+    {
+      "case": "C45.captured-policy",
+      "reference": "formal/dialcache-independent-conformance.qnt:independentRecoveryAtCapturedAgeBoundaryTest",
+      "kind": "regression",
+      "scope": "The shorter captured policy rejects at its exact maximum age while a longer-policy decode remains pending; subsequent decode serves only the longer-policy caller and neither recovery writes shared state."
+    },
+    {
+      "case": "C43.request-memo",
+      "reference": "formal/dialcache-recovery-conformance.qnt:recoveredFlightMemoIsReusedByBothRequestsTest",
+      "kind": "regression",
+      "scope": "Two request scopes sharing recovery each reuse the recovered result in a subsequent public call, with one read/source/decode and no shared writes."
     }
   ],
   "definitions": [

@@ -302,7 +302,8 @@
         "missingFenceRefillsAndIsReadableTest",
         "negativeFenceRefillsAndIsReadableTest",
         "fractionalFenceRefillsAndIsReadableTest",
-        "unsafeFenceRefillsAndIsReadableTest"
+        "unsafeFenceRefillsAndIsReadableTest",
+        "untrackedFencedReplyRefillsAndIsReadableTest"
       ],
       "profile": "effects",
       "generate": {
@@ -329,7 +330,8 @@
         "fractionalFenceRefillsAndIsReadableTest",
         "unsafeFenceRefillsAndIsReadableTest",
         "observerFailuresCannotReplaceSourceErrorTest",
-        "libraryReadBudgetIsFiftyMillisecondsTest"
+        "libraryReadBudgetIsFiftyMillisecondsTest",
+        "untrackedFencedReplyRefillsAndIsReadableTest"
       ]
     },
     {
@@ -373,7 +375,8 @@
         "maximumAgeAfterDecodePreservesSourceTest",
         "operationAllowReplacesInstanceDenialTest",
         "coalescedRecoveryClassifiesAndDecodesOnceTest",
-        "recoveredValueKeepsOriginalFallbackDiagnosticTest"
+        "recoveredValueKeepsOriginalFallbackDiagnosticTest",
+        "recoveredFlightMemoIsReusedByBothRequestsTest"
       ],
       "profile": "recovery",
       "generate": {
@@ -411,7 +414,8 @@
         "maximumAgeAfterDecodePreservesSourceTest",
         "operationAllowReplacesInstanceDenialTest",
         "coalescedRecoveryClassifiesAndDecodesOnceTest",
-        "recoveredValueKeepsOriginalFallbackDiagnosticTest"
+        "recoveredValueKeepsOriginalFallbackDiagnosticTest",
+        "recoveredFlightMemoIsReusedByBothRequestsTest"
       ]
     },
     {
@@ -709,7 +713,8 @@
         "readFailureCannotBorrowAnotherCallsRefillTest",
         "recoveryPolicyIsCapturedPerCallerTest",
         "staggeredSourceStartsKeepIndependentBudgetsTest",
-        "staggeredSourcesExpireAtTheirOwnDeadlineTest"
+        "staggeredSourcesExpireAtTheirOwnDeadlineTest",
+        "independentRecoveryAtCapturedAgeBoundaryTest"
       ],
       "profile": "independent",
       "generate": {
@@ -720,7 +725,8 @@
       },
       "replayRegressions": [
         "staggeredSourceStartsKeepIndependentBudgetsTest",
-        "staggeredSourcesExpireAtTheirOwnDeadlineTest"
+        "staggeredSourcesExpireAtTheirOwnDeadlineTest",
+        "independentRecoveryAtCapturedAgeBoundaryTest"
       ]
     },
     {

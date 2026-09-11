@@ -374,6 +374,15 @@ module dialcache_recovery_conformance {
     .then(joinWith(1)).then(joinWith(0)).then(rejectWith(0)).then(releaseLoad)
     .expect(s.memo == List(1, 1) and s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_ONE) and
       s.d.coalesced == List("process", "request_local") and s.o.loads == 1)
+  // Both request scopes join one flight, then independently reuse its recovered
+  // value. These calls make request publication observable without shared writes.
+  run recoveredFlightMemoIsReusedByBothRequestsTest = initialize(4)
+    .then(beginWith(4)).then(joinWith(0)).then(advanceBy(1000)).then(releaseLoad)
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.recovery == List("served"))
+    .then(beginWith(4)).then(beginWith(0))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_ONE, VALUE_ONE)
+      and s.o.reads == 1 and s.o.loaders == 1 and s.o.loads == 1
+      and s.o.classifications == 1 and s.o.dumps == 0 and s.o.writes == 0)
   run closedRequestCannotReceiveLateRecoveryMemoTest = initialize(5).then(beginWith(3)).then(rejectWith(0))
     .then(closeWith(0)).then(releaseLoad)
     .expect(s.memo == List(0, 0) and s.o.calls == List(VALUE_ONE)).then(beginWith(7))

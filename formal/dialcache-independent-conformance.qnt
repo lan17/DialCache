@@ -323,17 +323,19 @@ module dialcache_independent_conformance {
     }
   }
 
-  action policy = {
-    // Wire choices 0/1 use long retention; parity chooses the read budget.
-    nondet choice = 0.to(3).oneOf()
-    all {
-      input' = { name: "policy", choice: choice },
-      s' = {
-        readBudget: if (choice % 2 == 0) SHORT_READ_BUDGET_MS else LONG_READ_BUDGET_MS,
-        maxAge: if (choice < 2) LONG_RETENTION_MS else SHORT_RETENTION_MS,
-        ...s
-      }
+  // Wire choices 0/1 use long retention; parity chooses the read budget.
+  action policyWith(choice: int): bool = all {
+    (0.to(3)).contains(choice),
+    input' = { name: "policy", choice: choice },
+    s' = {
+      readBudget: if (choice % 2 == 0) SHORT_READ_BUDGET_MS else LONG_READ_BUDGET_MS,
+      maxAge: if (choice < 2) LONG_RETENTION_MS else SHORT_RETENTION_MS,
+      ...s
     }
+  }
+  action policy = {
+    nondet choice = 0.to(3).oneOf()
+    policyWith(choice)
   }
 
 
@@ -398,6 +400,20 @@ module dialcache_independent_conformance {
     .then(rejectAt(0)).then(rejectAt(1)).then(advanceBy(1000))
     .then(loadAt(0)).then(loadAt(1))
     .expect(s.o.calls == List(VALUE_ONE, SOURCE_ERROR) and s.io.sourceErrors == List(0, 2) and s.o.recovery == List("served", "miss"))
+
+  // Release the shorter-policy decode first, while the longer-policy caller
+  // still waits. At exactly its captured maximum it preserves its own error;
+  // the other caller can still recover the same acquired bytes.
+  run independentRecoveryAtCapturedAgeBoundaryTest = init
+    .then(beginCall).then(readAt(0)).then(policyWith(2))
+    .then(beginCall).then(readAt(1)).then(rejectAt(0)).then(rejectAt(1))
+    .then(advanceBy(1000)).then(loadAt(1))
+    .expect(s.o.calls == List(CALL_PENDING, SOURCE_ERROR)
+      and s.o.recovery == List("miss") and s.io.sourceErrors == List(0, 2))
+    .then(loadAt(0))
+    .expect(s.o.calls == List(VALUE_ONE, SOURCE_ERROR)
+      and s.o.recovery == List("miss", "served") and s.o.reads == 2
+      and s.o.loaders == 2 and s.o.loads == 2 and s.o.dumps == 0 and s.o.writes == 0)
 
   // Fenced storage removes recovery as a competing explanation. The later
   // source succeeds after the earlier caller's deadline, within its own budget.

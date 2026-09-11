@@ -643,4 +643,15 @@ module dialcache_effects_conformance {
     .expect(s.calls == List(CALL_VALUE, CALL_VALUE) and s.loads == 1 and s.loaders == 1
       and s.reads == 2 and s.dumps == 1 and s.writes == 1)
     .expect(s.events.select(e => e.event == "miss").foldl(List(), (out, e) => out.append(e.detail)) == List("value_absent"))
+
+  // Untracked reads demote a fenced-miss reply to an ordinary miss. Observe the
+  // consequence through publication and a later hit, using only public inputs.
+  run untrackedFencedReplyRefillsAndIsReadableTest = initialized(FIXTURE_UNTRACKED)
+    .then(replyWith(REPLY_FENCED_WITH_VALID_FENCE)).then(beginCall).then(releaseRead)
+    .then(resolveLoader).then(releaseDump).then(releaseWrite)
+    .then(beginCall).then(releaseRead).then(releaseLoad)
+    .expect(s.calls == List(CALL_VALUE, CALL_VALUE) and s.observedFence == 0
+      and s.loads == 1 and s.loaders == 1 and s.reads == 2 and s.dumps == 1 and s.writes == 1)
+    .expect(s.events.select(e => e.event == "miss").foldl(List(), (out, e) => out.append(e.detail)) == List("unclassified"))
+
 }

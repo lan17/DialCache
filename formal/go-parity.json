@@ -8,10 +8,10 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "a596571f0538c4117fdde625c2b9651e3595f5934e6423db7a64bf2f1cbb5447",
-    "executionSha256": "fdc5335baa236aaf41af739e33cf61c28268dc2638ae9937540f63e6a57bfb40",
+    "semanticCasesSha256": "f6a9c877799200ca0c4b1d2f7769b809df417baad6dc24ff03cfaa65685994a9",
+    "executionSha256": "07fcb6b6f0876e1cefad9bace82aeb20f87c16d20496e662be6ab2720cc25d4e",
     "sourceAuditSha256": "32b459e21f86ad882215dc40484e2e3e4e295a651658f37c794574a2ed9f25ec",
-    "quintCaseAuditSha256": "4a14919f0df510ba571b1c3b136e2ebd4fd3ceab5edea8327b5e54c7edfa1ec5",
+    "quintCaseAuditSha256": "5cfeca45726ca11e426afb3fa8c7ac0bdaec956273684d442e9e6fd6f3f69b9c",
     "featureCoverageSha256": "2e59570c657a6393d5f1bf2f33e27e3825c84a15ed54f902543327fcc08439a0",
     "coverageWitnessesSha256": "8fc8ab123150fdec059f5b75f84172d39af80d08d7a4211fa88c63c5a3f2874b",
     "profilesSha256": "6dffed03ebb8e916731bd2f34f81cd7cb6f1905a21ccc83b185c77f234b7455c"
@@ -41,16 +41,16 @@
     "sourceDeclarations": 772,
     "casesWithScheduledChecks": 262,
     "requiredWitnesses": 435,
-    "casesWithQuintRegressionReplay": 162,
+    "casesWithQuintRegressionReplay": 164,
     "casesWithQuintGeneratedVectors": 22,
     "withoutModelDrivenReplay": [],
     "quintModels": 32,
     "scheduledInvariants": 212,
-    "scheduledRegressions": 396,
+    "scheduledRegressions": 399,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
     "caseReferencedWitnesses": 285,
-    "exportedRegressionHistories": 205
+    "exportedRegressionHistories": 208
   },
   "profiles": [
     {
@@ -93,7 +93,8 @@
         "fractionalFenceRefillsAndIsReadableTest",
         "unsafeFenceRefillsAndIsReadableTest",
         "observerFailuresCannotReplaceSourceErrorTest",
-        "libraryReadBudgetIsFiftyMillisecondsTest"
+        "libraryReadBudgetIsFiftyMillisecondsTest",
+        "untrackedFencedReplyRefillsAndIsReadableTest"
       ],
       "status": "executable-profile-schedule",
       "witnessSources": [
@@ -168,7 +169,8 @@
         "maximumAgeAfterDecodePreservesSourceTest",
         "operationAllowReplacesInstanceDenialTest",
         "coalescedRecoveryClassifiesAndDecodesOnceTest",
-        "recoveredValueKeepsOriginalFallbackDiagnosticTest"
+        "recoveredValueKeepsOriginalFallbackDiagnosticTest",
+        "recoveredFlightMemoIsReusedByBothRequestsTest"
       ],
       "status": "executable-profile-schedule",
       "witnessSources": [
@@ -308,7 +310,8 @@
       "plannedTraces": 512,
       "scheduledRegressions": [
         "staggeredSourceStartsKeepIndependentBudgetsTest",
-        "staggeredSourcesExpireAtTheirOwnDeadlineTest"
+        "staggeredSourcesExpireAtTheirOwnDeadlineTest",
+        "independentRecoveryAtCapturedAgeBoundaryTest"
       ],
       "status": "executable-profile-schedule",
       "witnessSources": [
@@ -5803,7 +5806,8 @@
         "formal/dialcache-stale-recovery.qnt:recoveredStaleHasNoSharedPublication",
         "formal/dialcache-recovery-read-conformance.qnt:recoveredResultsNeverPublishShared",
         "formal/dialcache-recovery-read-conformance.qnt:compressedRecoveryMemoizesWithoutLocalPublicationTest",
-        "formal/dialcache-legacy-recovery-connection.qnt:flightRecoveryMatchesContract"
+        "formal/dialcache-legacy-recovery-connection.qnt:flightRecoveryMatchesContract",
+        "formal/dialcache-recovery-conformance.qnt:recoveredFlightMemoIsReusedByBothRequestsTest"
       ],
       "requiredGenerated": [
         {
@@ -5841,7 +5845,8 @@
       "quintReplays": [
         "recovery-read/compressedRecoveryMemoizesWithoutLocalPublicationTest",
         "recovery/recoveredValueMemoizesOnlyInAttachedRequestTest",
-        "recovery/closedRequestCannotReceiveLateRecoveryMemoTest"
+        "recovery/closedRequestCannotReceiveLateRecoveryMemoTest",
+        "recovery/recoveredFlightMemoIsReusedByBothRequestsTest"
       ],
       "generatedVectors": []
     },
@@ -6110,7 +6115,8 @@
       "quintProperties": [
         "formal/dialcache-independent-conformance.qnt:recoveryPolicyIsCapturedPerCallerTest",
         "formal/dialcache-recovery-connection.qnt:recoveryReturnMatchesAcquiredContract",
-        "formal/dialcache-independent-connection.qnt:independentRecoveryMatchesContract"
+        "formal/dialcache-independent-connection.qnt:independentRecoveryMatchesContract",
+        "formal/dialcache-independent-conformance.qnt:independentRecoveryAtCapturedAgeBoundaryTest"
       ],
       "requiredGenerated": [
         {
@@ -6133,7 +6139,9 @@
       },
       "quintDefinitions": [],
       "scopeAudit": "formal/quint-case-audit.json",
-      "quintReplays": [],
+      "quintReplays": [
+        "independent/independentRecoveryAtCapturedAgeBoundaryTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -7385,7 +7393,8 @@
       "kind": "portable-behavior",
       "group": "diagnostics",
       "quintProperties": [
-        "formal/dialcache-effects-conformance.qnt:untrackedReplyCannotCarryFenceTest"
+        "formal/dialcache-effects-conformance.qnt:untrackedReplyCannotCarryFenceTest",
+        "formal/dialcache-effects-conformance.qnt:untrackedFencedReplyRefillsAndIsReadableTest"
       ],
       "requiredGenerated": [
         {
@@ -7408,7 +7417,9 @@
       },
       "quintDefinitions": [],
       "scopeAudit": "formal/quint-case-audit.json",
-      "quintReplays": [],
+      "quintReplays": [
+        "effects/untrackedFencedReplyRefillsAndIsReadableTest"
+      ],
       "generatedVectors": []
     },
     {
