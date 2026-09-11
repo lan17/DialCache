@@ -41,9 +41,16 @@ export function conformanceInventory(execution = readExecution(), scenarios = re
 function specificationInputs() {
   return filesBelow('formal').filter(path => /\.(qnt|mjs|mts|json)$/.test(path)).sort();
 }
-function defaultSources(language) {
-  if (language === 'typescript') return [...filesBelow('src'), ...filesBelow('test'), 'package.json', 'pnpm-lock.yaml', 'vitest.config.ts', 'tsconfig.json'].filter(path => /\.(ts|json|yaml)$/.test(path));
-  if (language === 'go') return filesBelow('go').filter(path => /\.(go|ts)$/.test(path) || /\/go\.(mod|sum)$/.test(path));
+export function defaultSources(language) {
+  const shared = [...filesBelow('src'), ...filesBelow('test')].filter(path => /\.(ts|json)$/.test(path));
+  if (language === 'typescript') return [...shared, 'package.json', 'pnpm-lock.yaml', 'vitest.config.ts', 'tsconfig.json'];
+  // Go also reads shared fixtures, TypeScript metric schemas and witness
+  // definitions. Bind those bytes and the evaluated witness files it consumes,
+  // so edits after a native assertion cannot escape the completion check.
+  if (language === 'go') return [...shared,
+    ...filesBelow('go').filter(path => /\.(go|ts)$/.test(path) || /\/go\.(mod|sum)$/.test(path)),
+    ...readExecution().models.filter(model => model.profile && model.profile !== 'core')
+      .map(model => `.formal-traces/go-parity-witnesses/${model.profile}.json`)];
   fail('New languages must supply an explicit JSON list of implementation and harness source paths');
 }
 function hashes(paths) {

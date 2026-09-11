@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 
-const { checkCompletion, fingerprint, conformanceInventory } = await import(new URL("../formal/conformance.mjs", import.meta.url).href);
+const { checkCompletion, fingerprint, conformanceInventory, defaultSources } = await import(new URL("../formal/conformance.mjs", import.meta.url).href);
 const { nativeBinding, parseTypeScriptReport } = await import(new URL("../formal/conformance-adapters.mjs", import.meta.url).href);
 type Entry = { id: string; category: string; profile?: string; path?: string; name?: string; feature?: string; group?: string };
 const inventory = conformanceInventory() as Entry[];
@@ -23,6 +24,17 @@ function nativeReport() {
 }
 
 describe("portable completion contract", () => {
+  it("binds Go's shared definitions, fixtures and consumed witness evidence", () => {
+    const inputs = new Set(defaultSources("go") as string[]);
+    const profiles = JSON.parse(readFileSync("formal/profiles.json", "utf8")) as { profiles: Array<{ id: string; witnessSources?: string[] }> };
+    const lock = JSON.parse(readFileSync("formal/generated-fixtures.lock.json", "utf8")) as { artifacts: Record<string, string> };
+    const shared = ["src/prometheus.ts", "test/formal/coverage-evidence.ts", "test/formal/runtime-witnesses.ts", "test/formal/recovery-shadow-witnesses.ts",
+      ...profiles.profiles.flatMap(profile => profile.witnessSources ?? []), ...Object.keys(lock.artifacts)];
+    for (const path of shared.filter(path => !path.startsWith("formal/"))) expect(inputs.has(path), path).toBe(true);
+    for (const profile of profiles.profiles.filter(profile => profile.id !== "core")) {
+      expect(inputs.has(`.formal-traces/go-parity-witnesses/${profile.id}.json`), profile.id).toBe(true);
+    }
+  });
   it("accepts an additional language without adding language-specific test names", () => {
     expect(check(completed())).toMatchObject({ language: "third-port", status: "passed", cases: 2 });
   });
