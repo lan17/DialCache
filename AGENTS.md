@@ -56,6 +56,10 @@ formal/                 # Quint behavioral source of truth, contracts and portab
 - Keep Redis client-specific behavior in adapters; core code depends on `DialCacheRedisClient`.
 - Public exports belong in the root or an explicit integration entry point such as `src/node-redis.ts`, `src/prometheus.ts`, or `src/redis-protocol.ts`.
 - Use `corepack pnpm` for project commands.
+- Start formal work at `formal/README.md`. `formal/WALKTHROUGH.md` follows one
+  contract through Quint, generated inputs and both language replays;
+  `formal/AUTHORING.md` explains how to extend that chain. Read the relevant
+  model and profile bindings before opening large generated JSON artifacts.
 - For formal specification changes, follow `formal/AUTHORING.md`: keep models
   readable as behavior definitions, share helpers with identical meaning, retain
   independent property checks, and register executable evidence in the catalogs.

@@ -74,18 +74,23 @@ func advanceAction(choices ...int64) behaviorAction {
 	return chosenAction(choices, func(n int64) obj { return obj{"op": "advance", "ms": n} })
 }
 func sourceValueAction(count int64) behaviorAction {
-	return chosenAction(brange(1, count*7), func(n int64) obj {
+	return chosenAction(brange(1, count*7), func(choice int64) obj {
+		// Each loader has seven outcomes, including absence and all false-like JSON values.
 		values := []any{1, 2, Absent, nil, false, 0, ""}
-		input := obj{"op": "resolve", "loader": (n - 1) / 7}
-		v := values[(n-1)%7]
-		if !IsAbsent(v) {
-			input["value"] = v
+		loader, outcome := (choice-1)/7, (choice-1)%7
+		input := obj{"op": "resolve", "loader": loader}
+		value := values[outcome]
+		if !IsAbsent(value) {
+			input["value"] = value
 		}
 		return input
 	})
 }
 func sourcePairAction(count int64) behaviorAction {
-	return chosenAction(brange(1, count*2), func(n int64) obj { return obj{"op": "resolve", "loader": (n - 1) / 2, "value": (n-1)%2 + 1} })
+	return chosenAction(brange(1, count*2), func(choice int64) obj {
+		loader, value := (choice-1)/2, (choice-1)%2+1
+		return obj{"op": "resolve", "loader": loader, "value": value}
+	})
 }
 func rejectSourceAction(count int64) behaviorAction {
 	return chosenAction(brange(0, count-1), func(n int64) obj { return obj{"op": "reject", "loader": n} })
@@ -97,104 +102,317 @@ func behaviorProfiles() map[string]behaviorProfile {
 	profiles["runtime-boundaries"] = runtimeBoundariesProfile()
 	profiles["shadow-layers"] = shadowLayersProfile()
 	profiles["source-budgets"] = sourceBudgetsProfile()
-	profiles["scope"] = behaviorProfile{name: "scope", explicitInputs: true, diagnosticAge: "none", fixture: func(int64) obj {
-		return obj{"policy": obj{"requestLocal": true}, "remote": false, "fallbackTimeoutMs": nil, "probeSourceScope": true, "observe": []any{"coalesced", "error"}}
-	}, setup: []obj{{"op": "openScope", "id": "0"}, {"op": "faults", "value": obj{"holdPolicies": true}}}, actions: map[string]behaviorAction{
-		"openScope": chosenAction(brange(1, 4), func(n int64) obj {
-			v := obj{"op": "openScope", "id": fmt.Sprint(n)}
-			if n != 1 {
-				v["parent"] = "0"
+
+	// Scopes can be independent, nested, disabled, or closed while policy resolution waits.
+	profiles["scope"] = behaviorProfile{
+		name:           "scope",
+		explicitInputs: true,
+		diagnosticAge:  "none",
+		fixture: func(int64) obj {
+			return obj{
+				"policy":            obj{"requestLocal": true},
+				"remote":            false,
+				"fallbackTimeoutMs": nil,
+				"probeSourceScope":  true,
+				"observe":           []any{"coalesced", "error"},
 			}
-			if n == 4 {
-				v["parent"] = "3"
-			}
-			if n == 3 {
-				v["disabled"] = true
-			}
-			return v
-		}),
-		"closeScope": chosenAction(brange(0, 4), func(n int64) obj { return obj{"op": "closeScope", "id": fmt.Sprint(n)} }),
-		"beginCall": chosenAction(brange(0, 5), func(n int64) obj {
-			v := obj{"op": "begin"}
-			if n == 5 {
-				v["outside"] = true
-			} else {
-				v["scope"] = fmt.Sprint(n)
-			}
-			return v
-		}), "releasePolicy": releaseAction("policy"), "resolveLoader": sourceValueAction(16), "rejectLoader": rejectSourceAction(16),
-		"policy": chosenAction(brange(0, 2), func(n int64) obj {
-			v := obj{}
-			if n == 1 {
-				v["requestLocal"] = false
-			}
-			if n == 2 {
-				v["coalesce"] = false
-			}
-			return obj{"op": "policy", "value": v}
-		})}}
-	overlays := []obj{{}, {"ttlSec": obj{"local": 2}}, {"ttlSec": obj{"remote": 2}}, {"ramp": obj{"local": 0}}, {"ramp": obj{"remote": 0}}, {"ttlSec": obj{"local": -1}}, {"ttlSec": obj{"remote": -1}}, {"staleOnErrorMaxAgeSec": 2}, {"ramp": obj{"local": 0, "remote": 0}}, {"ttlSec": obj{"remote": 4}, "staleOnErrorMaxAgeSec": 0}}
-	for i := 0; i < 10; i++ {
-		v := bm(bclone(overlays[i]))
-		v["coalesce"] = false
-		overlays = append(overlays, v)
+		},
+		setup: []obj{
+			{"op": "openScope", "id": "0"},
+			{"op": "faults", "value": obj{"holdPolicies": true}},
+		},
+		actions: map[string]behaviorAction{
+			"openScope": chosenAction(brange(1, 4), func(scope int64) obj {
+				input := obj{"op": "openScope", "id": fmt.Sprint(scope)}
+				// Scope 1 is independent; 2 and disabled 3 descend from 0; 4 descends from 3.
+				if scope != 1 {
+					input["parent"] = "0"
+				}
+				if scope == 4 {
+					input["parent"] = "3"
+				}
+				if scope == 3 {
+					input["disabled"] = true
+				}
+				return input
+			}),
+			"closeScope": chosenAction(brange(0, 4), func(scope int64) obj {
+				return obj{"op": "closeScope", "id": fmt.Sprint(scope)}
+			}),
+			"beginCall": chosenAction(brange(0, 5), func(scope int64) obj {
+				input := obj{"op": "begin"}
+				if scope == 5 {
+					input["outside"] = true
+				} else {
+					input["scope"] = fmt.Sprint(scope)
+				}
+				return input
+			}),
+			"releasePolicy": releaseAction("policy"),
+			"resolveLoader": sourceValueAction(16),
+			"rejectLoader":  rejectSourceAction(16),
+			"policy": chosenAction(brange(0, 2), func(choice int64) obj {
+				policy := obj{}
+				if choice == 1 {
+					policy["requestLocal"] = false
+				}
+				if choice == 2 {
+					policy["coalesce"] = false
+				}
+				return obj{"op": "policy", "value": policy}
+			}),
+		},
 	}
-	overlays = append(overlays, obj{"remoteReadTimeoutMs": 0}, obj{"ramp": obj{"local": 101}}, obj{"ramp": obj{"remote": 101}}, obj{"staleOnErrorMaxAgeSec": 1}, obj{"staleOnErrorMaxAgeSec": -1}, obj{"shadow": obj{"ramp": 101}})
-	profiles["policy"] = behaviorProfile{name: "policy", explicitInputs: true, policyErrorIO: true, fixture: func(int64) obj {
-		return obj{"policy": obj{"ttlSec": obj{"local": 1, "remote": 1}, "staleOnErrorMaxAgeSec": 5}, "localMaxSize": 1, "fallbackTimeoutMs": nil, "observe": []any{"error"}}
-	}, setup: []obj{{"op": "faults", "value": obj{"holdPolicies": true}}}, actions: map[string]behaviorAction{
-		"beginCall": chosenAction(brange(0, 1), func(n int64) obj { return obj{"op": "begin", "key": fmt.Sprint(n)} }), "releasePolicy": releaseAction("policy"), "resolveLoader": sourceValueAction(12), "rejectLoader": rejectSourceAction(12),
-		"seed": chosenAction(brange(0, 3), func(n int64) obj { return obj{"op": "seed", "key": fmt.Sprint(n / 2), "value": n%2 + 1, "ttlMs": 5000} }), "policy": chosenAction(brange(0, 25), func(n int64) obj { return obj{"op": "policy", "value": overlays[n]} }), "advance": advanceAction(1, 500, 1000, 2000, 5000), "rollbackWall": fixedAction(obj{"op": "shiftWall", "ms": -1000}), "providerFault": faultAction("policy"), "readFault": faultAction("read"), "dumpFault": faultAction("dump"), "writeFault": faultAction("write")}}
-	layerPolicies := []obj{{}, {"requestLocal": false}, {"ramp": obj{"local": 0}}, {"ramp": obj{"remote": 0}}, {"ramp": obj{"local": 0, "remote": 0}}, {"requestLocal": false, "ramp": obj{"local": 0, "remote": 0}}}
-	profiles["layers"] = behaviorProfile{name: "layers", explicitInputs: true, initChoices: brange(0, 5), fixture: func(n int64) obj {
-		capacity := 2
-		if n == 2 || n == 3 {
-			capacity = 0
-		}
-		return obj{"policy": obj{"requestLocal": true, "ttlSec": obj{"local": 60, "remote": 60}}, "tracked": n%2 == 1, "remote": n < 4, "localMaxSize": capacity, "fallbackTimeoutMs": nil}
-	}, setup: []obj{{"op": "openScope", "id": "0", "instance": "0"}, {"op": "openScope", "id": "1", "instance": "0"}, {"op": "openScope", "id": "2", "instance": "1"}}, actions: map[string]behaviorAction{
-		"beginCall": chosenAction(brange(0, 19), func(n int64) obj {
-			context, id := n/4, n%4
-			v := obj{"op": "begin", "key": fmt.Sprint(id / 2), "useCase": fmt.Sprintf("Layers%d", id%2)}
-			if context < 3 {
-				v["scope"] = fmt.Sprint(context)
-			} else if context == 4 {
-				v["instance"] = "1"
-			} else {
-				v["instance"] = "0"
+
+	// Overlay positions are Quint choices: 0–9 retain coalescing, 10–19 disable it.
+	overlays := []obj{
+		{},
+		{"ttlSec": obj{"local": 2}},
+		{"ttlSec": obj{"remote": 2}},
+		{"ramp": obj{"local": 0}},
+		{"ramp": obj{"remote": 0}},
+		{"ttlSec": obj{"local": -1}},
+		{"ttlSec": obj{"remote": -1}},
+		{"staleOnErrorMaxAgeSec": 2},
+		{"ramp": obj{"local": 0, "remote": 0}},
+		{"ttlSec": obj{"remote": 4}, "staleOnErrorMaxAgeSec": 0},
+	}
+	for i := 0; i < 10; i++ {
+		overlay := bm(bclone(overlays[i]))
+		overlay["coalesce"] = false
+		overlays = append(overlays, overlay)
+	}
+	// Choices 20–25 exercise additional timeout, ramp, and recovery-age boundaries.
+	overlays = append(overlays,
+		obj{"remoteReadTimeoutMs": 0},
+		obj{"ramp": obj{"local": 101}},
+		obj{"ramp": obj{"remote": 101}},
+		obj{"staleOnErrorMaxAgeSec": 1},
+		obj{"staleOnErrorMaxAgeSec": -1},
+		obj{"shadow": obj{"ramp": 101}},
+	)
+	profiles["policy"] = behaviorProfile{
+		name:           "policy",
+		explicitInputs: true,
+		policyErrorIO:  true,
+		fixture: func(int64) obj {
+			return obj{
+				"policy": obj{
+					"ttlSec":                obj{"local": 1, "remote": 1},
+					"staleOnErrorMaxAgeSec": 5,
+				},
+				"localMaxSize":      1,
+				"fallbackTimeoutMs": nil,
+				"observe":           []any{"error"},
 			}
-			return v
-		}), "resolveLoader": sourcePairAction(20), "rejectLoader": rejectSourceAction(20), "closeScope": chosenAction(brange(0, 2), func(n int64) obj { return obj{"op": "closeScope", "id": fmt.Sprint(n)} }), "policy": chosenAction(brange(0, 5), func(n int64) obj { return obj{"op": "policy", "value": layerPolicies[n]} }), "seed": chosenAction(brange(0, 7), func(n int64) obj {
-			return obj{"op": "seed", "key": fmt.Sprint(n / 4), "useCase": fmt.Sprintf("Layers%d", n/2%2), "value": n%2 + 1}
-		}), "invalidate": chosenAction(brange(0, 1), func(n int64) obj { return obj{"op": "invalidate", "key": fmt.Sprint(n)} }), "tick": fixedAction(obj{"op": "advance", "ms": 1})}}
-	profiles["recovery"] = behaviorProfile{name: "recovery", diagnosticAge: "recoveryAge", initChoices: brange(0, 7), fixture: func(n int64) obj {
-		return obj{"policy": obj{"ttlSec": obj{"remote": 1}, "staleOnErrorMaxAgeSec": 5, "requestLocal": n >= 4}, "tracked": true, "fallbackTimeoutMs": 10, "recovery": []string{"default", "allow", "deny", "error"}[n%4], "observe": []any{"recoveryAge", "coalesced", "error"}}
-	}, setup: []obj{{"op": "openScope", "id": "0"}, {"op": "openScope", "id": "1"}, {"op": "seed", "value": 1, "ageMs": 1000}, {"op": "faults", "value": obj{"holdLoads": true}}}, actions: map[string]behaviorAction{
-		"beginCall": chosenAction(brange(0, 7), func(n int64) obj {
-			v := obj{"op": "begin", "scope": fmt.Sprint(n / 4)}
-			if n%4 != 3 {
-				v["recovery"] = []string{"allow", "deny", "error"}[n%4]
+		},
+		setup: []obj{{"op": "faults", "value": obj{"holdPolicies": true}}},
+		actions: map[string]behaviorAction{
+			"beginCall": chosenAction(brange(0, 1), func(key int64) obj {
+				return obj{"op": "begin", "key": fmt.Sprint(key)}
+			}),
+			"releasePolicy": releaseAction("policy"),
+			"resolveLoader": sourceValueAction(12),
+			"rejectLoader":  rejectSourceAction(12),
+			"seed": chosenAction(brange(0, 3), func(choice int64) obj {
+				key, value := choice/2, choice%2+1
+				return obj{"op": "seed", "key": fmt.Sprint(key), "value": value, "ttlMs": 5000}
+			}),
+			"policy": chosenAction(brange(0, 25), func(choice int64) obj {
+				return obj{"op": "policy", "value": overlays[choice]}
+			}),
+			"advance":       advanceAction(1, 500, 1000, 2000, 5000),
+			"rollbackWall":  fixedAction(obj{"op": "shiftWall", "ms": -1000}),
+			"providerFault": faultAction("policy"),
+			"readFault":     faultAction("read"),
+			"dumpFault":     faultAction("dump"),
+			"writeFault":    faultAction("write"),
+		},
+	}
+
+	layerPolicies := []obj{
+		{},
+		{"requestLocal": false},
+		{"ramp": obj{"local": 0}},
+		{"ramp": obj{"remote": 0}},
+		{"ramp": obj{"local": 0, "remote": 0}},
+		{"requestLocal": false, "ramp": obj{"local": 0, "remote": 0}},
+	}
+	profiles["layers"] = behaviorProfile{
+		name:           "layers",
+		explicitInputs: true,
+		initChoices:    brange(0, 5),
+		fixture: func(choice int64) obj {
+			// Pairs select local+remote, remote only, or local only; odd choices track identity.
+			capacity := 2
+			if choice == 2 || choice == 3 {
+				capacity = 0
 			}
-			return v
-		}), "joinCall": chosenAction(brange(0, 1), func(n int64) obj { return obj{"op": "begin", "scope": fmt.Sprint(n)} }), "closeScope": chosenAction(brange(0, 1), func(n int64) obj { return obj{"op": "closeScope", "id": fmt.Sprint(n)} }), "resolveLoader": chosenAction(brange(0, 7), func(n int64) obj { return obj{"op": "resolve", "loader": n, "value": 2} }), "rejectLoader": rejectSourceAction(8), "rejectTimeout": chosenAction(brange(0, 7), func(n int64) obj { return obj{"op": "reject", "loader": n, "error": "timeout"} }), "releaseLoad": releaseAction("load"), "seed": chosenAction(brange(0, 6), func(n int64) obj {
-			v := 1
-			if n == 6 {
-				v = 2
+			return obj{
+				"policy": obj{
+					"requestLocal": true,
+					"ttlSec":       obj{"local": 60, "remote": 60},
+				},
+				"tracked":           choice%2 == 1,
+				"remote":            choice < 4,
+				"localMaxSize":      capacity,
+				"fallbackTimeoutMs": nil,
 			}
-			return obj{"op": "seed", "value": v, "ageMs": []int{0, 999, 1000, 4999, 5000, -1, 1000}[n]}
-		}), "advance": advanceAction(1, 10, 1000, 4000), "rollbackWall": fixedAction(obj{"op": "shiftWall", "ms": -1000}), "invalidate": fixedAction(obj{"op": "invalidate"}), "policy": chosenAction([]int64{2000, 5000}, func(n int64) obj { return obj{"op": "policy", "value": obj{"staleOnErrorMaxAgeSec": n / 1000}} }), "readFault": faultAction("read"), "loadFault": faultAction("load")}}
-	profiles["independent"] = behaviorProfile{name: "independent", explicitInputs: true, readIO: true, fixture: func(int64) obj {
-		return obj{"policy": obj{"ttlSec": obj{"remote": 1}, "staleOnErrorMaxAgeSec": 5, "coalesce": false}, "tracked": true, "readTimeoutMs": 5, "fallbackTimeoutMs": 10, "recovery": "allow", "observe": []any{"readContext", "readAbort"}}
-	}, setup: []obj{{"op": "seed", "value": 1, "ageMs": 1000}, {"op": "faults", "value": obj{"holdReads": true, "holdLoads": true}}}, actions: map[string]behaviorAction{
-		"beginCall": fixedAction(obj{"op": "begin"}), "resolveLoader": sourcePairAction(6), "rejectLoader": rejectSourceAction(6), "advance": advanceAction(1, 5, 10, 1000), "seed": chosenAction(brange(0, 5), func(n int64) obj {
-			value := 1
-			if n == 2 || n == 4 {
-				value = 2
+		},
+		setup: []obj{
+			{"op": "openScope", "id": "0", "instance": "0"},
+			{"op": "openScope", "id": "1", "instance": "0"},
+			{"op": "openScope", "id": "2", "instance": "1"},
+		},
+		actions: map[string]behaviorAction{
+			"beginCall": chosenAction(brange(0, 19), func(choice int64) obj {
+				// Each context has two keys and two use cases. Contexts 3–4 have no explicit scope.
+				context, identity := choice/4, choice%4
+				key, useCase := identity/2, identity%2
+				input := obj{"op": "begin", "key": fmt.Sprint(key), "useCase": fmt.Sprintf("Layers%d", useCase)}
+				if context < 3 {
+					input["scope"] = fmt.Sprint(context)
+				} else if context == 4 {
+					input["instance"] = "1"
+				} else {
+					input["instance"] = "0"
+				}
+				return input
+			}),
+			"resolveLoader": sourcePairAction(20),
+			"rejectLoader":  rejectSourceAction(20),
+			"closeScope": chosenAction(brange(0, 2), func(scope int64) obj {
+				return obj{"op": "closeScope", "id": fmt.Sprint(scope)}
+			}),
+			"policy": chosenAction(brange(0, 5), func(choice int64) obj {
+				return obj{"op": "policy", "value": layerPolicies[choice]}
+			}),
+			"seed": chosenAction(brange(0, 7), func(choice int64) obj {
+				key, useCase, value := choice/4, choice/2%2, choice%2+1
+				return obj{"op": "seed", "key": fmt.Sprint(key), "useCase": fmt.Sprintf("Layers%d", useCase), "value": value}
+			}),
+			"invalidate": chosenAction(brange(0, 1), func(key int64) obj {
+				return obj{"op": "invalidate", "key": fmt.Sprint(key)}
+			}),
+			"tick": fixedAction(obj{"op": "advance", "ms": 1}),
+		},
+	}
+
+	profiles["recovery"] = behaviorProfile{
+		name:          "recovery",
+		diagnosticAge: "recoveryAge",
+		initChoices:   brange(0, 7),
+		fixture: func(choice int64) obj {
+			// Cross the four cache-level recovery modes with request-local caching off/on.
+			recovery := []string{"default", "allow", "deny", "error"}[choice%4]
+			return obj{
+				"policy": obj{
+					"ttlSec":                obj{"remote": 1},
+					"staleOnErrorMaxAgeSec": 5,
+					"requestLocal":          choice >= 4,
+				},
+				"tracked":           true,
+				"fallbackTimeoutMs": 10,
+				"recovery":          recovery,
+				"observe":           []any{"recoveryAge", "coalesced", "error"},
 			}
-			return obj{"op": "seed", "value": value, "ageMs": []int{0, 1000, 1000, 4999, 0, 1999}[n]}
-		}), "invalidate": fixedAction(obj{"op": "invalidate"}), "policy": chosenAction(brange(0, 3), func(n int64) obj {
-			return obj{"op": "policy", "value": obj{"remoteReadTimeoutMs": []int{5, 10}[n%2], "staleOnErrorMaxAgeSec": []int{5, 2}[n/2]}}
-		})}}
+		},
+		setup: []obj{
+			{"op": "openScope", "id": "0"},
+			{"op": "openScope", "id": "1"},
+			{"op": "seed", "value": 1, "ageMs": 1000},
+			{"op": "faults", "value": obj{"holdLoads": true}},
+		},
+		actions: map[string]behaviorAction{
+			"beginCall": chosenAction(brange(0, 7), func(choice int64) obj {
+				scope, recovery := choice/4, choice%4
+				input := obj{"op": "begin", "scope": fmt.Sprint(scope)}
+				// Recovery mode 3 inherits the fixture predicate; the others override it per call.
+				if recovery != 3 {
+					input["recovery"] = []string{"allow", "deny", "error"}[recovery]
+				}
+				return input
+			}),
+			"joinCall": chosenAction(brange(0, 1), func(scope int64) obj {
+				return obj{"op": "begin", "scope": fmt.Sprint(scope)}
+			}),
+			"closeScope": chosenAction(brange(0, 1), func(scope int64) obj {
+				return obj{"op": "closeScope", "id": fmt.Sprint(scope)}
+			}),
+			"resolveLoader": chosenAction(brange(0, 7), func(loader int64) obj {
+				return obj{"op": "resolve", "loader": loader, "value": 2}
+			}),
+			"rejectLoader": rejectSourceAction(8),
+			"rejectTimeout": chosenAction(brange(0, 7), func(loader int64) obj {
+				return obj{"op": "reject", "loader": loader, "error": "timeout"}
+			}),
+			"releaseLoad": releaseAction("load"),
+			"seed": chosenAction(brange(0, 6), func(choice int64) obj {
+				value := 1
+				if choice == 6 {
+					value = 2
+				}
+				ageMS := []int{0, 999, 1000, 4999, 5000, -1, 1000}[choice]
+				return obj{"op": "seed", "value": value, "ageMs": ageMS}
+			}),
+			"advance":      advanceAction(1, 10, 1000, 4000),
+			"rollbackWall": fixedAction(obj{"op": "shiftWall", "ms": -1000}),
+			"invalidate":   fixedAction(obj{"op": "invalidate"}),
+			"policy": chosenAction([]int64{2000, 5000}, func(ageMS int64) obj {
+				return obj{"op": "policy", "value": obj{"staleOnErrorMaxAgeSec": ageMS / 1000}}
+			}),
+			"readFault": faultAction("read"),
+			"loadFault": faultAction("load"),
+		},
+	}
+
+	// Independent reads keep their own deadlines and recovery attempts when coalescing is off.
+	profiles["independent"] = behaviorProfile{
+		name:           "independent",
+		explicitInputs: true,
+		readIO:         true,
+		fixture: func(int64) obj {
+			return obj{
+				"policy": obj{
+					"ttlSec":                obj{"remote": 1},
+					"staleOnErrorMaxAgeSec": 5,
+					"coalesce":              false,
+				},
+				"tracked":           true,
+				"readTimeoutMs":     5,
+				"fallbackTimeoutMs": 10,
+				"recovery":          "allow",
+				"observe":           []any{"readContext", "readAbort"},
+			}
+		},
+		setup: []obj{
+			{"op": "seed", "value": 1, "ageMs": 1000},
+			{"op": "faults", "value": obj{"holdReads": true, "holdLoads": true}},
+		},
+		actions: map[string]behaviorAction{
+			"beginCall":     fixedAction(obj{"op": "begin"}),
+			"resolveLoader": sourcePairAction(6),
+			"rejectLoader":  rejectSourceAction(6),
+			"advance":       advanceAction(1, 5, 10, 1000),
+			"seed": chosenAction(brange(0, 5), func(choice int64) obj {
+				value := 1
+				if choice == 2 || choice == 4 {
+					value = 2
+				}
+				ageMS := []int{0, 1000, 1000, 4999, 0, 1999}[choice]
+				return obj{"op": "seed", "value": value, "ageMs": ageMS}
+			}),
+			"invalidate": fixedAction(obj{"op": "invalidate"}),
+			"policy": chosenAction(brange(0, 3), func(choice int64) obj {
+				readTimeoutMS := []int{5, 10}[choice%2]
+				staleAgeSec := []int{5, 2}[choice/2]
+				return obj{"op": "policy", "value": obj{
+					"remoteReadTimeoutMs":   readTimeoutMS,
+					"staleOnErrorMaxAgeSec": staleAgeSec,
+				}}
+			}),
+		},
+	}
 	for _, effect := range []string{"read", "load"} {
 		for _, fail := range []bool{false, true} {
 			name := "release"
@@ -202,71 +420,169 @@ func behaviorProfiles() map[string]behaviorProfile {
 				name = "fail"
 			}
 			name += strings.ToUpper(effect[:1]) + effect[1:]
-			p := profiles["independent"]
-			p.actions[name] = chosenAction(brange(0, 5), func(n int64) obj { return obj{"op": "release", "effect": effect, "index": n, "fail": fail} })
-			profiles["independent"] = p
+			profile := profiles["independent"]
+			profile.actions[name] = chosenAction(brange(0, 5), func(index int64) obj {
+				return obj{"op": "release", "effect": effect, "index": index, "fail": fail}
+			})
+			profiles["independent"] = profile
 		}
 	}
-	profiles["admission"] = behaviorProfile{name: "admission", fixture: func(int64) obj {
-		return obj{"policy": obj{"ttlSec": obj{"remote": 60}, "shadow": obj{"ramp": 100}}, "tracked": true, "shadowMaxInFlight": 2, "readTimeoutMs": 1000, "probeSourceScope": true}
-	}, setup: []obj{{"op": "seed", "key": "0", "value": 1}, {"op": "seed", "key": "1", "value": 1}, {"op": "seed", "key": "2", "value": 1}, {"op": "faults", "value": obj{"holdReads": true, "holdLoads": true}}}, actions: map[string]behaviorAction{
-		"beginCall": chosenAction(brange(0, 5), func(n int64) obj { return obj{"op": "begin", "key": fmt.Sprint(n % 3), "instance": fmt.Sprint(n / 3)} }), "releaseRead": chosenAction(brange(0, 31), func(n int64) obj { return obj{"op": "release", "effect": "read", "index": n} }), "releaseLoad": chosenAction(brange(0, 31), func(n int64) obj { return obj{"op": "release", "effect": "load", "index": n} }), "resolveLoader": sourcePairAction(16), "rejectLoader": rejectSourceAction(16), "seed": chosenAction(brange(0, 5), func(n int64) obj { return obj{"op": "seed", "key": fmt.Sprint(n / 2), "value": n%2 + 1} }), "advance": advanceAction(1, 10), "policy": chosenAction(brange(0, 3), func(n int64) obj {
-			return obj{"op": "policy", "value": obj{"shadow": obj{"ramp": []int{100, 0}[n%2]}, "coalesce": n < 2}}
-		})}}
-	shadowSeed := chosenAction(brange(1, 8), func(n int64) obj {
-		v := obj{"op": "seed"}
-		switch n {
+
+	// Three keys on two instances compete for two shadow slots per instance.
+	profiles["admission"] = behaviorProfile{
+		name: "admission",
+		fixture: func(int64) obj {
+			return obj{
+				"policy":            obj{"ttlSec": obj{"remote": 60}, "shadow": obj{"ramp": 100}},
+				"tracked":           true,
+				"shadowMaxInFlight": 2,
+				"readTimeoutMs":     1000,
+				"probeSourceScope":  true,
+			}
+		},
+		setup: []obj{
+			{"op": "seed", "key": "0", "value": 1},
+			{"op": "seed", "key": "1", "value": 1},
+			{"op": "seed", "key": "2", "value": 1},
+			{"op": "faults", "value": obj{"holdReads": true, "holdLoads": true}},
+		},
+		actions: map[string]behaviorAction{
+			"beginCall": chosenAction(brange(0, 5), func(choice int64) obj {
+				key, instance := choice%3, choice/3
+				return obj{"op": "begin", "key": fmt.Sprint(key), "instance": fmt.Sprint(instance)}
+			}),
+			"releaseRead": chosenAction(brange(0, 31), func(index int64) obj {
+				return obj{"op": "release", "effect": "read", "index": index}
+			}),
+			"releaseLoad": chosenAction(brange(0, 31), func(index int64) obj {
+				return obj{"op": "release", "effect": "load", "index": index}
+			}),
+			"resolveLoader": sourcePairAction(16),
+			"rejectLoader":  rejectSourceAction(16),
+			"seed": chosenAction(brange(0, 5), func(choice int64) obj {
+				key, value := choice/2, choice%2+1
+				return obj{"op": "seed", "key": fmt.Sprint(key), "value": value}
+			}),
+			"advance": advanceAction(1, 10),
+			"policy": chosenAction(brange(0, 3), func(choice int64) obj {
+				shadowRamp := []int{100, 0}[choice%2]
+				return obj{"op": "policy", "value": obj{
+					"shadow":   obj{"ramp": shadowRamp},
+					"coalesce": choice < 2,
+				}}
+			}),
+		},
+	}
+
+	// Values, raw text, and bytes exercise semantic comparison across equivalent encodings.
+	shadowSeed := chosenAction(brange(1, 8), func(choice int64) obj {
+		input := obj{"op": "seed"}
+		switch choice {
 		case 1, 2:
-			v["value"] = n
+			input["value"] = choice
 		case 3:
-			v["payloadHex"] = "31"
+			input["payloadHex"] = "31"
 		case 4:
-			v["payloadHex"] = "32"
+			input["payloadHex"] = "32"
 		case 5:
-			v["payloadHex"] = "2031"
+			input["payloadHex"] = "2031"
 		case 6:
-			v["payloadText"] = " 1"
+			input["payloadText"] = " 1"
 		case 7:
-			v["payloadText"] = "\"café\""
+			input["payloadText"] = "\"café\""
 		case 8:
-			v["payloadHex"] = "22636166c3a922"
+			input["payloadHex"] = "22636166c3a922"
 		}
-		return v
+		return input
 	})
-	profiles["shadow"] = behaviorProfile{name: "shadow", explicitInputs: true, diagnosticFutureOffsets: true, diagnosticAge: "shadowAge", diagnosticConfigErrors: true, initChoices: brange(0, 12), fixture: func(n int64) obj {
-		shadow := obj{"ramp": 100}
-		if n >= 4 && n < 8 {
-			shadow["logMismatches"] = true
-		}
-		v := obj{"policy": obj{"ttlSec": obj{"remote": 60}, "ramp": obj{"remote": 0}, "shadow": shadow}, "tracked": true, "shadowHook": n != 8, "observe": []any{"shadowAge", "mismatchWarning", "coalesced", "error", "futureOffset"}}
-		if n%4 != 0 && n < 11 {
-			mode := n%4 - 1
-			if n == 10 {
-				mode = 2
+	profiles["shadow"] = behaviorProfile{
+		name:                    "shadow",
+		explicitInputs:          true,
+		diagnosticFutureOffsets: true,
+		diagnosticAge:           "shadowAge",
+		diagnosticConfigErrors:  true,
+		initChoices:             brange(0, 12),
+		fixture: func(choice int64) obj {
+			shadow := obj{"ramp": 100}
+			if choice >= 4 && choice < 8 {
+				shadow["logMismatches"] = true
 			}
-			v["comparator"] = []string{"equal", "unequal", "error"}[mode]
-		}
-		if n == 9 || n == 10 {
-			v["comparisonMs"] = 10
-		}
-		if n >= 11 {
-			v["sourceWorkMs"] = []int{9, 10}[n-11]
-		}
-		return v
-	}, setup: []obj{{"op": "faults", "value": obj{"holdReads": true, "holdLoads": true, "holdDumps": true, "holdWrites": true}}}, actions: map[string]behaviorAction{
-		"beginCall": fixedAction(obj{"op": "begin"}), "resolveLoader": {choices: brange(1, 2), input: func(n int64, d *behaviorDriver) obj {
-			return obj{"op": "resolve", "loader": d.observedEffectCount("loader") - 1, "value": n}
-		}}, "rejectLoader": {input: func(_ int64, d *behaviorDriver) obj {
-			return obj{"op": "reject", "loader": d.observedEffectCount("loader") - 1}
-		}}, "releaseRead": releaseAction("read"), "releaseLoad": releaseAction("load"), "releaseDump": releaseAction("dump"), "releaseWrite": releaseAction("write"), "advance": advanceAction(1, 10), "seed": shadowSeed, "reencode": shadowSeed, "seedUnicode": behaviorAction{choices: []int64{7, 8}, input: shadowSeed.input}, "invalidate": chosenAction([]int64{0, 20}, func(n int64) obj { return obj{"op": "invalidate", "futureBufferMs": n} }), "readFault": faultAction("read"), "loadFault": faultAction("load"), "dumpFault": faultAction("dump"), "writeFault": faultAction("write"), "rollbackWall": fixedAction(obj{"op": "shiftWall", "ms": -1000}), "advanceWall": chosenAction([]int64{1, 60000}, func(n int64) obj { return obj{"op": "shiftWall", "ms": n} }), "shadowPolicy": chosenAction(brange(0, 2), func(n int64) obj {
-			return obj{"op": "policy", "value": obj{"shadow": obj{"ramp": []int{100, 0, 101}[n]}}}
-		}), "logPolicy": chosenAction(brange(0, 2), func(n int64) obj {
-			var logging any = n == 1
-			if n == 2 {
-				logging = "invalid"
+			fixture := obj{
+				"policy": obj{
+					"ttlSec": obj{"remote": 60},
+					"ramp":   obj{"remote": 0},
+					"shadow": shadow,
+				},
+				"tracked":    true,
+				"shadowHook": choice != 8,
+				"observe":    []any{"shadowAge", "mismatchWarning", "coalesced", "error", "futureOffset"},
 			}
-			return obj{"op": "policy", "value": obj{"shadow": obj{"logMismatches": logging}}}
-		})}}
+			// Choices 0–7 cross default/equal/unequal/error comparison with mismatch logging.
+			if choice%4 != 0 && choice < 11 {
+				comparator := choice%4 - 1
+				if choice == 10 {
+					comparator = 2
+				}
+				fixture["comparator"] = []string{"equal", "unequal", "error"}[comparator]
+			}
+			// Choices 9–10 delay comparison; 11–12 vary source work around the deadline.
+			if choice == 9 || choice == 10 {
+				fixture["comparisonMs"] = 10
+			}
+			if choice >= 11 {
+				fixture["sourceWorkMs"] = []int{9, 10}[choice-11]
+			}
+			return fixture
+		},
+		setup: []obj{{"op": "faults", "value": obj{
+			"holdReads":  true,
+			"holdLoads":  true,
+			"holdDumps":  true,
+			"holdWrites": true,
+		}}},
+		actions: map[string]behaviorAction{
+			"beginCall": fixedAction(obj{"op": "begin"}),
+			"resolveLoader": {
+				choices: brange(1, 2),
+				input: func(value int64, d *behaviorDriver) obj {
+					return obj{"op": "resolve", "loader": d.observedEffectCount("loader") - 1, "value": value}
+				},
+			},
+			"rejectLoader": {input: func(_ int64, d *behaviorDriver) obj {
+				return obj{"op": "reject", "loader": d.observedEffectCount("loader") - 1}
+			}},
+			"releaseRead":  releaseAction("read"),
+			"releaseLoad":  releaseAction("load"),
+			"releaseDump":  releaseAction("dump"),
+			"releaseWrite": releaseAction("write"),
+			"advance":      advanceAction(1, 10),
+			"seed":         shadowSeed,
+			"reencode":     shadowSeed,
+			"seedUnicode":  {choices: []int64{7, 8}, input: shadowSeed.input},
+			"invalidate": chosenAction([]int64{0, 20}, func(bufferMS int64) obj {
+				return obj{"op": "invalidate", "futureBufferMs": bufferMS}
+			}),
+			"readFault":    faultAction("read"),
+			"loadFault":    faultAction("load"),
+			"dumpFault":    faultAction("dump"),
+			"writeFault":   faultAction("write"),
+			"rollbackWall": fixedAction(obj{"op": "shiftWall", "ms": -1000}),
+			"advanceWall": chosenAction([]int64{1, 60000}, func(deltaMS int64) obj {
+				return obj{"op": "shiftWall", "ms": deltaMS}
+			}),
+			"shadowPolicy": chosenAction(brange(0, 2), func(choice int64) obj {
+				shadowRamp := []int{100, 0, 101}[choice]
+				return obj{"op": "policy", "value": obj{"shadow": obj{"ramp": shadowRamp}}}
+			}),
+			"logPolicy": chosenAction(brange(0, 2), func(choice int64) obj {
+				var logging any = choice == 1
+				if choice == 2 {
+					logging = "invalid"
+				}
+				return obj{"op": "policy", "value": obj{"shadow": obj{"logMismatches": logging}}}
+			}),
+		},
+	}
 	return profiles
 }
 

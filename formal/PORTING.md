@@ -7,6 +7,10 @@ binding requirements. This document defines the driver and completion boundary.
 The specification is experimental and versioned in [profiles.json](./profiles.json).
 Pin a repository commit and corpus when developing a port.
 
+Start with the [worked walkthrough](./WALKTHROUGH.md) to follow one source
+deadline contract from a Quint regression to its TypeScript and Go assertions.
+Then use this guide to implement the remaining profiles and completion reports.
+
 ## What a port supplies
 
 Supply a native implementation, a controlled test environment, a profile adapter,

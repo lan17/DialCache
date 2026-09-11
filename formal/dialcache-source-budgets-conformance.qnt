@@ -8,12 +8,20 @@ module dialcache_source_budgets_conformance {
   // advance; late settlement before timer delivery is covered by effects.
   // Remote I/O, request memo and shadow work are outside this focused profile.
 
+  // Initialization choices are part of the replay input: keep these codes stable.
+  pure val DEFAULT_BUDGET_MODE = 0
+  pure val UNBOUNDED_BUDGET_MODE = 1
+  pure val FINITE_BUDGET_MODE = 2
   pure val ENABLED = 0
   pure val OUTSIDE = 1
   pure val INVALID_KEY = 2
   pure val OUTSIDE_INVALID_KEY = 3
   pure val MAX_CALLS = 8
   pure val LOCAL_TTL_MS = 1000
+
+  // All times are monotonic milliseconds. A budget of -1 is unbounded.
+  // rawPending can remain true after result becomes DEADLINE_ERROR: the caller
+  // has stopped waiting, but its abandoned source can still finish externally.
   type Source = {
     rawPending: bool, result: int, started: int, settled: int,
     budget: int, cacheable: bool, outside: bool
@@ -25,18 +33,36 @@ module dialcache_source_budgets_conformance {
     localValue: int, localExpires: int, localWriter: int
   }
   var s: State
+  // input records the external command. s.o predicts public observations;
+  // owners, registered and local storage describe model-owned state, not inputs
+  // a native replay driver may read to decide what the implementation should do.
   var input: { name: str, choice: int }
 
-  pure def configuredBudget(mode: int): int = if (mode == 0) 60000 else if (mode == 1) -1 else 10
+  pure def configuredBudget(mode: int): int =
+    if (mode == DEFAULT_BUDGET_MODE) 60000
+    else if (mode == UNBOUNDED_BUDGET_MODE) -1
+    else 10
+
   action initialize(mode: int): bool = all {
     input' = { name: "init", choice: mode },
     s' = {
-      o: empty, mode: mode, now: 0, kinds: List(), owners: List(),
-      policyOwners: List(), sources: List(), registered: -1,
-      localValue: 0, localExpires: 0, localWriter: -1
+      o: empty,
+      mode: mode,
+      now: 0,
+      kinds: List(),
+      owners: List(),
+      policyOwners: List(),
+      sources: List(),
+      registered: -1,
+      localValue: 0,
+      localExpires: 0,
+      localWriter: -1
     }
   }
-  action init = { nondet choice = Set(0, 1, 2).oneOf(); initialize(choice) }
+  action init = {
+    nondet choice = Set(DEFAULT_BUDGET_MODE, UNBOUNDED_BUDGET_MODE, FINITE_BUDGET_MODE).oneOf()
+    initialize(choice)
+  }
 
   pure def startSource(x: State, call: int, kind: int): State = {
     val outside = kind == OUTSIDE or kind == OUTSIDE_INVALID_KEY
@@ -66,10 +92,14 @@ module dialcache_source_budgets_conformance {
       o: { policyCalls: entered.o.policyCalls + 1, ...entered.o }, ...entered
     } else startSource(entered, call, kind)
   }
-  action beginCall = { nondet choice = Set(ENABLED, OUTSIDE, INVALID_KEY, OUTSIDE_INVALID_KEY).oneOf(); begin(choice) }
+  action beginCall = {
+    nondet choice = Set(ENABLED, OUTSIDE, INVALID_KEY, OUTSIDE_INVALID_KEY).oneOf()
+    begin(choice)
+  }
 
   action release(id: int): bool = all {
-    id < s.policyOwners.length(), s.policyOwners.nth(id) >= 0,
+    id < s.policyOwners.length(),
+    s.policyOwners.nth(id) >= 0,
     input' = { name: "releasePolicy", choice: id },
     val call = s.policyOwners.nth(id)
     val admitted = { policyOwners: s.policyOwners.replaceAt(id, -1), ...s }
@@ -100,7 +130,8 @@ module dialcache_source_budgets_conformance {
       if (source.budget >= 0 and x.now - source.started >= source.budget) DEADLINE_ERROR else outcome)
   }
   action resolved(id: int, value: int): bool = all {
-    id < s.sources.length(), s.sources.nth(id).rawPending,
+    id < s.sources.length(),
+    s.sources.nth(id).rawPending,
     input' = { name: "resolveLoader", choice: id * 2 + value },
     s' = settleSource(s, id, value)
   }
@@ -109,8 +140,10 @@ module dialcache_source_budgets_conformance {
     resolved((choice - 1) / 2, (choice - 1) % 2 + 1)
   }
   action rejected(id: int): bool = all {
-    id < s.sources.length(), s.sources.nth(id).rawPending,
-    input' = { name: "rejectLoader", choice: id }, s' = settleSource(s, id, SOURCE_ERROR)
+    id < s.sources.length(),
+    s.sources.nth(id).rawPending,
+    input' = { name: "rejectLoader", choice: id },
+    s' = settleSource(s, id, SOURCE_ERROR)
   }
   action rejectLoader = { nondet choice = 0.to(MAX_CALLS - 1).oneOf(); rejected(choice) }
 
@@ -150,48 +183,48 @@ module dialcache_source_budgets_conformance {
   val onlyEnabledValidCallsResolvePolicy = s.o.policyCalls == s.kinds.foldl(0,
     (count, kind) => count + (if (kind == ENABLED) 1 else 0))
 
-  run outsideAndInvalidOutsideCallsIgnoreDeadlineAndSharingTest = initialize(2)
+  run outsideAndInvalidOutsideCallsIgnoreDeadlineAndSharingTest = initialize(FINITE_BUDGET_MODE)
     .then(begin(OUTSIDE)).then(begin(OUTSIDE_INVALID_KEY)).then(advanced(100))
     .expect(s.o.calls == List(CALL_PENDING, CALL_PENDING) and s.o.policyCalls == 0 and s.o.loaders == 2)
     .then(resolved(0, VALUE_ONE)).then(resolved(1, VALUE_TWO))
     .then(begin(ENABLED)).then(release(0))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, CALL_PENDING) and s.o.loaders == 3)
 
-  run defaultSourceBudgetExpiresAtSixtySecondsTest = initialize(0)
+  run defaultSourceBudgetExpiresAtSixtySecondsTest = initialize(DEFAULT_BUDGET_MODE)
     .then(begin(ENABLED)).then(release(0)).then(advanced(59999))
     .expect(s.o.calls == List(CALL_PENDING))
     .then(advanced(1)).then(resolved(0, VALUE_ONE))
     .then(begin(ENABLED)).then(release(1))
     .expect(s.o.calls == List(DEADLINE_ERROR, CALL_PENDING) and s.o.loaders == 2)
 
-  run unboundedEnabledSourcePublishesAfterSixtySecondsTest = initialize(1)
+  run unboundedEnabledSourcePublishesAfterSixtySecondsTest = initialize(UNBOUNDED_BUDGET_MODE)
     .then(begin(ENABLED)).then(release(0)).then(advanced(60001))
     .expect(s.o.calls == List(CALL_PENDING))
     .then(resolved(0, VALUE_ONE)).then(begin(ENABLED)).then(release(1))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loaders == 1)
 
-  run lateFollowerUsesLeadersRemainingBudgetTest = initialize(2)
+  run lateFollowerUsesLeadersRemainingBudgetTest = initialize(FINITE_BUDGET_MODE)
     .then(begin(ENABLED)).then(release(0)).then(advanced(6))
     .then(begin(ENABLED)).then(release(1)).then(advanced(3))
     .expect(s.o.calls == List(CALL_PENDING, CALL_PENDING) and s.o.loaders == 1)
     .then(advanced(1))
     .expect(s.o.calls == List(DEADLINE_ERROR, DEADLINE_ERROR))
 
-  run heldPolicyDoesNotSpendSourceBudgetTest = initialize(2)
+  run heldPolicyDoesNotSpendSourceBudgetTest = initialize(FINITE_BUDGET_MODE)
     .then(begin(ENABLED)).then(advanced(100))
     .expect(s.o.calls == List(CALL_PENDING) and s.o.loaders == 0)
     .then(release(0)).then(advanced(9)).then(resolved(0, VALUE_ONE))
     .then(begin(ENABLED)).then(release(1))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loaders == 1)
 
-  run invalidKeyStillKeepsEnabledSourceDeadlineTest = initialize(2)
+  run invalidKeyStillKeepsEnabledSourceDeadlineTest = initialize(FINITE_BUDGET_MODE)
     .then(begin(INVALID_KEY)).then(advanced(9))
     .expect(s.o.calls == List(CALL_PENDING) and s.o.policyCalls == 0)
     .then(advanced(1)).then(resolved(0, VALUE_ONE))
     .then(begin(ENABLED)).then(release(0))
     .expect(s.o.calls == List(DEADLINE_ERROR, CALL_PENDING) and s.o.loaders == 2)
 
-  run abandonedSourceCannotReplaceSuccessfulRetryTest = initialize(2)
+  run abandonedSourceCannotReplaceSuccessfulRetryTest = initialize(FINITE_BUDGET_MODE)
     .then(begin(ENABLED)).then(release(0)).then(advanced(10))
     .then(begin(ENABLED)).then(release(1)).then(resolved(1, VALUE_TWO))
     .then(resolved(0, VALUE_ONE)).then(begin(ENABLED)).then(release(2))

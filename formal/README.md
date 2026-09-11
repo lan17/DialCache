@@ -6,22 +6,28 @@ histories against their real APIs and compare the resulting values, errors,
 cache effects and diagnostics. The suite targets language ports and regression
 testing; passing finite executions is not a proof over every input or schedule.
 
-## Reading order
+## Start with your task
 
-1. [SPEC.md](./SPEC.md) explains the behavior, ownership rules and allowed races.
-2. [CONTRACTS.md](./CONTRACTS.md) assigns stable obligations;
-   [FEATURE-COVERAGE.md](./FEATURE-COVERAGE.md) groups their known corners.
-3. [AUTHORING.md](./AUTHORING.md) explains Quint's notation and how to add a
-   distinguishing property and implementation replay.
-4. Read the relevant model below, then its public-action regressions.
-   [BEHAVIOR.md](./BEHAVIOR.md) and [CONFORMANCE.md](./CONFORMANCE.md) explain
-   replay inputs and observations; [PROTOCOL.md](./PROTOCOL.md) covers bytes.
-5. [SEMANTIC-COVERAGE.md](./SEMANTIC-COVERAGE.md) explains evidence accounting
-   and mutation measurement. [GO-PARITY.md](./GO-PARITY.md) defines acceptance
-   and native adaptations; [TEST-MAP.md](./TEST-MAP.md) helps locate evidence.
+- **Understand a behavior:** follow the [worked Quint walkthrough](./WALKTHROUGH.md),
+  then read the relevant [model below](#models-and-composition-profiles).
+  [SPEC.md](./SPEC.md) explains the surrounding ownership rules and allowed races.
+- **Change or add a rule:** read [AUTHORING.md](./AUTHORING.md#codifying-the-next-behavior).
+  Find its stable contract ID in [CONTRACTS.md](./CONTRACTS.md), then its corner
+  case in [FEATURE-COVERAGE.md](./FEATURE-COVERAGE.md). The walkthrough shows how
+  that ID connects the model, drivers and evidence catalogs.
+- **Investigate a failure:** start with the reported model/run or trace path and
+  replay its exact inputs. See [single-history reproduction](#generating-and-replaying-behavior)
+  and the walkthrough's [focused commands](./WALKTHROUGH.md#run-this-example).
+  [BEHAVIOR.md](./BEHAVIOR.md) documents profile-specific encodings and observations.
+- **Implement another language:** follow [PORTING.md](./PORTING.md) for driver
+  responsibilities and acceptance checks, then [PROTOCOL.md](./PROTOCOL.md) for
+  shared bytes. [GO-PARITY.md](./GO-PARITY.md) records Go's binding adaptations.
 
-For another language, follow [PORTING.md](./PORTING.md): it defines driver
-responsibilities, one-command artifact regeneration and shared completion checks.
+Use large JSON catalogs as lookup indexes after identifying the relevant rule.
+Begin with the model and its named regression; generated JSON preserves the
+executable example for native tests. [SEMANTIC-COVERAGE.md](./SEMANTIC-COVERAGE.md)
+explains what the different evidence counts establish, and
+[TEST-MAP.md](./TEST-MAP.md) locates the broader test suite.
 
 ## What the suite checks
 
@@ -58,19 +64,25 @@ The verification models emphasize individual ownership or safety boundaries:
 | [dialcache-shadow-validation.qnt](./dialcache-shadow-validation.qnt) | Diagnostic C0/source/C1 work and fills |
 | [dialcache-redis-protocol.qnt](./dialcache-redis-protocol.qnt) | Frame/fence validation order |
 
-Conformance profiles expose replayable external commands. The established
-`core`, `effects`, `scope`, `recovery`, `policy`, `shadow`, `admission`, `layers`
-and `independent` profiles remain separate slices. Six additional profiles
-compose previously separate boundaries:
+Conformance profiles expose external commands that both language drivers replay:
 
-| Profile | Consequential interactions |
+| Profile | Behavior and interactions |
 | --- | --- |
-| [recovery-read](./dialcache-recovery-read-conformance.qnt) | Held reads/decode, request/local/remote publication, logical versus physical retention, compressed recovery, marker lifetime, and recovered absence skipping selected shadow work |
-| [local-failure](./dialcache-local-failure-conformance.qnt) | Local read/write failures, source outcome preservation, and request publication through native storage fault seams |
-| [runtime-boundaries](./dialcache-runtime-boundaries-conformance.qnt) | Omission versus invalid leaves, defaults, exact cohorts and policy capture at their invocation boundaries |
-| [shadow-layers](./dialcache-shadow-layers-conformance.qnt) | Dark source publication, captured fills, request/local first hits, independent sources, and mixed served/dark capacity ownership |
-| [local-clock](./dialcache-local-clock-conformance.qnt) | Fractional environment time, whole-millisecond local expiry, and the common process grid across separately constructed native instances |
-| [source-budgets](./dialcache-source-budgets-conformance.qnt) | Default/unbounded/finite source budgets, held policy, followers, disabled calls and key failures |
+| [core](./dialcache-conformance.qnt) | Enabled traversal, hits, misses, publication and invalidation |
+| [effects](./dialcache-effects-conformance.qnt) | Pending reads, sources and serialization; deadlines, refill authority and late effects |
+| [scope](./dialcache-scope-conformance.qnt) | Nested enablement, request memoization, shared work and scope closure |
+| [recovery](./dialcache-recovery-conformance.qnt) | Retained stale bytes, classifier policy, age checks and request-only recovery publication |
+| [policy](./dialcache-policy-conformance.qnt) | Runtime overlays, captured policy, cache lifetime, capacity and coalescing changes |
+| [shadow](./dialcache-shadow-conformance.qnt) | Dark reads, source comparison, confirmation, conditional fills and diagnostic outcomes |
+| [admission](./dialcache-admission-conformance.qnt) | Served-hit shadow admission, deduplication, deadlines and capacity held by unfinished work |
+| [layers](./dialcache-layers-conformance.qnt) | Request/local/remote composition, instance and key isolation, publication and invalidation |
+| [independent](./dialcache-independent-conformance.qnt) | Uncoalesced callers, independent budgets, acquired snapshots and per-call refill authority |
+| [recovery-read](./dialcache-recovery-read-conformance.qnt) | Held reads/decode, compressed recovery, logical versus physical age, marker lifetime and publication |
+| [local-failure](./dialcache-local-failure-conformance.qnt) | Local storage faults, preserved source outcomes and request publication |
+| [runtime-boundaries](./dialcache-runtime-boundaries-conformance.qnt) | Omitted/invalid policy leaves, defaults, exact rollout cohorts and policy capture |
+| [shadow-layers](./dialcache-shadow-layers-conformance.qnt) | Dark fills and local/request reuse; independent sources and mixed served/dark capacity |
+| [local-clock](./dialcache-local-clock-conformance.qnt) | Fractional environment time and the shared whole-millisecond process-local expiry grid |
+| [source-budgets](./dialcache-source-budgets-conformance.qnt) | Default/unbounded/finite source deadlines, held policy, followers, outside calls and key failures |
 
 These profiles deliberately bound callers, keys, contexts, capacities, payloads
 and time. Their introduction does not imply that every product of those domains

@@ -10,6 +10,10 @@ module dialcache_recovery_read_conformance {
   // The read budget exceeds the entire elapsed-time domain; sources are
   // explicitly unbounded. Logical age and native retention remain independent.
 
+  // Initialization choices are part of the replay input: keep these codes stable.
+  pure val UNTRACKED_MODE = 0
+  pure val TRACKED_MODE = 1
+  pure val TRACKED_WITH_SHADOW_MODE = 2
   pure val IDLE = 0
   pure val READING = 1
   pure val FRESH_DECODE = 2
@@ -19,7 +23,6 @@ module dialcache_recovery_read_conformance {
   pure val RAW_ONE = 1
   pure val RAW_TWO = 2
   pure val RAW_ABSENCE = 16
-  pure val ABSENCE_VALUE = 5
   pure val COMPRESSED_ONE = 11
   pure val CORRUPT_COMPRESSED = 12
   pure val UNSUPPORTED_ENCODING = 13
@@ -41,6 +44,10 @@ module dialcache_recovery_read_conformance {
     dumpsBefore: int, dumpsAfter: int, writesBefore: int, writesAfter: int,
     localBefore: int, localAfter: int, age: int, maximum: int, served: bool
   }
+  // now is monotonic elapsed milliseconds; wall is application wall-clock ms.
+  // Stored frame/candidate timestamps use wall; local/remote/marker expiry uses
+  // now. s.o, io, markers and compression predict observations checked by the
+  // native drivers. Receipts retain before/after facts for independent invariants.
   type State = {
     o: Observation,
     io: { budgets: List[int], aborted: List[int], sourceErrors: List[int] },
@@ -64,23 +71,50 @@ module dialcache_recovery_read_conformance {
   action initialized(mode: int): bool = all {
     input' = { name: "init", choice: mode },
     s' = {
-      o: empty, io: { budgets: List(), aborted: List(), sourceErrors: List() },
-      markers: List(), compression: List(), tracked: mode != 0, shadowSelected: mode == 2, now: 0, wall: WALL_ORIGIN, phase: IDLE, writeFailed: false,
-      frame: ABSENT_PAYLOAD, created: 0, expires: 0,
-      watermark: 0, markerExpires: 0,
-      localValue: 0, localExpires: 0, localVersion: 0,
-      memo: List(0, 0), closed: List(false, false), scope: 2,
-      freshMs: 1000, maximumMs: 5000, acceptedFresh: 1000, acceptedMaximum: 5000,
-      candidate: 0, candidateCreated: 0, canRecover: false, canWrite: false,
-      observedFence: 0, activeSource: -1,
-      readReceipts: List(), writeReceipts: List(), recoveryReceipts: List()
+      o: empty,
+      io: { budgets: List(), aborted: List(), sourceErrors: List() },
+      markers: List(),
+      compression: List(),
+      tracked: mode != UNTRACKED_MODE,
+      shadowSelected: mode == TRACKED_WITH_SHADOW_MODE,
+      now: 0,
+      wall: WALL_ORIGIN,
+      phase: IDLE,
+      writeFailed: false,
+      frame: ABSENT_PAYLOAD,
+      created: 0,
+      expires: 0,
+      watermark: 0,
+      markerExpires: 0,
+      localValue: 0,
+      localExpires: 0,
+      localVersion: 0,
+      memo: List(0, 0),
+      closed: List(false, false),
+      scope: 2,
+      freshMs: 1000,
+      maximumMs: 5000,
+      acceptedFresh: 1000,
+      acceptedMaximum: 5000,
+      candidate: 0,
+      candidateCreated: 0,
+      canRecover: false,
+      canWrite: false,
+      observedFence: 0,
+      activeSource: -1,
+      readReceipts: List(),
+      writeReceipts: List(),
+      recoveryReceipts: List()
     }
   }
-  action init = { nondet choice = Set(0, 1, 2).oneOf(); initialized(choice) }
+  action init = {
+    nondet choice = Set(UNTRACKED_MODE, TRACKED_MODE, TRACKED_WITH_SHADOW_MODE).oneOf()
+    initialized(choice)
+  }
 
   pure def effectiveMarker(x: State): int = if (x.now < x.markerExpires) x.watermark else 0
   pure def payloadValue(payload: int): int =
-    if (payload == RAW_ABSENCE) ABSENCE_VALUE else if (payload == RAW_TWO) VALUE_TWO else VALUE_ONE
+    if (payload == RAW_ABSENCE) VALUE_ABSENT else if (payload == RAW_TWO) VALUE_TWO else VALUE_ONE
   pure def decodeFails(payload: int): bool = payload == CORRUPT_COMPRESSED
   pure def startedCompression(x: State, payload: int): List[str] =
     if (payload == COMPRESSED_ONE) x.compression.append("decompressed")
@@ -106,8 +140,10 @@ module dialcache_recovery_read_conformance {
 
   // Request and local hits stop traversal. Local expiry uses the insertion
   // deadline; a hit never alters it. Policy is captured before a held read.
+  // Contexts 0/1 own persistent request memos; context 2 is a transient caller.
   action beginIn(context: int): bool = all {
-    s.phase == IDLE, s.o.calls.length() < MAX_CALLS,
+    s.phase == IDLE,
+    s.o.calls.length() < MAX_CALLS,
     context == 2 or not(s.closed.nth(context)),
     input' = { name: "beginCall", choice: context },
     val memoValue = if (context < 2) s.memo.nth(context) else 0
@@ -173,7 +209,8 @@ module dialcache_recovery_read_conformance {
       else complete(rejected, SOURCE_ERROR)
   }
   action resolveLoader = all {
-    s.phase == SOURCE_RUNNING, not(s.shadowSelected),
+    s.phase == SOURCE_RUNNING,
+    not(s.shadowSelected),
     input' = { name: "resolveLoader", choice: -1 },
     val requested = if (s.acceptedMaximum > s.acceptedFresh) s.acceptedMaximum else s.acceptedFresh
     val physicalTtl = if (s.tracked and requested > TRACKED_CAP_MS) TRACKED_CAP_MS else requested
@@ -229,7 +266,7 @@ module dialcache_recovery_read_conformance {
   // External fixtures: codes select actual raw/enveloped bytes, age and physical
   // lifetime. Compressed bodies are fixed portable zstd examples in the driver;
   // this model states their decode outcome, not the compression algorithm.
-  // Mode 2 isolates recovered results with an otherwise selected shadow policy.
+  // TRACKED_WITH_SHADOW_MODE isolates recovery with a selected shadow policy.
   // Only stale bytes and failed sources are admitted in this mode, so fresh-hit
   // diagnostic jobs remain in the shadow profiles. Absence is stored data here;
   // ABSENT_PAYLOAD still means that the remote key itself does not exist.
@@ -319,20 +356,20 @@ module dialcache_recovery_read_conformance {
   // A selected policy, outcome hook and available capacity make shadow work
   // otherwise eligible. Neither ordinary recovery nor its request-memo probe
   // may create a diagnostic source or any shared-cache publication.
-  run recoveredAbsenceSkipsSelectedShadowTest = initialized(2).then(seedWith(18))
+  run recoveredAbsenceSkipsSelectedShadowTest = initialized(TRACKED_WITH_SHADOW_MODE).then(seedWith(18))
     .then(beginIn(0)).then(releaseRead).then(rejectLoader).then(releaseLoad)
-    .expect(s.o.calls == List(ABSENCE_VALUE) and s.o.loaders == 1 and s.o.reads == 1
+    .expect(s.o.calls == List(VALUE_ABSENT) and s.o.loaders == 1 and s.o.reads == 1
       and s.o.loads == 1 and s.o.classifications == 1 and s.o.recovery == List("served")
       and s.o.shadow == List() and s.o.dumps == 0 and s.o.writes == 0)
     .then(beginIn(0))
-    .expect(s.o.calls == List(ABSENCE_VALUE, ABSENCE_VALUE) and s.o.loaders == 1 and s.o.reads == 1
+    .expect(s.o.calls == List(VALUE_ABSENT, VALUE_ABSENT) and s.o.loaders == 1 and s.o.reads == 1
       and s.o.shadow == List() and s.o.dumps == 0 and s.o.writes == 0)
     .then(beginIn(1)).then(releaseRead).then(rejectLoader).then(releaseLoad)
-    .expect(s.o.calls == List(ABSENCE_VALUE, ABSENCE_VALUE, ABSENCE_VALUE)
+    .expect(s.o.calls == List(VALUE_ABSENT, VALUE_ABSENT, VALUE_ABSENT)
       and s.o.loaders == 2 and s.o.reads == 2 and s.o.loads == 2
       and s.o.recovery == List("served", "served") and s.o.shadow == List()
       and s.o.dumps == 0 and s.o.writes == 0 and s.localValue == 0)
-  run recoveredValueSkipsSelectedShadowTest = initialized(2).then(seedWith(2))
+  run recoveredValueSkipsSelectedShadowTest = initialized(TRACKED_WITH_SHADOW_MODE).then(seedWith(2))
     .then(beginIn(0)).then(releaseRead).then(rejectLoader).then(releaseLoad)
     .then(beginIn(0))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loaders == 1 and s.o.reads == 1
@@ -340,89 +377,89 @@ module dialcache_recovery_read_conformance {
       and s.o.shadow == List() and s.o.dumps == 0 and s.o.writes == 0 and s.localValue == 0)
 
   // Deterministic replay uses only the same external commands as exploration.
-  run freshnessAfterHeldReadTest = initialized(1).then(seedWith(0)).then(beginIn(2))
+  run freshnessAfterHeldReadTest = initialized(TRACKED_MODE).then(seedWith(0)).then(beginIn(2))
     .then(advanceBy(1000)).then(releaseRead)
     .expect(s.o.loaders == 1 and s.o.loads == 0)
     .then(rejectLoader).then(releaseLoad)
     .expect(s.o.calls == List(VALUE_ONE) and s.o.recovery == List("served") and s.o.writes == 0)
-  run trackedEncodingFailureSuppressesRefillTest = initialized(1).then(seedWith(10))
+  run trackedEncodingFailureSuppressesRefillTest = initialized(TRACKED_MODE).then(seedWith(10))
     .then(beginIn(0)).then(releaseRead).then(resolveLoader)
     .expect(s.o.calls == List(VALUE_TWO) and s.o.loads == 0 and s.o.dumps == 0 and s.o.writes == 0)
     .then(beginIn(1)).expect(s.o.reads == 2 and s.o.calls == List(VALUE_TWO, CALL_PENDING))
-  run untrackedEncodingFailureStillPublishesLocalTest = initialized(0).then(seedWith(10))
+  run untrackedEncodingFailureStillPublishesLocalTest = initialized(UNTRACKED_MODE).then(seedWith(10))
     .then(beginIn(0)).then(releaseRead).then(resolveLoader).then(beginIn(1))
     .expect(s.o.calls == List(VALUE_TWO, VALUE_TWO) and s.o.reads == 1
       and s.o.loads == 0 and s.o.dumps == 0 and s.o.writes == 0)
-  run trackedPhysicalRetentionExpiresAtCapTest = initialized(1).then(policyWith(2))
+  run trackedPhysicalRetentionExpiresAtCapTest = initialized(TRACKED_MODE).then(policyWith(2))
     .then(beginIn(2)).then(releaseRead).then(resolveLoader)
     .expect(s.o.writeTtls == List(3600000))
     .then(advanceBy(3600000)).then(beginIn(2)).then(releaseRead)
     .expect(s.o.calls == List(VALUE_TWO, CALL_PENDING) and s.o.loaders == 2 and s.o.loads == 0)
-  run physicalCapDoesNotClampLogicalRecoveryTest = initialized(1).then(policyWith(1))
+  run physicalCapDoesNotClampLogicalRecoveryTest = initialized(TRACKED_MODE).then(policyWith(1))
     .then(seedWith(5)).then(beginIn(2)).then(releaseRead).then(rejectLoader).then(releaseLoad)
     .expect(s.o.calls == List(VALUE_ONE) and s.o.recovery == List("served")
       and s.o.writeTtls == List() and s.recoveryReceipts.nth(0).age == 3600001)
-  run compressedRecoveryMemoizesWithoutLocalPublicationTest = initialized(1).then(seedWith(8))
+  run compressedRecoveryMemoizesWithoutLocalPublicationTest = initialized(TRACKED_MODE).then(seedWith(8))
     .then(beginIn(0)).then(releaseRead).then(rejectLoader).then(releaseLoad)
     .then(beginIn(0)).expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.reads == 1)
     .then(beginIn(1)).expect(s.o.reads == 2 and s.o.calls == List(VALUE_ONE, VALUE_ONE, CALL_PENDING))
     .expect(s.o.dumps == 0 and s.o.writes == 0 and s.localValue == 0)
-  run corruptCompressedRecoveryKeepsOriginalSourceErrorTest = initialized(1).then(seedWith(9))
+  run corruptCompressedRecoveryKeepsOriginalSourceErrorTest = initialized(TRACKED_MODE).then(seedWith(9))
     .then(beginIn(0)).then(releaseRead).then(rejectLoader).then(releaseLoad)
     .expect(s.o.calls == List(SOURCE_ERROR) and s.io.sourceErrors == List(1)
       and s.o.recovery == List("deserialization_error") and s.o.loads == 1
       and s.o.dumps == 0 and s.o.writes == 0)
-  run retainedCompressedRecoverySurvivesInvalidationTest = initialized(1).then(seedWith(8))
+  run retainedCompressedRecoverySurvivesInvalidationTest = initialized(TRACKED_MODE).then(seedWith(8))
     .then(beginIn(0)).then(releaseRead).then(invalidate).then(rejectLoader).then(releaseLoad)
     .then(beginIn(0)).expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.reads == 1)
     .then(beginIn(1)).then(releaseRead).then(rejectLoader)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, SOURCE_ERROR) and s.io.sourceErrors == List(0, 0, 2)
       and s.o.recovery == List("served", "miss") and s.o.loads == 1 and s.o.writes == 0)
-  run closedRequestCannotReceiveCompressedRecoveryTest = initialized(1).then(seedWith(8))
+  run closedRequestCannotReceiveCompressedRecoveryTest = initialized(TRACKED_MODE).then(seedWith(8))
     .then(beginIn(0)).then(releaseRead).then(rejectLoader).then(closeContext(0)).then(releaseLoad)
     .then(beginIn(1)).expect(s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.reads == 2)
     .expect(s.memo == List(0, 0) and s.localValue == 0 and s.o.writes == 0)
-  run trackedSourceNeedsRemoteValidationBeforeLocalReuseTest = initialized(1)
+  run trackedSourceNeedsRemoteValidationBeforeLocalReuseTest = initialized(TRACKED_MODE)
     .then(beginIn(0)).then(releaseRead).then(resolveLoader).then(beginIn(0))
     .expect(s.o.calls == List(VALUE_TWO, VALUE_TWO) and s.o.reads == 1)
     .then(beginIn(1)).then(releaseRead).then(releaseLoad).then(beginIn(2))
     .expect(s.o.calls == List(VALUE_TWO, VALUE_TWO, VALUE_TWO, VALUE_TWO)
       and s.o.reads == 2 and s.o.loaders == 1 and s.o.loads == 1)
-  run ordinaryValueWorkDoesNotCreateMarkerTest = initialized(1).then(observeMarker)
+  run ordinaryValueWorkDoesNotCreateMarkerTest = initialized(TRACKED_MODE).then(observeMarker)
     .then(beginIn(2)).then(releaseRead).then(resolveLoader).then(observeMarker)
     .then(beginIn(2)).then(releaseRead).then(releaseLoad).then(observeMarker)
     .expect(s.markers == List({ cutoffMs: -1, ttlMs: -2 },
       { cutoffMs: -1, ttlMs: -2 }, { cutoffMs: -1, ttlMs: -2 }))
-  run ordinaryValueWorkDoesNotExtendMarkerTest = initialized(1).then(invalidate).then(observeMarker)
+  run ordinaryValueWorkDoesNotExtendMarkerTest = initialized(TRACKED_MODE).then(invalidate).then(observeMarker)
     .then(advanceBy(1)).then(policyWith(2)).then(beginIn(2)).then(releaseRead).then(resolveLoader)
     .then(observeMarker).then(beginIn(2)).then(releaseRead).then(releaseLoad).then(advanceBy(999)).then(observeMarker)
     .expect(s.markers == List({ cutoffMs: 0, ttlMs: 7200000 },
       { cutoffMs: 0, ttlMs: 7199999 }, { cutoffMs: 0, ttlMs: 7199000 }))
 
-  run failedInvalidationPreservesExistingMarkerTest = initialized(1).then(invalidate).then(observeMarker)
+  run failedInvalidationPreservesExistingMarkerTest = initialized(TRACKED_MODE).then(invalidate).then(observeMarker)
     .then(advanceBy(1000)).then(writeFaultWith(1)).then(invalidate).then(observeMarker)
     .expect(s.o.maintenance == List("ok", "mutation_error"))
     .expect(s.markers == List({ cutoffMs: 0, ttlMs: 7200000 }, { cutoffMs: 0, ttlMs: 7199000 }))
-  run failedInvalidationDoesNotCreateMarkerTest = initialized(1).then(writeFaultWith(1))
+  run failedInvalidationDoesNotCreateMarkerTest = initialized(TRACKED_MODE).then(writeFaultWith(1))
     .then(invalidate).then(observeMarker)
     .expect(s.o.maintenance == List("mutation_error") and s.markers == List({ cutoffMs: -1, ttlMs: -2 }))
-  run freshCompressedReadReportsDecompressionTest = initialized(1).then(seedWith(13))
+  run freshCompressedReadReportsDecompressionTest = initialized(TRACKED_MODE).then(seedWith(13))
     .then(beginIn(0)).then(releaseRead)
     .expect(s.compression == List("decompressed") and s.o.calls == List(CALL_PENDING))
     .then(releaseLoad).expect(s.o.calls == List(VALUE_ONE) and s.o.loaders == 0 and s.o.loads == 1)
-  run corruptCompressedReadReportsRawFallbackTest = initialized(1).then(seedWith(14))
+  run corruptCompressedReadReportsRawFallbackTest = initialized(TRACKED_MODE).then(seedWith(14))
     .then(beginIn(0)).then(releaseRead).expect(s.compression == List("fallback_raw"))
     .then(releaseLoad).then(resolveLoader)
     .expect(s.o.calls == List(VALUE_TWO) and s.o.loads == 1 and s.o.loaders == 1 and s.o.writes == 1)
 
-  run heldReadJustBeforeFreshnessBoundaryStillHitsTest = initialized(1).then(seedWith(0))
+  run heldReadJustBeforeFreshnessBoundaryStillHitsTest = initialized(TRACKED_MODE).then(seedWith(0))
     .then(beginIn(2)).then(advanceBy(999)).then(releaseRead).then(releaseLoad)
     .expect(s.o.calls == List(VALUE_ONE) and s.o.loaders == 0 and s.o.loads == 1 and s.o.recovery == List())
-  run untrackedCompressedRecoveryDoesNotWarmLocalTest = initialized(0).then(seedWith(8))
+  run untrackedCompressedRecoveryDoesNotWarmLocalTest = initialized(UNTRACKED_MODE).then(seedWith(8))
     .then(beginIn(0)).then(releaseRead).then(rejectLoader).then(releaseLoad)
     .then(beginIn(1)).expect(s.o.calls == List(VALUE_ONE, CALL_PENDING)
       and s.o.reads == 2 and s.localValue == 0 and s.o.dumps == 0 and s.o.writes == 0)
-  run compressedRecoveryRechecksMaximumAfterDecodeTest = initialized(1).then(seedWith(12))
+  run compressedRecoveryRechecksMaximumAfterDecodeTest = initialized(TRACKED_MODE).then(seedWith(12))
     .then(beginIn(0)).then(releaseRead).then(rejectLoader)
     .expect(s.compression == List("decompressed") and s.o.calls == List(CALL_PENDING))
     .then(advanceBy(1)).then(releaseLoad)
@@ -431,25 +468,25 @@ module dialcache_recovery_read_conformance {
 
   // The retained bytes belong to the call. Native expiration affects the next
   // read, but cannot revoke that earlier snapshot while its logical age is valid.
-  run retainedSnapshotSurvivesPhysicalExpiryTest = initialized(1).then(seedWith(15))
+  run retainedSnapshotSurvivesPhysicalExpiryTest = initialized(TRACKED_MODE).then(seedWith(15))
     .then(beginIn(0)).then(releaseRead).then(advanceBy(1000)).then(rejectLoader).then(releaseLoad)
     .then(beginIn(1)).then(releaseRead).then(rejectLoader)
     .expect(s.o.calls == List(VALUE_ONE, SOURCE_ERROR) and s.io.sourceErrors == List(0, 2)
       and s.o.loads == 1 and s.o.reads == 2 and s.o.recovery == List("served", "miss")
       and s.o.dumps == 0 and s.o.writes == 0)
 
-  run unsafeTimestampSkipsSerializerAndAllowsRefillTest = initialized(1).then(seedWith(16))
+  run unsafeTimestampSkipsSerializerAndAllowsRefillTest = initialized(TRACKED_MODE).then(seedWith(16))
     .then(beginIn(0)).then(releaseRead).expect(s.o.loads == 0 and s.o.loaders == 1)
     .then(resolveLoader).then(beginIn(1)).then(releaseRead).then(releaseLoad)
     .expect(s.o.calls == List(VALUE_TWO, VALUE_TWO) and s.o.reads == 2
       and s.o.loaders == 1 and s.o.loads == 1 and s.o.dumps == 1 and s.o.writes == 1)
-  run unsupportedVersionSkipsSerializerAndAllowsRefillTest = initialized(1).then(seedWith(17))
+  run unsupportedVersionSkipsSerializerAndAllowsRefillTest = initialized(TRACKED_MODE).then(seedWith(17))
     .then(beginIn(0)).then(releaseRead).expect(s.o.loads == 0 and s.o.loaders == 1)
     .then(resolveLoader).then(beginIn(1)).then(releaseRead).then(releaseLoad)
     .expect(s.o.calls == List(VALUE_TWO, VALUE_TWO) and s.o.reads == 2
       and s.o.loaders == 1 and s.o.loads == 1 and s.o.dumps == 1 and s.o.writes == 1)
 
-  run maximumAgeBeforeDecodeKeepsOriginalErrorTest = initialized(1).then(seedWith(12))
+  run maximumAgeBeforeDecodeKeepsOriginalErrorTest = initialized(TRACKED_MODE).then(seedWith(12))
     .then(beginIn(0)).then(releaseRead).then(advanceBy(1)).then(rejectLoader)
     .expect(s.o.calls == List(SOURCE_ERROR) and s.io.sourceErrors == List(1)
       and s.o.loads == 0 and s.compression == List() and s.o.recovery == List("miss")
@@ -458,7 +495,7 @@ module dialcache_recovery_read_conformance {
   // An absent read acquired the zero baseline. Invalidation before settlement
   // does not retroactively change that receipt, so the source still writes.
   // The write's equal timestamp is fenced for a subsequent independent read.
-  run laterInvalidationDoesNotRewriteObservedMissFenceTest = initialized(1)
+  run laterInvalidationDoesNotRewriteObservedMissFenceTest = initialized(TRACKED_MODE)
     .then(beginIn(0)).then(releaseRead).then(invalidate).then(resolveLoader)
     .then(beginIn(1)).then(releaseRead).then(rejectLoader)
     .expect(s.o.calls == List(VALUE_TWO, SOURCE_ERROR) and s.io.sourceErrors == List(0, 2)

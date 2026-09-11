@@ -3,7 +3,7 @@
   "sources": [
     {
       "path": "README.md",
-      "sha256": "3f2805199cf7f156ef3abe294a404e44d96a00252c37d04c24a5f0fa5f71c245",
+      "sha256": "514162b3e3409389fcd6b5e387a602604b7baea230b0f9743d6d331a3be83d9f",
       "entries": [
         {"line":1,"title":"DialCache","contracts":["B01"]},
         {"line":24,"title":"Install","contracts":["B01"]},
@@ -1005,20 +1005,21 @@
   "reviewedGuides": [
     {
       "path": "formal/AUTHORING.md",
-      "sha256": "e88af9358a27bae90e35b970edc61b46fbbfa45aff95c9c9d259cdd2bccee945",
+      "sha256": "4fef356a76d16630283e164b223b96dc6c577f73fae2a5acf132b155bb9df10b",
       "entries": [
         {"line":1,"title":"Reading and extending the DialCache models"},
-        {"line":10,"title":"Reading a model"},
-        {"line":45,"title":"Writing conventions"},
-        {"line":86,"title":"Codifying the next behavior"},
-        {"line":116,"title":"Exporting a deterministic regression"},
-        {"line":149,"title":"Maintaining case and witness evidence"},
-        {"line":190,"title":"Reproducible committed fixtures"},
-        {"line":200,"title":"Refactoring and execution"}
+        {"line":16,"title":"Reading a model"},
+        {"line":51,"title":"Writing conventions"},
+        {"line":92,"title":"Codifying the next behavior"},
+        {"line":122,"title":"Give reviewers focused context"},
+        {"line":137,"title":"Exporting a deterministic regression"},
+        {"line":170,"title":"Maintaining case and witness evidence"},
+        {"line":211,"title":"Reproducible committed fixtures"},
+        {"line":221,"title":"Refactoring and execution"}
       ],
       "review": {
         "kind": "tooling-guide",
-        "scope": "Model reading and editing conventions, independent properties, explicit action inputs, witness attribution, artifact generation and appropriate validation. These are authoring requirements, not additional portable cache cases."
+        "scope": "Quint notation and authoring conventions, catalog ownership, independent properties, explicit action inputs, witness attribution and reproducible validation. Human and automated contributors follow the same reviewed evidence chain."
       }
     },
     {
@@ -1284,18 +1285,18 @@
     },
     {
       "path": "formal/PORTING.md",
-      "sha256": "814efcb715f70e6a7dbcc6bd0115e6d522168028126067fd999c25df562dc6a6",
+      "sha256": "f14759d49a6ea65d5be2df3f467a599412ae1b6c50cc51290471fc52c58d6fa5",
       "entries": [
         {"line":1,"title":"Implementing another DialCache port"},
-        {"line":10,"title":"What a port supplies"},
-        {"line":35,"title":"Trace and observation contract"},
-        {"line":83,"title":"Generated fixtures and fast local tests"},
-        {"line":118,"title":"Complete corpus and reusable acceptance checks"},
-        {"line":216,"title":"New-port acceptance"}
+        {"line":14,"title":"What a port supplies"},
+        {"line":39,"title":"Trace and observation contract"},
+        {"line":87,"title":"Generated fixtures and fast local tests"},
+        {"line":122,"title":"Complete corpus and reusable acceptance checks"},
+        {"line":220,"title":"New-port acceptance"}
       ],
       "review": {
         "kind": "tooling-guide",
-        "scope": "Native driver operations, reproducible artifacts, shared Make entry points and strict complete-corpus acceptance. TS completion precedes Go preparation; mutations require current completed evidence. Fast PR smoke cannot establish full acceptance."
+        "scope": "Native driver operations, linked source-deadline walkthrough, reproducible artifacts and strict complete-corpus acceptance. TypeScript witness completion precedes Go preparation; smoke and full acceptance retain different evidence scopes."
       }
     },
     {
@@ -1339,21 +1340,21 @@
     },
     {
       "path": "formal/README.md",
-      "sha256": "d2aca3f5e39da7d676344d48465bed881871202c4d2829154cc6d77c02e9a42d",
+      "sha256": "1fba57946f24f6bfede39da800089dd0fd7c36be7f49093302d96087fca2149b",
       "entries": [
         {"line":1,"title":"Executable DialCache specification"},
-        {"line":9,"title":"Reading order"},
-        {"line":26,"title":"What the suite checks"},
-        {"line":47,"title":"Models and composition profiles"},
-        {"line":80,"title":"One execution inventory"},
-        {"line":104,"title":"Generating and replaying behavior"},
-        {"line":199,"title":"Wire artifacts and native boundaries"},
-        {"line":224,"title":"Go completion and fault challenges"},
-        {"line":252,"title":"Assumptions and maintenance"}
+        {"line":9,"title":"Start with your task"},
+        {"line":32,"title":"What the suite checks"},
+        {"line":53,"title":"Models and composition profiles"},
+        {"line":92,"title":"One execution inventory"},
+        {"line":116,"title":"Generating and replaying behavior"},
+        {"line":211,"title":"Wire artifacts and native boundaries"},
+        {"line":236,"title":"Go completion and fault challenges"},
+        {"line":264,"title":"Assumptions and maintenance"}
       ],
       "review": {
         "kind": "tooling-guide",
-        "scope": "Specification reading order, shared Make targets and pinned tool prerequisites, fast PR checks versus manual/weekly full validation, report fingerprints and new-port acceptance. Smoke replay, complete corpus evidence and mutation measurements retain distinct meanings."
+        "scope": "Intent-based entry routes for understanding, changing, debugging and porting DialCache; links to the worked Quint-to-native example, model inventory and full validation workflow. Navigation and finite evidence accounting add no behavioral cases."
       }
     },
     {
@@ -1519,6 +1520,21 @@
           "bf8405a9326a09012db4ed243f3f72f326a38a87",
           "c4fcb34d21cf19bca534926abdaf11d158674004"
         ]
+      }
+    },
+    {
+      "path": "formal/WALKTHROUGH.md",
+      "sha256": "3e2c97ee30ede542fc79db4657ee351ad851fea2d09abd809992d3a9ab0dd01c",
+      "entries": [
+        {"line":1,"title":"Follow one behavior from Quint to both ports"},
+        {"line":14,"title":"Read the named run first"},
+        {"line":51,"title":"Follow input and evidence separately"},
+        {"line":86,"title":"Find the rule's catalog entries"},
+        {"line":113,"title":"Run this example"}
+      ],
+      "review": {
+        "kind": "tooling-guide",
+        "scope": "A worked reading and reproduction guide for C23.policy-does-not-spend-source-budget. The existing public Quint regression, replay command encodings, independent native observations and catalog roles are explained without adding or broadening a behavioral claim."
       }
     },
     {

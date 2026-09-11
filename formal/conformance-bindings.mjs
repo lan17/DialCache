@@ -49,4 +49,3 @@ export function nativeBinding(entry, language, workspace = root) {
     ? 'reaches fractional expiry and shared instance grid' : 'reaches every action and required outcome or race';
   return [profileFile(entry.profile), `${profileSuite(entry.profile)} ${title}`];
 }
-

@@ -7,6 +7,12 @@ Quint is the behavioral source of truth for both TypeScript and Go. The prose
 explains it; implementation tests must not become an independent, drifting
 definition of the same portable rule.
 
+For a first contribution, start with the [worked walkthrough](./WALKTHROUGH.md).
+It follows one existing contract from a named Quint regression through actual
+TypeScript and Go assertions, and identifies the catalog entry each edit owns.
+Then use the checklist below for your rule; it applies the same path to another
+behavior.
+
 ## Reading a model
 
 Start with the file's scope and assumptions. Each model deliberately covers a
@@ -112,6 +118,21 @@ replay the same corpus in both languages. A readable model and TypeScript
 replay do not by themselves establish Go conformance; the Go completion gate
 also requires every scheduled profile, fixed case, protocol case, and witness
 gate to finish successfully.
+
+## Give reviewers focused context
+
+For a human or LLM review, search the stable contract and case IDs first, then
+extract the matching catalog entries. Provide a small context packet:
+
+- Contract/case IDs, the observable rule or change, and its documentation link.
+- Model file, exact regression/property symbols, and their execution-manifest entries.
+- Profile name, TS and Go input mappings, and each port's actual-observation assertion.
+- Latest relevant validation evidence, its source revision, and any changes since that run.
+
+State the exact modeled bounds, environmental assumptions and native evidence
+gaps. Separate a reached witness from a successful implementation assertion.
+Expected model state belongs only in predictions and checks; execution must
+follow recorded external inputs and actual effect ownership.
 
 ## Exporting a deterministic regression
 
