@@ -34,8 +34,8 @@ const validate = (value: unknown) => validateExecution(value);
 
 describe("formal execution schedule", () => {
   it("accounts for all models, selected invariants, regressions, and generated traces without Quint", () => {
-    expect(validate(manifest())).toEqual({ models: 32, libraries: 5, profiles: 15, invariants: 212, regressions: 396,
-      generatedTraces: 5280, exportedRegressionTraces: 205, vectorModels: 4, generatedVectors: 1631 });
+    expect(validate(manifest())).toEqual({ models: 32, libraries: 5, profiles: 15, invariants: 212, regressions: 399,
+      generatedTraces: 5280, exportedRegressionTraces: 208, vectorModels: 4, generatedVectors: 1631 });
   });
 
   it("rejects omitted models and dropped or renamed regressions", () => {
