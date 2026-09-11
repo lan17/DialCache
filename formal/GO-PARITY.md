@@ -23,11 +23,27 @@ regressions, drivers or wire artifacts require fresh reports.
 and the exact scope of its shared and native evidence. Inventory totals are
 accounting, not coverage percentages or proofs.
 
-The local validation record identifies its base revision and dirty source
-snapshot, report hashes, and execution-input manifest. CI repeats generation,
-both replays, real interoperability checks, and independent mutation
-measurements on the committed revision. `check-go-replay.mjs` rejects an
-incomplete Go report, missing generated histories, or skipped witness gates.
+Each validation record identifies its actual revision/input snapshot, report
+hashes and execution-input manifest. Use `make formal` for full model checks,
+artifact generation and prepared TS/Go replay, then `make mutations` and
+`make integration` for their separate fault and real-server evidence.
+`make ci NODE22_BIN=/path/to/node22/bin/node` runs all local lanes in order,
+including the exact Node 22.15.0 package floor; see the [Make target guide](./README.md#generating-and-replaying-behavior)
+for pinned prerequisites and individual targets.
+
+Hosted PR checks run native/race tests, committed smoke, audits and real
+integration; model/generator input changes also trigger artifact recomputation.
+The full formal/mutation workflow runs manually and weekly. Fast PR checks do
+not replace the full 7,180-check acceptance requirement: behavior/model changes
+need full validation for their exact inputs before merge, and release/new-port
+acceptance needs the full evidence. Reports under `.formal-traces/` bind their
+source, corpus and witness fingerprints; changed inputs invalidate an old pass.
+
+`make formal-corpus` completes TS replay and its witness evidence before
+`make formal-go` validates that report and prepares Go. `check-go-replay.mjs`
+and the shared completion gate reject missing histories, skipped witnesses,
+incomplete reports and stale inputs. Go independently executes every history;
+TS supplies shared witness reachability, not Go's cache results.
 
 ## Required evidence
 

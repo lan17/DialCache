@@ -103,28 +103,68 @@ histories or repeated citations are not independent proofs.
 
 ## Generating and replaying behavior
 
-Use the supported Node/Go versions and Quint version pinned by CI. Install
-repository dependencies with `corepack pnpm install --frozen-lockfile`, then:
+Run the repository [Make targets](../Makefile) from its root. Local commands
+and hosted CI share those targets, so a failure has the same reproduction path.
+Use Node 24, pnpm 10.33.0 and Go 1.27.1 to match CI. Install repository
+dependencies with `corepack pnpm install --frozen-lockfile`; the targets do not
+install tools or dependencies. Full model work and fixture recomputation also
+require Quint 0.32.0 and its Rust evaluator 0.6.0. Install Quint with
+`npm install --global @informalsystems/quint@0.32.0`; the pinned evaluator must
+be available to it. Real-server integration requires Docker. Full local CI also
+needs the exact Node 22.15.0 executable for the supported-runtime package floor;
+pass its absolute path as `NODE22_BIN`. Make targets expect these tools to be
+installed before validation starts.
 
 ```sh
-npm install --global @informalsystems/quint@0.32.0
-bash formal/check.sh
-bash formal/generate-traces.sh
-DIALCACHE_MBT_TRACE_DIR=.formal-traces/conformance \
-DIALCACHE_EFFECTS_TRACE_DIR=.formal-traces/effects \
-DIALCACHE_FEATURE_TRACE_DIR=.formal-traces/features \
-DIALCACHE_COVERAGE_EVIDENCE_DIR=.formal-traces/go-parity-witnesses \
-  corepack pnpm exec vitest run test/formal-conformance.test.ts test/formal-effects.test.ts \
-  test/formal-features.test.ts test/formal-local-clock.test.ts \
-  test/formal-behavior.test.ts test/formal-protocol-vectors.test.ts --coverage.enabled=false
+make help          # List targets and prerequisites.
+make check         # Fast native checks, committed Quint-derived smoke and audits.
+make formal        # Full models, corpus and prepared TS/Go conformance reports.
+make mutations     # Challenge both ports after their full reports pass.
+make integration   # Real Redis/Valkey/Cluster and cross-language checks.
+make ci NODE22_BIN=/path/to/node22/bin/node
+                   # All local lanes, including the exact Node 22.15.0 floor.
 ```
 
-Checking typechecks every scheduled model, explores its invariants and runs its
-named regressions. Generation follows the same manifest and checks committed
-Quint-derived wire artifacts. Run `node formal/generated-fixtures.mjs --check`
-to recompute the committed smoke and witness snapshots. Regenerate all committed
-model-derived artifacts with `node formal/generate-artifacts.mjs --write`. `QUINT_SEED` overrides the exploration seed; the
-manifest records the default backend, thread count, sample and transition bounds.
+| Target | Scope |
+| --- | --- |
+| `check-ts`, `check-go` | Native checks for one language; Go includes race detection |
+| `docs` | Build the documentation |
+| `package-floor` | Run zstd and packed-package checks with exact Node 22.15.0 via `NODE22_BIN` (or the current Node only if it is 22.15.0) |
+| `audit` | Check reviewed manifests, source mappings and artifact freshness without Quint |
+| `smoke` | Replay committed Quint-derived smoke and fixed supplements in both ports |
+| `formal-corpus` | Check all scheduled models, generate the full corpus, recompute committed artifacts, and complete TS replay |
+| `formal-go` | Validate the existing TS completion, then prepare and complete Go replay of that corpus |
+| `mutations-ts`, `mutations-go` | Measure one port's fault catalog against validated full evidence; Go requires both completion reports |
+| `integration-ts`, `integration-go` | Run one port's real-server integration checks |
+| `fixtures-check` | Recompute and compare all committed Quint-derived artifacts |
+
+`make check` and `make smoke` use committed artifacts without starting Quint.
+They do not establish full parity. `make formal` checks all scheduled model
+invariants and named regressions, exports sampled and public-action histories,
+then runs TS and Go through the shared completion gates. TS witness evidence
+is produced before Go's inputs are prepared. Reports and corpus files live
+under `.formal-traces/`; changed inputs invalidate their completion reports.
+
+Hosted pull requests run the fast native, race, smoke and audit checks plus
+both real-server integration suites. Changes to models, generation inputs or
+related tooling also trigger committed-artifact recomputation. The complete
+formal and mutation workflow runs manually and weekly. A behavior or model
+change still requires full validation for its exact inputs before merge;
+release and new-port acceptance also require full evidence. Passing only the
+fast PR checks cannot replace the full 7,180-check acceptance inventory.
+
+[GitHub requires a manually dispatched workflow to exist on the default branch](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow).
+Once the full workflow is on `main`, select the PR branch/ref when dispatching
+it. Until that first merge, use `make ci` locally with `NODE22_BIN` set. The
+weekly run validates its `main` snapshot; it does not validate a different PR's
+inputs.
+
+Regenerate committed predictions after an intentional model change with
+`node formal/generate-artifacts.mjs --write`, then run `make fixtures-check`.
+Make targets clear inherited trace selectors and `QUINT_SEED`, using the
+execution manifest's seed, backend, thread count, sample and transition bounds.
+For exploratory runs, the lower-level `formal/run-models.mjs` commands accept
+`QUINT_SEED`; keep those results separate from the reproducible acceptance run.
 These are bounded simulations, not exhaustive mathematical proofs.
 
 For `explicit-v1` profiles, every public transition records
@@ -183,19 +223,18 @@ and actual resource ceilings retain their separately stated binding evidence.
 
 ## Go completion and fault challenges
 
-After the TypeScript replay records exact corpus/witness fingerprints:
+The main full-run command is `make formal`. To resume after a successful
+`make formal-corpus`, run `make formal-go`; it validates the existing TS report
+and current corpus before preparing Go. To challenge the completed run:
 
 ```sh
-DIALCACHE_MBT_TRACE_DIR="$PWD/.formal-traces/conformance" \
-DIALCACHE_EFFECTS_TRACE_DIR="$PWD/.formal-traces/effects" \
-DIALCACHE_FEATURE_TRACE_DIR="$PWD/.formal-traces/features" \
-DIALCACHE_WITNESS_EVIDENCE_DIR="$PWD/.formal-traces/go-parity-witnesses" \
-  go -C go test -race -count=1 -json ./... > .formal-traces/go-replay.jsonl
-node formal/check-go-replay.mjs
-go -C go test -race -tags integration -count=1 -run '^TestRedisIntegration$' ./...
-node formal/measure-semantics.mjs
-node formal/measure-go-semantics.mjs
+make mutations-ts  # Requires the current TS completion report.
+make mutations-go  # Requires the current TS and Go completion reports.
 ```
+
+These targets are also used by the manual and weekly full workflow. The TS
+mutation measurement may overlap Go replay; Go mutations start only after Go
+completion. `make mutations` verifies both reports before measuring both ports.
 
 The completion checker derives required replay leaves, regression inventory,
 protocol cases and witness gates from current metadata. A partial, skipped or

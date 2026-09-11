@@ -152,17 +152,17 @@
     },
     {
       "path": "docs/maintainers.md",
-      "sha256": "aed21ceb7d4ddad1b63a7fccfdeb8aace5eb4b85bbdc890f7fde43d10852c0b2",
+      "sha256": "2fc4bc6aa99545572fcff75c44479ee52148030ec33886801e74ee545d7404ee",
       "entries": [
         {"line":1,"title":"Maintainer guide","contracts":["B01"]},
         {"line":8,"title":"Validation","contracts":["B01"]},
-        {"line":34,"title":"Maintaining the reference","contracts":["E05","B01"]},
-        {"line":56,"title":"Run the documentation site","contracts":["B01"]},
-        {"line":83,"title":"Publish to GitHub Pages","contracts":["B01"]},
-        {"line":99,"title":"Cache-path benchmark","contracts":["X02"]},
-        {"line":121,"title":"Redis write benchmark","contracts":["X02"]},
-        {"line":144,"title":"Stale-on-error benchmark","contracts":["X02"]},
-        {"line":172,"title":"Releasing","contracts":["B01","E05"]}
+        {"line":57,"title":"Maintaining the reference","contracts":["E05","B01"]},
+        {"line":79,"title":"Run the documentation site","contracts":["B01"]},
+        {"line":106,"title":"Publish to GitHub Pages","contracts":["B01"]},
+        {"line":122,"title":"Cache-path benchmark","contracts":["X02"]},
+        {"line":144,"title":"Redis write benchmark","contracts":["X02"]},
+        {"line":167,"title":"Stale-on-error benchmark","contracts":["X02"]},
+        {"line":195,"title":"Releasing","contracts":["B01","E05"]}
       ]
     },
     {
@@ -1023,23 +1023,23 @@
     },
     {
       "path": "formal/BEHAVIOR.md",
-      "sha256": "3522f1c31b670e3efb1f5b2677fcf7da78e1bdbd76f266c49b37c7bd794c2e5a",
+      "sha256": "c848844a063f4c3379c01a1a4c3eff2acf6526d114ab479de85077af66796cc0",
       "entries": [
         {"line":1,"title":"Portable behavioral scenarios and generated feature profiles"},
-        {"line":9,"title":"Scenario format"},
-        {"line":28,"title":"Optional observed events"},
-        {"line":42,"title":"Fixture"},
-        {"line":54,"title":"Inputs and completion boundaries"},
-        {"line":74,"title":"Additional composition profiles"},
-        {"line":121,"title":"Observations"},
-        {"line":133,"title":"Additional fixed-scenario inputs"},
-        {"line":139,"title":"Generated pending-effect profile"},
-        {"line":183,"title":"Generated feature profiles"},
-        {"line":282,"title":"Generated independent-caller profile"},
-        {"line":303,"title":"Generated layer-composition profile"},
-        {"line":336,"title":"Generated request-scope profile"},
-        {"line":359,"title":"Generated served-hit shadow admission profile"},
-        {"line":383,"title":"Port workflow and limits"}
+        {"line":17,"title":"Scenario format"},
+        {"line":36,"title":"Optional observed events"},
+        {"line":50,"title":"Fixture"},
+        {"line":62,"title":"Inputs and completion boundaries"},
+        {"line":82,"title":"Additional composition profiles"},
+        {"line":129,"title":"Observations"},
+        {"line":141,"title":"Additional fixed-scenario inputs"},
+        {"line":147,"title":"Generated pending-effect profile"},
+        {"line":191,"title":"Generated feature profiles"},
+        {"line":290,"title":"Generated independent-caller profile"},
+        {"line":311,"title":"Generated layer-composition profile"},
+        {"line":344,"title":"Generated request-scope profile"},
+        {"line":367,"title":"Generated served-hit shadow admission profile"},
+        {"line":391,"title":"Port workflow and limits"}
       ],
       "review": {
         "kind": "contract-guide",
@@ -1269,33 +1269,33 @@
     },
     {
       "path": "formal/GO-PARITY.md",
-      "sha256": "3a052318fdcadbfc61fd2ca18a1d1b4efea62bbc33523a156fbc9e4d3ef0f629",
+      "sha256": "fcd32784517e0fb4ae9d7dc9c957b8756e01272e93383022add97f3d3ad35b15",
       "entries": [
         {"line":1,"title":"Go parity acceptance"},
-        {"line":32,"title":"Required evidence"},
-        {"line":89,"title":"Reading and updating the ledger"},
-        {"line":133,"title":"Native clock precision"},
-        {"line":166,"title":"Current configuration and observability bindings"}
+        {"line":48,"title":"Required evidence"},
+        {"line":105,"title":"Reading and updating the ledger"},
+        {"line":149,"title":"Native clock precision"},
+        {"line":182,"title":"Current configuration and observability bindings"}
       ],
       "review": {
         "kind": "tooling-guide",
-        "scope": "Go acceptance, applicability mappings and native clock/configuration/exporter adaptations. Shared replay and mutation evidence is required separately from ledger freshness; historical reports retain original identities."
+        "scope": "Go acceptance, shared local/hosted validation targets and native clock/configuration/exporter adaptations. Fast PR checks remain separate from complete replay, mutation and interoperability evidence; historical reports retain original identities."
       }
     },
     {
       "path": "formal/PORTING.md",
-      "sha256": "d91234ee461792de6f770d5c62d74f8604a286b9729a5c070aed3e473f77925a",
+      "sha256": "814efcb715f70e6a7dbcc6bd0115e6d522168028126067fd999c25df562dc6a6",
       "entries": [
         {"line":1,"title":"Implementing another DialCache port"},
         {"line":10,"title":"What a port supplies"},
         {"line":35,"title":"Trace and observation contract"},
         {"line":83,"title":"Generated fixtures and fast local tests"},
-        {"line":116,"title":"Complete corpus and reusable acceptance checks"},
-        {"line":195,"title":"New-port acceptance"}
+        {"line":118,"title":"Complete corpus and reusable acceptance checks"},
+        {"line":216,"title":"New-port acceptance"}
       ],
       "review": {
         "kind": "tooling-guide",
-        "scope": "Native driver operations, external input versus expected observation boundary, reproducible artifacts, prepared completion context and new-port acceptance. Go consumes previously generated witness evidence; reports require trusted native assertion adapters."
+        "scope": "Native driver operations, reproducible artifacts, shared Make entry points and strict complete-corpus acceptance. TS completion precedes Go preparation; mutations require current completed evidence. Fast PR smoke cannot establish full acceptance."
       }
     },
     {
@@ -1339,7 +1339,7 @@
     },
     {
       "path": "formal/README.md",
-      "sha256": "9b9eca94588b93378e9ea2b98b8cb1036f36aacadb07b02f6fd12031e6403397",
+      "sha256": "d2aca3f5e39da7d676344d48465bed881871202c4d2829154cc6d77c02e9a42d",
       "entries": [
         {"line":1,"title":"Executable DialCache specification"},
         {"line":9,"title":"Reading order"},
@@ -1347,18 +1347,18 @@
         {"line":47,"title":"Models and composition profiles"},
         {"line":80,"title":"One execution inventory"},
         {"line":104,"title":"Generating and replaying behavior"},
-        {"line":159,"title":"Wire artifacts and native boundaries"},
-        {"line":184,"title":"Go completion and fault challenges"},
-        {"line":213,"title":"Assumptions and maintenance"}
+        {"line":199,"title":"Wire artifacts and native boundaries"},
+        {"line":224,"title":"Go completion and fault challenges"},
+        {"line":252,"title":"Assumptions and maintenance"}
       ],
       "review": {
         "kind": "tooling-guide",
-        "scope": "Specification reading order, executable inventory, generation/replay commands, artifact provenance and evidence boundaries. Models, histories, witnesses, native tests and mutation measurements have distinct meanings."
+        "scope": "Specification reading order, shared Make targets and pinned tool prerequisites, fast PR checks versus manual/weekly full validation, report fingerprints and new-port acceptance. Smoke replay, complete corpus evidence and mutation measurements retain distinct meanings."
       }
     },
     {
       "path": "formal/SEMANTIC-COVERAGE.md",
-      "sha256": "4c6cd7e2f2079760595c2401287e2ecc2cf8578445eebf18e9657c6d17d3e290",
+      "sha256": "364d1534b5bd3f4c340154eba06a1ac312ecad2bee561d13df57d46d278dd550",
       "entries": [
         {"line":1,"title":"Measuring semantic coverage"},
         {"line":5,"title":"Evidence inventory"},
@@ -1366,12 +1366,12 @@
         {"line":57,"title":"Behavioral mutation comparison"},
         {"line":71,"title":"Latest recorded measurement"},
         {"line":82,"title":"Historical comparison before generated primitive vectors"},
-        {"line":127,"title":"Reproduction and CI"},
-        {"line":142,"title":"Model properties and cross-language execution"}
+        {"line":129,"title":"Reproduction and CI"},
+        {"line":158,"title":"Model properties and cross-language execution"}
       ],
       "review": {
         "kind": "coverage-guide",
-        "scope": "Named-case and mutation methodology, current recorded results via VALIDATION, and explicitly historical earlier cohorts. Historical survivor tables do not describe current generated primitive coverage."
+        "scope": "Named-case and mutation methodology, current recorded results via VALIDATION, and explicitly historical earlier cohorts. Mutation execution is manual/weekly or local after valid complete replay, separate from fast PR checks; historical survivor tables retain their original scope."
       }
     },
     {
@@ -1523,7 +1523,7 @@
     },
     {
       "path": "go/README.md",
-      "sha256": "e66e398756c2493f1b54583f3115eed32c9ebde4f4a515dc554762188884ca2d",
+      "sha256": "c5e6b76a080660c4781f1fea9c4a079066137539b44a50837c6ac494dbecc729",
       "entries": [
         {"line":1,"title":"DialCache for Go"},
         {"line":19,"title":"Use"},
@@ -1533,7 +1533,7 @@
       ],
       "review": {
         "kind": "contract-guide",
-        "scope": "Idiomatic Go API/context/policy and error bindings, interoperable storage, native value/codec domains and observability. Fractional local-clock replay is distinct from additional precise deadline tests; reproducibility commands require shared witness evidence first.",
+        "scope": "Idiomatic Go API/context/policy and error bindings, interoperable storage, native value/codec domains and observability. Shared Make commands separate fast smoke from full TS-then-Go replay, mutation and real integration; fractional local-clock replay retains its bounded scope.",
         "contracts": [
           "B01",
           "B02",

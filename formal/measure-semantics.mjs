@@ -121,7 +121,7 @@ function save() {
 }
 save();
 try {
-  for (const path of ['src', 'test', 'formal', 'docs', 'README.md', 'package.json', 'tsconfig.json', 'vitest.config.ts']) {
+  for (const path of ['src', 'test', 'formal', 'docs', 'README.md', 'go/README.md', 'package.json', 'tsconfig.json', 'vitest.config.ts']) {
     cpSync(resolve(root, path), resolve(workspace, path), { recursive: true, filter: source => !source.includes('/docs/.vitepress/cache') && !source.includes('/docs/.vitepress/dist') });
   }
   symlinkSync(resolve(root, 'node_modules'), resolve(workspace, 'node_modules'), 'dir');

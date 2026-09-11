@@ -67,11 +67,13 @@ formal/                 # Quint behavioral source of truth, contracts and portab
 
 ```bash
 corepack pnpm install --frozen-lockfile
-corepack pnpm typecheck
-corepack pnpm test
-corepack pnpm build
-corepack pnpm test:package
-corepack pnpm test:integration
-go -C go test -race ./...
-go -C go test -race -tags integration -run '^TestRedisIntegration$' ./...
+make check
+make integration
 ```
+
+Use `make formal` for complete Quint model checks, corpus generation and both
+ports' full replay, then `make mutations` for assertion-strength checks.
+`make ci` runs all validation in the required order. `make help` lists targets
+and prerequisites; `formal/README.md` documents the fast PR and full-validation
+workflows. Full behavior/model/replay changes require full validation before
+merge; smoke tests cannot satisfy the full conformance gate.

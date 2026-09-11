@@ -87,8 +87,8 @@ not describe current detection. Its completed TypeScript measurement passed
 all unmodified baselines: 660 ordinary tests, 4,008 generated replays/witness
 gates, and 372 fixed scenarios/protocol vectors (4,380 positive portable
 tests/gates in their union). Exact source, input, and corpus fingerprints are
-retained in that report. Later changes require fresh reports; CI repeats
-measurement on the committed revision.
+retained in that report. Later changes require fresh reports; the manual/weekly
+full workflow repeats measurement for its checked-out inputs.
 
 | Mutant scope | Ordinary detected | Generated detected | Portable detected |
 | --- | ---: | ---: | ---: |
@@ -120,22 +120,38 @@ The independent Go measurement from that historical milestone compiled all 13 eq
 
 In that historical Go run, native clock regressions detected M03 (late source acceptance) and M11 (renewed insertion TTL). All 11 behavioral faults were detected by generated tests. M12 was detected only by the fixed protocol vectors; M09 (omitted mismatch-logging flag) was detected by generated tests but survived the fixed cohort. The native TypeScript and Go suites differed in size and scope, so their ordinary detection ratios were not equivalent denominators of implementation quality.
 
-Current CI requires every catalog entry's declared generated and portable
-detections in each language. Quint-driven tests provide the main portable
-regression suite; native tests cover language and integration boundaries.
+Full validation requires every catalog entry's declared generated and portable
+detections in each language. It runs in the manual/weekly full workflow and via
+`make mutations` locally. Fast PR checks do not run the mutation catalog.
+Quint-driven tests provide the main portable regression suite; native tests
+cover language and integration boundaries.
 
 ## Reproduction and CI
 
+Use the [shared Make targets and pinned prerequisites](./README.md#generating-and-replaying-behavior):
+
 ```sh
-# Install dependencies and CI-pinned Quint as described in README.md, then:
-bash formal/generate-traces.sh
-node formal/check-semantic-coverage.mjs
-node formal/measure-semantics.mjs
+make formal        # Regenerate and complete prepared TS and Go replay.
+make mutations     # Validate those reports, then measure both fault catalogs.
 ```
 
-The runner clears inherited trace selectors, uses the complete generated directories, and leaves source files untouched. It writes `.formal-traces/semantic/report.json` and `report.md`, per-cohort assertion reports/logs, and baseline witness evidence. JSON records completion status, elapsed time, revision, Node version, source/configuration/input hashes, exact corpus hash, cohort sizes, detections, survivors, and failing test names. An interrupted or failed run is not a completed measurement. CI retains these files in `typescript-semantic-evidence`, alongside the shared `formal-traces` artifact; restore the measurement artifact into `.formal-traces/semantic/` for reproduction.
+`make mutations-ts` requires current full TS completion. `make mutations-go`
+requires both TS and Go completion; it cannot run until Go replay finishes.
+TS mutation measurement may run alongside Go replay after `make formal-corpus`.
+The targets reject missing, incomplete or stale completion evidence by checking
+its current source, corpus and witness fingerprints. Raw measurement programs
+remain `measure-semantics.mjs` and `measure-go-semantics.mjs`; the Make targets
+supply the preflight checks used by hosted full validation.
 
-Each catalog entry's `requiredDetections` is a regression gate. CI fails if a previously detected fault survives. Newly detected faults remain visible as improvements; update the required set after inspecting the result. Source edits must match exactly once, so implementation drift requires reviewing the mutation rather than silently skipping it.
+The manual/weekly workflow runs the full corpus and fault checks. PR checks
+retain native/race/smoke/audit and real-server integration, plus fixture
+recomputation when generation inputs change. A behavior/model change still
+needs full validation before merge; release and new-port acceptance need the
+same full evidence. `make check` alone supplies no mutation or full-parity pass.
+
+The runner clears inherited trace selectors, uses the complete generated directories, and leaves source files untouched. It writes `.formal-traces/semantic/report.json` and `report.md`, per-cohort assertion reports/logs, and baseline witness evidence. JSON records completion status, elapsed time, revision, Node version, source/configuration/input hashes, exact corpus hash, cohort sizes, detections, survivors, and failing test names. An interrupted or failed run is not a completed measurement. The full workflow retains these files in `typescript-semantic-evidence`, alongside the shared `formal-traces` artifact; restore the measurement artifact into `.formal-traces/semantic/` for reproduction.
+
+Each catalog entry's `requiredDetections` is a regression gate. The local mutation target and full workflow fail if a required fault survives. Newly detected faults remain visible as improvements; update the required set after inspecting the result. Source edits must match exactly once, so implementation drift requires reviewing the mutation rather than silently skipping it.
 
 To expand assurance, add a test/doc-derived case and precise executable evidence, require a generated witness where appropriate, then add a representative fault for a previously unchallenged rule. Preserve gaps until execution closes them. Keep code coverage, source accounting, case evidence, and mutation detection as separate measurements. The current Go suite requires every shared profile, exported regression, fixed scenario and protocol case registered by the manifests, with an equivalent fault catalog in `go-mutations.json`. Broader interaction histories and larger domains remain separate assurance work.
 

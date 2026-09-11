@@ -87,7 +87,7 @@ model-derived artifacts with one command:
 
 ```sh
 node formal/generate-artifacts.mjs --write
-node formal/generate-artifacts.mjs --check
+make fixtures-check
 ```
 
 This runs all four wire exporters and regenerates the smoke/witness fixtures.
@@ -107,22 +107,40 @@ regeneration. Named public-action regressions run directly in Quint.
 Generated files omit volatile timestamps and retain recipe provenance. The
 [fixture lock](./generated-fixtures.lock.json) binds their content to the
 models, recipes and exporter. Ordinary TS/Go tests verify those fingerprints
-without launching Quint; formal CI recomputes the predictions and compares
-the complete output. Review changed predictions against the model change.
+without launching Quint. `make fixtures-check` recomputes the predictions and
+compares the complete output; the full workflow always recomputes these
+artifacts, and PR CI recomputes them when model/generator inputs change. Review changed predictions against the
+model change.
 Fixed scenarios and manually reviewed coverage/binding catalogs remain separate.
 Classifier tests deliberately corrupt copies of valid fixtures to test the
 harness; those corruptions receive no positive conformance credit.
 
 ## Complete corpus and reusable acceptance checks
 
-Generate the complete sampled and named-regression corpus with:
+Use the [shared Make targets and pinned prerequisites](./README.md#generating-and-replaying-behavior)
+from the repository root:
 
 ```sh
-bash formal/check.sh
-bash formal/generate-traces.sh
-node formal/generated-fixtures.mjs --check
-node formal/conformance.mjs inventory
+make check         # Fast native checks and committed smoke; not full acceptance.
+make formal        # Full model/corpus checks, then prepared TS and Go replay.
+make mutations     # Requires valid completion reports from the full run.
+make integration   # Real-server interoperability; requires Docker.
 ```
+
+`make ci NODE22_BIN=/path/to/node22/bin/node` runs all local lanes in order,
+including the exact Node 22.15.0 package floor. `make formal-corpus` produces the full
+corpus and completed TS evidence; `make formal-go` validates that evidence and
+then prepares Go's run. These are the same entry points used by hosted CI.
+The manual/weekly full workflow performs the complete formal and mutation
+checks; PR CI keeps native/race/smoke/audit and real-server integration checks,
+with conditional artifact recomputation. Behavior/model changes require full
+validation before merge, and every release or new-port acceptance requires the
+complete inventory. A green smoke lane supplies no full-parity claim.
+
+The current shared inventory contains 7,180 required checks. Print its exact
+IDs with `node formal/conformance.mjs inventory`. The commands below describe
+the lower-level completion API for implementers of another port; the Make
+targets already orchestrate it for TS and Go.
 
 The shared inventory contains stable language-neutral IDs:
 
@@ -141,13 +159,12 @@ separate from implementation assertions. Current Go validation consumes the
 shared witness evidence produced during TS replay, checking exact corpus and
 definition hashes. Go independently executes and asserts every history.
 
-Prepare each port immediately before its native tests. Complete TypeScript
-witness generation before preparing Go, which consumes that evidence:
-
-```sh
-node formal/conformance.mjs prepare typescript .formal-traces/ts-context.json
-node formal/conformance.mjs prepare go .formal-traces/go-context.json
-```
+Prepare each port immediately before its native tests. For TS, the low-level
+command is `node formal/conformance.mjs prepare typescript .formal-traces/ts-context.json`.
+Run its complete native suite and validate its completion before using
+`node formal/conformance.mjs prepare go .formal-traces/go-context.json`.
+Go preparation consumes the witness evidence TS just produced. Do not prepare
+both contexts consecutively before running either suite.
 
 For another language, supply a JSON array containing every repository-relative
 implementation, driver, adapter, dependency-lock and test-configuration file
@@ -186,7 +203,11 @@ and test execution use the native language. Reuse the supplied checker.
 
 Every required ID must pass exactly once. Missing, duplicate, unknown, skipped,
 failed and incomplete results are rejected. So are changed source/corpus bytes
-and native runs predating preparation. Supplied adapters verify actual native
+and native runs predating preparation. Keep contexts, corpus, original reports
+and completion JSON together under `.formal-traces/`. Mutation targets validate
+the relevant full reports against current source and corpus fingerprints before
+starting: TS mutations need TS completion, and Go mutations need both ports.
+Supplied adapters verify actual native
 assertion records before producing completion results. A completion document
 is test evidence, not cryptographic attestation that an untrusted driver behaved
 honestly. Challenge each new driver with broken implementations and malformed
