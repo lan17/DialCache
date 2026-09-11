@@ -1,13 +1,13 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 const { prepareApalache } = await import(new URL("../formal/apalache.mjs", import.meta.url).href) as {
   prepareApalache(specification: unknown, options: { output: string; archivePath: string }): Promise<{
-    launcher: string; jar: string; archive: { path: string; sha256: string }; cleanup(): void;
+    launcher: string; jar: string; quintHome: string; archive: { path: string; sha256: string }; cleanup(): void;
   }>;
 };
 
@@ -36,6 +36,7 @@ describe("approved standalone Apalache distribution", () => {
     const first = await prepareApalache(specification, { output, archivePath });
     try {
       expect(first.archive).toMatchObject({ path: archivePath, sha256: specification.archive.sha256 });
+      expect(realpathSync(join(first.quintHome, "apalache-dist-0.56.1/apalache/bin/apalache-mc"))).toBe(realpathSync(first.launcher));
       writeFileSync(first.jar, "changed extracted jar");
       const second = await prepareApalache(specification, { output, archivePath });
       try {

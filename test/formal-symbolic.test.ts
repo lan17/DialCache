@@ -20,10 +20,22 @@ function fixtureSolver(directory: string, version = "0.56.1") {
   const jar = join(directory, "fixture.jar");
   writeFileSync(jar, "controlled solver fixture");
   writeFileSync(launcher, `#!${process.execPath}
-const net = require('node:net');
+const http2 = require('node:http2');
 if (process.env.APALACHE_JAR !== ${JSON.stringify(jar)}) process.exit(2);
 const port = Number(process.argv.find(arg => arg.startsWith('--port=')).split('=')[1]);
-const server = net.createServer();
+const server = http2.createServer();
+server.on('stream', stream => {
+  stream.on('data', () => {});
+  stream.on('end', () => {
+    const field = (number, value) => Buffer.concat([Buffer.from([number * 8 + 2, value.length]), value]);
+    const message = field(4, field(1, field(1, Buffer.from('fixture.proto'))));
+    const header = Buffer.alloc(5);
+    header.writeUInt32BE(message.length, 1);
+    stream.respond({ ':status': 200, 'content-type': 'application/grpc' }, { waitForTrailers: true });
+    stream.on('wantTrailers', () => stream.sendTrailers({ 'grpc-status': '0' }));
+    stream.end(Buffer.concat([header, message]));
+  });
+});
 server.listen(port, '127.0.0.1', () => {
   console.log('# APALACHE version: ${version} | build: fixture');
   console.log('The Apalache server is running on port ' + port + '. Press Ctrl-C to stop.');

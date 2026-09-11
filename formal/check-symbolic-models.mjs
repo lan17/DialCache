@@ -1,12 +1,13 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { closeSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { basename, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { readExecution, validateExecution } from './execution.mjs';
 import { prepareApalache } from './apalache.mjs';
+import { waitForApalache } from './apalache-readiness.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const hash = path => createHash('sha256').update(readFileSync(path)).digest('hex');
@@ -79,8 +80,11 @@ export async function startSymbolicServer({ launcher, jar, version, output, endp
       const observed = /^# APALACHE version: (\S+) \| build: (\S+)/m.exec(text);
       if (observed && observed[1] !== version) throw new Error(`Owned Apalache version ${observed[1]} differs from required ${version}`);
       if (observed && text.includes(`The Apalache server is running on port ${port}.`)) {
+        // A bind banner does not imply that cold gRPC reflection is ready.
+        await waitForApalache(endpoint, assertAlive);
+        assertAlive();
         return { endpoint, assertAlive, stop, evidence: { endpoint, pid: server.pid, version: observed[1],
-          build: observed[2], launcher, launcherSha256: hash(launcher), jar, jarSha256: hash(jar) } };
+          build: observed[2], readiness: 'grpc-reflection-cmd-executor', launcher, launcherSha256: hash(launcher), jar, jarSha256: hash(jar) } };
       }
       if (Date.now() - started > 20_000) throw new Error('Owned Apalache startup did not attest its version and bound endpoint');
       await delay(50);
@@ -103,7 +107,7 @@ export async function checkSymbolicModels({ directory = root } = {}) {
     const plan = symbolicPlan(manifest);
     report.backend = manifest.symbolic;
     const sources = ['formal/execution.json', 'formal/execution.mjs', 'formal/generated-fixtures.lock.json',
-      'formal/check-symbolic-models.mjs', 'formal/apalache.mjs', ...manifest.libraries, ...manifest.models.map(model => model.path)];
+      'formal/check-symbolic-models.mjs', 'formal/apalache.mjs', 'formal/apalache-readiness.mjs', ...manifest.libraries, ...manifest.models.map(model => model.path)];
     report.sources = Object.fromEntries(sources.map(path => [path, hash(resolve(directory, path))]));
     save();
     const version = spawnSync('quint', ['--version'], { cwd: directory, encoding: 'utf8', timeout: 15_000 });
@@ -112,6 +116,7 @@ export async function checkSymbolicModels({ directory = root } = {}) {
     report.quintVersion = version.stdout.trim();
     installation = await prepareApalache(manifest.symbolic, { output });
     report.archive = installation.archive;
+    report.quintHome = installation.quintHome;
     server = await startSymbolicServer({ ...installation,
       version: manifest.symbolic.version, output });
     report.solver = server.evidence;
@@ -120,11 +125,15 @@ export async function checkSymbolicModels({ directory = root } = {}) {
       console.log(`Symbolically check ${job.model} through ${job.maxSteps} steps (${job.invariants.length} properties)`);
       rmSync(resolve(directory, job.output), { force: true });
       const args = [...job.args, `--server-endpoint=${server.endpoint}`];
-      const run = spawnSync('quint', args, { cwd: directory, encoding: 'utf8', timeout: job.timeoutMs, maxBuffer: 8 * 1024 * 1024 });
-      writeFileSync(resolve(output, `${basename(job.model, '.qnt')}.log`), (run.stdout ?? '') + (run.stderr ?? ''));
+      const run = spawnSync('quint', args, { cwd: directory, encoding: 'utf8', timeout: job.timeoutMs, maxBuffer: 8 * 1024 * 1024,
+        env: { ...process.env, QUINT_HOME: installation.quintHome, APALACHE_JAR: installation.jar } });
+      const log = resolve(output, `${basename(job.model, '.qnt')}.log`);
+      writeFileSync(log, (run.stdout ?? '') + (run.stderr ?? ''));
       await delay(0); // Observe an owned-server exit that happened during spawnSync.
       server.assertAlive();
-      if (run.error || run.signal) throw new Error(`${job.model}: symbolic checker failed: ${run.error ?? run.signal}`);
+      if (run.error || run.signal || !existsSync(resolve(directory, job.output))) {
+        throw new Error(`${job.model}: symbolic checker failed (${run.error?.message ?? run.signal ?? `exit ${run.status} without a result`}). See ${log}`);
+      }
       validateSymbolicResult(JSON.parse(readFileSync(resolve(directory, job.output), 'utf8')), run.status);
       report.checks.push({ ...job, args, status: 'passed', reportSha256: hash(resolve(directory, job.output)) });
       save();

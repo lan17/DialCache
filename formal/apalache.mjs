@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { createReadStream, createWriteStream, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync } from 'node:fs';
+import { createReadStream, createWriteStream, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, symlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { pipeline } from 'node:stream/promises';
@@ -41,11 +41,20 @@ export async function prepareApalache(specification, { output, archivePath = pro
   const cleanup = () => rmSync(installation, { recursive: true, force: true });
   try {
     // Always extract verified bytes afresh; a changed cached executable cannot run.
-    const result = spawnSync('tar', ['-xzf', archivePath, '--strip-components=1', '-C', installation], { encoding: 'utf8', timeout: 60_000 });
+    const distribution = resolve(installation, 'distribution');
+    mkdirSync(distribution);
+    const result = spawnSync('tar', ['-xzf', archivePath, '--strip-components=1', '-C', distribution], { encoding: 'utf8', timeout: 60_000 });
     if (result.error || result.status !== 0) throw new Error(`Cannot extract verified Apalache archive: ${result.error?.message ?? result.stderr}`);
-    const launcher = resolve(installation, 'bin/apalache-mc');
-    const jar = resolve(installation, 'lib/apalache.jar');
+    const launcher = resolve(distribution, 'bin/apalache-mc');
+    const jar = resolve(distribution, 'lib/apalache.jar');
     if (!existsSync(launcher) || !existsSync(jar)) throw new Error('Verified Apalache archive is missing its launcher or JAR.');
-    return { launcher, jar, archive: { path: archivePath, url: archive.url, sha256: archive.sha256 }, cleanup };
+    // Quint 0.32 tries its own downloader if a gRPC connection fails. Its
+    // documented QUINT_HOME override isolates that fallback and points it only
+    // at these approved bytes; no user cache or alternate download is involved.
+    const quintHome = resolve(installation, 'quint-home');
+    const fallback = resolve(quintHome, `apalache-dist-${version}`);
+    mkdirSync(fallback, { recursive: true });
+    symlinkSync(distribution, resolve(fallback, 'apalache'), 'dir');
+    return { launcher, jar, quintHome, archive: { path: archivePath, url: archive.url, sha256: archive.sha256 }, cleanup };
   } catch (error) { cleanup(); throw error; }
 }
