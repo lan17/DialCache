@@ -1005,19 +1005,19 @@
   "reviewedGuides": [
     {
       "path": "formal/AUTHORING.md",
-      "sha256": "2664301922e1daee4a9f9978ecf307bb177b9699018b3e955bd38054c6e03551",
+      "sha256": "db893b60bb3c71071ad39d363166445aee49c85138e7975017c374eca591284a",
       "entries": [
         {"line":1,"title":"Reading and extending the DialCache models"},
         {"line":16,"title":"Reading a model"},
         {"line":56,"title":"Writing conventions"},
-        {"line":115,"title":"Codifying the next behavior"},
-        {"line":148,"title":"Give reviewers focused context"},
-        {"line":163,"title":"Exporting a deterministic regression"},
-        {"line":199,"title":"Maintaining case and witness evidence"},
-        {"line":247,"title":"Reproducible committed fixtures"},
-        {"line":257,"title":"Refactoring and execution"},
-        {"line":282,"title":"Challenging every model"},
-        {"line":307,"title":"Exported runs are exactly the public-only runs"}
+        {"line":135,"title":"Codifying the next behavior"},
+        {"line":168,"title":"Give reviewers focused context"},
+        {"line":183,"title":"Exporting a deterministic regression"},
+        {"line":219,"title":"Maintaining case and witness evidence"},
+        {"line":267,"title":"Reproducible committed fixtures"},
+        {"line":277,"title":"Refactoring and execution"},
+        {"line":302,"title":"Challenging every model"},
+        {"line":370,"title":"Exported runs are exactly the public-only runs"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1287,7 +1287,7 @@
     },
     {
       "path": "formal/PORTING.md",
-      "sha256": "637fc70f08e0996a72fc0c04e2fd42f5a4388246bc84b44a8964d3e2f654d3dd",
+      "sha256": "6901654293c522493c81d581ecbda04891fcb90ec8512615400e9b5b02867692",
       "entries": [
         {"line":1,"title":"Implementing another DialCache port"},
         {"line":14,"title":"What a port supplies"},
@@ -1297,8 +1297,8 @@
         {"line":222,"title":"Generated fixtures and fast local tests"},
         {"line":257,"title":"Complete corpus and reusable acceptance checks"},
         {"line":365,"title":"Witness evidence"},
-        {"line":408,"title":"Current limitations for a third port"},
-        {"line":422,"title":"New-port acceptance"}
+        {"line":436,"title":"Current limitations for a third port"},
+        {"line":450,"title":"New-port acceptance"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1362,16 +1362,16 @@
     },
     {
       "path": "formal/SEMANTIC-COVERAGE.md",
-      "sha256": "a6c137d8f075b096e0f8a204ece53193526e38a64ac37623c997784712b3defe",
+      "sha256": "3e140eb14ea646a3ce5639b002d32963bb57c7341b3b12f3487adc028f428f33",
       "entries": [
         {"line":1,"title":"Measuring semantic coverage"},
         {"line":5,"title":"Evidence inventory"},
         {"line":47,"title":"Model assurance"},
-        {"line":88,"title":"Generated boundary evidence"},
-        {"line":96,"title":"Behavioral mutation comparison"},
-        {"line":110,"title":"Recorded measurements"},
-        {"line":116,"title":"Reproduction and CI"},
-        {"line":158,"title":"Model properties and cross-language execution"}
+        {"line":95,"title":"Generated boundary evidence"},
+        {"line":103,"title":"Behavioral mutation comparison"},
+        {"line":117,"title":"Recorded measurements"},
+        {"line":123,"title":"Reproduction and CI"},
+        {"line":165,"title":"Model properties and cross-language execution"}
       ],
       "review": {
         "kind": "coverage-guide",
@@ -1501,15 +1501,15 @@
     },
     {
       "path": "formal/VALIDATION.md",
-      "sha256": "a6f4de4caf246c24aa924be96475ef22d9db372c61b270d0c72370f5b75cdb45",
+      "sha256": "56c9728c7ebe1ca65d7eb1e655d6f93b7de3d5ae133807894dc76722a5200ae9",
       "entries": [
         {"line":1,"title":"Validation and evidence"},
         {"line":7,"title":"Choosing a run"},
-        {"line":50,"title":"Reading a completion report"},
-        {"line":68,"title":"Mutation evidence"},
-        {"line":125,"title":"Exploratory runs"},
-        {"line":155,"title":"A retained sampling regression"},
-        {"line":192,"title":"Historical results"}
+        {"line":59,"title":"Reading a completion report"},
+        {"line":77,"title":"Mutation evidence"},
+        {"line":138,"title":"Exploratory runs"},
+        {"line":171,"title":"A retained sampling regression"},
+        {"line":208,"title":"Historical results"}
       ],
       "review": {
         "kind": "tooling-guide",
