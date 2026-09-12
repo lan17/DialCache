@@ -147,11 +147,24 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  # Each mutation lane is sharded over three runners. Every shard compiles,
+  # measures every unmodified baseline and evaluates the witness evidence
+  # itself, then measures a contiguous third of the catalog; the merge job
+  # refuses shards whose fingerprints or baselines disagree, so the merged
+  # report is exactly as strict as one sequential run. The lane was bounded
+  # by sequential mutants: run 34669546872 took 17 minutes unsharded. A shard
+  # runs the baselines (2-4 minutes) plus 4-5 mutants (2-4 minutes each);
+  # doubled for a slow runner that stays under 30.
   typescript-mutations:
     needs: generate
     runs-on: ubuntu-latest
-    # Run 34660598461 took 17 minutes; a 2x slower runner needs 34.
-    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    env:
+      MUTATION_SHARD: ${{ matrix.shard }}/3
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup-validation
@@ -159,8 +172,39 @@ jobs:
         with:
           name: formal-traces
           path: .formal-traces
-      - name: Require TypeScript assertion-based fault detection
+      - name: Measure one shard of TypeScript assertion-based fault detection
         run: make mutations-ts
+      # The shard directory alone: the merge job downloads every shard into
+      # one .formal-traces/semantic/shards/ tree.
+      - name: Preserve this shard's TypeScript mutation evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: typescript-semantic-shard-${{ matrix.shard }}
+          path: .formal-traces/semantic/shards/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14
+
+  # Runs even when a shard failed or never uploaded, so the merge names the
+  # missing or inconsistent shard instead of a skipped job hiding it. Needs
+  # neither Quint nor Go. Uploads under the artifact name the unsharded lane
+  # used, so the summary and any reader of the evidence are unchanged.
+  typescript-mutations-merge:
+    needs: typescript-mutations
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: ./.github/actions/setup-validation
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: typescript-semantic-shard-*
+          path: .formal-traces/semantic/shards
+          merge-multiple: true
+      - name: Require every TypeScript shard and merge the complete report
+        run: make mutations-merge-ts
       - name: Preserve TypeScript mutation evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -201,12 +245,23 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  # The Go lane bounded the whole workflow: 13 mutants each replaying the
+  # generated cohort for about 105 s on a fast runner, strictly in sequence.
+  # Run 34660598461 took 25 minutes; runs 34669546872 and 34670045249 took 47
+  # and 48 on the slow runner class. A shard compiles, runs the baselines
+  # (2-4 minutes) and 4-5 mutants (2-4 minutes each); doubled for a slow
+  # runner that stays under 40, and one hung cohort adds its 8-minute test
+  # bound before the shard fails.
   go-mutations:
     needs: generate
     runs-on: ubuntu-latest
-    # Run 34660598461 took 25 minutes; a 2x slower runner needs 50, and one
-    # hung cohort adds its 8-minute test bound before the lane fails.
-    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    env:
+      MUTATION_SHARD: ${{ matrix.shard }}/3
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup-validation
@@ -216,8 +271,33 @@ jobs:
         with:
           name: formal-traces
           path: .formal-traces
-      - name: Require Go assertion-based fault detection
+      - name: Measure one shard of Go assertion-based fault detection
         run: make mutations-go
+      - name: Preserve this shard's Go mutation evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: go-semantic-shard-${{ matrix.shard }}
+          path: .formal-traces/go-semantic/shards/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14
+
+  go-mutations-merge:
+    needs: go-mutations
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: ./.github/actions/setup-validation
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: go-semantic-shard-*
+          path: .formal-traces/go-semantic/shards
+          merge-multiple: true
+      - name: Require every Go shard and merge the complete report
+        run: make mutations-merge-go
       - name: Preserve Go mutation evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -229,8 +309,10 @@ jobs:
           retention-days: 14
 
   # A failed or skipped dependency cannot turn smoke evidence into full acceptance.
+  # The mutation lanes count through their merge jobs: a merge succeeds only
+  # when every shard's report is present, consistent and free of lost detections.
   formal-full:
-    needs: [check-models, generate, typescript-parity, symbolic, typescript-mutations, go-parity, go-mutations, exploration]
+    needs: [check-models, generate, typescript-parity, symbolic, typescript-mutations-merge, go-parity, go-mutations-merge, exploration]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -291,14 +373,14 @@ jobs:
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 90
-      - name: Require the model check, the generated corpus, both port replays and both mutation measurements
+      - name: Require the model check, the generated corpus, both port replays and both merged mutation measurements
         env:
           CHECK_MODELS_RESULT: ${{ needs.check-models.result }}
           GENERATE_RESULT: ${{ needs.generate.result }}
           TYPESCRIPT_RESULT: ${{ needs.typescript-parity.result }}
-          TYPESCRIPT_MUTATIONS_RESULT: ${{ needs.typescript-mutations.result }}
+          TYPESCRIPT_MUTATIONS_MERGE_RESULT: ${{ needs.typescript-mutations-merge.result }}
           GO_RESULT: ${{ needs.go-parity.result }}
-          GO_MUTATIONS_RESULT: ${{ needs.go-mutations.result }}
+          GO_MUTATIONS_MERGE_RESULT: ${{ needs.go-mutations-merge.result }}
           SYMBOLIC_RESULT: ${{ needs.symbolic.result }}
           EXPLORATION_RESULT: ${{ needs.exploration.result }}
           EXPLORATION_REQUIRED: ${{ github.event_name == 'schedule' || inputs.exploration == true }}
@@ -306,9 +388,9 @@ jobs:
           test "$CHECK_MODELS_RESULT" = success
           test "$GENERATE_RESULT" = success
           test "$TYPESCRIPT_RESULT" = success
-          test "$TYPESCRIPT_MUTATIONS_RESULT" = success
+          test "$TYPESCRIPT_MUTATIONS_MERGE_RESULT" = success
           test "$GO_RESULT" = success
-          test "$GO_MUTATIONS_RESULT" = success
+          test "$GO_MUTATIONS_MERGE_RESULT" = success
           test "$SYMBOLIC_RESULT" = success
           if [ "$EXPLORATION_REQUIRED" = true ]; then
             test "$EXPLORATION_RESULT" = success

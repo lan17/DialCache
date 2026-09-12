@@ -84,12 +84,26 @@ challenges over 62 distinct faults, with no waivers. Its report distinguishes
 those two counts and marks a filtered `--only` run as partial; only the complete
 run is evidence.
 
-The weekly full workflow budgets `typescript-mutations` at 60 minutes and
-`go-mutations` at 75 minutes. A September 2026 run took 17 and 25 minutes; a
-second run the next day was 1.8 times slower on every phase, so each budget
-assumes a 2x slower runner. The Go mutation runner bounds each `go test`
-invocation at 8 minutes to catch a hung mutant, not to pace a slow runner.
-Its `formal-full` aggregate job retains a small `formal-summary` artifact for 90
+The weekly full workflow shards each mutation lane over three runners. The Go
+lane bounded the whole run: its 13 mutants replay the generated cohort in strict
+sequence, 25 minutes on a fast runner and 47 to 48 minutes on the slow class
+(runs 34669546872 and 34670045249; the TypeScript lane took 17). Each shard
+measures every unmodified baseline itself, so its evidence stands on the
+environment it ran in, then measures a contiguous third of the catalog. A merge
+job per language reads the shard reports and writes the complete report. It
+refuses a missing, duplicated or failed shard, shards whose source, catalog,
+corpus or witness fingerprints or baseline results differ, and coverage that is
+not the catalog exactly once in order. Only the merged report is complete
+evidence; a shard report is never `complete`. Shard budgets are 30 minutes
+(TypeScript) and 40 (Go): the baselines plus four or five mutants, doubled for a
+slow runner. The Go mutation runner still bounds each `go test` invocation at
+8 minutes to catch a hung mutant, not to pace a slow runner. Locally,
+`MUTATION_SHARD=1/3 make mutations-ts` (then `2/3` and `3/3`) reproduces one
+shard under `.formal-traces/semantic/shards/1-of-3/`, and
+`make mutations-merge-ts` assembles the report that an unsharded
+`make mutations-ts` writes; the Go targets mirror this.
+
+The workflow's `formal-full` aggregate job retains a small `formal-summary` artifact for 90
 days: both completion and context reports, the Go replay summary, the model
 properties `report.json` from the `check-models` job, the symbolic `report.json`
 and, on scheduled or exploration runs, each exploration `report.json`. Trace

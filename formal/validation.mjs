@@ -29,8 +29,10 @@ export const targetDescriptions = {
   explore: 'Explore a new recorded seed and replay both ports in an isolated source snapshot',
   'model-check': 'Symbolically verify the scheduled finite rules with pinned Quint/Apalache (Java 21)',
   mutations: 'Measure TypeScript and Go semantic mutations over the generated corpus and shared witness evidence',
-  'mutations-ts': 'Measure TypeScript semantic mutations over the generated corpus',
-  'mutations-go': 'Measure Go semantic mutations over the generated corpus and shared witness evidence',
+  'mutations-ts': 'Measure TypeScript semantic mutations over the generated corpus (MUTATION_SHARD=<index>/<count> measures one shard)',
+  'mutations-go': 'Measure Go semantic mutations over the generated corpus and shared witness evidence (MUTATION_SHARD=<index>/<count> measures one shard)',
+  'mutations-merge-ts': 'Merge TypeScript mutation shards into the complete report; refuses inconsistent or missing shards',
+  'mutations-merge-go': 'Merge Go mutation shards into the complete report; refuses inconsistent or missing shards',
   integration: 'Run real TypeScript and Go Redis/Valkey/Cluster integration checks',
   'integration-ts': 'Run TypeScript real integration checks',
   'integration-go': 'Run Go real integration and interoperability checks with race detection',
@@ -41,6 +43,23 @@ export const targetDescriptions = {
 export function expandTargets(target) {
   if (!Object.hasOwn(targetDescriptions, target)) throw new Error(`Unknown validation target ${target}; run make help`);
   return aggregateTargets[target]?.flatMap(expandTargets) ?? [target];
+}
+
+// MUTATION_SHARD=<index>/<count> narrows one measurement lane to a shard of
+// its catalog; the merge target later assembles the complete report. Only the
+// two leaf lanes accept it: an aggregate that silently ignored it would run the
+// complete measurement the caller did not ask for.
+const shardedTargets = ['mutations-ts', 'mutations-go'];
+export function mutationShardArguments(target, environment = process.env) {
+  const value = environment.MUTATION_SHARD;
+  if (value === undefined) return [];
+  if (!shardedTargets.includes(target)) {
+    if (expandTargets(target).some(name => shardedTargets.includes(name))) throw new Error(`MUTATION_SHARD=${value} applies only to make mutations-ts and make mutations-go; unset it to run the complete measurement with make ${target}.`);
+    return [];
+  }
+  const match = /^([1-9]\d*)\/([1-9]\d*)$/.exec(value);
+  if (!match || Number(match[1]) > Number(match[2])) throw new Error(`MUTATION_SHARD must be <index>/<count> with 1 <= index <= count (for example 2/3); got ${JSON.stringify(value)}.`);
+  return [`--shard=${value}`];
 }
 
 // Local shells may retain a one-file replay, protocol subset or alternate
@@ -94,6 +113,7 @@ export function validationPlan(target, { directory = root, environment = process
     'test', '-race', '-count=1', ...(full ? ['-json', '-timeout=35m'] : []), './...'),
     ...(full ? { env: { ...replayEnv, DIALCACHE_WITNESS_EVIDENCE_DIR: witnessDirectory }, stdoutFile: '.formal-traces/go-replay.jsonl' } : {}) });
   const node22 = floorExecutable(environment, runnerNode, nodeVersion) ?? '<NODE22_BIN>';
+  const shard = mutationShardArguments(target, environment);
   const plans = {
     'check-ts': [pnpm('Typecheck TypeScript', 'typecheck'), pnpm('Run TypeScript unit tests with coverage', 'test'),
       pnpm('Build package', 'build'), pnpm('Check packed package on Node 24', 'test:package')],
@@ -124,8 +144,12 @@ export function validationPlan(target, { directory = root, environment = process
       node('Prepare Go execution context', 'formal/conformance.mjs', 'prepare', 'go', reportPath('go', 'context')), nativeGo(true),
       { ...node('Check complete Go native report', 'formal/check-go-replay.mjs'), stdoutFile: '.formal-traces/go-replay-summary.json' },
       { ...node('Adapt Go native assertion report', 'formal/conformance-adapters.mjs', 'go', '.formal-traces/go-replay.jsonl', reportPath('go', 'context')), stdoutFile: reportPath('go', 'completion') }, completion('go')],
-    'mutations-ts': [node('Measure TypeScript semantic mutations', 'formal/measure-semantics.mjs')],
-    'mutations-go': [node('Measure Go semantic mutations', 'formal/measure-go-semantics.mjs')],
+    'mutations-ts': [node('Measure TypeScript semantic mutations', 'formal/measure-semantics.mjs', ...shard)],
+    'mutations-go': [node('Measure Go semantic mutations', 'formal/measure-go-semantics.mjs', ...shard)],
+    // The merge needs neither Quint nor Go: it reads shard reports, checks
+    // them against each other and this checkout, and writes the complete report.
+    'mutations-merge-ts': [node('Merge TypeScript mutation shards', 'formal/merge-mutation-reports.mjs', 'ts')],
+    'mutations-merge-go': [node('Merge Go mutation shards', 'formal/merge-mutation-reports.mjs', 'go')],
     'integration-ts': [pnpm('Run TypeScript Redis/Valkey/Cluster integrations', 'test:integration')],
     'integration-go': [{ ...go('Run Go Redis/Valkey/Cluster and TypeScript interoperability', 'test', '-race', '-tags', 'integration', '-count=1', '-run', '^TestRedisIntegration$', '-json', './...'), stdoutFile: '.formal-traces/go-integration.jsonl' }],
     'package-floor': [{ label: 'Require a built package for floor checks', requireFile: 'dist/index.js', failureHint: 'Build first with make check-ts, or run make ci with NODE22_BIN set.' },
@@ -311,9 +335,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [target = 'help', ...extra] = process.argv.slice(2);
   if (extra.length) throw new Error('Use node formal/validation.mjs <target>; run make help for targets.');
   if (target === 'help') {
-    console.log(Object.entries(targetDescriptions).map(([name, description]) => `make ${name.padEnd(17)} ${description}`).join('\n'));
+    const width = Math.max(...Object.keys(targetDescriptions).map(name => name.length));
+    console.log(Object.entries(targetDescriptions).map(([name, description]) => `make ${name.padEnd(width)} ${description}`).join('\n'));
     console.log('\nPrerequisites: frozen pnpm install; Node 24, pinned pnpm; Go 1.27.1 / Docker where required; Quint 0.32.0 for formal-check, formal-generate, fixtures-check, explore and model-check; Java 21 and tar for model-check and ci.');
     console.log('formal-check is the Quint evidence lane (models, regressions, challenges); the port and mutation lanes read only the formal-generate output and do not wait for it.');
+    console.log('Sharded mutation runs: MUTATION_SHARD=1/3 make mutations-ts (then 2/3, 3/3, on any machines with the same corpus), then make mutations-merge-ts; the merged report is the only complete evidence.');
     console.log('Full local CI: make ci NODE22_BIN=/absolute/path/to/node22/bin/node (exact 22.15.0).');
   } else {
     try { await runTarget(target); }
