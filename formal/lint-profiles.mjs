@@ -39,8 +39,9 @@ export const baselinePath = 'formal/profile-lint-baseline.json';
 export const defaultObservationField = 'o';
 const effectQualifiers = new Set(['action', 'run']);
 // Builtin combinators whose non-effect operands are guards when the whole
-// expression carries an effect: `all { guard, x' = e }`, `if (c) A else B`.
-const structuralOpcodes = new Set(['actionAll', 'actionAny', 'and', 'or', 'not', 'implies', 'iff', 'ite']);
+// expression carries an effect: `all { guard, x' = e }`, `if (c) A else B`,
+// and the scrutinee of `match c { | A => act1 | B => act2 }`.
+const structuralOpcodes = new Set(['actionAll', 'actionAny', 'and', 'or', 'not', 'implies', 'iff', 'ite', 'matchVariant']);
 
 // ---------------------------------------------------------------------------
 // Parsing

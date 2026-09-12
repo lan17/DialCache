@@ -35,7 +35,15 @@ const { lintModel, computeBaseline, checkBaseline, diffBaseline, formatBaseline,
 const root = fileURLToPath(new URL("../", import.meta.url));
 const fixtures = "test/fixtures/profile-lint";
 const fixture = (name: string) => `${fixtures}/${name}.qnt`;
-const fixtureNames = ["kernel", "kernel-leaky", "profile-clean", "profile-thick", "profile-witness-choice", "profile-witness-projection", "profile-witness-guard"];
+const fixtureNames = [
+  "kernel", "kernel-leaky", "profile-clean", "profile-thick", "profile-nested-let", "profile-lambda-assign", "profile-shadow",
+  "profile-witness-choice", "profile-witness-projection", "profile-witness-guard", "profile-witness-deep", "profile-witness-domain",
+  "profile-witness-input", "profile-witness-match",
+];
+// Quint's effect checker rejects an operator constant that reads a variable
+// (QNT201), so this route can only be shown on the parsed IR; the lint must
+// still report it because it is defined over that IR, not over the checker.
+const parseOnlyFixtures = ["profile-witness-constant"];
 const witness = { witnessPattern: "^witnessed$" };
 // The lint parses through the pinned Quint CLI. The TypeScript check lane runs
 // without Quint, so the parsing cases skip there and run in the formal lanes.
@@ -77,12 +85,21 @@ describe("profile lint baseline diff", () => {
 });
 
 describe.skipIf(!quintAvailable)("profile lint over synthetic kernel instances", () => {
-  it("typechecks every fixture with quint", () => {
+  it("typechecks every fixture with quint and runs every profile fixture", () => {
     for (const name of fixtureNames) {
       const result = spawnSync("quint", ["typecheck", fixture(name)], { cwd: root, encoding: "utf8" });
       expect(result.status, `${name}: ${result.stderr}${result.stdout}`).toBe(0);
+      if (!name.startsWith("profile-")) continue;
+      const run = spawnSync("quint", ["run", "--max-samples=3", "--max-steps=4", fixture(name)], { cwd: root, encoding: "utf8" });
+      expect(run.status, `${name}: ${run.stderr}${run.stdout}`).toBe(0);
     }
-  }, quintTimeout);
+    for (const name of parseOnlyFixtures) {
+      expect(spawnSync("quint", ["parse", fixture(name)], { cwd: root, encoding: "utf8" }).status, name).toBe(0);
+      const result = spawnSync("quint", ["typecheck", fixture(name)], { cwd: root, encoding: "utf8" });
+      expect(result.status, name).not.toBe(0);
+      expect(`${result.stderr}${result.stdout}`, name).toMatch(/QNT201/);
+    }
+  }, quintTimeout * 3);
 
   it("accepts the clean instance under both rules and lists the roots it examined", async () => {
     const report = await lintModel(fixture("profile-clean"), { kernelModules: ["kernel"], ...witness });
@@ -150,6 +167,84 @@ describe.skipIf(!quintAvailable)("profile lint over synthetic kernel instances",
     expect(report.thinProfile.violations).toEqual([]);
     expect(report.witnessIsolation.violations).toEqual([
       { kind: "guard", root: { kind: "step", definition: "step" }, chain: ["step", "bumpWrapper", "unlabeled"], variable: "kernel::witnessed" },
+    ]);
+  }, quintTimeout);
+
+  it("attributes an assignment made by a nested definition to the helper that binds it", async () => {
+    const report = await lintModel(fixture("profile-nested-let"), { kernelModules: ["kernel"], ...witness });
+    expect(report.thinProfile.stateAssigningDefinitions).toEqual(["kernel::init", "settle"]);
+    expect(report.thinProfile.violations).toEqual(["kernel::count", "kernel::input", "kernel::o", "kernel::witnessed"].map(variable =>
+      ({ definition: "settle", variable, chain: ["bumpWrapper", "settle"] })));
+    expect(report.witnessIsolation.violations).toEqual([]);
+  }, quintTimeout);
+
+  it("attributes an assignment inside a lambda argument to the wrapper that writes the lambda", async () => {
+    const report = await lintModel(fixture("profile-lambda-assign"), { kernelModules: ["kernel"], ...witness });
+    expect(report.thinProfile.stateAssigningDefinitions).toEqual(["bumpWrapper", "kernel::init"]);
+    expect(report.thinProfile.violations).toEqual(["kernel::count", "kernel::input", "kernel::o", "kernel::witnessed"].map(variable =>
+      ({ definition: "bumpWrapper", variable, chain: ["bumpWrapper"] })));
+    expect(report.witnessIsolation.violations).toEqual([]);
+  }, quintTimeout);
+
+  it("resolves by declaration, not by name, when the profile shadows kernel definitions", async () => {
+    const report = await lintModel(fixture("profile-shadow"), { kernelModules: ["kernel"], ...witness });
+    expect(report.thinProfile.publicActions).toEqual(["init", "viaKernel", "viaLocal", "step"]);
+    expect(report.thinProfile.stateAssigningDefinitions).toEqual(["bump", "kernel::bump", "kernel::init"]);
+    // Only the profile's own `bump` is private; `K::bump` through the instance is kernel logic.
+    expect(report.thinProfile.violations).toEqual(["kernel::count", "kernel::input", "kernel::o", "kernel::witnessed"].map(variable =>
+      ({ definition: "bump", variable, chain: ["viaLocal", "bump"] })));
+    // Only the profile's own `room` reads witness state; `K::room` is the kernel's pure guard.
+    expect(report.witnessIsolation.violations).toEqual([
+      { kind: "guard", root: { kind: "step", definition: "step" }, chain: ["step", "viaLocal", "room"], variable: "kernel::witnessed" },
+    ]);
+  }, quintTimeout);
+
+  it("follows a guard two pure calls deep and through an operator argument", async () => {
+    const report = await lintModel(fixture("profile-witness-deep"), { kernelModules: ["kernel"], ...witness });
+    expect(report.thinProfile.violations).toEqual([]);
+    expect(report.witnessIsolation.violations).toEqual([
+      { kind: "guard", root: { kind: "step", definition: "step" }, chain: ["step", "bumpWrapper", "screen", "blocked"], variable: "kernel::witnessed" },
+    ]);
+  }, quintTimeout);
+
+  it("names the choice domain when a helper computes the set the nondet draws from", async () => {
+    const report = await lintModel(fixture("profile-witness-domain"), { kernelModules: ["kernel"], ...witness });
+    expect(report.thinProfile.violations).toEqual([]);
+    expect(report.witnessIsolation.violations).toEqual([
+      { kind: "choice domain", detail: "choice", root: { kind: "step", definition: "step" }, chain: ["step", "bumpWrapper", "domain"], variable: "kernel::witnessed" },
+    ]);
+  }, quintTimeout);
+
+  it("reports witness state flowing into a kernel action's input under the step root itself", async () => {
+    const report = await lintModel(fixture("profile-witness-input"), { kernelModules: ["kernel"], ...witness });
+    expect(report.thinProfile.violations).toEqual([]);
+    expect(report.witnessIsolation.violations).toEqual([
+      { kind: "step", root: { kind: "step", definition: "step" }, chain: ["step", "bumpWrapper"], variable: "kernel::witnessed" },
+    ]);
+  }, quintTimeout);
+
+  it("treats the scrutinee of a match over kernel actions as a guard", async () => {
+    const report = await lintModel(fixture("profile-witness-match"), { kernelModules: ["kernel"], ...witness });
+    expect(report.thinProfile.violations).toEqual([]);
+    expect(report.witnessIsolation.violations).toEqual([
+      { kind: "guard", root: { kind: "step", definition: "step" }, chain: ["step", "bumpWrapper", "mode"], variable: "kernel::witnessed" },
+    ]);
+  }, quintTimeout);
+
+  it("names the operator constant when the projection bound at instantiation reads witness state", async () => {
+    const report = await lintModel(fixture("profile-witness-constant"), { kernelModules: ["kernel"], witnessPattern: "^seen$" });
+    expect(report.witnessIsolation.witnessVariables).toEqual(["seen"]);
+    expect(report.witnessIsolation.roots.operatorConstants).toEqual([
+      { instance: "K", constant: "CAPACITY", definitions: [] }, { instance: "K", constant: "PROJECT", definitions: ["project"] },
+    ]);
+    expect(report.witnessIsolation.violations).toEqual([
+      { kind: "operator constant", root: { kind: "operator constant", definition: "K.PROJECT" }, chain: ["K.PROJECT", "project", "label"], variable: "seen" },
+      { kind: "projection", detail: "kernel::o", root: { kind: "init", definition: "init" }, chain: ["init", "kernel::init", "K.PROJECT", "project", "label"], variable: "seen" },
+    ]);
+    // The profile-local witness variable is also state the profile assigns itself.
+    expect(report.thinProfile.violations).toEqual([
+      { definition: "bumpWrapper", variable: "seen", chain: ["bumpWrapper"] },
+      { definition: "init", variable: "seen", chain: ["init"] },
     ]);
   }, quintTimeout);
 
