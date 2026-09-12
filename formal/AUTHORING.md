@@ -87,6 +87,26 @@ Where representations differ, add an executable projection/connection check
 that compares profile history with the contract. Give the projection an explicit
 scope and challenge mistakes in policy capture, event timing or ownership.
 
+`node formal/lint-profiles.mjs <model.qnt> --kernel=<module,...> --witness=<regex>`
+checks that structure rather than the text: it follows the resolved references
+in Quint's parsed IR through helpers, lambda arguments and constants bound at
+instantiation, and reports two kinds of violation with the definition chain
+that reaches them. The thin-profile rule fails on any state assignment
+reachable from a profile action outside the named kernel modules. Witness
+isolation fails on any reference to a variable matching the witness pattern
+from a cache guard or assignment, the profile's `init` or `step`, a `nondet`
+choice domain, the definition assigning the observation field (`o` unless
+`--observation` says otherwise) or the body of an operator constant; a witness
+assignment may read its own prior state. Until a kernel module exists, every
+reachable assignment is private, so
+[`profile-lint-baseline.json`](./profile-lint-baseline.json) records, per
+conformance profile, how many definitions its public actions reach and which of
+them assign state: that list is the profile's migration work list for the
+kernel described in issue #165, and `node formal/lint-profiles.mjs baseline
+--check` fails when a profile drifts from it (`--write` refreshes it after a
+reviewed change). The baseline is not yet part of `make audit`, because that
+lane runs without Quint.
+
 Connection models advance the imported profile and save its preceding context
 in the same `all` action. Views such as `acquired` and `observedSources` combine
 that context with the latest recorded input to reconstruct the current contract
