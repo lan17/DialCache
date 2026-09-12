@@ -131,6 +131,18 @@ measurement programs remain `measure-semantics.mjs` and
 `measure-go-semantics.mjs`; the Make targets supply the pinned prerequisite
 checks used by hosted full validation.
 
+Hosted runs shard each lane three ways with `MUTATION_SHARD=<index>/<count>`.
+A shard reruns the compile check, every unmodified baseline and the witness
+evaluation before its contiguous slice of the catalog, and writes an incomplete
+report under `shards/<index>-of-<count>/`. `make mutations-merge-ts` and
+`make mutations-merge-go` (`merge-mutation-reports.mjs`) assemble the complete
+report from those shards and refuse any inconsistency: a missing or duplicated
+shard, a shard that failed or claims completion, differing fingerprints or
+baseline results, or mutations that do not cover the catalog exactly once in
+order. The detection summary and the required-detection gate are computed by the
+functions the single-process run uses, so the merged report is the same evidence
+at the same strictness; it is the only report the workflow accepts.
+
 The manual/weekly workflow runs the full corpus and fault checks. PR checks
 retain native/race/smoke/audit and real-server integration, plus fixture
 recomputation when generation inputs change. A behavior/model change still

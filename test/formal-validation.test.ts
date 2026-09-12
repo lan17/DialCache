@@ -17,12 +17,14 @@ type Step = {
   failureHint?: string;
 };
 type Options = { directory?: string; environment?: NodeJS.ProcessEnv; runnerNode?: string; nodeVersion?: string };
-const { validationPlan, executeSteps, checkPrerequisites } = await import(
+const { validationPlan, executeSteps, checkPrerequisites, cleanEnvironment, targetDescriptions } = await import(
   new URL("../formal/validation.mjs", import.meta.url).href,
 ) as {
   validationPlan(target: string, options?: Options): Step[];
   executeSteps(steps: Step[], options?: Options & { log?: (message: string) => void }): Promise<void>;
   checkPrerequisites(target: string, options?: Options): void;
+  cleanEnvironment(environment: NodeJS.ProcessEnv, overrides?: NodeJS.ProcessEnv): NodeJS.ProcessEnv;
+  targetDescriptions: Record<string, string>;
 };
 
 describe("shared validation runner", () => {
@@ -168,16 +170,55 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     expect(all.some(step => step.remove || step.args?.[0] === "formal/run-models.mjs")).toBe(false);
   });
 
+  it("shards a mutation lane only through MUTATION_SHARD on its own target and validates the value", () => {
+    const sharded = { ...environment, MUTATION_SHARD: "2/3" };
+    expect(validationPlan("mutations-ts", { directory, environment: sharded })).toEqual([
+      { label: "Measure TypeScript semantic mutations", command: process.execPath, args: ["formal/measure-semantics.mjs", "--shard=2/3"] },
+    ]);
+    expect(validationPlan("mutations-go", { directory, environment: sharded }).map(step => step.args)).toEqual([["formal/measure-go-semantics.mjs", "--shard=2/3"]]);
+    // Unset, the plan is exactly today's complete measurement.
+    expect(validationPlan("mutations-ts", { directory, environment }).map(step => step.args)).toEqual([["formal/measure-semantics.mjs"]]);
+    for (const value of ["0/3", "4/3", "1/0", "a/b", "1", "01/3", "1/3/", " 1/3", ""]) {
+      expect(() => validationPlan("mutations-ts", { directory, environment: { ...environment, MUTATION_SHARD: value } }), value).toThrow(/MUTATION_SHARD must be <index>\/<count>/);
+    }
+    // The aggregates stay unsharded and refuse to ignore the variable silently; unrelated targets ignore it.
+    for (const target of ["mutations", "ci"]) {
+      expect(() => validationPlan(target, { directory, environment: sharded }), target).toThrow(/MUTATION_SHARD=2\/3 applies only to make mutations-ts and make mutations-go/);
+    }
+    for (const target of ["check", "formal", "formal-ts", "mutations-merge-ts", "mutations-merge-go"]) {
+      expect(validationPlan(target, { directory, environment: sharded }), target).toEqual(validationPlan(target, { directory, environment }));
+    }
+    // The runner's environment cleaning removes replay selectors, not the shard.
+    expect(cleanEnvironment({ MUTATION_SHARD: "2/3", DIALCACHE_PROTOCOL_CORPUS: "fixed", QUINT_SEED: "1" })).toEqual({ MUTATION_SHARD: "2/3" });
+  });
+
+  it("merges each language's shards with a plain Node step that needs neither Quint nor Go", () => {
+    expect(validationPlan("mutations-merge-ts", { directory })).toEqual([
+      { label: "Merge TypeScript mutation shards", command: process.execPath, args: ["formal/merge-mutation-reports.mjs", "ts"] },
+    ]);
+    expect(validationPlan("mutations-merge-go", { directory }).map(step => step.args)).toEqual([["formal/merge-mutation-reports.mjs", "go"]]);
+    fakeTool("quint", 'console.error("quint: not installed"); process.exit(1)');
+    fakeTool("go", 'console.error("go: not installed"); process.exit(1)');
+    for (const target of ["mutations-merge-ts", "mutations-merge-go"]) {
+      expect(() => checkPrerequisites(target, { directory, environment, nodeVersion: "v24.20.0" })).not.toThrow();
+      expect(targetDescriptions[target]).toMatch(/Merge .* mutation shards/);
+    }
+    // The merge is not part of the local aggregates: they measure unsharded.
+    for (const target of ["mutations", "ci"]) {
+      expect(validationPlan(target, { directory }).some(step => step.args?.[0] === "formal/merge-mutation-reports.mjs"), target).toBe(false);
+    }
+  });
+
   it("requires Quint only for generation and recomputation, not for replay or mutation lanes", () => {
     fakeTool("quint", 'console.error("quint: not installed"); process.exit(1)');
     for (const target of ["formal-check", "formal-generate", "formal", "fixtures-check", "explore", "ci"]) {
       expect(() => checkPrerequisites(target, { directory, environment, nodeVersion: "v24.20.0" })).toThrow(/Cannot run quint/);
     }
-    for (const target of ["formal-ts", "formal-go", "mutations-ts", "mutations-go", "mutations"]) {
+    for (const target of ["formal-ts", "formal-go", "mutations-ts", "mutations-go", "mutations", "mutations-merge-ts", "mutations-merge-go"]) {
       expect(() => checkPrerequisites(target, { directory, environment, nodeVersion: "v24.20.0" })).not.toThrow();
     }
     fakeTool("go", 'console.error("go: not installed"); process.exit(1)');
-    for (const target of ["formal-ts", "mutations-ts"]) {
+    for (const target of ["formal-ts", "mutations-ts", "mutations-merge-ts", "mutations-merge-go"]) {
       expect(() => checkPrerequisites(target, { directory, environment, nodeVersion: "v24.20.0" })).not.toThrow();
     }
     for (const target of ["formal-go", "mutations-go"]) {
@@ -243,8 +284,8 @@ else {
 });
 
 describe("full formal workflow shape", () => {
-  type Step = { name?: string; run?: string; uses?: string; env?: Record<string, string>; with?: Record<string, string> };
-  type Job = { needs?: string | string[]; steps: Step[] };
+  type Step = { name?: string; run?: string; uses?: string; if?: string; env?: Record<string, string>; with?: Record<string, string | boolean> };
+  type Job = { needs?: string | string[]; if?: string; env?: Record<string, string>; strategy?: { "fail-fast"?: boolean; matrix?: Record<string, unknown[]> }; "timeout-minutes"?: number; steps: Step[] };
   const lanes = ["typescript-parity", "go-parity", "typescript-mutations", "go-mutations"];
   const needsOf = (job: Job) => (job.needs === undefined ? [] : [job.needs].flat());
   let jobs: Record<string, Job>;
@@ -274,15 +315,61 @@ describe("full formal workflow shape", () => {
     for (const lane of lanes) expect(needsOf(jobs[lane]!), lane).toEqual(["generate"]);
   });
 
+  it("shards both mutation lanes over three runners and gates the aggregate on their merges", () => {
+    const uploadOf = (job: Job) => job.steps.find(step => step.uses?.startsWith("actions/upload-artifact"))!;
+    const downloadsOf = (job: Job) => job.steps.filter(step => step.uses?.startsWith("actions/download-artifact")).map(step => step.with);
+    const matrixShard = "$" + "{{ matrix.shard }}";
+    const table = [
+      { lane: "typescript-mutations", language: "ts", output: ".formal-traces/semantic", artifact: "typescript-semantic", timeout: 30, go: undefined },
+      { lane: "go-mutations", language: "go", output: ".formal-traces/go-semantic", artifact: "go-semantic", timeout: 40, go: { go: "true" } },
+    ];
+    for (const { lane, language, output, artifact, timeout, go } of table) {
+      const job = jobs[lane]!;
+      expect(job.strategy, lane).toEqual({ "fail-fast": false, matrix: { shard: [1, 2, 3] } });
+      expect(job.env, lane).toEqual({ MUTATION_SHARD: matrixShard + "/3" });
+      expect(job["timeout-minutes"], lane).toBe(timeout);
+      expect(job.steps.map(step => step.run).filter(Boolean), lane).toEqual(["make mutations-" + language]);
+      expect(job.steps.find(step => step.uses === "./.github/actions/setup-validation")!.with, lane).toEqual(go);
+      expect(downloadsOf(job), lane).toEqual([{ name: "formal-traces", path: ".formal-traces" }]);
+      const upload = uploadOf(job);
+      expect(upload.if, lane).toBe("always()");
+      expect(upload.with, lane).toMatchObject({ name: artifact + "-shard-" + matrixShard, path: output + "/shards/" });
+      const merge = jobs[lane + "-merge"]!;
+      expect(needsOf(merge), lane).toEqual([lane]);
+      expect(merge.if, lane).toBe("always()");
+      expect(merge["timeout-minutes"], lane).toBe(10);
+      expect(merge.steps.map(step => step.run).filter(Boolean), lane).toEqual(["make mutations-merge-" + language]);
+      // The merge installs only the shared Node/pnpm environment: no Go, no Quint.
+      expect(merge.steps.find(step => step.uses === "./.github/actions/setup-validation")!.with, lane).toBeUndefined();
+      expect(downloadsOf(merge), lane).toEqual([{ pattern: artifact + "-shard-*", path: output + "/shards", "merge-multiple": true }]);
+      const evidence = uploadOf(merge);
+      expect(evidence.if, lane).toBe("always()");
+      expect(evidence.with, lane).toMatchObject({ name: artifact + "-evidence", path: output + "/" });
+    }
+    const aggregate = jobs["formal-full"]!;
+    expect(needsOf(aggregate)).toEqual(expect.arrayContaining(["typescript-mutations-merge", "go-mutations-merge"]));
+    expect(needsOf(aggregate)).not.toContain("typescript-mutations");
+    expect(needsOf(aggregate)).not.toContain("go-mutations");
+    const gate = aggregate.steps.find(step => step.run?.includes("_RESULT"))!;
+    expect(gate.env).toMatchObject({
+      TYPESCRIPT_MUTATIONS_MERGE_RESULT: "$" + "{{ needs.typescript-mutations-merge.result }}",
+      GO_MUTATIONS_MERGE_RESULT: "$" + "{{ needs.go-mutations-merge.result }}",
+    });
+    expect(gate.env).not.toHaveProperty("TYPESCRIPT_MUTATIONS_RESULT");
+    expect(gate.env).not.toHaveProperty("GO_MUTATIONS_RESULT");
+    expect(gate.run).toMatch(/test "\$TYPESCRIPT_MUTATIONS_MERGE_RESULT" = success/);
+    expect(gate.run).toMatch(/test "\$GO_MUTATIONS_MERGE_RESULT" = success/);
+  });
+
   it("requires the model check in the aggregate and retains its report in the long-lived summary", () => {
     const aggregate = jobs["formal-full"]!;
-    expect(needsOf(aggregate)).toEqual(expect.arrayContaining(["check-models", "generate", ...lanes]));
+    expect(needsOf(aggregate)).toEqual(expect.arrayContaining(["check-models", "generate", "typescript-parity", "go-parity"]));
     const gate = aggregate.steps.find(step => step.run?.includes("_RESULT"))!;
     expect(gate.env).toMatchObject({ CHECK_MODELS_RESULT: "${{ needs.check-models.result }}" });
     expect(gate.run).toMatch(/test "\$CHECK_MODELS_RESULT" = success/);
     const evidence = jobs["check-models"]!.steps.find(step => step.uses?.startsWith("actions/upload-artifact"))!.with!;
     expect(evidence.name).toBe("model-check-evidence");
-    expect(evidence.path!.trim().split("\n").map(line => line.trim())).toEqual([".formal-traces/verification/", ".formal-traces/model-properties/"]);
+    expect(String(evidence.path).trim().split("\n").map(line => line.trim())).toEqual([".formal-traces/verification/", ".formal-traces/model-properties/"]);
     expect(aggregate.steps.some(step => step.uses?.startsWith("actions/download-artifact") && step.with?.name === "model-check-evidence")).toBe(true);
     const summary = aggregate.steps.find(step => step.uses?.startsWith("actions/upload-artifact"))!.with!;
     expect(summary.path).toContain("formal-summary/model-check/model-properties/report.json");
