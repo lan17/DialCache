@@ -381,29 +381,57 @@ node formal/witnesses.mjs evaluate --profile all
 ```
 
 `--profile <name>` selects one profile, `--traces <dir>` relocates the corpus
-root (default `.formal-traces`), and `--out <dir>` selects the evidence
-directory (default `.formal-traces/go-parity-witnesses`). When a required
-witness or any declared action is unreached, the command fails listing every
-missing label and removes that profile's stale evidence file.
+root (default `.formal-traces`), `--out <dir>` selects the evidence directory
+(default `.formal-traces/go-parity-witnesses`) and `--baseline <path>` selects
+the sampled-count baseline (default `formal/witness-baseline.json`). When a
+required witness or any declared action is unreached, the command fails listing
+every missing label and removes that profile's stale evidence file. It also
+fails, with the evidence still written, when a gated label's sampled hits fall
+below the baseline tolerance (below).
 
 For each complete profile it writes `<out>/<profile>.json`:
 
 | Field | Meaning |
 | --- | --- |
-| `schemaVersion` | `1` |
+| `schemaVersion` | `2` |
 | `profile` | Profile ID |
 | `traces` | Number of evaluated histories |
 | `required` | The registry's required labels, in registry order |
 | `seen` | Every reached label, sorted |
+| `labels` | Per reached label: `sampled` and `regression` hit counts, and `traces`, one `{ name, kind, checkpoints }` per history that earned the label, sorted by name. `kind` is `sampled` for a history from the profile's generated directory and `regression` for an exported `replayRegressions` trace. `checkpoints` are the ascending step indices at which the classifier credited the label: the step whose public consequence the rule requires, every declared checkpoint of a public-prefix rule, `0` for labels decided by the init choice (`fixture:*`, `action:init`), and every establishing step for a rule whose consequence spans several public steps |
+| `diversity` | Over sampled histories only: `sampledHistories`, `distinctActionSequences` (distinct sequences of action names) and `distinctObservationSequences` (distinct sequences of the observation each driver is asserted against at every step: the feature coordinator's expected observation record, the effects projection or the local-clock expected record, compared as JSON) |
 | `inputs` | `{ path, sha256 }` for `formal/profiles.json`, `formal/coverage-witnesses.json`, `formal/execution.json`, the profile's model, `formal/conformance-observations.qnt`, every Quint library, the full `formal/replay` closure (which contains the classifiers) and the profile's `witnessSources`, deduplicated in that order |
 | `corpus` | `{ name, sha256 }` per history, sorted by file name |
+
+A regression pins a label regardless of seed; only the sampled count says
+whether random exploration still finds it. Every run therefore ends with a
+report per profile: required labels with at most three sampled hits and no
+regression (fragile and unpinned), required labels pinned by a regression but
+with at most three sampled hits, the diversity counts, and the comparison with
+the baseline. The same report is written to `<traces>/witness-report.json`.
+`node formal/witnesses.mjs report` prints it without writing evidence or
+failing.
+
+`formal/witness-baseline.json` records, per profile and required label, the
+sampled hit count on the pinned-seed corpus, with the seed and a fingerprint of
+each profile's sampled histories (their `vars` and `states`; the ITF `#meta`
+creation stamp is excluded, so regenerating the pinned seed reproduces the
+fingerprint and the report says whether the fresh corpus is the recorded one).
+A label recorded with at least `gatedMinimum`
+(10) sampled hits is gated: `evaluate` fails when its fresh sampled count drops
+below `tolerance` (0.5) times the recorded count. Labels recorded below the
+minimum, or not recorded, are reported and never gated. After a deliberate
+model or classifier change, regenerate the pinned corpus and run
+`node formal/witnesses.mjs baseline --write`; an exploration seed must not
+rewrite the baseline.
 
 No input names a TypeScript or Go file, so completing the witness leaves does
 not require running another port's test suite. A port either runs the CLI
 itself before its native replay or consumes an evidence file whose `inputs`
 and `corpus` hashes match its own checkout and corpus byte for byte, as the Go
 replay does. The TypeScript suite calls the same `checkWitnesses` function for
-its gate; it no longer produces evidence.
+its gate; it no longer produces evidence. The Go replay also checks that every
+required label names at least one history of the bound corpus.
 
 ## Current limitations for a third port
 

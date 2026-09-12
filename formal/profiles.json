@@ -367,6 +367,8 @@
     "formal/replay/witnesses/policy.mjs",
     "formal/replay/witnesses/public-prefix.d.mts",
     "formal/replay/witnesses/public-prefix.mjs",
+    "formal/replay/witnesses/recorder.d.mts",
+    "formal/replay/witnesses/recorder.mjs",
     "formal/replay/witnesses/recovery-admission.d.mts",
     "formal/replay/witnesses/recovery-admission.mjs",
     "formal/replay/witnesses/recovery-read.d.mts",

@@ -6,10 +6,13 @@ const read = path => readFileSync(root + path, 'utf8');
 export const readExecution = () => JSON.parse(read('formal/execution.json'));
 
 // A scoped declaration scanner, not a Quint parser or typechecker. Ignore
-// comments and strings, and only inventory declarations directly in the one
-// module body. Quint remains responsible for syntax, types, and effects.
+// comments, keep each string literal as one opaque token, and only inventory
+// declarations directly in the one module body. Quint remains responsible for
+// syntax, types, and effects. Every token keeps its source span so a run body
+// can be sliced back out of the text.
 function tokenize(source) {
-  const tokens = [];
+  const tokens = [], spans = [];
+  const push = (text, start, end) => { tokens.push(text); spans.push([start, end]); };
   for (let i = 0; i < source.length;) {
     if (/\s/.test(source[i])) { i++; continue; }
     if (source.startsWith('//', i)) {
@@ -24,27 +27,29 @@ function tokenize(source) {
       continue;
     }
     if (source[i] === '"') {
+      const start = i;
       let closed = false;
       for (i++; i < source.length; i++) {
         if (source[i] === '\\') { i++; continue; }
         if (source[i] === '"') { i++; closed = true; break; }
       }
       if (!closed) throw new Error('Unterminated Quint string');
-      tokens.push('""');
+      push(source.slice(start, i), start, i);
       continue;
     }
     const identifier = /^[A-Za-z_][A-Za-z_0-9]*/.exec(source.slice(i));
-    if (identifier) { tokens.push(identifier[0]); i += identifier[0].length; }
-    else tokens.push(source[i++]);
+    if (identifier) { push(identifier[0], i, i + identifier[0].length); i += identifier[0].length; }
+    else { push(source[i], i, i + 1); i++; }
   }
-  return tokens;
+  return { tokens, spans };
 }
 
 // Top-level declarations with their token bodies. A body runs from the
 // declaration name to the next top-level declaration keyword; module imports
 // and other non-declaration statements never attach to a declaration body.
+// `spans` holds the source range of each body token.
 export function scanDeclarationBodies(source) {
-  const tokens = tokenize(source);
+  const { tokens, spans } = tokenize(source);
   const declarations = new Map(), stack = [];
   const kinds = new Set(['val', 'def', 'action', 'run', 'type', 'var', 'const', 'assume']);
   const closes = { '}': '{', ')': '(', ']': '[' };
@@ -63,14 +68,14 @@ export function scanDeclarationBodies(source) {
       const name = tokens[i + 1];
       if (!name || !/^[A-Za-z_]\w*$/.test(name)) throw new Error(`Unsupported Quint ${token} declaration`);
       if (declarations.has(name)) throw new Error(`Duplicate Quint declaration: ${name}`);
-      current = { kind: token, body: [] };
+      current = { kind: token, body: [], spans: [] };
       declarations.set(name, current);
       i++;
       continue;
     }
     if (stack.length === 1 && stack[0] === '{' && token === 'pure') { current = undefined; continue; }
     if (stack.length === 1 && stack[0] === '{' && ['import', 'export'].includes(token)) current = undefined;
-    if (stack.length >= 1 && current && !(stack.length === 1 && token === '}')) current.body.push(token);
+    if (stack.length >= 1 && current && !(stack.length === 1 && token === '}')) { current.body.push(token); current.spans.push(spans[i]); }
     if (['{', '(', '['].includes(token)) stack.push(token);
     else if (Object.hasOwn(closes, token) && stack.pop() !== closes[token]) throw new Error('Unbalanced Quint delimiters');
   }
@@ -113,6 +118,42 @@ export function classifyRuns(declarations) {
   return runs;
 }
 
+// The checkpoint of a reproducer is the one top-level `.expect(...)` in the
+// cited run's chain whose condition is the declared `failure` text, compared
+// token by token so spacing does not matter. Returns the chain before that
+// expect and the chain through it. Run as probes under the fault, the first
+// must still pass and the second must fail: the failure then belongs to the
+// declared expectation, not to a step the fault disables or a later check.
+const opens = ['{', '(', '['], shuts = ['}', ')', ']'];
+export function reproducerCheckpoint(source, run, failure) {
+  const declaration = scanDeclarationBodies(source).get(run);
+  if (declaration?.kind !== 'run') throw new Error(`${run} is not a run declaration`);
+  const { body, spans } = declaration;
+  const wanted = tokenize(typeof failure === 'string' ? failure : '').tokens;
+  if (!wanted.length || body[0] !== '=' || body.length < 2) throw new Error(`${run}: reproducer failure must be an expect condition`);
+  for (let depth = 0, i = 1; i < body.length; i++) {
+    if (depth === 0 && body[i] === '(' && body[i - 1] === 'expect' && body[i - 2] === '.') {
+      const condition = [];
+      let j = i + 1;
+      for (let nested = 1; nested > 0; j++) {
+        if (j >= body.length) throw new Error(`${run}: unbalanced expect`);
+        if (opens.includes(body[j])) nested++;
+        else if (shuts.includes(body[j])) nested--;
+        if (nested > 0) condition.push(body[j]);
+      }
+      if (condition.length === wanted.length && condition.every((token, index) => token === wanted[index])) {
+        const start = spans[1][0];
+        return { before: source.slice(start, spans[i - 2][0]).trimEnd(), through: source.slice(start, spans[j - 1][1]) };
+      }
+      i = j - 1;
+      continue;
+    }
+    if (opens.includes(body[i])) depth++;
+    else if (shuts.includes(body[i])) depth--;
+  }
+  throw new Error(`${run} has no top-level expect whose condition is the declared failure`);
+}
+
 const positiveInteger = (value, label) => {
   if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`Invalid positive bound: ${label}`);
 };
@@ -123,23 +164,88 @@ const names = (values, label, allowEmpty = false) => {
 };
 const sameMembers = (left, right) => JSON.stringify([...left].sort()) === JSON.stringify([...right].sort());
 const nonEmptyText = value => typeof value === 'string' && value.trim().length > 0;
+const isSlug = value => typeof value === 'string' && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(value);
 export const contractIds = text => [...text.matchAll(/^\| ([CWEB]\d{2}) \|/gm)].map(match => match[1]);
+
+// A deterministic reproducer pins one challenge to a named run that passes on
+// the clean model and fails, at one declared expectation, under the fault. An
+// exported-regression cites a public-only run both ports replay, so the fault
+// is portable behavior; for a fault in a shared library the run may live in a
+// profile model other than the challenged one, since every importer executes
+// the mutated text. A model-run cites a run that only the model executes and
+// must say why the fault has no native counterpart. `failure` is the expect
+// condition the fault breaks. `profiles` names where the fault is observable:
+// the challenged model's own profile, or its path for a model without one,
+// and the cited run's profile. `exclusions` explains why a known profile that
+// is not listed cannot exercise the fault. A shared-library fault must list or
+// exclude every profile; a fault in one model's own file needs no exclusions,
+// because no other profile executes that text.
+const reproducerKinds = ['exported-regression', 'model-run'];
+const reproducerFields = ['kind', 'run', 'model', 'failure', 'family', 'profiles', 'exclusions', 'scope'];
+function validateReproducer(challenge, model, { models, libraries, profileIds, publicOnly, readSource }) {
+  const { id, reproducer } = challenge;
+  if (!reproducer || typeof reproducer !== 'object' || Array.isArray(reproducer)) throw new Error(`${id}: invalid reproducer`);
+  const unknown = Object.keys(reproducer).filter(key => !reproducerFields.includes(key));
+  if (unknown.length) throw new Error(`${id}: unsupported reproducer field ${unknown.join(', ')}`);
+  const { kind, run, failure, family, profiles, exclusions, scope } = reproducer;
+  if (!reproducerKinds.includes(kind)) throw new Error(`${id}: reproducer kind must be one of ${reproducerKinds.join(', ')}`);
+  const shared = libraries.includes(challenge.source);
+  const cited = reproducer.model === undefined ? model : models.get(reproducer.model);
+  if (reproducer.model !== undefined && (!cited?.profile || kind !== 'exported-regression' || !shared || cited === model)) {
+    throw new Error(`${id}: reproducer model must name another profile model and is allowed only for an exported-regression of a shared-library fault: ${reproducer.model}`);
+  }
+  if (typeof run !== 'string' || !cited.regressions.includes(run)) throw new Error(`${id}: reproducer run is not a scheduled regression of ${cited.path}: ${run}`);
+  if (!nonEmptyText(failure)) throw new Error(`${id}: reproducer failure must state the expect condition the fault breaks`);
+  try { reproducerCheckpoint(readSource(cited.path), run, failure); }
+  catch (error) { throw new Error(`${id}: ${error.message}`); }
+  if (!isSlug(family)) throw new Error(`${id}: reproducer family must be a fault family slug`);
+  const own = model.profile ?? model.path;
+  const required = [...new Set([own, ...(cited.profile ? [cited.profile] : [])])];
+  if (!Array.isArray(profiles) || !profiles.length || new Set(profiles).size !== profiles.length ||
+      required.some(name => !profiles.includes(name)) || profiles.some(profile => profile !== own && !profileIds.has(profile))) {
+    throw new Error(`${id}: reproducer profiles must name known profiles and include ${required.join(' and ')}`);
+  }
+  if (!exclusions || typeof exclusions !== 'object' || Array.isArray(exclusions)) throw new Error(`${id}: reproducer exclusions must map profiles to reasons`);
+  for (const [profile, reason] of Object.entries(exclusions)) {
+    if (!profileIds.has(profile) || profiles.includes(profile) || !nonEmptyText(reason)) {
+      throw new Error(`${id}: reproducer exclusion must name an unlisted known profile with a reason: ${profile}`);
+    }
+  }
+  if (shared) {
+    const unaccounted = [...profileIds].filter(profile => !profiles.includes(profile) && !Object.hasOwn(exclusions, profile));
+    if (unaccounted.length) throw new Error(`${id}: a shared-library fault must list or exclude every profile; missing ${unaccounted.join(', ')}`);
+  }
+  const exported = cited.replayRegressions?.includes(run) ?? false;
+  if (kind === 'exported-regression') {
+    if (!cited.profile || !exported || !publicOnly.get(cited.path)?.includes(run)) {
+      throw new Error(`${id}: exported-regression reproducer must cite an exported public-only run of ${cited.path}: ${run}`);
+    }
+    if (scope !== undefined) throw new Error(`${id}: scope belongs only to a model-run reproducer`);
+  } else {
+    if (exported) throw new Error(`${id}: ${run} is exported; cite it as an exported-regression reproducer`);
+    if (!nonEmptyText(scope)) throw new Error(`${id}: model-run reproducer needs a scope stating why the fault has no native counterpart`);
+  }
+}
 
 // Compiling semantic faults, checked against independent model obligations.
 // Every scheduled model carries at least one challenge or an explicit waiver.
-function validateChallenges(manifest, { readSource, contracts, sources }) {
-  const { challenges } = manifest;
+// Every challenge carries a reproducer or is listed in the reported backlog.
+function validateChallenges(manifest, { readSource, contracts, sources, profileIds, publicOnly }) {
+  const { challenges, reproducerBacklog } = manifest;
   if (!Array.isArray(challenges) || !challenges.length) throw new Error('Model property challenge catalog is missing');
+  if (!Array.isArray(reproducerBacklog)) throw new Error('Challenge reproducer backlog is missing');
   const models = new Map(manifest.models.map(model => [model.path, model]));
   const fields = ['id', 'contract', 'source', 'model', 'invariant', 'before', 'after'];
+  const optional = ['measures', 'reproducer'];
   const ids = new Set(), faults = new Map(), challengedModels = new Set();
+  let reproducers = 0;
   for (const challenge of challenges) {
     if (!challenge || typeof challenge !== 'object' || fields.some(key => typeof challenge[key] !== 'string' || !challenge[key])) {
       throw new Error(`Invalid model property challenge: ${JSON.stringify(challenge)}`);
     }
-    const unknown = Object.keys(challenge).filter(key => !fields.includes(key) && key !== 'measures');
+    const unknown = Object.keys(challenge).filter(key => !fields.includes(key) && !optional.includes(key));
     if (unknown.length) throw new Error(`${challenge.id}: unsupported challenge field ${unknown.join(', ')}`);
-    if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(challenge.id) || ids.has(challenge.id)) throw new Error(`Invalid or duplicate challenge id: ${challenge.id}`);
+    if (!isSlug(challenge.id) || ids.has(challenge.id)) throw new Error(`Invalid or duplicate challenge id: ${challenge.id}`);
     ids.add(challenge.id);
     if (!contracts.includes(challenge.contract)) throw new Error(`${challenge.id}: unknown contract ${challenge.contract}`);
     if (!sources.has(challenge.source)) throw new Error(`${challenge.id}: mutation source is not a scheduled model or library: ${challenge.source}`);
@@ -157,6 +263,22 @@ function validateChallenges(manifest, { readSource, contracts, sources }) {
     }
     if (!faults.has(fault)) faults.set(fault, challenge.id);
     challengedModels.add(challenge.model);
+    if (challenge.reproducer !== undefined) {
+      validateReproducer(challenge, model, { models, libraries: manifest.libraries, profileIds, publicOnly, readSource });
+      reproducers++;
+    }
+  }
+  // The backlog is the exact set of challenges without a reproducer: it can be
+  // reported, and it cannot hide a challenge that has one or never existed.
+  const backlog = new Set(reproducerBacklog);
+  if (backlog.size !== reproducerBacklog.length) throw new Error('Duplicate challenge ids in reproducerBacklog');
+  for (const id of backlog) {
+    if (!ids.has(id)) throw new Error(`reproducerBacklog names an unknown challenge: ${id}`);
+  }
+  for (const challenge of challenges) {
+    const listed = backlog.has(challenge.id);
+    if (challenge.reproducer !== undefined && listed) throw new Error(`${challenge.id}: has a reproducer and is listed in reproducerBacklog`);
+    if (challenge.reproducer === undefined && !listed) throw new Error(`${challenge.id}: has no reproducer and is not listed in reproducerBacklog`);
   }
   const waived = [];
   for (const model of manifest.models) {
@@ -167,7 +289,8 @@ function validateChallenges(manifest, { readSource, contracts, sources }) {
       throw new Error(`${model.path}: scheduled invariants have no model property challenge and no challengeWaiver`);
     }
   }
-  return { challenges: challenges.length, distinctFaults: faults.size, challengedModels: challengedModels.size, waivedModels: waived.length };
+  return { challenges: challenges.length, distinctFaults: faults.size, challengedModels: challengedModels.size, waivedModels: waived.length,
+    reproducers, reproducerBacklog: backlog.size };
 }
 
 export function validateExecution(manifest = readExecution(), {
@@ -192,7 +315,7 @@ export function validateExecution(manifest = readExecution(), {
   const paths = [...manifest.models.map(model => model.path), ...manifest.libraries];
   if (paths.some(path => typeof path !== 'string' || !/^formal\/[\w-]+\.qnt$/.test(path)) ||
       new Set(paths).size !== paths.length || !sameMembers(paths, files)) throw new Error('Model/library file inventory changed; review the execution schedule');
-  const profileIds = [], outputDirectories = new Set([check.outputDirectory]);
+  const profileIds = [], outputDirectories = new Set([check.outputDirectory]), publicOnly = new Map();
   let invariants = 0, regressions = 0, generatedTraces = 0;
   let exportedRegressionTraces = 0, generatedVectors = 0, vectorModels = 0;
   const vectorPaths = new Set();
@@ -244,6 +367,7 @@ export function validateExecution(manifest = readExecution(), {
       // Every deterministic history a driver could replay must be exported, and
       // an exported history must never patch model state behind the driver.
       const runs = classifyRuns(bodies);
+      publicOnly.set(model.path, runs.publicOnly);
       const exported = new Set(model.replayRegressions ?? []);
       const unexported = runs.publicOnly.filter(name => !exported.has(name));
       const patched = runs.patching.filter(name => exported.has(name));
@@ -273,7 +397,7 @@ export function validateExecution(manifest = readExecution(), {
     if ([...declarations.values()].some(kind => ['action', 'run', 'var'].includes(kind))) throw new Error(`${path}: a stateful model cannot be classified as a pure helper library`);
   }
   if (!sameMembers(profileIds, profiles.map(profile => profile.id))) throw new Error('Generated profile inventory differs from claim registry');
-  const challenges = validateChallenges(manifest, { readSource, contracts, sources: new Set(paths) });
+  const challenges = validateChallenges(manifest, { readSource, contracts, sources: new Set(paths), profileIds: new Set(profileIds), publicOnly });
   return { models: manifest.models.length, libraries: manifest.libraries.length, profiles: profileIds.length, invariants, regressions, generatedTraces, exportedRegressionTraces, vectorModels, generatedVectors, ...challenges };
 }
 

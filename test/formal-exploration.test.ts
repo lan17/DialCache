@@ -295,4 +295,21 @@ describe("isolated exploratory validation", () => {
       expect(existsSync(join(output, "workspace/node_modules"))).toBe(false);
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
+  it("keeps the tolerated witness step's report in the exploration report", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "dialcache-exploration-witness-report-"));
+    try {
+      execFileSync("git", ["init", "--quiet"], { cwd: directory });
+      execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-qm", "test"], { cwd: directory });
+      writeFileSync(join(directory, ".gitignore"), ".formal-traces/\n");
+      const witnesses = { schemaVersion: 1, command: "evaluate", failed: ["witness/effects: reply:13 reached by 1 sampled histories, minimum 2 (baseline 4)"], profiles: {} };
+      const output = await explore("42", { directory, run: async () => {
+        const workspace = join(directory, ".formal-traces/exploration", readdirSync(join(directory, ".formal-traces/exploration"))[0]!, "workspace");
+        mkdirSync(join(workspace, ".formal-traces"), { recursive: true });
+        writeFileSync(join(workspace, ".formal-traces/witness-report.json"), JSON.stringify(witnesses));
+        return [{ language: "typescript", status: "passed" }, { language: "go", status: "passed" }];
+      } });
+      expect(JSON.parse(readFileSync(join(output, "report.json"), "utf8"))).toMatchObject({ status: "passed", witnesses });
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
+
 });

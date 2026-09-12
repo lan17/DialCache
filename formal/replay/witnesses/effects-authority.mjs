@@ -1,5 +1,6 @@
 import { itfInteger, record } from "../itf.mjs";
 import { explicitInput, readTrace, traceStates, witnessCommand as cmd } from "./trace.mjs";
+import { createWitnessRecorder } from "./recorder.mjs";
 
 const init = cmd("init", 2), begin = cmd("beginCall"), read = cmd("releaseRead", 0);
 const resolve = cmd("resolveLoader", 0), reject = cmd("rejectLoader", 0);
@@ -38,9 +39,9 @@ export const effectsAuthorityRules = [
       ]) },
 ];
 
-export function effectsAuthorityWitnesses(paths) {
-  const found = new Set();
+export function effectsAuthorityWitnesses(paths, recorder = createWitnessRecorder()) {
   for (const path of paths) {
+    recorder.enter(path);
     const commands = [];
     const states = traceStates(readTrace(path), path).map(rawState => {
       const state = record(rawState, path), s = record(state.s, path);
@@ -61,8 +62,8 @@ export function effectsAuthorityWitnesses(paths) {
     });
     for (const rule of effectsAuthorityRules) {
       if (commands.length >= rule.commands.length && rule.commands.every((value, index) => commands[index] === value)
-        && rule.consequence(states[rule.commands.length - 1])) found.add(rule.name);
+        && rule.consequence(states[rule.commands.length - 1])) recorder.credit(rule.name, rule.commands.length - 1);
     }
   }
-  return found;
+  return recorder.labels();
 }

@@ -28,6 +28,15 @@ the TypeScript suite only checks the same gate. `make formal-ts`, `make formal-g
 and that witness evidence, so the hosted workflow runs them in parallel and the
 aggregate requires all of them.
 
+The evaluator ends with a per-profile witness report: required labels with at
+most three sampled hits and no regression, labels pinned by a regression but
+rarely sampled, and the distinct sampled action and observation sequences. It
+compares each required label's sampled hits with `formal/witness-baseline.json`
+and fails generation when a gated label drops below the tolerance, so a corpus
+that stops reaching its corners is visible even though named regressions keep
+the completion gate green. [PORTING.md](./PORTING.md#witness-evidence) defines
+the evidence fields, the report and the baseline.
+
 Within a lane, `run-models.mjs`, `check-model-properties.mjs` and
 `generated-fixtures.mjs` run independent Quint processes concurrently so a
 multi-core runner is not left idle; each process keeps the single Quint thread
@@ -79,10 +88,14 @@ missing witness, crash or timeout is a failed measurement. The selected fault
 catalogs and per-run reports define the denominator; do not infer a percentage
 of all possible defects from their scores.
 
-The model catalog in `execution.json` covers every scheduled model: currently 64
-challenges over 62 distinct faults, with no waivers. Its report distinguishes
+The model catalog in `execution.json` covers every scheduled model: currently 67
+challenges over 64 distinct faults, with no waivers. Its report distinguishes
 those two counts and marks a filtered `--only` run as partial; only the complete
-run is evidence.
+run is evidence. A challenge with a deterministic reproducer is additionally
+replayed on the clean and mutated model and must fail only under the fault, at
+the expectation the manifest declares; the report records that outcome per
+challenge, and `node formal/execution.mjs` reports how many challenges still
+wait in `reproducerBacklog`.
 
 The weekly full workflow shards each mutation lane over three runners. The Go
 lane bounded the whole run: its 13 mutants replay the generated cohort in strict
@@ -133,7 +146,10 @@ does not produce an acceptance completion: its separate report distinguishes
 native replay failures, witness-check failures and other infrastructure failures.
 A witness-check failure can mean an unreached boundary or invalid witness
 evidence; inspect the native report before attributing it to sampling. Go replay
-still runs after a TypeScript witness-check failure.
+still runs after a TypeScript witness-check failure. The exploration report
+keeps that seed's witness report under `witnesses`, so a drop in sampled hits
+against the pinned baseline stays visible although the witness step is
+tolerated.
 
 Choose a seed explicitly, or replay the saved source snapshot using the exact
 command printed by the runner:

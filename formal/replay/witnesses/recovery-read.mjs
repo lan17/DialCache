@@ -1,5 +1,6 @@
 import { record } from "../itf.mjs";
 import { decodeIntegers, explicitInput, readTrace, traceStates, witnessCommand as command } from "./trace.mjs";
+import { createWitnessRecorder } from "./recorder.mjs";
 
 // These boundary histories are intentionally narrow. Inputs identify the
 // controlled schedule; the independently written public checks establish its
@@ -108,9 +109,9 @@ function contains(actual, expected) {
   return Object.entries(expected).every(([key, value]) => contains(actual[key], value));
 }
 
-export function recoveryReadWitnesses(paths) {
-  const seen = new Set();
+export function recoveryReadWitnesses(paths, recorder = createWitnessRecorder()) {
   for (const path of paths) {
+    recorder.enter(path);
     const commands = [];
     const observations = traceStates(readTrace(path), path).map(rawState => {
       const state = record(rawState, path);
@@ -124,8 +125,8 @@ export function recoveryReadWitnesses(paths) {
     for (const rule of recoveryReadWitnessRules) {
       if (commands.length < rule.commands.length) continue;
       if (!rule.commands.every((value, index) => value === commands[index])) continue;
-      if (contains(observations[rule.commands.length - 1], rule.outcome)) seen.add(rule.name);
+      if (contains(observations[rule.commands.length - 1], rule.outcome)) recorder.credit(rule.name, rule.commands.length - 1);
     }
   }
-  return seen;
+  return recorder.labels();
 }
