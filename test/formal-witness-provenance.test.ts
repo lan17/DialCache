@@ -6,7 +6,7 @@ import { corpusDiversity, labelProvenance, witnessEvidence } from "../formal/rep
 import { checkWitnesses, historySequences } from "../formal/replay/witnesses/index.mjs";
 import { publicCheckpoint, publicPrefixRule, publicPrefixWitnesses, witnessCommand } from "../formal/replay/witnesses/public-prefix.mjs";
 import { createWitnessRecorder, standaloneRecorder } from "../formal/replay/witnesses/recorder.mjs";
-import { baselineFindings, canonicalSeed, gateRule, parseArguments, profileReport, readBaseline, recordBaseline, sampledCorpusFingerprint, traceKind } from "../formal/witnesses.mjs";
+import { baselineFindings, canonicalSeed, gateRule, parseArguments, profileReport, readBaseline, recordBaseline, sampledCorpusFingerprint, staleBaselineProblem, traceKind } from "../formal/witnesses.mjs";
 import type { WitnessEvidence } from "../formal/replay/witnesses/evidence.mjs";
 import type { WitnessHistory } from "../formal/replay/witnesses/index.mjs";
 
@@ -194,6 +194,16 @@ describe("witness baseline gate", () => {
     expect(contradiction).toMatchObject({ sameSeedAsBaseline: false, sameCorpusAsBaseline: true, seedContradiction: true });
     expect(contradiction.baseline.rule).toBe("tolerance");
     expect(contradiction.baseline.failed.map(failure => failure.rule)).toEqual(["tolerance"]);
+  });
+
+  it("refuses a stale-seed baseline everywhere except the full rewrite that replaces it", () => {
+    const stale = { ...baseline, seed: "0x2a" };
+    for (const options of [{ command: "evaluate", profile: "all" }, { command: "report", profile: "effects" }, { command: "baseline", profile: "effects" }]) {
+      expect(staleBaselineProblem(stale, "0x1", options)).toMatch(/recorded at seed 0x2a but the manifest seed is 0x1; rewrite it with baseline --write --profile all/);
+    }
+    expect(staleBaselineProblem(stale, "0x1", { command: "baseline", profile: "all" })).toBeUndefined();
+    expect(staleBaselineProblem(baseline, "0x1", { command: "evaluate", profile: "all" })).toBeUndefined();
+    expect(staleBaselineProblem(undefined, "0x1", { command: "evaluate", profile: "all" })).toBeUndefined();
   });
 
   it("canonicalizes seeds wherever they enter", () => {

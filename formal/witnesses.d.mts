@@ -65,6 +65,7 @@ export function sampledCorpusFingerprint(corpus: { paths: readonly string[]; kin
 export function recordBaseline(existing: WitnessBaseline | undefined, entries: ReadonlyArray<{ profile: string; evidence: WitnessEvidence; fingerprint: string }>, seed: string, defaults?: { tolerance: number; gatedMinimum: number; freshSeedSigma: number }): WitnessBaseline;
 export function baselineFindings(profile: string, rows: readonly LabelRow[], baseline: WitnessBaseline | undefined, options?: { freshCorpus?: boolean }): BaselineFindings;
 export function canonicalSeed(value: string): string;
+export function staleBaselineProblem(baseline: WitnessBaseline | undefined, manifestSeed: string, options: { command: string; profile: string }): string | undefined;
 export function resolveCorpusSeed(environment?: Record<string, string | undefined>, execution?: unknown): string;
 export function gateRule(seed: string | null | undefined, baseline: WitnessBaseline | undefined, sameCorpus: boolean | null): { rule: 'tolerance' | 'collapse'; sameSeed: boolean | null; contradiction: boolean };
 export function profileReport(profile: string, evidence: WitnessEvidence, missing: readonly string[], fingerprint: string, baseline: WitnessBaseline | undefined, options?: { seed?: string }): ProfileReport;

@@ -432,9 +432,11 @@ exploration seed, is judged by the collapse rule: the count must also fall
 more than `freshSeedSigma` (4) Poisson standard deviations below the recorded
 one, and always fails at zero hits, because per-label counts of ten to forty
 vary by a third or more between seeds. The baseline itself is always recorded
-under the manifest seed; `evaluate` refuses a baseline recorded under any other
-seed, and `baseline --write` refuses to run with a different `QUINT_SEED`. The
-report records the seed it judged and both comparisons. Labels recorded below the
+under the manifest seed; `evaluate`, `report` and a partial rewrite refuse a baseline recorded
+under any other seed, a full `baseline --write --profile all` under the
+manifest seed replaces it, and `baseline --write` refuses to run with a
+different `QUINT_SEED`. The report records the seed it judged and both
+comparisons. Labels recorded below the
 minimum, or not recorded, are reported and never gated, so a green gate speaks
 only for the gated labels; the report names the ungated ones per profile, and a
 profile whose required labels are all pinned by regressions has none gated. After a deliberate

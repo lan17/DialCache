@@ -7,7 +7,7 @@ import { cleanEnvironment, executeSteps, validationPlan } from './validation.mjs
 import { nativeBinding } from './conformance-bindings.mjs';
 import { parseTypeScriptReport } from './conformance-adapters.mjs';
 import { checkGoReplay } from './check-go-replay.mjs';
-import { canonicalSeed, reportFileName, selectedProfiles } from './witnesses.mjs';
+import { canonicalSeed, reportFileName } from './witnesses.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -244,12 +244,24 @@ function loadWitnessReport(workspace, report) {
   catch (error) { report.witnesses = { error: String(error) }; }
 }
 
+// The witness profiles a snapshot schedules: its own manifest filtered by its
+// own registry. A saved run is judged against the inventory it was saved with,
+// not against a checkout that may have gained or lost profiles since.
+export function snapshotWitnessProfiles(workspace) {
+  const manifest = resolve(workspace, 'formal/execution.json'), registry = resolve(workspace, 'formal/coverage-witnesses.json');
+  if (!existsSync(manifest) || !existsSync(registry)) return undefined;
+  const models = JSON.parse(readFileSync(manifest, 'utf8')).models ?? [];
+  const witnessed = new Set(Object.keys(JSON.parse(readFileSync(registry, 'utf8'))));
+  return models.map(model => model.profile).filter(profile => typeof profile === 'string' && witnessed.has(profile));
+}
+
 // A completed evaluator report for this seed: the tolerated step may have died
 // after writing per-profile evidence but before the aggregate, and both ports
 // can still pass on that evidence. Missing or malformed coverage evidence is
 // never a clean gate, and neither is a report judged under another seed or
 // covering fewer profiles than the manifest schedules.
-export function witnessReportProblem(witnesses, seed, expectedProfiles = selectedProfiles('all')) {
+export function witnessReportProblem(witnesses, seed, expectedProfiles) {
+  if (expectedProfiles === undefined) return 'the snapshot has no witness inventory (formal/execution.json and formal/coverage-witnesses.json)';
   if (witnesses === undefined) return 'the witness evaluator wrote no report';
   if (witnesses.error !== undefined) return `the witness report is unreadable: ${witnesses.error}`;
   if (witnesses.schemaVersion !== 1 || witnesses.command !== 'evaluate' || !Array.isArray(witnesses.failed) || !Array.isArray(witnesses.incomplete)
@@ -323,7 +335,7 @@ async function executeExploration(seed, { directory = root, environment = proces
     loadWitnessReport(workspace, report);
     const nativeStatus = report.native.some(result => result.status === 'native-failure') ? 'native-failure'
       : report.native.some(result => result.status === 'witness-check-failure') ? 'witness-check-failure' : undefined;
-    const problem = witnessReportProblem(report.witnesses, selectedSeed);
+    const problem = witnessReportProblem(report.witnesses, selectedSeed, snapshotWitnessProfiles(workspace));
     if (nativeStatus === undefined && problem !== undefined) {
       report.status = 'infrastructure-failure';
       throw new Error(`Exploration cannot be accepted: ${problem}, so the coverage gate has no evidence although both ports passed.`);

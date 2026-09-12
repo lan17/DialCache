@@ -52,6 +52,16 @@ export function resolveCorpusSeed(environment = process.env, execution = readExe
   return canonicalSeed(environment.QUINT_SEED || execution.settings.seed);
 }
 
+// The recorded baseline belongs to the manifest seed: a baseline written under
+// another seed would make the pinned lane look like exploration. Evaluation,
+// reporting and a partial rewrite refuse such a file; only the full rewrite,
+// which replaces it, may run, so the recovery the error names is possible.
+export function staleBaselineProblem(baseline, manifestSeed, { command, profile }) {
+  if (baseline === undefined || baseline.seed === manifestSeed) return undefined;
+  if (command === 'baseline' && profile === 'all') return undefined;
+  return `recorded at seed ${baseline.seed} but the manifest seed is ${manifestSeed}; rewrite it with baseline --write --profile all under the manifest seed`;
+}
+
 // Which gate rule judges a corpus. A byte-identical sampled corpus cannot come
 // from another seed, so an equal fingerprint always keeps the strict tolerance
 // rule; only a corpus that differs AND was generated under another seed is an
@@ -234,11 +244,8 @@ export function evaluateProfiles(options, { directory = root, log = message => c
   const baseline = readBaseline(baselinePath);
   const seed = resolveCorpusSeed(environment, execution);
   const manifestSeed = canonicalSeed(execution.settings.seed);
-  // The recorded baseline belongs to the manifest seed. A baseline written
-  // under another seed would make the pinned lane look like exploration.
-  if (baseline !== undefined && baseline.seed !== manifestSeed) {
-    throw new Error(`${options.baseline}: recorded at seed ${baseline.seed} but the manifest seed is ${manifestSeed}; rewrite it with baseline --write --profile all under the manifest seed`);
-  }
+  const stale = staleBaselineProblem(baseline, manifestSeed, options);
+  if (stale !== undefined) throw new Error(`${options.baseline}: ${stale}`);
   const report = { schemaVersion: 1, command: options.command, traces: options.traces, seed,
     sameSeedAsBaseline: baseline === undefined ? null : seed === baseline.seed,
     baseline: baseline === undefined ? null : { path: options.baseline, seed: baseline.seed, tolerance: baseline.tolerance, gatedMinimum: baseline.gatedMinimum, freshSeedSigma: baseline.freshSeedSigma },

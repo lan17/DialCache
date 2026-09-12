@@ -62,9 +62,17 @@ function goReport(failure?: string) {
 
 // A completed evaluator report for a seed: what formal/witnesses.mjs evaluate
 // writes when every scheduled witness profile was evaluated and nothing failed.
-function completedWitnessReport(seed: string) {
+function completedWitnessReport(seed: string, profiles: readonly string[] = selectedProfiles("all")) {
   return { schemaVersion: 1, command: "evaluate", seed, failed: [] as string[], incomplete: [] as string[],
-    profiles: Object.fromEntries(selectedProfiles("all").map(profile => [profile, {}])) };
+    profiles: Object.fromEntries(profiles.map(profile => [profile, {}])) };
+}
+
+// The witness inventory a snapshot carries: the manifest's scheduled profiles
+// and the registry that names which of them have required witnesses.
+function writeWitnessInventory(directory: string, profiles: readonly string[]) {
+  mkdirSync(join(directory, "formal"), { recursive: true });
+  writeFileSync(join(directory, "formal/execution.json"), JSON.stringify({ models: profiles.map(profile => ({ profile })) }));
+  writeFileSync(join(directory, "formal/coverage-witnesses.json"), JSON.stringify(Object.fromEntries(profiles.map(profile => [profile, ["required"]]))));
 }
 
 function savedFixture(directory: string) {
@@ -74,12 +82,16 @@ function savedFixture(directory: string) {
   const sources: Record<string, string> = {
     "package.json": '{"packageManager":"pnpm@10.33.0"}\n',
     "pnpm-lock.yaml": "lockfileVersion: '9.0'\n",
+    // The saved snapshot schedules one witness profile; the current checkout
+    // schedules fourteen. A replay is judged against the saved inventory.
+    "formal/execution.json": JSON.stringify({ models: [{ profile: "effects" }] }),
+    "formal/coverage-witnesses.json": JSON.stringify({ effects: ["required"] }),
     "formal/explore.mjs": `import { writeFileSync } from 'node:fs';
       export const explorationPlan = (directory, seed) => [{ directory, seed, runner: 'saved' }];
       export async function runExplorationSteps(plan, options) {
         writeFileSync(options.directory + '/.formal-traces/saved-runner.json', JSON.stringify(plan));
         // A saved run's evaluator also has to leave a completed witness report behind.
-        writeFileSync(options.directory + '/.formal-traces/witness-report.json', ${JSON.stringify(JSON.stringify(completedWitnessReport("0x2a")))});
+        writeFileSync(options.directory + '/.formal-traces/witness-report.json', ${JSON.stringify(JSON.stringify(completedWitnessReport("0x2a", ["effects"])))});
         return [{ language: 'typescript', status: 'passed' }, { language: 'go', status: 'passed' }];
       }`,
     "formal/validation.mjs": `import { mkdirSync, writeFileSync } from 'node:fs';
@@ -222,6 +234,7 @@ describe("isolated exploratory validation", () => {
       execFileSync("git", ["init", "--quiet"], { cwd: directory });
       execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-qm", "test"], { cwd: directory });
       writeFileSync(join(directory, ".gitignore"), ".formal-traces/\n");
+      writeWitnessInventory(directory, selectedProfiles("all"));
       writeFileSync(join(directory, "rule.qnt"), "original");
       await expect(explore("42", { directory, run: async () => {
         const output = join(directory, ".formal-traces/exploration", readdirSync(join(directory, ".formal-traces/exploration"))[0]!);
@@ -241,6 +254,7 @@ describe("isolated exploratory validation", () => {
       execFileSync("git", ["init", "--quiet"], { cwd: directory });
       execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-qm", "test"], { cwd: directory });
       writeFileSync(join(directory, ".gitignore"), ".formal-traces/\n");
+      writeWitnessInventory(directory, selectedProfiles("all"));
       await expect(explore("42", { directory, run: async () => [
         { language: "typescript", status: "witness-check-failure" }, { language: "go", status: "witness-check-failure" },
       ] })).rejects.toThrow(/witness-check-failure/);
@@ -269,6 +283,10 @@ describe("isolated exploratory validation", () => {
         { directory: join(output, "workspace"), seed: "0x2a", runner: "saved" },
       ]);
       expect(readFileSync(join(output, "workspace/.formal-traces/saved-prerequisites.txt"), "utf8")).toBe("explore");
+      // The saved inventory has one profile while this checkout schedules many:
+      // the replay was judged against the snapshot's inventory, not the checkout's.
+      expect(selectedProfiles("all").length).toBeGreaterThan(1);
+      expect(Object.keys(report.witnesses.profiles)).toEqual(["effects"]);
       expect(readFileSync(saved.path, "utf8")).toBe(original);
       expect(readFileSync(join(saved.workspace, ".formal-traces/original-evidence.txt"), "utf8")).toBe("retain original native evidence");
       for (const [path, content] of Object.entries(saved.sources)) expect(readFileSync(join(saved.workspace, path), "utf8")).toBe(content);
@@ -311,6 +329,7 @@ describe("isolated exploratory validation", () => {
       execFileSync("git", ["init", "--quiet"], { cwd: directory });
       execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-qm", "test"], { cwd: directory });
       writeFileSync(join(directory, ".gitignore"), ".formal-traces/\n");
+      writeWitnessInventory(directory, selectedProfiles("all"));
       const witnesses = { ...completedWitnessReport("0x2a"), failed: ["witness/effects: reply:13 reached by 1 sampled histories, minimum 2 (baseline 4)"] };
       let replays = 0;
       await expect(explore("42", { directory, run: async () => {
@@ -339,6 +358,7 @@ describe("isolated exploratory validation", () => {
       execFileSync("git", ["init", "--quiet"], { cwd: directory });
       execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-qm", "test"], { cwd: directory });
       writeFileSync(join(directory, ".gitignore"), ".formal-traces/\n");
+      writeWitnessInventory(directory, selectedProfiles("all"));
       await expect(explore("42", { directory, run: async () => {
         const workspace = join(directory, ".formal-traces/exploration", readdirSync(join(directory, ".formal-traces/exploration"))[0]!, "workspace");
         mkdirSync(join(workspace, ".formal-traces"), { recursive: true });
@@ -364,6 +384,7 @@ describe("isolated exploratory validation", () => {
       execFileSync("git", ["init", "--quiet"], { cwd: directory });
       execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-qm", "test"], { cwd: directory });
       writeFileSync(join(directory, ".gitignore"), ".formal-traces/\n");
+      writeWitnessInventory(directory, selectedProfiles("all"));
       const witnesses = completedWitnessReport("42");
       const output = await explore("42", { directory, run: async () => {
         const workspace = join(directory, ".formal-traces/exploration", readdirSync(join(directory, ".formal-traces/exploration"))[0]!, "workspace");
