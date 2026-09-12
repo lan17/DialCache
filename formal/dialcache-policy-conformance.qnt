@@ -649,4 +649,22 @@ module dialcache_policy_conformance {
     .then(startCall(0)).then(releasePolicy)
     .expect(s.policyErrors == List({ layer: "noop", errorType: "config_resolution" })
       and s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE) and s.o.loaders == 2)
+
+  // Falsy source results are values in Redis. With the local layer disabled,
+  // each later same-key call within freshness is a remote hit returning the
+  // stored falsy value; reaching the fresh boundary starts a source instead.
+  run falsyRemoteValuesAreServedFromRemoteTest = init.then(changePolicy(POLICY_NO_LOCAL))
+    .then(startCall(0)).then(releasePolicy).then(finishSource(0, VALUE_FALSE))
+    .then(startCall(0)).then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_FALSE, VALUE_FALSE) and s.o.loaders == 1 and s.o.loads == 1)
+    .then(startCall(1)).then(releasePolicy).then(finishSource(1, VALUE_ZERO))
+    .then(startCall(1)).then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_FALSE, VALUE_FALSE, VALUE_ZERO, VALUE_ZERO)
+      and s.o.loaders == 2 and s.o.loads == 2)
+    .then(elapse(ONE_SECOND_MS))
+    .then(startCall(0)).then(releasePolicy).then(finishSource(2, VALUE_EMPTY_STRING))
+    .then(startCall(0)).then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_FALSE, VALUE_FALSE, VALUE_ZERO, VALUE_ZERO, VALUE_EMPTY_STRING, VALUE_EMPTY_STRING)
+      and s.o.loaders == 3 and s.o.reads == 6 and s.o.loads == 3 and s.o.writes == 3
+      and s.localValue == NO_CACHED_VALUE)
 }

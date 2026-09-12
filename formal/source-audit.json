@@ -1026,7 +1026,7 @@
     },
     {
       "path": "formal/BEHAVIOR.md",
-      "sha256": "b105f74669b84992eddac4920c34445088512fbe543d8b18e17f8dd7549ad100",
+      "sha256": "f62fdee1d5d8335383f99afedcd13c172aa6cb244159360c28457189aa771b08",
       "entries": [
         {"line":1,"title":"Portable behavioral scenarios and generated feature profiles"},
         {"line":17,"title":"Scenario format"},
@@ -1501,7 +1501,7 @@
     },
     {
       "path": "formal/VALIDATION.md",
-      "sha256": "c445bab1b58f6c3bdf346e9149654fa9f4cc566e868a461e92e12333e62e9e6b",
+      "sha256": "a6f4de4caf246c24aa924be96475ef22d9db372c61b270d0c72370f5b75cdb45",
       "entries": [
         {"line":1,"title":"Validation and evidence"},
         {"line":7,"title":"Choosing a run"},
@@ -1509,7 +1509,7 @@
         {"line":68,"title":"Mutation evidence"},
         {"line":125,"title":"Exploratory runs"},
         {"line":155,"title":"A retained sampling regression"},
-        {"line":176,"title":"Historical results"}
+        {"line":192,"title":"Historical results"}
       ],
       "review": {
         "kind": "tooling-guide",

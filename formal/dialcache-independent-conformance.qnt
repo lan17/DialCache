@@ -300,19 +300,21 @@ module dialcache_independent_conformance {
     nondet choice = Set(1, 5, 10, 1000).oneOf()
     advanceBy(choice)
   }
-  action seed = {
-    // Fresh values and values just inside each admitted recovery age bound.
-    nondet choice = 0.to(5).oneOf()
-    all {
-      input' = { name: "seed", choice: choice },
-      s' = {
-        frame: if (choice == 2 or choice == 4) VALUE_TWO else VALUE_ONE,
-        created: s.wall - (if (choice == 0 or choice == 4) 0
-        else if (choice == 3) 4999 else if (choice == 5) 1999 else 1000),
-        expires: s.now + FIXTURE_TTL_MS,
-        ...s
-      }
+  // Fresh values and values just inside each admitted recovery age bound.
+  action seedWith(choice: int): bool = all {
+    (0.to(5)).contains(choice),
+    input' = { name: "seed", choice: choice },
+    s' = {
+      frame: if (choice == 2 or choice == 4) VALUE_TWO else VALUE_ONE,
+      created: s.wall - (if (choice == 0 or choice == 4) 0
+      else if (choice == 3) 4999 else if (choice == 5) 1999 else 1000),
+      expires: s.now + FIXTURE_TTL_MS,
+      ...s
     }
+  }
+  action seed = {
+    nondet choice = 0.to(5).oneOf()
+    seedWith(choice)
   }
   action invalidate = all {
     input' = { name: "invalidate", choice: -1 },
@@ -431,4 +433,14 @@ module dialcache_independent_conformance {
     .expect(s.o.calls == List(DEADLINE_ERROR, CALL_PENDING))
     .then(advanceBy(1)).expect(s.o.calls == List(DEADLINE_ERROR, DEADLINE_ERROR)
       and s.o.loaders == 2 and s.o.loads == 0 and s.o.writes == 0 and s.o.recovery == List("miss", "miss"))
+
+  // Each caller retains the stale bytes its own read acquired. Replacing the
+  // stored frame between the reads, then invalidating, changes neither served
+  // recovery: both callers get their captured snapshot, and nothing is written.
+  run independentRecoveriesServeDistinctAcquiredSnapshotsTest = init
+    .then(beginCall).then(readAt(0)).then(seedWith(2))
+    .then(beginCall).then(readAt(1)).then(rejectAt(0)).then(rejectAt(1)).then(invalidate)
+    .then(loadAt(1)).then(loadAt(0))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO) and s.o.recovery == List("served", "served")
+      and s.o.reads == 2 and s.o.loaders == 2 and s.o.loads == 2 and s.o.dumps == 0 and s.o.writes == 0)
 }
