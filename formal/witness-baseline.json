@@ -3,6 +3,7 @@
   "seed": "0xd1a1ca",
   "tolerance": 0.5,
   "gatedMinimum": 10,
+  "freshSeedSigma": 4,
   "profiles": {
     "admission": {
       "sampledHistories": 128,
