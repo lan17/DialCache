@@ -304,6 +304,49 @@ wrong owner or a wrong clock. Verify a new entry with
 `node formal/check-model-properties.mjs --only=<id>` before running the whole
 catalog; a filtered report is a local aid and is never marked complete.
 
+Random exploration finds the history that separates a fault from the clean
+model; a reproducer preserves that history so the fault stays detected
+regardless of seed. Every new challenge carries a `reproducer` object naming a
+deterministic `run`, its `kind`, the `failure` the fault produces (the
+condition of one top-level `.expect(...)` in that run, copied from the model),
+the fault `family` slug it belongs to, the `profiles` where the fault is
+observable, and `exclusions` mapping other known profiles to the reason they
+cannot exercise it. Two kinds exist. An `exported-regression` cites a run in a
+profile model's `replayRegressions`, so it is public-only and both ports replay
+it: use this kind for every portable behavior fault. The run normally belongs
+to the challenged model; when the fault sits in a shared library, the
+reproducer may instead name another profile `model` whose exported run reaches
+it, which is how a verification model's shared-rule challenge gets a portable
+reproducer. A `model-run` cites a run that only the model executes and must
+carry a `scope` stating why the fault has no native counterpart: a vector model
+whose cases reach the codecs through an exported artifact, or instrumentation
+such as a receipt that no driver observes. A run that is exported must be cited
+as an `exported-regression`; `scope` is rejected on that kind. `profiles` must
+include the challenged model's own profile id, or its path for a model without
+a profile, and the cited run's profile. For a fault in a shared library every
+known profile must appear in `profiles` or in `exclusions`; a fault in one
+model's own file needs no exclusions, because no other profile executes that
+text.
+
+`check-model-properties.mjs` runs the cited history on the same copy of the
+sources as the invariant measurement, together with two probes it appends to
+the cited model: the run's chain cut just before the declared `failure`
+expectation and the chain cut just after it. `quint test --max-samples=1
+--seed=<manifest seed> --match=^(<run>|<probes>)$` must report all three passed
+on the clean model. On the mutant it must exit 1 with the run failed, the probe
+before the checkpoint passed and the probe through it failed with `Expect
+condition does not hold true`: the fault then breaks exactly the declared
+expectation, not an earlier step it disables or a later check. A history the
+fault does not distinguish, or one that fails elsewhere, is a measurement
+failure, not a survivor to record. The report entry gains
+`reproducer: { ..., baseline: 'passed', mutant: 'failed', code: 'QNT508' }`.
+
+Existing challenges are backfilled as their models are touched. Until then each
+one is listed by id in the manifest's top-level `reproducerBacklog`;
+`node formal/execution.mjs` rejects a challenge that is neither listed nor
+reproduced, a listed id that does not exist or already has a reproducer, and
+reports the backlog size. The backlog is a reported gap, not a gate.
+
 ### Exported runs are exactly the public-only runs
 
 A profile run is public-only when every transition it takes records a command
