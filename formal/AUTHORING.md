@@ -304,6 +304,37 @@ wrong owner or a wrong clock. Verify a new entry with
 `node formal/check-model-properties.mjs --only=<id>` before running the whole
 catalog; a filtered report is a local aid and is never marked complete.
 
+Random exploration finds the history that separates a fault from the clean
+model; a reproducer preserves that history so the fault stays detected
+regardless of seed. Every new challenge carries a `reproducer` object naming a
+deterministic run of the challenged model, its `kind`, the fault `family` slug
+it belongs to, the `profiles` where the fault is observable, and `exclusions`
+mapping other known profiles to the reason they cannot exercise it. Two kinds
+exist. An `exported-regression` cites a run in the model's `replayRegressions`,
+so it is public-only and both ports replay it: use this kind for every portable
+behavior fault. A `model-run` cites a run that only the model executes and must
+carry a `scope` stating why the fault has no native counterpart: a verification
+or vector model without a driver profile, or instrumentation such as a receipt
+that no driver observes. A run that is exported must be cited as an
+`exported-regression`; `scope` is rejected on that kind. `profiles` must include
+the model's own profile id, or the model path for a model without a profile;
+`exclusions` may be empty when the mutated text lives only in the challenged
+model's file, because no other profile executes it.
+
+`check-model-properties.mjs` runs the cited history with
+`quint test --max-samples=1 --seed=<manifest seed> --match=^<run>$` on the same
+copy of the sources as the invariant measurement. The clean model must report
+the run as passed and the mutant must exit 1 and report that run as failed; a
+history the fault does not distinguish is a measurement failure, not a survivor
+to record. The report entry gains
+`reproducer: { baseline: 'passed', mutant: 'failed', failure: '<QNT code>' }`.
+
+Existing challenges are backfilled as their models are touched. Until then each
+one is listed by id in the manifest's top-level `reproducerBacklog`;
+`node formal/execution.mjs` rejects a challenge that is neither listed nor
+reproduced, a listed id that does not exist or already has a reproducer, and
+reports the backlog size. The backlog is a reported gap, not a gate.
+
 ### Exported runs are exactly the public-only runs
 
 A profile run is public-only when every transition it takes records a command

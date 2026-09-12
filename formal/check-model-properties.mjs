@@ -22,6 +22,30 @@ export function validatePropertyResult(result, exitCode, expectation) {
   }
 }
 
+// A reproducer is one named run executed with `quint test --match=^run$`. The
+// clean model must report the run as passed; the mutant must exit 1 and report
+// that same run as failed, so a compile error, a run the pattern never selected
+// or an unrelated failure is not detection. `failure` records the Quint error
+// code that ended the run (for example QNT508, an expect that did not hold).
+const escapeRegExp = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+export function validateReproducerResult(output, exitCode, run, expectation) {
+  if (!['baseline', 'mutant'].includes(expectation)) throw new Error('Unknown model measurement expectation');
+  if (typeof output !== 'string' || typeof run !== 'string' || !run) throw new Error('Reproducer output and run name are required');
+  const name = escapeRegExp(run);
+  const passed = new RegExp(`^\\s*ok ${name} passed \\d+ test\\(s\\)$`, 'm').test(output);
+  const failed = new RegExp(`^\\s*\\d+\\) ${name} failed after \\d+ test\\(s\\)$`, 'm').test(output);
+  if (!passed && !failed) throw new Error(`Reproducer ${run} did not run: the output names it neither passed nor failed`);
+  if (expectation === 'baseline') {
+    if (exitCode !== 0 || !passed || failed) throw new Error(`Reproducer ${run} must pass on the unmodified model`);
+    return { status: 'passed' };
+  }
+  if (exitCode === 0 || passed) throw new Error(`Reproducer ${run} passes under the fault: this history does not distinguish it`);
+  if (exitCode !== 1 || !failed) throw new Error(`Reproducer ${run} ended abnormally (exit ${exitCode}) instead of failing its own run`);
+  const code = /Error \[(QNT\d+)\]/.exec(output);
+  if (!code) throw new Error(`Reproducer ${run} failed without a Quint run error code`);
+  return { status: 'failed', failure: code[1] };
+}
+
 // Select a subset of the catalog by id for local iteration. The complete
 // catalog remains the only accepted evidence: a filtered report is never final.
 export function selectChallenges(manifest, only) {
@@ -46,10 +70,11 @@ export async function measureModelProperties({ only, concurrency = resolveConcur
   const files = readdirSync(resolve(root, 'formal')).filter(name => name.endsWith('.qnt')).sort();
   const sources = new Map(files.map(name => [`formal/${name}`, readFileSync(resolve(root, 'formal', name), 'utf8')]));
   mkdirSync(output, { recursive: true });
-  const report = { schemaVersion: 3, complete: false, partial: only !== undefined, mode: 'bounded-simulation', options,
+  const report = { schemaVersion: 4, complete: false, partial: only !== undefined, mode: 'bounded-simulation', options,
     sources: Object.fromEntries([...sources].map(([path, source]) => [path, createHash('sha256').update(source).digest('hex')])),
     catalogSha256: createHash('sha256').update(readFileSync(resolve(root, 'formal/execution.json'))).digest('hex'),
-    catalog: manifest.challenges.length, challenges: [] };
+    catalog: manifest.challenges.length, reproducers: manifest.challenges.filter(challenge => challenge.reproducer).length,
+    reproducerBacklog: manifest.reproducerBacklog.length, challenges: [] };
   const save = () => writeFileSync(resolve(output, 'report.json'), JSON.stringify(report, null, 2) + '\n');
   save();
   async function execute(args) {
@@ -90,6 +115,19 @@ export async function measureModelProperties({ only, concurrency = resolveConcur
         if (label === 'mutant') entry.counterexampleStates = result.trace.length;
         save();
         lines.push(`${label}: typecheck ${seconds(compile.durationMs)}; run ${result.status} after ${result.trace.length} states, ${seconds(run.durationMs)}\n`);
+        if (challenge.reproducer === undefined) continue;
+        // The reproducer replays one named history in the same copy of the
+        // sources: it must pass here on the baseline and fail on the mutant.
+        const name = challenge.reproducer.run;
+        const test = await execute(['test', model, `--backend=${settings.backend}`, '--max-samples=1',
+          `--seed=${settings.seed}`, `--match=^${name}$`]);
+        detail = test.stdout + test.stderr;
+        writeFileSync(`${prefix}-reproducer.log`, detail);
+        const outcome = validateReproducerResult(detail, test.status, name, label);
+        entry.reproducer[label] = outcome.status;
+        if (label === 'mutant') entry.reproducer.failure = outcome.failure;
+        save();
+        lines.push(`${label}: reproducer ${name} ${outcome.status}${outcome.failure ? ` (${outcome.failure})` : ''}, ${seconds(test.durationMs)}\n`);
       }
       printGroup(`${challenge.id}: compiling fault violates ${challenge.invariant}`, ...lines);
     } catch (error) {
@@ -109,7 +147,10 @@ export async function measureModelProperties({ only, concurrency = resolveConcur
     }
     // Entries hold catalog order from the start; completions fill them in place,
     // so the saved report never depends on which challenge finished first.
-    for (const challenge of challenges) report.challenges.push({ ...challenge, baseline: 'pending', mutant: 'pending' });
+    for (const challenge of challenges) {
+      report.challenges.push({ ...challenge, baseline: 'pending', mutant: 'pending',
+        ...(challenge.reproducer === undefined ? {} : { reproducer: { ...challenge.reproducer, baseline: 'pending', mutant: 'pending' } }) });
+    }
     save();
     await runPool(challenges.map((challenge, index) => () => measure(challenge, report.challenges[index])), { concurrency });
     report.complete = only === undefined;
