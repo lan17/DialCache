@@ -1,3 +1,5 @@
+import type { WitnessRecorder } from "./recorder.mjs";
+
 export interface EffectsPublicState {
   calls: number[];
   reads: number;
@@ -14,4 +16,4 @@ export interface EffectsAuthorityRule {
   consequence: (state: EffectsPublicState) => boolean;
 }
 export const effectsAuthorityRules: readonly EffectsAuthorityRule[];
-export function effectsAuthorityWitnesses(paths: readonly string[]): Set<string>;
+export function effectsAuthorityWitnesses(paths: readonly string[], recorder?: WitnessRecorder): Set<string>;

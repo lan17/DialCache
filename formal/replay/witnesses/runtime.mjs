@@ -1,4 +1,5 @@
 import { explicitInput, privateStates, readTrace, traceStates } from "./trace.mjs";
+import { createWitnessRecorder } from "./recorder.mjs";
 
 const successful = value => value !== undefined && value > 0 && value !== 3 && value !== 4;
 const baseOverlay = overlay => overlay < 20 ? overlay % 10 : 0;
@@ -11,23 +12,23 @@ const remoteTtl = s => baseOverlay(s.overlay) === 2 ? 2000 : baseOverlay(s.overl
 // public APIs of every port. Private cache predictions select a schedule; a
 // later public call must expose retained values, skipped work, or independent
 // work. They neither drive implementations nor add a behavioral oracle.
-export function runtimeWitnesses(profile, paths) {
-  const seen = new Set();
-  if (!["policy", "scope", "layers"].includes(profile)) return seen;
+export function runtimeWitnesses(profile, paths, recorder = createWitnessRecorder()) {
+  if (!["policy", "scope", "layers"].includes(profile)) return recorder.labels();
   for (const path of paths) {
+    recorder.enter(path);
     const raw = readTrace(path);
     const states = traceStates(raw, path);
     // Published smoke fixtures deliberately retain only public observations.
     if (states[0]?.s?.sources === undefined) continue;
     const steps = privateStates(raw, path).map((s, index) => ({ s, input: index === 0 ? undefined : explicitInput(states[index], `${path} step ${index}`) }));
-    if (profile === "policy") policyWitnesses(steps, seen);
-    if (profile === "scope") scopeWitnesses(steps, seen);
-    if (profile === "layers") layersWitnesses(steps, seen);
+    if (profile === "policy") policyWitnesses(steps, recorder);
+    if (profile === "scope") scopeWitnesses(steps, recorder);
+    if (profile === "layers") layersWitnesses(steps, recorder);
   }
-  return seen;
+  return recorder.labels();
 }
 
-function policyWitnesses(steps, seen) {
+function policyWitnesses(steps, recorder) {
   const overlaps = new Set();
   const previousPublication = new Map();
   const lastWriter = new Map();
@@ -36,6 +37,7 @@ function policyWitnesses(steps, seen) {
   const failedReadSources = new Set();
   const failedReadValues = new Map();
   for (let i = 1; i < steps.length; i++) {
+    recorder.step(i);
     const step = steps[i], before = steps[i - 1].s, after = step.s;
     const prior = before.o, current = after.o, action = step.input.name, choice = step.input.choice;
     if (action === "releasePolicy") {
@@ -50,7 +52,7 @@ function policyWitnesses(steps, seen) {
         for (const [other, source] of before.sources.entries()) {
           if (source.key !== key || source.result !== 0) continue;
           if (!source.shared && !after.sources[loader].shared) overlaps.add(`${Math.min(other, loader)}:${Math.max(other, loader)}`);
-          if (base === 8 && source.localTtl === 0 && source.remoteTtl === 0 && current.reads === prior.reads) seen.add("inactive-layers-independent-sources");
+          if (base === 8 && source.localTtl === 0 && source.remoteTtl === 0 && current.reads === prior.reads) recorder.credit("inactive-layers-independent-sources");
         }
         if (before.readFailed && current.reads > prior.reads && after.sources[loader].localTtl > 0) failedReadSources.add(loader);
         if (before.localKey === key && before.localValue > 0 && before.now < before.localExpires) {
@@ -59,23 +61,23 @@ function policyWitnesses(steps, seen) {
         }
       }
       if (!before.providerFailed) {
-        if (base === 5 && current.reads > prior.reads && remoteHit) seen.add("invalid-local-ttl-preserves-remote-hit");
-        if (base === 6 && localHit) seen.add("invalid-remote-ttl-preserves-local-hit");
-        if (before.overlay === 21 && remoteHit) seen.add("invalid-local-ramp-preserves-remote-hit");
-        if (before.overlay === 22 && localHit) seen.add("invalid-remote-ramp-preserves-local-hit");
-        if (before.overlay === 0 && localHit) seen.add("sparse-empty-provider-inherits-local-hit");
-        if (before.overlay === 0 && remoteHit) seen.add("sparse-empty-provider-inherits-remote-hit");
+        if (base === 5 && current.reads > prior.reads && remoteHit) recorder.credit("invalid-local-ttl-preserves-remote-hit");
+        if (base === 6 && localHit) recorder.credit("invalid-remote-ttl-preserves-local-hit");
+        if (before.overlay === 21 && remoteHit) recorder.credit("invalid-local-ramp-preserves-remote-hit");
+        if (before.overlay === 22 && localHit) recorder.credit("invalid-remote-ramp-preserves-local-hit");
+        if (before.overlay === 0 && localHit) recorder.credit("sparse-empty-provider-inherits-local-hit");
+        if (before.overlay === 0 && remoteHit) recorder.credit("sparse-empty-provider-inherits-remote-hit");
       }
       if (localHit) {
-        if (independent(before.overlay)) seen.add("uncoalesced-local-settled-hit");
+        if (independent(before.overlay)) recorder.credit("uncoalesced-local-settled-hit");
         const retained = bypassed.get(key);
-        if (retained?.settled === true && retained.value === value && retained.expires === before.localExpires) seen.add(`${retained.reason}-preserves-existing-local`);
-        if (failedReadValues.get(key) === value) seen.add("failed-untracked-read-still-warms-local");
+        if (retained?.settled === true && retained.value === value && retained.expires === before.localExpires) recorder.credit(`${retained.reason}-preserves-existing-local`);
+        if (failedReadValues.get(key) === value) recorder.credit("failed-untracked-read-still-warms-local");
         const insertion = warmed.get(key);
         if (insertion?.value === value && insertion.expires === before.localExpires && before.wall >= insertion.freshUntil) {
-          seen.add("remote-hit-local-ttl-outlives-remote-freshness");
+          recorder.credit("remote-hit-local-ttl-outlives-remote-freshness");
         }
-        if (lastWriter.get(`local:${key}`)?.value === value) seen.add("independent-local-last-completion-probed");
+        if (lastWriter.get(`local:${key}`)?.value === value) recorder.credit("independent-local-last-completion-probed");
       }
       if (remoteHit) {
         // Remote warming replaces the local entry, even when the decoded value
@@ -83,18 +85,18 @@ function policyWitnesses(steps, seen) {
         lastWriter.delete(`local:${key}`);
         bypassed.delete(key);
         failedReadValues.delete(key);
-        if (independent(before.overlay)) seen.add("uncoalesced-remote-settled-hit");
-        if (lastWriter.get(`remote:${key}`)?.value === value) seen.add("independent-remote-last-completion-probed");
+        if (independent(before.overlay)) recorder.credit("uncoalesced-remote-settled-hit");
+        if (lastWriter.get(`remote:${key}`)?.value === value) recorder.credit("independent-remote-last-completion-probed");
         const age = before.wall - before.remoteCreated[key];
-        if (age >= 1000 && remoteTtl(before) > 1000) seen.add("increased-fresh-ttl-reuses-retained-frame");
+        if (age >= 1000 && remoteTtl(before) > 1000) recorder.credit("increased-fresh-ttl-reuses-retained-frame");
         if (localActive(before) && age > 0) warmed.set(key, {
           value, expires: after.localExpires, freshUntil: before.remoteCreated[key] + remoteTtl(before),
         });
       }
       if (starts && current.reads > prior.reads && !before.readFailed && before.remoteValues[key] > 0 && remoteActive(before)) {
         const age = before.wall - before.remoteCreated[key];
-        if (before.now < before.remoteExpires[key] && age === remoteTtl(before)) seen.add("remote-exact-fresh-boundary-miss");
-        if (before.now >= before.remoteExpires[key] && age >= 0 && age < remoteTtl(before)) seen.add("increased-fresh-ttl-cannot-resurrect-expired-storage");
+        if (before.now < before.remoteExpires[key] && age === remoteTtl(before)) recorder.credit("remote-exact-fresh-boundary-miss");
+        if (before.now >= before.remoteExpires[key] && age >= 0 && age < remoteTtl(before)) recorder.credit("increased-fresh-ttl-cannot-resurrect-expired-storage");
       }
     }
     if (action === "resolveLoader") {
@@ -133,11 +135,12 @@ function policyWitnesses(steps, seen) {
   }
 }
 
-function scopeWitnesses(steps, seen) {
+function scopeWitnesses(steps, recorder) {
   const overlaps = new Set();
   const publications = new Map();
   const lastWriter = new Map();
   for (let i = 1; i < steps.length; i++) {
+    recorder.step(i);
     const step = steps[i], before = steps[i - 1].s, after = step.s;
     const prior = before.o, current = after.o, action = step.input.name, choice = step.input.choice;
     if (action === "releasePolicy") {
@@ -146,9 +149,9 @@ function scopeWitnesses(steps, seen) {
         for (const [other, source] of before.sources.entries()) if (admitted.slot >= 0 && source.slot === admitted.slot &&
           source.result === 0 && !source.shared && !admitted.shared) overlaps.add(`${other}:${loader}`);
       } else if (successful(current.calls[before.policyCall]) && before.overlay === 2) {
-        seen.add("uncoalesced-request-settled-hit");
+        recorder.credit("uncoalesced-request-settled-hit");
         const slot = before.scope === 1 ? 1 : 0;
-        if (lastWriter.get(slot)?.value === current.calls[before.policyCall]) seen.add("independent-request-last-completion-probed");
+        if (lastWriter.get(slot)?.value === current.calls[before.policyCall]) recorder.credit("independent-request-last-completion-probed");
       }
     }
     if (action === "resolveLoader") {
@@ -170,7 +173,7 @@ function scopeWitnesses(steps, seen) {
   }
 }
 
-function layersWitnesses(steps, seen) {
+function layersWitnesses(steps, recorder) {
   const sourcePublications = new Map();
   const probed = new Map();
   const localOwners = new Map();
@@ -181,6 +184,7 @@ function layersWitnesses(steps, seen) {
   // on every later publication, even if the replacement has the same value.
   const memoBeforeInvalidation = new Map();
   for (let i = 1; i < steps.length; i++) {
+    recorder.step(i);
     const step = steps[i], before = steps[i - 1].s, after = step.s;
     const prior = before.o, current = after.o, action = step.input.name, choice = step.input.choice;
     if (action === "invalidate" && current.invalidations === prior.invalidations + 1) {
@@ -227,17 +231,17 @@ function layersWitnesses(steps, seen) {
     const memoHit = successful(value) && slot >= 0 && before.memo[slot] === value && !read && !starts;
     const localHit = successful(value) && !memoHit && !read && !starts;
     if (memoHit) {
-      seen.add("request-hit-stops-lower-traversal");
+      recorder.credit("request-hit-stops-lower-traversal");
       if (before.tracked && memoBeforeInvalidation.get(slot) === value) {
-        seen.add("invalidation-preserves-request-hit");
+        recorder.credit("invalidation-preserves-request-hit");
       }
     }
     if (localHit) {
-      seen.add("local-hit-stops-remote-and-source");
-      if (trackedLocalOnly.get(identity) === value) seen.add(before.remoteAvailable ? "tracked-remote-disabled-local-hit" : "tracked-local-only-hit");
+      recorder.credit("local-hit-stops-remote-and-source");
+      if (trackedLocalOnly.get(identity) === value) recorder.credit(before.remoteAvailable ? "tracked-remote-disabled-local-hit" : "tracked-local-only-hit");
     }
     if (starts && before.sources.some(source => source.key === key && source.instance !== instance && source.result === 0)) {
-      seen.add("different-instances-own-distinct-flights");
+      recorder.credit("different-instances-own-distinct-flights");
     }
     if (!successful(value)) continue;
     if (!memoHit && slot >= 0) memoBeforeInvalidation.delete(slot);
@@ -262,7 +266,7 @@ function layersWitnesses(steps, seen) {
       if (localHit && source.instance === instance && publication.local && localOwners.get(identity) === loader) observations.add("local");
       if (remoteHit && publication.remote && remoteOwners.get(key) === loader) observations.add("remote");
       probed.set(loader, observations);
-      if (!before.tracked && observations.size === 3) seen.add("source-publication-probed-in-all-three-layers");
+      if (!before.tracked && observations.size === 3) recorder.credit("source-publication-probed-in-all-three-layers");
     }
   }
 }

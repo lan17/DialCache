@@ -1,3 +1,5 @@
+import type { WitnessRecorder } from "./recorder.mjs";
+
 export interface RecoveryReadWitnessRule {
   name: string;
   regression: string;
@@ -5,4 +7,4 @@ export interface RecoveryReadWitnessRule {
   outcome: Record<string, unknown>;
 }
 export const recoveryReadWitnessRules: readonly RecoveryReadWitnessRule[];
-export function recoveryReadWitnesses(paths: readonly string[]): Set<string>;
+export function recoveryReadWitnesses(paths: readonly string[], recorder?: WitnessRecorder): Set<string>;

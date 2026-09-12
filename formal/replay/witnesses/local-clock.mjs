@@ -1,14 +1,17 @@
+import { createWitnessRecorder } from "./recorder.mjs";
+
 // Consequential coverage uses only the declared schedule and returned values /
 // source counts. Private model timestamps never steer or credit the replay.
-export function localClockWitnesses(traces) {
-  const seen = new Set();
+export function localClockWitnesses(traces, recorder = createWitnessRecorder()) {
   for (const trace of traces) {
+    recorder.enter(trace.path);
     let ticks = 0;
     const constructions = [undefined, undefined];
     const fills = [];
     const expirations = [];
     for (const [index, step] of trace.steps.entries()) {
-      seen.add(`action:${step.action}`);
+      recorder.step(index);
+      recorder.credit(`action:${step.action}`);
       if (step.action === "constructInstance") constructions[step.choice] = ticks;
       if (step.action === "advanceTicks") ticks += step.choice;
       if (step.action !== "call") continue;
@@ -23,7 +26,7 @@ export function localClockWitnesses(traces) {
       if (sourceDelta === 1 && value === offered) {
         if (previous !== undefined && previous.hitBefore && offered !== previous.value
           && ticks % 1000 === 0 && Math.floor(ticks / 1000) - Math.floor(previous.ticks / 1000) === 1000) {
-          if (previous.ticks % 1000 !== 0) seen.add("fractional-insertion-expiry");
+          if (previous.ticks % 1000 !== 0) recorder.credit("fractional-insertion-expiry");
           expirations.push({ instance, ticks, inserted: previous.ticks });
         }
         fills[instance] = { ticks, value, hitBefore: false };
@@ -32,7 +35,7 @@ export function localClockWitnesses(traces) {
     if (expirations.some(left => expirations.some(right => left.instance !== right.instance
       && left.ticks === right.ticks && Math.floor(left.inserted / 1000) === Math.floor(right.inserted / 1000)
       && constructions[left.instance] !== undefined && constructions[right.instance] !== undefined
-      && constructions[left.instance] % 1000 !== constructions[right.instance] % 1000))) seen.add("shared-instance-grid");
+      && constructions[left.instance] % 1000 !== constructions[right.instance] % 1000))) recorder.credit("shared-instance-grid");
   }
-  return seen;
+  return recorder.labels();
 }

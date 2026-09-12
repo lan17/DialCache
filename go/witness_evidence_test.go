@@ -22,14 +22,28 @@ type witnessDigest struct {
 	Name   string `json:"name"`
 	SHA256 string `json:"sha256"`
 }
+type witnessTrace struct {
+	Name        string `json:"name"`
+	Kind        string `json:"kind"`
+	Checkpoints []int  `json:"checkpoints"`
+}
+
+// Schema 2 adds per-label provenance: the sampled and regression histories
+// that earned each label and the checkpoint steps at which they did.
+type witnessLabel struct {
+	Sampled    int            `json:"sampled"`
+	Regression int            `json:"regression"`
+	Traces     []witnessTrace `json:"traces"`
+}
 type witnessEvidence struct {
-	SchemaVersion int             `json:"schemaVersion"`
-	Profile       string          `json:"profile"`
-	Traces        int             `json:"traces"`
-	Required      []string        `json:"required"`
-	Seen          []string        `json:"seen"`
-	Inputs        []witnessDigest `json:"inputs"`
-	Corpus        []witnessDigest `json:"corpus"`
+	SchemaVersion int                     `json:"schemaVersion"`
+	Profile       string                  `json:"profile"`
+	Traces        int                     `json:"traces"`
+	Required      []string                `json:"required"`
+	Seen          []string                `json:"seen"`
+	Labels        map[string]witnessLabel `json:"labels"`
+	Inputs        []witnessDigest         `json:"inputs"`
+	Corpus        []witnessDigest         `json:"corpus"`
 }
 
 func witnessHash(path string) (string, error) {
@@ -56,7 +70,7 @@ func checkWitnessEvidenceAt(root, profile, directory string, paths []string) err
 	if err = json.Unmarshal(raw, &evidence); err != nil {
 		return err
 	}
-	if evidence.SchemaVersion != 1 || evidence.Profile != profile || evidence.Traces != len(paths) || len(evidence.Corpus) != len(paths) {
+	if evidence.SchemaVersion != 2 || evidence.Profile != profile || evidence.Traces != len(paths) || len(evidence.Corpus) != len(paths) {
 		return fmt.Errorf("unsupported/incomplete %s witness evidence", profile)
 	}
 	registryRaw, err := os.ReadFile(filepath.Join(root, "formal/coverage-witnesses.json"))
@@ -81,6 +95,27 @@ func checkWitnessEvidenceAt(root, profile, directory string, paths []string) err
 	for _, name := range required {
 		if !seen[name] {
 			return fmt.Errorf("%s missing witness %s", profile, name)
+		}
+	}
+	// Every required label names the histories that earned it; at least one
+	// sampled history or exported regression must exist, and each named
+	// history must be part of the bound corpus.
+	if evidence.Labels == nil {
+		return fmt.Errorf("%s witness evidence lacks per-label provenance", profile)
+	}
+	corpusNames := map[string]bool{}
+	for _, item := range evidence.Corpus {
+		corpusNames[item.Name] = true
+	}
+	for _, name := range required {
+		label, ok := evidence.Labels[name]
+		if !ok || label.Sampled+label.Regression < 1 || len(label.Traces) != label.Sampled+label.Regression {
+			return fmt.Errorf("%s witness %s lacks provenance", profile, name)
+		}
+		for _, trace := range label.Traces {
+			if !corpusNames[trace.Name] || (trace.Kind != "sampled" && trace.Kind != "regression") || len(trace.Checkpoints) == 0 {
+				return fmt.Errorf("%s witness %s cites an unknown history %s", profile, name, trace.Name)
+			}
 		}
 	}
 	// The evidence binds language-neutral definitions only: the registry, the
@@ -286,7 +321,8 @@ func TestWitnessEvidenceBindsSharedReplaySources(t *testing.T) {
 	write("formal/coverage-witnesses.json", `{"effects":["observed"]}`)
 	write("formal/execution.json", `{"libraries":[]}`)
 	write("trace.itf.json", "controlled trace")
-	evidence := witnessEvidence{SchemaVersion: 1, Profile: "effects", Traces: 1, Required: []string{"observed"}, Seen: []string{"observed"}}
+	evidence := witnessEvidence{SchemaVersion: 2, Profile: "effects", Traces: 1, Required: []string{"observed"}, Seen: []string{"observed"},
+		Labels: map[string]witnessLabel{"observed": {Sampled: 1, Traces: []witnessTrace{{Name: "trace.itf.json", Kind: "sampled", Checkpoints: []int{1}}}}}}
 	for _, path := range inputs {
 		hash, err := witnessHash(filepath.Join(root, path))
 		if err != nil {
@@ -306,6 +342,34 @@ func TestWitnessEvidenceBindsSharedReplaySources(t *testing.T) {
 	}
 	write("effects.json", string(raw))
 	check := func() error { return checkWitnessEvidenceAt(root, "effects", root, []string{trace}) }
+	if err := check(); err != nil {
+		t.Fatal(err)
+	}
+	rewrite := func(patch func(*witnessEvidence)) {
+		t.Helper()
+		copied := evidence
+		patch(&copied)
+		raw, err := json.Marshal(copied)
+		if err != nil {
+			t.Fatal(err)
+		}
+		write("effects.json", string(raw))
+	}
+	rewrite(func(e *witnessEvidence) { e.SchemaVersion = 1 })
+	if err := check(); err == nil || !strings.Contains(err.Error(), "unsupported") {
+		t.Fatalf("schema 1 evidence accepted: %v", err)
+	}
+	rewrite(func(e *witnessEvidence) { e.Labels = map[string]witnessLabel{} })
+	if err := check(); err == nil || !strings.Contains(err.Error(), "lacks provenance") {
+		t.Fatalf("required label without provenance accepted: %v", err)
+	}
+	rewrite(func(e *witnessEvidence) {
+		e.Labels = map[string]witnessLabel{"observed": {Sampled: 1, Traces: []witnessTrace{{Name: "other.itf.json", Kind: "sampled", Checkpoints: []int{1}}}}}
+	})
+	if err := check(); err == nil || !strings.Contains(err.Error(), "unknown history") {
+		t.Fatalf("provenance outside the corpus accepted: %v", err)
+	}
+	write("effects.json", string(raw))
 	if err := check(); err != nil {
 		t.Fatal(err)
 	}

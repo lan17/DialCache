@@ -28,6 +28,15 @@ the TypeScript suite only checks the same gate. `make formal-ts`, `make formal-g
 and that witness evidence, so the hosted workflow runs them in parallel and the
 aggregate requires all of them.
 
+The evaluator ends with a per-profile witness report: required labels with at
+most three sampled hits and no regression, labels pinned by a regression but
+rarely sampled, and the distinct sampled action and observation sequences. It
+compares each required label's sampled hits with `formal/witness-baseline.json`
+and fails generation when a gated label drops below the tolerance, so a corpus
+that stops reaching its corners is visible even though named regressions keep
+the completion gate green. [PORTING.md](./PORTING.md#witness-evidence) defines
+the evidence fields, the report and the baseline.
+
 Within a lane, `run-models.mjs`, `check-model-properties.mjs` and
 `generated-fixtures.mjs` run independent Quint processes concurrently so a
 multi-core runner is not left idle; each process keeps the single Quint thread
@@ -133,7 +142,10 @@ does not produce an acceptance completion: its separate report distinguishes
 native replay failures, witness-check failures and other infrastructure failures.
 A witness-check failure can mean an unreached boundary or invalid witness
 evidence; inspect the native report before attributing it to sampling. Go replay
-still runs after a TypeScript witness-check failure.
+still runs after a TypeScript witness-check failure. The exploration report
+keeps that seed's witness report under `witnesses`, so a drop in sampled hits
+against the pinned baseline stays visible although the witness step is
+tolerated.
 
 Choose a seed explicitly, or replay the saved source snapshot using the exact
 command printed by the runner:
