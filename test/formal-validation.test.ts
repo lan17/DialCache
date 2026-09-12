@@ -336,7 +336,7 @@ describe("full formal workflow shape", () => {
       expect(upload.with, lane).toMatchObject({ name: artifact + "-shard-" + matrixShard, path: output + "/shards/" });
       const merge = jobs[lane + "-merge"]!;
       expect(needsOf(merge), lane).toEqual([lane]);
-      expect(merge.if, lane).toBe("always()");
+      expect(merge.if, lane).toBe(`always() && needs.${lane}.result != 'skipped'`);
       expect(merge["timeout-minutes"], lane).toBe(10);
       expect(merge.steps.map(step => step.run).filter(Boolean), lane).toEqual(["make mutations-merge-" + language]);
       // The merge installs only the shared Node/pnpm environment: no Go, no Quint.
