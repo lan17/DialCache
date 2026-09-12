@@ -16,6 +16,10 @@ lists tool prerequisites and focused reproduction commands.
 | Explore another schedule sample | `make explore` | Separate source snapshot, recorded random seed, both-port replay |
 | All required local lanes | `make ci NODE22_BIN=/absolute/path/to/node22/bin/node` | Native, formal, separate symbolic, integration and mutation runs |
 
+`make formal-check` is the Quint evidence lane: typechecks and bounded runs of
+every scheduled model, the public regressions and the model mutation challenges.
+It produces nothing the port lanes consume, so the hosted workflow runs it as a
+`check-models` job beside generation; only the aggregate waits for it.
 `make formal-generate` runs `node formal/witnesses.mjs evaluate --profile all`
 immediately after generation, before either port replays. That shared,
 language-neutral step is the sole producer of `.formal-traces/go-parity-witnesses/`;
@@ -24,14 +28,24 @@ the TypeScript suite only checks the same gate. `make formal-ts`, `make formal-g
 and that witness evidence, so the hosted workflow runs them in parallel and the
 aggregate requires all of them.
 
+Within a lane, `run-models.mjs`, `check-model-properties.mjs` and
+`generated-fixtures.mjs` run independent Quint processes concurrently so a
+multi-core runner is not left idle; each process keeps the single Quint thread
+that `execution.json` pins. `QUINT_JOBS` sets how many processes run at once;
+the default is the machine's available parallelism, capped at one process per
+2 GiB of memory because a Quint process that generates a full trace corpus
+peaks near 1.7 GiB. Results do not depend on that number: every process has
+its own seed, inputs and output paths, so the corpus, the fixtures and the
+challenge report are identical for any worker count.
+
 A behavior, model, or replay change requires full validation of its current
 inputs before merge. The default PR workflow runs faster checks; it does not
 enforce this full-validation requirement. The manual full workflow can target a
-PR branch. Its symbolic job runs separately from corpus generation. Its weekly
-run validates the selected `main` revision and includes exploration; a manual
-run can enable the `exploration` option. The aggregate gate requires exploration
-when selected or scheduled. Each PR body should identify the revision and
-completed local or hosted validation.
+PR branch. Its model check and symbolic jobs run separately from corpus
+generation. Its weekly run validates the selected `main` revision and includes
+exploration; a manual run can enable the `exploration` option. The aggregate
+gate requires exploration when selected or scheduled. Each PR body should
+identify the revision and completed local or hosted validation.
 
 ## Reading a completion report
 
@@ -76,9 +90,11 @@ second run the next day was 1.8 times slower on every phase, so each budget
 assumes a 2x slower runner. The Go mutation runner bounds each `go test`
 invocation at 8 minutes to catch a hung mutant, not to pace a slow runner.
 Its `formal-full` aggregate job retains a small `formal-summary` artifact for 90
-days: both completion and context reports, the Go replay summary, the symbolic
-`report.json` and, on scheduled or exploration runs, each exploration
-`report.json`. Trace corpora and mutation evidence keep the 14-day retention.
+days: both completion and context reports, the Go replay summary, the model
+properties `report.json` from the `check-models` job, the symbolic `report.json`
+and, on scheduled or exploration runs, each exploration `report.json`. Trace
+corpora, model check counterexamples and mutation evidence keep the 14-day
+retention.
 
 When a redirected native step fails, the validation runner behind the Make
 targets prints an excerpt of its JSONL report instead of the whole file. Each
