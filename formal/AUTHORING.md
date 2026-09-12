@@ -365,7 +365,11 @@ Existing challenges are backfilled as their models are touched. Until then each
 one is listed by id in the manifest's top-level `reproducerBacklog`;
 `node formal/execution.mjs` rejects a challenge that is neither listed nor
 reproduced, a listed id that does not exist or already has a reproducer, and
-reports the backlog size. The backlog is a reported gap, not a gate.
+reports the backlog size. The backlog is a reported gap, not a gate, and it
+only shrinks: the ids that may appear in it are frozen in
+`grandfatheredReproducerBacklog` in `formal/execution.mjs`, so a new challenge
+cannot opt out by listing itself. Adding to that constant is a reviewed code
+change; removing an id once its challenge has a reproducer is the normal path.
 
 ### Exported runs are exactly the public-only runs
 

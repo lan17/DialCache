@@ -420,7 +420,9 @@ fingerprint and the report says whether the fresh corpus is the recorded one).
 A label recorded with at least `gatedMinimum`
 (10) sampled hits is gated: `evaluate` fails when its fresh sampled count drops
 below `tolerance` (0.5) times the recorded count. Labels recorded below the
-minimum, or not recorded, are reported and never gated. After a deliberate
+minimum, or not recorded, are reported and never gated, so a green gate speaks
+only for the gated labels; the report names the ungated ones per profile, and a
+profile whose required labels are all pinned by regressions has none gated. After a deliberate
 model or classifier change, regenerate the pinned corpus and run
 `node formal/witnesses.mjs baseline --write`; an exploration seed must not
 rewrite the baseline.

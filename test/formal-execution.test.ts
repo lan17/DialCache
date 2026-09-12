@@ -25,13 +25,14 @@ type Command = { command: string; args: string[]; outputDirectory?: string; expe
 const manifest = () => JSON.parse(readFileSync(new URL("../formal/execution.json", import.meta.url), "utf8")) as Manifest;
 const moduleUrl = new URL("../formal/execution.mjs", import.meta.url).href;
 const runner = fileURLToPath(new URL("../formal/run-models.mjs", import.meta.url));
-const { root, scanDeclarations, scanDeclarationBodies, classifyRuns, reproducerCheckpoint, validateExecution } = await import(moduleUrl) as {
+const { root, scanDeclarations, scanDeclarationBodies, classifyRuns, reproducerCheckpoint, validateExecution, grandfatheredReproducerBacklog } = await import(moduleUrl) as {
   root: string;
   scanDeclarations(source: string): Map<string, string>;
   scanDeclarationBodies(source: string): Map<string, { kind: string; body: string[]; spans: Array<[number, number]> }>;
   classifyRuns(declarations: Map<string, { kind: string; body: string[] }>): { publicOnly: string[]; patching: string[] };
   reproducerCheckpoint(source: string, run: string, failure: unknown): { before: string; through: string };
-  validateExecution(value: unknown, options?: { readSource(path: string): string }): Record<string, number>;
+  validateExecution(value: unknown, options?: { readSource?(path: string): string; grandfathered?: readonly string[] }): Record<string, number>;
+  grandfatheredReproducerBacklog: readonly string[];
 };
 const { checkSemanticCoverage } = await import(new URL("../formal/check-semantic-coverage.mjs", import.meta.url).href) as {
   checkSemanticCoverage(value: unknown): unknown;
@@ -41,7 +42,7 @@ const { bindGeneratedTrace } = await import(new URL("../formal/run-models.mjs", 
 };
 // Exercise pure metadata checks directly: large catalogs must not depend on
 // synchronous stdin pipes. The CLI dry-run check below still tests the launcher.
-const validate = (value: unknown) => validateExecution(value);
+const validate = (value: unknown, options?: { grandfathered?: readonly string[] }) => validateExecution(value, options);
 
 describe("formal execution schedule", () => {
   it("accounts for all models, selected invariants, regressions, generated traces and challenges without Quint", () => {
@@ -180,9 +181,11 @@ describe("formal execution schedule", () => {
     const { measures: _ignored, ...first } = repeated.challenges[0]!;
     repeated.challenges.push({ ...first, id: "repeated-fault" });
     repeated.reproducerBacklog.push("repeated-fault");
-    expect(() => validate(repeated)).toThrow(/repeated-fault: repeats the fault of .* without a measures note/);
+    // A test-only grandfather list: production keeps the frozen constant.
+    const grandfathered = [...grandfatheredReproducerBacklog, "repeated-fault"];
+    expect(() => validate(repeated, { grandfathered })).toThrow(/repeated-fault: repeats the fault of .* without a measures note/);
     repeated.challenges.at(-1)!.measures = "Measures the same fault against a second invariant.";
-    expect(validate(repeated).distinctFaults).toBe(validate(manifest()).distinctFaults);
+    expect(validate(repeated, { grandfathered }).distinctFaults).toBe(validate(manifest()).distinctFaults);
     const strayNote = manifest();
     strayNote.challenges.find(challenge => !challenge.measures)!.measures = "not a repeat";
     expect(() => validate(strayNote)).toThrow(/a measures note is only for a repeated fault/);
@@ -230,6 +233,14 @@ describe("formal execution schedule", () => {
     const unknown = manifest();
     unknown.reproducerBacklog.push("invented-fault");
     expect(() => validate(unknown)).toThrow(/reproducerBacklog names an unknown challenge: invented-fault/);
+    // A new challenge cannot opt out by listing itself: only the frozen
+    // grandfather list may appear in the backlog, and it only shrinks.
+    const optedOut = manifest();
+    const { measures: _note, reproducer: _reproducer, ...template } = optedOut.challenges.find(challenge => challenge.reproducer)!;
+    optedOut.challenges.push({ ...template, id: "new-fault-without-reproducer", after: template.after + " and true" });
+    optedOut.reproducerBacklog.push("new-fault-without-reproducer");
+    expect(() => validate(optedOut)).toThrow(/new-fault-without-reproducer: new challenges must carry a reproducer/);
+    expect([...grandfatheredReproducerBacklog].sort()).toEqual([...manifest().reproducerBacklog].sort());
     const duplicate = manifest();
     duplicate.reproducerBacklog.push(duplicate.reproducerBacklog[0]!);
     expect(() => validate(duplicate)).toThrow(/Duplicate challenge ids in reproducerBacklog/);

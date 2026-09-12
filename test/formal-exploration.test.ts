@@ -295,13 +295,33 @@ describe("isolated exploratory validation", () => {
       expect(existsSync(join(output, "workspace/node_modules"))).toBe(false);
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
-  it("keeps the tolerated witness step's report in the exploration report", async () => {
+  it("fails exploration after both ports replay when the witness baseline gate tripped", async () => {
     const directory = mkdtempSync(join(tmpdir(), "dialcache-exploration-witness-report-"));
     try {
       execFileSync("git", ["init", "--quiet"], { cwd: directory });
       execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-qm", "test"], { cwd: directory });
       writeFileSync(join(directory, ".gitignore"), ".formal-traces/\n");
       const witnesses = { schemaVersion: 1, command: "evaluate", failed: ["witness/effects: reply:13 reached by 1 sampled histories, minimum 2 (baseline 4)"], profiles: {} };
+      let replays = 0;
+      await expect(explore("42", { directory, run: async () => {
+        const workspace = join(directory, ".formal-traces/exploration", readdirSync(join(directory, ".formal-traces/exploration"))[0]!, "workspace");
+        mkdirSync(join(workspace, ".formal-traces"), { recursive: true });
+        writeFileSync(join(workspace, ".formal-traces/witness-report.json"), JSON.stringify(witnesses));
+        replays = 2;
+        return [{ language: "typescript", status: "passed" }, { language: "go", status: "passed" }];
+      } })).rejects.toThrow(/coverage-gate-failure[\s\S]*reply:13 reached by 1 sampled histories/);
+      expect(replays).toBe(2);
+      const output = join(directory, ".formal-traces/exploration", readdirSync(join(directory, ".formal-traces/exploration"))[0]!);
+      expect(JSON.parse(readFileSync(join(output, "report.json"), "utf8"))).toMatchObject({ status: "coverage-gate-failure", witnesses, sourcesUnchanged: true });
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
+  it("keeps a clean witness report and passes when the baseline gate holds", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "dialcache-exploration-witness-clean-"));
+    try {
+      execFileSync("git", ["init", "--quiet"], { cwd: directory });
+      execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-qm", "test"], { cwd: directory });
+      writeFileSync(join(directory, ".gitignore"), ".formal-traces/\n");
+      const witnesses = { schemaVersion: 1, command: "evaluate", failed: [], incomplete: [], profiles: {} };
       const output = await explore("42", { directory, run: async () => {
         const workspace = join(directory, ".formal-traces/exploration", readdirSync(join(directory, ".formal-traces/exploration"))[0]!, "workspace");
         mkdirSync(join(workspace, ".formal-traces"), { recursive: true });

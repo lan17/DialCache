@@ -227,10 +227,76 @@ function validateReproducer(challenge, model, { models, libraries, profileIds, p
   }
 }
 
+// Challenges that predate the reproducer requirement. The backlog may only
+// shrink: a new challenge must carry a reproducer, and listing it here instead
+// is a reviewed change to this constant, never a manifest edit.
+export const grandfatheredReproducerBacklog = Object.freeze([
+  'source-deadline-epoch',
+  'recovery-inclusive-maximum',
+  'recovery-future-candidate',
+  'legacy-recovery-inclusive-maximum',
+  'local-precise-grid',
+  'source-inclusive-deadline',
+  'fence-inclusive-timestamp',
+  'profile-source-wrong-clock',
+  'profile-source-wrong-owner',
+  'profile-recovery-wrong-snapshot',
+  'recovery-read-wrong-admission-policy',
+  'legacy-recovery-wrong-snapshot',
+  'independent-wrong-admission-policy',
+  'independent-wrong-recovered-value',
+  'effects-source-wrong-clock',
+  'effects-wrong-acceptance-receipt',
+  'legacy-recovery-strands-followers',
+  'independent-source-wrong-clock',
+  'independent-source-wrong-owner',
+  'tracked-read-inclusive-fence',
+  'policy-inclusive-remote-freshness',
+  'core-unhealthy-local-read-hits',
+  'core-tracked-fallback-warms-local',
+  'runtime-policy-coalesce-defaults-off',
+  'runtime-policy-physical-ttl-ignores-recovery',
+  'stale-recovery-inclusive-served-maximum',
+  'stale-recovery-candidate-stamped-at-read',
+  'shadow-validation-fenced-fill-writes',
+  'shadow-validation-fill-before-source',
+  'redis-protocol-inclusive-fence',
+  'redis-protocol-untracked-fence',
+  'frame-vectors-inclusive-fence',
+  'invalidation-transition-cutoff-moves-backwards',
+  'invalidation-transition-inclusive-buffer-limit',
+  'key-protocol-untracked-brace-rejection',
+  'cohort-inclusive-threshold',
+  'envelope-vectors-tie-compresses',
+  'envelope-vectors-escape-misses-binary-marker',
+  'conformance-local-hit-returns-source',
+  'conformance-remote-miss-skips-publication',
+  'effects-fenced-source-publishes',
+  'effects-late-source-accepted',
+  'scope-late-source-repopulates-closed-memo',
+  'scope-source-error-memoized',
+  'admission-duplicate-key-admitted',
+  'layers-process-flight-crosses-instance',
+  'layers-late-memo-into-closed-scope',
+  'independent-fresh-frame-retained',
+  'independent-deadline-settles-at-start',
+  'recovery-read-inclusive-maximum',
+  'recovery-read-recovery-warms-local',
+  'local-failure-write-fault-publishes',
+  'local-failure-source-error-published',
+  'runtime-boundaries-inclusive-cohort',
+  'runtime-boundaries-inherited-sharing-ignores-default',
+  'shadow-layers-inclusive-c0-freshness',
+  'shadow-layers-fill-uses-current-retention',
+  'local-clock-hit-renews-insertion',
+  'source-budgets-outside-call-has-deadline',
+  'source-budgets-settled-flight-stays-registered',
+]);
+
 // Compiling semantic faults, checked against independent model obligations.
 // Every scheduled model carries at least one challenge or an explicit waiver.
 // Every challenge carries a reproducer or is listed in the reported backlog.
-function validateChallenges(manifest, { readSource, contracts, sources, profileIds, publicOnly }) {
+function validateChallenges(manifest, { readSource, contracts, sources, profileIds, publicOnly, grandfathered = grandfatheredReproducerBacklog }) {
   const { challenges, reproducerBacklog } = manifest;
   if (!Array.isArray(challenges) || !challenges.length) throw new Error('Model property challenge catalog is missing');
   if (!Array.isArray(reproducerBacklog)) throw new Error('Challenge reproducer backlog is missing');
@@ -275,10 +341,12 @@ function validateChallenges(manifest, { readSource, contracts, sources, profileI
   for (const id of backlog) {
     if (!ids.has(id)) throw new Error(`reproducerBacklog names an unknown challenge: ${id}`);
   }
+  const grandfatheredIds = new Set(grandfathered);
   for (const challenge of challenges) {
     const listed = backlog.has(challenge.id);
     if (challenge.reproducer !== undefined && listed) throw new Error(`${challenge.id}: has a reproducer and is listed in reproducerBacklog`);
     if (challenge.reproducer === undefined && !listed) throw new Error(`${challenge.id}: has no reproducer and is not listed in reproducerBacklog`);
+    if (listed && !grandfatheredIds.has(challenge.id)) throw new Error(`${challenge.id}: new challenges must carry a reproducer; reproducerBacklog only grandfathers the challenges that predate the requirement`);
   }
   const waived = [];
   for (const model of manifest.models) {
@@ -295,6 +363,7 @@ function validateChallenges(manifest, { readSource, contracts, sources, profileI
 
 export function validateExecution(manifest = readExecution(), {
   readSource = read,
+  grandfathered = grandfatheredReproducerBacklog,
   files = readdirSync(root + 'formal').filter(name => name.endsWith('.qnt')).map(name => 'formal/' + name),
   profiles = JSON.parse(read('formal/profiles.json')).profiles,
   contracts = contractIds(read('formal/CONTRACTS.md')),
@@ -397,7 +466,7 @@ export function validateExecution(manifest = readExecution(), {
     if ([...declarations.values()].some(kind => ['action', 'run', 'var'].includes(kind))) throw new Error(`${path}: a stateful model cannot be classified as a pure helper library`);
   }
   if (!sameMembers(profileIds, profiles.map(profile => profile.id))) throw new Error('Generated profile inventory differs from claim registry');
-  const challenges = validateChallenges(manifest, { readSource, contracts, sources: new Set(paths), profileIds: new Set(profileIds), publicOnly });
+  const challenges = validateChallenges(manifest, { readSource, contracts, sources: new Set(paths), profileIds: new Set(profileIds), publicOnly, grandfathered });
   return { models: manifest.models.length, libraries: manifest.libraries.length, profiles: profileIds.length, invariants, regressions, generatedTraces, exportedRegressionTraces, vectorModels, generatedVectors, ...challenges };
 }
 

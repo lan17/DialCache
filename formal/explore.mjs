@@ -202,7 +202,7 @@ function savedExploration(path) {
   if (report.schemaVersion !== 1 || report.kind !== 'exploration' || report.acceptance !== false
     || !/^(?:[a-f\d]{40}|[a-f\d]{64})$/.test(report.baseRevision ?? '')
     || !Number.isFinite(Date.parse(report.finishedAt))
-    || !['passed', 'native-failure', 'witness-check-failure', 'infrastructure-failure'].includes(report.status)
+    || !['passed', 'native-failure', 'witness-check-failure', 'coverage-gate-failure', 'infrastructure-failure'].includes(report.status)
     || !report.sources || Array.isArray(report.sources) || !Object.keys(report.sources).length
     || Object.values(report.sources).some(value => typeof value !== 'string' || !/^[a-f\d]{64}$/.test(value))) {
     throw new Error('Expected a finished exploratory report with a source inventory and base revision.');
@@ -231,6 +231,13 @@ export async function explore(seed, options = {}) {
 export async function replayExploration(path, options = {}) {
   const origin = savedExploration(path);
   return executeExploration(origin.seed, { ...options, origin });
+}
+
+function loadWitnessReport(workspace, report) {
+  const witnessReport = resolve(workspace, `.formal-traces/${reportFileName}`);
+  if (!existsSync(witnessReport)) return;
+  try { report.witnesses = JSON.parse(readFileSync(witnessReport, 'utf8')); }
+  catch (error) { report.witnesses = { error: String(error) }; }
 }
 
 async function executeExploration(seed, { directory = root, environment = process.env, run, origin } = {}) {
@@ -282,8 +289,17 @@ async function executeExploration(seed, { directory = root, environment = proces
       || report.native.some(result => !['passed', 'native-failure', 'witness-check-failure'].includes(result.status))) {
       throw new Error('Exploration did not finish both native ports.');
     }
+    // The witness step is tolerated so both ports replay, but its baseline
+    // gate still decides the outcome afterwards: a fresh seed whose sampled
+    // hits fell below the recorded tolerance is an exploration-quality failure
+    // even when every required label is present and both ports pass.
+    loadWitnessReport(workspace, report);
+    const coverageGate = report.witnesses === undefined ? [] : report.witnesses.error !== undefined
+      ? [`witness report unreadable: ${report.witnesses.error}`] : Array.isArray(report.witnesses.failed) ? report.witnesses.failed : [];
     report.status = report.native.some(result => result.status === 'native-failure') ? 'native-failure'
-      : report.native.some(result => result.status === 'witness-check-failure') ? 'witness-check-failure' : 'passed';
+      : report.native.some(result => result.status === 'witness-check-failure') ? 'witness-check-failure'
+      : coverageGate.length ? 'coverage-gate-failure' : 'passed';
+    if (report.status === 'coverage-gate-failure') throw new Error(`Exploration finished with coverage-gate-failure; sampled hits fell below the baseline tolerance:\n${coverageGate.join('\n')}`);
     if (report.status !== 'passed') throw new Error(`Exploration finished with ${report.status}; inspect both native reports.`);
   } catch (error) {
     if (report.status === 'running') report.status = 'infrastructure-failure';
@@ -292,11 +308,7 @@ async function executeExploration(seed, { directory = root, environment = proces
     // The tolerated witness step leaves its fragility report and baseline gate
     // result in the workspace; keep them with the exploration report so a
     // fresh seed's sampled-count drop stays visible even when the step failed.
-    const witnessReport = resolve(workspace, `.formal-traces/${reportFileName}`);
-    if (existsSync(witnessReport)) {
-      try { report.witnesses = JSON.parse(readFileSync(witnessReport, 'utf8')); }
-      catch (error) { report.witnesses = { error: String(error) }; }
-    }
+    if (report.witnesses === undefined) loadWitnessReport(workspace, report);
     // Unlink only the known runtime link. Initialization errors also receive a
     // finished report and cannot leave a permanently "running" artifact.
     let cleanupError;

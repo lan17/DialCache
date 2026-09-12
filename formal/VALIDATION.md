@@ -147,9 +147,12 @@ native replay failures, witness-check failures and other infrastructure failures
 A witness-check failure can mean an unreached boundary or invalid witness
 evidence; inspect the native report before attributing it to sampling. Go replay
 still runs after a TypeScript witness-check failure. The exploration report
-keeps that seed's witness report under `witnesses`, so a drop in sampled hits
-against the pinned baseline stays visible although the witness step is
-tolerated.
+keeps that seed's witness report under `witnesses`. The witness step itself is
+tolerated so both ports replay, but its baseline gate decides the outcome
+afterwards: when every required label is present and both ports pass yet a
+gated label's sampled hits fell below the recorded tolerance, the report ends
+with `coverage-gate-failure` and the lane fails. That is a statement about
+exploration quality on that seed, not about native behavior.
 
 Choose a seed explicitly, or replay the saved source snapshot using the exact
 command printed by the runner:
