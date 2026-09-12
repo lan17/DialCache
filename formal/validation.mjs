@@ -2,6 +2,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync } from 'node:fs';
 import { delimiter, dirname, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseShard } from './mutation-reports.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const replayTests = ['test/formal-conformance.test.ts', 'test/formal-effects.test.ts', 'test/formal-features.test.ts',
@@ -57,8 +58,9 @@ export function mutationShardArguments(target, environment = process.env) {
     if (expandTargets(target).some(name => shardedTargets.includes(name))) throw new Error(`MUTATION_SHARD=${value} applies only to make mutations-ts and make mutations-go; unset it to run the complete measurement with make ${target}.`);
     return [];
   }
-  const match = /^([1-9]\d*)\/([1-9]\d*)$/.exec(value);
-  if (!match || Number(match[1]) > Number(match[2])) throw new Error(`MUTATION_SHARD must be <index>/<count> with 1 <= index <= count (for example 2/3); got ${JSON.stringify(value)}.`);
+  // The measurement scripts parse the same value; one implementation decides
+  // what is well-formed, so the runner cannot accept a shard the script rejects.
+  try { parseShard(value); } catch { throw new Error(`MUTATION_SHARD must be <index>/<count> with 1 <= index <= count (for example 2/3); got ${JSON.stringify(value)}.`); }
   return [`--shard=${value}`];
 }
 

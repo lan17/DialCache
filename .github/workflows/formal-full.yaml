@@ -192,7 +192,9 @@ jobs:
   # used, so the summary and any reader of the evidence are unchanged.
   typescript-mutations-merge:
     needs: typescript-mutations
-    if: always()
+    # Run after the shards regardless of their result so a missing shard is
+    # diagnosed by the merge; skip only when the matrix itself never ran.
+    if: always() && needs.typescript-mutations.result != 'skipped'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -285,7 +287,9 @@ jobs:
 
   go-mutations-merge:
     needs: go-mutations
-    if: always()
+    # Run after the shards regardless of their result so a missing shard is
+    # diagnosed by the merge; skip only when the matrix itself never ran.
+    if: always() && needs.go-mutations.result != 'skipped'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
