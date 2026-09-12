@@ -8,10 +8,10 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "b4bf9f49df5e1a2019616811014a37b0ab5c46d441e780609b0c2cd8ddc4b96a",
-    "executionSha256": "8dabaa93a4429e6fb5b409ef8c3ac9f9148a704370b2bb305b2ca69a062a9d5f",
-    "sourceAuditSha256": "b0960f3074c2d67f55b267d330a5777f496d143032a8fbd73dd81d281336fa4f",
-    "quintCaseAuditSha256": "b5432029958cda110dd3fb97364ddac90205d8081690b974fe1611a60753415c",
+    "semanticCasesSha256": "6f57159edeb9ec1a54e22953562cb38ed4bafe067432fc20426173ca2d4173aa",
+    "executionSha256": "7a648ff2eaf50dc7da80dc4f58becbe95fbed5ad98be33d1f52e00d85a618a61",
+    "sourceAuditSha256": "1b1de33603845750e6ea9dfdfd8575aca3be5274471393d3f9175a2db601635e",
+    "quintCaseAuditSha256": "8fad76f6d14655d735864cd43532b7160553d38810a67311eba9523d9235827d",
     "featureCoverageSha256": "2e59570c657a6393d5f1bf2f33e27e3825c84a15ed54f902543327fcc08439a0",
     "coverageWitnessesSha256": "8fc8ab123150fdec059f5b75f84172d39af80d08d7a4211fa88c63c5a3f2874b",
     "profilesSha256": "49095970f95113fec3e6e75dd8fed9118aaa73a05329e7dcf202c703e9d1bf70"
@@ -41,16 +41,16 @@
     "sourceDeclarations": 772,
     "casesWithScheduledChecks": 262,
     "requiredWitnesses": 435,
-    "casesWithQuintRegressionReplay": 164,
+    "casesWithQuintRegressionReplay": 168,
     "casesWithQuintGeneratedVectors": 22,
     "withoutModelDrivenReplay": [],
     "quintModels": 32,
     "scheduledInvariants": 217,
-    "scheduledRegressions": 401,
+    "scheduledRegressions": 406,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
     "caseReferencedWitnesses": 285,
-    "exportedRegressionHistories": 234
+    "exportedRegressionHistories": 239
   },
   "profiles": [
     {
@@ -115,7 +115,9 @@
         "readFailureKeepsCategoryAndDeniesRefillTest",
         "decodeFailureKeepsCategoryAndAllowsRefillTest",
         "dumpFailureKeepsCategoryAndSourceValueTest",
-        "writeFailureKeepsCategoryAndSourceValueTest"
+        "writeFailureKeepsCategoryAndSourceValueTest",
+        "expiredZeroFenceReplyRefillsAndIsReadableTest",
+        "absentReplyWithFutureFenceBlocksRefillTest"
       ],
       "status": "executable-profile-schedule",
       "witnessSources": [
@@ -239,7 +241,8 @@
         "recoveryAgeEqualToFreshTtlStillServesFreshRemoteTest",
         "negativeRecoveryAgeStillServesFreshRemoteTest",
         "providerFailureReportsStablePolicyCategoryTest",
-        "remoteHitBeforeBoundaryDoesNotRenewFreshnessTest"
+        "remoteHitBeforeBoundaryDoesNotRenewFreshnessTest",
+        "falsyRemoteValuesAreServedFromRemoteTest"
       ],
       "status": "executable-profile-schedule",
       "witnessSources": [
@@ -322,7 +325,8 @@
         "pendingSourcesKeepEntityAndOperationIdentityTest",
         "settledRequestMemoSurvivesSharedLayerRampDownTest",
         "untrackedReadsIgnoreGroupedInvalidationTest",
-        "trackedWithoutRemotePublishesReusableLocalTest"
+        "trackedWithoutRemotePublishesReusableLocalTest",
+        "untrackedSourcePublicationIsProbedInAllThreeLayersTest"
       ],
       "status": "executable-profile-schedule",
       "witnessSources": [
@@ -346,7 +350,8 @@
         "independentRecoveryAtCapturedAgeBoundaryTest",
         "independentReadDeadlinesStartSeparateSourcesTest",
         "timedOutReadCannotAffectAnotherCallTest",
-        "readFailureCannotBorrowAnotherCallsRefillTest"
+        "readFailureCannotBorrowAnotherCallsRefillTest",
+        "independentRecoveriesServeDistinctAcquiredSnapshotsTest"
       ],
       "status": "executable-profile-schedule",
       "witnessSources": [
@@ -829,7 +834,8 @@
       "kind": "portable-behavior",
       "group": "request-and-layers",
       "quintProperties": [
-        "formal/dialcache-core.qnt:untrackedSourcePublishesToAllParticipatingLayersTest"
+        "formal/dialcache-core.qnt:untrackedSourcePublishesToAllParticipatingLayersTest",
+        "formal/dialcache-layers-conformance.qnt:untrackedSourcePublicationIsProbedInAllThreeLayersTest"
       ],
       "requiredGenerated": [
         {
@@ -855,7 +861,9 @@
         "formal/dialcache-core.qnt:finishRemotePublication"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
-      "quintReplays": [],
+      "quintReplays": [
+        "layers/untrackedSourcePublicationIsProbedInAllThreeLayersTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -1136,7 +1144,8 @@
       "kind": "portable-behavior",
       "group": "request-and-layers",
       "quintProperties": [
-        "formal/dialcache-runtime-boundaries-conformance.qnt:remoteFalsyValuesRemainDistinctAndReusableTest"
+        "formal/dialcache-runtime-boundaries-conformance.qnt:remoteFalsyValuesRemainDistinctAndReusableTest",
+        "formal/dialcache-policy-conformance.qnt:falsyRemoteValuesAreServedFromRemoteTest"
       ],
       "requiredGenerated": [
         {
@@ -1164,7 +1173,8 @@
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
-        "runtime-boundaries/remoteFalsyValuesRemainDistinctAndReusableTest"
+        "runtime-boundaries/remoteFalsyValuesRemainDistinctAndReusableTest",
+        "policy/falsyRemoteValuesAreServedFromRemoteTest"
       ],
       "generatedVectors": []
     },
@@ -1259,7 +1269,8 @@
       "kind": "portable-behavior",
       "group": "request-and-layers",
       "quintProperties": [
-        "formal/dialcache-runtime-boundaries-conformance.qnt:remoteFalsyValuesRemainDistinctAndReusableTest"
+        "formal/dialcache-runtime-boundaries-conformance.qnt:remoteFalsyValuesRemainDistinctAndReusableTest",
+        "formal/dialcache-policy-conformance.qnt:falsyRemoteValuesAreServedFromRemoteTest"
       ],
       "requiredGenerated": [
         {
@@ -1287,7 +1298,8 @@
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
-        "runtime-boundaries/remoteFalsyValuesRemainDistinctAndReusableTest"
+        "runtime-boundaries/remoteFalsyValuesRemainDistinctAndReusableTest",
+        "policy/falsyRemoteValuesAreServedFromRemoteTest"
       ],
       "generatedVectors": []
     },
@@ -1382,7 +1394,8 @@
       "kind": "portable-behavior",
       "group": "request-and-layers",
       "quintProperties": [
-        "formal/dialcache-runtime-boundaries-conformance.qnt:remoteFalsyValuesRemainDistinctAndReusableTest"
+        "formal/dialcache-runtime-boundaries-conformance.qnt:remoteFalsyValuesRemainDistinctAndReusableTest",
+        "formal/dialcache-policy-conformance.qnt:falsyRemoteValuesAreServedFromRemoteTest"
       ],
       "requiredGenerated": [
         {
@@ -1410,7 +1423,8 @@
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
-        "runtime-boundaries/remoteFalsyValuesRemainDistinctAndReusableTest"
+        "runtime-boundaries/remoteFalsyValuesRemainDistinctAndReusableTest",
+        "policy/falsyRemoteValuesAreServedFromRemoteTest"
       ],
       "generatedVectors": []
     },
@@ -4115,7 +4129,8 @@
       "group": "invalidation",
       "quintProperties": [
         "formal/dialcache-tracked-invalidation.qnt:observedFutureFenceSkipsRefillTest",
-        "formal/dialcache-tracked-invalidation.qnt:refillAtFenceEqualitySkipsWriteTest"
+        "formal/dialcache-tracked-invalidation.qnt:refillAtFenceEqualitySkipsWriteTest",
+        "formal/dialcache-effects-conformance.qnt:absentReplyWithFutureFenceBlocksRefillTest"
       ],
       "requiredGenerated": [
         {
@@ -4140,7 +4155,9 @@
         "formal/dialcache-effects-conformance.qnt:settledSource"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
-      "quintReplays": [],
+      "quintReplays": [
+        "effects/absentReplyWithFutureFenceBlocksRefillTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -5895,7 +5912,8 @@
       "kind": "portable-behavior",
       "group": "recovery",
       "quintProperties": [
-        "formal/dialcache-independent-conformance.qnt:independentRecoveryKeepsDistinctSnapshotsTest"
+        "formal/dialcache-independent-conformance.qnt:independentRecoveryKeepsDistinctSnapshotsTest",
+        "formal/dialcache-independent-conformance.qnt:independentRecoveriesServeDistinctAcquiredSnapshotsTest"
       ],
       "requiredGenerated": [
         {
@@ -5923,7 +5941,9 @@
       },
       "quintDefinitions": [],
       "scopeAudit": "formal/quint-case-audit.json",
-      "quintReplays": [],
+      "quintReplays": [
+        "independent/independentRecoveriesServeDistinctAcquiredSnapshotsTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -11184,7 +11204,9 @@
       "rule": "A valid tracked watermark survives normalization independently of a recognized miss cause and constrains later publication.",
       "kind": "portable-behavior",
       "quintProperties": [
-        "formal/dialcache-redis-protocol.qnt:validMissWatermarksArePreserved"
+        "formal/dialcache-redis-protocol.qnt:validMissWatermarksArePreserved",
+        "formal/dialcache-effects-conformance.qnt:absentReplyWithFutureFenceBlocksRefillTest",
+        "formal/dialcache-effects-conformance.qnt:expiredZeroFenceReplyRefillsAndIsReadableTest"
       ],
       "requiredGenerated": [
         {
@@ -11207,7 +11229,10 @@
       "quintDefinitions": [],
       "status": "executable-generated",
       "gaps": [],
-      "quintReplays": [],
+      "quintReplays": [
+        "effects/absentReplyWithFutureFenceBlocksRefillTest",
+        "effects/expiredZeroFenceReplyRefillsAndIsReadableTest"
+      ],
       "generatedVectors": []
     },
     {
@@ -18251,7 +18276,7 @@
   ],
   "reviewedTestAndDocumentationAudit": {
     "path": "formal/source-audit.json",
-    "sha256": "b0960f3074c2d67f55b267d330a5777f496d143032a8fbd73dd81d281336fa4f",
+    "sha256": "1b1de33603845750e6ea9dfdfd8575aca3be5274471393d3f9175a2db601635e",
     "sourceFiles": 44,
     "status": "reviewed-applicability-not-execution",
     "limitations": "These rows review Go applicability for the public documentation and ordinary test files in source-audit.json sources, inheriting their C/W/E/B/X classifications. They map subjects to native artifacts without claiming one Go test per TypeScript assertion or turning documentation counts into executed coverage. The same audit hash also binds reviewedGuides for formal and Go documentation; those guide reviews are freshness/scope records, not additional behavioral applicability rows. Per-case Quint and replay evidence is recorded separately.",
