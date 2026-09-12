@@ -7,7 +7,7 @@ import { cleanEnvironment, executeSteps, validationPlan } from './validation.mjs
 import { nativeBinding } from './conformance-bindings.mjs';
 import { parseTypeScriptReport } from './conformance-adapters.mjs';
 import { checkGoReplay } from './check-go-replay.mjs';
-import { reportFileName } from './witnesses.mjs';
+import { canonicalSeed, reportFileName, selectedProfiles } from './witnesses.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -16,9 +16,8 @@ const reportPaths = { typescript: '.formal-traces/ts-replay.json', go: '.formal-
 const contextPaths = { typescript: '.formal-traces/ts-context.json', go: '.formal-traces/go-context.json' };
 
 export function explorationSeed(value = `0x${randomBytes(8).toString('hex')}`) {
-  if (typeof value !== 'string' || !/^(0x[\da-fA-F]{1,16}|\d{1,20})$/.test(value)
-    || BigInt(value) > 0xffffffffffffffffn) throw new Error('Exploration seed must be an unsigned 64-bit integer.');
-  return `0x${BigInt(value).toString(16)}`;
+  try { return canonicalSeed(value); }
+  catch { throw new Error('Exploration seed must be an unsigned 64-bit integer.'); }
 }
 
 // Share model generation and native execution with acceptance. Exploration has
@@ -169,13 +168,16 @@ export function nativeExplorationResult(language, text, context, directory, pack
     cases: inventory.length, contextSha256: hash(JSON.stringify(context)), nativeReportSha256: hash(text), witnessFailures, caseFailures, otherFailures };
 }
 
-export async function runExplorationSteps(plan, { directory, environment = process.env, execute = executeSteps, onResult = () => {} } = {}) {
+export async function runExplorationSteps(plan, { directory, environment = process.env, execute = executeSteps, onResult = () => {}, onToleratedFailure = () => {} } = {}) {
   const results = [];
   for (const step of plan) {
     if (step.explorationContext) { await prepareExplorationContext(step.explorationContext, directory); continue; }
     if (step.tolerateFailure) {
       try { await execute([step], { directory, environment }); }
-      catch (error) { console.warn(`${step.label ?? 'Tolerated step'} failed; both native witness leaves record the shortfall and report.json keeps the witness report: ${error}`); }
+      catch (error) {
+        console.warn(`${step.label ?? 'Tolerated step'} failed; both native witness leaves record the shortfall and report.json keeps the witness report: ${error}`);
+        onToleratedFailure(step, error);
+      }
       continue;
     }
     if (!step.nativeReport) { await execute([step], { directory, environment }); continue; }
@@ -242,16 +244,23 @@ function loadWitnessReport(workspace, report) {
   catch (error) { report.witnesses = { error: String(error) }; }
 }
 
-// A completed evaluator report: the tolerated step may have died after writing
-// per-profile evidence but before the aggregate, and both ports can still pass
-// on that evidence. Missing or malformed coverage evidence is never a clean gate.
-function witnessReportProblem(witnesses) {
+// A completed evaluator report for this seed: the tolerated step may have died
+// after writing per-profile evidence but before the aggregate, and both ports
+// can still pass on that evidence. Missing or malformed coverage evidence is
+// never a clean gate, and neither is a report judged under another seed or
+// covering fewer profiles than the manifest schedules.
+export function witnessReportProblem(witnesses, seed, expectedProfiles = selectedProfiles('all')) {
   if (witnesses === undefined) return 'the witness evaluator wrote no report';
   if (witnesses.error !== undefined) return `the witness report is unreadable: ${witnesses.error}`;
   if (witnesses.schemaVersion !== 1 || witnesses.command !== 'evaluate' || !Array.isArray(witnesses.failed) || !Array.isArray(witnesses.incomplete)
-    || typeof witnesses.profiles !== 'object' || witnesses.profiles === null || Array.isArray(witnesses.profiles)) {
+    || typeof witnesses.profiles !== 'object' || witnesses.profiles === null || Array.isArray(witnesses.profiles) || typeof witnesses.seed !== 'string') {
     return 'the witness report is not a completed evaluation';
   }
+  let reportSeed;
+  try { reportSeed = canonicalSeed(witnesses.seed); } catch { return `the witness report carries an invalid seed ${JSON.stringify(witnesses.seed)}`; }
+  if (reportSeed !== seed) return `the witness report was judged under seed ${reportSeed}, not this exploration's ${seed}`;
+  const missing = expectedProfiles.filter(profile => !(profile in witnesses.profiles));
+  if (missing.length) return `the witness report covers no evaluation of ${missing.join(', ')}`;
   return undefined;
 }
 
@@ -297,6 +306,9 @@ async function executeExploration(seed, { directory = root, environment = proces
     }
     report.native = await snapshot.runExplorationSteps(snapshot.explorationPlan(workspace, selectedSeed, { environment }), {
       directory: workspace, environment: cleanEnvironment(environment), onResult: results => { report.native = results; save(); },
+      // The evaluator step is tolerated so both ports replay; its failure is
+      // still part of the record so a missing report explains itself.
+      onToleratedFailure: (step, error) => { report.witnessStepError = `${step.label ?? 'tolerated step'}: ${error}`; save(); },
     });
     verifyHashes(workspace, [report.sources]);
     report.sourcesUnchanged = true;
@@ -311,7 +323,7 @@ async function executeExploration(seed, { directory = root, environment = proces
     loadWitnessReport(workspace, report);
     const nativeStatus = report.native.some(result => result.status === 'native-failure') ? 'native-failure'
       : report.native.some(result => result.status === 'witness-check-failure') ? 'witness-check-failure' : undefined;
-    const problem = witnessReportProblem(report.witnesses);
+    const problem = witnessReportProblem(report.witnesses, selectedSeed);
     if (nativeStatus === undefined && problem !== undefined) {
       report.status = 'infrastructure-failure';
       throw new Error(`Exploration cannot be accepted: ${problem}, so the coverage gate has no evidence although both ports passed.`);

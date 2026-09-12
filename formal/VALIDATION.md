@@ -155,9 +155,12 @@ tolerance and more than `freshSeedSigma` Poisson deviations below the recorded
 count, or to zero), the report ends with `coverage-gate-failure` and the lane
 fails. That is a statement about exploration quality on that seed, not about
 native behavior. Exploration also refuses to pass without a completed witness
-report: if the tolerated evaluator step wrote no report, or an unreadable or
-incomplete one, the run ends with `infrastructure-failure` after both ports
-finish, because missing coverage evidence is never a clean gate. Two fresh seeds in September 2026 dropped four and five gated
+report for its own seed: when both ports passed but the tolerated evaluator
+step wrote no report, or an unreadable or incomplete one, or one judged under
+another seed or covering fewer profiles than the manifest schedules, the run
+ends with `infrastructure-failure`, because missing coverage evidence is never
+a clean gate; the tolerated step's error is kept in the exploration report so
+the absence explains itself. A native failure still takes precedence. Two fresh seeds in September 2026 dropped four and five gated
 labels below half their baseline while every label stayed reachable; those
 drops are seed noise on counts of ten to thirty and stay visible in the report
 without failing the lane.

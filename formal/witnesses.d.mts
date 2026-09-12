@@ -35,12 +35,15 @@ export interface ProfileReport {
   sameCorpusAsBaseline: boolean | null;
   seed: string | null;
   sameSeedAsBaseline: boolean | null;
+  seedContradiction: boolean;
   baseline: BaselineFindings;
 }
 export interface WitnessReport {
   schemaVersion: number;
   command: string;
   traces: string;
+  seed: string;
+  sameSeedAsBaseline: boolean | null;
   baseline: { path: string; seed: string; tolerance: number; gatedMinimum: number; freshSeedSigma: number } | null;
   profiles: Record<string, ProfileReport>;
   incomplete: string[];
@@ -61,6 +64,9 @@ export function readBaseline(path: string): WitnessBaseline | undefined;
 export function sampledCorpusFingerprint(corpus: { paths: readonly string[]; kinds: TraceKinds }): string;
 export function recordBaseline(existing: WitnessBaseline | undefined, entries: ReadonlyArray<{ profile: string; evidence: WitnessEvidence; fingerprint: string }>, seed: string, defaults?: { tolerance: number; gatedMinimum: number; freshSeedSigma: number }): WitnessBaseline;
 export function baselineFindings(profile: string, rows: readonly LabelRow[], baseline: WitnessBaseline | undefined, options?: { freshCorpus?: boolean }): BaselineFindings;
+export function canonicalSeed(value: string): string;
+export function resolveCorpusSeed(environment?: Record<string, string | undefined>, execution?: unknown): string;
+export function gateRule(seed: string | null | undefined, baseline: WitnessBaseline | undefined, sameCorpus: boolean | null): { rule: 'tolerance' | 'collapse'; sameSeed: boolean | null; contradiction: boolean };
 export function profileReport(profile: string, evidence: WitnessEvidence, missing: readonly string[], fingerprint: string, baseline: WitnessBaseline | undefined, options?: { seed?: string }): ProfileReport;
 export function formatReport(report: WitnessReport): string;
-export function evaluateProfiles(options: WitnessOptions, context?: { directory?: string; log?: (message: string) => void }): WitnessReport;
+export function evaluateProfiles(options: WitnessOptions, context?: { directory?: string; log?: (message: string) => void; environment?: Record<string, string | undefined> }): WitnessReport;

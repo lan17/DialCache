@@ -6,7 +6,7 @@ import { corpusDiversity, labelProvenance, witnessEvidence } from "../formal/rep
 import { checkWitnesses, historySequences } from "../formal/replay/witnesses/index.mjs";
 import { publicCheckpoint, publicPrefixRule, publicPrefixWitnesses, witnessCommand } from "../formal/replay/witnesses/public-prefix.mjs";
 import { createWitnessRecorder, standaloneRecorder } from "../formal/replay/witnesses/recorder.mjs";
-import { baselineFindings, parseArguments, profileReport, readBaseline, recordBaseline, sampledCorpusFingerprint, traceKind } from "../formal/witnesses.mjs";
+import { baselineFindings, canonicalSeed, gateRule, parseArguments, profileReport, readBaseline, recordBaseline, sampledCorpusFingerprint, traceKind } from "../formal/witnesses.mjs";
 import type { WitnessEvidence } from "../formal/replay/witnesses/evidence.mjs";
 import type { WitnessHistory } from "../formal/replay/witnesses/index.mjs";
 
@@ -175,14 +175,41 @@ describe("witness baseline gate", () => {
     expect(sameSeed).toMatchObject({ seed: "0x1", sameSeedAsBaseline: true, sameCorpusAsBaseline: false });
     expect(sameSeed.baseline.rule).toBe("tolerance");
     expect(sameSeed.baseline.failed).toEqual([{ label: "gated", baseline: 20, sampled: 1, minimum: 10, rule: "tolerance" }]);
-    // An exploration seed gets the collapse rule even when the fingerprint happens to match.
-    const otherSeed = profileReport("effects", evidence, [], "0".repeat(64), baseline, { seed: "0x2" });
-    expect(otherSeed).toMatchObject({ seed: "0x2", sameSeedAsBaseline: false, sameCorpusAsBaseline: true });
+    // An exploration seed with its own corpus gets the collapse rule.
+    const otherSeed = profileReport("effects", evidence, [], "f".repeat(64), baseline, { seed: "0x2" });
+    expect(otherSeed).toMatchObject({ seed: "0x2", sameSeedAsBaseline: false, sameCorpusAsBaseline: false, seedContradiction: false });
     expect(otherSeed.baseline.rule).toBe("collapse");
     expect(otherSeed.baseline.failed).toEqual([{ label: "gated", baseline: 20, sampled: 1, minimum: Math.max(1, 20 - 4 * Math.sqrt(20)), rule: "collapse" }]);
-    expect(profileReport("effects", { ...evidence, labels: { gated: { sampled: 9, regression: 0, traces: [] } } } as unknown as WitnessEvidence, [], "0".repeat(64), baseline, { seed: "0x2" }).baseline.failed).toEqual([]);
+    expect(profileReport("effects", { ...evidence, labels: { gated: { sampled: 9, regression: 0, traces: [] } } } as unknown as WitnessEvidence, [], "f".repeat(64), baseline, { seed: "0x2" }).baseline.failed).toEqual([]);
     // Without a seed the strict rule applies.
     expect(profileReport("effects", evidence, [], "f".repeat(64), baseline).baseline.rule).toBe("tolerance");
+    // Seeds compare in canonical form, so a differently written equal seed is the recorded seed.
+    for (const same of ["0x1", "0x01", "1"]) {
+      const written = profileReport("effects", evidence, [], "f".repeat(64), baseline, { seed: same });
+      expect(written).toMatchObject({ seed: "0x1", sameSeedAsBaseline: true, seedContradiction: false });
+      expect(written.baseline.rule).toBe("tolerance");
+    }
+    // A byte-identical corpus cannot come from another seed: the strict rule holds and the contradiction is recorded.
+    const contradiction = profileReport("effects", evidence, [], "0".repeat(64), baseline, { seed: "0x2" });
+    expect(contradiction).toMatchObject({ sameSeedAsBaseline: false, sameCorpusAsBaseline: true, seedContradiction: true });
+    expect(contradiction.baseline.rule).toBe("tolerance");
+    expect(contradiction.baseline.failed.map(failure => failure.rule)).toEqual(["tolerance"]);
+  });
+
+  it("canonicalizes seeds wherever they enter", () => {
+    expect(["0xd1a1ca", "0xD1A1CA", "13738442"].map(canonicalSeed)).toEqual(["0xd1a1ca", "0xd1a1ca", "0xd1a1ca"]);
+    expect(() => canonicalSeed("seed")).toThrow(/unsigned 64-bit integer/);
+    expect(() => canonicalSeed("0x10000000000000000")).toThrow(/unsigned 64-bit integer/);
+    expect(gateRule("0x01", baseline, false)).toEqual({ rule: "tolerance", sameSeed: true, contradiction: false });
+    expect(() => canonicalSeed("0X1")).toThrow(/unsigned 64-bit integer/);
+    expect(gateRule("2", baseline, false)).toEqual({ rule: "collapse", sameSeed: false, contradiction: false });
+    expect(gateRule("2", baseline, true)).toEqual({ rule: "tolerance", sameSeed: false, contradiction: true });
+    expect(gateRule(undefined, baseline, false)).toEqual({ rule: "tolerance", sameSeed: null, contradiction: false });
+    expect(gateRule("0x1", undefined, null)).toEqual({ rule: "tolerance", sameSeed: null, contradiction: false });
+    const recorded = recordBaseline(undefined, [], "0xD1A1CA");
+    expect(recorded.seed).toBe("0xd1a1ca");
+    expect(() => recordBaseline(recorded, [], "0x2a")).toThrow(/Recorded baseline seed 0xd1a1ca differs from 0x2a/);
+    expect(recordBaseline(recorded, [], "13738442").seed).toBe("0xd1a1ca");
   });
 
   it("fingerprints the sampled histories' content and ignores the ITF creation stamp", () => {

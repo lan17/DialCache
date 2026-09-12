@@ -1287,7 +1287,7 @@
     },
     {
       "path": "formal/PORTING.md",
-      "sha256": "6bd60f540340181ae0c01c0baf0e020799989ad91c3b23bf024a1d176efd2de4",
+      "sha256": "32af5414d95abfd1049bb1965fab878a57afe10863e4a31609676043cfcce803",
       "entries": [
         {"line":1,"title":"Implementing another DialCache port"},
         {"line":14,"title":"What a port supplies"},
@@ -1297,8 +1297,8 @@
         {"line":222,"title":"Generated fixtures and fast local tests"},
         {"line":257,"title":"Complete corpus and reusable acceptance checks"},
         {"line":365,"title":"Witness evidence"},
-        {"line":447,"title":"Current limitations for a third port"},
-        {"line":461,"title":"New-port acceptance"}
+        {"line":453,"title":"Current limitations for a third port"},
+        {"line":467,"title":"New-port acceptance"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1501,15 +1501,15 @@
     },
     {
       "path": "formal/VALIDATION.md",
-      "sha256": "a92d0a337366d7272e69b3de66fed4f720b863b2ce02f6834872f025b7171126",
+      "sha256": "c556b45c1829d1e1184bd8eb2cd2d053cabe88a35197b10a7df1142142b21b5d",
       "entries": [
         {"line":1,"title":"Validation and evidence"},
         {"line":7,"title":"Choosing a run"},
         {"line":59,"title":"Reading a completion report"},
         {"line":77,"title":"Mutation evidence"},
         {"line":138,"title":"Exploratory runs"},
-        {"line":182,"title":"A retained sampling regression"},
-        {"line":219,"title":"Historical results"}
+        {"line":185,"title":"A retained sampling regression"},
+        {"line":222,"title":"Historical results"}
       ],
       "review": {
         "kind": "tooling-guide",

@@ -419,16 +419,22 @@ creation stamp is excluded, so regenerating the pinned seed reproduces the
 fingerprint and the report says whether the fresh corpus is the recorded one).
 A label recorded with at least `gatedMinimum`
 (10) sampled hits is gated. Which rule applies follows the generation seed
-(`QUINT_SEED`, or the manifest seed), never the corpus fingerprint. Under the
-recorded seed, `evaluate` fails when a gated label's sampled count drops below
-`tolerance` (0.5) times the recorded count; a corpus whose fingerprint differs
-under that seed is a model or classifier change and is judged by the same
-strict rule, and the report says so. Under another seed, an exploration seed,
-the count must also fall more than `freshSeedSigma` (4) Poisson standard
-deviations below the recorded one, and always fails at zero hits: per-label
-counts of ten to forty vary by a third or more between seeds, so the tolerance
-alone would fail most fresh seeds on noise, while a collapsed label still
-fails. The report records the seed it judged and both comparisons. Labels recorded below the
+(`QUINT_SEED`, or the manifest seed), compared in canonical form so `0xD1A1CA`,
+`13738442` and `0xd1a1ca` are one seed, together with the corpus fingerprint.
+A sampled corpus byte-identical to the recorded one is judged strictly whatever
+the seed claims, because another seed cannot reproduce it, and the report
+records the contradiction. Under the recorded seed, `evaluate` fails when a
+gated label's sampled count drops below `tolerance` (0.5) times the recorded
+count; a corpus whose fingerprint differs under that seed is a model or
+classifier change and is judged by the same strict rule, and the report says
+so. Only a corpus that differs and was generated under another seed, an
+exploration seed, is judged by the collapse rule: the count must also fall
+more than `freshSeedSigma` (4) Poisson standard deviations below the recorded
+one, and always fails at zero hits, because per-label counts of ten to forty
+vary by a third or more between seeds. The baseline itself is always recorded
+under the manifest seed; `evaluate` refuses a baseline recorded under any other
+seed, and `baseline --write` refuses to run with a different `QUINT_SEED`. The
+report records the seed it judged and both comparisons. Labels recorded below the
 minimum, or not recorded, are reported and never gated, so a green gate speaks
 only for the gated labels; the report names the ungated ones per profile, and a
 profile whose required labels are all pinned by regressions has none gated. After a deliberate
