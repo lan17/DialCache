@@ -6,7 +6,7 @@ import { corpusDiversity, labelProvenance, witnessEvidence } from "../formal/rep
 import { checkWitnesses, historySequences } from "../formal/replay/witnesses/index.mjs";
 import { publicCheckpoint, publicPrefixRule, publicPrefixWitnesses, witnessCommand } from "../formal/replay/witnesses/public-prefix.mjs";
 import { createWitnessRecorder, standaloneRecorder } from "../formal/replay/witnesses/recorder.mjs";
-import { baselineFindings, parseArguments, profileReport, readBaseline, recordBaseline, traceKind } from "../formal/witnesses.mjs";
+import { baselineFindings, parseArguments, profileReport, readBaseline, recordBaseline, sampledCorpusFingerprint, traceKind } from "../formal/witnesses.mjs";
 import type { WitnessEvidence } from "../formal/replay/witnesses/evidence.mjs";
 import type { WitnessHistory } from "../formal/replay/witnesses/index.mjs";
 
@@ -145,10 +145,36 @@ describe("witness baseline gate", () => {
     const evidence = { traces: 12, required: ["fragile", "pinned", "common", "unreached"], diversity: { sampledHistories: 10, distinctActionSequences: 9, distinctObservationSequences: 10 },
       labels: { fragile: { sampled: 2, regression: 0, traces: [] }, pinned: { sampled: 1, regression: 1, traces: [] }, common: { sampled: 50, regression: 0, traces: [] } },
       corpus: [] } as unknown as WitnessEvidence;
-    const report = profileReport("effects", evidence, ["unreached"], new Map(), baseline);
+    const report = profileReport("effects", evidence, ["unreached"], "1".repeat(64), baseline);
     expect(report.fragile).toEqual([row("fragile", 2), row("unreached", 0)]);
     expect(report.rare).toEqual([row("pinned", 1, 1)]);
     expect(report).toMatchObject({ histories: 12, missing: ["unreached"], sameCorpusAsBaseline: false, baseline: { recorded: true, unrecorded: ["fragile", "pinned", "common", "unreached"] } });
+    expect(profileReport("effects", evidence, [], "0".repeat(64), baseline).sameCorpusAsBaseline).toBe(true);
+    expect(profileReport("scope", evidence, [], "0".repeat(64), baseline).sameCorpusAsBaseline).toBeNull();
+  });
+
+  it("fingerprints the sampled histories' content and ignores the ITF creation stamp", () => {
+    const directory = scratch();
+    const dirs = { sampled: join(directory, "features/scope"), regressions: join(directory, "regressions/scope") };
+    mkdirSync(dirs.sampled, { recursive: true });
+    mkdirSync(dirs.regressions, { recursive: true });
+    const trace = (timestamp: number, calls: number[]) => JSON.stringify({ "#meta": { format: "ITF", timestamp, description: `Created by Quint at ${timestamp}` },
+      vars: ["input", "s"], states: [{ input: { name: "init", choice: integer(-1) }, s: { o: { calls: calls.map(integer) } } }] });
+    const paths = [join(dirs.sampled, "trace_1.itf.json"), join(dirs.sampled, "trace_2.itf.json"), join(dirs.regressions, "pinnedTest.itf.json")];
+    const kinds = new Map<string, "sampled" | "regression">([["trace_1.itf.json", "sampled"], ["trace_2.itf.json", "sampled"], ["pinnedTest.itf.json", "regression"]]);
+    writeFileSync(paths[0]!, trace(1, []));
+    writeFileSync(paths[1]!, trace(1, [1]));
+    writeFileSync(paths[2]!, trace(1, [2]));
+    const first = sampledCorpusFingerprint({ paths, kinds });
+    expect(first).toMatch(/^[a-f\d]{64}$/);
+    // A later generation of the same histories, and any change to a regression, keep the fingerprint.
+    writeFileSync(paths[0]!, trace(2, []));
+    writeFileSync(paths[2]!, trace(2, [3]));
+    expect(sampledCorpusFingerprint({ paths, kinds })).toBe(first);
+    // A changed sampled state or a missing sampled history changes it.
+    writeFileSync(paths[1]!, trace(1, [2]));
+    expect(sampledCorpusFingerprint({ paths, kinds })).not.toBe(first);
+    expect(sampledCorpusFingerprint({ paths: paths.slice(1), kinds })).not.toBe(first);
   });
 
   it("reads, records and merges baselines from evidence", () => {
@@ -156,15 +182,14 @@ describe("witness baseline gate", () => {
     expect(readBaseline(join(directory, "missing.json"))).toBeUndefined();
     writeFileSync(join(directory, "bad.json"), JSON.stringify({ schemaVersion: 1, seed: "0x1", tolerance: 1.5, gatedMinimum: 10, profiles: {} }));
     expect(() => readBaseline(join(directory, "bad.json"))).toThrow(/unsupported/);
-    const evidence = { required: ["a", "b"], labels: { a: { sampled: 12, regression: 1, traces: [] } }, diversity: { sampledHistories: 3 },
-      corpus: [{ name: "trace_1.itf.json", sha256: "1".repeat(64) }, { name: "pinnedTest.itf.json", sha256: "2".repeat(64) }] } as unknown as WitnessEvidence;
-    const kinds = new Map<string, "sampled" | "regression">([["trace_1.itf.json", "sampled"], ["pinnedTest.itf.json", "regression"]]);
-    const recorded = recordBaseline(undefined, [{ profile: "scope", evidence, kinds }], "0x2a");
+    const evidence = { required: ["a", "b"], labels: { a: { sampled: 12, regression: 1, traces: [] } }, diversity: { sampledHistories: 3 } } as unknown as WitnessEvidence;
+    const fingerprint = "3".repeat(64);
+    const recorded = recordBaseline(undefined, [{ profile: "scope", evidence, fingerprint }], "0x2a");
     expect(recorded).toMatchObject({ schemaVersion: 1, seed: "0x2a", tolerance: 0.5, gatedMinimum: 10,
-      profiles: { scope: { sampledHistories: 3, corpusSha256: expect.stringMatching(/^[a-f\d]{64}$/), labels: { a: 12, b: 0 } } } });
-    const merged = recordBaseline(structuredClone(baseline), [{ profile: "scope", evidence, kinds }], "0x1");
+      profiles: { scope: { sampledHistories: 3, corpusSha256: fingerprint, labels: { a: 12, b: 0 } } } });
+    const merged = recordBaseline(structuredClone(baseline), [{ profile: "scope", evidence, fingerprint }], "0x1");
     expect(Object.keys(merged.profiles)).toEqual(["effects", "scope"]);
-    expect(() => recordBaseline(baseline, [{ profile: "scope", evidence, kinds }], "0x2a")).toThrow(/seed/);
+    expect(() => recordBaseline(baseline, [{ profile: "scope", evidence, fingerprint }], "0x2a")).toThrow(/seed/);
   });
 
   it("parses the evaluate, report and baseline commands", () => {

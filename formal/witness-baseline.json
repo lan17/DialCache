@@ -6,7 +6,7 @@
   "profiles": {
     "admission": {
       "sampledHistories": 128,
-      "corpusSha256": "eb5735cb61efd8eb85100be7dad6d87a4fac76f87b9c3a49e142a08d3c449258",
+      "corpusSha256": "42e843bd3126da1c79b6fa713b10b35e8b0131012ef179c87734b1dd6bfb6548",
       "labels": {
         "outcome:match": 57,
         "outcome:mismatch": 35,
@@ -30,7 +30,7 @@
     },
     "effects": {
       "sampledHistories": 512,
-      "corpusSha256": "fa3eb81fef34c3a57a0a4ed84926d8e49e39b87df199a190c9a914f3e59d7768",
+      "corpusSha256": "0e20f4873f08eefcdd2d3e2d81bb90b0a0b3a51ad9d8f0e4056832d791de58bc",
       "labels": {
         "event:request": 512,
         "event:disabled": 512,
@@ -129,7 +129,7 @@
     },
     "independent": {
       "sampledHistories": 512,
-      "corpusSha256": "60880c80496d5d55261e304a3c7f82eb268df0e4c32ce5e9d2a0da05a96e9913",
+      "corpusSha256": "9e8c9084c909e2d38307356f6e7adf1809ad739b25abe2cdc4dc927a4920ab53",
       "labels": {
         "independent-source-error-identities": 262,
         "independent-read-overlap": 465,
@@ -151,7 +151,7 @@
     },
     "layers": {
       "sampledHistories": 512,
-      "corpusSha256": "f2469e6f2e2289d579ddbe0595d8b8f232b9cdd53e5a03ecef7dc4ffefc9e6b1",
+      "corpusSha256": "6ea98176618ecfef841072fd119ca1ce72231c80de100a3085f83c40fd411dd8",
       "labels": {
         "absent-remote-maintenance-preserves-local": 39,
         "fixture:4": 65,
@@ -183,7 +183,7 @@
     },
     "local-clock": {
       "sampledHistories": 128,
-      "corpusSha256": "4a1aa0030a1b6ddf1ebf396e04a10f94805de72077ff29054e3e0c5d0a9168a4",
+      "corpusSha256": "8e6f796e9387efdd1651d71841de94d7944c783e2d2b940345f6030915731b7f",
       "labels": {
         "fractional-insertion-expiry": 0,
         "shared-instance-grid": 0
@@ -191,7 +191,7 @@
     },
     "local-failure": {
       "sampledHistories": 128,
-      "corpusSha256": "259fa056e7f8dcd212e9b5bb738d80ed3941fdd2f99a927116aa1a2a1c547a78",
+      "corpusSha256": "f299300bcf8ca50a98380a84b9ec182874f2229fe76e6c6a8b181770d283e4f0",
       "labels": {
         "failed-local-read-preserves-old-value-and-memoizes-remote": 0,
         "failed-local-read-suppresses-later-source-publication": 0,
@@ -201,7 +201,7 @@
     },
     "policy": {
       "sampledHistories": 512,
-      "corpusSha256": "a7438b0e8e7e59a0370966ce26d6f327927cd71d09712f91543979b609f84c9d",
+      "corpusSha256": "66f651d27a7966768e47e34f48dab9b6898d466d1ac242db8294efa40434c321",
       "labels": {
         "local-hit-preserves-insertion-expiry": 1,
         "invalid-read-budget-bypasses-caching": 33,
@@ -256,7 +256,7 @@
     },
     "recovery": {
       "sampledHistories": 512,
-      "corpusSha256": "ff1c37c328d6553d5f3b3797730fabf2f15107d82eaf13620bfc64230ca86ee3",
+      "corpusSha256": "cbd6f011a2ce320b4a240ab42581fa6fa131b5c2728d2781789567c4dc5bdd06",
       "labels": {
         "fixture:4": 52,
         "fixture:5": 59,
@@ -309,7 +309,7 @@
     },
     "recovery-read": {
       "sampledHistories": 256,
-      "corpusSha256": "a4b2348035bb1e41e9ec948b664e9aa2f27cab3398bca0d5480c5bc047a1ae64",
+      "corpusSha256": "2b830b52713f1d9b4dfca326aa40c2314baf7b428cf4ac23c203687b34194a57",
       "labels": {
         "read-settlement-crosses-freshness-and-recovers": 0,
         "read-settlement-before-freshness-hits": 0,
@@ -341,7 +341,7 @@
     },
     "runtime-boundaries": {
       "sampledHistories": 256,
-      "corpusSha256": "3532cc6dabfff7ef55d5d7ba2867aa94e5ec15976e7e2e9e73908fab6f07bf09",
+      "corpusSha256": "7ef5481d5c6fe9a1e23492f95e3ab9db03e774c2403fc8199e1a4b74e6383404",
       "labels": {
         "runtime-enables-sharing": 1,
         "inherited-false-request-last-writer": 0,
@@ -369,7 +369,7 @@
     },
     "scope": {
       "sampledHistories": 256,
-      "corpusSha256": "effb883b2933c3cd4ed71cff26c1e1c5cfce9cfe04fd3231c5f4b3fd9d087ac5",
+      "corpusSha256": "92e24e70c96120941b6e46f25c88751da6238c7c68120caa6185e4c697330a2b",
       "labels": {
         "failure-layer:request_local": 146,
         "failure-layer:local": 114,
@@ -401,7 +401,7 @@
     },
     "shadow": {
       "sampledHistories": 1024,
-      "corpusSha256": "871a9dfde9a3b820855a9d12957b386dabf57fb17c4beade3f6dfd341036c45b",
+      "corpusSha256": "8699d7dcea093ad9962d1a169ebf58fb64a0307cd13f13f0c7d9e007abd4784e",
       "labels": {
         "outcome:match": 53,
         "outcome:mismatch": 54,
@@ -484,7 +484,7 @@
     },
     "shadow-layers": {
       "sampledHistories": 256,
-      "corpusSha256": "88f17eb697854682e0bb831e2a395bfaa7e767e4c4e21566dbc6fab801168f8e",
+      "corpusSha256": "c7210e376ad01e1ce1eccf99ebe67db853000524765fa7ec30843c4221910447",
       "labels": {
         "dark-present-c0-never-publishes-local": 0,
         "dark-local-source-publication-stops-later-shadow": 0,
@@ -512,7 +512,7 @@
     },
     "source-budgets": {
       "sampledHistories": 256,
-      "corpusSha256": "da28a43e897be29742d1046c1787983b0011342f11e7f7d168b45e4d8afaebbb",
+      "corpusSha256": "b3f6b1d0778632287eaaad8df40abc4a4d56ed9d427e042f6448e026a2445681",
       "labels": {
         "outside-calls-skip-source-deadlines-sharing-and-publication": 0,
         "default-source-budget-expires-at-sixty-seconds": 0,

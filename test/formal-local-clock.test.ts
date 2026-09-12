@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { checkWitnesses } from "../formal/replay/witnesses/index.mjs";
 import { localClockWitnesses } from "../formal/replay/witnesses/local-clock.mjs";
+import { createWitnessRecorder } from "../formal/replay/witnesses/recorder.mjs";
 import { parseLocalClockTrace, replayLocalClockTrace } from "./formal/local-clock-profile.js";
 
 const profile = "local-clock";
@@ -63,6 +64,13 @@ describe("local-clock witness attribution", () => {
   it("observes both the fractional insertion boundary and the distinct construction phases", () => {
     expect([...localClockWitnesses([smoke()])]).toContain("fractional-insertion-expiry");
     expect([...localClockWitnesses([smoke()])]).toContain("shared-instance-grid");
+  });
+  it("credits the shared grid at both expiring calls rather than at the end of the history", () => {
+    const recorder = createWitnessRecorder();
+    localClockWitnesses([smoke()], recorder);
+    const provenance = recorder.provenance();
+    expect(provenance["fractional-insertion-expiry"]).toEqual([{ name: "clock witness fixture", checkpoints: [11, 12] }]);
+    expect(provenance["shared-instance-grid"]).toEqual([{ name: "clock witness fixture", checkpoints: [11, 12] }]);
   });
   it("cannot credit an expiry before the final boundary calls", () => {
     const trace = smoke();

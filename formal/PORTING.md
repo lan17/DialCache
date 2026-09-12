@@ -398,7 +398,7 @@ For each complete profile it writes `<out>/<profile>.json`:
 | `traces` | Number of evaluated histories |
 | `required` | The registry's required labels, in registry order |
 | `seen` | Every reached label, sorted |
-| `labels` | Per reached label: `sampled` and `regression` hit counts, and `traces`, one `{ name, kind, checkpoints }` per history that earned the label, sorted by name. `kind` is `sampled` for a history from the profile's generated directory and `regression` for an exported `replayRegressions` trace. `checkpoints` are the ascending step indices at which the classifier credited the label: the step whose public consequence the rule requires, every declared checkpoint of a public-prefix rule, `0` for labels decided by the init choice (`fixture:*`, `action:init`), and the final step for a whole-history fact |
+| `labels` | Per reached label: `sampled` and `regression` hit counts, and `traces`, one `{ name, kind, checkpoints }` per history that earned the label, sorted by name. `kind` is `sampled` for a history from the profile's generated directory and `regression` for an exported `replayRegressions` trace. `checkpoints` are the ascending step indices at which the classifier credited the label: the step whose public consequence the rule requires, every declared checkpoint of a public-prefix rule, `0` for labels decided by the init choice (`fixture:*`, `action:init`), and every establishing step for a rule whose consequence spans several public steps |
 | `diversity` | Over sampled histories only: `sampledHistories`, `distinctActionSequences` (distinct sequences of action names) and `distinctObservationSequences` (distinct sequences of the observation each driver is asserted against at every step: the feature coordinator's expected observation record, the effects projection or the local-clock expected record, compared as JSON) |
 | `inputs` | `{ path, sha256 }` for `formal/profiles.json`, `formal/coverage-witnesses.json`, `formal/execution.json`, the profile's model, `formal/conformance-observations.qnt`, every Quint library, the full `formal/replay` closure (which contains the classifiers) and the profile's `witnessSources`, deduplicated in that order |
 | `corpus` | `{ name, sha256 }` per history, sorted by file name |
@@ -414,7 +414,10 @@ failing.
 
 `formal/witness-baseline.json` records, per profile and required label, the
 sampled hit count on the pinned-seed corpus, with the seed and a fingerprint of
-each profile's sampled corpus. A label recorded with at least `gatedMinimum`
+each profile's sampled histories (their `vars` and `states`; the ITF `#meta`
+creation stamp is excluded, so regenerating the pinned seed reproduces the
+fingerprint and the report says whether the fresh corpus is the recorded one).
+A label recorded with at least `gatedMinimum`
 (10) sampled hits is gated: `evaluate` fails when its fresh sampled count drops
 below `tolerance` (0.5) times the recorded count. Labels recorded below the
 minimum, or not recorded, are reported and never gated. After a deliberate

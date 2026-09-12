@@ -54,9 +54,9 @@ export function witnessCorpus(profile: string, tracesRoot: string, execution?: u
 export function witnessCorpusPaths(profile: string, tracesRoot: string, execution?: unknown, directory?: string): string[];
 export function selectedProfiles(selection: string, execution?: unknown): string[];
 export function readBaseline(path: string): WitnessBaseline | undefined;
-export function sampledCorpusFingerprint(evidence: Pick<WitnessEvidence, "corpus">, kinds: TraceKinds): string;
-export function recordBaseline(existing: WitnessBaseline | undefined, entries: ReadonlyArray<{ profile: string; evidence: WitnessEvidence; kinds: TraceKinds }>, seed: string, defaults?: { tolerance: number; gatedMinimum: number }): WitnessBaseline;
+export function sampledCorpusFingerprint(corpus: { paths: readonly string[]; kinds: TraceKinds }): string;
+export function recordBaseline(existing: WitnessBaseline | undefined, entries: ReadonlyArray<{ profile: string; evidence: WitnessEvidence; fingerprint: string }>, seed: string, defaults?: { tolerance: number; gatedMinimum: number }): WitnessBaseline;
 export function baselineFindings(profile: string, rows: readonly LabelRow[], baseline: WitnessBaseline | undefined): BaselineFindings;
-export function profileReport(profile: string, evidence: WitnessEvidence, missing: readonly string[], kinds: TraceKinds, baseline: WitnessBaseline | undefined): ProfileReport;
+export function profileReport(profile: string, evidence: WitnessEvidence, missing: readonly string[], fingerprint: string, baseline: WitnessBaseline | undefined): ProfileReport;
 export function formatReport(report: WitnessReport): string;
 export function evaluateProfiles(options: WitnessOptions, context?: { directory?: string; log?: (message: string) => void }): WitnessReport;

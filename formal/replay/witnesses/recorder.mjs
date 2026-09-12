@@ -4,11 +4,11 @@ import { basename } from "node:path";
 // label, the history that earned it and the checkpoint step at which the
 // classifier credited it. The recorder decides nothing: a classifier calls
 // enter(path) when it starts a history and step(index) at the top of its step
-// loop, and credit(label) records the label at that step. Rules whose public
-// checkpoints are declared (public-prefix rules) pass them explicitly. Labels
-// credited before a history's first step(...) call (fixture labels, the init
-// choice) record checkpoint 0; labels credited after the loop (whole-history
-// facts) record the last step the loop visited.
+// loop, and credit(label) records the label at that step. Rules whose
+// consequence spans several public steps pass every establishing step
+// explicitly (declared public-prefix checkpoints, the two expiring calls of
+// the local-clock shared grid). Labels credited before a history's first
+// step(...) call (fixture labels, the init choice) record checkpoint 0.
 export function createWitnessRecorder() {
   const credits = new Map();
   let history, current = 0;

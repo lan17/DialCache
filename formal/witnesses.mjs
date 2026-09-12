@@ -98,9 +98,20 @@ export function readBaseline(path) {
   return baseline;
 }
 
-export function sampledCorpusFingerprint(evidence, kinds) {
-  const sampled = evidence.corpus.filter(({ name }) => kinds.get(name) === 'sampled');
-  return createHash('sha256').update(sampled.map(({ name, sha256 }) => `${name} ${sha256}\n`).join('')).digest('hex');
+// The fingerprint covers the sampled histories' content (their vars and
+// states). Quint stamps every ITF file's #meta with its creation time, so the
+// byte-level corpus digests in the evidence differ on each regeneration of the
+// pinned seed although the histories are identical; this digest does not.
+export function sampledCorpusFingerprint(corpus) {
+  const sampled = corpus.paths.filter(path => corpus.kinds.get(basename(path)) === 'sampled')
+    .map(path => ({ name: basename(path), path })).sort((a, b) => a.name.localeCompare(b.name, 'en'));
+  const digest = createHash('sha256');
+  for (const { name, path } of sampled) {
+    const content = JSON.parse(readFileSync(path, 'utf8'));
+    delete content['#meta'];
+    digest.update(`${name} ${createHash('sha256').update(JSON.stringify(content)).digest('hex')}\n`);
+  }
+  return digest.digest('hex');
 }
 
 export function recordBaseline(existing, entries, seed, defaults = baselineDefaults) {
@@ -108,8 +119,8 @@ export function recordBaseline(existing, entries, seed, defaults = baselineDefau
     throw new Error(`Recorded baseline seed ${existing.seed} differs from ${seed}; rewrite every profile with --profile all`);
   }
   const baseline = existing ?? { schemaVersion: 1, seed, ...defaults, profiles: {} };
-  for (const { profile, evidence, kinds } of entries) {
-    baseline.profiles[profile] = { sampledHistories: evidence.diversity.sampledHistories, corpusSha256: sampledCorpusFingerprint(evidence, kinds),
+  for (const { profile, evidence, fingerprint } of entries) {
+    baseline.profiles[profile] = { sampledHistories: evidence.diversity.sampledHistories, corpusSha256: fingerprint,
       labels: Object.fromEntries(evidence.required.map(label => [label, evidence.labels[label]?.sampled ?? 0])) };
   }
   baseline.profiles = Object.fromEntries(Object.entries(baseline.profiles).sort(([a], [b]) => a.localeCompare(b, 'en')));
@@ -134,13 +145,13 @@ export function baselineFindings(profile, rows, baseline) {
   return findings;
 }
 
-export function profileReport(profile, evidence, missing, kinds, baseline) {
+export function profileReport(profile, evidence, missing, fingerprint, baseline) {
   const rows = evidence.required.map(label => ({ label, sampled: evidence.labels[label]?.sampled ?? 0, regression: evidence.labels[label]?.regression ?? 0 }));
   const recorded = baseline?.profiles[profile];
   return { profile, histories: evidence.traces, diversity: evidence.diversity, missing,
     fragile: rows.filter(row => row.sampled <= rareMaximum && row.regression === 0),
     rare: rows.filter(row => row.sampled <= rareMaximum && row.regression >= 1),
-    sameCorpusAsBaseline: recorded === undefined ? null : recorded.corpusSha256 === sampledCorpusFingerprint(evidence, kinds),
+    sameCorpusAsBaseline: recorded === undefined ? null : recorded.corpusSha256 === fingerprint,
     baseline: baselineFindings(profile, rows, baseline) };
 }
 
@@ -178,9 +189,10 @@ export function evaluateProfiles(options, { directory = root, log = message => c
     const corpus = witnessCorpus(profile, options.traces, execution, directory);
     const check = checkWitnesses(profile, corpus.paths, registry);
     const evidence = witnessEvidence(profile, check, corpus, directory);
-    const summary = profileReport(profile, evidence, check.missing, corpus.kinds, baseline);
+    const fingerprint = sampledCorpusFingerprint(corpus);
+    const summary = profileReport(profile, evidence, check.missing, fingerprint, baseline);
     report.profiles[profile] = summary;
-    entries.push({ profile, evidence, kinds: corpus.kinds });
+    entries.push({ profile, evidence, fingerprint });
     if (check.missing.length) {
       if (options.command === 'evaluate') rmSync(resolve(outputDirectory, `${profile}.json`), { force: true });
       report.incomplete.push(`witness/${profile}: ${check.traces} histories reached ${check.seen.size} labels; missing ${check.missing.join(', ')}`);

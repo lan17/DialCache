@@ -27,15 +27,22 @@ export function localClockWitnesses(traces, recorder = createWitnessRecorder()) 
         if (previous !== undefined && previous.hitBefore && offered !== previous.value
           && ticks % 1000 === 0 && Math.floor(ticks / 1000) - Math.floor(previous.ticks / 1000) === 1000) {
           if (previous.ticks % 1000 !== 0) recorder.credit("fractional-insertion-expiry");
-          expirations.push({ instance, ticks, inserted: previous.ticks });
+          expirations.push({ instance, ticks, inserted: previous.ticks, step: index });
         }
         fills[instance] = { ticks, value, hitBefore: false };
       }
     }
-    if (expirations.some(left => expirations.some(right => left.instance !== right.instance
-      && left.ticks === right.ticks && Math.floor(left.inserted / 1000) === Math.floor(right.inserted / 1000)
-      && constructions[left.instance] !== undefined && constructions[right.instance] !== undefined
-      && constructions[left.instance] % 1000 !== constructions[right.instance] % 1000))) recorder.credit("shared-instance-grid");
+    // Two instances constructed in different sub-second phases expired on the
+    // same whole-second grid. The consequence is established by the two calls
+    // that observed the expirations, so both are the label's checkpoints.
+    for (const left of expirations) {
+      for (const right of expirations) {
+        if (left.instance !== right.instance && left.ticks === right.ticks
+          && Math.floor(left.inserted / 1000) === Math.floor(right.inserted / 1000)
+          && constructions[left.instance] !== undefined && constructions[right.instance] !== undefined
+          && constructions[left.instance] % 1000 !== constructions[right.instance] % 1000) recorder.credit("shared-instance-grid", left.step, right.step);
+      }
+    }
   }
   return recorder.labels();
 }
