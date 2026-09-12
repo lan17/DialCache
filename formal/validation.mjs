@@ -2,13 +2,14 @@ import { spawn, spawnSync } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync } from 'node:fs';
 import { delimiter, dirname, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseShard } from './mutation-reports.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const replayTests = ['test/formal-conformance.test.ts', 'test/formal-effects.test.ts', 'test/formal-features.test.ts',
   'test/formal-local-clock.test.ts', 'test/formal-behavior.test.ts', 'test/formal-protocol-vectors.test.ts'];
 const aggregateTargets = {
   check: ['check-ts', 'check-go', 'docs', 'audit'],
-  formal: ['formal-corpus', 'formal-go'],
+  formal: ['formal-check', 'formal-generate', 'formal-ts', 'formal-go'],
   mutations: ['mutations-ts', 'mutations-go'],
   integration: ['integration-ts', 'integration-go'],
   ci: ['check', 'package-floor', 'formal', 'model-check', 'integration', 'mutations'],
@@ -20,15 +21,19 @@ export const targetDescriptions = {
   docs: 'Build the documentation site',
   audit: 'Check source, behavior, feature, Go and generated-fixture freshness inventories',
   smoke: 'Replay committed Quint-derived fixtures in TypeScript and Go; no full completion claim',
-  formal: 'Complete Quint checks and corpus, then prepared TypeScript and Go replay',
-  'formal-corpus': 'Check models, generate/recompute artifacts and complete TypeScript replay with witnesses',
-  'formal-go': 'Require current TypeScript completion, then complete Go replay with race detection',
+  formal: 'Check every scheduled Quint model, generate the complete corpus and shared witness evidence, then complete TypeScript and Go replay',
+  'formal-check': 'Typecheck and run every scheduled Quint model, its public regressions and the model mutation challenges',
+  'formal-generate': 'Generate/recompute artifacts and evaluate shared witness evidence over the complete corpus',
+  'formal-ts': 'Complete prepared TypeScript replay of the generated corpus',
+  'formal-go': 'Complete prepared Go replay of the generated corpus with race detection',
   'fixtures-check': 'Recompute every committed model-derived artifact with pinned Quint',
   explore: 'Explore a new recorded seed and replay both ports in an isolated source snapshot',
   'model-check': 'Symbolically verify the scheduled finite rules with pinned Quint/Apalache (Java 21)',
-  mutations: 'Require both current completions, then measure TypeScript and Go semantic mutations',
-  'mutations-ts': 'Require current TypeScript completion, then measure its semantic mutations',
-  'mutations-go': 'Require both current completions, then measure Go semantic mutations',
+  mutations: 'Measure TypeScript and Go semantic mutations over the generated corpus and shared witness evidence',
+  'mutations-ts': 'Measure TypeScript semantic mutations over the generated corpus (MUTATION_SHARD=<index>/<count> measures one shard)',
+  'mutations-go': 'Measure Go semantic mutations over the generated corpus and shared witness evidence (MUTATION_SHARD=<index>/<count> measures one shard)',
+  'mutations-merge-ts': 'Merge TypeScript mutation shards into the complete report; refuses inconsistent or missing shards',
+  'mutations-merge-go': 'Merge Go mutation shards into the complete report; refuses inconsistent or missing shards',
   integration: 'Run real TypeScript and Go Redis/Valkey/Cluster integration checks',
   'integration-ts': 'Run TypeScript real integration checks',
   'integration-go': 'Run Go real integration and interoperability checks with race detection',
@@ -39,6 +44,24 @@ export const targetDescriptions = {
 export function expandTargets(target) {
   if (!Object.hasOwn(targetDescriptions, target)) throw new Error(`Unknown validation target ${target}; run make help`);
   return aggregateTargets[target]?.flatMap(expandTargets) ?? [target];
+}
+
+// MUTATION_SHARD=<index>/<count> narrows one measurement lane to a shard of
+// its catalog; the merge target later assembles the complete report. Only the
+// two leaf lanes accept it: an aggregate that silently ignored it would run the
+// complete measurement the caller did not ask for.
+const shardedTargets = ['mutations-ts', 'mutations-go'];
+export function mutationShardArguments(target, environment = process.env) {
+  const value = environment.MUTATION_SHARD;
+  if (value === undefined) return [];
+  if (!shardedTargets.includes(target)) {
+    if (expandTargets(target).some(name => shardedTargets.includes(name))) throw new Error(`MUTATION_SHARD=${value} applies only to make mutations-ts and make mutations-go; unset it to run the complete measurement with make ${target}.`);
+    return [];
+  }
+  // The measurement scripts parse the same value; one implementation decides
+  // what is well-formed, so the runner cannot accept a shard the script rejects.
+  try { parseShard(value); } catch { throw new Error(`MUTATION_SHARD must be <index>/<count> with 1 <= index <= count (for example 2/3); got ${JSON.stringify(value)}.`); }
+  return [`--shard=${value}`];
 }
 
 // Local shells may retain a one-file replay, protocol subset or alternate
@@ -81,11 +104,18 @@ export function validationPlan(target, { directory = root, environment = process
   const tsReplay = full => ({ ...pnpm(full ? 'Replay complete TypeScript corpus' : 'Replay committed TypeScript fixtures',
     'exec', 'vitest', 'run', ...replayTests, '--coverage.enabled=false',
     ...(full ? ['--reporter=default', '--reporter=json', '--outputFile=.formal-traces/ts-replay.json'] : [])),
-    ...(full ? { env: { ...replayEnv, DIALCACHE_COVERAGE_EVIDENCE_DIR: witnessDirectory } } : {}) });
+    ...(full ? { env: replayEnv } : {}) });
+  // The language-neutral evaluator is the sole producer of the reusable witness
+  // evidence; TypeScript replay only checks the same gate inside its suite.
+  const witnesses = node('Evaluate shared witness evidence over the complete corpus', 'formal/witnesses.mjs', 'evaluate', '--profile', 'all');
+  // The complete replay outlives Go's default 10-minute test timeout on a slow
+  // runner (run 34667733523 was killed at 10m0s); bound it explicitly, under
+  // the go-parity job budget. The smoke run keeps the default.
   const nativeGo = full => ({ ...go(full ? 'Replay complete Go corpus with race detection' : 'Run Go default tests with race detection',
-    'test', '-race', '-count=1', ...(full ? ['-json'] : []), './...'),
+    'test', '-race', '-count=1', ...(full ? ['-json', '-timeout=35m'] : []), './...'),
     ...(full ? { env: { ...replayEnv, DIALCACHE_WITNESS_EVIDENCE_DIR: witnessDirectory }, stdoutFile: '.formal-traces/go-replay.jsonl' } : {}) });
   const node22 = floorExecutable(environment, runnerNode, nodeVersion) ?? '<NODE22_BIN>';
+  const shard = mutationShardArguments(target, environment);
   const plans = {
     'check-ts': [pnpm('Typecheck TypeScript', 'typecheck'), pnpm('Run TypeScript unit tests with coverage', 'test'),
       pnpm('Build package', 'build'), pnpm('Check packed package on Node 24', 'test:package')],
@@ -99,25 +129,36 @@ export function validationPlan(target, { directory = root, environment = process
     'fixtures-check': [node('Recompute all committed Quint artifacts', 'formal/generate-artifacts.mjs', '--check')],
     explore: [node('Explore and replay an isolated alternate-seed corpus', 'formal/explore.mjs')],
     'model-check': [node('Symbolically verify the scheduled finite rules', 'formal/check-symbolic-models.mjs')],
-    'formal-corpus': [invalidate('ts', 'go'), node('Check every scheduled Quint model', 'formal/run-models.mjs', 'check'),
+    // The model check is evidence about the Quint models (typechecks, bounded
+    // runs, regressions and the mutation challenges). Nothing downstream reads
+    // its output, so it is a sibling of generation rather than a prefix of it.
+    'formal-check': [node('Check every scheduled Quint model', 'formal/run-models.mjs', 'check')],
+    // Generation is the single shared producer: the corpus, wire artifacts and
+    // witness evidence depend only on the models. Both ports' replays and both
+    // mutation measurements read that output and can run in parallel off it.
+    'formal-generate': [invalidate('ts', 'go'),
       node('Generate complete corpus and recompute wire artifacts', 'formal/run-models.mjs', 'generate'),
-      node('Recompute committed Quint smoke and witness fixtures', 'formal/generated-fixtures.mjs', '--check'),
-      node('Prepare TypeScript execution context', 'formal/conformance.mjs', 'prepare', 'typescript', reportPath('ts', 'context')),
+      node('Recompute committed Quint smoke and witness fixtures', 'formal/generated-fixtures.mjs', '--check'), witnesses],
+    'formal-ts': [invalidate('ts'), node('Prepare TypeScript execution context', 'formal/conformance.mjs', 'prepare', 'typescript', reportPath('ts', 'context')),
       tsReplay(true), { ...node('Adapt TypeScript native assertion report', 'formal/conformance-adapters.mjs', 'typescript', reportPath('ts', 'replay'), reportPath('ts', 'context')), stdoutFile: reportPath('ts', 'completion') },
       completion('ts')],
-    'formal-go': [completion('ts'), invalidate('go'), node('Check Go parity inventory', 'formal/check-go-parity.mjs'),
+    'formal-go': [invalidate('go'), node('Check Go parity inventory', 'formal/check-go-parity.mjs'),
       node('Prepare Go execution context', 'formal/conformance.mjs', 'prepare', 'go', reportPath('go', 'context')), nativeGo(true),
       { ...node('Check complete Go native report', 'formal/check-go-replay.mjs'), stdoutFile: '.formal-traces/go-replay-summary.json' },
       { ...node('Adapt Go native assertion report', 'formal/conformance-adapters.mjs', 'go', '.formal-traces/go-replay.jsonl', reportPath('go', 'context')), stdoutFile: reportPath('go', 'completion') }, completion('go')],
-    'mutations-ts': [completion('ts'), node('Measure TypeScript semantic mutations', 'formal/measure-semantics.mjs')],
-    'mutations-go': [completion('ts'), completion('go'), node('Measure Go semantic mutations', 'formal/measure-go-semantics.mjs')],
+    'mutations-ts': [node('Measure TypeScript semantic mutations', 'formal/measure-semantics.mjs', ...shard)],
+    'mutations-go': [node('Measure Go semantic mutations', 'formal/measure-go-semantics.mjs', ...shard)],
+    // The merge needs neither Quint nor Go: it reads shard reports, checks
+    // them against each other and this checkout, and writes the complete report.
+    'mutations-merge-ts': [node('Merge TypeScript mutation shards', 'formal/merge-mutation-reports.mjs', 'ts')],
+    'mutations-merge-go': [node('Merge Go mutation shards', 'formal/merge-mutation-reports.mjs', 'go')],
     'integration-ts': [pnpm('Run TypeScript Redis/Valkey/Cluster integrations', 'test:integration')],
     'integration-go': [{ ...go('Run Go Redis/Valkey/Cluster and TypeScript interoperability', 'test', '-race', '-tags', 'integration', '-count=1', '-run', '^TestRedisIntegration$', '-json', './...'), stdoutFile: '.formal-traces/go-integration.jsonl' }],
     'package-floor': [{ label: 'Require a built package for floor checks', requireFile: 'dist/index.js', failureHint: 'Build first with make check-ts, or run make ci with NODE22_BIN set.' },
       { label: 'Check Node 22.15 zstd round trip and output ceiling', command: node22, args: ['--eval', floorSmoke], env: { PATH: floorEnvironment(environment, node22).PATH } },
       { label: 'Check packed package on Node 22.15', command: node22, args: ['scripts/test-package.mjs'], env: { PATH: floorEnvironment(environment, node22).PATH } }],
   };
-  return [...(target === 'mutations' ? [completion('ts'), completion('go')] : []), ...expandTargets(target).flatMap(name => plans[name])];
+  return expandTargets(target).flatMap(name => plans[name]);
 }
 
 function probe(command, args, { directory, environment }) {
@@ -137,7 +178,7 @@ export function checkPrerequisites(target, { directory = root, environment = pro
     const version = probe('go', ['version'], { directory, environment });
     if (!/^go version go1\.27\.1\s/.test(version)) throw new Error(`Validation requires Go 1.27.1; found ${version}. Put the pinned Go toolchain on PATH.`);
   }
-  if (targets.some(name => ['formal-corpus', 'fixtures-check', 'explore', 'model-check'].includes(name))) {
+  if (targets.some(name => ['formal-check', 'formal-generate', 'fixtures-check', 'explore', 'model-check'].includes(name))) {
     const requiredQuint = JSON.parse(readFileSync(resolve(directory, 'formal/generated-fixtures.lock.json'), 'utf8')).quintVersion;
     const version = probe('quint', ['--version'], { directory, environment });
     if (version !== requiredQuint) throw new Error(`Expected Quint ${requiredQuint}; found ${version}. Install the pinned Quint CLI before recomputing artifacts.`);
@@ -145,6 +186,9 @@ export function checkPrerequisites(target, { directory = root, environment = pro
   if (targets.includes('model-check')) {
     const version = probe('java', ['--version'], { directory, environment });
     if (!/^(?:openjdk|java) 21(?:\.|\s)/.test(version)) throw new Error(`Symbolic checking requires Java 21; found ${version.split('\n')[0]}. Put Java 21 on PATH.`);
+    // The pinned Apalache distribution is unpacked from a checksummed tarball.
+    try { probe('tar', ['--version'], { directory, environment }); }
+    catch (error) { throw new Error(`Symbolic checking requires tar to unpack the pinned Apalache archive. ${error.message}`); }
   }
   if (targets.some(name => name.startsWith('integration-'))) probe('docker', ['info', '--format', '{{.ServerVersion}}'], { directory, environment });
   if (targets.includes('package-floor')) {
@@ -155,64 +199,86 @@ export function checkPrerequisites(target, { directory = root, environment = pro
   }
 }
 
+// Scan rather than only tail: a failed subtest can precede many passes.
+// Retained lines and printed text stay bounded even for malformed or
+// oversized JSONL. Each failure receives its own budget (a header plus the
+// last lines buffered for that test), so one noisy failure cannot starve the
+// others; failures beyond the cap are counted rather than dropped silently.
+const excerptLimits = { failures: 24, bufferLines: 40, tailLines: 20, pendingTests: 64, line: 32 * 1024, output: 12 * 1024 };
+const crashMarker = /(?:--- FAIL:|panic:|fatal error:|DATA RACE)/;
+async function failureExcerpt(path) {
+  const { createReadStream } = await import('node:fs');
+  const selected = [], tail = [], pending = new Map();
+  let line = '', truncated = false, failures = 0;
+  const clip = text => text.length > 2048 ? `${text.slice(0, 2048)} … [line truncated]` : text;
+  const consume = raw => {
+    let event;
+    try { event = JSON.parse(raw); } catch { /* Plain or truncated report line. */ }
+    if (typeof event !== 'object' || event === null) event = undefined;
+    // Go 1.24+ reports compiler diagnostics as build-output/build-fail events
+    // keyed by ImportPath; older releases only had Test/Package.
+    const key = event?.Test ?? event?.Package ?? event?.ImportPath ?? 'native process';
+    const action = event?.Action;
+    const hasOutput = typeof event?.Output === 'string';
+    let text;
+    if (event === undefined) text = raw;
+    else if (hasOutput) text = event.Output.trimEnd();
+    // Bare lifecycle events carry no diagnostic text: name the failures, skip the rest.
+    else if (action === 'fail' || action === 'build-fail') text = `[${action} ${key}]`;
+    else return;
+    if (!text.trim()) return;
+    tail.push(clip(text));
+    if (tail.length > excerptLimits.tailLines) tail.shift();
+    if (action === 'output' || action === 'build-output') {
+      // Ordinary buffers keep their most recent lines. A race report is long
+      // and its head names the conflicting accesses, so the marker anchors the
+      // buffer: later lines are counted instead of evicting the head.
+      const buffer = /WARNING: DATA RACE/.test(text) ? { lines: [], anchored: true, omitted: 0 }
+        : pending.get(key) ?? { lines: [], anchored: false, omitted: 0 };
+      if (buffer.lines.length < excerptLimits.bufferLines) buffer.lines.push(clip(text));
+      else if (buffer.anchored) buffer.omitted++;
+      else { buffer.lines.shift(); buffer.lines.push(clip(text)); }
+      pending.delete(key); pending.set(key, buffer);
+      if (pending.size > excerptLimits.pendingTests) pending.delete(pending.keys().next().value);
+    }
+    if (action === 'fail' || action === 'build-fail') {
+      failures++;
+      if (failures <= excerptLimits.failures) {
+        const buffer = pending.get(key);
+        selected.push(`Failed: ${key}`, ...(buffer?.lines ?? []));
+        if (buffer?.omitted) selected.push(`… ${buffer.omitted} more lines for ${key}`);
+      }
+      pending.delete(key);
+    } else if (action === 'pass' || action === 'skip') pending.delete(key);
+    // Crashes may prevent a final Go fail event; plain/truncated lines still
+    // expose the diagnostic instead of turning the excerpt into a JSON dump.
+    // Output belonging to a test is attributed through its fail event only,
+    // so a passing test that merely prints "panic:" is not selected.
+    if (event === undefined && crashMarker.test(text) && selected.length < excerptLimits.failures * excerptLimits.bufferLines) selected.push(clip(text));
+  };
+  for await (const chunk of createReadStream(path, { encoding: 'utf8', highWaterMark: 64 * 1024 })) {
+    let start = 0;
+    for (let end = chunk.indexOf('\n', start); end !== -1; end = chunk.indexOf('\n', start)) {
+      const part = chunk.slice(start, end);
+      truncated ||= line.length + part.length > excerptLimits.line;
+      line += part.slice(0, Math.max(0, excerptLimits.line - line.length));
+      consume(line + (truncated ? ' … [line truncated]' : ''));
+      line = ''; truncated = false; start = end + 1;
+    }
+    const part = chunk.slice(start);
+    truncated ||= line.length + part.length > excerptLimits.line;
+    line += part.slice(0, Math.max(0, excerptLimits.line - line.length));
+  }
+  if (line || truncated) consume(line + (truncated ? ' … [line truncated]' : ''));
+  if (failures > excerptLimits.failures) selected.push(`… ${failures - excerptLimits.failures} more failed tests`);
+  const excerpt = (selected.length ? selected : tail).join('\n');
+  return excerpt.length > excerptLimits.output ? `${excerpt.slice(0, excerptLimits.output)}\n… [diagnostics truncated]` : excerpt;
+}
+
 // No shell pipeline: each child exit status is checked before the next step.
 // Native JSON reports go directly to files, avoiding enormous CI log streams.
 export async function executeSteps(steps, { directory = root, environment = process.env, log = message => console.log(message) } = {}) {
   const baseEnvironment = cleanEnvironment(environment);
-  const failureExcerpt = async path => {
-    // Scan rather than only tail: a failed subtest can precede many passes.
-    // Bound retained lines and printed text even for malformed/oversized JSONL.
-    const { createReadStream } = await import('node:fs');
-    const selected = [], tail = [], pending = new Map();
-    const lineLimit = 32 * 1024, outputLimit = 12 * 1024;
-    let line = '', truncated = false;
-    const keep = (target, text) => {
-      target.push(text.length > 2048 ? `${text.slice(0, 2048)} … [line truncated]` : text);
-      if (target === tail && tail.length > 20) tail.shift();
-    };
-    const consume = raw => {
-      let event;
-      try { event = JSON.parse(raw); } catch { /* Plain or truncated report line. */ }
-      const text = typeof event?.Output === 'string' ? event.Output.trimEnd() : raw;
-      if (!text.trim()) return;
-      keep(tail, text);
-      const key = event?.Test ?? event?.Package ?? 'native process';
-      if (event?.Action === 'output') {
-        const lines = pending.get(key) ?? [];
-        keep(lines, text);
-        if (lines.length > 12) lines.shift();
-        pending.delete(key); pending.set(key, lines);
-        if (pending.size > 64) pending.delete(pending.keys().next().value);
-      }
-      if (event?.Action === 'fail' || event?.Action === 'build-fail') {
-        if (selected.length < 24) {
-          keep(selected, `Failed: ${key}`);
-          for (const text of pending.get(key) ?? []) if (selected.length < 24) keep(selected, text);
-        }
-        pending.delete(key);
-      } else if (event?.Action === 'pass') pending.delete(key);
-      // Crashes may prevent a final Go fail event; plain/truncated lines still
-      // expose the diagnostic instead of turning the excerpt into a JSON dump.
-      if (selected.length < 24 && /(?:--- FAIL:|panic:|fatal error:|DATA RACE)/.test(text)
-          && event?.Action !== 'output') keep(selected, text);
-    };
-    for await (const chunk of createReadStream(path, { encoding: 'utf8', highWaterMark: 64 * 1024 })) {
-      let start = 0;
-      for (let end = chunk.indexOf('\n', start); end !== -1; end = chunk.indexOf('\n', start)) {
-        const part = chunk.slice(start, end);
-        truncated ||= line.length + part.length > lineLimit;
-        line += part.slice(0, Math.max(0, lineLimit - line.length));
-        consume(line + (truncated ? ' … [line truncated]' : ''));
-        line = ''; truncated = false; start = end + 1;
-      }
-      const part = chunk.slice(start);
-      truncated ||= line.length + part.length > lineLimit;
-      line += part.slice(0, Math.max(0, lineLimit - line.length));
-    }
-    if (line || truncated) consume(line + (truncated ? ' … [line truncated]' : ''));
-    const excerpt = (selected.length ? selected : tail).join('\n');
-    return excerpt.length > outputLimit ? `${excerpt.slice(0, outputLimit)}\n… [diagnostics truncated]` : excerpt;
-  };
   for (const step of steps) {
     log(`→ ${step.label}`);
     if (step.remove) {
@@ -271,8 +337,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [target = 'help', ...extra] = process.argv.slice(2);
   if (extra.length) throw new Error('Use node formal/validation.mjs <target>; run make help for targets.');
   if (target === 'help') {
-    console.log(Object.entries(targetDescriptions).map(([name, description]) => `make ${name.padEnd(17)} ${description}`).join('\n'));
-    console.log('\nPrerequisites: frozen pnpm install; Node 24, pinned pnpm; Go 1.27.1 / Quint 0.32.0 / Docker where required.');
+    const width = Math.max(...Object.keys(targetDescriptions).map(name => name.length));
+    console.log(Object.entries(targetDescriptions).map(([name, description]) => `make ${name.padEnd(width)} ${description}`).join('\n'));
+    console.log('\nPrerequisites: frozen pnpm install; Node 24, pinned pnpm; Go 1.27.1 / Docker where required; Quint 0.32.0 for formal-check, formal-generate, fixtures-check, explore and model-check; Java 21 and tar for model-check and ci.');
+    console.log('formal-check is the Quint evidence lane (models, regressions, challenges); the port and mutation lanes read only the formal-generate output and do not wait for it.');
+    console.log('Sharded mutation runs: MUTATION_SHARD=1/3 make mutations-ts (then 2/3, 3/3, on any machines with the same corpus), then make mutations-merge-ts; the merged report is the only complete evidence.');
     console.log('Full local CI: make ci NODE22_BIN=/absolute/path/to/node22/bin/node (exact 22.15.0).');
   } else {
     try { await runTarget(target); }

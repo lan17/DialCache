@@ -654,4 +654,27 @@ module dialcache_effects_conformance {
       and s.loads == 1 and s.loaders == 1 and s.reads == 2 and s.dumps == 1 and s.writes == 1)
     .expect(s.events.select(e => e.event == "miss").foldl(List(), (out, e) => out.append(e.detail)) == List("unclassified"))
 
+  // An expired-reason reply with a zero fence keeps its miss cause but retains
+  // no fence. One source refill is serialized and written; a later read hits it.
+  run expiredZeroFenceReplyRefillsAndIsReadableTest = tenMillisecondFixture
+    .then(replyWith(REPLY_EXPIRED_ZERO_FENCE)).then(beginCall).then(releaseRead)
+    .then(resolveLoader).then(releaseDump).then(releaseWrite)
+    .then(beginCall).then(releaseRead).then(releaseLoad)
+    .expect(s.calls == List(CALL_VALUE, CALL_VALUE) and s.observedFence == 0
+      and s.loads == 1 and s.loaders == 1 and s.reads == 2 and s.dumps == 1 and s.writes == 1)
+    .expect(s.events.select(e => e.event == "miss").foldl(List(), (out, e) => out.append(e.detail)) == List("expired"))
+
+  // A valid future fence survives normalization even with an absent cause. The
+  // accepted source is served but never serialized, so the next read misses again.
+  run absentReplyWithFutureFenceBlocksRefillTest = tenMillisecondFixture
+    .then(replyWith(REPLY_ABSENT_WITH_FENCE)).then(beginCall).then(releaseRead)
+    .expect(s.observedFence == s.wall + FUTURE_BUFFER_MS and s.refill == REFILL_ALLOWED and s.loaders == 1)
+    .then(resolveLoader)
+    .expect(s.calls == List(CALL_VALUE) and s.dumps == 0 and s.writes == 0)
+    .then(beginCall).then(releaseRead)
+    .expect(s.calls == List(CALL_VALUE, CALL_PENDING) and s.loaders == 2
+      and s.loads == 0 and s.dumps == 0 and s.writes == 0)
+    .expect(s.events.select(e => e.event == "miss").foldl(List(), (out, e) => out.append(e.detail))
+      == List("value_absent", "value_absent"))
+
 }

@@ -9,21 +9,43 @@ lists tool prerequisites and focused reproduction commands.
 | Task | Command | Evidence |
 | --- | --- | --- |
 | Routine implementation checks | `make check` | Native tests, coverage, package, docs and source audits |
-| Full portable acceptance | `make formal` | Rust model checks, generated histories, TS and Go replay, exact completion inventories; no Java |
+| Full portable acceptance | `make formal` | Rust model checks, generated histories, TS replay, shared witness evaluation, Go replay, exact completion inventories; no Java |
 | Finite symbolic rules | `make model-check` | Scheduled bounded checks with checksummed standalone Apalache; requires Java 21, `tar` and pinned Quint |
 | Challenge implementation assertions | `make mutations` | Compiling semantic faults tested against both completed ports |
 | Real server behavior | `make integration` | Redis, Valkey, Cluster and cross-language interoperability |
 | Explore another schedule sample | `make explore` | Separate source snapshot, recorded random seed, both-port replay |
 | All required local lanes | `make ci NODE22_BIN=/absolute/path/to/node22/bin/node` | Native, formal, separate symbolic, integration and mutation runs |
 
+`make formal-check` is the Quint evidence lane: typechecks and bounded runs of
+every scheduled model, the public regressions and the model mutation challenges.
+It produces nothing the port lanes consume, so the hosted workflow runs it as a
+`check-models` job beside generation; only the aggregate waits for it.
+`make formal-generate` runs `node formal/witnesses.mjs evaluate --profile all`
+immediately after generation, before either port replays. That shared,
+language-neutral step is the sole producer of `.formal-traces/go-parity-witnesses/`;
+the TypeScript suite only checks the same gate. `make formal-ts`, `make formal-go`,
+`make mutations-ts` and `make mutations-go` depend only on the generated corpus
+and that witness evidence, so the hosted workflow runs them in parallel and the
+aggregate requires all of them.
+
+Within a lane, `run-models.mjs`, `check-model-properties.mjs` and
+`generated-fixtures.mjs` run independent Quint processes concurrently so a
+multi-core runner is not left idle; each process keeps the single Quint thread
+that `execution.json` pins. `QUINT_JOBS` sets how many processes run at once;
+the default is the machine's available parallelism, capped at one process per
+2 GiB of memory because a Quint process that generates a full trace corpus
+peaks near 1.7 GiB. Results do not depend on that number: every process has
+its own seed, inputs and output paths, so the corpus, the fixtures and the
+challenge report are identical for any worker count.
+
 A behavior, model, or replay change requires full validation of its current
 inputs before merge. The default PR workflow runs faster checks; it does not
 enforce this full-validation requirement. The manual full workflow can target a
-PR branch. Its symbolic job runs separately from corpus generation. Its weekly
-run validates the selected `main` revision and includes exploration; a manual
-run can enable the `exploration` option. The aggregate gate requires exploration
-when selected or scheduled. Each PR body should identify the revision and
-completed local or hosted validation.
+PR branch. Its model check and symbolic jobs run separately from corpus
+generation. Its weekly run validates the selected `main` revision and includes
+exploration; a manual run can enable the `exploration` option. The aggregate
+gate requires exploration when selected or scheduled. Each PR body should
+identify the revision and completed local or hosted validation.
 
 ## Reading a completion report
 
@@ -56,6 +78,49 @@ must come from a semantic assertion or invariant counterexample. A tool failure,
 missing witness, crash or timeout is a failed measurement. The selected fault
 catalogs and per-run reports define the denominator; do not infer a percentage
 of all possible defects from their scores.
+
+The model catalog in `execution.json` covers every scheduled model: currently 64
+challenges over 62 distinct faults, with no waivers. Its report distinguishes
+those two counts and marks a filtered `--only` run as partial; only the complete
+run is evidence.
+
+The weekly full workflow shards each mutation lane over three runners. The Go
+lane bounded the whole run: its 13 mutants replay the generated cohort in strict
+sequence, 25 minutes on a fast runner and 47 to 48 minutes on the slow class
+(runs 34669546872 and 34670045249; the TypeScript lane took 17). Each shard
+measures every unmodified baseline itself, so its evidence stands on the
+environment it ran in, then measures a contiguous third of the catalog. A merge
+job per language reads the shard reports and writes the complete report. It
+refuses a missing, duplicated or failed shard, shards whose source, catalog,
+corpus or witness fingerprints or baseline results differ, and coverage that is
+not the catalog exactly once in order. Only the merged report is complete
+evidence; a shard report is never `complete`. Shard budgets are 30 minutes
+(TypeScript) and 40 (Go): the baselines plus four or five mutants, doubled for a
+slow runner. The Go mutation runner still bounds each `go test` invocation at
+8 minutes to catch a hung mutant, not to pace a slow runner. Locally,
+`MUTATION_SHARD=1/3 make mutations-ts` (then `2/3` and `3/3`) reproduces one
+shard under `.formal-traces/semantic/shards/1-of-3/`, and
+`make mutations-merge-ts` assembles the report that an unsharded
+`make mutations-ts` writes; the Go targets mirror this.
+
+The workflow's `formal-full` aggregate job retains a small `formal-summary` artifact for 90
+days: both completion and context reports, the Go replay summary, the model
+properties `report.json` from the `check-models` job, the symbolic `report.json`
+and, on scheduled or exploration runs, each exploration `report.json`. Trace
+corpora, model check counterexamples and mutation evidence keep the 14-day
+retention.
+
+When a redirected native step fails, the validation runner behind the Make
+targets prints an excerpt of its JSONL report instead of the whole file. Each
+failed test or package receives its own budget (a `Failed:` header plus up to 40
+of its most recent buffered lines); failures beyond 24 are counted in a trailing
+`… K more failed tests` line. Go 1.24+ `build-output`/`build-fail` events are
+keyed by `ImportPath`, so compiler errors appear under the failing import path.
+A `WARNING: DATA RACE` line anchors the buffer so the report head (the
+conflicting accesses) is kept and later lines are counted. Only plain, non-JSON
+lines matching a crash marker (`--- FAIL:`, `panic:`, `fatal error:`,
+`DATA RACE`) are promoted directly; a passing test that merely prints such text
+is never reported as a failure.
 
 ## Exploratory runs
 
@@ -101,15 +166,33 @@ regressions now anchor the missing schedules:
 | recovery / `recovery-memoizes-both-requests` | [recoveredFlightMemoIsReusedByBothRequestsTest](./dialcache-recovery-conformance.qnt) |
 
 The same seed passed both ports and all mandatory witnesses on snapshot
-`97f77529d693c4d39baa124a2bde2142c8856bc1`. That exploration was not rerun on
-`87c5e6e25784f188125403db4c46295d6e5bea95`, whose later changes include assertion
-diagnostics. This records the discovery and its regression anchors; it does not
-claim that named regressions alone cover every required witness.
+`97f77529d693c4d39baa124a2bde2142c8856bc1`. A second fresh seed,
+`0xfe678a03def8b0f2`, passed both ports and all 435 required labels on the
+merged revision `61d55cfec0f5f124ce4cbe46ad9386b310bfaf75` in hosted run
+[34646653122](https://github.com/lan17/DialCache/actions/runs/34646653122).
+This records discoveries and their regression anchors; it does not claim that
+named regressions alone cover every required witness.
+
+Fresh seed `0x8d654b2dd2257c4d` in hosted run
+[34670045249](https://github.com/lan17/DialCache/actions/runs/34670045249)
+replayed both ports but missed the effects witness
+`normalized-reply-allows-refill:13` after 552 histories. Counting required
+labels per history over the pinned corpus then found nine more labels reached by
+at most three sampled histories and by no exported regression. These
+public-action regressions now anchor all of them:
+
+| Profile / fragile witness | Named regression |
+| --- | --- |
+| effects / `normalized-reply-allows-refill:13`, `reply:13`, `miss:expired` | [expiredZeroFenceReplyRefillsAndIsReadableTest](./dialcache-effects-conformance.qnt) |
+| effects / `normalized-reply-fences-refill:12`, `normalized-fence-blocks-publication` | [absentReplyWithFutureFenceBlocksRefillTest](./dialcache-effects-conformance.qnt) |
+| policy / `remote-value:7`, `remote-value:8`, `remote-value:9` | [falsyRemoteValuesAreServedFromRemoteTest](./dialcache-policy-conformance.qnt) |
+| layers / `source-publication-probed-in-all-three-layers` | [untrackedSourcePublicationIsProbedInAllThreeLayersTest](./dialcache-layers-conformance.qnt) |
+| independent / `distinct-retained-recovery-values` | [independentRecoveriesServeDistinctAcquiredSnapshotsTest](./dialcache-independent-conformance.qnt) |
 
 ## Historical results
 
 The merged baseline's detailed run logs remain in
-[the versioned record from PR #161](https://github.com/lan17/DialCache/blob/7729c3f461c1d6f631b528ea06a81edca3ae787c/formal/VALIDATION.md).
+[the versioned record from PR #161](https://github.com/lan17/DialCache/blob/fa4ef77489fd124213b5877479f69e2086c1aa90/formal/VALIDATION.md).
 Current results belong in PR summaries and uploaded artifacts. This guide
 explains how to produce and interpret evidence; it is not an accumulating log
 of previous executions or machine-specific temporary paths.

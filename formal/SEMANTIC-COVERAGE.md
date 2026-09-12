@@ -62,15 +62,23 @@ histories against those records.
 `make model-check` runs the symbolic checks declared in `execution.json` through
 checksummed standalone Apalache; see the [tool prerequisites](./README.md#generating-and-replaying-behavior).
 This lane is separate from `make formal` and included in `make ci`.
-The model-property challenge catalog in
-[model-property-challenges.mjs](./model-property-challenges.mjs) runs with the
-scheduled model checks and records its independent baseline and counterexample
-for each fault. Model receipts preserve the timestamp, captured policy and owner
-at acceptance. Boundary properties can challenge an eligibility helper by
-stating the inequality directly. Connection and composition properties may
-reuse that helper while checking independently captured inputs, ownership and
-history; they do not thereby validate the helper itself. Each challenge's named
-property and scope determine what its detection establishes.
+The model-property challenge catalog is the `challenges` array of
+[execution.json](./execution.json). It runs once at the end of the scheduled
+model checks and records an independent baseline and counterexample for each
+fault. Count challenges and distinct faults separately: a challenge is one
+(fault, model, invariant) measurement, while a distinct fault is one
+`(source, before, after)` mutation. The same shared-rule fault may be measured
+against several models when each entry carries a `measures` note, so the
+catalog currently reports 64 challenges over 62 distinct faults. Every scheduled
+model owns at least one challenge; a `challengeWaiver` on a model entry is a
+documented gap, not coverage. A detected challenge shows that the named
+invariant rejects that one deliberate change under the manifest bounds. Model
+receipts preserve the timestamp, captured policy and owner at acceptance.
+Boundary properties can challenge an eligibility helper by stating the
+inequality directly. Connection and composition properties may reuse that
+helper while checking independently captured inputs, ownership and history;
+they do not thereby validate the helper itself. Each challenge's named property
+and scope determine what its detection establishes.
 
 Keep structural invariants because they expose broken model state, but report
 semantic obligations and mutation sensitivity separately. Sharing transition
@@ -83,7 +91,7 @@ establish a whole-system refinement theorem.
 
 A case links to a specific required witness, not merely an action name or the presence of a test file. For example, read-budget precedence requires a first read before runtime policy changes, late source fulfillment and rejection have separate witnesses, and failed recovery requires the original source-error identity. Default-off logging requires an actually omitted flag; a separate exported regression distinguishes omission from an explicit false runtime reply. Multiple witness references are all required, but do not imply that all those events occurred in one history; use a dedicated interaction witness for that claim.
 
-Witness classification also has negative controls in `test/formal-witness-boundaries.test.ts` and `test/formal-witness-attribution.test.ts`. A matching fixture or intermediate phase with a missing or contradictory public consequence must not count. These controls challenge the classifier; they are neither positive cache cases nor mutation-detection credit.
+Witness classification lives in the language-neutral modules under [`formal/replay/witnesses/`](./replay/witnesses/): one classifier module per profile plus shared trace, label and evidence helpers, run by `node formal/witnesses.mjs evaluate` to write the evidence every port consumes (see the [witness evidence contract](./PORTING.md#witness-evidence)). Its negative controls remain TypeScript tests: `test/formal-witness-boundaries.test.ts`, `test/formal-witness-attribution.test.ts` and the per-profile `test/formal-*-witnesses.test.ts` files import those shared classifiers directly. A matching fixture or intermediate phase with a missing or contradictory public consequence must not count. These controls challenge the classifier; they are neither positive cache cases nor mutation-detection credit.
 
 ## Behavioral mutation comparison
 
@@ -111,16 +119,29 @@ Use the [shared Make targets and pinned prerequisites](./README.md#generating-an
 
 ```sh
 make formal        # Regenerate and complete prepared TS and Go replay.
-make mutations     # Validate those reports, then measure both fault catalogs.
+make mutations     # Measure both fault catalogs over the generated corpus.
 ```
 
-`make mutations-ts` requires current full TS completion. `make mutations-go`
-requires both TS and Go completion; it cannot run until Go replay finishes.
-TS mutation measurement may run alongside Go replay after `make formal-corpus`.
-The targets reject missing, incomplete or stale completion evidence by checking
-its current source, corpus and witness fingerprints. Raw measurement programs
-remain `measure-semantics.mjs` and `measure-go-semantics.mjs`; the Make targets
-supply the preflight checks used by hosted full validation.
+`make mutations-ts` and `make mutations-go` depend only on the corpus produced
+by `make formal-generate` and its shared witness evidence, not on either port's
+completion report. Hosted CI runs both mutation lanes in parallel with both
+parity lanes off one generation job; the aggregate requires all of them. Each
+report records the source, corpus and witness fingerprints it measured. Raw
+measurement programs remain `measure-semantics.mjs` and
+`measure-go-semantics.mjs`; the Make targets supply the pinned prerequisite
+checks used by hosted full validation.
+
+Hosted runs shard each lane three ways with `MUTATION_SHARD=<index>/<count>`.
+A shard reruns the compile check, every unmodified baseline and the witness
+evaluation before its contiguous slice of the catalog, and writes an incomplete
+report under `shards/<index>-of-<count>/`. `make mutations-merge-ts` and
+`make mutations-merge-go` (`merge-mutation-reports.mjs`) assemble the complete
+report from those shards and refuse any inconsistency: a missing or duplicated
+shard, a shard that failed or claims completion, differing fingerprints or
+baseline results, or mutations that do not cover the catalog exactly once in
+order. The detection summary and the required-detection gate are computed by the
+functions the single-process run uses, so the merged report is the same evidence
+at the same strictness; it is the only report the workflow accepts.
 
 The manual/weekly workflow runs the full corpus and fault checks. PR checks
 retain native/race/smoke/audit and real-server integration, plus fixture
@@ -128,7 +149,7 @@ recomputation when generation inputs change. A behavior/model change still
 needs full validation before merge; release and new-port acceptance need the
 same full evidence. `make check` alone supplies no mutation or full-parity pass.
 
-The runner clears inherited trace selectors, uses the complete generated directories, and leaves source files untouched. It writes `.formal-traces/semantic/report.json` and `report.md`, per-cohort assertion reports/logs, and baseline witness evidence. JSON records completion status, elapsed time, revision, Node version, source/configuration/input hashes, exact corpus hash, cohort sizes, detections, survivors, and failing test names. An interrupted or failed run is not a completed measurement. The full workflow retains these files in `typescript-semantic-evidence`, alongside the shared `formal-traces` artifact; restore the measurement artifact into `.formal-traces/semantic/` for reproduction.
+The runner clears inherited trace selectors, uses the complete generated directories, and leaves source files untouched. It writes `.formal-traces/semantic/report.json` and `report.md`, per-cohort assertion reports/logs, and baseline witness evidence; in a sharded run each shard's cohort reports, logs and witness evidence sit under `shards/<index>-of-<count>/` beneath the merged `report.json` and `report.md`. JSON records completion status, elapsed time, revision, Node version, source/configuration/input hashes, exact corpus hash, cohort sizes, detections, survivors, and failing test names. An interrupted or failed run is not a completed measurement. The full workflow retains these files in `typescript-semantic-evidence`, alongside the shared `formal-traces` artifact; restore the measurement artifact into `.formal-traces/semantic/` for reproduction.
 
 Each catalog entry's `requiredDetections` is a regression gate. The local mutation target and full workflow fail if a required fault survives. Newly detected faults remain visible as improvements; update the required set after inspecting the result. Source edits must match exactly once, so implementation drift requires reviewing the mutation rather than silently skipping it.
 
@@ -137,10 +158,12 @@ To expand assurance, add a test/doc-derived case and precise executable evidence
 ## Model properties and cross-language execution
 
 `check-model-properties.mjs` challenges shared boundaries and profile connections
-using the reviewed catalog. It records a passing baseline and invariant
-counterexample for each compiling fault, along with source fingerprints, tools
-and bounds. This measures the specification separately from implementation
-mutation detection.
+using the reviewed catalog, which it reads from the `challenges` array in
+`execution.json`. It validates the whole manifest before a complete run, records
+a passing baseline and invariant counterexample for each compiling fault along
+with source fingerprints, tools and bounds, and fingerprints `execution.json` as
+`catalogSha256` in its report. This measures the specification separately from
+implementation mutation detection.
 
 Every effects replay also runs `assertEffectsHistory` over actual external source starts/settlements and public fallback/write observations. Its C23/C25/C26 checks cover source-relative budget/duration, strict deadline acceptance, and a preceding accepted success before publication. It consumes no expected model phases and permits pending prefixes. An additional causal monitor in both drivers ties writes to their actual invocation/source callback and rejects publication after that source settled too late; negative tests distinguish property failures from malformed monitor inputs. This is a bounded connection for selected properties, not full model refinement or liveness proof.
 

@@ -4,6 +4,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writ
 import { resolve, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { fingerprintFiles, gateDetections, languages, partitionMutations, shardDirectory, shardFromArguments } from './mutation-reports.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -99,36 +100,38 @@ export function evaluateGoTestEvents(lines, exitCode) {
     executedTests: leaves };
 }
 
-function fingerprint(directory, paths) {
-  const files = [];
-  const visit = path => {
-    for (const entry of readdirSync(resolve(directory, path), { withFileTypes: true })) {
-      if (entry.isDirectory()) visit(`${path}/${entry.name}`);
-      else if (entry.isFile()) files.push(`${path}/${entry.name}`);
-    }
-  };
-  for (const path of paths) visit(path);
-  files.sort();
-  const digest = createHash('sha256');
-  for (const path of files) digest.update(path).update('\0').update(readFileSync(resolve(directory, path))).update('\0');
-  return { files: files.length, sha256: digest.digest('hex') };
-}
 function union(generated, fixed) {
   return { state: generated.failed + fixed.failed ? 'detected' : 'survived', passed: generated.passed + fixed.passed,
     failed: generated.failed + fixed.failed, failingTests: [...generated.failingTests, ...fixed.failingTests], components: ['generated', 'fixed'] };
 }
 
-export function measureGoSemantics() {
-  const output = resolve(root, '.formal-traces/go-semantic');
+// --shard=<index>/<count> measures a contiguous slice of the catalog after the
+// compile check and the full baselines; the default is the complete
+// single-process measurement.
+export function measureGoSemantics({ shard = { index: 1, count: 1 } } = {}) {
+  const language = languages.go;
+  const reportRoot = resolve(root, language.output);
+  const output = shardDirectory(reportRoot, shard);
   const started = Date.now();
-  mkdirSync(output, { recursive: true });
+  mkdirSync(reportRoot, { recursive: true });
   // Invalidate old completion before loading catalog, dependencies, or evidence.
-  const report = { schemaVersion: 1, complete: false, startedAt: new Date(started).toISOString(), baselines: {}, mutations: [] };
+  // A shard also invalidates the merged report above it, which is evidence only
+  // while every shard beneath it is current.
+  const report = { schemaVersion: 1, complete: false, ...(shard.count > 1 ? { shard: { index: shard.index, count: shard.count } } : {}), startedAt: new Date(started).toISOString(), baselines: {}, mutations: [] };
   const save = () => { report.elapsedSeconds = Math.round((Date.now() - started) / 1000); writeFileSync(resolve(output, 'report.json'), JSON.stringify(report, null, 2) + '\n'); };
-  save(); rmSync(resolve(output, 'report.md'), { force: true });
+  if (output !== reportRoot) {
+    writeFileSync(resolve(reportRoot, 'report.json'), JSON.stringify({ schemaVersion: 1, complete: false, startedAt: report.startedAt }, null, 2) + '\n');
+    rmSync(output, { recursive: true, force: true });
+    mkdirSync(output, { recursive: true });
+  }
+  save(); rmSync(resolve(reportRoot, 'report.md'), { force: true });
   const workspace = mkdtempSync(resolve(tmpdir(), 'dialcache-go-semantic-'));
   const go = process.env.GO_BIN ?? 'go';
-  const timeout = 180_000;
+  // Bounds a hung mutant, not a slow runner: hosted runners vary by about
+  // 2x between runs (run 34660598461 replayed the generated cohort in 104 s;
+  // run 34666226055 had not finished it after 150 s). One timeout aborts the
+  // whole measurement, so a generous bound costs at most one wait.
+  const timeout = 540_000;
   try {
     // Copies preserve repo-relative witness definition paths while mutations
     // remain completely outside the shared checkout. No git resets or writes
@@ -154,6 +157,8 @@ export function measureGoSemantics() {
       }
     }
     for (const counterpart of typescript.mutations) if (!catalog.mutations.some(m => m.typescriptMutation === counterpart.id)) throw new Error(`missing TypeScript counterpart ${counterpart.id}`);
+    const selected = partitionMutations(catalog.mutations, shard);
+    if (shard.count > 1) report.shard = { index: shard.index, count: shard.count, mutationIds: selected.map(m => m.id) };
     const ordinaryFiles = readdirSync(moduleDirectory).filter(file => file.endsWith('_test.go') && !infrastructureTestFile.test(file)).sort();
     const ordinary = ordinaryFiles.flatMap(file => [...readFileSync(resolve(moduleDirectory, file), 'utf8').matchAll(/^func (Test\w+)\(t \*testing\.T\)/gm)].map(match => match[1]));
     if (!ordinary.length || new Set(ordinary).size !== ordinary.length) throw new Error('invalid ordinary Go test selection');
@@ -171,9 +176,9 @@ export function measureGoSemantics() {
     report.go = spawnSync(go, ['version'], { cwd: moduleDirectory, encoding: 'utf8' }).stdout?.trim();
     report.node = process.version;
     report.catalogSha256 = hash(readFileSync(catalogPath));
-    report.inputs = fingerprint(workspace, ['formal', 'go', 'test', 'src']);
-    report.corpus = fingerprint(root, ['.formal-traces/conformance', '.formal-traces/effects', '.formal-traces/features', '.formal-traces/regressions']);
-    report.witnesses = fingerprint(witnessDirectory, ['.']);
+    report.inputs = fingerprintFiles(workspace, language.inputs);
+    report.corpus = fingerprintFiles(root, ['.formal-traces/conformance', '.formal-traces/effects', '.formal-traces/features', '.formal-traces/regressions']);
+    report.witnesses = fingerprintFiles(witnessDirectory, ['.']);
     report.sourceSha256 = Object.fromEntries([...originals].map(([path, text]) => [path, hash(text)]));
     report.selections = cohorts;
     report.ordinaryFiles = ordinaryFiles;
@@ -183,7 +188,7 @@ export function measureGoSemantics() {
       if (result.error || result.signal || result.status !== 0) throw new Error(`${label}: noncompiling mutant/baseline, not detection; see compile log`);
     };
     const run = (label, cohort, baseline) => {
-      const result = spawnSync(go, ['test', '-json', '-count=1', '-timeout=150s', '-run', `^(${cohorts[cohort].join('|')})$`, '.'], {
+      const result = spawnSync(go, ['test', '-json', '-count=1', '-timeout=480s', '-run', `^(${cohorts[cohort].join('|')})$`, '.'], {
         cwd: moduleDirectory, env: { ...env, DIALCACHE_PROTOCOL_CORPUS: cohort === 'generated' ? 'generated' : 'fixed' }, encoding: 'utf8', timeout, maxBuffer: 128 * 1024 * 1024,
       });
       writeFileSync(resolve(output, `${label}-${cohort}.jsonl`), result.stdout ?? '');
@@ -197,13 +202,16 @@ export function measureGoSemantics() {
       writeFileSync(resolve(output, `${label}-${cohort}.json`), JSON.stringify(parsed, null, 2) + '\n');
       return parsed;
     };
+    // Every shard compiles and measures every baseline itself: its evidence
+    // stands on the environment it ran in, and the merge refuses shards whose
+    // baselines differ.
     compile('baseline');
     for (const cohort of Object.keys(cohorts)) {
       report.baselines[cohort] = run('baseline', cohort, true);
       console.log(`baseline ${cohort}: ${report.baselines[cohort].passed} passing leaf tests`); save();
     }
     report.baselines.portable = union(report.baselines.generated, report.baselines.fixed);
-    for (const mutation of catalog.mutations) {
+    for (const mutation of selected) {
       const editedPaths = new Set();
       try {
         for (const edit of mutation.edits) {
@@ -219,23 +227,21 @@ export function measureGoSemantics() {
         console.log(`${mutation.id}: ${Object.entries(result.cohorts).map(([name, value]) => `${name}=${value.state}(${value.failed})`).join(', ')}`); save();
       } finally { for (const path of editedPaths) writeFileSync(resolve(workspace, path), originals.get(path)); }
     }
-    const regressions = catalog.mutations.flatMap(m => m.requiredDetections.filter(cohort => report.mutations.find(result => result.id === m.id).cohorts[cohort].state !== 'detected').map(cohort => `${m.id}/${cohort}`));
-    report.detection = Object.fromEntries(['ordinary', 'generated', 'fixed', 'portable'].map(cohort => [cohort, {
-      detected: report.mutations.filter(m => m.cohorts[cohort].state === 'detected').length, total: report.mutations.length,
-      survivors: report.mutations.filter(m => m.cohorts[cohort].state === 'survived').map(m => m.id),
-    }]));
-    report.requiredDetectionRegressions = regressions;
-    if (regressions.length) throw new Error(`missing required detections: ${regressions.join(', ')}`);
-    report.complete = true; save();
-    const lines = ['# Go semantic mutation measurement', '', `Completed in ${report.elapsedSeconds}s. Counts measure this named fault catalog and exact corpus, not universal equivalence.`, '',
-      '| Mutation | Contract case | Ordinary | Quint generated | Fixed supplement | Full portable |', '| --- | --- | --- | --- | --- | --- |',
-      ...report.mutations.map(m => `| ${m.id} | ${m.case} | ${m.cohorts.ordinary.state} | ${m.cohorts.generated.state} | ${m.cohorts.fixed.state} | ${m.cohorts.portable.state} |`), '',
-      'Full JSON records snapshot/corpus/witness fingerprints, selected tests, actual passing/failing leaf counts, and assertion diagnostics. Compilation errors, crashes, timeouts, missing witnesses, and skipped executions cannot count as detections.', ''];
-    writeFileSync(resolve(output, 'report.md'), lines.join('\n'));
+    if (shard.count > 1) {
+      // A shard gates its own slice and stays incomplete; the merge recomputes
+      // the gate and the detection summary over the whole catalog.
+      gateDetections(language, report, selected, { directory: root, summarize: false });
+      save();
+      console.log(`Shard ${shard.index}/${shard.count} measured ${selected.length} mutations: ${relative(root, output)}/report.json; merge with node formal/merge-mutation-reports.mjs go`);
+      return report;
+    }
+    gateDetections(language, report, catalog.mutations, { directory: root });
+    save();
+    writeFileSync(resolve(output, 'report.md'), language.markdown(report));
     return report;
   } catch (error) { report.error = String(error); save(); throw error; }
   finally { rmSync(workspace, { recursive: true, force: true }); }
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  try { measureGoSemantics(); } catch (error) { console.error(error); process.exitCode = 1; }
+  try { measureGoSemantics({ shard: shardFromArguments(process.argv.slice(2)) }); } catch (error) { console.error(error); process.exitCode = 1; }
 }
