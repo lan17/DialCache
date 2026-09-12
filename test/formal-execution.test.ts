@@ -42,8 +42,8 @@ const validate = (value: unknown) => validateExecution(value);
 
 describe("formal execution schedule", () => {
   it("accounts for all models, selected invariants, regressions, generated traces and challenges without Quint", () => {
-    expect(validate(manifest())).toEqual({ models: 32, libraries: 5, profiles: 15, invariants: 217, regressions: 401,
-      generatedTraces: 5280, exportedRegressionTraces: 234, vectorModels: 4, generatedVectors: 1631,
+    expect(validate(manifest())).toEqual({ models: 32, libraries: 5, profiles: 15, invariants: 217, regressions: 406,
+      generatedTraces: 5280, exportedRegressionTraces: 239, vectorModels: 4, generatedVectors: 1631,
       challenges: 67, distinctFaults: 64, challengedModels: 32, waivedModels: 0 });
   });
 
@@ -118,9 +118,9 @@ describe("formal execution schedule", () => {
       const runs = classifyRuns(scanDeclarationBodies(readFileSync(root + model.path, "utf8")));
       expect([...runs.publicOnly].sort(), model.path).toEqual([...model.replayRegressions!].sort());
     }
-    expect(current.models.find(model => model.profile === "effects")!.replayRegressions).toHaveLength(40);
+    expect(current.models.find(model => model.profile === "effects")!.replayRegressions).toHaveLength(42);
     expect(current.models.find(model => model.profile === "shadow")!.replayRegressions).toHaveLength(7);
-    expect(current.models.find(model => model.profile === "independent")!.replayRegressions).toHaveLength(6);
+    expect(current.models.find(model => model.profile === "independent")!.replayRegressions).toHaveLength(7);
   });
 
   it("forces every public-only run to be exported and keeps state-patching runs out of replay", () => {
