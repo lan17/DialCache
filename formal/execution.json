@@ -1345,6 +1345,7 @@
       "reproducer": {
         "kind": "exported-regression",
         "run": "localHitDoesNotRenewInsertionTtlTest",
+        "failure": "s.o.calls == List(VALUE_ONE, VALUE_ONE, CALL_PENDING) and s.o.loaders == 2",
         "family": "inclusive-expiry-boundary",
         "profiles": [
           "policy"
@@ -1517,6 +1518,7 @@
       "reproducer": {
         "kind": "exported-regression",
         "run": "c0AtExactFreshnessBoundaryRefillsTest",
+        "failure": "s.o.calls == List(VALUE_TWO, VALUE_TWO) and s.o.loads == 1 and s.o.dumps == 1",
         "family": "inclusive-freshness-boundary",
         "profiles": [
           "shadow"
@@ -1751,6 +1753,7 @@
       "reproducer": {
         "kind": "exported-regression",
         "run": "fullInstanceDoesNotBlockOtherInstanceTest",
+        "failure": "s.o.loaders == 2 and s.o.shadow == List(\"dropped\")",
         "family": "capacity-off-by-one",
         "profiles": [
           "admission"
@@ -1877,6 +1880,7 @@
       "reproducer": {
         "kind": "exported-regression",
         "run": "fractionalInsertionExpiresAtWholeMillisecondTest",
+        "failure": "s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_TWO) and s.o.loaders == 2",
         "family": "sub-millisecond-expiry-grid",
         "profiles": [
           "local-clock"
@@ -1921,14 +1925,31 @@
       "after": "observed - created < ceiling",
       "measures": "Repeats the recovery-future-candidate fault against stale-recovery: the model keeps no future check of its own on the initial-read path, so a shared age rule that stops rejecting future stamps must be caught by this model's read receipt.",
       "reproducer": {
-        "kind": "model-run",
-        "run": "futureFrameIsNotRetainedTest",
+        "kind": "exported-regression",
+        "run": "wallRollbackRejectsFutureRemoteFrameTest",
+        "model": "formal/dialcache-policy-conformance.qnt",
+        "failure": "s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.loaders == 2",
         "family": "future-timestamp-accepted",
         "profiles": [
-          "formal/dialcache-stale-recovery.qnt"
+          "formal/dialcache-stale-recovery.qnt",
+          "recovery",
+          "policy",
+          "shadow"
         ],
-        "exclusions": {},
-        "scope": "The stale-recovery model has no driver profile; its read receipt and candidate classification are model state no driver observes. The same shared-rule fault reaches the recovery, policy and shadow profiles through their exported regressions futureFrameDoesNotCarryMissFenceTest, wallRollbackRejectsFutureRemoteFrameTest and futureDarkAcquisitionReportsOffsetAndFillsMissTest, which pin the portable consequence natively."
+        "exclusions": {
+          "core": "Evaluates no age judgment from cache-rules, so ageBeforeCeiling is unreachable.",
+          "effects": "Uses only deadlinePendingAt and fenceAllows from cache-rules; no age judgment is evaluated.",
+          "scope": "Evaluates no age judgment from cache-rules, so ageBeforeCeiling is unreachable.",
+          "admission": "Uses only deadlinePendingAt from cache-rules; no age judgment is evaluated.",
+          "layers": "Uses only fenceAllows from cache-rules; no age judgment is evaluated.",
+          "independent": "Seeds stamp frames at the wall minus a non-negative age and the clock only advances, so no history observes a future stamp.",
+          "recovery-read": "Seeds stamp frames at the wall minus a non-negative age and the wall only advances; the unsafe-timestamp seed is rejected as an unsupported frame before any age judgment, so no history observes a future stamp.",
+          "local-failure": "Evaluates no age judgment from cache-rules, so ageBeforeCeiling is unreachable.",
+          "runtime-boundaries": "Evaluates no age judgment from cache-rules, so ageBeforeCeiling is unreachable.",
+          "shadow-layers": "Remote frames are stamped from the monotonic job clock at write time or seeded at a non-negative age, so no history observes a future stamp.",
+          "local-clock": "Uses only localEntryLiveOnGrid from cache-rules; no age judgment is evaluated.",
+          "source-budgets": "Uses only localEntryLiveAt and sourceAcceptsAt from cache-rules; no age judgment is evaluated."
+        }
       }
     },
     {
@@ -1942,6 +1963,7 @@
       "reproducer": {
         "kind": "model-run",
         "run": "unknownLegacyZeroPrefixRemainsUntouchedTest",
+        "failure": "result.read.bytes == List(0, 3, 255)",
         "family": "escape-prefix-over-consumed",
         "profiles": [
           "formal/dialcache-envelope-vectors.qnt"
@@ -1961,6 +1983,7 @@
       "reproducer": {
         "kind": "exported-regression",
         "run": "defaultSourceBudgetExpiresAtSixtySecondsTest",
+        "failure": "s.o.calls == List(DEADLINE_ERROR, CALL_PENDING) and s.o.loaders == 2",
         "family": "inclusive-deadline-boundary",
         "profiles": [
           "source-budgets"

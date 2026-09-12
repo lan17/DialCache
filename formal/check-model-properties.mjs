@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readExecution, validateExecution } from './execution.mjs';
+import { readExecution, reproducerCheckpoint, validateExecution } from './execution.mjs';
 import { printGroup, resolveConcurrency, runPool, seconds, spawnBuffered } from './quint-pool.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -22,28 +22,45 @@ export function validatePropertyResult(result, exitCode, expectation) {
   }
 }
 
-// A reproducer is one named run executed with `quint test --match=^run$`. The
-// clean model must report the run as passed; the mutant must exit 1 and report
-// that same run as failed, so a compile error, a run the pattern never selected
-// or an unrelated failure is not detection. `failure` records the Quint error
-// code that ended the run (for example QNT508, an expect that did not hold).
+// A reproducer is one named run plus two probes cut from it at the declared
+// checkpoint, executed together with `quint test --match=^(run|probes)$`. The
+// clean model must report all three passed. The mutant must exit 1 and report
+// the run failed, the chain before the checkpoint passed and the chain through
+// it failed because its expect did not hold: a compile error, a run the pattern
+// never selected, a step the fault disables or a different expectation is not
+// detection. `code` records the Quint error code of that checkpoint failure.
 const escapeRegExp = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const EXPECT_FAILED = 'Expect condition does not hold true';
+export const probeNames = run => ({ before: `${run}BeforeCheckpointProbe`, through: `${run}ThroughCheckpointProbe` });
 export function validateReproducerResult(output, exitCode, run, expectation) {
   if (!['baseline', 'mutant'].includes(expectation)) throw new Error('Unknown model measurement expectation');
   if (typeof output !== 'string' || typeof run !== 'string' || !run) throw new Error('Reproducer output and run name are required');
-  const name = escapeRegExp(run);
-  const passed = new RegExp(`^\\s*ok ${name} passed \\d+ test\\(s\\)$`, 'm').test(output);
-  const failed = new RegExp(`^\\s*\\d+\\) ${name} failed after \\d+ test\\(s\\)$`, 'm').test(output);
-  if (!passed && !failed) throw new Error(`Reproducer ${run} did not run: the output names it neither passed nor failed`);
+  const outcome = name => {
+    const escaped = escapeRegExp(name);
+    const passed = new RegExp(`^\\s*ok ${escaped} passed \\d+ test\\(s\\)$`, 'm').test(output);
+    const failed = new RegExp(`^\\s*\\d+\\) ${escaped} failed after \\d+ test\\(s\\)$`, 'm').test(output);
+    if (passed === failed) return undefined;
+    const error = failed ? new RegExp(`^\\s*\\d+\\) ${escaped}:\\s*\\n\\s*Error \\[(QNT\\d+)\\]: (.*)$`, 'm').exec(output) : undefined;
+    return { passed, code: error?.[1], message: error?.[2]?.trim() };
+  };
+  const names = probeNames(run);
+  const results = { run: outcome(run), before: outcome(names.before), through: outcome(names.through) };
+  for (const [part, result] of Object.entries(results)) {
+    if (!result) throw new Error(`Reproducer ${run} did not run: the output names its ${part === 'run' ? 'run' : `${part}-checkpoint probe`} neither passed nor failed`);
+  }
   if (expectation === 'baseline') {
-    if (exitCode !== 0 || !passed || failed) throw new Error(`Reproducer ${run} must pass on the unmodified model`);
+    if (exitCode !== 0 || Object.values(results).some(result => !result.passed)) throw new Error(`Reproducer ${run} must pass on the unmodified model`);
     return { status: 'passed' };
   }
-  if (exitCode === 0 || passed) throw new Error(`Reproducer ${run} passes under the fault: this history does not distinguish it`);
-  if (exitCode !== 1 || !failed) throw new Error(`Reproducer ${run} ended abnormally (exit ${exitCode}) instead of failing its own run`);
-  const code = /Error \[(QNT\d+)\]/.exec(output);
-  if (!code) throw new Error(`Reproducer ${run} failed without a Quint run error code`);
-  return { status: 'failed', failure: code[1] };
+  if (exitCode === 0 || results.run.passed) throw new Error(`Reproducer ${run} passes under the fault: this history does not distinguish it`);
+  if (exitCode !== 1) throw new Error(`Reproducer ${run} ended abnormally (exit ${exitCode}) instead of failing its own run`);
+  const describe = result => `${result.code ?? 'no Quint error code'}${result.message ? ` ${result.message}` : ''}`;
+  if (!results.before.passed) throw new Error(`Reproducer ${run} fails before its declared checkpoint: ${describe(results.before)}`);
+  if (results.through.passed) throw new Error(`Reproducer ${run} holds at its declared checkpoint under the fault; a later step or expectation fails instead`);
+  if (results.through.code !== 'QNT508' || results.through.message !== EXPECT_FAILED) {
+    throw new Error(`Reproducer ${run} does not fail its declared expectation: ${describe(results.through)}`);
+  }
+  return { status: 'failed', code: results.through.code };
 }
 
 // Select a subset of the catalog by id for local iteration. The complete
@@ -117,17 +134,26 @@ export async function measureModelProperties({ only, concurrency = resolveConcur
         lines.push(`${label}: typecheck ${seconds(compile.durationMs)}; run ${result.status} after ${result.trace.length} states, ${seconds(run.durationMs)}\n`);
         if (challenge.reproducer === undefined) continue;
         // The reproducer replays one named history in the same copy of the
-        // sources: it must pass here on the baseline and fail on the mutant.
-        const name = challenge.reproducer.run;
-        const test = await execute(['test', model, `--backend=${settings.backend}`, '--max-samples=1',
-          `--seed=${settings.seed}`, `--match=^${name}$`]);
+        // sources, with two probes cut from the run at its declared checkpoint
+        // appended to the cited model: all three pass here on the baseline; on
+        // the mutant the run and the probe through the checkpoint fail while
+        // the probe before it still passes.
+        const { run: name, failure } = challenge.reproducer;
+        const cited = resolve(workspace, challenge.reproducer.model ?? challenge.model);
+        const text = readFileSync(cited, 'utf8');
+        const checkpoint = reproducerCheckpoint(text, name, failure);
+        const names = probeNames(name);
+        const end = text.lastIndexOf('}');
+        writeFileSync(cited, `${text.slice(0, end)}  run ${names.before} = ${checkpoint.before}\n  run ${names.through} = ${checkpoint.through}\n${text.slice(end)}`);
+        const test = await execute(['test', cited, `--backend=${settings.backend}`, '--max-samples=1',
+          `--seed=${settings.seed}`, `--match=^(${name}|${names.before}|${names.through})$`]);
         detail = test.stdout + test.stderr;
         writeFileSync(`${prefix}-reproducer.log`, detail);
         const outcome = validateReproducerResult(detail, test.status, name, label);
         entry.reproducer[label] = outcome.status;
-        if (label === 'mutant') entry.reproducer.failure = outcome.failure;
+        if (label === 'mutant') entry.reproducer.code = outcome.code;
         save();
-        lines.push(`${label}: reproducer ${name} ${outcome.status}${outcome.failure ? ` (${outcome.failure})` : ''}, ${seconds(test.durationMs)}\n`);
+        lines.push(`${label}: reproducer ${name} ${outcome.status}${outcome.code ? ` (${outcome.code} at the declared checkpoint)` : ''}, ${seconds(test.durationMs)}\n`);
       }
       printGroup(`${challenge.id}: compiling fault violates ${challenge.invariant}`, ...lines);
     } catch (error) {
