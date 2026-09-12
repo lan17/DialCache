@@ -16,7 +16,7 @@ afterEach(() => { for (const directory of directories.splice(0)) rmSync(director
 
 const integer = (value: number) => ({ "#bigint": String(value) });
 const baseline = {
-  schemaVersion: 1, seed: "0x1", tolerance: 0.5, gatedMinimum: 10,
+  schemaVersion: 1, seed: "0x1", tolerance: 0.5, gatedMinimum: 10, freshSeedSigma: 4,
   profiles: { effects: { sampledHistories: 10, corpusSha256: "0".repeat(64), labels: { gated: 20, exact: 10, rare: 5 } } },
 };
 type Row = { label: string; sampled: number; regression: number };
@@ -136,7 +136,19 @@ describe("witness baseline gate", () => {
     const findings = baselineFindings("effects", [row("gated", 10), row("exact", 5), row("rare", 0), row("new", 1)], baseline);
     expect(findings).toEqual({ recorded: true, gated: ["gated", "exact"], failed: [], ungated: ["rare"], unrecorded: ["new"] });
     const tripped = baselineFindings("effects", [row("gated", 9), row("exact", 4), row("rare", 0)], baseline);
-    expect(tripped.failed).toEqual([{ label: "gated", baseline: 20, sampled: 9, minimum: 10 }, { label: "exact", baseline: 10, sampled: 4, minimum: 5 }]);
+    expect(tripped.failed).toEqual([{ label: "gated", baseline: 20, sampled: 9, minimum: 10, rule: "tolerance" }, { label: "exact", baseline: 10, sampled: 4, minimum: 5, rule: "tolerance" }]);
+    // On a fresh corpus the same drops are seed noise on small counts: a gated
+    // label fails only when it also falls four Poisson deviations below the
+    // recorded count, and always when it disappears.
+    const fresh = baselineFindings("effects", [row("gated", 9), row("exact", 4)], baseline, { freshCorpus: true });
+    expect(fresh.rule).toBe("collapse");
+    expect(fresh.failed).toEqual([]);
+    const collapsed = baselineFindings("effects", [row("gated", 0), row("exact", 0)], baseline, { freshCorpus: true });
+    expect(collapsed.failed.map(failure => [failure.label, failure.minimum, failure.rule])).toEqual([["gated", 2, "collapse"], ["exact", 1, "collapse"]]);
+    const large = { ...baseline, profiles: { effects: { ...baseline.profiles.effects, labels: { big: 100 } } } };
+    expect(baselineFindings("effects", [row("big", 55)], large, { freshCorpus: true }).failed).toEqual([]);
+    expect(baselineFindings("effects", [row("big", 49)], large, { freshCorpus: true }).failed).toEqual([{ label: "big", baseline: 100, sampled: 49, minimum: 50, rule: "collapse" }]);
+    expect(baselineFindings("effects", [row("big", 49)], large).failed[0]!.rule).toBe("tolerance");
     expect(baselineFindings("scope", [row("gated", 0)], baseline)).toEqual({ recorded: false, gated: [], failed: [], ungated: [], unrecorded: ["gated"] });
     expect(baselineFindings("scope", [row("gated", 0)], undefined).recorded).toBe(false);
   });

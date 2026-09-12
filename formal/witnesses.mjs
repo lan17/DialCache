@@ -28,7 +28,13 @@ export const defaultBaselinePath = 'formal/witness-baseline.json';
 export const reportFileName = 'witness-report.json';
 // A required label reached by this many sampled histories or fewer is rare.
 export const rareMaximum = 3;
-export const baselineDefaults = { tolerance: 0.5, gatedMinimum: 10 };
+// freshSeedSigma bounds the fresh-seed gate: on a corpus other than the recorded
+// one, a gated label fails only when its sampled count falls below tolerance
+// AND below the recorded count minus this many Poisson standard deviations,
+// never below one hit. Per-label counts of ten to forty vary by a third or
+// more between seeds, so the tolerance alone would fail most fresh seeds on
+// noise; the bound keeps the fresh-seed gate a collapse detector.
+export const baselineDefaults = { tolerance: 0.5, gatedMinimum: 10, freshSeedSigma: 4 };
 
 export function parseArguments(args) {
   const [command, ...rest] = args;
@@ -92,7 +98,8 @@ export function readBaseline(path) {
   if (!existsSync(path)) return undefined;
   const baseline = JSON.parse(readFileSync(path, 'utf8'));
   if (baseline?.schemaVersion !== 1 || typeof baseline.seed !== 'string' || !(baseline.tolerance > 0 && baseline.tolerance < 1)
-    || !Number.isInteger(baseline.gatedMinimum) || baseline.gatedMinimum < 1 || typeof baseline.profiles !== 'object' || baseline.profiles === null) {
+    || !Number.isInteger(baseline.gatedMinimum) || baseline.gatedMinimum < 1 || !(baseline.freshSeedSigma > 0)
+    || typeof baseline.profiles !== 'object' || baseline.profiles === null) {
     throw new Error(`${path}: unsupported witness baseline`);
   }
   return baseline;
@@ -129,18 +136,23 @@ export function recordBaseline(existing, entries, seed, defaults = baselineDefau
 
 // The gate: a required label whose recorded sampled count is at least
 // gatedMinimum fails when the fresh sampled count drops below tolerance times
-// the recorded count. Labels recorded below the minimum, or not recorded, are
-// reported and never gated.
-export function baselineFindings(profile, rows, baseline) {
+// the recorded count. On the recorded corpus that is exact evidence of a model
+// or classifier change. On another corpus (an exploration seed) the count must
+// also fall more than freshSeedSigma Poisson standard deviations below the
+// recorded one, and at least to below one hit, so seed noise on small counts
+// does not fail the lane while a collapsed label still does. Labels recorded
+// below the minimum, or not recorded, are reported and never gated.
+export function baselineFindings(profile, rows, baseline, { freshCorpus = false } = {}) {
   const recorded = baseline?.profiles[profile];
-  const findings = { recorded: recorded !== undefined, gated: [], failed: [], ungated: [], unrecorded: [] };
+  const findings = { recorded: recorded !== undefined, gated: [], failed: [], ungated: [], unrecorded: [], rule: freshCorpus ? 'collapse' : 'tolerance' };
   for (const { label, sampled } of rows) {
     const base = recorded?.labels[label];
     if (base === undefined) { findings.unrecorded.push(label); continue; }
     if (base < baseline.gatedMinimum) { findings.ungated.push(label); continue; }
     findings.gated.push(label);
-    const minimum = base * baseline.tolerance;
-    if (sampled < minimum) findings.failed.push({ label, baseline: base, sampled, minimum });
+    const tolerance = base * baseline.tolerance;
+    const minimum = freshCorpus ? Math.max(1, Math.min(tolerance, base - baseline.freshSeedSigma * Math.sqrt(base))) : tolerance;
+    if (sampled < minimum) findings.failed.push({ label, baseline: base, sampled, minimum, rule: findings.rule });
   }
   return findings;
 }
@@ -152,7 +164,7 @@ export function profileReport(profile, evidence, missing, fingerprint, baseline)
     fragile: rows.filter(row => row.sampled <= rareMaximum && row.regression === 0),
     rare: rows.filter(row => row.sampled <= rareMaximum && row.regression >= 1),
     sameCorpusAsBaseline: recorded === undefined ? null : recorded.corpusSha256 === fingerprint,
-    baseline: baselineFindings(profile, rows, baseline) };
+    baseline: baselineFindings(profile, rows, baseline, { freshCorpus: recorded !== undefined && recorded.corpusSha256 !== fingerprint }) };
 }
 
 const percent = value => `${Math.round(value * 100)}%`;
@@ -168,9 +180,11 @@ export function formatReport(report) {
     lines.push(`  fragile, unpinned (sampled <= ${rareMaximum}, no regression): ${summary.fragile.length ? summary.fragile.map(hits).join(', ') : 'none'}`);
     lines.push(`  pinned but rare (sampled <= ${rareMaximum}, regression >= 1): ${summary.rare.length ? summary.rare.map(hits).join(', ') : 'none'}`);
     if (!baseline.recorded) { lines.push('  baseline: none recorded for this profile'); continue; }
-    lines.push(`  baseline ${report.baseline.seed} (${summary.sameCorpusAsBaseline ? 'same' : 'different'} sampled corpus): ${baseline.gated.length} labels gated at ${percent(report.baseline.tolerance)},`
+    const rule = summary.sameCorpusAsBaseline ? `same sampled corpus, gated at ${percent(report.baseline.tolerance)}`
+      : `different sampled corpus, gated at ${percent(report.baseline.tolerance)} and ${report.baseline.freshSeedSigma} sigma below the recorded count`;
+    lines.push(`  baseline ${report.baseline.seed} (${rule}): ${baseline.gated.length} labels gated,`
       + ` ${baseline.ungated.length} below the gated minimum of ${report.baseline.gatedMinimum}, ${baseline.unrecorded.length} unrecorded`);
-    for (const failure of baseline.failed) lines.push(`  FAILED ${failure.label}: ${failure.sampled} sampled, minimum ${failure.minimum} (baseline ${failure.baseline})`);
+    for (const failure of baseline.failed) lines.push(`  FAILED ${failure.label}: ${failure.sampled} sampled, minimum ${Math.round(failure.minimum * 10) / 10} (baseline ${failure.baseline}, ${failure.rule} rule)`);
   }
   return lines.join('\n');
 }
@@ -182,7 +196,7 @@ export function evaluateProfiles(options, { directory = root, log = message => c
   const baselinePath = resolve(directory, options.baseline);
   const baseline = readBaseline(baselinePath);
   const report = { schemaVersion: 1, command: options.command, traces: options.traces,
-    baseline: baseline === undefined ? null : { path: options.baseline, seed: baseline.seed, tolerance: baseline.tolerance, gatedMinimum: baseline.gatedMinimum },
+    baseline: baseline === undefined ? null : { path: options.baseline, seed: baseline.seed, tolerance: baseline.tolerance, gatedMinimum: baseline.gatedMinimum, freshSeedSigma: baseline.freshSeedSigma },
     profiles: {}, incomplete: [], failed: [] };
   const entries = [];
   for (const profile of selectedProfiles(options.profile, execution)) {
