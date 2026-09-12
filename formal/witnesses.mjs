@@ -136,12 +136,14 @@ export function recordBaseline(existing, entries, seed, defaults = baselineDefau
 
 // The gate: a required label whose recorded sampled count is at least
 // gatedMinimum fails when the fresh sampled count drops below tolerance times
-// the recorded count. On the recorded corpus that is exact evidence of a model
-// or classifier change. On another corpus (an exploration seed) the count must
-// also fall more than freshSeedSigma Poisson standard deviations below the
-// recorded one, and at least to below one hit, so seed noise on small counts
-// does not fail the lane while a collapsed label still does. Labels recorded
-// below the minimum, or not recorded, are reported and never gated.
+// the recorded count. Which rule applies is decided by the generation seed,
+// never by the corpus fingerprint: under the recorded seed a changed count is
+// exact evidence of a model or classifier change and the tolerance rule holds,
+// whatever the fingerprint says. Under another seed (exploration) the count
+// must also fall more than freshSeedSigma Poisson standard deviations below
+// the recorded one, and at least to below one hit, so seed noise on small
+// counts does not fail the lane while a collapsed label still does. Labels
+// recorded below the minimum, or not recorded, are reported and never gated.
 export function baselineFindings(profile, rows, baseline, { freshCorpus = false } = {}) {
   const recorded = baseline?.profiles[profile];
   const findings = { recorded: recorded !== undefined, gated: [], failed: [], ungated: [], unrecorded: [], rule: freshCorpus ? 'collapse' : 'tolerance' };
@@ -157,14 +159,17 @@ export function baselineFindings(profile, rows, baseline, { freshCorpus = false 
   return findings;
 }
 
-export function profileReport(profile, evidence, missing, fingerprint, baseline) {
+export function profileReport(profile, evidence, missing, fingerprint, baseline, { seed } = {}) {
   const rows = evidence.required.map(label => ({ label, sampled: evidence.labels[label]?.sampled ?? 0, regression: evidence.labels[label]?.regression ?? 0 }));
   const recorded = baseline?.profiles[profile];
   return { profile, histories: evidence.traces, diversity: evidence.diversity, missing,
     fragile: rows.filter(row => row.sampled <= rareMaximum && row.regression === 0),
     rare: rows.filter(row => row.sampled <= rareMaximum && row.regression >= 1),
     sameCorpusAsBaseline: recorded === undefined ? null : recorded.corpusSha256 === fingerprint,
-    baseline: baselineFindings(profile, rows, baseline, { freshCorpus: recorded !== undefined && recorded.corpusSha256 !== fingerprint }) };
+    seed: seed ?? null, sameSeedAsBaseline: baseline === undefined || seed === undefined ? null : seed === baseline.seed,
+    // The rule follows the seed. A same-seed corpus whose fingerprint differs
+    // is a model or classifier change and keeps the strict rule.
+    baseline: baselineFindings(profile, rows, baseline, { freshCorpus: baseline !== undefined && seed !== undefined && seed !== baseline.seed }) };
 }
 
 const percent = value => `${Math.round(value * 100)}%`;
@@ -180,8 +185,10 @@ export function formatReport(report) {
     lines.push(`  fragile, unpinned (sampled <= ${rareMaximum}, no regression): ${summary.fragile.length ? summary.fragile.map(hits).join(', ') : 'none'}`);
     lines.push(`  pinned but rare (sampled <= ${rareMaximum}, regression >= 1): ${summary.rare.length ? summary.rare.map(hits).join(', ') : 'none'}`);
     if (!baseline.recorded) { lines.push('  baseline: none recorded for this profile'); continue; }
-    const rule = summary.sameCorpusAsBaseline ? `same sampled corpus, gated at ${percent(report.baseline.tolerance)}`
-      : `different sampled corpus, gated at ${percent(report.baseline.tolerance)} and ${report.baseline.freshSeedSigma} sigma below the recorded count`;
+    const rule = summary.sameSeedAsBaseline === false
+      ? `exploration seed ${summary.seed}: gated at ${percent(report.baseline.tolerance)} and ${report.baseline.freshSeedSigma} sigma below the recorded count`
+      : summary.sameCorpusAsBaseline ? `recorded seed and corpus: gated at ${percent(report.baseline.tolerance)}`
+      : `recorded seed, corpus differs (a model or classifier change; rewrite the baseline deliberately): gated at ${percent(report.baseline.tolerance)}`;
     lines.push(`  baseline ${report.baseline.seed} (${rule}): ${baseline.gated.length} labels gated,`
       + ` ${baseline.ungated.length} below the gated minimum of ${report.baseline.gatedMinimum}, ${baseline.unrecorded.length} unrecorded`);
     for (const failure of baseline.failed) lines.push(`  FAILED ${failure.label}: ${failure.sampled} sampled, minimum ${Math.round(failure.minimum * 10) / 10} (baseline ${failure.baseline}, ${failure.rule} rule)`);
@@ -195,7 +202,10 @@ export function evaluateProfiles(options, { directory = root, log = message => c
   const outputDirectory = resolve(directory, options.out);
   const baselinePath = resolve(directory, options.baseline);
   const baseline = readBaseline(baselinePath);
-  const report = { schemaVersion: 1, command: options.command, traces: options.traces,
+  // The corpus under evaluation was generated with this seed (run-models.mjs
+  // reads the same variable); the gate rule follows it, not the fingerprint.
+  const seed = process.env.QUINT_SEED || execution.settings.seed;
+  const report = { schemaVersion: 1, command: options.command, traces: options.traces, seed,
     baseline: baseline === undefined ? null : { path: options.baseline, seed: baseline.seed, tolerance: baseline.tolerance, gatedMinimum: baseline.gatedMinimum, freshSeedSigma: baseline.freshSeedSigma },
     profiles: {}, incomplete: [], failed: [] };
   const entries = [];
@@ -204,7 +214,7 @@ export function evaluateProfiles(options, { directory = root, log = message => c
     const check = checkWitnesses(profile, corpus.paths, registry);
     const evidence = witnessEvidence(profile, check, corpus, directory);
     const fingerprint = sampledCorpusFingerprint(corpus);
-    const summary = profileReport(profile, evidence, check.missing, fingerprint, baseline);
+    const summary = profileReport(profile, evidence, check.missing, fingerprint, baseline, { seed });
     report.profiles[profile] = summary;
     entries.push({ profile, evidence, fingerprint });
     if (check.missing.length) {
@@ -215,12 +225,11 @@ export function evaluateProfiles(options, { directory = root, log = message => c
       log(`witness/${profile}: ${check.traces} histories, ${check.seen.size} labels, ${check.required.length} required -> ${relative(directory, written)}`);
     }
     for (const failure of summary.baseline.failed) {
-      report.failed.push(`witness/${profile}: ${failure.label} reached by ${failure.sampled} sampled histories, minimum ${failure.minimum} (baseline ${failure.baseline})`);
+      report.failed.push(`witness/${profile}: ${failure.label} reached by ${failure.sampled} sampled histories, minimum ${Math.round(failure.minimum * 10) / 10} (baseline ${failure.baseline}, ${failure.rule} rule)`);
     }
   }
   if (options.command === 'baseline') {
     if (report.incomplete.length) throw new Error(`A baseline needs complete witness coverage:\n${report.incomplete.join('\n')}`);
-    const seed = process.env.QUINT_SEED || execution.settings.seed;
     const written = recordBaseline(options.profile === 'all' ? undefined : baseline, entries, seed);
     mkdirSync(dirname(baselinePath), { recursive: true });
     writeFileSync(baselinePath, JSON.stringify(written, null, 2) + '\n');

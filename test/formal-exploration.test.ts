@@ -70,6 +70,8 @@ function savedFixture(directory: string) {
       export const explorationPlan = (directory, seed) => [{ directory, seed, runner: 'saved' }];
       export async function runExplorationSteps(plan, options) {
         writeFileSync(options.directory + '/.formal-traces/saved-runner.json', JSON.stringify(plan));
+        // A saved run's evaluator also has to leave a completed witness report behind.
+        writeFileSync(options.directory + '/.formal-traces/witness-report.json', JSON.stringify({ schemaVersion: 1, command: 'evaluate', failed: [], incomplete: [], profiles: {} }));
         return [{ language: 'typescript', status: 'passed' }, { language: 'go', status: 'passed' }];
       }`,
     "formal/validation.mjs": `import { mkdirSync, writeFileSync } from 'node:fs';
@@ -103,9 +105,9 @@ describe("isolated exploratory validation", () => {
     const directory = "/isolated/exploration";
     const plan = explorationPlan(directory, "42");
     const seeded = plan.filter(step => step.env?.QUINT_SEED);
-    expect(seeded).toHaveLength(2);
+    expect(seeded).toHaveLength(3);
     expect(seeded.map(step => step.args?.slice(0, 2))).toEqual([
-      ["formal/run-models.mjs", "check"], ["formal/run-models.mjs", "generate"],
+      ["formal/run-models.mjs", "check"], ["formal/run-models.mjs", "generate"], ["formal/witnesses.mjs", "evaluate"],
     ]);
     for (const step of seeded) expect(step.env?.QUINT_SEED).toBe("0x2a");
     const replays = plan.filter(step => step.nativeReport);
@@ -301,7 +303,7 @@ describe("isolated exploratory validation", () => {
       execFileSync("git", ["init", "--quiet"], { cwd: directory });
       execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-qm", "test"], { cwd: directory });
       writeFileSync(join(directory, ".gitignore"), ".formal-traces/\n");
-      const witnesses = { schemaVersion: 1, command: "evaluate", failed: ["witness/effects: reply:13 reached by 1 sampled histories, minimum 2 (baseline 4)"], profiles: {} };
+      const witnesses = { schemaVersion: 1, command: "evaluate", failed: ["witness/effects: reply:13 reached by 1 sampled histories, minimum 2 (baseline 4)"], incomplete: [], profiles: {} };
       let replays = 0;
       await expect(explore("42", { directory, run: async () => {
         const workspace = join(directory, ".formal-traces/exploration", readdirSync(join(directory, ".formal-traces/exploration"))[0]!, "workspace");
@@ -313,6 +315,27 @@ describe("isolated exploratory validation", () => {
       expect(replays).toBe(2);
       const output = join(directory, ".formal-traces/exploration", readdirSync(join(directory, ".formal-traces/exploration"))[0]!);
       expect(JSON.parse(readFileSync(join(output, "report.json"), "utf8"))).toMatchObject({ status: "coverage-gate-failure", witnesses, sourcesUnchanged: true });
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
+  it.each([
+    ["missing", undefined, /wrote no report/],
+    ["an empty object", "{}", /not a completed evaluation/],
+    ["a failure string instead of a list", JSON.stringify({ schemaVersion: 1, command: "evaluate", failed: "evaluation failed", incomplete: [], profiles: {} }), /not a completed evaluation/],
+    ["malformed JSON", "{ not json", /unreadable/],
+  ])("fails as infrastructure when the witness report is %s although both ports passed", async (_name, contents, message) => {
+    const directory = mkdtempSync(join(tmpdir(), "dialcache-exploration-witness-missing-"));
+    try {
+      execFileSync("git", ["init", "--quiet"], { cwd: directory });
+      execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-qm", "test"], { cwd: directory });
+      writeFileSync(join(directory, ".gitignore"), ".formal-traces/\n");
+      await expect(explore("42", { directory, run: async () => {
+        const workspace = join(directory, ".formal-traces/exploration", readdirSync(join(directory, ".formal-traces/exploration"))[0]!, "workspace");
+        mkdirSync(join(workspace, ".formal-traces"), { recursive: true });
+        if (contents !== undefined) writeFileSync(join(workspace, ".formal-traces/witness-report.json"), contents);
+        return [{ language: "typescript", status: "passed" }, { language: "go", status: "passed" }];
+      } })).rejects.toThrow(message);
+      const output = join(directory, ".formal-traces/exploration", readdirSync(join(directory, ".formal-traces/exploration"))[0]!);
+      expect(JSON.parse(readFileSync(join(output, "report.json"), "utf8")).status).toBe("infrastructure-failure");
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
   it("keeps a clean witness report and passes when the baseline gate holds", async () => {

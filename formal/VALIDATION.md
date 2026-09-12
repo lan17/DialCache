@@ -154,7 +154,10 @@ gated label's sampled hits collapsed against the recorded baseline (below the
 tolerance and more than `freshSeedSigma` Poisson deviations below the recorded
 count, or to zero), the report ends with `coverage-gate-failure` and the lane
 fails. That is a statement about exploration quality on that seed, not about
-native behavior. Two fresh seeds in September 2026 dropped four and five gated
+native behavior. Exploration also refuses to pass without a completed witness
+report: if the tolerated evaluator step wrote no report, or an unreadable or
+incomplete one, the run ends with `infrastructure-failure` after both ports
+finish, because missing coverage evidence is never a clean gate. Two fresh seeds in September 2026 dropped four and five gated
 labels below half their baseline while every label stayed reachable; those
 drops are seed noise on counts of ten to thirty and stay visible in the report
 without failing the lane.

@@ -39,7 +39,9 @@ export function explorationPlan(directory, seed, options = {}) {
     // evaluator runs before either replay and still writes evidence for complete
     // profiles; its exit status must not stop either port from executing that
     // seed's histories.
-    if (script === 'formal/witnesses.mjs') return [{ ...step, tolerateFailure: true }];
+    // The evaluator learns the corpus seed from the same variable run-models.mjs
+    // reads, so its baseline gate applies the exploration rule to this seed.
+    if (script === 'formal/witnesses.mjs') return [{ ...step, env: { ...step.env, QUINT_SEED: normalized }, tolerateFailure: true }];
     return [step];
   });
 }
@@ -240,6 +242,19 @@ function loadWitnessReport(workspace, report) {
   catch (error) { report.witnesses = { error: String(error) }; }
 }
 
+// A completed evaluator report: the tolerated step may have died after writing
+// per-profile evidence but before the aggregate, and both ports can still pass
+// on that evidence. Missing or malformed coverage evidence is never a clean gate.
+function witnessReportProblem(witnesses) {
+  if (witnesses === undefined) return 'the witness evaluator wrote no report';
+  if (witnesses.error !== undefined) return `the witness report is unreadable: ${witnesses.error}`;
+  if (witnesses.schemaVersion !== 1 || witnesses.command !== 'evaluate' || !Array.isArray(witnesses.failed) || !Array.isArray(witnesses.incomplete)
+    || typeof witnesses.profiles !== 'object' || witnesses.profiles === null || Array.isArray(witnesses.profiles)) {
+    return 'the witness report is not a completed evaluation';
+  }
+  return undefined;
+}
+
 async function executeExploration(seed, { directory = root, environment = process.env, run, origin } = {}) {
   const selectedSeed = explorationSeed(seed);
   const parent = resolve(directory, '.formal-traces/exploration');
@@ -294,12 +309,16 @@ async function executeExploration(seed, { directory = root, environment = proces
     // hits fell below the recorded tolerance is an exploration-quality failure
     // even when every required label is present and both ports pass.
     loadWitnessReport(workspace, report);
-    const coverageGate = report.witnesses === undefined ? [] : report.witnesses.error !== undefined
-      ? [`witness report unreadable: ${report.witnesses.error}`] : Array.isArray(report.witnesses.failed) ? report.witnesses.failed : [];
-    report.status = report.native.some(result => result.status === 'native-failure') ? 'native-failure'
-      : report.native.some(result => result.status === 'witness-check-failure') ? 'witness-check-failure'
-      : coverageGate.length ? 'coverage-gate-failure' : 'passed';
-    if (report.status === 'coverage-gate-failure') throw new Error(`Exploration finished with coverage-gate-failure; sampled hits fell below the baseline tolerance:\n${coverageGate.join('\n')}`);
+    const nativeStatus = report.native.some(result => result.status === 'native-failure') ? 'native-failure'
+      : report.native.some(result => result.status === 'witness-check-failure') ? 'witness-check-failure' : undefined;
+    const problem = witnessReportProblem(report.witnesses);
+    if (nativeStatus === undefined && problem !== undefined) {
+      report.status = 'infrastructure-failure';
+      throw new Error(`Exploration cannot be accepted: ${problem}, so the coverage gate has no evidence although both ports passed.`);
+    }
+    const coverageGate = problem === undefined ? [...report.witnesses.incomplete, ...report.witnesses.failed] : [];
+    report.status = nativeStatus ?? (coverageGate.length ? 'coverage-gate-failure' : 'passed');
+    if (report.status === 'coverage-gate-failure') throw new Error(`Exploration finished with coverage-gate-failure; the witness gate reported:\n${coverageGate.join('\n')}`);
     if (report.status !== 'passed') throw new Error(`Exploration finished with ${report.status}; inspect both native reports.`);
   } catch (error) {
     if (report.status === 'running') report.status = 'infrastructure-failure';

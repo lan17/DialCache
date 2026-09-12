@@ -33,6 +33,8 @@ export interface ProfileReport {
   fragile: LabelRow[];
   rare: LabelRow[];
   sameCorpusAsBaseline: boolean | null;
+  seed: string | null;
+  sameSeedAsBaseline: boolean | null;
   baseline: BaselineFindings;
 }
 export interface WitnessReport {
@@ -59,6 +61,6 @@ export function readBaseline(path: string): WitnessBaseline | undefined;
 export function sampledCorpusFingerprint(corpus: { paths: readonly string[]; kinds: TraceKinds }): string;
 export function recordBaseline(existing: WitnessBaseline | undefined, entries: ReadonlyArray<{ profile: string; evidence: WitnessEvidence; fingerprint: string }>, seed: string, defaults?: { tolerance: number; gatedMinimum: number; freshSeedSigma: number }): WitnessBaseline;
 export function baselineFindings(profile: string, rows: readonly LabelRow[], baseline: WitnessBaseline | undefined, options?: { freshCorpus?: boolean }): BaselineFindings;
-export function profileReport(profile: string, evidence: WitnessEvidence, missing: readonly string[], fingerprint: string, baseline: WitnessBaseline | undefined): ProfileReport;
+export function profileReport(profile: string, evidence: WitnessEvidence, missing: readonly string[], fingerprint: string, baseline: WitnessBaseline | undefined, options?: { seed?: string }): ProfileReport;
 export function formatReport(report: WitnessReport): string;
 export function evaluateProfiles(options: WitnessOptions, context?: { directory?: string; log?: (message: string) => void }): WitnessReport;

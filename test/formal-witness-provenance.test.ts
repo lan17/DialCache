@@ -165,6 +165,26 @@ describe("witness baseline gate", () => {
     expect(profileReport("scope", evidence, [], "0".repeat(64), baseline).sameCorpusAsBaseline).toBeNull();
   });
 
+  it("chooses the gate rule from the generation seed, never from the corpus fingerprint", () => {
+    // Baseline: label "gated" recorded with 20 sampled hits under seed 0x1.
+    const evidence = { traces: 10, required: ["gated"], diversity: { sampledHistories: 10, distinctActionSequences: 10, distinctObservationSequences: 10 },
+      labels: { gated: { sampled: 1, regression: 0, traces: [] } }, corpus: [] } as unknown as WitnessEvidence;
+    // A model change regenerated under the recorded seed changes the fingerprint
+    // and must still be judged by the strict tolerance rule.
+    const sameSeed = profileReport("effects", evidence, [], "f".repeat(64), baseline, { seed: "0x1" });
+    expect(sameSeed).toMatchObject({ seed: "0x1", sameSeedAsBaseline: true, sameCorpusAsBaseline: false });
+    expect(sameSeed.baseline.rule).toBe("tolerance");
+    expect(sameSeed.baseline.failed).toEqual([{ label: "gated", baseline: 20, sampled: 1, minimum: 10, rule: "tolerance" }]);
+    // An exploration seed gets the collapse rule even when the fingerprint happens to match.
+    const otherSeed = profileReport("effects", evidence, [], "0".repeat(64), baseline, { seed: "0x2" });
+    expect(otherSeed).toMatchObject({ seed: "0x2", sameSeedAsBaseline: false, sameCorpusAsBaseline: true });
+    expect(otherSeed.baseline.rule).toBe("collapse");
+    expect(otherSeed.baseline.failed).toEqual([{ label: "gated", baseline: 20, sampled: 1, minimum: Math.max(1, 20 - 4 * Math.sqrt(20)), rule: "collapse" }]);
+    expect(profileReport("effects", { ...evidence, labels: { gated: { sampled: 9, regression: 0, traces: [] } } } as unknown as WitnessEvidence, [], "0".repeat(64), baseline, { seed: "0x2" }).baseline.failed).toEqual([]);
+    // Without a seed the strict rule applies.
+    expect(profileReport("effects", evidence, [], "f".repeat(64), baseline).baseline.rule).toBe("tolerance");
+  });
+
   it("fingerprints the sampled histories' content and ignores the ITF creation stamp", () => {
     const directory = scratch();
     const dirs = { sampled: join(directory, "features/scope"), regressions: join(directory, "regressions/scope") };
