@@ -1,0 +1,331 @@
+{
+  "schemaVersion": 1,
+  "quintVersion": "0.32.0",
+  "kernelModules": [],
+  "profiles": [
+    {
+      "id": "core",
+      "model": "formal/dialcache-conformance.qnt",
+      "module": "dialcache_conformance",
+      "tableSize": 159,
+      "actions": 10,
+      "reachableDefinitions": 12,
+      "stateAssigningDefinitions": 9,
+      "stateAssigningDefinitionNames": [
+        "bumpSource",
+        "coalescedLocalPair",
+        "init",
+        "invalidateRemote",
+        "localCall",
+        "outsideCall",
+        "remoteCall",
+        "remoteReadFailureCall",
+        "requestLocalPair"
+      ]
+    },
+    {
+      "id": "effects",
+      "model": "formal/dialcache-effects-conformance.qnt",
+      "module": "dialcache_effects_conformance",
+      "tableSize": 1505,
+      "actions": 26,
+      "reachableDefinitions": 76,
+      "stateAssigningDefinitions": 21,
+      "stateAssigningDefinitionNames": [
+        "beginCall",
+        "failDump",
+        "failLoad",
+        "failRead",
+        "failWrite",
+        "futureFence",
+        "initialized",
+        "invalidate",
+        "jumpClock",
+        "observerFaultWith",
+        "readBudgetPolicy",
+        "rejectLoader",
+        "releaseDump",
+        "releaseLoad",
+        "releaseRead",
+        "releaseWrite",
+        "replyWith",
+        "resolveLoader",
+        "rollbackWall",
+        "seedRemote",
+        "tick"
+      ]
+    },
+    {
+      "id": "scope",
+      "model": "formal/dialcache-scope-conformance.qnt",
+      "module": "dialcache_scope_conformance",
+      "tableSize": 634,
+      "actions": 14,
+      "reachableDefinitions": 49,
+      "stateAssigningDefinitions": 7,
+      "stateAssigningDefinitionNames": [
+        "changePolicy",
+        "closeContext",
+        "finishSource",
+        "init",
+        "openContext",
+        "releasePolicy",
+        "startCall"
+      ]
+    },
+    {
+      "id": "recovery",
+      "model": "formal/dialcache-recovery-conformance.qnt",
+      "module": "dialcache_recovery_conformance",
+      "tableSize": 1018,
+      "actions": 28,
+      "reachableDefinitions": 69,
+      "stateAssigningDefinitions": 15,
+      "stateAssigningDefinitionNames": [
+        "advanceBy",
+        "beginWith",
+        "closeWith",
+        "initialize",
+        "invalidate",
+        "joinWith",
+        "loadFaultWith",
+        "policyWith",
+        "readFaultWith",
+        "rejectTimeoutWith",
+        "rejectWith",
+        "releaseLoad",
+        "resolveWith",
+        "rollbackWall",
+        "seedWith"
+      ]
+    },
+    {
+      "id": "policy",
+      "model": "formal/dialcache-policy-conformance.qnt",
+      "module": "dialcache_policy_conformance",
+      "tableSize": 1259,
+      "actions": 20,
+      "reachableDefinitions": 73,
+      "stateAssigningDefinitions": 9,
+      "stateAssigningDefinitionNames": [
+        "changePolicy",
+        "elapse",
+        "finishSource",
+        "init",
+        "releasePolicy",
+        "rollbackWall",
+        "seedRemote",
+        "setFault",
+        "startCall"
+      ]
+    },
+    {
+      "id": "shadow",
+      "model": "formal/dialcache-shadow-conformance.qnt",
+      "module": "dialcache_shadow_conformance",
+      "tableSize": 1387,
+      "actions": 33,
+      "reachableDefinitions": 92,
+      "stateAssigningDefinitions": 23,
+      "stateAssigningDefinitionNames": [
+        "advanceBy",
+        "advanceWallBy",
+        "beginCall",
+        "dumpFault",
+        "expirePendingJob",
+        "initialize",
+        "invalidate",
+        "loadFault",
+        "modelFixture",
+        "readFault",
+        "reencode",
+        "rejectLoader",
+        "releaseDump",
+        "releaseLoad",
+        "releaseRead",
+        "releaseWrite",
+        "resolveAt",
+        "rollbackWall",
+        "seedAt",
+        "seedUnicode",
+        "setLogging",
+        "shadowPolicy",
+        "writeFault"
+      ]
+    },
+    {
+      "id": "admission",
+      "model": "formal/dialcache-admission-conformance.qnt",
+      "module": "dialcache_admission_conformance",
+      "tableSize": 718,
+      "actions": 18,
+      "reachableDefinitions": 53,
+      "stateAssigningDefinitions": 9,
+      "stateAssigningDefinitionNames": [
+        "advanceBy",
+        "beginWith",
+        "init",
+        "loadWith",
+        "policyWith",
+        "readWith",
+        "rejectWith",
+        "resolveWith",
+        "seedWith"
+      ]
+    },
+    {
+      "id": "layers",
+      "model": "formal/dialcache-layers-conformance.qnt",
+      "module": "dialcache_layers_conformance",
+      "tableSize": 1216,
+      "actions": 19,
+      "reachableDefinitions": 70,
+      "stateAssigningDefinitions": 8,
+      "stateAssigningDefinitionNames": [
+        "changePolicy",
+        "closeContext",
+        "finishSource",
+        "initialize",
+        "invalidateEntity",
+        "seedRemote",
+        "startCall",
+        "tick"
+      ]
+    },
+    {
+      "id": "independent",
+      "model": "formal/dialcache-independent-conformance.qnt",
+      "module": "dialcache_independent_conformance",
+      "tableSize": 933,
+      "actions": 22,
+      "reachableDefinitions": 61,
+      "stateAssigningDefinitions": 12,
+      "stateAssigningDefinitionNames": [
+        "advanceBy",
+        "beginCall",
+        "failLoadAt",
+        "failReadAt",
+        "init",
+        "invalidate",
+        "loadAt",
+        "policyWith",
+        "readAt",
+        "rejectAt",
+        "resolveWith",
+        "seedWith"
+      ]
+    },
+    {
+      "id": "recovery-read",
+      "model": "formal/dialcache-recovery-read-conformance.qnt",
+      "module": "dialcache_recovery_read_conformance",
+      "tableSize": 1171,
+      "actions": 21,
+      "reachableDefinitions": 65,
+      "stateAssigningDefinitions": 13,
+      "stateAssigningDefinitionNames": [
+        "advanceBy",
+        "beginIn",
+        "closeContext",
+        "initialized",
+        "invalidate",
+        "observeMarker",
+        "policyWith",
+        "rejectLoader",
+        "releaseLoad",
+        "releaseRead",
+        "resolveLoader",
+        "seedWith",
+        "writeFaultWith"
+      ]
+    },
+    {
+      "id": "local-failure",
+      "model": "formal/dialcache-local-failure-conformance.qnt",
+      "module": "dialcache_local_failure_conformance",
+      "tableSize": 332,
+      "actions": 13,
+      "reachableDefinitions": 23,
+      "stateAssigningDefinitions": 7,
+      "stateAssigningDefinitionNames": [
+        "begin",
+        "fault",
+        "init",
+        "rejectLoader",
+        "remotePolicy",
+        "resolve",
+        "seeded"
+      ]
+    },
+    {
+      "id": "runtime-boundaries",
+      "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
+      "module": "dialcache_runtime_boundaries_conformance",
+      "tableSize": 1113,
+      "actions": 10,
+      "reachableDefinitions": 64,
+      "stateAssigningDefinitions": 6,
+      "stateAssigningDefinitionNames": [
+        "beginCall",
+        "changePolicy",
+        "closeScope",
+        "finishSource",
+        "initialize",
+        "releasePolicy"
+      ]
+    },
+    {
+      "id": "shadow-layers",
+      "model": "formal/dialcache-shadow-layers-conformance.qnt",
+      "module": "dialcache_shadow_layers_conformance",
+      "tableSize": 1544,
+      "actions": 20,
+      "reachableDefinitions": 82,
+      "stateAssigningDefinitions": 10,
+      "stateAssigningDefinitionNames": [
+        "advanceBy",
+        "beginAt",
+        "init",
+        "rejectAt",
+        "rejectTimeoutAt",
+        "releaseDumpAt",
+        "releaseWriteAt",
+        "resolveAt",
+        "seedAt",
+        "setPolicy"
+      ]
+    },
+    {
+      "id": "local-clock",
+      "model": "formal/dialcache-local-clock-conformance.qnt",
+      "module": "dialcache_local_clock_conformance",
+      "tableSize": 334,
+      "actions": 8,
+      "reachableDefinitions": 18,
+      "stateAssigningDefinitions": 4,
+      "stateAssigningDefinitionNames": [
+        "call",
+        "construct",
+        "elapse",
+        "init"
+      ]
+    },
+    {
+      "id": "source-budgets",
+      "model": "formal/dialcache-source-budgets-conformance.qnt",
+      "module": "dialcache_source_budgets_conformance",
+      "tableSize": 558,
+      "actions": 13,
+      "reachableDefinitions": 37,
+      "stateAssigningDefinitions": 6,
+      "stateAssigningDefinitionNames": [
+        "advanced",
+        "begin",
+        "initialize",
+        "rejected",
+        "release",
+        "resolved"
+      ]
+    }
+  ]
+}
