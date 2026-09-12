@@ -529,4 +529,21 @@ module dialcache_layers_conformance {
     .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loaders == 1
       and s.o.reads == 0 and s.o.writes == 0 and s.o.dumps == 0)
+
+  // One untracked source fills the request memo, the local layer and Redis.
+  // Three later callers probe each layer in turn: the same request scope hits
+  // its memo, a fresh context on the same instance hits local, and a fresh
+  // context on the other instance reads the remote frame. No second source runs.
+  run untrackedSourcePublicationIsProbedInAllThreeLayersTest = untrackedFixture
+    .then(startCall(FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(finishSource(0, VALUE_ONE))
+    .expect(s.memo.nth(0) == VALUE_ONE and s.localValues.nth(0) == VALUE_ONE
+      and s.remoteValues.nth(KEY_A) == VALUE_ONE)
+    .then(startCall(FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.reads == 1)
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_ONE) and s.o.reads == 1)
+    .then(startCall(FRESH_OTHER_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_ONE, VALUE_ONE) and s.o.loaders == 1
+      and s.o.reads == 2 and s.o.loads == 1 and s.o.dumps == 1 and s.o.writes == 1)
 }

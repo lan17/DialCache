@@ -3523,6 +3523,54 @@
       "reference": "formal/dialcache-envelope-vectors.qnt:unknownZeroPrefixPassesThroughUnchanged",
       "kind": "invariant",
       "scope": "A binary payload whose leading zero is followed by nothing or by a byte above 2 is legacy raw data: the read outcome is passthrough with every byte returned. Complements the one-prefix unescape invariant; together they cover every zero-prefixed vector input."
+    },
+    {
+      "case": "C55.valid-fence-independent-of-cause",
+      "reference": "formal/dialcache-effects-conformance.qnt:expiredZeroFenceReplyRefillsAndIsReadableTest",
+      "kind": "regression",
+      "scope": "A tracked expired-reason reply with a zero fence is normalized to an expired miss with no retained fence; one source refill is serialized and written, and the next public read hits it without a second source."
+    },
+    {
+      "case": "C55.valid-fence-independent-of-cause",
+      "reference": "formal/dialcache-effects-conformance.qnt:absentReplyWithFutureFenceBlocksRefillTest",
+      "kind": "regression",
+      "scope": "A tracked absent-reason reply with a valid future fence retains that fence through normalization; the accepted source is served without serialization, and the next public read misses and starts a second source."
+    },
+    {
+      "case": "C34.first-fence",
+      "reference": "formal/dialcache-effects-conformance.qnt:absentReplyWithFutureFenceBlocksRefillTest",
+      "kind": "regression",
+      "scope": "An observed future fence carried by a normalized adapter reply suppresses serialization and refill of the accepted source; the following read finds no stored value. Fence equality and invalidation-issued fences keep their tracked-invalidation regressions."
+    },
+    {
+      "case": "C06.false-remote",
+      "reference": "formal/dialcache-policy-conformance.qnt:falsyRemoteValuesAreServedFromRemoteTest",
+      "kind": "regression",
+      "scope": "With the local layer disabled, a false source result is written to Redis and the next same-key call is a remote hit returning false. The zero and empty-string results share this schedule; host encodings remain fixed-scenario evidence."
+    },
+    {
+      "case": "C06.zero-remote",
+      "reference": "formal/dialcache-policy-conformance.qnt:falsyRemoteValuesAreServedFromRemoteTest",
+      "kind": "regression",
+      "scope": "With the local layer disabled, a zero source result is written to Redis and the next same-key call is a remote hit returning zero. The false and empty-string results share this schedule; host encodings remain fixed-scenario evidence."
+    },
+    {
+      "case": "C06.empty-string-remote",
+      "reference": "formal/dialcache-policy-conformance.qnt:falsyRemoteValuesAreServedFromRemoteTest",
+      "kind": "regression",
+      "scope": "After the earlier key reaches its fresh boundary, an empty-string source result refills Redis and the next same-key call is a remote hit returning the empty string. The false and zero results share this schedule; host encodings remain fixed-scenario evidence."
+    },
+    {
+      "case": "C05.participating-publication",
+      "reference": "formal/dialcache-layers-conformance.qnt:untrackedSourcePublicationIsProbedInAllThreeLayersTest",
+      "kind": "regression",
+      "scope": "One untracked source fills the request memo, the local layer and Redis; a same-scope memo hit, a fresh-context local hit and an other-instance remote hit each return the published value with no second source. Tracked validation and detached scopes retain separate evidence."
+    },
+    {
+      "case": "C43.independent-values",
+      "reference": "formal/dialcache-independent-conformance.qnt:independentRecoveriesServeDistinctAcquiredSnapshotsTest",
+      "kind": "regression",
+      "scope": "Two uncoalesced callers acquire different stale frames before their sources fail; after invalidation each recovery serves the bytes its own read retained, with two reads, two sources, two decodes and no writes."
     }
   ],
   "definitions": [

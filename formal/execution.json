@@ -304,7 +304,9 @@
         "negativeFenceRefillsAndIsReadableTest",
         "fractionalFenceRefillsAndIsReadableTest",
         "unsafeFenceRefillsAndIsReadableTest",
-        "untrackedFencedReplyRefillsAndIsReadableTest"
+        "untrackedFencedReplyRefillsAndIsReadableTest",
+        "expiredZeroFenceReplyRefillsAndIsReadableTest",
+        "absentReplyWithFutureFenceBlocksRefillTest"
       ],
       "profile": "effects",
       "generate": {
@@ -353,7 +355,9 @@
         "readFailureKeepsCategoryAndDeniesRefillTest",
         "decodeFailureKeepsCategoryAndAllowsRefillTest",
         "dumpFailureKeepsCategoryAndSourceValueTest",
-        "writeFailureKeepsCategoryAndSourceValueTest"
+        "writeFailureKeepsCategoryAndSourceValueTest",
+        "expiredZeroFenceReplyRefillsAndIsReadableTest",
+        "absentReplyWithFutureFenceBlocksRefillTest"
       ]
     },
     {
@@ -482,7 +486,8 @@
         "recoveryAgeEqualToFreshTtlStillServesFreshRemoteTest",
         "negativeRecoveryAgeStillServesFreshRemoteTest",
         "providerFailureReportsStablePolicyCategoryTest",
-        "remoteHitBeforeBoundaryDoesNotRenewFreshnessTest"
+        "remoteHitBeforeBoundaryDoesNotRenewFreshnessTest",
+        "falsyRemoteValuesAreServedFromRemoteTest"
       ],
       "profile": "policy",
       "generate": {
@@ -519,7 +524,8 @@
         "recoveryAgeEqualToFreshTtlStillServesFreshRemoteTest",
         "negativeRecoveryAgeStillServesFreshRemoteTest",
         "providerFailureReportsStablePolicyCategoryTest",
-        "remoteHitBeforeBoundaryDoesNotRenewFreshnessTest"
+        "remoteHitBeforeBoundaryDoesNotRenewFreshnessTest",
+        "falsyRemoteValuesAreServedFromRemoteTest"
       ]
     },
     {
@@ -695,7 +701,8 @@
         "pendingSourcesKeepEntityAndOperationIdentityTest",
         "settledRequestMemoSurvivesSharedLayerRampDownTest",
         "untrackedReadsIgnoreGroupedInvalidationTest",
-        "trackedWithoutRemotePublishesReusableLocalTest"
+        "trackedWithoutRemotePublishesReusableLocalTest",
+        "untrackedSourcePublicationIsProbedInAllThreeLayersTest"
       ],
       "profile": "layers",
       "generate": {
@@ -718,7 +725,8 @@
         "pendingSourcesKeepEntityAndOperationIdentityTest",
         "settledRequestMemoSurvivesSharedLayerRampDownTest",
         "untrackedReadsIgnoreGroupedInvalidationTest",
-        "trackedWithoutRemotePublishesReusableLocalTest"
+        "trackedWithoutRemotePublishesReusableLocalTest",
+        "untrackedSourcePublicationIsProbedInAllThreeLayersTest"
       ]
     },
     {
@@ -742,7 +750,8 @@
         "recoveryPolicyIsCapturedPerCallerTest",
         "staggeredSourceStartsKeepIndependentBudgetsTest",
         "staggeredSourcesExpireAtTheirOwnDeadlineTest",
-        "independentRecoveryAtCapturedAgeBoundaryTest"
+        "independentRecoveryAtCapturedAgeBoundaryTest",
+        "independentRecoveriesServeDistinctAcquiredSnapshotsTest"
       ],
       "profile": "independent",
       "generate": {
@@ -757,7 +766,8 @@
         "independentRecoveryAtCapturedAgeBoundaryTest",
         "independentReadDeadlinesStartSeparateSourcesTest",
         "timedOutReadCannotAffectAnotherCallTest",
-        "readFailureCannotBorrowAnotherCallsRefillTest"
+        "readFailureCannotBorrowAnotherCallsRefillTest",
+        "independentRecoveriesServeDistinctAcquiredSnapshotsTest"
       ]
     },
     {

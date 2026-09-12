@@ -143,6 +143,22 @@ merged revision `61d55cfec0f5f124ce4cbe46ad9386b310bfaf75` in hosted run
 This records discoveries and their regression anchors; it does not claim that
 named regressions alone cover every required witness.
 
+Fresh seed `0x8d654b2dd2257c4d` in hosted run
+[34670045249](https://github.com/lan17/DialCache/actions/runs/34670045249)
+replayed both ports but missed the effects witness
+`normalized-reply-allows-refill:13` after 552 histories. Counting required
+labels per history over the pinned corpus then found nine more labels reached by
+at most three sampled histories and by no exported regression. These
+public-action regressions now anchor all of them:
+
+| Profile / fragile witness | Named regression |
+| --- | --- |
+| effects / `normalized-reply-allows-refill:13`, `reply:13`, `miss:expired` | [expiredZeroFenceReplyRefillsAndIsReadableTest](./dialcache-effects-conformance.qnt) |
+| effects / `normalized-reply-fences-refill:12`, `normalized-fence-blocks-publication` | [absentReplyWithFutureFenceBlocksRefillTest](./dialcache-effects-conformance.qnt) |
+| policy / `remote-value:7`, `remote-value:8`, `remote-value:9` | [falsyRemoteValuesAreServedFromRemoteTest](./dialcache-policy-conformance.qnt) |
+| layers / `source-publication-probed-in-all-three-layers` | [untrackedSourcePublicationIsProbedInAllThreeLayersTest](./dialcache-layers-conformance.qnt) |
+| independent / `distinct-retained-recovery-values` | [independentRecoveriesServeDistinctAcquiredSnapshotsTest](./dialcache-independent-conformance.qnt) |
+
 ## Historical results
 
 The merged baseline's detailed run logs remain in
