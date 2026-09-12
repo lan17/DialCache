@@ -1362,7 +1362,7 @@
     },
     {
       "path": "formal/SEMANTIC-COVERAGE.md",
-      "sha256": "c67558bdd7b27e7dde5cbc4233c231794a3ee1205e0d73a161be55825181005e",
+      "sha256": "a6c137d8f075b096e0f8a204ece53193526e38a64ac37623c997784712b3defe",
       "entries": [
         {"line":1,"title":"Measuring semantic coverage"},
         {"line":5,"title":"Evidence inventory"},
@@ -1371,7 +1371,7 @@
         {"line":96,"title":"Behavioral mutation comparison"},
         {"line":110,"title":"Recorded measurements"},
         {"line":116,"title":"Reproduction and CI"},
-        {"line":146,"title":"Model properties and cross-language execution"}
+        {"line":158,"title":"Model properties and cross-language execution"}
       ],
       "review": {
         "kind": "coverage-guide",
@@ -1501,15 +1501,15 @@
     },
     {
       "path": "formal/VALIDATION.md",
-      "sha256": "a01e0b546bdc2a1a2b13b5573898cafb01b6b19791f670f088b8be4d4c123bb1",
+      "sha256": "c445bab1b58f6c3bdf346e9149654fa9f4cc566e868a461e92e12333e62e9e6b",
       "entries": [
         {"line":1,"title":"Validation and evidence"},
         {"line":7,"title":"Choosing a run"},
         {"line":50,"title":"Reading a completion report"},
         {"line":68,"title":"Mutation evidence"},
-        {"line":111,"title":"Exploratory runs"},
-        {"line":141,"title":"A retained sampling regression"},
-        {"line":162,"title":"Historical results"}
+        {"line":125,"title":"Exploratory runs"},
+        {"line":155,"title":"A retained sampling regression"},
+        {"line":176,"title":"Historical results"}
       ],
       "review": {
         "kind": "tooling-guide",

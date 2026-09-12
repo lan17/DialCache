@@ -131,13 +131,25 @@ measurement programs remain `measure-semantics.mjs` and
 `measure-go-semantics.mjs`; the Make targets supply the pinned prerequisite
 checks used by hosted full validation.
 
+Hosted runs shard each lane three ways with `MUTATION_SHARD=<index>/<count>`.
+A shard reruns the compile check, every unmodified baseline and the witness
+evaluation before its contiguous slice of the catalog, and writes an incomplete
+report under `shards/<index>-of-<count>/`. `make mutations-merge-ts` and
+`make mutations-merge-go` (`merge-mutation-reports.mjs`) assemble the complete
+report from those shards and refuse any inconsistency: a missing or duplicated
+shard, a shard that failed or claims completion, differing fingerprints or
+baseline results, or mutations that do not cover the catalog exactly once in
+order. The detection summary and the required-detection gate are computed by the
+functions the single-process run uses, so the merged report is the same evidence
+at the same strictness; it is the only report the workflow accepts.
+
 The manual/weekly workflow runs the full corpus and fault checks. PR checks
 retain native/race/smoke/audit and real-server integration, plus fixture
 recomputation when generation inputs change. A behavior/model change still
 needs full validation before merge; release and new-port acceptance need the
 same full evidence. `make check` alone supplies no mutation or full-parity pass.
 
-The runner clears inherited trace selectors, uses the complete generated directories, and leaves source files untouched. It writes `.formal-traces/semantic/report.json` and `report.md`, per-cohort assertion reports/logs, and baseline witness evidence. JSON records completion status, elapsed time, revision, Node version, source/configuration/input hashes, exact corpus hash, cohort sizes, detections, survivors, and failing test names. An interrupted or failed run is not a completed measurement. The full workflow retains these files in `typescript-semantic-evidence`, alongside the shared `formal-traces` artifact; restore the measurement artifact into `.formal-traces/semantic/` for reproduction.
+The runner clears inherited trace selectors, uses the complete generated directories, and leaves source files untouched. It writes `.formal-traces/semantic/report.json` and `report.md`, per-cohort assertion reports/logs, and baseline witness evidence; in a sharded run each shard's cohort reports, logs and witness evidence sit under `shards/<index>-of-<count>/` beneath the merged `report.json` and `report.md`. JSON records completion status, elapsed time, revision, Node version, source/configuration/input hashes, exact corpus hash, cohort sizes, detections, survivors, and failing test names. An interrupted or failed run is not a completed measurement. The full workflow retains these files in `typescript-semantic-evidence`, alongside the shared `formal-traces` artifact; restore the measurement artifact into `.formal-traces/semantic/` for reproduction.
 
 Each catalog entry's `requiredDetections` is a regression gate. The local mutation target and full workflow fail if a required fault survives. Newly detected faults remain visible as improvements; update the required set after inspecting the result. Source edits must match exactly once, so implementation drift requires reviewing the mutation rather than silently skipping it.
 

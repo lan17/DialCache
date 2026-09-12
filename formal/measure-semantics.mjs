@@ -1,23 +1,36 @@
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { resolve, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { checkSemanticCoverage } from './check-semantic-coverage.mjs';
 import { evaluateSemanticTestReport } from './semantic-reporter.mjs';
+import { fingerprintFiles, gateDetections, languages, partitionMutations, shardDirectory, shardFromArguments } from './mutation-reports.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const output = resolve(root, '.formal-traces/semantic');
+const language = languages.ts;
+// --shard=<index>/<count> measures a contiguous slice of the catalog after the
+// full baselines; the default is the complete single-process measurement.
+const shard = shardFromArguments(process.argv.slice(2));
+const reportRoot = resolve(root, language.output);
+const output = shardDirectory(reportRoot, shard);
 const read = path => readFileSync(resolve(root, path), 'utf8');
 const started = Date.now();
 // Invalidate any previous completed report even if preflight fails before an
 // isolated workspace can be created (for example, a stale mutation anchor).
-mkdirSync(output, { recursive: true });
-writeFileSync(resolve(output, 'report.json'), JSON.stringify({ schemaVersion: 1, complete: false, startedAt: new Date(started).toISOString() }) + '\n');
-rmSync(resolve(output, 'report.md'), { force: true });
+// A shard also invalidates the merged report above it, which is evidence only
+// while every shard beneath it is current.
+mkdirSync(reportRoot, { recursive: true });
+writeFileSync(resolve(reportRoot, 'report.json'), JSON.stringify({ schemaVersion: 1, complete: false, startedAt: new Date(started).toISOString() }) + '\n');
+rmSync(resolve(reportRoot, 'report.md'), { force: true });
+if (output !== reportRoot) {
+  rmSync(output, { recursive: true, force: true });
+  mkdirSync(output, { recursive: true });
+  writeFileSync(resolve(output, 'report.json'), JSON.stringify({ schemaVersion: 1, complete: false, shard: { index: shard.index, count: shard.count }, startedAt: new Date(started).toISOString() }) + '\n');
+}
 const declaredCoverage = checkSemanticCoverage();
-const catalog = JSON.parse(read('formal/semantic-mutations.json'));
+const catalog = JSON.parse(read(language.catalog));
 if (catalog.schemaVersion !== 1 || catalog.mutations.length === 0) throw new Error('Expected semantic mutation catalog');
 const formalTests = ['test/formal-conformance.test.ts', 'test/formal-effects.test.ts', 'test/formal-features.test.ts', 'test/formal-local-clock.test.ts', 'test/formal-protocol-vectors.test.ts'];
 const portableTests = ['test/formal-behavior.test.ts', 'test/formal-protocol-vectors.test.ts'];
@@ -41,6 +54,8 @@ function portableResult({ generated, fixed }) {
 }
 const sourceText = new Map();
 const ids = new Set();
+// Every shard validates the whole catalog: a stale anchor anywhere fails each
+// shard the same way it fails the single run.
 for (const mutation of catalog.mutations) {
   if (!/^M\d+$/.test(mutation.id) || ids.has(mutation.id)) throw new Error('Invalid/duplicate mutation ID');
   ids.add(mutation.id);
@@ -50,35 +65,22 @@ for (const mutation of catalog.mutations) {
   if (!mutation.requiredDetections.every(c => comparisons.includes(c))) throw new Error(`Unknown cohort: ${mutation.id}`);
   sourceText.set(mutation.path, original);
 }
+const selected = partitionMutations(catalog.mutations, shard);
 // A hard CI cancellation may bypass finally. Keep temporary dependency links
 // outside the artifact tree even when that happens.
 const workspace = mkdtempSync(resolve(tmpdir(), 'dialcache-semantic-'));
 const report = {
   schemaVersion: 1,
   complete: false,
+  ...(shard.count > 1 ? { shard: { index: shard.index, count: shard.count, mutationIds: selected.map(m => m.id) } } : {}),
   startedAt: new Date(started).toISOString(),
   revision: spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout.trim(),
   node: process.version,
-  catalogSha256: createHash('sha256').update(read('formal/semantic-mutations.json')).digest('hex'),
+  catalogSha256: createHash('sha256').update(read(language.catalog)).digest('hex'),
   sourceSha256: Object.fromEntries([...sourceText].map(([path, text]) => [path, createHash('sha256').update(text).digest('hex')])),
   declaredCoverage,
   baselines: {}, mutations: [],
 };
-// Hash the reviewed inputs, including uncommitted edits and exact trace bytes.
-// Git revision alone cannot identify an exploratory run from a dirty worktree.
-function fingerprint(paths) {
-  const files = [];
-  const visit = path => {
-    for (const entry of readdirSync(resolve(root, path), { withFileTypes: true })) {
-      if (entry.isDirectory()) visit(`${path}/${entry.name}`);
-      else if (entry.isFile()) files.push(`${path}/${entry.name}`);
-    }
-  };
-  paths.forEach(visit);
-  const hash = createHash('sha256');
-  for (const path of files.sort()) hash.update(path).update('\0').update(readFileSync(resolve(root, path))).update('\0');
-  return { files: files.length, sha256: hash.digest('hex') };
-}
 const env = { ...process.env };
 for (const key of Object.keys(env)) if (key.startsWith('DIALCACHE_')) delete env[key];
 Object.assign(env, {
@@ -118,10 +120,12 @@ try {
     cpSync(resolve(root, path), resolve(workspace, path), { recursive: true, filter: source => !source.includes('/docs/.vitepress/cache') && !source.includes('/docs/.vitepress/dist') });
   }
   symlinkSync(resolve(root, 'node_modules'), resolve(workspace, 'node_modules'), 'dir');
-  report.inputs = fingerprint(['src', 'test', 'formal']);
+  report.inputs = fingerprintFiles(root, language.inputs);
   report.configurationSha256 = Object.fromEntries(['package.json', 'pnpm-lock.yaml', 'tsconfig.json', 'vitest.config.ts'].map(path => [path, createHash('sha256').update(read(path)).digest('hex')]));
-  report.corpus = fingerprint(['.formal-traces/conformance', '.formal-traces/effects', '.formal-traces/features', '.formal-traces/regressions']);
+  report.corpus = fingerprintFiles(root, ['.formal-traces/conformance', '.formal-traces/effects', '.formal-traces/features', '.formal-traces/regressions']);
   rmSync(resolve(output, 'witnesses'), { recursive: true, force: true });
+  // Every shard measures every baseline itself: its evidence stands on the
+  // environment it ran in, and the merge refuses shards whose baselines differ.
   for (const cohort of Object.keys(cohorts)) {
     report.baselines[cohort] = run('baseline', cohort, true);
     console.log(`baseline ${cohort}: ${report.baselines[cohort].passed} passed`);
@@ -140,7 +144,7 @@ try {
     if (evidence.profile !== profile || evidence.traces <= 0 || required.some(w => !evidence.seen.includes(w))) throw new Error(`${profile}: incomplete baseline witness evidence`);
     report.reachedWitnesses[profile] = { required: required.length, reached: required.filter(w => evidence.seen.includes(w)).length, traces: evidence.traces };
   }
-  for (const mutation of catalog.mutations) {
+  for (const mutation of selected) {
     const path = resolve(workspace, mutation.path), original = sourceText.get(mutation.path);
     try {
       writeFileSync(path, original.replace(mutation.before, mutation.after));
@@ -154,31 +158,18 @@ try {
       save();
     } finally { writeFileSync(path, original); }
   }
-  const regressions = catalog.mutations.flatMap(m => m.requiredDetections.filter(c => report.mutations.find(r => r.id === m.id).cohorts[c].state !== 'detected').map(c => `${m.id}/${c}`));
-  if (regressions.length) throw new Error(`Lost required detections: ${regressions.join(', ')}`);
-  const cases = JSON.parse(read('formal/semantic-cases.json')).cases;
-  const score = mutations => Object.fromEntries(comparisons.map(cohort => {
-    const detected = mutations.filter(m => m.cohorts[cohort].state === 'detected');
-    const ordinary = mutations.filter(m => m.cohorts.ordinary.state === 'detected');
-    return [cohort, { detected: detected.length, total: mutations.length,
-      ordinaryParity: { detected: ordinary.filter(m => m.cohorts[cohort].state === 'detected').length, total: ordinary.length },
-      survivors: mutations.filter(m => m.cohorts[cohort].state === 'survived').map(m => m.id) }];
-  }));
-  const protocol = m => cases.find(c => c.id === m.case).vectors.length > 0;
-  report.detection = { all: score(report.mutations), behavioral: score(report.mutations.filter(m => !protocol(m))), protocol: score(report.mutations.filter(protocol)) };
-  report.complete = true;
-  save();
-  const lines = ['# Semantic coverage measurement', '',
-    `Completed in ${report.elapsedSeconds}s. Inventory and mutation counts describe named cases, not universal semantic completeness.`, '',
-    '| Scope | Cases | Portable execution references | Required generated witnesses |',
-    '| --- | ---: | ---: | ---: |',
-    ...['cases', 'behavioral', 'protocol'].map(scope => { const c = declaredCoverage[scope]; return `| ${scope} | ${c.total} | ${c.portable} | ${c.generated} |`; }), '',
-    'Protocol references include invalidation vectors exercised separately by integration CI. Model references are a conservative named-property subset, not total model coverage.', '',
-    '| Mutation | Case | Ordinary | Generated | Full portable |', '| --- | --- | --- | --- | --- |',
-    ...report.mutations.map(m => `| ${m.id} | ${m.case} | ${m.cohorts.ordinary.state} | ${m.cohorts.generated.state} | ${m.cohorts.portable.state} |`), '',
-    'Full JSON includes exact input/corpus hashes, cohort counts, reached witnesses, behavioral/protocol scores, and failing test names. Adjacent JSON/log files retain assertion diagnostics and trace paths.', ''];
-  writeFileSync(resolve(output, 'report.md'), lines.join('\n'));
-  console.log(`Report: ${relative(root, output)}/report.md`);
+  if (shard.count > 1) {
+    // A shard gates its own slice and stays incomplete; the merge recomputes the
+    // gate and the detection summary over the whole catalog.
+    gateDetections(language, report, selected, { directory: root, summarize: false });
+    save();
+    console.log(`Shard ${shard.index}/${shard.count} measured ${selected.length} mutations: ${relative(root, output)}/report.json; merge with node formal/merge-mutation-reports.mjs ts`);
+  } else {
+    gateDetections(language, report, catalog.mutations, { directory: root });
+    save();
+    writeFileSync(resolve(output, 'report.md'), language.markdown(report));
+    console.log(`Report: ${relative(root, output)}/report.md`);
+  }
 } catch (error) {
   report.complete = false;
   report.error = String(error);
