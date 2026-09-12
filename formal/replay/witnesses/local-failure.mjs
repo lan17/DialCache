@@ -31,6 +31,6 @@ export const localFailureWitnessRules = [
     check(8, { calls: [1, 3, 1], loaders: 2, reads: 1, writes: 1 })),
 ];
 
-export function localFailureWitnesses(paths) {
-  return publicPrefixWitnesses(paths, localFailureWitnessRules);
+export function localFailureWitnesses(paths, recorder) {
+  return publicPrefixWitnesses(paths, localFailureWitnessRules, recorder);
 }

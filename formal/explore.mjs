@@ -7,6 +7,7 @@ import { cleanEnvironment, executeSteps, validationPlan } from './validation.mjs
 import { nativeBinding } from './conformance-bindings.mjs';
 import { parseTypeScriptReport } from './conformance-adapters.mjs';
 import { checkGoReplay } from './check-go-replay.mjs';
+import { reportFileName } from './witnesses.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -172,7 +173,7 @@ export async function runExplorationSteps(plan, { directory, environment = proce
     if (step.explorationContext) { await prepareExplorationContext(step.explorationContext, directory); continue; }
     if (step.tolerateFailure) {
       try { await execute([step], { directory, environment }); }
-      catch (error) { console.warn(`${step.label ?? 'Tolerated step'} failed; both native witness leaves record the shortfall: ${error}`); }
+      catch (error) { console.warn(`${step.label ?? 'Tolerated step'} failed; both native witness leaves record the shortfall and report.json keeps the witness report: ${error}`); }
       continue;
     }
     if (!step.nativeReport) { await execute([step], { directory, environment }); continue; }
@@ -288,6 +289,14 @@ async function executeExploration(seed, { directory = root, environment = proces
     if (report.status === 'running') report.status = 'infrastructure-failure';
     report.error = String(error); throw error;
   } finally {
+    // The tolerated witness step leaves its fragility report and baseline gate
+    // result in the workspace; keep them with the exploration report so a
+    // fresh seed's sampled-count drop stays visible even when the step failed.
+    const witnessReport = resolve(workspace, `.formal-traces/${reportFileName}`);
+    if (existsSync(witnessReport)) {
+      try { report.witnesses = JSON.parse(readFileSync(witnessReport, 'utf8')); }
+      catch (error) { report.witnesses = { error: String(error) }; }
+    }
     // Unlink only the known runtime link. Initialization errors also receive a
     // finished report and cannot leave a permanently "running" artifact.
     let cleanupError;

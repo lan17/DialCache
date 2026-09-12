@@ -1,12 +1,14 @@
+import { createWitnessRecorder } from "./recorder.mjs";
+
 // These are reachability checks over replayed observations, not additional
 // implementation state. A large corpus must not pass by missing its hard paths.
 // Private predictions identify the schedules we sampled. A witness involving
 // stored state is counted only when a later public call probes that prediction.
-export function layersWitnesses(histories) {
-  const seen = new Set();
-  for (const { steps, states: predictions } of histories) {
+export function layersWitnesses(histories, recorder = createWitnessRecorder()) {
+  for (const { path, steps, states: predictions } of histories) {
+    recorder.enter(path);
     const mode = steps[0].choice;
-    seen.add(`fixture:${mode}`);
+    recorder.credit(`fixture:${mode}`);
     const calls = [];
     const evicted = new Set();
     const promoted = new Set();
@@ -17,7 +19,8 @@ export function layersWitnesses(histories) {
     const fenced = new Map();
     const survivingOther = new Set();
     for (const [i, step] of steps.entries()) {
-      seen.add(`action:${step.action}`);
+      recorder.step(i);
+      recorder.credit(`action:${step.action}`);
       const previous = steps[i - 1]?.expected;
       if (previous === undefined) continue;
       const o = step.expected;
@@ -38,35 +41,35 @@ export function layersWitnesses(histories) {
         const localHit = context >= 3 && returned && !read && !starts && [0, 1, 3].includes(policy);
         if (!starts && !returned && calls.some((call, j) => previous.calls[j] === 0 && call.identity === identity
           && [0, 1].includes(call.context) && [0, 1].includes(context) && call.context !== context)
-          && !calls.some((call, j) => previous.calls[j] === 0 && call.identity === identity && call.context === context)) seen.add("request-misses-share-process-flight");
-        if (mode >= 2 && mode <= 3 && context >= 3 && !starts && !returned && [0, 1, 2, 3].includes(policy)) seen.add("zero-capacity-still-shares");
+          && !calls.some((call, j) => previous.calls[j] === 0 && call.identity === identity && call.context === context)) recorder.credit("request-misses-share-process-flight");
+        if (mode >= 2 && mode <= 3 && context >= 3 && !starts && !returned && [0, 1, 2, 3].includes(policy)) recorder.credit("zero-capacity-still-shares");
         if (mode >= 2 && mode <= 3 && context >= 3 && policy === 3 && starts
-          && calls.some((call, j) => call.identity === identity && previous.calls[j] > 0)) seen.add("zero-capacity-reloads");
+          && calls.some((call, j) => call.identity === identity && previous.calls[j] > 0)) recorder.credit("zero-capacity-reloads");
         if (mode >= 2 && mode <= 3 && context < 3 && policy === 4 && returned && !starts
-          && before.memo.slice(context * 4, context * 4 + 4).filter(v => v > 0).length > 2) seen.add("request-memo-exceeds-local-capacity");
+          && before.memo.slice(context * 4, context * 4 + 4).filter(v => v > 0).length > 2) recorder.credit("request-memo-exceeds-local-capacity");
         if (localHit) {
           if (mode === 4) {
-            seen.add("absent-remote-preserves-local-reuse");
-            if (previous.maintenance.includes("missing_remote")) seen.add("absent-remote-maintenance-preserves-local");
+            recorder.credit("absent-remote-preserves-local-reuse");
+            if (previous.maintenance.includes("missing_remote")) recorder.credit("absent-remote-maintenance-preserves-local");
           }
-          if (ordersBefore[instance].length === 2 && ordersBefore[instance][0] === identity) { seen.add("lru-read-promotes"); promoted.add(key); }
-          if (preserved.has(key)) seen.add("promoted-value-survives-eviction");
-          if (survivingOther.has(key)) seen.add("capacity-is-per-instance");
-          if (validated.has(key)) seen.add("validated-tracked-hit-warms-local");
-          if (mode % 2 === 1 && invalidated.has(Math.floor(identity / 2))) seen.add("invalidation-preserves-local-hit");
+          if (ordersBefore[instance].length === 2 && ordersBefore[instance][0] === identity) { recorder.credit("lru-read-promotes"); promoted.add(key); }
+          if (preserved.has(key)) recorder.credit("promoted-value-survives-eviction");
+          if (survivingOther.has(key)) recorder.credit("capacity-is-per-instance");
+          if (validated.has(key)) recorder.credit("validated-tracked-hit-warms-local");
+          if (mode % 2 === 1 && invalidated.has(Math.floor(identity / 2))) recorder.credit("invalidation-preserves-local-hit");
         }
-        if (context >= 3 && policy === 3 && starts && evicted.has(key)) seen.add("lru-eviction-probed");
+        if (context >= 3 && policy === 3 && starts && evicted.has(key)) recorder.credit("lru-eviction-probed");
         if (remoteHit && mode % 2 === 1) {
           validated.add(key);
-          if (published.has(key)) seen.add("tracked-refill-needs-remote-validation");
+          if (published.has(key)) recorder.credit("tracked-refill-needs-remote-validation");
         }
         const entity = Math.floor(identity / 2);
         const fencedBytes = before.remoteValues[identity] > 0 && before.created[identity] <= before.watermark[entity];
-        if (fencedBytes && read && mode % 2 === 0 && remoteHit) seen.add("untracked-ignores-watermark");
+        if (fencedBytes && read && mode % 2 === 0 && remoteHit) recorder.credit("untracked-ignores-watermark");
         if (fencedBytes && read && mode % 2 === 1 && starts) {
           const variants = fenced.get(entity);
           variants?.add(identity);
-          if (variants?.size === 2) seen.add("invalidation-fences-both-operations");
+          if (variants?.size === 2) recorder.credit("invalidation-fences-both-operations");
         }
         if (remoteHit) { survivingOther.delete(key); promoted.delete(key); preserved.delete(key); }
         for (const pending of published) if (Math.floor(pending / 4) === instance) published.delete(pending);
@@ -93,5 +96,5 @@ export function layersWitnesses(histories) {
       }
     }
   }
-  return seen;
+  return recorder.labels();
 }
