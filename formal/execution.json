@@ -1341,7 +1341,17 @@
       "model": "formal/dialcache-policy-conformance.qnt",
       "invariant": "localHitsRespectInsertionExpiry",
       "before": "val localHit = localEligible and localEntryLiveAt(s.now, s.localExpires)",
-      "after": "val localHit = localEligible and s.now <= s.localExpires"
+      "after": "val localHit = localEligible and s.now <= s.localExpires",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "localHitDoesNotRenewInsertionTtlTest",
+        "failure": "s.o.calls == List(VALUE_ONE, VALUE_ONE, CALL_PENDING) and s.o.loaders == 2",
+        "family": "inclusive-expiry-boundary",
+        "profiles": [
+          "policy"
+        ],
+        "exclusions": {}
+      }
     },
     {
       "id": "local-precise-grid",
@@ -1504,7 +1514,17 @@
       "model": "formal/dialcache-shadow-conformance.qnt",
       "invariant": "c0AcquisitionsRespectFreshness",
       "before": "val acquired = if (freshAgeAllowed(s.created, s.wall, FRESHNESS_MS)) snapshot else NO_PAYLOAD",
-      "after": "val acquired = if (s.created <= s.wall and s.wall - s.created <= FRESHNESS_MS) snapshot else NO_PAYLOAD"
+      "after": "val acquired = if (s.created <= s.wall and s.wall - s.created <= FRESHNESS_MS) snapshot else NO_PAYLOAD",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "c0AtExactFreshnessBoundaryRefillsTest",
+        "failure": "s.o.calls == List(VALUE_TWO, VALUE_TWO) and s.o.loads == 1 and s.o.dumps == 1",
+        "family": "inclusive-freshness-boundary",
+        "profiles": [
+          "shadow"
+        ],
+        "exclusions": {}
+      }
     },
     {
       "id": "core-unhealthy-local-read-hits",
@@ -1729,7 +1749,17 @@
       "model": "formal/dialcache-admission-conformance.qnt",
       "invariant": "capacityIsPerInstance",
       "before": "    ).size() >= JOBS_PER_INSTANCE\n    val admitted",
-      "after": "    ).size() > JOBS_PER_INSTANCE\n    val admitted"
+      "after": "    ).size() > JOBS_PER_INSTANCE\n    val admitted",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "fullInstanceDoesNotBlockOtherInstanceTest",
+        "failure": "s.o.loaders == 2 and s.o.shadow == List(\"dropped\")",
+        "family": "capacity-off-by-one",
+        "profiles": [
+          "admission"
+        ],
+        "exclusions": {}
+      }
     },
     {
       "id": "layers-process-flight-crosses-instance",
@@ -1846,7 +1876,17 @@
       "model": "formal/dialcache-local-clock-conformance.qnt",
       "invariant": "localReadsUseCommonWholeMilliseconds",
       "before": "entry.value != EMPTY_ENTRY and localEntryLiveOnGrid(ticks, entry.insertedTicks, LOCAL_TTL_MS, TICKS_PER_MS)",
-      "after": "entry.value != EMPTY_ENTRY and ticks - entry.insertedTicks < LOCAL_TTL_MS * TICKS_PER_MS"
+      "after": "entry.value != EMPTY_ENTRY and ticks - entry.insertedTicks < LOCAL_TTL_MS * TICKS_PER_MS",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "fractionalInsertionExpiresAtWholeMillisecondTest",
+        "failure": "s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_TWO) and s.o.loaders == 2",
+        "family": "sub-millisecond-expiry-grid",
+        "profiles": [
+          "local-clock"
+        ],
+        "exclusions": {}
+      }
     },
     {
       "id": "local-clock-hit-renews-insertion",
@@ -1883,7 +1923,34 @@
       "invariant": "futureFrameIsNeverFreshOrRetained",
       "before": "created <= observed and observed - created < ceiling",
       "after": "observed - created < ceiling",
-      "measures": "Repeats the recovery-future-candidate fault against stale-recovery: the model keeps no future check of its own on the initial-read path, so a shared age rule that stops rejecting future stamps must be caught by this model's read receipt."
+      "measures": "Repeats the recovery-future-candidate fault against stale-recovery: the model keeps no future check of its own on the initial-read path, so a shared age rule that stops rejecting future stamps must be caught by this model's read receipt.",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "wallRollbackRejectsFutureRemoteFrameTest",
+        "model": "formal/dialcache-policy-conformance.qnt",
+        "failure": "s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.loaders == 2",
+        "family": "future-timestamp-accepted",
+        "profiles": [
+          "formal/dialcache-stale-recovery.qnt",
+          "recovery",
+          "policy",
+          "shadow"
+        ],
+        "exclusions": {
+          "core": "Evaluates no age judgment from cache-rules, so ageBeforeCeiling is unreachable.",
+          "effects": "Uses only deadlinePendingAt and fenceAllows from cache-rules; no age judgment is evaluated.",
+          "scope": "Evaluates no age judgment from cache-rules, so ageBeforeCeiling is unreachable.",
+          "admission": "Uses only deadlinePendingAt from cache-rules; no age judgment is evaluated.",
+          "layers": "Uses only fenceAllows from cache-rules; no age judgment is evaluated.",
+          "independent": "Seeds stamp frames at the wall minus a non-negative age and the clock only advances, so no history observes a future stamp.",
+          "recovery-read": "Seeds stamp frames at the wall minus a non-negative age and the wall only advances; the unsafe-timestamp seed is rejected as an unsupported frame before any age judgment, so no history observes a future stamp.",
+          "local-failure": "Evaluates no age judgment from cache-rules, so ageBeforeCeiling is unreachable.",
+          "runtime-boundaries": "Evaluates no age judgment from cache-rules, so ageBeforeCeiling is unreachable.",
+          "shadow-layers": "Remote frames are stamped from the monotonic job clock at write time or seeded at a non-negative age, so no history observes a future stamp.",
+          "local-clock": "Uses only localEntryLiveOnGrid from cache-rules; no age judgment is evaluated.",
+          "source-budgets": "Uses only localEntryLiveAt and sourceAcceptsAt from cache-rules; no age judgment is evaluated."
+        }
+      }
     },
     {
       "id": "envelope-strips-unknown-zero-prefix",
@@ -1892,7 +1959,18 @@
       "model": "formal/dialcache-envelope-vectors.qnt",
       "invariant": "unknownZeroPrefixPassesThroughUnchanged",
       "before": "if (raw.length() > 1 and raw.nth(1) <= 2)",
-      "after": "if (raw.length() > 1)"
+      "after": "if (raw.length() > 1)",
+      "reproducer": {
+        "kind": "model-run",
+        "run": "unknownLegacyZeroPrefixRemainsUntouchedTest",
+        "failure": "result.read.bytes == List(0, 3, 255)",
+        "family": "escape-prefix-over-consumed",
+        "profiles": [
+          "formal/dialcache-envelope-vectors.qnt"
+        ],
+        "exclusions": {},
+        "scope": "Envelope handling is a deterministic transform with no replayed input history: the vector model exports its cases to quint-envelope-vectors.json and both codecs are checked against that artifact, not through a driver profile. The run pins the unknown zero-prefix payload (bytes 0, 3, 255) that the fault would unescape."
+      }
     },
     {
       "id": "source-budgets-accepts-at-deadline-equality",
@@ -1901,7 +1979,79 @@
       "model": "formal/dialcache-source-budgets-conformance.qnt",
       "invariant": "acceptedSourceRespectsItsOwnStart",
       "before": "not(sourceAcceptsAt(source.started, now, source.budget))",
-      "after": "source.budget >= 0 and now > source.started + source.budget"
+      "after": "source.budget >= 0 and now > source.started + source.budget",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "defaultSourceBudgetExpiresAtSixtySecondsTest",
+        "failure": "s.o.calls == List(DEADLINE_ERROR, CALL_PENDING) and s.o.loaders == 2",
+        "family": "inclusive-deadline-boundary",
+        "profiles": [
+          "source-budgets"
+        ],
+        "exclusions": {}
+      }
     }
+  ],
+  "reproducerBacklog": [
+    "source-deadline-epoch",
+    "recovery-inclusive-maximum",
+    "recovery-future-candidate",
+    "legacy-recovery-inclusive-maximum",
+    "local-precise-grid",
+    "source-inclusive-deadline",
+    "fence-inclusive-timestamp",
+    "profile-source-wrong-clock",
+    "profile-source-wrong-owner",
+    "profile-recovery-wrong-snapshot",
+    "recovery-read-wrong-admission-policy",
+    "legacy-recovery-wrong-snapshot",
+    "independent-wrong-admission-policy",
+    "independent-wrong-recovered-value",
+    "effects-source-wrong-clock",
+    "effects-wrong-acceptance-receipt",
+    "legacy-recovery-strands-followers",
+    "independent-source-wrong-clock",
+    "independent-source-wrong-owner",
+    "tracked-read-inclusive-fence",
+    "policy-inclusive-remote-freshness",
+    "core-unhealthy-local-read-hits",
+    "core-tracked-fallback-warms-local",
+    "runtime-policy-coalesce-defaults-off",
+    "runtime-policy-physical-ttl-ignores-recovery",
+    "stale-recovery-inclusive-served-maximum",
+    "stale-recovery-candidate-stamped-at-read",
+    "shadow-validation-fenced-fill-writes",
+    "shadow-validation-fill-before-source",
+    "redis-protocol-inclusive-fence",
+    "redis-protocol-untracked-fence",
+    "frame-vectors-inclusive-fence",
+    "invalidation-transition-cutoff-moves-backwards",
+    "invalidation-transition-inclusive-buffer-limit",
+    "key-protocol-untracked-brace-rejection",
+    "cohort-inclusive-threshold",
+    "envelope-vectors-tie-compresses",
+    "envelope-vectors-escape-misses-binary-marker",
+    "conformance-local-hit-returns-source",
+    "conformance-remote-miss-skips-publication",
+    "effects-fenced-source-publishes",
+    "effects-late-source-accepted",
+    "scope-late-source-repopulates-closed-memo",
+    "scope-source-error-memoized",
+    "admission-duplicate-key-admitted",
+    "layers-process-flight-crosses-instance",
+    "layers-late-memo-into-closed-scope",
+    "independent-fresh-frame-retained",
+    "independent-deadline-settles-at-start",
+    "recovery-read-inclusive-maximum",
+    "recovery-read-recovery-warms-local",
+    "local-failure-write-fault-publishes",
+    "local-failure-source-error-published",
+    "runtime-boundaries-inclusive-cohort",
+    "runtime-boundaries-inherited-sharing-ignores-default",
+    "shadow-layers-inclusive-c0-freshness",
+    "shadow-layers-fill-uses-current-retention",
+    "local-clock-hit-renews-insertion",
+    "source-budgets-outside-call-has-deadline",
+    "source-budgets-settled-flight-stays-registered"
   ]
 }

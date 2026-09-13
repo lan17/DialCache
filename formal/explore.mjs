@@ -7,6 +7,7 @@ import { cleanEnvironment, executeSteps, validationPlan } from './validation.mjs
 import { nativeBinding } from './conformance-bindings.mjs';
 import { parseTypeScriptReport } from './conformance-adapters.mjs';
 import { checkGoReplay } from './check-go-replay.mjs';
+import { canonicalSeed, reportFileName } from './witnesses.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -15,9 +16,8 @@ const reportPaths = { typescript: '.formal-traces/ts-replay.json', go: '.formal-
 const contextPaths = { typescript: '.formal-traces/ts-context.json', go: '.formal-traces/go-context.json' };
 
 export function explorationSeed(value = `0x${randomBytes(8).toString('hex')}`) {
-  if (typeof value !== 'string' || !/^(0x[\da-fA-F]{1,16}|\d{1,20})$/.test(value)
-    || BigInt(value) > 0xffffffffffffffffn) throw new Error('Exploration seed must be an unsigned 64-bit integer.');
-  return `0x${BigInt(value).toString(16)}`;
+  try { return canonicalSeed(value); }
+  catch { throw new Error('Exploration seed must be an unsigned 64-bit integer.'); }
 }
 
 // Share model generation and native execution with acceptance. Exploration has
@@ -38,7 +38,9 @@ export function explorationPlan(directory, seed, options = {}) {
     // evaluator runs before either replay and still writes evidence for complete
     // profiles; its exit status must not stop either port from executing that
     // seed's histories.
-    if (script === 'formal/witnesses.mjs') return [{ ...step, tolerateFailure: true }];
+    // The evaluator learns the corpus seed from the same variable run-models.mjs
+    // reads, so its baseline gate applies the exploration rule to this seed.
+    if (script === 'formal/witnesses.mjs') return [{ ...step, env: { ...step.env, QUINT_SEED: normalized }, tolerateFailure: true }];
     return [step];
   });
 }
@@ -166,13 +168,16 @@ export function nativeExplorationResult(language, text, context, directory, pack
     cases: inventory.length, contextSha256: hash(JSON.stringify(context)), nativeReportSha256: hash(text), witnessFailures, caseFailures, otherFailures };
 }
 
-export async function runExplorationSteps(plan, { directory, environment = process.env, execute = executeSteps, onResult = () => {} } = {}) {
+export async function runExplorationSteps(plan, { directory, environment = process.env, execute = executeSteps, onResult = () => {}, onToleratedFailure = () => {} } = {}) {
   const results = [];
   for (const step of plan) {
     if (step.explorationContext) { await prepareExplorationContext(step.explorationContext, directory); continue; }
     if (step.tolerateFailure) {
       try { await execute([step], { directory, environment }); }
-      catch (error) { console.warn(`${step.label ?? 'Tolerated step'} failed; both native witness leaves record the shortfall: ${error}`); }
+      catch (error) {
+        console.warn(`${step.label ?? 'Tolerated step'} failed; both native witness leaves record the shortfall and report.json keeps the witness report: ${error}`);
+        onToleratedFailure(step, error);
+      }
       continue;
     }
     if (!step.nativeReport) { await execute([step], { directory, environment }); continue; }
@@ -201,7 +206,7 @@ function savedExploration(path) {
   if (report.schemaVersion !== 1 || report.kind !== 'exploration' || report.acceptance !== false
     || !/^(?:[a-f\d]{40}|[a-f\d]{64})$/.test(report.baseRevision ?? '')
     || !Number.isFinite(Date.parse(report.finishedAt))
-    || !['passed', 'native-failure', 'witness-check-failure', 'infrastructure-failure'].includes(report.status)
+    || !['passed', 'native-failure', 'witness-check-failure', 'coverage-gate-failure', 'infrastructure-failure'].includes(report.status)
     || !report.sources || Array.isArray(report.sources) || !Object.keys(report.sources).length
     || Object.values(report.sources).some(value => typeof value !== 'string' || !/^[a-f\d]{64}$/.test(value))) {
     throw new Error('Expected a finished exploratory report with a source inventory and base revision.');
@@ -230,6 +235,45 @@ export async function explore(seed, options = {}) {
 export async function replayExploration(path, options = {}) {
   const origin = savedExploration(path);
   return executeExploration(origin.seed, { ...options, origin });
+}
+
+function loadWitnessReport(workspace, report) {
+  const witnessReport = resolve(workspace, `.formal-traces/${reportFileName}`);
+  if (!existsSync(witnessReport)) return;
+  try { report.witnesses = JSON.parse(readFileSync(witnessReport, 'utf8')); }
+  catch (error) { report.witnesses = { error: String(error) }; }
+}
+
+// The witness profiles a snapshot schedules: its own manifest filtered by its
+// own registry. A saved run is judged against the inventory it was saved with,
+// not against a checkout that may have gained or lost profiles since.
+export function snapshotWitnessProfiles(workspace) {
+  const manifest = resolve(workspace, 'formal/execution.json'), registry = resolve(workspace, 'formal/coverage-witnesses.json');
+  if (!existsSync(manifest) || !existsSync(registry)) return undefined;
+  const models = JSON.parse(readFileSync(manifest, 'utf8')).models ?? [];
+  const witnessed = new Set(Object.keys(JSON.parse(readFileSync(registry, 'utf8'))));
+  return models.map(model => model.profile).filter(profile => typeof profile === 'string' && witnessed.has(profile));
+}
+
+// A completed evaluator report for this seed: the tolerated step may have died
+// after writing per-profile evidence but before the aggregate, and both ports
+// can still pass on that evidence. Missing or malformed coverage evidence is
+// never a clean gate, and neither is a report judged under another seed or
+// covering fewer profiles than the manifest schedules.
+export function witnessReportProblem(witnesses, seed, expectedProfiles) {
+  if (expectedProfiles === undefined) return 'the snapshot has no witness inventory (formal/execution.json and formal/coverage-witnesses.json)';
+  if (witnesses === undefined) return 'the witness evaluator wrote no report';
+  if (witnesses.error !== undefined) return `the witness report is unreadable: ${witnesses.error}`;
+  if (witnesses.schemaVersion !== 1 || witnesses.command !== 'evaluate' || !Array.isArray(witnesses.failed) || !Array.isArray(witnesses.incomplete)
+    || typeof witnesses.profiles !== 'object' || witnesses.profiles === null || Array.isArray(witnesses.profiles) || typeof witnesses.seed !== 'string') {
+    return 'the witness report is not a completed evaluation';
+  }
+  let reportSeed;
+  try { reportSeed = canonicalSeed(witnesses.seed); } catch { return `the witness report carries an invalid seed ${JSON.stringify(witnesses.seed)}`; }
+  if (reportSeed !== seed) return `the witness report was judged under seed ${reportSeed}, not this exploration's ${seed}`;
+  const missing = expectedProfiles.filter(profile => !(profile in witnesses.profiles));
+  if (missing.length) return `the witness report covers no evaluation of ${missing.join(', ')}`;
+  return undefined;
 }
 
 async function executeExploration(seed, { directory = root, environment = process.env, run, origin } = {}) {
@@ -274,6 +318,9 @@ async function executeExploration(seed, { directory = root, environment = proces
     }
     report.native = await snapshot.runExplorationSteps(snapshot.explorationPlan(workspace, selectedSeed, { environment }), {
       directory: workspace, environment: cleanEnvironment(environment), onResult: results => { report.native = results; save(); },
+      // The evaluator step is tolerated so both ports replay; its failure is
+      // still part of the record so a missing report explains itself.
+      onToleratedFailure: (step, error) => { report.witnessStepError = `${step.label ?? 'tolerated step'}: ${error}`; save(); },
     });
     verifyHashes(workspace, [report.sources]);
     report.sourcesUnchanged = true;
@@ -281,13 +328,30 @@ async function executeExploration(seed, { directory = root, environment = proces
       || report.native.some(result => !['passed', 'native-failure', 'witness-check-failure'].includes(result.status))) {
       throw new Error('Exploration did not finish both native ports.');
     }
-    report.status = report.native.some(result => result.status === 'native-failure') ? 'native-failure'
-      : report.native.some(result => result.status === 'witness-check-failure') ? 'witness-check-failure' : 'passed';
+    // The witness step is tolerated so both ports replay, but its baseline
+    // gate still decides the outcome afterwards: a fresh seed whose sampled
+    // hits fell below the recorded tolerance is an exploration-quality failure
+    // even when every required label is present and both ports pass.
+    loadWitnessReport(workspace, report);
+    const nativeStatus = report.native.some(result => result.status === 'native-failure') ? 'native-failure'
+      : report.native.some(result => result.status === 'witness-check-failure') ? 'witness-check-failure' : undefined;
+    const problem = witnessReportProblem(report.witnesses, selectedSeed, snapshotWitnessProfiles(workspace));
+    if (nativeStatus === undefined && problem !== undefined) {
+      report.status = 'infrastructure-failure';
+      throw new Error(`Exploration cannot be accepted: ${problem}, so the coverage gate has no evidence although both ports passed.`);
+    }
+    const coverageGate = problem === undefined ? [...report.witnesses.incomplete, ...report.witnesses.failed] : [];
+    report.status = nativeStatus ?? (coverageGate.length ? 'coverage-gate-failure' : 'passed');
+    if (report.status === 'coverage-gate-failure') throw new Error(`Exploration finished with coverage-gate-failure; the witness gate reported:\n${coverageGate.join('\n')}`);
     if (report.status !== 'passed') throw new Error(`Exploration finished with ${report.status}; inspect both native reports.`);
   } catch (error) {
     if (report.status === 'running') report.status = 'infrastructure-failure';
     report.error = String(error); throw error;
   } finally {
+    // The tolerated witness step leaves its fragility report and baseline gate
+    // result in the workspace; keep them with the exploration report so a
+    // fresh seed's sampled-count drop stays visible even when the step failed.
+    if (report.witnesses === undefined) loadWitnessReport(workspace, report);
     // Unlink only the known runtime link. Initialization errors also receive a
     // finished report and cannot leave a permanently "running" artifact.
     let cleanupError;

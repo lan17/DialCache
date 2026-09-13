@@ -44,6 +44,6 @@ export const sourceBudgetsWitnessRules = [
     check(9, { calls: [4, 2, 2], loaders: 2, policyCalls: 3 })),
 ];
 
-export function sourceBudgetsWitnesses(paths) {
-  return publicPrefixWitnesses(paths, sourceBudgetsWitnessRules);
+export function sourceBudgetsWitnesses(paths, recorder) {
+  return publicPrefixWitnesses(paths, sourceBudgetsWitnessRules, recorder);
 }

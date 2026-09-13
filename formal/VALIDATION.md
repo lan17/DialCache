@@ -28,6 +28,15 @@ the TypeScript suite only checks the same gate. `make formal-ts`, `make formal-g
 and that witness evidence, so the hosted workflow runs them in parallel and the
 aggregate requires all of them.
 
+The evaluator ends with a per-profile witness report: required labels with at
+most three sampled hits and no regression, labels pinned by a regression but
+rarely sampled, and the distinct sampled action and observation sequences. It
+compares each required label's sampled hits with `formal/witness-baseline.json`
+and fails generation when a gated label drops below the tolerance, so a corpus
+that stops reaching its corners is visible even though named regressions keep
+the completion gate green. [PORTING.md](./PORTING.md#witness-evidence) defines
+the evidence fields, the report and the baseline.
+
 Within a lane, `run-models.mjs`, `check-model-properties.mjs` and
 `generated-fixtures.mjs` run independent Quint processes concurrently so a
 multi-core runner is not left idle; each process keeps the single Quint thread
@@ -79,10 +88,14 @@ missing witness, crash or timeout is a failed measurement. The selected fault
 catalogs and per-run reports define the denominator; do not infer a percentage
 of all possible defects from their scores.
 
-The model catalog in `execution.json` covers every scheduled model: currently 64
-challenges over 62 distinct faults, with no waivers. Its report distinguishes
+The model catalog in `execution.json` covers every scheduled model: currently 67
+challenges over 64 distinct faults, with no waivers. Its report distinguishes
 those two counts and marks a filtered `--only` run as partial; only the complete
-run is evidence.
+run is evidence. A challenge with a deterministic reproducer is additionally
+replayed on the clean and mutated model and must fail only under the fault, at
+the expectation the manifest declares; the report records that outcome per
+challenge, and `node formal/execution.mjs` reports how many challenges still
+wait in `reproducerBacklog`.
 
 The weekly full workflow shards each mutation lane over three runners. The Go
 lane bounded the whole run: its 13 mutants replay the generated cohort in strict
@@ -133,7 +146,25 @@ does not produce an acceptance completion: its separate report distinguishes
 native replay failures, witness-check failures and other infrastructure failures.
 A witness-check failure can mean an unreached boundary or invalid witness
 evidence; inspect the native report before attributing it to sampling. Go replay
-still runs after a TypeScript witness-check failure.
+still runs after a TypeScript witness-check failure. The exploration report
+keeps that seed's witness report under `witnesses`. The witness step itself is
+tolerated so both ports replay, but its baseline gate decides the outcome
+afterwards: when every required label is present and both ports pass yet a
+gated label's sampled hits collapsed against the recorded baseline (below the
+tolerance and more than `freshSeedSigma` Poisson deviations below the recorded
+count, or to zero), the report ends with `coverage-gate-failure` and the lane
+fails. That is a statement about exploration quality on that seed, not about
+native behavior. Exploration also refuses to pass without a completed witness
+report for its own seed: when both ports passed but the tolerated evaluator
+step wrote no report, or an unreadable or incomplete one, or one judged under
+another seed or covering fewer profiles than the snapshot's own manifest
+schedules (a saved run is judged against the inventory it was saved with), the
+run ends with `infrastructure-failure`, because missing coverage evidence is never
+a clean gate; the tolerated step's error is kept in the exploration report so
+the absence explains itself. A native failure still takes precedence. Two fresh seeds in September 2026 dropped four and five gated
+labels below half their baseline while every label stayed reachable; those
+drops are seed noise on counts of ten to thirty and stay visible in the report
+without failing the lane.
 
 Choose a seed explicitly, or replay the saved source snapshot using the exact
 command printed by the runner:

@@ -1,2 +1,3 @@
 import type { LocalClockTrace } from "../local-clock.mjs";
-export function localClockWitnesses(traces: readonly LocalClockTrace[]): Set<string>;
+import type { WitnessRecorder } from "./recorder.mjs";
+export function localClockWitnesses(traces: readonly LocalClockTrace[], recorder?: WitnessRecorder): Set<string>;

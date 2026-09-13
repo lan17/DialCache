@@ -1,5 +1,6 @@
 import { itfInteger, record } from "../itf.mjs";
 import { explicitInput, readTrace, traceStates } from "./trace.mjs";
+import { createWitnessRecorder, standaloneRecorder } from "./recorder.mjs";
 
 const values = [1, 2, 5, 11, 6, 7, 8, 9];
 const layerNames = ["request", "local", "remote"];
@@ -18,9 +19,8 @@ function publicStates(raw) {
 // Evidence is attributed from external policy/settlement commands and public
 // returns/effects. Private model admissions, cache values and owners are never
 // consulted. The replay separately checks every observation in these traces.
-export function runtimeBoundaryTraceWitnesses(raw) {
+export function runtimeBoundaryTraceWitnesses(raw, recorder = standaloneRecorder()) {
   const states = publicStates(raw);
-  const seen = new Set();
   const fixture = states[0].choice;
   const layer = fixture < 6 ? fixture % 3 : fixture === 7 ? 2 : fixture === 9 ? 0 : 1;
   const defaultSharing = fixture >= 3;
@@ -39,9 +39,10 @@ export function runtimeBoundaryTraceWitnesses(raw) {
   const uncachedDefaults = new Set();
   let killedSettlements = 0;
   for (let index = 1; index < states.length; index++) {
+    recorder.step(index);
     const step = states[index];
     const before = states[index - 1];
-    seen.add(`action:${step.action}`);
+    recorder.credit(`action:${step.action}`);
     if (step.action === "policy") policy = step.choice;
     if (step.action === "closeScope") { open = false; publication = undefined; }
     if (step.action === "beginCall") pendingCaller = before.calls.length;
@@ -58,28 +59,28 @@ export function runtimeBoundaryTraceWitnesses(raw) {
       const value = step.calls[pendingCaller];
       const hit = value !== undefined && value !== 0 && step.loaders === before.loaders && before.calls[pendingCaller] === 0;
       if (hit && publication !== undefined && value === publication.value) {
-        if ([5, 11].includes(value) && settled.has(5) && settled.has(11)) seen.add(`absent-distinct-from-text:${layerNames[layer]}`);
+        if ([5, 11].includes(value) && settled.has(5) && settled.has(11)) recorder.credit(`absent-distinct-from-text:${layerNames[layer]}`);
         if ([6, 7, 8, 9].includes(value)) falsyProbes.add(value);
-        if (falsyProbes.size === 4) seen.add(`falsy-values:${layerNames[layer]}`);
+        if (falsyProbes.size === 4) recorder.credit(`falsy-values:${layerNames[layer]}`);
         if (equality !== undefined && layer !== 0 && Math.floor(policy / 3) === 2
           && publication.policy < 12 && Math.floor(publication.policy / 3) === 2
-          && publication.loader > equality.loader && value !== equality.value) seen.add(`exact-serving-cohort:${layerNames[layer]}`);
+          && publication.loader > equality.loader && value !== equality.value) recorder.credit(`exact-serving-cohort:${layerNames[layer]}`);
         if (priorPublication !== undefined && publication.loader < priorPublication.loader
           && value !== priorPublication.value && !defaultSharing && layer === 0
-          && publication.policy % 3 === 0 && priorPublication.policy % 3 === 0) seen.add("inherited-false-request-last-writer");
+          && publication.policy % 3 === 0 && priorPublication.policy % 3 === 0) recorder.credit("inherited-false-request-last-writer");
         if (preserved !== undefined && preserved.publication === publication && value !== preserved.bypassValue) {
           const names = { 13: "false-request-leaf", 14: "invalid-coalesce", 15: "invalid-request-local", 16: "null-coalesce", 17: "null-request-local" };
           if (preserved.policy === 21) {
-            if (fixture === 9 && killedSettlements >= 2 && sharedPolicies.has(9)) seen.add("full-feature-kill-switch");
-          } else seen.add(`bypass-preserves-cache:${names[preserved.policy]}`);
+            if (fixture === 9 && killedSettlements >= 2 && sharedPolicies.has(9)) recorder.credit("full-feature-kill-switch");
+          } else recorder.credit(`bypass-preserves-cache:${names[preserved.policy]}`);
         }
-        if (fixture === 6 && publication.policy === 18 && [...uncachedDefaults].some(previous => previous !== value)) seen.add("runtime-ttl-implies-ramp:local");
-        if (fixture === 7 && publication.policy === 19 && [...uncachedDefaults].some(previous => previous !== value)) seen.add("runtime-ttl-implies-ramp:remote");
+        if (fixture === 6 && publication.policy === 18 && [...uncachedDefaults].some(previous => previous !== value)) recorder.credit("runtime-ttl-implies-ramp:local");
+        if (fixture === 7 && publication.policy === 19 && [...uncachedDefaults].some(previous => previous !== value)) recorder.credit("runtime-ttl-implies-ramp:remote");
         if (fixture === 8 && publication.policy === 20 && sharedPolicies.has(20)
-          && [...uncachedDefaults].some(previous => previous !== value)) seen.add("disabled-baseline-default-sharing");
+          && [...uncachedDefaults].some(previous => previous !== value)) recorder.credit("disabled-baseline-default-sharing");
         if (defaultSharing && layer === 2 && step.reads === before.reads + 1 && step.loads === before.loads + 1) {
-          if (policy === 12 && sharedPolicies.has(12)) seen.add("null-provider-inherits-serving-and-sharing");
-          if (policy === 9 && sharedPolicies.has(9)) seen.add("default-ramp-and-sharing");
+          if (policy === 12 && sharedPolicies.has(12)) recorder.credit("null-provider-inherits-serving-and-sharing");
+          if (policy === 9 && sharedPolicies.has(9)) recorder.credit("default-ramp-and-sharing");
         }
       }
     }
@@ -95,8 +96,8 @@ export function runtimeBoundaryTraceWitnesses(raw) {
       .filter(({ result, caller }) => before.calls[caller] === 0 && result === value);
     if (source.active && completed.length >= 2 && completed.every(({ caller }) => policies.get(caller) === source.policy)) {
       sharedPolicies.add(source.policy);
-      if (!defaultSharing && source.policy < 12 && source.policy % 3 === 2) seen.add("runtime-enables-sharing");
-      if (defaultSharing && source.policy === 9 && [...sources.values()].some(other => other.policy === 10)) seen.add("reenabled-default-sharing");
+      if (!defaultSharing && source.policy < 12 && source.policy % 3 === 2) recorder.credit("runtime-enables-sharing");
+      if (defaultSharing && source.policy === 9 && [...sources.values()].some(other => other.policy === 10)) recorder.credit("reenabled-default-sharing");
     }
     if (source.active) {
       priorPublication = publication;
@@ -108,12 +109,14 @@ export function runtimeBoundaryTraceWitnesses(raw) {
       preserved = { policy: source.policy, publication, bypassValue: value };
     }
   }
-  return seen;
+  return recorder.labels();
 }
 
-export function runtimeBoundaryWitnesses(profile, paths) {
-  if (profile !== "runtime-boundaries") return new Set();
-  const seen = new Set();
-  for (const path of paths) for (const witness of runtimeBoundaryTraceWitnesses(readTrace(path))) seen.add(witness);
-  return seen;
+export function runtimeBoundaryWitnesses(profile, paths, recorder = createWitnessRecorder()) {
+  if (profile !== "runtime-boundaries") return recorder.labels();
+  for (const path of paths) {
+    recorder.enter(path);
+    runtimeBoundaryTraceWitnesses(readTrace(path), recorder);
+  }
+  return recorder.labels();
 }

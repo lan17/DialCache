@@ -83,6 +83,9 @@ const report = {
 };
 const env = { ...process.env };
 for (const key of Object.keys(env)) if (key.startsWith('DIALCACHE_')) delete env[key];
+// The baseline witness evaluation judges the pinned corpus; a stray seed in the
+// caller's shell must not select the exploration rule.
+delete env.QUINT_SEED;
 Object.assign(env, {
   DIALCACHE_MBT_TRACE_DIR: resolve(root, '.formal-traces/conformance'),
   DIALCACHE_EFFECTS_TRACE_DIR: resolve(root, '.formal-traces/effects'),

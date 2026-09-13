@@ -1,4 +1,5 @@
 import { explicitInput, integer, privateStates, readTrace, traceStates } from "./trace.mjs";
+import { createWitnessRecorder } from "./recorder.mjs";
 
 // Classify schedules only after every driver has independently replayed its
 // public observations. Private Quint state identifies the external boundary;
@@ -13,13 +14,14 @@ function unchangedWork(before, after) {
     && after.dumps === before.dumps && after.writes === before.writes;
 }
 
-function recoveryWitnesses(steps, seen) {
+function recoveryWitnesses(steps, recorder) {
   const FRESH_DECODE = 1, SOURCE_RUNNING = 2, RECOVERY_DECODE = 3;
   let acquired;
   let acquisitionObservations;
   let failedFreshDecode = false;
   let decodeStartedAge;
   for (let index = 1; index < steps.length; index++) {
+    recorder.step(index);
     const before = steps[index - 1].s, after = steps[index].s;
     const previous = before.o, actual = after.o, action = steps[index].input.name;
     if (action === "beginCall" && actual.reads === previous.reads + 1) {
@@ -54,26 +56,26 @@ function recoveryWitnesses(steps, seen) {
       failedFreshDecode = before.loadFailed === true;
       if (!failedFreshDecode && returnsCandidate && actual.loaders === acquisitionObservations.loaders
         && actual.recovery.length === previous.recovery.length && noSharedWrite) {
-        if (ageAtRead === 0) seen.add("fresh-zero-age-skips-source");
-        if (ageAtRead === 999) seen.add("last-fresh-age-skips-source");
+        if (ageAtRead === 0) recorder.credit("fresh-zero-age-skips-source");
+        if (ageAtRead === 999) recorder.credit("last-fresh-age-skips-source");
       }
     }
     if (action === "resolveLoader" && phase === SOURCE_RUNNING
       && number(before, "candidate") > 0 && ageAtRead >= 1000
       && settled(previous, actual, 2) && actual.loads === previous.loads
       && actual.recovery.length === previous.recovery.length) {
-      seen.add("source-success-skips-stale-decode");
+      recorder.credit("source-success-skips-stale-decode");
     }
     if (action === "rejectLoader" && phase === SOURCE_RUNNING && returnsSourceError
       && actual.loads === previous.loads && noSharedWrite && noReread) {
       if (number(before, "classifier") === 2 && actual.classifications === previous.classifications + 1
         && number(before, "candidate") > 0 && ageNow >= 0 && ageNow < number(before, "acceptedMaxAge")) {
-        seen.add("classifier-error-keeps-error-without-decode");
+        recorder.credit("classifier-error-keeps-error-without-decode");
       }
       if (failedFreshDecode && actual.classifications === previous.classifications
-        && appendedRecovery.length === 0) seen.add("failed-fresh-decode-is-not-recovery");
+        && appendedRecovery.length === 0) recorder.credit("failed-fresh-decode-is-not-recovery");
       if (acquired.readFailed === true && actual.classifications === previous.classifications
-        && appendedRecovery.length === 0) seen.add("failed-initial-read-skips-recovery");
+        && appendedRecovery.length === 0) recorder.credit("failed-initial-read-skips-recovery");
     }
     if (appendedRecovery.includes("miss") && phase === SOURCE_RUNNING
       && (returnsSourceError || returnsDeadline) && actual.loads === previous.loads
@@ -81,30 +83,30 @@ function recoveryWitnesses(steps, seen) {
       // Isolate the rejection rule: a fenced or physically missing value cannot
       // establish that the age check itself prevented recovery, and vice versa.
       if (initialBytesPresent && initialBytesUnfenced) {
-        if (ageAtRead === number(acquired, "maxAge")) seen.add("maximum-age-read-preserves-source-error");
-        if (ageAtRead < 0) seen.add("future-read-preserves-source-error");
+        if (ageAtRead === number(acquired, "maxAge")) recorder.credit("maximum-age-read-preserves-source-error");
+        if (ageAtRead < 0) recorder.credit("future-read-preserves-source-error");
       }
       if (initialBytesPresent && !initialBytesUnfenced
         && ageAtRead >= 0 && ageAtRead < number(acquired, "maxAge")) {
-        seen.add("fenced-read-does-not-retain");
+        recorder.credit("fenced-read-does-not-retain");
       }
       if (number(before, "candidate") > 0 && ageNow >= number(before, "acceptedMaxAge")) {
-        seen.add("maximum-age-before-decode-skips-load");
+        recorder.credit("maximum-age-before-decode-skips-load");
       }
     }
     if (action === "releaseLoad" && phase === RECOVERY_DECODE && noSharedWrite && noReread) {
       if (appendedRecovery.includes("served") && returnsCandidate) {
-        if (ageAtRead === 1000) seen.add("first-stale-age-recovers-without-publication");
-        if (ageNow === number(before, "acceptedMaxAge") - 1) seen.add("last-recovery-age-serves");
-        if (ageNow >= 0 && ageNow < 1000 && ageAtRead >= 1000) seen.add("rollback-below-fresh-age-still-recovers");
-        if (number(before, "frame") !== number(before, "candidate")) seen.add("replacement-cannot-change-recovered-value");
+        if (ageAtRead === 1000) recorder.credit("first-stale-age-recovers-without-publication");
+        if (ageNow === number(before, "acceptedMaxAge") - 1) recorder.credit("last-recovery-age-serves");
+        if (ageNow >= 0 && ageNow < 1000 && ageAtRead >= 1000) recorder.credit("rollback-below-fresh-age-still-recovers");
+        if (number(before, "frame") !== number(before, "candidate")) recorder.credit("replacement-cannot-change-recovered-value");
         const ages = after.d.ages;
         if (decodeStartedAge !== undefined && ageNow !== decodeStartedAge && ages.at(-1) === ageNow) {
-          seen.add("recovery-age-sampled-at-successful-decode");
+          recorder.credit("recovery-age-sampled-at-successful-decode");
         }
       }
       if (appendedRecovery.includes("miss") && ageNow === number(before, "acceptedMaxAge")
-        && (returnsSourceError || returnsDeadline)) seen.add("exact-maximum-after-decode-rejects");
+        && (returnsSourceError || returnsDeadline)) recorder.credit("exact-maximum-after-decode-rejects");
     }
   }
 }
@@ -115,12 +117,13 @@ function payloadBytes(payload) {
   return ({ 3: 1, 4: 2, 6: 5, 8: 7 })[payload] ?? payload;
 }
 
-function shadowWitnesses(steps, seen) {
+function shadowWitnesses(steps, recorder) {
   const C0_READ = 1, SNAPSHOT_DECODE = 3, CONFIRMATION_READ = 4;
   const FILL_SERIALIZE = 5, FILL_WRITE = 6;
   let c0Future = false, c0Fenced = false, failedReadWhileCallerPending = false;
   let callStart;
   for (let index = 1; index < steps.length; index++) {
+    recorder.step(index);
     const before = steps[index - 1].s, after = steps[index].s;
     const previous = before.o, actual = after.o, action = steps[index].input.name;
     const phase = number(before, "phase");
@@ -141,65 +144,65 @@ function shadowWitnesses(steps, seen) {
     if (action === "resolveLoader" && failedReadWhileCallerPending
       && (settled(previous, actual, 1) || settled(previous, actual, 2))
       && unchangedWork(previous, actual) && appended.length === 0) {
-      seen.add("dark-read-error-still-allows-source-result");
+      recorder.credit("dark-read-error-still-allows-source-result");
     }
     if (appended.includes("filled") && actual.loads === callStart.loads && keepsCaller) {
-      if (c0Future) seen.add("future-dark-c0-fills-without-decoding");
-      if (c0Fenced) seen.add("fenced-dark-c0-can-fill-after-cutoff");
+      if (c0Future) recorder.credit("future-dark-c0-fills-without-decoding");
+      if (c0Fenced) recorder.credit("fenced-dark-c0-can-fill-after-cutoff");
     }
     if (action === "releaseRead" && phase === CONFIRMATION_READ && keepsCaller && noWrite) {
       const sameBytes = payloadBytes(number(before, "frame")) === payloadBytes(number(before, "c0"));
       if (appended.includes("superseded") && number(before, "frame") > 0 && sameBytes
         && before.readFailed === false && number(before, "created") <= number(before, "watermark")) {
-        seen.add("fenced-c1-supersedes-without-repair");
+        recorder.credit("fenced-c1-supersedes-without-repair");
       }
       const visibleC1 = number(before, "frame") > 0
         && number(before, "created") > number(before, "watermark") && before.readFailed === false;
       if (visibleC1 && sameBytes && appended.includes("mismatch")) {
-        seen.add("same-c1-bytes-confirm-mismatch");
+        recorder.credit("same-c1-bytes-confirm-mismatch");
         if (number(before, "created") > number(before, "wall")) {
-          seen.add("future-c1-confirms-payload-without-repair");
+          recorder.credit("future-c1-confirms-payload-without-repair");
         }
       }
       if (visibleC1 && !sameBytes && appended.includes("superseded")) {
-        seen.add("different-c1-bytes-supersede");
+        recorder.credit("different-c1-bytes-supersede");
       }
     }
     if (action === "releaseLoad" && phase === SNAPSHOT_DECODE && noWrite && keepsCaller) {
-      if (appended.includes("match") && actual.reads === previous.reads) seen.add("equal-comparison-skips-c1");
+      if (appended.includes("match") && actual.reads === previous.reads) recorder.credit("equal-comparison-skips-c1");
       if (appended.includes("deserialization_error") && actual.dumps === previous.dumps) {
-        seen.add("present-undecodable-c0-is-not-repaired");
+        recorder.credit("present-undecodable-c0-is-not-repaired");
       }
     }
     if (appended.includes("source_error") && noWrite && actual.loads === callStart.loads
-      && actual.calls.at(-1) === 3) seen.add("dark-source-error-never-decodes-or-fills");
+      && actual.calls.at(-1) === 3) recorder.credit("dark-source-error-never-decodes-or-fills");
     if (action === "releaseDump" && phase === FILL_SERIALIZE && appended.includes("fill_error")
-      && noWrite && keepsCaller) seen.add("fill-serialization-error-preserves-caller");
+      && noWrite && keepsCaller) recorder.credit("fill-serialization-error-preserves-caller");
     if (action === "releaseWrite" && phase === FILL_WRITE && appended.includes("fill_error")
       && before.writeFailed === true && actual.writes === previous.writes && keepsCaller) {
-      seen.add("fill-write-error-preserves-caller");
+      recorder.credit("fill-write-error-preserves-caller");
     }
     if (before.abandoned === true && keepsCaller && appended.length === 0
       && unchangedWork(previous, actual)) {
-      if (action === "releaseRead" && phase === C0_READ) seen.add("late-c0-cannot-start-new-shadow-work");
-      if (action === "releaseRead" && phase === CONFIRMATION_READ) seen.add("late-c1-cannot-emit-second-verdict");
-      if (action === "releaseLoad" && phase === SNAPSHOT_DECODE) seen.add("late-shadow-decode-cannot-start-c1");
-      if (action === "releaseDump" && phase === FILL_SERIALIZE) seen.add("late-shadow-dump-cannot-dispatch-write");
-      if (action === "releaseWrite" && phase === FILL_WRITE) seen.add("late-shadow-write-cannot-change-caller-or-verdict");
+      if (action === "releaseRead" && phase === C0_READ) recorder.credit("late-c0-cannot-start-new-shadow-work");
+      if (action === "releaseRead" && phase === CONFIRMATION_READ) recorder.credit("late-c1-cannot-emit-second-verdict");
+      if (action === "releaseLoad" && phase === SNAPSHOT_DECODE) recorder.credit("late-shadow-decode-cannot-start-c1");
+      if (action === "releaseDump" && phase === FILL_SERIALIZE) recorder.credit("late-shadow-dump-cannot-dispatch-write");
+      if (action === "releaseWrite" && phase === FILL_WRITE) recorder.credit("late-shadow-write-cannot-change-caller-or-verdict");
     }
   }
 }
 
-export function recoveryShadowWitnesses(profile, paths) {
-  const seen = new Set();
-  if (profile !== "recovery" && profile !== "shadow") return seen;
+export function recoveryShadowWitnesses(profile, paths, recorder = createWitnessRecorder()) {
+  if (profile !== "recovery" && profile !== "shadow") return recorder.labels();
   for (const path of paths) {
+    recorder.enter(path);
     const raw = readTrace(path);
     const states = traceStates(raw, path);
     if (states[0]?.s?.phase === undefined) continue;
     const steps = privateStates(raw, path).map((s, index) => ({ s, input: index === 0 ? undefined : explicitInput(states[index], `${path} step ${index}`) }));
-    if (profile === "recovery") recoveryWitnesses(steps, seen);
-    else shadowWitnesses(steps, seen);
+    if (profile === "recovery") recoveryWitnesses(steps, recorder);
+    else shadowWitnesses(steps, recorder);
   }
-  return seen;
+  return recorder.labels();
 }

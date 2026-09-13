@@ -34,6 +34,6 @@ export const shadowDiagnosticsWitnessRules = [
       { futureOffsets: [{ layer: "remote_shadow", offsetMs: 990 }] })),
 ];
 
-export function shadowDiagnosticsWitnesses(paths) {
-  return publicPrefixWitnesses(paths, shadowDiagnosticsWitnessRules);
+export function shadowDiagnosticsWitnesses(paths, recorder) {
+  return publicPrefixWitnesses(paths, shadowDiagnosticsWitnessRules, recorder);
 }
