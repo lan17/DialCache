@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "challenges": [
+    {
+      "id": "source-accepts-exact-deadline",
+      "source": "formal/kernel/cache-kernel.qnt",
+      "before": "val timely = state.config.sourceBudget == 0 or deadlinePendingAt(state.now, execution.deadline)",
+      "after": "val timely = true",
+      "checks": [
+        {
+          "history": "effects-exact-deadline-resolve",
+          "profile": "effects",
+          "invariant": "publicationHasTimelySource",
+          "failureStep": 4
+        }
+      ]
+    },
+    {
+      "id": "finished-flight-remains-registered",
+      "source": "formal/kernel/cache-kernel.qnt",
+      "before": "owner, { phase: Finished, result: result, ...execution })",
+      "after": "owner, { phase: Loading, result: result, ...execution })",
+      "checks": [
+        {
+          "history": "layers-shared-failure-and-retry",
+          "profile": "layers",
+          "invariant": "registeredExecutionsHavePendingCallers",
+          "failureStep": 3
+        },
+        {
+          "history": "effects-shared-failure-and-retry",
+          "profile": "effects",
+          "invariant": "registeredExecutionsHavePendingCallers",
+          "failureStep": 4
+        }
+      ]
+    },
+    {
+      "id": "caller-loses-owned-source-outcome",
+      "source": "formal/kernel/cache-kernel.qnt",
+      "before": "if (call.owner == owner) { result: result, ...call } else call), ...state },",
+      "after": "if (call.owner == owner) { result: SourceError, ...call } else call), ...state },",
+      "checks": [
+        {
+          "history": "layers-shared-source-and-reuse",
+          "profile": "layers",
+          "invariant": "finishedOwnersHaveFinishedCallers",
+          "failureStep": 3
+        },
+        {
+          "history": "effects-shared-source-and-reuse",
+          "profile": "effects",
+          "invariant": "finishedOwnersHaveFinishedCallers",
+          "failureStep": 6
+        }
+      ]
+    }
+  ]
+}

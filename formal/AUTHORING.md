@@ -107,6 +107,14 @@ kernel described in issue #165, and `node formal/lint-profiles.mjs baseline
 reviewed change). The baseline is not yet part of `make audit`, because that
 lane runs without Quint.
 
+The [layers/effects lifecycle pilot](./kernel/README.md) now uses these checks
+with `cache_kernel` as the assignment owner. Its input catalog, independent
+properties and exact-checkpoint faults are executed by `make kernel-pilot`.
+The baseline above still describes the original profiles; no profile has yet
+been replaced. Compare the same recorded inputs before attributing a change
+in observations to the extraction. Reusing a random seed does not preserve an
+input history when a model's choice structure changes.
+
 Connection models advance the imported profile and save its preceding context
 in the same `all` action. Views such as `acquired` and `observedSources` combine
 that context with the latest recorded input to reconstruct the current contract
@@ -119,8 +127,8 @@ representation helpers such as completing callers owned by one source belong
 in [conformance-observations.qnt](./conformance-observations.qnt). Name repeated
 transition conditions locally, including the time or snapshot they inspect.
 Keep request lifetime, flight ownership, deadline acceptance, and publication
-policy in the model that explains them. A common cache-model framework would
-make those differences harder to see.
+policy in the model that explains them. A shared lifecycle must keep these
+differences explicit; the bounded pilot is evaluated before any full migration.
 
 An assertion needs an independent way to detect a wrong transition. Do not
 rewrite both sides of a check to call the same newly extracted eligibility

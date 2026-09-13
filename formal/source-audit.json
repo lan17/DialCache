@@ -1005,19 +1005,19 @@
   "reviewedGuides": [
     {
       "path": "formal/AUTHORING.md",
-      "sha256": "0497884f866ac94d4f159550634aee4726fd5b5077ccdb930af45baf001ec7ab",
+      "sha256": "1ecedbfba86c0480444368e9cd4003b2b3e984dab79940006d55c25e6cef416e",
       "entries": [
         {"line":1,"title":"Reading and extending the DialCache models"},
         {"line":16,"title":"Reading a model"},
         {"line":56,"title":"Writing conventions"},
-        {"line":135,"title":"Codifying the next behavior"},
-        {"line":168,"title":"Give reviewers focused context"},
-        {"line":183,"title":"Exporting a deterministic regression"},
-        {"line":219,"title":"Maintaining case and witness evidence"},
-        {"line":267,"title":"Reproducible committed fixtures"},
-        {"line":277,"title":"Refactoring and execution"},
-        {"line":302,"title":"Challenging every model"},
-        {"line":374,"title":"Exported runs are exactly the public-only runs"}
+        {"line":143,"title":"Codifying the next behavior"},
+        {"line":176,"title":"Give reviewers focused context"},
+        {"line":191,"title":"Exporting a deterministic regression"},
+        {"line":227,"title":"Maintaining case and witness evidence"},
+        {"line":275,"title":"Reproducible committed fixtures"},
+        {"line":285,"title":"Refactoring and execution"},
+        {"line":310,"title":"Challenging every model"},
+        {"line":382,"title":"Exported runs are exactly the public-only runs"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1346,14 +1346,14 @@
     },
     {
       "path": "formal/README.md",
-      "sha256": "4931e0c49ffbfe9de2e5efb009d12ad8732a67b11f8f68482bc747a554447bc3",
+      "sha256": "3060e31b6de766c2f795dc54d65f32155b4f77aef9666736e9fabfb49e2653d8",
       "entries": [
         {"line":1,"title":"Executable DialCache specification"},
         {"line":7,"title":"Start with your task"},
         {"line":23,"title":"How the specification connects to code"},
         {"line":43,"title":"Models and composition profiles"},
-        {"line":89,"title":"Generating and replaying behavior"},
-        {"line":171,"title":"Evidence and scope"}
+        {"line":94,"title":"Generating and replaying behavior"},
+        {"line":181,"title":"Evidence and scope"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1362,16 +1362,16 @@
     },
     {
       "path": "formal/SEMANTIC-COVERAGE.md",
-      "sha256": "3e140eb14ea646a3ce5639b002d32963bb57c7341b3b12f3487adc028f428f33",
+      "sha256": "ea59cd51d39975e984e19e85898c1ca9297eb4ba8d57fff686302e9eed2aea41",
       "entries": [
         {"line":1,"title":"Measuring semantic coverage"},
         {"line":5,"title":"Evidence inventory"},
         {"line":47,"title":"Model assurance"},
-        {"line":95,"title":"Generated boundary evidence"},
-        {"line":103,"title":"Behavioral mutation comparison"},
-        {"line":117,"title":"Recorded measurements"},
-        {"line":123,"title":"Reproduction and CI"},
-        {"line":165,"title":"Model properties and cross-language execution"}
+        {"line":100,"title":"Generated boundary evidence"},
+        {"line":108,"title":"Behavioral mutation comparison"},
+        {"line":122,"title":"Recorded measurements"},
+        {"line":128,"title":"Reproduction and CI"},
+        {"line":170,"title":"Model properties and cross-language execution"}
       ],
       "review": {
         "kind": "coverage-guide",
@@ -1485,14 +1485,14 @@
     },
     {
       "path": "formal/TEST-MAP.md",
-      "sha256": "998bc945136167fc301a909644dd1ac2ea608f857d255c3b03c06c99eb4c47a1",
+      "sha256": "14e7af8dc644f3c0aca567b72124974d55bb690d6d4c66760fda8e5abf4f3ce6",
       "entries": [
         {"line":1,"title":"Formal contract and implementation evidence map"},
         {"line":18,"title":"Behavioral map"},
-        {"line":42,"title":"New composition boundaries"},
-        {"line":68,"title":"Wire transforms"},
-        {"line":86,"title":"Native obligations"},
-        {"line":101,"title":"Evidence and measurement"}
+        {"line":49,"title":"New composition boundaries"},
+        {"line":75,"title":"Wire transforms"},
+        {"line":93,"title":"Native obligations"},
+        {"line":108,"title":"Evidence and measurement"}
       ],
       "review": {
         "kind": "coverage-guide",
@@ -1501,15 +1501,15 @@
     },
     {
       "path": "formal/VALIDATION.md",
-      "sha256": "a680d466389d423bde52692979c33c0cc4ce3fdacbdbe6e8382a5941d0f4ac2a",
+      "sha256": "603459ed95bdb141bfbe840852c532920d20dfe2abb0eeaecb4ff9dd712c4dac",
       "entries": [
         {"line":1,"title":"Validation and evidence"},
         {"line":7,"title":"Choosing a run"},
-        {"line":59,"title":"Reading a completion report"},
-        {"line":77,"title":"Mutation evidence"},
-        {"line":138,"title":"Exploratory runs"},
-        {"line":186,"title":"A retained sampling regression"},
-        {"line":223,"title":"Historical results"}
+        {"line":65,"title":"Reading a completion report"},
+        {"line":83,"title":"Mutation evidence"},
+        {"line":144,"title":"Exploratory runs"},
+        {"line":192,"title":"A retained sampling regression"},
+        {"line":229,"title":"Historical results"}
       ],
       "review": {
         "kind": "tooling-guide",

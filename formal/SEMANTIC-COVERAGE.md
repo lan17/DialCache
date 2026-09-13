@@ -46,6 +46,11 @@ where to retain behavioral, primitive-vector and mutation results.
 
 ## Model assurance
 
+The [shared lifecycle pilot](./kernel/README.md) reports exact-history
+equivalence, native replay and kernel property challenges separately. Its
+sampled invariant runs are model-only evidence; its fixed histories reuse
+existing obligations and add no semantic completeness percentage.
+
 A model's transition helpers, independent properties and implementation replay
 answer different questions. The shared `cache-rules.qnt` judgments own age,
 expiry, deadline and fence decisions. `cache-contract.qnt` owns acquired recovery
