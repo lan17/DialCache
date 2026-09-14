@@ -2,6 +2,34 @@
   "schemaVersion": 1,
   "challenges": [
     {
+      "id": "source-enters-writing-before-acceptance",
+      "source": "formal/kernel/cache-kernel.qnt",
+      "before": "phase: Loading,\n      source: state.sources.length(),",
+      "after": "phase: Writing,\n      source: state.sources.length(),",
+      "checks": [
+        {
+          "history": "layers-invalidation-before-acquisition",
+          "profile": "layers",
+          "invariant": "publicationHasTimelySource",
+          "failureStep": 2
+        }
+      ]
+    },
+    {
+      "id": "publication-ignores-acquired-fence",
+      "source": "formal/kernel/cache-kernel.qnt",
+      "before": "if (not(execution.refill) or not(fenceAllows(state.wall, execution.fence)))",
+      "after": "if (not(execution.refill))",
+      "checks": [
+        {
+          "history": "layers-invalidation-before-acquisition",
+          "profile": "layers",
+          "invariant": "publicationHasTimelySource",
+          "failureStep": 3
+        }
+      ]
+    },
+    {
       "id": "source-accepts-exact-deadline",
       "source": "formal/kernel/cache-kernel.qnt",
       "before": "val timely = state.config.sourceBudget == 0 or deadlinePendingAt(state.now, execution.deadline)",

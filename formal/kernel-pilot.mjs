@@ -105,6 +105,9 @@ export function validatePilotChallenges(catalog, pilot) {
         throw new Error(`${challenge.id}: invalid history, invariant or failure checkpoint`);
       }
     }
+    if (read(resolve(root, challenge.source)).split(challenge.before).length !== 2) {
+      throw new Error(`${challenge.id}: mutation anchor must match exactly once`);
+    }
   }
   return catalog;
 }
@@ -133,6 +136,24 @@ export function validateWitnessControlResult(output, exitCode, required) {
     throw new Error('Quint witness controls did not all complete successfully');
   }
   return { status: 'passed', tests: required };
+}
+
+export function explorationComparison(baseline, kernel, settings, bounds) {
+  for (const [name, measured] of Object.entries({ baseline, kernel })) {
+    if (!measured) throw new Error(`${name}: missing sampled exploration measurement`);
+    validatePropertyResult(measured.result, measured.status, 'baseline');
+    if (!Number.isFinite(measured.durationMs) || measured.durationMs <= 0) {
+      throw new Error(`${name}: invalid sampled exploration duration`);
+    }
+  }
+  return {
+    status: 'passed', kind: 'sampled-exploration', backend: settings.backend,
+    seed: settings.seed, threads: 1, bounds: { maxSamples: bounds.maxSamples, maxSteps: bounds.maxSteps },
+    invariants: [], includesCliStartup: true, sameInputHistories: false,
+    baseline: { durationMs: baseline.durationMs, report: baseline.report },
+    kernel: { durationMs: kernel.durationMs, report: kernel.report },
+    ratio: kernel.durationMs / baseline.durationMs
+  };
 }
 
 function publicHistory(profile, raw, path) {
@@ -232,7 +253,27 @@ async function checkModel(profile, definition, model, settings, bounds, output) 
     `--max-samples=${bounds.maxSamples}`, `--max-steps=${bounds.maxSteps}`, '--invariants', ...pilotInvariants, `--out=${path}`], root, `${path}.log`);
   validatePropertyResult(json(path), run.status, 'baseline');
   return { status: 'passed', bounds: { maxSamples: bounds.maxSamples, maxSteps: bounds.maxSteps }, invariants: pilotInvariants,
+    invariantScope: {
+      publicationHasTimelySource: `Retained serialization-acceptance records and counts, recorded-fence checks and ownership; ${profile === 'effects'
+        ? 'source deadline acceptance is exercised.' : 'source deadlines are disabled in this view.'}`,
+      closedScopesHaveNoMemo: profile === 'layers' ? 'Closed request scopes cannot retain memo entries.'
+        : 'Request memoization is disabled in this view; the property is not consequential.'
+    },
     durationMs: run.durationMs, lint: { thinProfile: 0, witnessIsolation: 0 }, report: relative(root, path) };
+}
+
+async function measureExploration(profile, baseline, kernel, settings, bounds, output) {
+  // Use the same sampling workload without either model's different invariant
+  // costs. Equal seeds do not imply equal inputs across different choice trees.
+  const options = [`--backend=${settings.backend}`, '--n-threads=1', `--seed=${settings.seed}`,
+    `--max-samples=${bounds.maxSamples}`, `--max-steps=${bounds.maxSteps}`];
+  const measured = {};
+  for (const [name, model] of Object.entries({ baseline, kernel })) {
+    const path = resolve(output, 'checks', profile, `exploration-${name}.json`);
+    const run = await execute('quint', ['run', model.path, ...options, `--out=${path}`], root, `${path}.log`);
+    measured[name] = { result: json(path), status: run.status, durationMs: run.durationMs, report: relative(root, path) };
+  }
+  return explorationComparison(measured.baseline, measured.kernel, settings, bounds);
 }
 
 async function checkWitnessControls(settings, output) {
@@ -249,7 +290,6 @@ async function checkWitnessControls(settings, output) {
 async function checkChallenges(catalog, pilot, settings, output, report, persist) {
   for (const challenge of catalog.challenges) {
     const source = read(resolve(root, challenge.source));
-    if (source.split(challenge.before).length !== 2) throw new Error(`${challenge.id}: mutation anchor must match exactly once`);
     for (const check of challenge.checks) {
       const history = pilot.histories.find(history => history.id === check.history);
       const entry = { id: challenge.id, ...check, status: 'running' };
@@ -304,9 +344,10 @@ export async function runPilot(mode = 'check') {
   save(reportPath, report);
   try {
     const catalog = validatePilot(json(resolve(root, catalogPath)));
+    const challenges = mode === 'check' ? validatePilotChallenges(json(resolve(root, challengePath)), catalog) : undefined;
     const execution = json(resolve(root, 'formal/execution.json')), settings = execution.settings;
     report.sources = sources(); report.seed = settings.seed;
-    report.models = {}; report.challenges = [];
+    report.models = {}; report.challenges = []; report.exploration = {};
     if (mode === 'check') report.witnessControls = await checkWitnessControls(settings, output);
     const models = new Map();
     for (const [profile, definition] of Object.entries(catalog.profiles)) {
@@ -316,6 +357,10 @@ export async function runPilot(mode = 'check') {
         const prepared = await prepareModel(model, flavor === 'pilot' ? definition.module : undefined, directory);
         models.set(`${profile}/${flavor}`, prepared);
         if (mode === 'check' && flavor === 'pilot') report.models[profile] = await checkModel(profile, definition, prepared, settings, execution.check, output);
+      }
+      if (mode === 'check') {
+        report.exploration[profile] = await measureExploration(profile, models.get(`${profile}/baseline`), models.get(`${profile}/pilot`), settings, execution.check, output);
+        save(reportPath, report);
       }
     }
     for (const history of catalog.histories) {
@@ -337,7 +382,7 @@ export async function runPilot(mode = 'check') {
       if (mode === 'check') result.native = await replayNative(history, path, resolve(output, 'native'));
       result.status = 'passed'; save(reportPath, report);
     }
-    if (mode === 'check') await checkChallenges(validatePilotChallenges(json(resolve(root, challengePath)), catalog), catalog, settings, output, report, () => save(reportPath, report));
+    if (mode === 'check') await checkChallenges(challenges, catalog, settings, output, report, () => save(reportPath, report));
     const after = sources();
     const changed = [...new Set([...Object.keys(after), ...Object.keys(report.sources)])].filter(path => after[path] !== report.sources[path]);
     if (changed.length) throw new Error(`Kernel pilot inputs changed during validation: ${changed.join(', ')}`);

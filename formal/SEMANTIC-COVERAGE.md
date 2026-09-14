@@ -47,7 +47,7 @@ where to retain behavioral, primitive-vector and mutation results.
 ## Model assurance
 
 The [shared lifecycle pilot](./kernel/README.md) reports exact-history
-equivalence, native replay and kernel property challenges separately. Its
+observation agreement, native replay and kernel property challenges separately. Its
 sampled invariant runs are model-only evidence; its fixed histories reuse
 existing obligations and add no semantic completeness percentage.
 

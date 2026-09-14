@@ -436,15 +436,23 @@ module cache_kernel {
     a == b or not(left.shared and right.shared and left.phase != Finished and right.phase != Finished)
       or left.instance != right.instance or left.key != right.key
   }))
-  val publicationHasTimelySource = s.executions.indices().forall(owner => {
-    val execution = s.executions.nth(owner)
-    not(Set(Serializing, Writing).contains(execution.phase)) or {
-      val source = s.sources.nth(execution.source)
-      source.status == Settled and s.executions.nth(source.owner) == execution
-        and (s.config.sourceBudget == 0 or execution.acceptedAt < execution.sourceStarted + s.config.sourceBudget)
-        and execution.acceptedWall > execution.fence
-    }
-  })
+  // Acceptance records survive completion, including layers' immediate dump
+  // and write. The effect count requires a record for every serialization;
+  // checking only active phases would be vacuous in that settlement view.
+  // Monotonic time starts above zero; zero is the unused acceptance sentinel.
+  val publicationHasTimelySource =
+    s.counts.dumps == s.executions.select(execution => execution.acceptedAt > 0).length()
+    and s.executions.indices().forall(owner => {
+      val execution = s.executions.nth(owner)
+      (not(Set(Serializing, Writing).contains(execution.phase)) or execution.acceptedAt > 0)
+      and (execution.acceptedAt == 0 or {
+        val source = s.sources.nth(execution.source)
+        source.status == Settled and source.owner == owner
+          and execution.acceptedAt >= execution.sourceStarted
+          and (s.config.sourceBudget == 0 or execution.acceptedAt < execution.sourceStarted + s.config.sourceBudget)
+          and execution.acceptedWall > execution.fence
+      })
+    })
   val finishedOwnersHaveFinishedCallers = s.calls.indices().forall(index => {
     val call = s.calls.nth(index)
     val execution = s.executions.nth(call.owner)

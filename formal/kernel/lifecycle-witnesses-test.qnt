@@ -146,4 +146,67 @@ module lifecycle_witnesses_test {
     .then(check(futureFrame.replaceAt(9, observed("releaseWrite", -1, List(0), 10, 1, 1, 1, 1)), true))
     .expect(not(labels.contains("future-frame-refills-after-source")))
     .then(check(futureFrame, true)).expect(labels.contains("future-frame-refills-after-source"))
+
+  pure val trackedLayersInitialized = observed("init", 1, List(), 10000, 0, 0, 0, 0)
+  pure val invalidationBeforeAcquisition = List(trackedLayersInitialized,
+    observed("invalidate", 0, List(), 10000, 0, 0, 0, 0),
+    observed("beginCall", 0, List(0), 10000, 1, 1, 0, 0),
+    observed("resolveLoader", 1, List(1), 10000, 1, 1, 0, 0))
+  run acquiredFenceNeedsReturnedValueWithoutPreparationOrWriteTest =
+    check(invalidationBeforeAcquisition.slice(0, 3), false)
+    .expect(not(labels.contains("acquired-fence-suppresses-publication")))
+    .then(check(invalidationBeforeAcquisition.replaceAt(3,
+      observed("resolveLoader", 1, List(3), 10000, 1, 1, 0, 0)), false))
+    .expect(not(labels.contains("acquired-fence-suppresses-publication")))
+    .then(check(invalidationBeforeAcquisition.replaceAt(3,
+      observed("resolveLoader", 1, List(1), 10000, 1, 1, 1, 0)), false))
+    .expect(not(labels.contains("acquired-fence-suppresses-publication")))
+    .then(check(invalidationBeforeAcquisition.replaceAt(3,
+      observed("resolveLoader", 1, List(1), 10000, 1, 1, 1, 1)), false))
+    .expect(not(labels.contains("acquired-fence-suppresses-publication")))
+    .then(check(invalidationBeforeAcquisition, false))
+    .expect(labels.contains("acquired-fence-suppresses-publication"))
+
+  pure val invalidationAfterAcquisition = List(trackedLayersInitialized,
+    observed("beginCall", 0, List(0), 10000, 1, 1, 0, 0),
+    observed("invalidate", 0, List(0), 10000, 1, 1, 0, 0),
+    observed("resolveLoader", 1, List(1), 10000, 1, 1, 1, 1),
+    observed("beginCall", 16, List(1, 0), 10000, 2, 2, 1, 1))
+  run inflightPublicationNeedsPermittedWriteAndLaterFencedMissTest =
+    check(invalidationAfterAcquisition.slice(0, 4), false)
+    .expect(not(labels.contains("inflight-publication-remains-fenced")))
+    .then(check(invalidationAfterAcquisition.replaceAt(3,
+      observed("resolveLoader", 1, List(1), 10000, 1, 1, 0, 0)), false))
+    .expect(not(labels.contains("inflight-publication-remains-fenced")))
+    .then(check(invalidationAfterAcquisition.replaceAt(4,
+      observed("beginCall", 16, List(1, 1), 10000, 2, 1, 1, 1)), false))
+    .expect(not(labels.contains("inflight-publication-remains-fenced")))
+    .then(check(invalidationAfterAcquisition.replaceAt(4,
+      observed("beginCall", 16, List(1, 0), 10000, 2, 1, 1, 1)), false))
+    .expect(not(labels.contains("inflight-publication-remains-fenced")))
+    .then(check(invalidationAfterAcquisition, false))
+    .expect(labels.contains("inflight-publication-remains-fenced"))
+
+  pure val trackedLocalWarming = List(trackedLayersInitialized,
+    observed("beginCall", 12, List(0), 10000, 1, 1, 0, 0),
+    observed("resolveLoader", 1, List(1), 10000, 1, 1, 1, 1),
+    observed("beginCall", 12, List(1, 1), 10000, 2, 1, 1, 1),
+    observed("beginCall", 12, List(1, 1, 1), 10000, 2, 1, 1, 1))
+  run trackedLocalWarmingNeedsRedisValidationThenLocalReuseTest =
+    check(trackedLocalWarming.slice(0, 4), false)
+    .expect(not(labels.contains("tracked-redis-warms-local")))
+    .then(check(trackedLocalWarming.replaceAt(3,
+      observed("beginCall", 12, List(1, 1), 10000, 1, 1, 1, 1)), false))
+    .expect(not(labels.contains("tracked-redis-warms-local")))
+    .then(check(trackedLocalWarming.replaceAt(4,
+      observed("beginCall", 12, List(1, 1, 1), 10000, 3, 1, 1, 1)), false))
+    .expect(not(labels.contains("tracked-redis-warms-local")))
+    .then(check(trackedLocalWarming.replaceAt(4,
+      observed("beginCall", 12, List(1, 1, 0), 10000, 2, 1, 1, 1)), false))
+    .expect(not(labels.contains("tracked-redis-warms-local")))
+    .then(check(trackedLocalWarming.replaceAt(4,
+      observed("beginCall", 0, List(1, 1, 1), 10000, 2, 1, 1, 1)), false))
+    .expect(not(labels.contains("tracked-redis-warms-local")))
+    .then(check(trackedLocalWarming, false))
+    .expect(labels.contains("tracked-redis-warms-local"))
 }

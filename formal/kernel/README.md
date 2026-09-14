@@ -42,7 +42,7 @@ Run `make kernel-pilot` with the same Node, Go and Quint prerequisites as
 `make formal`. The target is included in `make formal` and the full formal
 workflow, independently of the unchanged full-profile replay lanes.
 
-[`pilot.json`](./pilot.json) records nine input-only histories. The runner
+[`pilot.json`](./pilot.json) records twelve input-only histories. The runner
 executes each exact sequence in both the original profile and the shared
 kernel view. It compares public observations at every step, then replays the
 kernel-generated history through the existing TypeScript and Go drivers.
@@ -54,6 +54,9 @@ they receive no kernel state or expected result as an implementation input.
 | Coalesced success and subsequent cache reuse | Layers and effects | C05, C11, C12 |
 | Overlapping instances with distinct results in the success/reuse history | Layers | C11 |
 | Shared failure followed by a fresh successful attempt | Layers and effects | C11, C15 |
+| Invalidation before acquisition suppresses source publication | Layers | C33, C34 |
+| Invalidation after acquisition permits publication but fences a later read | Layers | C33, C34, C36 |
+| Tracked source fills Redis; the next read warms local, then local serves | Layers | C05, C31 |
 | Timed-out raw source settles during its replacement | Effects | C25 |
 | Accepted serialization and write finish after the source deadline | Effects | C26 |
 | Fulfillment or rejection at the exact deadline before timer delivery | Effects | C25 |
@@ -63,14 +66,31 @@ The check also requires:
 
 - The existing parsed-IR lint to find no state assignment outside the kernel
   and no witness dependency in cache behavior or observation projection.
-- Five independent properties over 2,000 sampled histories of up to 40 steps
-  per view, using the pinned evaluator and seed in `execution.json`.
-- Three compiling single-site kernel faults, with five named property checks
+- Five properties over 2,000 sampled histories of up to 40 steps per view,
+  using the pinned evaluator and seed in `execution.json`. Applicability is
+  described below and recorded in the report.
+- Five compiling single-site kernel faults, with seven named property checks
   at exact input checkpoints; each unmodified history must first pass.
 - A successful native assertion report from each language for every history.
   Skips, missing results and evaluator failures cannot count as passes.
 
-The nine fixed histories are compared and replayed; the sampled histories
+The publication property checks retained source-acceptance records after
+completion and requires one record per serialization effect. This includes
+layers actions that finish serialization and writing before the next recorded
+state. A fault that ignores an acquired fence must fail at that completed
+layers state; entering publication without source acceptance must also fail.
+Source ownership and fence eligibility apply in both views;
+the source deadline inequality is exercised only in effects because layers
+has an unbounded source budget. The closed-scope memo property is consequential
+only in layers; effects has request memoization disabled.
+
+The publication property checks eligibility against the recorded acquired
+fence. It does not independently establish that fence capture itself is
+correct. The two invalidation orderings additionally compare public effects
+with the original model and both implementations; independent capture
+challenges remain migration work.
+
+The twelve fixed histories are compared and replayed; the sampled histories
 provide model-only invariant evidence. Neither establishes exhaustive
 equivalence between the full models. The deliberate faults measure these
 properties' sensitivity to those particular changes, not all possible defects.
@@ -79,7 +99,10 @@ properties' sensitivity to those particular changes, not all possible defects.
 
 `.formal-traces/kernel-pilot/report.json` records source hashes, bounds,
 per-history comparison and witness checkpoints, native reports, model faults
-and original/kernel generation times. The directory retains copied Quint
+and original/kernel generation times. Full checks also time both models with
+the same evaluator, seed, thread count, sample count and step bound, without
+invariants, to compare exploration cost independently of property cost.
+The directory retains copied Quint
 sources and failing histories. A failure identifies its history, step, action
 and expected/actual public observations, or the exact failing report.
 
@@ -88,8 +111,9 @@ comparison and witness checks. Its report remains incomplete. A full `check`
 can become complete only if all pilot checks pass and its source inputs remain
 unchanged. Every pilot report has `acceptance: false`: it cannot substitute for
 the existing full conformance completion reports. Timing ratios include CLI
-startup and concern only these short histories; they are not a benchmark of a
-full migration.
+startup. Per-history ratios concern short deterministic histories; the separate
+exploration ratios concern the recorded bounded sampling workload. Neither is
+a runtime acceptance threshold or a benchmark of a full migration.
 
 The effects slice excludes adapter classification overrides, live read-budget
 changes and observer failures. Recovery, shadow work, admission, independent

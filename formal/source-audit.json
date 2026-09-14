@@ -1362,7 +1362,7 @@
     },
     {
       "path": "formal/SEMANTIC-COVERAGE.md",
-      "sha256": "ea59cd51d39975e984e19e85898c1ca9297eb4ba8d57fff686302e9eed2aea41",
+      "sha256": "c2153f2236e9629234c6089df22842219e04aae286dea85d14a5947db55bd0ef",
       "entries": [
         {"line":1,"title":"Measuring semantic coverage"},
         {"line":5,"title":"Evidence inventory"},

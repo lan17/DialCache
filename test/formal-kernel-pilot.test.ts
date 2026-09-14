@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 type Trace = { states: Array<Record<string, any>>; [key: string]: unknown };
 type Schedule = Array<[string, number]>;
-const { projectPilotTrace, comparePilotHistory, witnessCheckpoints, validatePilot, validatePilotChallenges, validatePilotChallengeResult, validateWitnessControlResult } = await import(
+const { projectPilotTrace, comparePilotHistory, witnessCheckpoints, validatePilot, validatePilotChallenges, validatePilotChallengeResult, validateWitnessControlResult, explorationComparison } = await import(
   new URL("../formal/kernel-pilot.mjs", import.meta.url).href,
 ) as {
   projectPilotTrace(raw: unknown, path?: string): Trace;
@@ -14,6 +14,7 @@ const { projectPilotTrace, comparePilotHistory, witnessCheckpoints, validatePilo
   validatePilotChallenges(raw: unknown, pilot: unknown): unknown;
   validatePilotChallengeResult(result: unknown, exitCode: number, raw: unknown, history: unknown, check: unknown, expectation: string): { status: string };
   validateWitnessControlResult(output: string, exitCode: number, required: string[]): { status: string; tests: string[] };
+  explorationComparison(baseline: unknown, kernel: unknown, settings: { backend: string; seed: string }, bounds: { maxSamples: number; maxSteps: number }): Record<string, unknown>;
 };
 const read = (path: string) => JSON.parse(readFileSync(resolve(path), "utf8"));
 const schedule = (trace: Trace): Schedule => trace.states.map(state => [state.input.name, Number(state.input.choice["#bigint"])]);
@@ -92,6 +93,28 @@ describe("supplemental kernel pilot evidence", () => {
     for (const patch of [{ history: "unknown" }, { profile: "unknown" }, { invariant: "doesNotExist" }, { failureStep: 1000 }]) {
       const invalid = structuredClone(challenges); Object.assign(invalid.challenges[0].checks[0], patch);
       expect(() => validatePilotChallenges(invalid, pilot)).toThrow(/invalid history, invariant or failure checkpoint/);
+    }
+    for (const before of ["__missing_kernel_anchor__", " "]) {
+      const invalid = structuredClone(challenges); invalid.challenges[0].before = before;
+      expect(() => validatePilotChallenges(invalid, pilot)).toThrow(/mutation anchor must match exactly once/);
+    }
+  });
+
+  it("reports sampled exploration separately and requires successful finite timings from both models", () => {
+    const settings = { backend: "rust", seed: "0xd1a1ca" }, bounds = { maxSamples: 2000, maxSteps: 40 };
+    const baseline = { result: { status: "ok", errors: [], trace: [{}] }, status: 0, durationMs: 100, report: "baseline.json" };
+    const kernel = { ...baseline, durationMs: 500, report: "kernel.json" };
+    expect(explorationComparison(baseline, kernel, settings, bounds)).toEqual({
+      status: "passed", kind: "sampled-exploration", backend: "rust", seed: "0xd1a1ca", threads: 1, bounds,
+      invariants: [], includesCliStartup: true, sameInputHistories: false,
+      baseline: { durationMs: 100, report: "baseline.json" }, kernel: { durationMs: 500, report: "kernel.json" }, ratio: 5,
+    });
+    const invalid = [undefined, { ...baseline, status: 1 }, { ...baseline, result: {} },
+      { ...baseline, result: { ...baseline.result, errors: ["evaluator failed"] } },
+      ...[undefined, 0, -1, NaN, Infinity].map(durationMs => ({ ...baseline, durationMs }))];
+    for (const measured of invalid) {
+      expect(() => explorationComparison(measured, kernel, settings, bounds)).toThrow();
+      expect(() => explorationComparison(baseline, measured, settings, bounds)).toThrow();
     }
   });
 

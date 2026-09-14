@@ -17,6 +17,21 @@
       "actions": [["init", 0], ["beginCall", 0], ["beginCall", 4], ["rejectLoader", 0], ["beginCall", 0], ["beginCall", 4], ["resolveLoader", 3], ["beginCall", 12]]
     },
     {
+      "id": "layers-invalidation-before-acquisition", "profile": "layers", "contracts": ["C33", "C34"],
+      "witnesses": ["acquired-fence-suppresses-publication"],
+      "actions": [["init", 1], ["invalidate", 0], ["beginCall", 0], ["resolveLoader", 1]]
+    },
+    {
+      "id": "layers-invalidation-after-acquisition", "profile": "layers", "contracts": ["C33", "C34", "C36"],
+      "witnesses": ["inflight-publication-remains-fenced"],
+      "actions": [["init", 1], ["beginCall", 0], ["invalidate", 0], ["resolveLoader", 1], ["beginCall", 16]]
+    },
+    {
+      "id": "layers-tracked-redis-warms-local", "profile": "layers", "contracts": ["C05", "C31"],
+      "witnesses": ["tracked-redis-warms-local"],
+      "actions": [["init", 1], ["beginCall", 12], ["resolveLoader", 1], ["beginCall", 12], ["beginCall", 12]]
+    },
+    {
       "id": "effects-shared-source-and-reuse", "profile": "effects", "contracts": ["C05", "C11"],
       "witnesses": ["coalesced-success", "published-value-reused"],
       "actions": [["init", 2], ["beginCall", -1], ["beginCall", -1], ["releaseRead", 0], ["resolveLoader", 0], ["releaseDump", -1], ["releaseWrite", -1], ["beginCall", -1], ["releaseRead", 1], ["releaseLoad", -1]]

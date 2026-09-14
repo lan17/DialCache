@@ -162,8 +162,73 @@ module lifecycle_witnesses {
       and history.nth(8).observation.writes == 1
       and history.nth(9).observation.calls == List(1)
 
+  // These small tracked histories fix input order and identity so public
+  // counters distinguish acquired-fence handling from current-watermark
+  // handling, and validated local warming from direct source publication.
+  // The inputs establish those boundaries; no private fence or cache state
+  // participates in the witness predicate.
+  pure def hasInputs(history: List[Step], inputs: List[Input]): bool =
+    history.length() >= inputs.length()
+      and inputs.indices().forall(i => history.nth(i).input == inputs.nth(i))
+  pure def hasCounts(view: View, reads: int, loaders: int, dumps: int, writes: int): bool =
+    view.reads == reads and view.loaders == loaders and view.dumps == dumps and view.writes == writes
+
+  pure val invalidationBeforeAcquisitionInputs: List[Input] = List(
+    { name: "init", choice: 1 },
+    { name: "invalidate", choice: 0 },
+    { name: "beginCall", choice: 0 },
+    { name: "resolveLoader", choice: 1 }
+  )
+  pure def acquiredFenceSuppressesPublication(history: List[Step]): bool =
+    hasInputs(history, invalidationBeforeAcquisitionInputs)
+      and history.nth(2).observation.calls == List(0)
+      and hasCounts(history.nth(2).observation, 1, 1, 0, 0)
+      and history.nth(3).observation.calls == List(1)
+      and hasCounts(history.nth(3).observation, 1, 1, 0, 0)
+
+  pure val invalidationAfterAcquisitionInputs: List[Input] = List(
+    { name: "init", choice: 1 },
+    { name: "beginCall", choice: 0 },
+    { name: "invalidate", choice: 0 },
+    { name: "resolveLoader", choice: 1 },
+    { name: "beginCall", choice: 16 }
+  )
+  pure def inflightPublicationRemainsFenced(history: List[Step]): bool =
+    hasInputs(history, invalidationAfterAcquisitionInputs)
+      and history.nth(1).observation.calls == List(0)
+      and hasCounts(history.nth(1).observation, 1, 1, 0, 0)
+      and history.nth(3).observation.calls == List(1)
+      and hasCounts(history.nth(3).observation, 1, 1, 1, 1)
+      and history.nth(4).observation.calls == List(1, 0)
+      and hasCounts(history.nth(4).observation, 2, 2, 1, 1)
+
+  pure val trackedLocalWarmingInputs: List[Input] = List(
+    { name: "init", choice: 1 },
+    { name: "beginCall", choice: 12 },
+    { name: "resolveLoader", choice: 1 },
+    { name: "beginCall", choice: 12 },
+    { name: "beginCall", choice: 12 }
+  )
+  pure def trackedRedisWarmsLocal(history: List[Step]): bool =
+    hasInputs(history, trackedLocalWarmingInputs)
+      and history.nth(1).observation.calls == List(0)
+      and hasCounts(history.nth(1).observation, 1, 1, 0, 0)
+      and history.nth(2).observation.calls == List(1)
+      and hasCounts(history.nth(2).observation, 1, 1, 1, 1)
+      // Every call uses a fresh request scope on the same instance/key.
+      // The first probe must validate Redis; only the second may skip it.
+      and history.nth(3).observation.calls == List(1, 1)
+      and hasCounts(history.nth(3).observation, 2, 1, 1, 1)
+      and history.nth(4).observation.calls == List(1, 1, 1)
+      and hasCounts(history.nth(4).observation, 2, 1, 1, 1)
+
   pure def reached(history: List[Step], heldEffects: bool, sourceBudget: int): Set[str] = {
     val lifecycle = history.foldl(emptyMonitor, (monitor, step) => advance(monitor, step, heldEffects, sourceBudget)).labels
-    credit(lifecycle, heldEffects and futureFrameRefills(history), "future-frame-refills-after-source")
+    val futureFrameLabels = credit(lifecycle, heldEffects and futureFrameRefills(history), "future-frame-refills-after-source")
+    val acquiredFenceLabels = credit(futureFrameLabels,
+      not(heldEffects) and acquiredFenceSuppressesPublication(history), "acquired-fence-suppresses-publication")
+    val inflightLabels = credit(acquiredFenceLabels,
+      not(heldEffects) and inflightPublicationRemainsFenced(history), "inflight-publication-remains-fenced")
+    credit(inflightLabels, not(heldEffects) and trackedRedisWarmsLocal(history), "tracked-redis-warms-local")
   }
 }
