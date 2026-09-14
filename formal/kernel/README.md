@@ -87,9 +87,11 @@ The check also requires:
   from `execution.json` (its sample count and step bound, one thread, the
   pinned seed, no trace output) with their own invariants, twice each. The
   kernel view's fastest wall time may be at most `exploration.maxRatio` in
-  `pilot.json` times the original's fastest wall time. The same pairing without
-  invariants, and the fixed cost of a one-sample, one-step run of each model,
-  are recorded but not gated.
+  `pilot.json` (2.5) times the original's fastest wall time. The first hosted
+  measurement was 1.2 for layers and 1.8 for effects; the bound leaves room
+  for runner variance and still fails on the 4 to 7 times of the refolding
+  monitor. The same pairing without invariants, and the fixed cost of a
+  one-sample, one-step run of each model, are recorded but not gated.
 
 The publication property checks retained source-acceptance records after
 completion and requires one record per serialization effect. This includes
