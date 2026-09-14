@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "scope": "Supplemental deterministic layers/effects lifecycle pilot; the existing conformance profiles remain authoritative during migration.",
+  "profiles": {
+    "layers": { "baseline": "formal/dialcache-layers-conformance.qnt", "model": "formal/kernel/layers-pilot.qnt", "module": "layers_pilot" },
+    "effects": { "baseline": "formal/dialcache-effects-conformance.qnt", "model": "formal/kernel/effects-pilot.qnt", "module": "effects_pilot" }
+  },
+  "histories": [
+    {
+      "id": "layers-shared-source-and-reuse", "profile": "layers", "contracts": ["C05", "C11", "C12"],
+      "witnesses": ["coalesced-success", "published-value-reused"],
+      "actions": [["init", 0], ["beginCall", 0], ["beginCall", 4], ["resolveLoader", 1], ["beginCall", 0], ["beginCall", 12], ["beginCall", 16], ["beginCall", 1], ["beginCall", 9], ["resolveLoader", 3], ["resolveLoader", 6], ["beginCall", 13], ["beginCall", 17]]
+    },
+    {
+      "id": "layers-shared-failure-and-retry", "profile": "layers", "contracts": ["C11", "C15"],
+      "witnesses": ["shared-failure-retry"],
+      "actions": [["init", 0], ["beginCall", 0], ["beginCall", 4], ["rejectLoader", 0], ["beginCall", 0], ["beginCall", 4], ["resolveLoader", 3], ["beginCall", 12]]
+    },
+    {
+      "id": "layers-invalidation-before-acquisition", "profile": "layers", "contracts": ["C33", "C34"],
+      "witnesses": ["acquired-fence-suppresses-publication"],
+      "actions": [["init", 1], ["invalidate", 0], ["beginCall", 0], ["resolveLoader", 1]]
+    },
+    {
+      "id": "layers-invalidation-after-acquisition", "profile": "layers", "contracts": ["C33", "C34", "C36"],
+      "witnesses": ["inflight-publication-remains-fenced"],
+      "actions": [["init", 1], ["beginCall", 0], ["invalidate", 0], ["resolveLoader", 1], ["beginCall", 16]]
+    },
+    {
+      "id": "layers-tracked-redis-warms-local", "profile": "layers", "contracts": ["C05", "C31"],
+      "witnesses": ["tracked-redis-warms-local"],
+      "actions": [["init", 1], ["beginCall", 12], ["resolveLoader", 1], ["beginCall", 12], ["beginCall", 12]]
+    },
+    {
+      "id": "effects-shared-source-and-reuse", "profile": "effects", "contracts": ["C05", "C11"],
+      "witnesses": ["coalesced-success", "published-value-reused"],
+      "actions": [["init", 2], ["beginCall", -1], ["beginCall", -1], ["releaseRead", 0], ["resolveLoader", 0], ["releaseDump", -1], ["releaseWrite", -1], ["beginCall", -1], ["releaseRead", 1], ["releaseLoad", -1]]
+    },
+    {
+      "id": "effects-shared-failure-and-retry", "profile": "effects", "contracts": ["C11", "C15"],
+      "witnesses": ["shared-failure-retry"],
+      "actions": [["init", 2], ["beginCall", -1], ["beginCall", -1], ["releaseRead", 0], ["rejectLoader", 0], ["beginCall", -1], ["releaseRead", 1], ["resolveLoader", 1], ["releaseDump", -1], ["releaseWrite", -1]]
+    },
+    {
+      "id": "effects-abandoned-source-and-replacement", "profile": "effects", "contracts": ["C25"],
+      "witnesses": ["abandoned-source-replacement"],
+      "actions": [["init", 2], ["beginCall", -1], ["releaseRead", 0], ["tick", -1], ["beginCall", -1], ["releaseRead", 1], ["resolveLoader", 0], ["resolveLoader", 1], ["releaseDump", -1], ["releaseWrite", -1]]
+    },
+    {
+      "id": "effects-accepted-publication-after-deadline", "profile": "effects", "contracts": ["C26"],
+      "witnesses": ["accepted-publication-after-deadline"],
+      "actions": [["init", 2], ["beginCall", -1], ["releaseRead", 0], ["resolveLoader", 0], ["tick", -1], ["releaseDump", -1], ["tick", -1], ["releaseWrite", -1]]
+    },
+    {
+      "id": "effects-exact-deadline-resolve", "profile": "effects", "contracts": ["C25"],
+      "witnesses": ["late-resolve-rejected"],
+      "actions": [["init", 2], ["beginCall", -1], ["releaseRead", 0], ["jumpClock", -1], ["resolveLoader", 0]]
+    },
+    {
+      "id": "effects-exact-deadline-reject", "profile": "effects", "contracts": ["C25"],
+      "witnesses": ["late-reject-rejected"],
+      "actions": [["init", 2], ["beginCall", -1], ["releaseRead", 0], ["jumpClock", -1], ["rejectLoader", 0]]
+    },
+    {
+      "id": "effects-future-unfenced-frame-refills", "profile": "effects", "contracts": ["C33", "C34"],
+      "witnesses": ["future-frame-refills-after-source"],
+      "actions": [["init", 2], ["invalidate", -1], ["tick", -1], ["seedRemote", -1], ["rollbackWall", -1], ["beginCall", -1], ["releaseRead", 0], ["resolveLoader", 0], ["releaseDump", -1], ["releaseWrite", -1]]
+    }
+  ]
+}

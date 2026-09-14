@@ -86,6 +86,11 @@ and time. Their introduction does not imply that every product of those domains
 is explored. [profiles.json](./profiles.json) records profile versions, input
 encodings, smoke traces and implementation declarations.
 
+The supplemental [shared lifecycle pilot](./kernel/README.md) exercises layers
+and effects views of one kernel against their original profiles and both ports.
+Its bounded histories evaluate a first migration slice; the profiles above
+remain authoritative and their coverage totals are unchanged.
+
 ## Generating and replaying behavior
 
 Use Node 24, pnpm 10.33.0 and Go 1.27.1 to match CI. Install dependencies with
@@ -112,6 +117,7 @@ make help          # Targets and prerequisites.
 make check         # Native checks, package, docs and inventories.
 make smoke         # Committed Quint-derived histories in both ports.
 make formal        # Rust model checks, full corpus and both-port completion.
+make kernel-pilot  # Supplemental shared lifecycle comparison and both-port replay.
 make model-check   # Separate finite symbolic checks; Java 21 and tar required.
 make mutations     # Challenge assertions after full replay has passed.
 make integration   # Real Redis/Valkey/Cluster and interoperability.
@@ -132,6 +138,10 @@ model check, which runs beside generation; the aggregate requires every lane.
 edit, update them with `node formal/generate-artifacts.mjs --write` first.
 `make ci` includes the separate symbolic checks after `make formal`, as well as
 the other local lanes.
+
+`make formal` also requires `make kernel-pilot`. Its report separately records
+the shared kernel's sampled invariants, exact-input comparisons, native replays
+and deliberate model faults. It never substitutes for full-profile completion.
 
 Pinned acceptance clears inherited trace selectors and `QUINT_SEED`. Exploration
 keeps a separate source snapshot, seed, corpus and diagnostic replay evidence. See
