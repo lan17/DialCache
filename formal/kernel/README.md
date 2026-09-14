@@ -31,10 +31,19 @@ starts. A timely accepted source retains its execution through serialization
 and writing, even after the original source deadline passes. Publication uses
 the acquired fence, and closing a scope prevents later memo publication.
 
-[`lifecycle-witnesses.qnt`](./lifecycle-witnesses.qnt) observes public input and
-result/effect histories. It cannot influence transitions or projections. Its
-positive and negative monitor tests are checks of evidence classification,
-not additional native behavioral coverage.
+[`lifecycle-witnesses.qnt`](./lifecycle-witnesses.qnt) observes public inputs
+and result/effect observations. It cannot influence transitions or projections.
+The kernel records one monitor value per step, computed from the previous
+monitor value and the current step alone; no input history is retained or
+refolded, so witness bookkeeping no longer grows with the length of a history.
+It still scales with the number of calls the view admits, which the fixture
+bounds. The monitor carries the credited label set. Four boundaries are scripted prefixes:
+a fixed public input order, for one view, with the observation fields that
+establish each consequence. A history that departs from a script's prefix can
+never earn its label. Every credited label is retained because each step's
+labels accumulate from the previous step's. The monitor's positive and negative
+tests are checks of evidence classification, not additional native behavioral
+coverage.
 
 ## Executable comparison
 
@@ -73,6 +82,14 @@ The check also requires:
   at exact input checkpoints; each unmodified history must first pass.
 - A successful native assertion report from each language for every history.
   Skips, missing results and evaluator failures cannot count as passes.
+- The generation-runtime budget of #165: in the same job, the original
+  profile and the kernel view each sample the original's generation workload
+  from `execution.json` (its sample count and step bound, one thread, the
+  pinned seed, no trace output) with their own invariants, twice each. The
+  kernel view's fastest wall time may be at most `exploration.maxRatio` in
+  `pilot.json` times the original's fastest wall time. The same pairing without
+  invariants, and the fixed cost of a one-sample, one-step run of each model,
+  are recorded but not gated.
 
 The publication property checks retained source-acceptance records after
 completion and requires one record per serialization effect. This includes
@@ -98,22 +115,33 @@ properties' sensitivity to those particular changes, not all possible defects.
 ## Evidence and next decision
 
 `.formal-traces/kernel-pilot/report.json` records source hashes, bounds,
-per-history comparison and witness checkpoints, native reports, model faults
-and original/kernel generation times. Full checks also time both models with
-the same evaluator, seed, thread count, sample count and step bound, without
-invariants, to compare exploration cost independently of property cost.
-The directory retains copied Quint
-sources and failing histories. A failure identifies its history, step, action
-and expected/actual public observations, or the exact failing report.
+per-history comparison and witness checkpoints, native reports, model faults,
+original/kernel generation times and raw trace sizes. Full checks also time
+both models on the original's generation workload, twice per model and pairing,
+record every run's wall time, the fixed CLI cost and the ratios with and
+without that fixed cost, and fail when the gated ratio exceeds its bound; the
+failing comparison is written to the report before the check fails. Wall times
+include CLI startup, about one second per run, which the ungated
+evaluation-only ratio removes. On one machine at the generation bounds, taking
+the faster of two runs: layers took 8.5 s in the original against 8.6 s in the
+kernel view with invariants and 3.0 s against 5.5 s without; effects took 7.7 s
+against 12.0 s with invariants and 2.5 s against 9.5 s without. With the
+refolding monitor, at 2,000 samples of 40 steps, the kernel views had taken 4
+to 7 times the originals with invariants and 9 to 13 times without. The
+remaining difference is the kernel's larger state and the monitor's per-step
+bookkeeping. The directory retains copied Quint sources and failing histories.
+A failure identifies its history, step, action and expected/actual public
+observations, or the exact failing report.
 
 `node formal/kernel-pilot.mjs generate` performs only deterministic generation,
 comparison and witness checks. Its report remains incomplete. A full `check`
 can become complete only if all pilot checks pass and its source inputs remain
 unchanged. Every pilot report has `acceptance: false`: it cannot substitute for
-the existing full conformance completion reports. Timing ratios include CLI
-startup. Per-history ratios concern short deterministic histories; the separate
-exploration ratios concern the recorded bounded sampling workload. Neither is
-a runtime acceptance threshold or a benchmark of a full migration.
+the existing full conformance completion reports. Per-history ratios and
+trace sizes concern short deterministic histories and are informational. The
+gated ratio concerns the original's recorded generation workload only; it
+detects a regression in the kernel's generation cost and is not a benchmark of
+a full migration.
 
 The effects slice excludes adapter classification overrides, live read-budget
 changes and observer failures. Recovery, shadow work, admission, independent

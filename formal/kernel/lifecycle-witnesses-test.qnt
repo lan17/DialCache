@@ -147,6 +147,25 @@ module lifecycle_witnesses_test {
     .expect(not(labels.contains("future-frame-refills-after-source")))
     .then(check(futureFrame, true)).expect(labels.contains("future-frame-refills-after-source"))
 
+  // A scripted prefix matches from initialization only. The same inputs and
+  // observations after one extra step never earn the label, and a history that
+  // departs at step 1 cannot recover even when the complete script, including
+  // its initialization step, follows.
+  run scriptedPrefixMustStartAtInitializationTest = check(List(initialized,
+    observed("tick", -1, List(), 10, 0, 0, 0, 0)).concat(futureFrame.slice(1, 10)), true)
+    .expect(not(labels.contains("future-frame-refills-after-source")))
+    .then(check(futureFrame.replaceAt(1, observed("tick", -1, List(), 10, 0, 0, 0, 0))
+      .concat(futureFrame), true))
+    .expect(not(labels.contains("future-frame-refills-after-source")))
+
+  // Each script belongs to one view: the effects script earns nothing under
+  // layers' immediate completions, and a layers script earns nothing under
+  // held effects, even when the inputs and observations match exactly.
+  run scriptsApplyToTheirOwnViewOnlyTest = check(futureFrame, false)
+    .expect(not(labels.contains("future-frame-refills-after-source")))
+    .then(check(trackedLocalWarming, true))
+    .expect(not(labels.contains("tracked-redis-warms-local")))
+
   pure val trackedLayersInitialized = observed("init", 1, List(), 10000, 0, 0, 0, 0)
   pure val invalidationBeforeAcquisition = List(trackedLayersInitialized,
     observed("invalidate", 0, List(), 10000, 0, 0, 0, 0),

@@ -140,8 +140,9 @@ edit, update them with `node formal/generate-artifacts.mjs --write` first.
 the other local lanes.
 
 `make formal` also requires `make kernel-pilot`. Its report separately records
-the shared kernel's sampled invariants, exact-input comparisons, native replays
-and deliberate model faults. It never substitutes for full-profile completion.
+the shared kernel's sampled invariants, bounded generation-time ratios against
+the original profiles, exact-input comparisons, native replays and deliberate
+model faults. It never substitutes for full-profile completion.
 
 Pinned acceptance clears inherited trace selectors and `QUINT_SEED`. Exploration
 keeps a separate source snapshot, seed, corpus and diagnostic replay evidence. See
