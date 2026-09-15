@@ -4,7 +4,7 @@ import { createWitnessRecorder } from "./recorder.mjs";
 // Private clock/cache predictions classify only schedules subsequently probed
 // by real replay. They never enter driver inputs or implementation projection.
 export function clockWitnesses(name, histories, recorder = createWitnessRecorder()) {
-  for (const { path, steps, states } of histories) {
+  for (const { path, steps, predictions: states } of histories) {
     recorder.enter(path);
     let rolledLocal;
     let hitBeforeExpiry;

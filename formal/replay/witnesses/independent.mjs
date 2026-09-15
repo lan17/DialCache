@@ -3,7 +3,7 @@ import { createWitnessRecorder } from "./recorder.mjs";
 // Independent-call witnesses: public results, read IO and recovery outcomes,
 // plus private call/read/load predictions that identify the schedule probed.
 export function independentWitnesses(histories, recorder = createWitnessRecorder()) {
-  for (const { path, steps, states } of histories) {
+  for (const { path, steps, predictions: states } of histories) {
     recorder.enter(path);
     const recovered = new Map();
     for (const [i, step] of steps.entries()) {

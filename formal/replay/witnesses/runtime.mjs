@@ -1,4 +1,4 @@
-import { explicitInput, privateStates, readTrace, traceStates } from "./trace.mjs";
+import { explicitInput } from "./trace.mjs";
 import { createWitnessRecorder } from "./recorder.mjs";
 
 const successful = value => value !== undefined && value > 0 && value !== 3 && value !== 4;
@@ -12,15 +12,13 @@ const remoteTtl = s => baseOverlay(s.overlay) === 2 ? 2000 : baseOverlay(s.overl
 // public APIs of every port. Private cache predictions select a schedule; a
 // later public call must expose retained values, skipped work, or independent
 // work. They neither drive implementations nor add a behavioral oracle.
-export function runtimeWitnesses(profile, paths, recorder = createWitnessRecorder()) {
+export function runtimeWitnesses(profile, histories, recorder = createWitnessRecorder()) {
   if (!["policy", "scope", "layers"].includes(profile)) return recorder.labels();
-  for (const path of paths) {
+  for (const { path, states, predictions } of histories) {
     recorder.enter(path);
-    const raw = readTrace(path);
-    const states = traceStates(raw, path);
     // Published smoke fixtures deliberately retain only public observations.
     if (states[0]?.s?.sources === undefined) continue;
-    const steps = privateStates(raw, path).map((s, index) => ({ s, input: index === 0 ? undefined : explicitInput(states[index], `${path} step ${index}`) }));
+    const steps = predictions.map((s, index) => ({ s, input: index === 0 ? undefined : explicitInput(states[index], `${path} step ${index}`) }));
     if (profile === "policy") policyWitnesses(steps, recorder);
     if (profile === "scope") scopeWitnesses(steps, recorder);
     if (profile === "layers") layersWitnesses(steps, recorder);

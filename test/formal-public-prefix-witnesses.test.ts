@@ -1,7 +1,5 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
 import { localFailureWitnessRules, localFailureWitnesses } from "../formal/replay/witnesses/local-failure.mjs";
 import { sourceBudgetsWitnessRules, sourceBudgetsWitnesses } from "../formal/replay/witnesses/source-budgets.mjs";
 
@@ -12,8 +10,6 @@ const suites = [
 ].map(suite => ({ ...suite, fixtures: JSON.parse(readFileSync(new URL(`./fixtures/${suite.family}-witnesses.json`, import.meta.url), "utf8")) as Array<{
   regression: string; trace: Trace;
 }> }));
-const directory = mkdtempSync(join(tmpdir(), "dialcache-public-prefix-witness-"));
-afterAll(() => rmSync(directory, { recursive: true, force: true }));
 const integer = (value: number) => ({ "#bigint": String(value) });
 function traceFor(name: string) {
   const suite = suites.find(suite => suite.rules.some(rule => rule.name === name))!;
@@ -21,9 +17,7 @@ function traceFor(name: string) {
   return structuredClone(suite.fixtures.find(fixture => fixture.regression === rule.regression)!.trace);
 }
 function classified(name: string, trace: Trace): boolean {
-  const path = join(directory, "trace.itf.json");
-  writeFileSync(path, JSON.stringify(trace));
-  return suites.find(suite => suite.rules.some(rule => rule.name === name))!.classify([path]).has(name);
+  return suites.find(suite => suite.rules.some(rule => rule.name === name))!.classify([{ path: "trace.itf.json", states: trace.states }]).has(name);
 }
 
 // Actual Quint input/public-observation excerpts challenge the classifier.

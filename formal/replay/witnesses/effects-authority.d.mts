@@ -1,4 +1,5 @@
 import type { WitnessRecorder } from "./recorder.mjs";
+import type { RawHistory } from "./trace.mjs";
 
 export interface EffectsPublicState {
   calls: number[];
@@ -15,9 +16,5 @@ export interface EffectsAuthorityRule {
   commands: string[];
   consequence: (state: EffectsPublicState) => boolean;
 }
-export interface EffectsAuthorityHistory {
-  path: string;
-  states: unknown[];
-}
 export const effectsAuthorityRules: readonly EffectsAuthorityRule[];
-export function effectsAuthorityWitnesses(histories: readonly EffectsAuthorityHistory[], recorder?: WitnessRecorder): Set<string>;
+export function effectsAuthorityWitnesses(histories: readonly RawHistory[], recorder?: WitnessRecorder): Set<string>;

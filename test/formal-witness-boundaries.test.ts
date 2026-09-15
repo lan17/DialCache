@@ -1,9 +1,8 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
 import { recoveryShadowWitnesses } from "../formal/replay/witnesses/recovery-shadow.mjs";
 import { runtimeWitnesses } from "../formal/replay/witnesses/runtime.mjs";
+import { witnessStates } from "../formal/replay/witnesses/trace.mjs";
 
 type RecordValue = Record<string, unknown>;
 type Fixture = {
@@ -15,7 +14,6 @@ type Fixture = {
 type Choice = { tag: string; value: unknown };
 type State = { input: { name: string; choice: unknown }; s: RecordValue };
 const fixtures = JSON.parse(readFileSync(new URL("./fixtures/formal-witness-boundaries.json", import.meta.url), "utf8")) as Fixture[];
-const directories: string[] = [];
 
 // The fixture file contains excerpts selected from real Quint histories. Store
 // only changed fields to keep the examples readable without duplicating state.
@@ -42,12 +40,8 @@ function statesFor(fixture: Fixture): State[] {
   return states;
 }
 function collect(fixture: Fixture, states: State[]): Set<string> {
-  const directory = mkdtempSync(join(tmpdir(), "dialcache-witness-boundary-"));
-  directories.push(directory);
-  const path = join(directory, "trace.itf.json");
-  writeFileSync(path, JSON.stringify({ states }));
-  return fixture.profile === "layers" ? runtimeWitnesses(fixture.profile, [path])
-    : recoveryShadowWitnesses(fixture.profile, [path]);
+  const histories = [{ path: "trace.itf.json", ...witnessStates({ states }, "trace.itf.json") }];
+  return fixture.profile === "layers" ? runtimeWitnesses(fixture.profile, histories) : recoveryShadowWitnesses(fixture.profile, histories);
 }
 function fixtureFor(witness: string): Fixture {
   const fixture = fixtures.find(item => item.witness === witness);
@@ -55,8 +49,6 @@ function fixtureFor(witness: string): Fixture {
   return fixture;
 }
 function integer(value: number): RecordValue { return { "#bigint": String(value) }; }
-
-afterEach(() => { for (const directory of directories.splice(0)) rmSync(directory, { recursive: true }); });
 
 describe("Quint recovery and shadow witness consequences", () => {
   it.each(fixtures)("recognizes the replayed consequence: $witness", fixture => {

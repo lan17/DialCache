@@ -24,7 +24,7 @@ import { shadowWitnesses } from "./shadow.mjs";
 import { shadowDiagnosticsWitnesses } from "./shadow-diagnostics.mjs";
 import { shadowLayersWitnesses } from "./shadow-layers.mjs";
 import { sourceBudgetsWitnesses } from "./source-budgets.mjs";
-import { privateStates, readTrace, traceStates } from "./trace.mjs";
+import { readTrace, traceStates, witnessStates } from "./trace.mjs";
 
 // One language-neutral witness evaluator for every profile with a completion
 // gate. Any port runs it over the same sampled histories and exported
@@ -34,15 +34,16 @@ import { privateStates, readTrace, traceStates } from "./trace.mjs";
 // nothing here supplies an implementation's inputs.
 export const witnessProfiles = [...Object.keys(featureProfiles), "effects", "local-clock"];
 
-// The shared strict parser for a profile's histories. Feature histories also
-// carry their decoded private predictions; effects histories keep their raw ITF
-// states, from which the authority classifier reads the public observations.
+// The shared strict parser for a profile's histories. Effects and feature
+// histories keep their raw ITF states for the classifiers keyed on explicit
+// inputs and public observations; feature histories also carry their decoded
+// private predictions.
 function historyParser(profile) {
   if (profile === "effects") return (raw, path) => ({ ...parseEffectsTrace(raw, path), states: traceStates(raw, path) });
   if (profile === "local-clock") return parseLocalClockTrace;
   const definition = featureProfiles[profile];
   if (definition === undefined) throw new Error(`Unknown witness profile ${profile}`);
-  return (raw, path) => ({ ...parseFeatureTrace(raw, path, definition), states: privateStates(raw, path) });
+  return (raw, path) => ({ ...parseFeatureTrace(raw, path, definition), ...witnessStates(raw, path) });
 }
 
 // Parse the corpus once. A test suite that replays the same histories loads
@@ -54,26 +55,24 @@ export function loadCorpus(profile, paths) {
 
 // Every classifier credits into one recorder, so each label keeps the history
 // and the checkpoint step that earned it (recorder.mjs). The returned label
-// set is what the completion gate compares with the registry. The feature
-// classifiers that take paths still read each history themselves.
+// set is what the completion gate compares with the registry.
 export function evaluateCorpus(profile, corpus, recorder = createWitnessRecorder()) {
-  const paths = corpus.map(trace => trace.path);
   switch (profile) {
     case "effects": effectsWitnesses(corpus, recorder); effectsAuthorityWitnesses(corpus, recorder); break;
     case "local-clock": localClockWitnesses(corpus, recorder); break;
-    case "policy": policyWitnesses(corpus, recorder); runtimeWitnesses(profile, paths, recorder); break;
-    case "scope": scopeWitnesses(corpus, recorder); runtimeWitnesses(profile, paths, recorder); break;
-    case "layers": layersWitnesses(corpus, recorder); runtimeWitnesses(profile, paths, recorder); break;
+    case "policy": policyWitnesses(corpus, recorder); runtimeWitnesses(profile, corpus, recorder); break;
+    case "scope": scopeWitnesses(corpus, recorder); runtimeWitnesses(profile, corpus, recorder); break;
+    case "layers": layersWitnesses(corpus, recorder); runtimeWitnesses(profile, corpus, recorder); break;
     case "admission": admissionWitnesses(corpus, recorder); break;
     case "independent": independentWitnesses(corpus, recorder); break;
-    case "recovery": recoveryWitnesses(corpus, recorder); recoveryShadowWitnesses(profile, paths, recorder); break;
+    case "recovery": recoveryWitnesses(corpus, recorder); recoveryShadowWitnesses(profile, corpus, recorder); break;
     case "shadow":
-      shadowWitnesses(corpus, recorder); recoveryShadowWitnesses(profile, paths, recorder); shadowDiagnosticsWitnesses(paths, recorder); break;
-    case "recovery-read": actionLabels(corpus, recorder); recoveryReadWitnesses(paths, recorder); recoveryAdmissionWitnesses(paths, recorder); break;
-    case "shadow-layers": actionLabels(corpus, recorder); shadowLayersWitnesses(paths, recorder); break;
-    case "local-failure": actionLabels(corpus, recorder); localFailureWitnesses(paths, recorder); break;
-    case "source-budgets": actionLabels(corpus, recorder); sourceBudgetsWitnesses(paths, recorder); break;
-    case "runtime-boundaries": flowLabels(corpus, false, recorder); runtimeBoundaryWitnesses(profile, paths, recorder); break;
+      shadowWitnesses(corpus, recorder); recoveryShadowWitnesses(profile, corpus, recorder); shadowDiagnosticsWitnesses(corpus, recorder); break;
+    case "recovery-read": actionLabels(corpus, recorder); recoveryReadWitnesses(corpus, recorder); recoveryAdmissionWitnesses(corpus, recorder); break;
+    case "shadow-layers": actionLabels(corpus, recorder); shadowLayersWitnesses(corpus, recorder); break;
+    case "local-failure": actionLabels(corpus, recorder); localFailureWitnesses(corpus, recorder); break;
+    case "source-budgets": actionLabels(corpus, recorder); sourceBudgetsWitnesses(corpus, recorder); break;
+    case "runtime-boundaries": flowLabels(corpus, false, recorder); runtimeBoundaryWitnesses(profile, corpus, recorder); break;
     default: throw new Error(`Unknown witness profile ${profile}`);
   }
   return recorder.labels();

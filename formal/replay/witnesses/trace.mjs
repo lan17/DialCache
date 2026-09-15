@@ -39,7 +39,10 @@ export function integer(value, context) {
   if (typeof value !== "number" || !Number.isSafeInteger(value)) throw new Error(`${context}: missing witness state integer`);
   return value;
 }
-// Private model predictions of every state, decoded once per history.
-export function privateStates(raw, context) {
-  return traceStates(raw, context).map(state => decodeIntegers(record(record(state, context).s, context), context));
+// The raw ITF states of a history and the private model predictions decoded
+// from them once. Classifiers keyed on explicit inputs read the states; the
+// feature classifiers that need predictions read them beside the parsed steps.
+export function witnessStates(raw, context) {
+  const states = traceStates(raw, context);
+  return { states, predictions: states.map(state => decodeIntegers(record(record(state, context).s, context), context)) };
 }

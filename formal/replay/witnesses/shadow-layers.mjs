@@ -110,6 +110,6 @@ export const shadowLayersWitnessRules = [
     check(4, { calls: [1], loaders: 1, sourceScopes: [false], dumps: 0, writes: 0, shadow: ["source_error"] })),
 ];
 
-export function shadowLayersWitnesses(paths, recorder) {
-  return publicPrefixWitnesses(paths, shadowLayersWitnessRules, recorder);
+export function shadowLayersWitnesses(histories, recorder) {
+  return publicPrefixWitnesses(histories, shadowLayersWitnessRules, recorder);
 }

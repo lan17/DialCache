@@ -2,8 +2,9 @@ import type { Trace as EffectsTrace } from "../effects.mjs";
 import type { Trace as FeatureTrace } from "../features.mjs";
 import type { LocalClockTrace } from "../local-clock.mjs";
 import type { WitnessProvenance, WitnessRecorder } from "./recorder.mjs";
-export type FeatureHistory = FeatureTrace & { states: Array<Record<string, unknown>> };
-export type EffectsHistory = EffectsTrace & { states: unknown[] };
+import type { PrivateHistory, RawHistory } from "./trace.mjs";
+export type FeatureHistory = FeatureTrace & PrivateHistory;
+export type EffectsHistory = EffectsTrace & RawHistory;
 export type WitnessHistory = FeatureHistory | EffectsHistory | LocalClockTrace;
 export type WitnessCorpus = FeatureHistory[] | EffectsHistory[] | LocalClockTrace[];
 export interface HistorySequences {
@@ -22,7 +23,8 @@ export interface WitnessCheck {
 }
 export const witnessProfiles: readonly string[];
 export function loadCorpus(profile: "effects", paths: readonly string[]): EffectsHistory[];
-export function loadCorpus(profile: string, paths: readonly string[]): WitnessCorpus;
+export function loadCorpus(profile: "local-clock", paths: readonly string[]): LocalClockTrace[];
+export function loadCorpus(profile: string, paths: readonly string[]): FeatureHistory[];
 export function evaluateCorpus(profile: string, corpus: WitnessCorpus, recorder?: WitnessRecorder): Set<string>;
 export function assertedObservations(profile: string, trace: WitnessHistory): unknown[];
 export function historySequences(profile: string, trace: WitnessHistory): HistorySequences;

@@ -1,5 +1,5 @@
 import { parseTrace, fixtureFor, inputsFor, project, expectedObservations, type Trace } from "../formal/replay/effects.mjs";
-import { checkCorpus, loadCorpus, type EffectsHistory } from "../formal/replay/witnesses/index.mjs";
+import { checkCorpus, loadCorpus } from "../formal/replay/witnesses/index.mjs";
 
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
@@ -11,7 +11,7 @@ import { assertEffectsHistory } from "./formal/effects-contract.js";
 
 const singleFile = process.env.DIALCACHE_EFFECTS_TRACE_FILE;
 const directory = process.env.DIALCACHE_EFFECTS_TRACE_DIR;
-function loadTraces(): EffectsHistory[] {
+function loadTraces(): { traces: Trace[]; missing: string[] | undefined } {
   let paths: string[];
   if (singleFile !== undefined) paths = [resolve(singleFile)];
   else if (directory === undefined) paths = [resolve("formal/effects-smoke.itf.json")];
@@ -25,10 +25,14 @@ function loadTraces(): EffectsHistory[] {
     }
   }
   if (paths.length === 0) throw new Error("No effects conformance traces found");
-  // Each history is read and parsed once; the replay and the witness gate share it.
-  return loadCorpus("effects", paths);
+  // Each history is read and parsed once. The shared language-neutral evaluator
+  // gates that corpus here, so only the steps the replays need stay in memory;
+  // the CLI `node formal/witnesses.mjs evaluate` writes the reusable evidence.
+  const corpus = loadCorpus("effects", paths);
+  const missing = directory !== undefined && singleFile === undefined ? checkCorpus("effects", corpus).missing : undefined;
+  return { traces: corpus.map(({ path, steps }) => ({ path, steps })), missing };
 }
-const traces = loadTraces();
+const { traces, missing } = loadTraces();
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -63,13 +67,10 @@ async function replay(trace: Trace) {
 describe("generated pending-effect conformance", () => {
   for (const trace of traces) it(`replays ${trace.path}`, async () => { await replay(trace); });
 
-  // The shared language-neutral evaluator supplies the witness gate over the
-  // histories parsed above; the CLI `node formal/witnesses.mjs evaluate` reads
-  // the same files itself and writes the reusable evidence files.
-  if (directory !== undefined && singleFile === undefined) {
+  if (missing !== undefined) {
     it("covers every action and the required race witnesses", () => {
-      expect(checkCorpus("effects", traces).missing, "Missing effects witnesses").toEqual([]);
-    }, 30_000);
+      expect(missing, "Missing effects witnesses").toEqual([]);
+    });
   }
 
   it("rejects missing diagnostics and detects a corrupted event without changing execution", async () => {

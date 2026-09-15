@@ -6,7 +6,7 @@ import { createWitnessRecorder } from "./recorder.mjs";
 // callbacks and results independently.
 export function shadowWitnesses(histories, recorder = createWitnessRecorder()) {
   flowLabels(histories, true, recorder);
-  for (const { path, steps, states: shadowStates } of histories) {
+  for (const { path, steps, predictions: shadowStates } of histories) {
     recorder.enter(path);
     let c0Released = false;
     let shadowTimedOut = false;

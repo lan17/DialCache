@@ -1,4 +1,4 @@
-import { explicitInput, integer, privateStates, readTrace, traceStates } from "./trace.mjs";
+import { explicitInput, integer } from "./trace.mjs";
 import { createWitnessRecorder } from "./recorder.mjs";
 
 // Classify schedules only after every driver has independently replayed its
@@ -193,14 +193,12 @@ function shadowWitnesses(steps, recorder) {
   }
 }
 
-export function recoveryShadowWitnesses(profile, paths, recorder = createWitnessRecorder()) {
+export function recoveryShadowWitnesses(profile, histories, recorder = createWitnessRecorder()) {
   if (profile !== "recovery" && profile !== "shadow") return recorder.labels();
-  for (const path of paths) {
+  for (const { path, states, predictions } of histories) {
     recorder.enter(path);
-    const raw = readTrace(path);
-    const states = traceStates(raw, path);
     if (states[0]?.s?.phase === undefined) continue;
-    const steps = privateStates(raw, path).map((s, index) => ({ s, input: index === 0 ? undefined : explicitInput(states[index], `${path} step ${index}`) }));
+    const steps = predictions.map((s, index) => ({ s, input: index === 0 ? undefined : explicitInput(states[index], `${path} step ${index}`) }));
     if (profile === "recovery") recoveryWitnesses(steps, recorder);
     else shadowWitnesses(steps, recorder);
   }
