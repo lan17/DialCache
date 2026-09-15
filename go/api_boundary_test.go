@@ -339,14 +339,16 @@ func TestInvalidOperationCodecFailsOpenWithoutDefaultSubstitution(t *testing.T) 
 func TestLocalStorageWriteFailureKeepsSourceResult(t *testing.T) {
 	logger := &boundaryLogger{panicOnCall: true}
 	var writeErrors atomic.Int64
-	cache := New(Options[any]{Logger: logger, Observe: func(event Event) {
+	// Only local storage reads Clock.ElapsedMS; deadlines and diagnostics use
+	// PreciseClock.ElapsedTime. Faulting that public clock boundary exercises
+	// the real local-write panic isolation without touching private state.
+	clock := &boundaryFaultClock{origin: time.Now()}
+	cache := New(Options[any]{Clock: clock, Logger: logger, Observe: func(event Event) {
 		if event.Kind == "error" && event.Data["error"] == "cache_write" {
 			writeErrors.Add(1)
 		}
 	}})
-	// Native-only plumbing fault: a nil map panics on insertion. This test does
-	// not derive scheduling or expected behavior from private cache state.
-	cache.local = nil
+	clock.faultElapsedMS.Store(true)
 	operation := Operation{Identity: Identity{Namespace: "boundary", KeyType: "id", ID: "local", UseCase: "get"}, Policy: Policy{LocalTTLMS: 1000}}
 	var value any
 	err := cache.Enable(context.Background(), func(ctx context.Context) error {
@@ -357,4 +359,20 @@ func TestLocalStorageWriteFailureKeepsSourceResult(t *testing.T) {
 	if err != nil || value != 7 || writeErrors.Load() != 1 || logger.warnings.Load() != 1 {
 		t.Fatalf("local storage failure changed result: %v %v errors=%d warnings=%d", value, err, writeErrors.Load(), logger.warnings.Load())
 	}
+}
+
+// boundaryFaultClock fails only the whole-millisecond clock that local
+// storage reads; precise elapsed time keeps deadlines and durations working.
+type boundaryFaultClock struct {
+	origin         time.Time
+	faultElapsedMS atomic.Bool
+}
+
+func (c *boundaryFaultClock) WallMS() int64              { return time.Now().UnixMilli() }
+func (c *boundaryFaultClock) ElapsedTime() time.Duration { return time.Since(c.origin) }
+func (c *boundaryFaultClock) ElapsedMS() int64 {
+	if c.faultElapsedMS.Load() {
+		panic("controlled local storage failure")
+	}
+	return c.ElapsedTime().Milliseconds()
 }
