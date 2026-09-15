@@ -13,8 +13,9 @@ module cache_kernel {
   var s: State
   var input: Input
   var view: a
-  var history: List[Witness::Step]
-  var witnesses: Set[str]
+  // Witness bookkeeping advances from its previous value and the current
+  // public step; it records credited labels and never reads kernel state.
+  var monitor: Witness::Monitor
 
   pure def publicView(state: State): Witness::View = {
     calls: state.calls.mapList(call => resultCode(call.result)),
@@ -28,8 +29,7 @@ module cache_kernel {
     s' = updated,
     input' = command,
     view' = PROJECT(updated),
-    history' = history.append({ input: command, observation: publicView(updated) }),
-    witnesses' = Witness::reached(history.append({ input: command, observation: publicView(updated) }),
+    monitor' = Witness::advance(monitor, { input: command, observation: publicView(updated) },
       not(SETTLE.read), updated.config.sourceBudget)
   }
   action initialize(choice: int): bool = {
@@ -69,8 +69,8 @@ module cache_kernel {
       s' = initial,
       input' = command,
       view' = PROJECT(initial),
-      history' = List({ input: command, observation: publicView(initial) }),
-      witnesses' = Set()
+      monitor' = Witness::advance(Witness::emptyMonitor, { input: command, observation: publicView(initial) },
+        not(SETTLE.read), config.sourceBudget)
     }
   }
 
@@ -430,12 +430,13 @@ module cache_kernel {
   }
 
   // Independent state properties use the records directly, not transition helpers.
-  val oneRegisteredFlightPerIdentity = s.executions.indices().forall(a => s.executions.indices().forall(b => {
-    val left = s.executions.nth(a)
-    val right = s.executions.nth(b)
-    a == b or not(left.shared and right.shared and left.phase != Finished and right.phase != Finished)
-      or left.instance != right.instance or left.key != right.key
-  }))
+  // No two registered shared executions serve the same instance and key: the
+  // registered executions have as many distinct identities as members.
+  val oneRegisteredFlightPerIdentity = {
+    val registered = s.executions.select(execution => execution.shared and execution.phase != Finished)
+    registered.foldl(Set(), (identities, execution) =>
+      identities.union(Set((execution.instance, execution.key)))).size() == registered.length()
+  }
   // Acceptance records survive completion, including layers' immediate dump
   // and write. The effect count requires a record for every serialization;
   // checking only active phases would be vacuous in that settlement view.
@@ -458,11 +459,12 @@ module cache_kernel {
     val execution = s.executions.nth(call.owner)
     execution.phase != Finished or (call.result != Pending and call.result == execution.result)
   })
-  val registeredExecutionsHavePendingCallers = s.executions.indices().forall(owner =>
-    s.executions.nth(owner).phase == Finished or s.calls.indices().exists(index => {
-      val call = s.calls.nth(index)
-      call.owner == owner and call.result == Pending
-    }))
+  val registeredExecutionsHavePendingCallers = {
+    val pendingOwners = s.calls.foldl(Set(), (owners, call) =>
+      if (call.result == Pending) owners.union(Set(call.owner)) else owners)
+    s.executions.indices().forall(owner =>
+      s.executions.nth(owner).phase == Finished or pendingOwners.contains(owner))
+  }
   val closedScopesHaveNoMemo = s.memo.indices().forall(slot =>
     not(s.closed.nth(slot / 4)) or s.memo.nth(slot) == Missing)
 }

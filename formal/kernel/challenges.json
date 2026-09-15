@@ -82,6 +82,26 @@
           "failureStep": 6
         }
       ]
+    },
+    {
+      "id": "second-caller-registers-duplicate-flight",
+      "source": "formal/kernel/cache-kernel.qnt",
+      "before": "else if (memo == 0 and sharing and processOwners.size() > 0) firstOwner(processOwners)",
+      "after": "else if (false) firstOwner(processOwners)",
+      "checks": [
+        {
+          "history": "layers-shared-source-and-reuse",
+          "profile": "layers",
+          "invariant": "oneRegisteredFlightPerIdentity",
+          "failureStep": 2
+        },
+        {
+          "history": "effects-shared-source-and-reuse",
+          "profile": "effects",
+          "invariant": "oneRegisteredFlightPerIdentity",
+          "failureStep": 2
+        }
+      ]
     }
   ]
 }

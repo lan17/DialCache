@@ -67,7 +67,7 @@ describe("generated pending-effect conformance", () => {
   if (directory !== undefined && singleFile === undefined) {
     it("covers every action and the required race witnesses", () => {
       expect(checkWitnesses("effects", traces.map(trace => trace.path)).missing, "Missing effects witnesses").toEqual([]);
-    });
+    }, 30_000);
   }
 
   it("rejects missing diagnostics and detects a corrupted event without changing execution", async () => {

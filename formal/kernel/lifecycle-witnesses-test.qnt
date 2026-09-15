@@ -2,7 +2,9 @@ module lifecycle_witnesses_test {
   import lifecycle_witnesses.* from "./lifecycle-witnesses"
 
   // Synthetic observation fixtures challenge the monitor itself. These are
-  // never exported as positive implementation-conformance histories.
+  // never exported as positive implementation-conformance histories. Like the
+  // kernel's public view, a fixture's calls list only grows: the monitor
+  // indexes the current observation by positions of the previous one.
   pure def observed(name: str, choice: int, calls: List[int], now: int,
     reads: int, loaders: int, dumps: int, writes: int): Step = {
     input: { name: name, choice: choice },
@@ -116,6 +118,15 @@ module lifecycle_witnesses_test {
     .then(check(lateSource.append(observed("rejectLoader", 0, List(4), 10, 1, 1, 0, 0)), true))
     .expect(labels.contains("late-reject-rejected"))
 
+  // Labels accumulate: a label earned at one step survives every later step,
+  // including those that re-earn nothing.
+  run oneShotLabelSurvivesLaterStepsTest = check(lateSource.append(
+      observed("resolveLoader", 0, List(4), 10, 1, 1, 0, 0)), true)
+    .expect(labels.contains("late-resolve-rejected"))
+    .then(check(lateSource.append(observed("resolveLoader", 0, List(4), 10, 1, 1, 0, 0))
+      .append(observed("tick", -1, List(4), 20, 1, 1, 0, 0)), true))
+    .expect(labels.contains("late-resolve-rejected"))
+
   run layersImmediatePublicationAndSameIdentityProbeTest = check(List(initialized,
     observed("beginCall", 0, List(0), 0, 1, 1, 0, 0),
     observed("beginCall", 4, List(0, 0), 0, 1, 1, 0, 0),
@@ -147,6 +158,25 @@ module lifecycle_witnesses_test {
     .expect(not(labels.contains("future-frame-refills-after-source")))
     .then(check(futureFrame, true)).expect(labels.contains("future-frame-refills-after-source"))
 
+  // A scripted prefix matches from initialization only. The same inputs and
+  // observations after one extra step never earn the label, and a history that
+  // departs at step 1 cannot recover even when the complete script, including
+  // its initialization step, follows.
+  run scriptedPrefixMustStartAtInitializationTest = check(List(initialized,
+    observed("tick", -1, List(), 10, 0, 0, 0, 0)).concat(futureFrame.slice(1, 10)), true)
+    .expect(not(labels.contains("future-frame-refills-after-source")))
+    .then(check(futureFrame.replaceAt(1, observed("tick", -1, List(), 10, 0, 0, 0, 0))
+      .concat(futureFrame), true))
+    .expect(not(labels.contains("future-frame-refills-after-source")))
+
+  // Each script belongs to one view: the effects script earns nothing under
+  // layers' immediate completions, and a layers script earns nothing under
+  // held effects, even when the inputs and observations match exactly.
+  run scriptsApplyToTheirOwnViewOnlyTest = check(futureFrame, false)
+    .expect(not(labels.contains("future-frame-refills-after-source")))
+    .then(check(trackedLocalWarming, true))
+    .expect(not(labels.contains("tracked-redis-warms-local")))
+
   pure val trackedLayersInitialized = observed("init", 1, List(), 10000, 0, 0, 0, 0)
   pure val invalidationBeforeAcquisition = List(trackedLayersInitialized,
     observed("invalidate", 0, List(), 10000, 0, 0, 0, 0),
@@ -163,6 +193,11 @@ module lifecycle_witnesses_test {
     .expect(not(labels.contains("acquired-fence-suppresses-publication")))
     .then(check(invalidationBeforeAcquisition.replaceAt(3,
       observed("resolveLoader", 1, List(1), 10000, 1, 1, 1, 1)), false))
+    .expect(not(labels.contains("acquired-fence-suppresses-publication")))
+    // A write without a serialization is the one variant only the writes
+    // expectation rejects.
+    .then(check(invalidationBeforeAcquisition.replaceAt(3,
+      observed("resolveLoader", 1, List(1), 10000, 1, 1, 0, 1)), false))
     .expect(not(labels.contains("acquired-fence-suppresses-publication")))
     .then(check(invalidationBeforeAcquisition, false))
     .expect(labels.contains("acquired-fence-suppresses-publication"))
@@ -192,6 +227,12 @@ module lifecycle_witnesses_test {
     observed("resolveLoader", 1, List(1), 10000, 1, 1, 1, 1),
     observed("beginCall", 12, List(1, 1), 10000, 2, 1, 1, 1),
     observed("beginCall", 12, List(1, 1, 1), 10000, 2, 1, 1, 1))
+  // A completed script's cursor stays put, so a history that continues past
+  // the script still carries its label at the later step.
+  run completedScriptRetainsLabelTest = check(trackedLocalWarming.append(
+      observed("beginCall", 12, List(1, 1, 1, 1), 10000, 2, 1, 1, 1)), false)
+    .expect(labels.contains("tracked-redis-warms-local"))
+
   run trackedLocalWarmingNeedsRedisValidationThenLocalReuseTest =
     check(trackedLocalWarming.slice(0, 4), false)
     .expect(not(labels.contains("tracked-redis-warms-local")))

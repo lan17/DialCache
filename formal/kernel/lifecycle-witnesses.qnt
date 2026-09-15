@@ -3,33 +3,38 @@ module lifecycle_witnesses {
   // It cannot import the kernel or influence which cache transition is enabled.
   // Outcome codes match the portable feature observations: pending 0, values
   // 1/2, source error 3, deadline error 4. now is the controlled elapsed clock.
+  // The kernel advances one Monitor value per step from the previous value and
+  // the current step alone; no input history is retained or refolded.
   type View = {
     calls: List[int], now: int, reads: int, loaders: int, dumps: int, writes: int
   }
   type Input = { name: str, choice: int }
   type Step = { input: Input, observation: View }
   type Pair = { leader: int, follower: int }
+  // A scripted step fixes one public input and the observation fields that
+  // establish its consequence; Any leaves a field unchecked.
+  type Expect[a] = Any | Exactly(a)
+  type Scripted = {
+    input: Input, calls: Expect[List[int]], reads: Expect[int], loaders: Expect[int], dumps: Expect[int], writes: Expect[int]
+  }
+  type Script = { label: str, heldEffects: bool, steps: List[Scripted] }
   type Monitor = {
     before: View, initialized: bool, identity: int, mixed: bool,
     joins: List[Pair], starts: List[int], settled: Set[int],
     failedCalls: int, failedLoaders: int, timedOutSource: int, replacement: bool,
     acceptedDeadline: int, preparationPastDeadline: bool,
     publishedValue: int, probeCall: int, probeValue: int, probeLoaders: int,
+    // Matched prefix length per script, in the order of scripts; -1 once the
+    // history departs from that script's inputs or observations.
+    cursors: List[int],
     labels: Set[str]
   }
 
   pure val emptyView: View = {
     calls: List(), now: 0, reads: 0, loaders: 0, dumps: 0, writes: 0
   }
-  pure val emptyMonitor: Monitor = {
-    before: emptyView, initialized: false, identity: -1, mixed: false,
-    joins: List(), starts: List(), settled: Set(),
-    failedCalls: -1, failedLoaders: 0, timedOutSource: -1, replacement: false,
-    acceptedDeadline: -1, preparationPastDeadline: false,
-    publishedValue: 0, probeCall: -1, probeValue: 0, probeLoaders: 0, labels: Set()
-  }
   pure def isValue(result: int): bool = result == 1 or result == 2
-  pure def positions(values: List[int]): List[int] =
+  pure def positions(values: List[a]): List[int] =
     values.foldl(List(), (out, _) => out.append(out.length()))
   pure def credit(labels: Set[str], condition: bool, label: str): Set[str] =
     if (condition) labels.union(Set(label)) else labels
@@ -40,6 +45,109 @@ module lifecycle_witnesses {
   pure def sourceOf(input: Input, heldEffects: bool): int =
     if (input.name == "resolveLoader" and not(heldEffects)) (input.choice - 1) / 2
     else input.choice
+
+  // Scripted prefixes. Each fixes the public input order and identity so the
+  // public counters distinguish the boundary from its nearest alternative,
+  // and applies to one view only. The inputs establish the environment; no
+  // private fence, watermark, phase or cache state participates.
+  pure def scripted(name: str, choice: int): Scripted = {
+    input: { name: name, choice: choice },
+    calls: Any, reads: Any, loaders: Any, dumps: Any, writes: Any
+  }
+  pure def expectCalls(step: Scripted, calls: List[int]): Scripted = { calls: Exactly(calls), ...step }
+  pure def expectLoaders(step: Scripted, loaders: int): Scripted = { loaders: Exactly(loaders), ...step }
+  pure def expectDumps(step: Scripted, dumps: int): Scripted = { dumps: Exactly(dumps), ...step }
+  pure def expectWrites(step: Scripted, writes: int): Scripted = { writes: Exactly(writes), ...step }
+  pure def expectCounts(step: Scripted, reads: int, loaders: int, dumps: int, writes: int): Scripted = {
+    reads: Exactly(reads), loaders: Exactly(loaders), dumps: Exactly(dumps), writes: Exactly(writes), ...step
+  }
+
+  // A tracked frame newer than its watermark, then the application clock
+  // moved behind the frame. The observations must expose rejection of that
+  // future hit followed by completed source publication.
+  pure val futureFrameRefills: Script = {
+    label: "future-frame-refills-after-source", heldEffects: true,
+    steps: List(
+      scripted("init", 2),
+      scripted("invalidate", -1),
+      scripted("tick", -1),
+      scripted("seedRemote", -1),
+      scripted("rollbackWall", -1),
+      scripted("beginCall", -1).expectLoaders(0),
+      scripted("releaseRead", 0).expectLoaders(1).expectCalls(List(0)),
+      scripted("resolveLoader", 0).expectDumps(1).expectCalls(List(0)),
+      scripted("releaseDump", -1).expectWrites(1),
+      scripted("releaseWrite", -1).expectCalls(List(1))
+    )
+  }
+  // Invalidation before acquisition: the value returns without serialization
+  // or a write.
+  pure val acquiredFenceSuppressesPublication: Script = {
+    label: "acquired-fence-suppresses-publication", heldEffects: false,
+    steps: List(
+      scripted("init", 1),
+      scripted("invalidate", 0),
+      scripted("beginCall", 0).expectCalls(List(0)).expectCounts(1, 1, 0, 0),
+      scripted("resolveLoader", 1).expectCalls(List(1)).expectCounts(1, 1, 0, 0)
+    )
+  }
+  // Invalidation after acquisition: publication proceeds under the acquired
+  // fence, and a later read of the published frame misses.
+  pure val inflightPublicationRemainsFenced: Script = {
+    label: "inflight-publication-remains-fenced", heldEffects: false,
+    steps: List(
+      scripted("init", 1),
+      scripted("beginCall", 0).expectCalls(List(0)).expectCounts(1, 1, 0, 0),
+      scripted("invalidate", 0),
+      scripted("resolveLoader", 1).expectCalls(List(1)).expectCounts(1, 1, 1, 1),
+      scripted("beginCall", 16).expectCalls(List(1, 0)).expectCounts(2, 2, 1, 1)
+    )
+  }
+  // Every call uses a fresh request scope on the same instance/key. The first
+  // probe must validate Redis; only the second may skip it.
+  pure val trackedRedisWarmsLocal: Script = {
+    label: "tracked-redis-warms-local", heldEffects: false,
+    steps: List(
+      scripted("init", 1),
+      scripted("beginCall", 12).expectCalls(List(0)).expectCounts(1, 1, 0, 0),
+      scripted("resolveLoader", 1).expectCalls(List(1)).expectCounts(1, 1, 1, 1),
+      scripted("beginCall", 12).expectCalls(List(1, 1)).expectCounts(2, 1, 1, 1),
+      scripted("beginCall", 12).expectCalls(List(1, 1, 1)).expectCounts(2, 1, 1, 1)
+    )
+  }
+  pure val scripts: List[Script] = List(
+    futureFrameRefills, acquiredFenceSuppressesPublication, inflightPublicationRemainsFenced, trackedRedisWarmsLocal
+  )
+
+  pure val emptyMonitor: Monitor = {
+    before: emptyView, initialized: false, identity: -1, mixed: false,
+    joins: List(), starts: List(), settled: Set(),
+    failedCalls: -1, failedLoaders: 0, timedOutSource: -1, replacement: false,
+    acceptedDeadline: -1, preparationPastDeadline: false,
+    publishedValue: 0, probeCall: -1, probeValue: 0, probeLoaders: 0,
+    cursors: scripts.foldl(List(), (out, _) => out.append(0)),
+    labels: Set()
+  }
+
+  pure def expected(expectation: Expect[a], actual: a): bool = match expectation {
+    Any => true
+    | Exactly(value) => value == actual
+  }
+  pure def matches(scriptedStep: Scripted, step: Step): bool =
+    step.input == scriptedStep.input
+      and expected(scriptedStep.calls, step.observation.calls)
+      and expected(scriptedStep.reads, step.observation.reads)
+      and expected(scriptedStep.loaders, step.observation.loaders)
+      and expected(scriptedStep.dumps, step.observation.dumps)
+      and expected(scriptedStep.writes, step.observation.writes)
+  // A departed history stays departed. A completed cursor stays put so the
+  // recorded value is stable; the label itself is retained because advance
+  // accumulates labels from the previous monitor.
+  pure def follow(cursor: int, script: Script, step: Step, heldEffects: bool): int =
+    if (cursor < 0 or script.heldEffects != heldEffects) -1
+    else if (cursor >= script.steps.length()) cursor
+    else if (matches(script.steps.nth(cursor), step)) cursor + 1
+    else -1
 
   pure def advance(monitor: Monitor, step: Step, heldEffects: bool, budget: int): Monitor = {
     val before = monitor.before
@@ -114,12 +222,15 @@ module lifecycle_witnesses {
     val probeLoaders = if (startsProbe) before.loaders else monitor.probeLoaders
     val reused = safe and probeCall >= 0 and observed.calls.nth(probeCall) == probeValue
       and observed.loaders == probeLoaders
+    val cursors = scripts.foldl(List(), (out, script) =>
+      out.append(follow(monitor.cursors.nth(out.length()), script, step, heldEffects)))
     val coalescingLabels = credit(monitor.labels, sharedValue, "coalesced-success")
     val retryLabels = credit(coalescingLabels, retrySucceeded, "shared-failure-retry")
     val timeoutLabels = credit(retryLabels, lateOldSuppressed, "abandoned-source-replacement")
     val settlementLabels = credit(timeoutLabels, lateSettlementRejected,
       if (input.name == "resolveLoader") "late-resolve-rejected" else "late-reject-rejected")
     val publicationLabels = credit(settlementLabels, latePublication, "accepted-publication-after-deadline")
+    val lifecycleLabels = credit(publicationLabels, reused, "published-value-reused")
     {
       before: observed, initialized: true,
       identity: if (monitor.identity < 0) identity else monitor.identity, mixed: mixed,
@@ -130,105 +241,15 @@ module lifecycle_witnesses {
       acceptedDeadline: acceptedDeadline, preparationPastDeadline: preparationPastDeadline,
       publishedValue: publishedValue,
       probeCall: probeCall, probeValue: probeValue, probeLoaders: probeLoaders,
-      labels: credit(publicationLabels, reused, "published-value-reused")
+      cursors: cursors,
+      labels: positions(scripts).foldl(lifecycleLabels, (out, i) =>
+        credit(out, cursors.nth(i) == scripts.nth(i).steps.length(), scripts.nth(i).label))
     }
   }
 
-  // This deliberately narrow public setup makes a tracked frame newer than
-  // its watermark, then moves the application clock behind the frame. The
-  // input prefix establishes the environment; the observations must expose
-  // rejection of that future hit followed by completed source publication.
-  // No watermark or phase is copied from the kernel into witness bookkeeping.
-  pure val futureFrameInputs: List[Input] = List(
-    { name: "init", choice: 2 },
-    { name: "invalidate", choice: -1 },
-    { name: "tick", choice: -1 },
-    { name: "seedRemote", choice: -1 },
-    { name: "rollbackWall", choice: -1 },
-    { name: "beginCall", choice: -1 },
-    { name: "releaseRead", choice: 0 },
-    { name: "resolveLoader", choice: 0 },
-    { name: "releaseDump", choice: -1 },
-    { name: "releaseWrite", choice: -1 }
-  )
-  pure def futureFrameRefills(history: List[Step]): bool =
-    history.length() >= futureFrameInputs.length()
-      and futureFrameInputs.indices().forall(i => history.nth(i).input == futureFrameInputs.nth(i))
-      and history.nth(5).observation.loaders == 0
-      and history.nth(6).observation.loaders == 1
-      and history.nth(6).observation.calls == List(0)
-      and history.nth(7).observation.dumps == 1
-      and history.nth(7).observation.calls == List(0)
-      and history.nth(8).observation.writes == 1
-      and history.nth(9).observation.calls == List(1)
-
-  // These small tracked histories fix input order and identity so public
-  // counters distinguish acquired-fence handling from current-watermark
-  // handling, and validated local warming from direct source publication.
-  // The inputs establish those boundaries; no private fence or cache state
-  // participates in the witness predicate.
-  pure def hasInputs(history: List[Step], inputs: List[Input]): bool =
-    history.length() >= inputs.length()
-      and inputs.indices().forall(i => history.nth(i).input == inputs.nth(i))
-  pure def hasCounts(view: View, reads: int, loaders: int, dumps: int, writes: int): bool =
-    view.reads == reads and view.loaders == loaders and view.dumps == dumps and view.writes == writes
-
-  pure val invalidationBeforeAcquisitionInputs: List[Input] = List(
-    { name: "init", choice: 1 },
-    { name: "invalidate", choice: 0 },
-    { name: "beginCall", choice: 0 },
-    { name: "resolveLoader", choice: 1 }
-  )
-  pure def acquiredFenceSuppressesPublication(history: List[Step]): bool =
-    hasInputs(history, invalidationBeforeAcquisitionInputs)
-      and history.nth(2).observation.calls == List(0)
-      and hasCounts(history.nth(2).observation, 1, 1, 0, 0)
-      and history.nth(3).observation.calls == List(1)
-      and hasCounts(history.nth(3).observation, 1, 1, 0, 0)
-
-  pure val invalidationAfterAcquisitionInputs: List[Input] = List(
-    { name: "init", choice: 1 },
-    { name: "beginCall", choice: 0 },
-    { name: "invalidate", choice: 0 },
-    { name: "resolveLoader", choice: 1 },
-    { name: "beginCall", choice: 16 }
-  )
-  pure def inflightPublicationRemainsFenced(history: List[Step]): bool =
-    hasInputs(history, invalidationAfterAcquisitionInputs)
-      and history.nth(1).observation.calls == List(0)
-      and hasCounts(history.nth(1).observation, 1, 1, 0, 0)
-      and history.nth(3).observation.calls == List(1)
-      and hasCounts(history.nth(3).observation, 1, 1, 1, 1)
-      and history.nth(4).observation.calls == List(1, 0)
-      and hasCounts(history.nth(4).observation, 2, 2, 1, 1)
-
-  pure val trackedLocalWarmingInputs: List[Input] = List(
-    { name: "init", choice: 1 },
-    { name: "beginCall", choice: 12 },
-    { name: "resolveLoader", choice: 1 },
-    { name: "beginCall", choice: 12 },
-    { name: "beginCall", choice: 12 }
-  )
-  pure def trackedRedisWarmsLocal(history: List[Step]): bool =
-    hasInputs(history, trackedLocalWarmingInputs)
-      and history.nth(1).observation.calls == List(0)
-      and hasCounts(history.nth(1).observation, 1, 1, 0, 0)
-      and history.nth(2).observation.calls == List(1)
-      and hasCounts(history.nth(2).observation, 1, 1, 1, 1)
-      // Every call uses a fresh request scope on the same instance/key.
-      // The first probe must validate Redis; only the second may skip it.
-      and history.nth(3).observation.calls == List(1, 1)
-      and hasCounts(history.nth(3).observation, 2, 1, 1, 1)
-      and history.nth(4).observation.calls == List(1, 1, 1)
-      and hasCounts(history.nth(4).observation, 2, 1, 1, 1)
-
-  pure def reached(history: List[Step], heldEffects: bool, sourceBudget: int): Set[str] = {
-    val lifecycle = history.foldl(emptyMonitor, (monitor, step) => advance(monitor, step, heldEffects, sourceBudget)).labels
-    val futureFrameLabels = credit(lifecycle, heldEffects and futureFrameRefills(history), "future-frame-refills-after-source")
-    val acquiredFenceLabels = credit(futureFrameLabels,
-      not(heldEffects) and acquiredFenceSuppressesPublication(history), "acquired-fence-suppresses-publication")
-    val inflightLabels = credit(acquiredFenceLabels,
-      not(heldEffects) and inflightPublicationRemainsFenced(history), "inflight-publication-remains-fenced")
-    credit(inflightLabels, not(heldEffects) and trackedRedisWarmsLocal(history), "tracked-redis-warms-local")
-  }
+  // The labels a complete history earns: the fold of the incremental monitor.
+  // The kernel records the same values step by step; this form serves the
+  // monitor's own positive and negative controls.
+  pure def reached(history: List[Step], heldEffects: bool, sourceBudget: int): Set[str] =
+    history.foldl(emptyMonitor, (monitor, step) => advance(monitor, step, heldEffects, sourceBudget)).labels
 }

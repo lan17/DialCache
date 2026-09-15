@@ -5,6 +5,8 @@
     "layers": { "baseline": "formal/dialcache-layers-conformance.qnt", "model": "formal/kernel/layers-pilot.qnt", "module": "layers_pilot" },
     "effects": { "baseline": "formal/dialcache-effects-conformance.qnt", "model": "formal/kernel/effects-pilot.qnt", "module": "effects_pilot" }
   },
+  "exploration": { "maxRatio": 2.5 },
+  "generation": { "maxRatio": 2.5 },
   "histories": [
     {
       "id": "layers-shared-source-and-reuse", "profile": "layers", "contracts": ["C05", "C11", "C12"],
@@ -29,7 +31,7 @@
     {
       "id": "layers-tracked-redis-warms-local", "profile": "layers", "contracts": ["C05", "C31"],
       "witnesses": ["tracked-redis-warms-local"],
-      "actions": [["init", 1], ["beginCall", 12], ["resolveLoader", 1], ["beginCall", 12], ["beginCall", 12]]
+      "actions": [["init", 1], ["beginCall", 12], ["resolveLoader", 1], ["beginCall", 12], ["beginCall", 12], ["beginCall", 12]]
     },
     {
       "id": "effects-shared-source-and-reuse", "profile": "effects", "contracts": ["C05", "C11"],

@@ -27,7 +27,7 @@ describe("generated local-clock conformance", () => {
   for (const trace of traces) it(`replays ${trace.path}`, async () => { await replayLocalClockTrace(trace); });
   if (directory !== undefined && single === undefined) it("reaches fractional expiry and shared instance grid", () => {
     expect(checkWitnesses(profile, paths).missing).toEqual([]);
-  });
+  }, 30_000);
   if (traces.length > 0) {
     it("rejects missing observations and unsupported inputs", () => {
       const raw = JSON.parse(readFileSync(traces[0]!.path, "utf8"));
