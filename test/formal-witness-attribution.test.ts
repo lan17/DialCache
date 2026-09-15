@@ -1,8 +1,7 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
 import { recoveryShadowWitnesses } from "../formal/replay/witnesses/recovery-shadow.mjs";
+import { witnessStates } from "../formal/replay/witnesses/trace.mjs";
 
 type RecordValue = Record<string, unknown>;
 type Fixture = {
@@ -14,7 +13,6 @@ type Fixture = {
 };
 type State = { input: { name: string; choice: { "#bigint": string } }; s: RecordValue };
 const fixtures = JSON.parse(readFileSync(new URL("./fixtures/formal-witness-attribution.json", import.meta.url), "utf8")) as Fixture[];
-const directories: string[] = [];
 
 // Excerpts from real Quint histories preserve their final public outcome. The
 // negative controls add another sufficient cause, or remove the distinguishing
@@ -47,14 +45,8 @@ function statesFor(fixture: Fixture): State[] {
   return states;
 }
 function witnessed(fixture: Fixture, states: State[]): boolean {
-  const directory = mkdtempSync(join(tmpdir(), "dialcache-witness-attribution-"));
-  directories.push(directory);
-  const path = join(directory, "trace.itf.json");
-  writeFileSync(path, JSON.stringify({ states }));
-  return recoveryShadowWitnesses(fixture.profile, [path]).has(fixture.witness);
+  return recoveryShadowWitnesses(fixture.profile, [{ path: "trace.itf.json", ...witnessStates({ states }, "trace.itf.json") }]).has(fixture.witness);
 }
-
-afterEach(() => { for (const directory of directories.splice(0)) rmSync(directory, { recursive: true }); });
 
 describe("Quint witnesses distinguish the rule responsible for an outcome", () => {
   it.each(fixtures)("recognizes an isolated real schedule: $witness", fixture => {

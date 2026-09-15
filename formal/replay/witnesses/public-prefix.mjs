@@ -1,5 +1,5 @@
 import { record } from "../itf.mjs";
-import { decodeIntegers, explicitInput, readTrace, traceStates, witnessCommand } from "./trace.mjs";
+import { decodeIntegers, explicitInput, witnessCommand } from "./trace.mjs";
 import { createWitnessRecorder } from "./recorder.mjs";
 
 export { witnessCommand };
@@ -16,11 +16,11 @@ function contains(observed, expected) {
 // checkpoint in its replayable prefix; later matching values cannot hide a
 // violation at the boundary being claimed. No private state or filename earns
 // credit, and this classifier never supplies an implementation's inputs.
-export function publicPrefixWitnesses(paths, rules, recorder = createWitnessRecorder()) {
-  for (const path of paths) {
+export function publicPrefixWitnesses(histories, rules, recorder = createWitnessRecorder()) {
+  for (const { path, states } of histories) {
     recorder.enter(path);
     const commands = [];
-    const observations = traceStates(readTrace(path), path).map(rawState => {
+    const observations = states.map(rawState => {
       const state = record(rawState, path);
       const input = explicitInput(state, path);
       commands.push(witnessCommand(input.name, input.choice));

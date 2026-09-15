@@ -4,4 +4,6 @@ export function explicitInput(state: unknown, context: string): { name: string; 
 export function witnessCommand(name: string, choice?: number): string;
 export function decodeIntegers(value: unknown, context: string): unknown;
 export function integer(value: unknown, context: string): number;
-export function privateStates(raw: unknown, context: string): Array<Record<string, unknown>>;
+export interface RawHistory { path: string; states: unknown[] }
+export interface PrivateHistory extends RawHistory { predictions: Array<Record<string, unknown>> }
+export function witnessStates(raw: unknown, context: string): Omit<PrivateHistory, "path">;

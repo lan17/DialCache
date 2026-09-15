@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { checkWitnesses } from "../formal/replay/witnesses/index.mjs";
+import { checkCorpus } from "../formal/replay/witnesses/index.mjs";
 import { localClockWitnesses } from "../formal/replay/witnesses/local-clock.mjs";
 import { createWitnessRecorder } from "../formal/replay/witnesses/recorder.mjs";
 import { parseLocalClockTrace, replayLocalClockTrace } from "./formal/local-clock-profile.js";
@@ -26,7 +26,7 @@ const traces = paths.map(path => parseLocalClockTrace(JSON.parse(readFileSync(pa
 describe("generated local-clock conformance", () => {
   for (const trace of traces) it(`replays ${trace.path}`, async () => { await replayLocalClockTrace(trace); });
   if (directory !== undefined && single === undefined) it("reaches fractional expiry and shared instance grid", () => {
-    expect(checkWitnesses(profile, paths).missing).toEqual([]);
+    expect(checkCorpus(profile, traces).missing).toEqual([]);
   }, 30_000);
   if (traces.length > 0) {
     it("rejects missing observations and unsupported inputs", () => {

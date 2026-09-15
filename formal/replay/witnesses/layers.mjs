@@ -5,7 +5,7 @@ import { createWitnessRecorder } from "./recorder.mjs";
 // Private predictions identify the schedules we sampled. A witness involving
 // stored state is counted only when a later public call probes that prediction.
 export function layersWitnesses(histories, recorder = createWitnessRecorder()) {
-  for (const { path, steps, states: predictions } of histories) {
+  for (const { path, steps, predictions } of histories) {
     recorder.enter(path);
     const mode = steps[0].choice;
     recorder.credit(`fixture:${mode}`);

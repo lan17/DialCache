@@ -1,7 +1,5 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
 import { shadowLayersWitnesses, shadowLayersWitnessRules } from "../formal/replay/witnesses/shadow-layers.mjs";
 
 // These excerpts come from actual Quint regressions. They contain only inputs
@@ -10,13 +8,9 @@ const fixtures = JSON.parse(readFileSync(new URL("./fixtures/shadow-layers-witne
   regression: string;
   trace: { states: Array<{ input: { name: string; choice: unknown }; s: { o: Record<string, unknown> } }> };
 }>;
-const directory = mkdtempSync(join(tmpdir(), "dialcache-shadow-layers-witness-"));
-afterAll(() => rmSync(directory, { recursive: true, force: true }));
 const integer = (value: number) => ({ "#bigint": String(value) });
-function classify(trace: unknown): Set<string> {
-  const path = join(directory, "trace.itf.json");
-  writeFileSync(path, JSON.stringify(trace));
-  return shadowLayersWitnesses([path]);
+function classify(trace: { states: unknown[] }): Set<string> {
+  return shadowLayersWitnesses([{ path: "trace.itf.json", states: trace.states }]);
 }
 function traceFor(name: string) {
   const rule = shadowLayersWitnessRules.find(rule => rule.name === name)!;

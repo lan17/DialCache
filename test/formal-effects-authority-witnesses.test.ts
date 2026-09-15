@@ -1,7 +1,5 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
 import { effectsAuthorityRules, effectsAuthorityWitnesses } from "../formal/replay/witnesses/effects-authority.mjs";
 
 // Public excerpts of real Quint regressions, used solely as classifier controls.
@@ -9,14 +7,11 @@ import { effectsAuthorityRules, effectsAuthorityWitnesses } from "../formal/repl
 const fixtures = JSON.parse(readFileSync(new URL("./fixtures/effects-authority-witnesses.json", import.meta.url), "utf8")) as Array<{
   regression: string; trace: { states: Array<{ input: unknown; s: Record<string, unknown> }> };
 }>;
-const directory = mkdtempSync(join(tmpdir(), "dialcache-effects-authority-"));
-afterAll(() => rmSync(directory, { recursive: true, force: true }));
 function traceFor(name: string) {
   return structuredClone(fixtures.find(fixture => fixture.regression === effectsAuthorityRules.find(rule => rule.name === name)!.regression)!.trace);
 }
-function classify(trace: unknown) {
-  const path = join(directory, "trace.itf.json"); writeFileSync(path, JSON.stringify(trace));
-  return effectsAuthorityWitnesses([path]);
+function classify(trace: { states: unknown[] }) {
+  return effectsAuthorityWitnesses([{ path: "trace.itf.json", states: trace.states }]);
 }
 describe("effects authority witness controls", () => {
   for (const rule of effectsAuthorityRules) it(`requires the actual consequence for ${rule.name}`, () => {
