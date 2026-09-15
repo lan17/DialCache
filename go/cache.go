@@ -8,13 +8,18 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/hashicorp/golang-lru/v2/simplelru"
 )
 
+// entry is one process-local value with its insertion-time TTL. Expiry is
+// checked lazily on read against Clock.ElapsedMS, as lru-cache does in
+// TypeScript without ttlAutopurge: an unread expired entry keeps its LRU
+// position until a read removes it or capacity evicts it.
 type entry[T any] struct {
 	value      T
 	insertedMS int64
 	ttlMS      int64
-	used       uint64
 }
 type flight[T any] struct {
 	done      chan struct{}
@@ -34,11 +39,12 @@ type scopeState[T any] struct {
 }
 
 type Cache[T any] struct {
-	mu         sync.Mutex
-	options    Options[T]
-	local      map[string]entry[T]
+	mu      sync.Mutex
+	options Options[T]
+	// local is nil when zero capacity disables local storage. Reads and writes
+	// both promote; the least recently used entry is evicted at capacity.
+	local      *simplelru.LRU[string, entry[T]]
 	flights    map[string]*flight[T]
-	sequence   uint64
 	shadows    map[string]*shadowFlight
 	registered map[string]bool
 }
@@ -85,7 +91,16 @@ func New[T any](options Options[T]) *Cache[T] {
 	if options.ShadowMaxInFlight < 1 || uint64(options.ShadowMaxInFlight) > MaxSafeInteger {
 		panic("invalid DialCache shadow capacity")
 	}
-	return &Cache[T]{options: options, local: make(map[string]entry[T]), flights: make(map[string]*flight[T]), shadows: make(map[string]*shadowFlight), registered: make(map[string]bool)}
+	c := &Cache[T]{options: options, flights: make(map[string]*flight[T]), shadows: make(map[string]*shadowFlight), registered: make(map[string]bool)}
+	if options.LocalCapacity > 0 {
+		// The LRU allocates per entry, so a large configured capacity stays sparse.
+		local, err := simplelru.NewLRU[string, entry[T]](options.LocalCapacity, nil)
+		if err != nil {
+			panic(err)
+		}
+		c.local = local
+	}
+	return c
 }
 
 // Enable reuses a live outer lifetime, including when nested inside Disable.
@@ -127,39 +142,35 @@ func (c *Cache[T]) emit(event Event) {
 func (c *Cache[T]) localGet(key string) (T, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	item, found := c.local[key]
+	var zero T
+	if c.local == nil {
+		return zero, false
+	}
+	// Peek, then check freshness, then promote: lru-cache checks staleness
+	// before any promotion, and a clock read that fails must leave the LRU
+	// order untouched, exactly as the TypeScript fault seam does.
+	item, found := c.local.Peek(key)
+	if !found {
+		return zero, false
+	}
 	// Match the TypeScript local cache's whole-millisecond monotonic clock.
 	// Source/read/shadow deadlines separately retain fractional elapsed time.
-	if found && c.options.Clock.ElapsedMS()-item.insertedMS >= item.ttlMS {
-		delete(c.local, key)
-		found = false
+	if c.options.Clock.ElapsedMS()-item.insertedMS >= item.ttlMS {
+		c.local.Remove(key)
+		return zero, false
 	}
-	if found {
-		c.sequence++
-		item.used = c.sequence
-		c.local[key] = item
-	}
-	return item.value, found
+	c.local.Get(key)
+	return item.value, true
 }
 func (c *Cache[T]) localPut(key string, value T, ttl int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.options.LocalCapacity <= 0 {
+	if c.local == nil {
 		return
 	}
-	c.sequence++
-	c.local[key] = entry[T]{value: value, insertedMS: c.options.Clock.ElapsedMS(), ttlMS: ttl, used: c.sequence}
-	if len(c.local) > c.options.LocalCapacity {
-		var oldest string
-		stamp := ^uint64(0)
-		for candidate, item := range c.local {
-			if item.used < stamp {
-				oldest = candidate
-				stamp = item.used
-			}
-		}
-		delete(c.local, oldest)
-	}
+	// Add promotes an existing key and evicts the least recently used entry
+	// once capacity is exceeded, regardless of that entry's remaining TTL.
+	c.local.Add(key, entry[T]{value: value, insertedMS: c.options.Clock.ElapsedMS(), ttlMS: ttl})
 }
 
 func (c *Cache[T]) Invalidate(ctx context.Context, identity Identity, futureBufferMS int64) (err error) {
