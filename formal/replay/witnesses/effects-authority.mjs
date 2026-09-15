@@ -1,5 +1,5 @@
 import { itfInteger, record } from "../itf.mjs";
-import { explicitInput, readTrace, traceStates, witnessCommand as cmd } from "./trace.mjs";
+import { explicitInput, witnessCommand as cmd } from "./trace.mjs";
 import { createWitnessRecorder } from "./recorder.mjs";
 
 const init = cmd("init", 2), begin = cmd("beginCall"), read = cmd("releaseRead", 0);
@@ -39,11 +39,13 @@ export const effectsAuthorityRules = [
       ]) },
 ];
 
-export function effectsAuthorityWitnesses(paths, recorder = createWitnessRecorder()) {
-  for (const path of paths) {
+// Histories are the effects corpus entries of index.mjs loadCorpus: a path
+// and the raw ITF states, whose public observations are read and checked here.
+export function effectsAuthorityWitnesses(histories, recorder = createWitnessRecorder()) {
+  for (const { path, states: rawStates } of histories) {
     recorder.enter(path);
     const commands = [];
-    const states = traceStates(readTrace(path), path).map(rawState => {
+    const states = rawStates.map(rawState => {
       const state = record(rawState, path), s = record(state.s, path);
       const input = explicitInput(state, path);
       commands.push(cmd(input.name, input.choice));

@@ -15,5 +15,9 @@ export interface EffectsAuthorityRule {
   commands: string[];
   consequence: (state: EffectsPublicState) => boolean;
 }
+export interface EffectsAuthorityHistory {
+  path: string;
+  states: unknown[];
+}
 export const effectsAuthorityRules: readonly EffectsAuthorityRule[];
-export function effectsAuthorityWitnesses(paths: readonly string[], recorder?: WitnessRecorder): Set<string>;
+export function effectsAuthorityWitnesses(histories: readonly EffectsAuthorityHistory[], recorder?: WitnessRecorder): Set<string>;

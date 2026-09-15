@@ -24,7 +24,7 @@ import { shadowWitnesses } from "./shadow.mjs";
 import { shadowDiagnosticsWitnesses } from "./shadow-diagnostics.mjs";
 import { shadowLayersWitnesses } from "./shadow-layers.mjs";
 import { sourceBudgetsWitnesses } from "./source-budgets.mjs";
-import { privateStates, readTrace } from "./trace.mjs";
+import { privateStates, readTrace, traceStates } from "./trace.mjs";
 
 // One language-neutral witness evaluator for every profile with a completion
 // gate. Any port runs it over the same sampled histories and exported
@@ -34,25 +34,32 @@ import { privateStates, readTrace } from "./trace.mjs";
 // nothing here supplies an implementation's inputs.
 export const witnessProfiles = [...Object.keys(featureProfiles), "effects", "local-clock"];
 
-// Parse the corpus once with the shared strict parsers. Feature histories also
-// expose their decoded private predictions for the classifiers that need them.
-export function loadCorpus(profile, paths) {
-  if (profile === "effects") return paths.map(path => parseEffectsTrace(readTrace(path), path));
-  if (profile === "local-clock") return paths.map(path => parseLocalClockTrace(readTrace(path), path));
+// The shared strict parser for a profile's histories. Feature histories also
+// carry their decoded private predictions; effects histories keep their raw ITF
+// states, from which the authority classifier reads the public observations.
+function historyParser(profile) {
+  if (profile === "effects") return (raw, path) => ({ ...parseEffectsTrace(raw, path), states: traceStates(raw, path) });
+  if (profile === "local-clock") return parseLocalClockTrace;
   const definition = featureProfiles[profile];
   if (definition === undefined) throw new Error(`Unknown witness profile ${profile}`);
-  return paths.map(path => {
-    const raw = readTrace(path);
-    return { ...parseFeatureTrace(raw, path, definition), states: privateStates(raw, path) };
-  });
+  return (raw, path) => ({ ...parseFeatureTrace(raw, path, definition), states: privateStates(raw, path) });
+}
+
+// Parse the corpus once. A test suite that replays the same histories loads
+// them here and gates them with checkCorpus instead of reading the files again.
+export function loadCorpus(profile, paths) {
+  const parse = historyParser(profile);
+  return paths.map(path => parse(readTrace(path), path));
 }
 
 // Every classifier credits into one recorder, so each label keeps the history
 // and the checkpoint step that earned it (recorder.mjs). The returned label
-// set is what the completion gate compares with the registry.
-export function evaluateCorpus(profile, corpus, paths, recorder = createWitnessRecorder()) {
+// set is what the completion gate compares with the registry. The feature
+// classifiers that take paths still read each history themselves.
+export function evaluateCorpus(profile, corpus, recorder = createWitnessRecorder()) {
+  const paths = corpus.map(trace => trace.path);
   switch (profile) {
-    case "effects": effectsWitnesses(corpus, recorder); effectsAuthorityWitnesses(paths, recorder); break;
+    case "effects": effectsWitnesses(corpus, recorder); effectsAuthorityWitnesses(corpus, recorder); break;
     case "local-clock": localClockWitnesses(corpus, recorder); break;
     case "policy": policyWitnesses(corpus, recorder); runtimeWitnesses(profile, paths, recorder); break;
     case "scope": scopeWitnesses(corpus, recorder); runtimeWitnesses(profile, paths, recorder); break;
@@ -70,10 +77,6 @@ export function evaluateCorpus(profile, corpus, paths, recorder = createWitnessR
     default: throw new Error(`Unknown witness profile ${profile}`);
   }
   return recorder.labels();
-}
-
-export function evaluateWitnesses(profile, paths, recorder) {
-  return evaluateCorpus(profile, loadCorpus(profile, paths), paths, recorder);
 }
 
 // The observation a driver is asserted against at each step of a history: the
@@ -117,16 +120,21 @@ export function requiredWitnesses(profile, registry = readWitnessRegistry()) {
 
 // The completion gate: every required label and every declared action must be
 // reached. Returns the evaluated labels together with whatever is missing, the
-// per-label provenance and each history's public sequences.
-export function checkWitnesses(profile, paths, registry = readWitnessRegistry()) {
-  if (paths.length === 0) throw new Error(`No ${profile} histories to evaluate`);
-  const corpus = loadCorpus(profile, paths);
+// per-label provenance and each history's public sequences. checkWitnesses
+// reads the histories from their paths (the CLI and every port); checkCorpus
+// gates a corpus the caller has already loaded.
+export function checkCorpus(profile, corpus, registry = readWitnessRegistry()) {
+  if (corpus.length === 0) throw new Error(`No ${profile} histories to evaluate`);
   const recorder = createWitnessRecorder();
-  const seen = evaluateCorpus(profile, corpus, paths, recorder);
+  const seen = evaluateCorpus(profile, corpus, recorder);
   const actions = new Set(corpus.flatMap(trace => trace.steps.map(step => step.action)));
   const required = requiredWitnesses(profile, registry);
   const missing = [...requiredActions(profile).filter(action => !actions.has(action)).map(action => `action:${action}`),
     ...required.filter(label => !seen.has(label))];
-  return { profile, traces: paths.length, seen, required, missing, provenance: recorder.provenance(),
+  return { profile, traces: corpus.length, seen, required, missing, provenance: recorder.provenance(),
     histories: corpus.map(trace => historySequences(profile, trace)) };
+}
+
+export function checkWitnesses(profile, paths, registry = readWitnessRegistry()) {
+  return checkCorpus(profile, loadCorpus(profile, paths), registry);
 }

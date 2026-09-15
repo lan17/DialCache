@@ -1,5 +1,5 @@
 import { parseTrace, fixtureFor, inputsFor, project, expectedObservations, type Trace } from "../formal/replay/effects.mjs";
-import { checkWitnesses } from "../formal/replay/witnesses/index.mjs";
+import { checkCorpus, loadCorpus, type EffectsHistory } from "../formal/replay/witnesses/index.mjs";
 
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
@@ -11,7 +11,7 @@ import { assertEffectsHistory } from "./formal/effects-contract.js";
 
 const singleFile = process.env.DIALCACHE_EFFECTS_TRACE_FILE;
 const directory = process.env.DIALCACHE_EFFECTS_TRACE_DIR;
-function loadTraces(): Trace[] {
+function loadTraces(): EffectsHistory[] {
   let paths: string[];
   if (singleFile !== undefined) paths = [resolve(singleFile)];
   else if (directory === undefined) paths = [resolve("formal/effects-smoke.itf.json")];
@@ -25,7 +25,8 @@ function loadTraces(): Trace[] {
     }
   }
   if (paths.length === 0) throw new Error("No effects conformance traces found");
-  return paths.map((path) => parseTrace(JSON.parse(readFileSync(path, "utf8")), path));
+  // Each history is read and parsed once; the replay and the witness gate share it.
+  return loadCorpus("effects", paths);
 }
 const traces = loadTraces();
 
@@ -62,11 +63,12 @@ async function replay(trace: Trace) {
 describe("generated pending-effect conformance", () => {
   for (const trace of traces) it(`replays ${trace.path}`, async () => { await replay(trace); });
 
-  // The shared language-neutral evaluator supplies the witness gate; the CLI
-  // `node formal/witnesses.mjs evaluate` writes the reusable evidence files.
+  // The shared language-neutral evaluator supplies the witness gate over the
+  // histories parsed above; the CLI `node formal/witnesses.mjs evaluate` reads
+  // the same files itself and writes the reusable evidence files.
   if (directory !== undefined && singleFile === undefined) {
     it("covers every action and the required race witnesses", () => {
-      expect(checkWitnesses("effects", traces.map(trace => trace.path)).missing, "Missing effects witnesses").toEqual([]);
+      expect(checkCorpus("effects", traces).missing, "Missing effects witnesses").toEqual([]);
     }, 30_000);
   }
 
