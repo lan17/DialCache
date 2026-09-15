@@ -13,10 +13,9 @@ module lifecycle_witnesses {
   type Pair = { leader: int, follower: int }
   // A scripted step fixes one public input and the observation fields that
   // establish its consequence; Any leaves a field unchecked.
-  type Expect = Any | Exactly(int)
-  type ExpectCalls = AnyCalls | ExactlyCalls(List[int])
+  type Expect[a] = Any | Exactly(a)
   type Scripted = {
-    input: Input, calls: ExpectCalls, reads: Expect, loaders: Expect, dumps: Expect, writes: Expect
+    input: Input, calls: Expect[List[int]], reads: Expect[int], loaders: Expect[int], dumps: Expect[int], writes: Expect[int]
   }
   type Script = { label: str, heldEffects: bool, steps: List[Scripted] }
   type Monitor = {
@@ -53,9 +52,9 @@ module lifecycle_witnesses {
   // private fence, watermark, phase or cache state participates.
   pure def scripted(name: str, choice: int): Scripted = {
     input: { name: name, choice: choice },
-    calls: AnyCalls, reads: Any, loaders: Any, dumps: Any, writes: Any
+    calls: Any, reads: Any, loaders: Any, dumps: Any, writes: Any
   }
-  pure def expectCalls(step: Scripted, calls: List[int]): Scripted = { calls: ExactlyCalls(calls), ...step }
+  pure def expectCalls(step: Scripted, calls: List[int]): Scripted = { calls: Exactly(calls), ...step }
   pure def expectLoaders(step: Scripted, loaders: int): Scripted = { loaders: Exactly(loaders), ...step }
   pure def expectDumps(step: Scripted, dumps: int): Scripted = { dumps: Exactly(dumps), ...step }
   pure def expectWrites(step: Scripted, writes: int): Scripted = { writes: Exactly(writes), ...step }
@@ -130,16 +129,13 @@ module lifecycle_witnesses {
     labels: Set()
   }
 
-  pure def expected(expectation: Expect, actual: int): bool = match expectation {
+  pure def expected(expectation: Expect[a], actual: a): bool = match expectation {
     Any => true
     | Exactly(value) => value == actual
   }
   pure def matches(scriptedStep: Scripted, step: Step): bool =
     step.input == scriptedStep.input
-      and (match scriptedStep.calls {
-        AnyCalls => true
-        | ExactlyCalls(calls) => calls == step.observation.calls
-      })
+      and expected(scriptedStep.calls, step.observation.calls)
       and expected(scriptedStep.reads, step.observation.reads)
       and expected(scriptedStep.loaders, step.observation.loaders)
       and expected(scriptedStep.dumps, step.observation.dumps)

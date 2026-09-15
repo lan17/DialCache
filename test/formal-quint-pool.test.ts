@@ -1,7 +1,9 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 type Buffered = { status: number | null; signal: string | null; error?: Error & { code?: string }; stdout: string; stderr: string; durationMs: number };
-const { resolveConcurrency, runPool, spawnBuffered, formatGroup, executionChains, executionPlan, CommandFailure } = {
+const { resolveConcurrency, runPool, spawnBuffered, formatGroup, executionChains, executionPlan, generationArguments, CommandFailure } = {
   ...await import(new URL("../formal/quint-pool.mjs", import.meta.url).href),
   ...await import(new URL("../formal/run-models.mjs", import.meta.url).href),
 } as {
@@ -10,7 +12,9 @@ const { resolveConcurrency, runPool, spawnBuffered, formatGroup, executionChains
   spawnBuffered(command: string, args: string[], options?: { cwd?: string; timeoutMs?: number }): Promise<Buffered>;
   formatGroup(title: string, ...texts: string[]): string;
   executionChains(commands: Array<{ command: string; args: string[] }>): Array<Array<{ command: string; args: string[] }>>;
-  executionPlan(mode: "check" | "generate"): Array<{ command: string; args: string[] }>;
+  executionPlan(mode: "check" | "generate", manifest?: unknown, seed?: string): Array<{ command: string; args: string[] }>;
+  generationArguments(path: string, generation: { maxSamples: number; maxSteps: number; traces: number }, invariants: string[],
+    options: { settings: { backend: string; threads: number; verbosity: number }; seed: string; outputDirectory: string }): string[];
   CommandFailure: new (message: string, result: { status?: number | null; signal?: string | null }) => Error & { status?: number | null };
 };
 
@@ -119,6 +123,23 @@ describe("Quint process pool", () => {
   it("prints a command's log as one closed group block", () => {
     expect(formatGroup("quint run model", "line one\n", "line two")).toBe("::group::quint run model\nline one\nline two\n::endgroup::");
     expect(formatGroup("quint typecheck model", "", undefined as unknown as string)).toBe("::group::quint typecheck model\n::endgroup::");
+  });
+
+  it("builds the generation lane's command once, for the lane and for the kernel pilot", () => {
+    const manifest = JSON.parse(readFileSync(new URL("../formal/execution.json", import.meta.url), "utf8")) as {
+      settings: { backend: string; threads: number; verbosity: number; seed: string };
+      models: Array<{ path: string; invariants: string[]; generate?: { maxSamples: number; maxSteps: number; traces: number; outputDirectory: string } }>;
+    };
+    const layers = manifest.models.find(model => model.path === "formal/dialcache-layers-conformance.qnt")!;
+    // An explicit seed: executionPlan otherwise follows QUINT_SEED from the environment.
+    const planned = executionPlan("generate", manifest, manifest.settings.seed).find(job => job.command === "quint" && job.args[1] === layers.path && job.args.includes("--mbt"))!;
+    const options = { settings: manifest.settings, seed: manifest.settings.seed, outputDirectory: layers.generate!.outputDirectory };
+    expect(generationArguments(layers.path, layers.generate!, layers.invariants, options)).toEqual(planned.args);
+    expect(planned.args).toContain("--verbosity=1");
+    const pilot = generationArguments("/build/layers/pilot/formal/kernel/layers-pilot.qnt", layers.generate!, ["a", "b"], { ...options, outputDirectory: "/scratch" });
+    const shared = planned.args.slice(0, planned.args.indexOf("--invariants") + 1)
+      .map(arg => arg === layers.path ? "/build/layers/pilot/formal/kernel/layers-pilot.qnt" : arg.startsWith("--out-itf=") ? "--out-itf=/scratch/trace_{seq}.itf.json" : arg);
+    expect(pilot).toEqual([...shared, "a", "b"]);
   });
 
   it("puts every job of the real plans into exactly one per-model chain, in plan order, without the challenge run", () => {

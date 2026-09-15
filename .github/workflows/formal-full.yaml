@@ -20,9 +20,10 @@ concurrency:
 jobs:
   kernel-pilot:
     runs-on: ubuntu-latest
-    # Runs 34902237253, 34904430717 and 34906552607 took 7 to 9 minutes before
-    # the generation-lane and frozen-monitor measurements were added.
-    timeout-minutes: 30
+    # Run 34916911057 took 15 minutes with the generation-lane and frozen-monitor
+    # measurements (7 to 9 minutes before them); the derived kernel generation
+    # timeouts cap the worst case near 32 minutes, and 2x headroom is 40.
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup-validation

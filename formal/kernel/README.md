@@ -43,8 +43,9 @@ a fixed public input order, for one view, with the observation fields that
 establish each consequence, written as data so each input sits next to what it
 must produce and one rule covers all four: a history that departs from a
 script's prefix can never earn its label, and no script applies to the other
-view. This form costs the same as the four index predicates it replaced; it
-was chosen for readability, not speed. Every credited label is retained
+view. The pilot does not measure the scripts' share of the monitor's cost
+separately; the frozen-monitor record below bounds the monitor as a whole. The
+form was chosen for readability, not speed. Every credited label is retained
 because each step's labels accumulate from the previous step's. The monitor's
 positive and negative tests are checks of evidence classification, not
 additional native behavioral coverage.
@@ -90,8 +91,9 @@ The check also requires:
   described below and recorded in the report.
 - Six compiling single-site kernel faults, with nine named property checks
   at exact input checkpoints; each unmodified history must first pass. Every
-  property except the closed-scope memo rule has a fault that only it detects
-  at its declared step.
+  property except the closed-scope memo rule has a fault it detects at its
+  declared step; whether the other properties would also detect it is not
+  checked.
 - A successful native assertion report from each language for every history.
   Skips, missing results and evaluator failures cannot count as passes.
 - A sampling-cost bound: in the same job, the original profile and the kernel
@@ -116,13 +118,27 @@ The check also requires:
   invariants; the kernel view with its monitor assignment replaced by
   `monitor' = monitor`, whose difference to the full view is the monitor's
   cost; and the fixed cost of a one-sample, one-step run of each model.
-- The generation lane's own command for both models: `--mbt`, the original's
-  trace count, ITF output to a scratch directory that is removed after
-  counting. The report records each model's exit status, wall time, traces and
-  bytes, and `generationParity`: whether the kernel view completed within the
-  bound. This is the generation-runtime budget of #165 and it is currently
-  unmet: under Node's default heap both kernel views run out of memory before
-  writing a trace (see below).
+- The generation lane's own command for both models, built by the same
+  function the lane uses (`generationArguments` in `run-models.mjs`): `--mbt`,
+  the original's trace count, ITF output to a scratch directory that is removed
+  after counting. The original runs under the lane's 600 s ceiling; the kernel
+  view's timeout is four times the original's wall time with a floor of 150 s,
+  above the observed heap-exhaustion abort, so that abort stays visible in the
+  record. The report records each model's outcome (completed, violation,
+  aborted, failed, or not attempted when the original failed), exit status,
+  signal, timeout, wall time, traces and bytes, and `generationParity`: the
+  kernel view completed under the lane's own Node heap within
+  `generation.maxRatio` in `pilot.json` (2.5) times the original in both wall
+  time and trace bytes. Trace size is part of parity on purpose: the traces are
+  what the replay lanes read and what exhausts the heap; the only completed
+  kernel generation on record, with a 12 GB heap, was 2.3 times the original's
+  time and 2.75 times its bytes. Peak memory is not measured; completion under
+  the default heap stands in for it. This is the generation-runtime budget of
+  #165 and it is currently unmet: under the default heap both kernel views run
+  out of memory before writing a trace (see below). A property violation on
+  either side, or an original that cannot complete its own command, fails the
+  check after the correctness evidence; any other failure of these cost
+  measurements is recorded the same way and raised at the end.
 
 The publication property checks retained source-acceptance records after
 completion and requires one record per serialization effect. This includes

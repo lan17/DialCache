@@ -6,6 +6,7 @@
     "effects": { "baseline": "formal/dialcache-effects-conformance.qnt", "model": "formal/kernel/effects-pilot.qnt", "module": "effects_pilot" }
   },
   "exploration": { "maxRatio": 2.5 },
+  "generation": { "maxRatio": 2.5 },
   "histories": [
     {
       "id": "layers-shared-source-and-reuse", "profile": "layers", "contracts": ["C05", "C11", "C12"],

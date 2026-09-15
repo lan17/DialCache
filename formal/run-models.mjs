@@ -7,6 +7,16 @@ import { CommandFailure, printGroup, resolveConcurrency, runPool, seconds, spawn
 import { normalizeReplayInputs } from './replay-inputs.mjs';
 import { bindTrace } from './replay/bindings.mjs';
 
+// The generation lane's command for one model, also issued by the kernel pilot
+// for its views so the two cannot drift: the pilot substitutes only the model
+// path, that model's invariants and a scratch output directory, and passes the
+// manifest seed explicitly.
+export function generationArguments(path, generation, invariants, { settings, seed, outputDirectory }) {
+  return ['run', path, '--mbt', `--backend=${settings.backend}`, `--n-threads=${settings.threads}`, `--seed=${seed}`,
+    `--max-samples=${generation.maxSamples}`, `--max-steps=${generation.maxSteps}`, `--n-traces=${generation.traces}`,
+    `--out-itf=${outputDirectory}/trace_{seq}.itf.json`, `--verbosity=${settings.verbosity}`, '--invariants', ...invariants];
+}
+
 export function executionPlan(mode, manifest = readExecution(), seed = process.env.QUINT_SEED || manifest.settings.seed) {
   validateExecution(manifest);
   if (!['check', 'generate'].includes(mode)) throw new Error('Expected check or generate');
@@ -26,10 +36,8 @@ export function executionPlan(mode, manifest = readExecution(), seed = process.e
       commands.push({ command: 'node', args: [model.vectorExport.generator, '--check'] });
     } else if (model.generate) {
       const generation = model.generate;
-      commands.push({ command: 'quint', args: ['run', model.path, '--mbt', ...options,
-        `--max-samples=${generation.maxSamples}`, `--max-steps=${generation.maxSteps}`, `--n-traces=${generation.traces}`,
-        `--out-itf=${generation.outputDirectory}/trace_{seq}.itf.json`, `--verbosity=${settings.verbosity}`,
-        '--invariants', ...model.invariants], outputDirectory: generation.outputDirectory, expectedTraces: generation.traces,
+      commands.push({ command: 'quint', args: generationArguments(model.path, generation, model.invariants, { settings, seed, outputDirectory: generation.outputDirectory }),
+        outputDirectory: generation.outputDirectory, expectedTraces: generation.traces,
         ...(model.replayRegressions === undefined ? {} : { explicitInputs: true }),
         ...(model.profile === undefined ? {} : { profile: model.profile }) });
       if (model.replayRegressions?.length) {
