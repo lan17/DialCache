@@ -78,8 +78,10 @@ The check also requires:
 - Five properties over 2,000 sampled histories of up to 40 steps per view,
   using the pinned evaluator and seed in `execution.json`. Applicability is
   described below and recorded in the report.
-- Five compiling single-site kernel faults, with seven named property checks
-  at exact input checkpoints; each unmodified history must first pass.
+- Six compiling single-site kernel faults, with nine named property checks
+  at exact input checkpoints; each unmodified history must first pass. Every
+  property except the closed-scope memo rule has a fault that only it detects
+  at its declared step.
 - A successful native assertion report from each language for every history.
   Skips, missing results and evaluator failures cannot count as passes.
 - The generation-runtime budget of #165: in the same job, the original

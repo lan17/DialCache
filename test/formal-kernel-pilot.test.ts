@@ -93,7 +93,7 @@ describe("supplemental kernel pilot evidence", () => {
     expect(() => witnessCheckpoints(pilot, [], "effects/invalid-witness")).toThrow(/effects\/invalid-witness step 1: invalid Quint witness set/);
   });
 
-  it("pins the pilot inventory: twelve histories, eleven labels, five faults with seven checks, five properties, fifteen controls", () => {
+  it("pins the pilot inventory: twelve histories, eleven labels, six faults with nine checks, five properties, fifteen controls", () => {
     const catalog = read("formal/kernel/pilot.json"), challenges = read("formal/kernel/challenges.json");
     const byProfile = (profile: string) => catalog.histories.filter((history: { profile: string }) => history.profile === profile);
     expect(catalog.histories).toHaveLength(12);
@@ -105,9 +105,13 @@ describe("supplemental kernel pilot evidence", () => {
       "future-frame-refills-after-source", "inflight-publication-remains-fenced", "late-reject-rejected", "late-resolve-rejected",
       "published-value-reused", "shared-failure-retry", "tracked-redis-warms-local",
     ]);
-    expect(challenges.challenges).toHaveLength(5);
-    expect(challenges.challenges.flatMap((challenge: { checks: unknown[] }) => challenge.checks)).toHaveLength(7);
+    expect(challenges.challenges).toHaveLength(6);
+    const checks: Array<{ invariant: string }> = challenges.challenges.flatMap((challenge: { checks: Array<{ invariant: string }> }) => challenge.checks);
+    expect(checks).toHaveLength(9);
     expect(pilotInvariants).toHaveLength(5);
+    // Every property but the closed-scope memo rule has a fault that only it detects.
+    expect([...new Set(checks.map(check => check.invariant))].sort()).toEqual(
+      pilotInvariants.filter(invariant => invariant !== "closedScopesHaveNoMemo").sort());
     expect(explorationRepetitions).toBe(2);
     const controls = readFileSync(resolve("formal/kernel/lifecycle-witnesses-test.qnt"), "utf8").match(/^\s*run \w+Test\b/gm) ?? [];
     expect(controls).toHaveLength(15);
