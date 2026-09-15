@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 type Trace = { states: Array<Record<string, any>>; [key: string]: unknown };
 type Schedule = Array<[string, number]>;
-const { projectPilotTrace, comparePilotHistory, witnessCheckpoints, validatePilot, validatePilotChallenges, validatePilotChallengeResult, validateWitnessControlResult, explorationComparison, pilotInvariants, explorationRepetitions } = await import(
+const { projectPilotTrace, comparePilotHistory, witnessCheckpoints, validatePilot, validatePilotChallenges, validatePilotChallengeResult, validateWitnessControlResult, explorationComparison, generationOutcome, generationParity, monitorAssignment, pilotInvariants, explorationRepetitions } = await import(
   new URL("../formal/kernel-pilot.mjs", import.meta.url).href,
 ) as {
   projectPilotTrace(raw: unknown, path?: string): Trace;
@@ -16,6 +16,9 @@ const { projectPilotTrace, comparePilotHistory, witnessCheckpoints, validatePilo
   validateWitnessControlResult(output: string, exitCode: number, required: string[]): { status: string; tests: string[] };
   explorationComparison(baseline: unknown, kernel: unknown, settings: { backend: string; seed: string }, bounds: { maxSamples: number; maxSteps: number },
     options?: Record<string, unknown>): Record<string, unknown>;
+  generationOutcome(name: string, result: Record<string, unknown>, traces: number, generation: { traces: number }, bytes: number): Record<string, unknown>;
+  generationParity(baseline: Record<string, unknown>, kernel: Record<string, unknown>, maxRatio: number): Record<string, unknown>;
+  monitorAssignment: { before: string; after: string };
   pilotInvariants: string[];
   explorationRepetitions: number;
 };
@@ -93,7 +96,7 @@ describe("supplemental kernel pilot evidence", () => {
     expect(() => witnessCheckpoints(pilot, [], "effects/invalid-witness")).toThrow(/effects\/invalid-witness step 1: invalid Quint witness set/);
   });
 
-  it("pins the pilot inventory: twelve histories, eleven labels, six faults with nine checks, five properties, fifteen controls", () => {
+  it("pins the pilot inventory: twelve histories, eleven labels, six faults with nine checks, five properties, sixteen controls", () => {
     const catalog = read("formal/kernel/pilot.json"), challenges = read("formal/kernel/challenges.json");
     const byProfile = (profile: string) => catalog.histories.filter((history: { profile: string }) => history.profile === profile);
     expect(catalog.histories).toHaveLength(12);
@@ -114,7 +117,10 @@ describe("supplemental kernel pilot evidence", () => {
       pilotInvariants.filter(invariant => invariant !== "closedScopesHaveNoMemo").sort());
     expect(explorationRepetitions).toBe(2);
     const controls = readFileSync(resolve("formal/kernel/lifecycle-witnesses-test.qnt"), "utf8").match(/^\s*run \w+Test\b/gm) ?? [];
-    expect(controls).toHaveLength(15);
+    expect(controls).toHaveLength(16);
+    const kernel = readFileSync(resolve("formal/kernel/cache-kernel.qnt"), "utf8");
+    expect(kernel.split(monitorAssignment.before)).toHaveLength(2);
+    expect(kernel).not.toContain(monitorAssignment.after);
     const monitor = readFileSync(resolve("formal/kernel/lifecycle-witnesses.qnt"), "utf8");
     expect(monitor.match(/^\s*pure val \w+: Script = \{/gm)).toHaveLength(4);
     expect([...monitor.matchAll(/label: "([a-z-]+)"/g)].map(match => match[1]).sort()).toEqual([
@@ -151,39 +157,58 @@ describe("supplemental kernel pilot evidence", () => {
 
   it("bounds the kernel view's wall time against the original profile and records the evaluation-only ratio", () => {
     const settings = { backend: "rust", seed: "0xd1a1ca" }, bounds = { maxSamples: 2048, maxSteps: 80 };
-    const invariants = { baseline: ["sourceEffectsMatch"], kernel: ["publicationHasTimelySource"] };
     const fixedCost = { baseline: 40, kernel: 50 };
-    const options = { label: "layers exploration with invariants", invariants, fixedCost, maxRatio: 2 };
+    const options = { label: "layers exploration with invariants", fixedCost, maxRatio: 2 };
     const run = (durationMs: number, report: string, patch: Record<string, unknown> = {}) =>
       ({ result: { status: "ok", errors: [], trace: [{}] }, status: 0, durationMs, report, ...patch });
-    const baseline = { runs: [run(120, "baseline-1.json"), run(100, "baseline-2.json")] };
-    const kernel = { runs: [run(150, "kernel-1.json"), run(180, "kernel-2.json")] };
+    const baseline = { runs: [run(120, "baseline-1.json"), run(100, "baseline-2.json")], invariants: ["sourceEffectsMatch"] };
+    const kernel = { runs: [run(150, "kernel-1.json"), run(180, "kernel-2.json")], invariants: ["publicationHasTimelySource"] };
     expect(explorationComparison(baseline, kernel, settings, bounds, options)).toEqual({
       status: "passed", kind: "sampled-exploration", backend: "rust", seed: "0xd1a1ca", threads: 1, bounds,
-      invariants, includesCliStartup: true, sameInputHistories: false,
-      baseline: { durationMs: 100, durations: [120, 100], reports: ["baseline-1.json", "baseline-2.json"], fixedCostMs: 40, evaluationMs: 60 },
-      kernel: { durationMs: 150, durations: [150, 180], reports: ["kernel-1.json", "kernel-2.json"], fixedCostMs: 50, evaluationMs: 100 },
+      includesCliStartup: true, sameInputHistories: false, tracesWritten: false,
+      baseline: { invariants: ["sourceEffectsMatch"], durationMs: 100, durations: [120, 100], reports: ["baseline-1.json", "baseline-2.json"], fixedCostMs: 40, evaluationMs: 60 },
+      kernel: { invariants: ["publicationHasTimelySource"], durationMs: 150, durations: [150, 180], reports: ["kernel-1.json", "kernel-2.json"], fixedCostMs: 50, evaluationMs: 100 },
       ratio: 1.5, evaluationRatio: 100 / 60, gated: true, maxRatio: 2,
     });
-    expect(explorationComparison(baseline, { runs: [run(200, "k.json")] }, settings, bounds, options)).toMatchObject({ status: "passed", ratio: 2 });
-    expect(explorationComparison(baseline, { runs: [run(201, "k.json")] }, settings, bounds, options)).toMatchObject({
+    const kernelAt = (durationMs: number) => ({ runs: [run(durationMs, "k.json")], invariants: [] });
+    expect(explorationComparison(baseline, kernelAt(200), settings, bounds, options)).toMatchObject({ status: "passed", ratio: 2 });
+    expect(explorationComparison(baseline, kernelAt(201), settings, bounds, options)).toMatchObject({
       status: "failed", ratio: 2.01, gated: true, maxRatio: 2,
       violation: "layers exploration with invariants: the kernel view took 2.01x the original profile's wall time (bound 2x); 201 ms against 100 ms",
     });
     const { maxRatio: _unused, ...ungated } = options;
-    expect(explorationComparison(baseline, { runs: [run(900, "k.json")] }, settings, bounds, ungated)).toMatchObject({ status: "passed", ratio: 9, gated: false });
-    expect(explorationComparison(baseline, { runs: [run(900, "k.json")] }, settings, bounds, ungated)).not.toHaveProperty("maxRatio");
-    const broken: Array<Record<string, unknown>> = [{}, { invariants }, { invariants, fixedCost, maxRatio: 0.5 }, { invariants: { baseline: [] }, fixedCost, maxRatio: 2 },
-      { invariants, fixedCost, maxRatio: NaN }, { invariants, fixedCost: { baseline: 40 }, maxRatio: 2 }, { invariants, fixedCost: { baseline: 0, kernel: 50 }, maxRatio: 2 },
-      { invariants, fixedCost: { baseline: 100, kernel: 50 }, maxRatio: 2 }];
+    expect(explorationComparison(baseline, kernelAt(900), settings, bounds, ungated)).toMatchObject({ status: "passed", ratio: 9, gated: false });
+    expect(explorationComparison(baseline, kernelAt(900), settings, bounds, ungated)).not.toHaveProperty("maxRatio");
+    const broken: Array<Record<string, unknown>> = [{}, { fixedCost, maxRatio: 0.5 }, { fixedCost, maxRatio: NaN }, { fixedCost: { baseline: 40 }, maxRatio: 2 },
+      { fixedCost: { baseline: 0, kernel: 50 }, maxRatio: 2 }, { fixedCost: { baseline: 100, kernel: 50 }, maxRatio: 2 }];
     for (const options of broken) expect(() => explorationComparison(baseline, kernel, settings, bounds, options)).toThrow();
-    const invalid = [undefined, {}, { runs: [] }, { runs: [run(100, "r.json", { status: 1 })] }, { runs: [run(100, "r.json", { result: {} })] },
-      { runs: [run(100, "r.json", { result: { status: "ok", errors: ["evaluator failed"], trace: [{}] } })] },
-      ...[undefined, 0, -1, NaN, Infinity].map(durationMs => ({ runs: [run(100, "ok.json"), run(durationMs as number, "bad.json")] }))];
+    const invalid = [undefined, {}, { runs: [] }, { runs: baseline.runs }, { runs: [run(100, "r.json", { status: 1 })], invariants: [] },
+      { runs: [run(100, "r.json", { result: {} })], invariants: [] },
+      { runs: [run(100, "r.json", { result: { status: "ok", errors: ["evaluator failed"], trace: [{}] } })], invariants: [] },
+      ...[undefined, 0, -1, NaN, Infinity].map(durationMs => ({ runs: [run(100, "ok.json"), run(durationMs as number, "bad.json")], invariants: [] }))];
     for (const measured of invalid) {
       expect(() => explorationComparison(measured, kernel, settings, bounds, options)).toThrow();
       expect(() => explorationComparison(baseline, measured, settings, bounds, options)).toThrow();
     }
+  });
+
+  it("records whether each model completed the generation lane's own command and whether the kernel reached parity", () => {
+    const generation = { traces: 512 };
+    const ok = { error: undefined, status: 0, signal: null, stdout: "", stderr: "", durationMs: 10_900 };
+    const completed = generationOutcome("baseline", ok, 512, generation, 108_000_000);
+    expect(completed).toEqual({ status: "completed", exitStatus: 0, signal: null, durationMs: 10_900, traces: 512, expectedTraces: 512, traceBytes: 108_000_000 });
+    const oom = generationOutcome("kernel", { ...ok, status: 134, durationMs: 21_300,
+      stderr: "\nFATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory\n 1: 0x1 node::OOMErrorHandler\n" }, 0, generation, 0);
+    expect(oom).toMatchObject({ status: "failed", exitStatus: 134, traces: 0, expectedTraces: 512, traceBytes: 0 });
+    expect(oom.diagnostics).toEqual(["FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory", "1: 0x1 node::OOMErrorHandler"]);
+    expect(generationOutcome("kernel", ok, 500, generation, 1)).toMatchObject({ status: "failed", diagnostics: ["kernel wrote 500 of 512 traces"] });
+    expect(generationOutcome("kernel", { ...ok, error: new Error("timed out") }, 512, generation, 1).status).toBe("failed");
+    expect(generationOutcome("kernel", { ...ok, status: null, signal: "SIGKILL", stderr: "Killed" }, 0, generation, 0)).toMatchObject({ status: "failed", exitStatus: null, signal: "SIGKILL", diagnostics: ["Killed"] });
+    const kernel = { ...generationOutcome("kernel", { ...ok, durationMs: 24_900 }, 512, generation, 297_000_000) };
+    expect(generationParity(completed, kernel, 2.5)).toEqual({ ratio: 24_900 / 10_900, traceBytesRatio: 297_000_000 / 108_000_000, parity: true, maxRatio: 2.5 });
+    expect(generationParity(completed, kernel, 2)).toMatchObject({ parity: false });
+    expect(generationParity(completed, oom, 2.5)).toEqual({ ratio: null, traceBytesRatio: null, parity: false, maxRatio: 2.5 });
+    expect(() => generationParity(oom, kernel, 2.5)).toThrow(/original profile did not complete/);
   });
 
   it("credits only an invariant violation at its declared public input checkpoint", () => {

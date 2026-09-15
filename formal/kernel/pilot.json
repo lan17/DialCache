@@ -30,7 +30,7 @@
     {
       "id": "layers-tracked-redis-warms-local", "profile": "layers", "contracts": ["C05", "C31"],
       "witnesses": ["tracked-redis-warms-local"],
-      "actions": [["init", 1], ["beginCall", 12], ["resolveLoader", 1], ["beginCall", 12], ["beginCall", 12]]
+      "actions": [["init", 1], ["beginCall", 12], ["resolveLoader", 1], ["beginCall", 12], ["beginCall", 12], ["beginCall", 12]]
     },
     {
       "id": "effects-shared-source-and-reuse", "profile": "effects", "contracts": ["C05", "C11"],

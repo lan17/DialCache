@@ -2,7 +2,9 @@ module lifecycle_witnesses_test {
   import lifecycle_witnesses.* from "./lifecycle-witnesses"
 
   // Synthetic observation fixtures challenge the monitor itself. These are
-  // never exported as positive implementation-conformance histories.
+  // never exported as positive implementation-conformance histories. Like the
+  // kernel's public view, a fixture's calls list only grows: the monitor
+  // indexes the current observation by positions of the previous one.
   pure def observed(name: str, choice: int, calls: List[int], now: int,
     reads: int, loaders: int, dumps: int, writes: int): Step = {
     input: { name: name, choice: choice },
@@ -211,6 +213,11 @@ module lifecycle_witnesses_test {
     observed("resolveLoader", 1, List(1), 10000, 1, 1, 1, 1),
     observed("beginCall", 12, List(1, 1), 10000, 2, 1, 1, 1),
     observed("beginCall", 12, List(1, 1, 1), 10000, 2, 1, 1, 1))
+  // A history that continues past a completed script keeps the label.
+  run completedScriptRetainsLabelTest = check(trackedLocalWarming.append(
+      observed("beginCall", 12, List(1, 1, 1, 1), 10000, 2, 1, 1, 1)), false)
+    .expect(labels.contains("tracked-redis-warms-local"))
+
   run trackedLocalWarmingNeedsRedisValidationThenLocalReuseTest =
     check(trackedLocalWarming.slice(0, 4), false)
     .expect(not(labels.contains("tracked-redis-warms-local")))

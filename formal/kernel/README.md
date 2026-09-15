@@ -37,13 +37,23 @@ The kernel records one monitor value per step, computed from the previous
 monitor value and the current step alone; no input history is retained or
 refolded, so witness bookkeeping no longer grows with the length of a history.
 It still scales with the number of calls the view admits, which the fixture
-bounds. The monitor carries the credited label set. Four boundaries are scripted prefixes:
+bounds, and it is the largest remaining cost of the kernel views (below). The
+monitor carries the credited label set. Four boundaries are scripted prefixes:
 a fixed public input order, for one view, with the observation fields that
-establish each consequence. A history that departs from a script's prefix can
-never earn its label. Every credited label is retained because each step's
-labels accumulate from the previous step's. The monitor's positive and negative
-tests are checks of evidence classification, not additional native behavioral
-coverage.
+establish each consequence, written as data so each input sits next to what it
+must produce and one rule covers all four: a history that departs from a
+script's prefix can never earn its label, and no script applies to the other
+view. This form costs the same as the four index predicates it replaced; it
+was chosen for readability, not speed. Every credited label is retained
+because each step's labels accumulate from the previous step's. The monitor's
+positive and negative tests are checks of evidence classification, not
+additional native behavioral coverage.
+
+The witness-isolation lint enforces one direction: nothing reachable from a
+transition, guard, choice domain or projection may read the monitor. The other
+direction, that the monitor reads only public data, rests on the monitor module
+importing nothing from the kernel and on the kernel handing it only the public
+input and view.
 
 ## Executable comparison
 
@@ -84,16 +94,35 @@ The check also requires:
   at its declared step.
 - A successful native assertion report from each language for every history.
   Skips, missing results and evaluator failures cannot count as passes.
-- The generation-runtime budget of #165: in the same job, the original
-  profile and the kernel view each sample the original's generation workload
-  from `execution.json` (its sample count and step bound, one thread, the
-  pinned seed, no trace output) with their own invariants, twice each. The
-  kernel view's fastest wall time may be at most `exploration.maxRatio` in
-  `pilot.json` (2.5) times the original's fastest wall time. The first hosted
-  measurement was 1.2 for layers and 1.8 for effects; the bound leaves room
+- A sampling-cost bound: in the same job, the original profile and the kernel
+  view each sample the original's generation bounds from `execution.json` (its
+  sample count and step bound, one thread, the pinned seed, no trace output)
+  with their own invariants, twice each, alternating. The kernel view's
+  fastest wall time may be at most `exploration.maxRatio` in `pilot.json`
+  (2.5) times the original's fastest wall time. The first hosted measurements
+  were 1.1 to 1.2 for layers and 1.6 to 1.8 for effects; the bound leaves room
   for runner variance and still fails on the 4 to 7 times of the refolding
-  monitor. The same pairing without invariants, and the fixed cost of a
-  one-sample, one-step run of each model, are recorded but not gated.
+  monitor. A violation is raised only after the histories, replays and faults
+  below have been recorded. The pairing compares unequal property sets: the
+  originals' nine invariants each against the kernel's five, and the originals
+  pay about 1.6 times as much for their properties (layers 4.6 s against
+  2.8 s, effects 4.1 s against 2.6 s on the machine below), so the gated ratio
+  understates a kernel view that carried the originals' properties. The report
+  records each side's property cost; the without-invariants ratio (1.8 for
+  layers, 3.8 for effects) is the transition-and-monitor ratio. Carrying the
+  originals' properties is a #165 work item next to monitor cost and exported
+  state size.
+- Records, not gates, that locate the remaining cost: the same pairing without
+  invariants; the kernel view with its monitor assignment replaced by
+  `monitor' = monitor`, whose difference to the full view is the monitor's
+  cost; and the fixed cost of a one-sample, one-step run of each model.
+- The generation lane's own command for both models: `--mbt`, the original's
+  trace count, ITF output to a scratch directory that is removed after
+  counting. The report records each model's exit status, wall time, traces and
+  bytes, and `generationParity`: whether the kernel view completed within the
+  bound. This is the generation-runtime budget of #165 and it is currently
+  unmet: under Node's default heap both kernel views run out of memory before
+  writing a trace (see below).
 
 The publication property checks retained source-acceptance records after
 completion and requires one record per serialization effect. This includes
@@ -120,22 +149,35 @@ properties' sensitivity to those particular changes, not all possible defects.
 
 `.formal-traces/kernel-pilot/report.json` records source hashes, bounds,
 per-history comparison and witness checkpoints, native reports, model faults,
-original/kernel generation times and raw trace sizes. Full checks also time
-both models on the original's generation workload, twice per model and pairing,
-record every run's wall time, the fixed CLI cost and the ratios with and
-without that fixed cost, and fail when the gated ratio exceeds its bound; the
-failing comparison is written to the report before the check fails. Wall times
-include CLI startup, about one second per run, which the ungated
-evaluation-only ratio removes. On one machine at the generation bounds, taking
-the faster of two runs: layers took 8.5 s in the original against 8.6 s in the
-kernel view with invariants and 3.0 s against 5.5 s without; effects took 7.7 s
-against 12.0 s with invariants and 2.5 s against 9.5 s without. With the
-refolding monitor, at 2,000 samples of 40 steps, the kernel views had taken 4
-to 7 times the originals with invariants and 9 to 13 times without. The
-remaining difference is the kernel's larger state and the monitor's per-step
-bookkeeping. The directory retains copied Quint sources and failing histories.
-A failure identifies its history, step, action and expected/actual public
-observations, or the exact failing report.
+original/kernel generation times and raw trace sizes, the sampling pairings
+with every run's wall time, the fixed CLI cost and the ratios with and without
+it, the frozen-monitor record, and the generation-lane measurement. Wall times
+include CLI startup, about one second per run locally. On one machine at the
+generation bounds, taking the faster of two runs: layers took 8.5 s in the
+original against 8.6 s in the kernel view with invariants and 3.0 s against
+5.5 s without; effects took 7.7 s against 12.0 s with invariants and 2.5 s
+against 9.5 s without. With the refolding monitor, at 2,000 samples of 40
+steps, the kernel views had taken 4 to 7 times the originals with invariants
+and 9 to 13 times without. Freezing the monitor puts the kernel views at about
+1.05 times the originals with invariants: nearly all of the remaining
+difference is the monitor's per-step bookkeeping, about 13 to 17 microseconds
+per step, not the kernel's state. Making the monitor cheaper is the next parity
+work item.
+
+The generation lane writes 512 traces per profile with `--mbt`. The originals
+complete that command in 11 s (effects, 108 MB of traces) and 14 s (layers,
+168 MB) with a peak of about 3 GB of memory. Both kernel views exhaust Node's
+default heap before writing a trace; given a 12 GB heap the effects kernel view
+completes in 25 s with 297 MB of traces and a 7 GB peak, 2.3 times the
+original's wall time and 2.5 times its memory. The exported state is the
+cause: per state the kernel's `s` is 61 to 83 percent of the bytes, the
+effects view's projection up to 29 percent and the monitor about 10 percent.
+Until that state shrinks or the lane's configuration for kernel-based profiles
+changes, the kernel cannot generate the corpus as configured, and no migration
+under #165 should proceed on the sampling bound alone. The directory retains
+copied Quint sources and failing histories. A failure identifies its history,
+step, action and expected/actual public observations, or the exact failing
+report.
 
 `node formal/kernel-pilot.mjs generate` performs only deterministic generation,
 comparison and witness checks. Its report remains incomplete. A full `check`
@@ -143,9 +185,9 @@ can become complete only if all pilot checks pass and its source inputs remain
 unchanged. Every pilot report has `acceptance: false`: it cannot substitute for
 the existing full conformance completion reports. Per-history ratios and
 trace sizes concern short deterministic histories and are informational. The
-gated ratio concerns the original's recorded generation workload only; it
-detects a regression in the kernel's generation cost and is not a benchmark of
-a full migration.
+gated ratio bounds sampling cost at the original's generation bounds; it
+detects a regression in the kernel's evaluation cost and is not the generation
+budget, which the recorded generation-lane measurement carries.
 
 The effects slice excludes adapter classification overrides, live read-budget
 changes and observer failures. Recovery, shadow work, admission, independent
