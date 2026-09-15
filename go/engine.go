@@ -167,6 +167,10 @@ func (c *Cache[T]) GetOrLoad(ctx context.Context, op Operation, load func(contex
 
 func (x *execution[T]) singleFlight(flights map[string]*flight[T], owner *scope[T], label string, run func() (T, error)) (T, error) {
 	c := x.cache
+	// Read the clock before taking the lock. The caller-supplied clock is the
+	// only external code on this path; a panic from it must not leave c.mu
+	// held, or the scope cleanup in Enable would deadlock.
+	started := elapsedNow(c.options.Clock)
 	c.mu.Lock()
 	if owner != nil && !owner.live {
 		c.mu.Unlock()
@@ -179,7 +183,7 @@ func (x *execution[T]) singleFlight(flights map[string]*flight[T], owner *scope[
 		<-f.done
 		return f.value, f.err
 	}
-	f := &flight[T]{done: make(chan struct{}), started: elapsedNow(c.options.Clock)}
+	f := &flight[T]{done: make(chan struct{}), started: started}
 	flights[x.key] = f
 	c.mu.Unlock()
 	f.value, f.err = callSafely(run)

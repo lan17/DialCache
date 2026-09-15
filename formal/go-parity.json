@@ -14270,7 +14270,7 @@
               "putRemote",
               "recover"
             ],
-            "sha256": "cde64ae32089281452430d3f49aefaa15e8c2bd0435f17c133356630e49bac9d"
+            "sha256": "21d52573a7390018ae0069c613a2370b833161c6b72aa5834b08e79e2a9b6330"
           },
           {
             "path": "go/deadline.go",
@@ -14667,7 +14667,7 @@
               "remoteValue",
               "localResult"
             ],
-            "sha256": "cde64ae32089281452430d3f49aefaa15e8c2bd0435f17c133356630e49bac9d"
+            "sha256": "21d52573a7390018ae0069c613a2370b833161c6b72aa5834b08e79e2a9b6330"
           }
         ]
       }
@@ -15111,7 +15111,7 @@
               "putLocal",
               "shared"
             ],
-            "sha256": "cde64ae32089281452430d3f49aefaa15e8c2bd0435f17c133356630e49bac9d"
+            "sha256": "21d52573a7390018ae0069c613a2370b833161c6b72aa5834b08e79e2a9b6330"
           },
           {
             "path": "go/api.go",
@@ -15551,7 +15551,7 @@
               "canRecover",
               "recover"
             ],
-            "sha256": "cde64ae32089281452430d3f49aefaa15e8c2bd0435f17c133356630e49bac9d"
+            "sha256": "21d52573a7390018ae0069c613a2370b833161c6b72aa5834b08e79e2a9b6330"
           },
           {
             "path": "go/shadow.go",
@@ -16902,7 +16902,7 @@
               "errorEvent",
               "duration"
             ],
-            "sha256": "cde64ae32089281452430d3f49aefaa15e8c2bd0435f17c133356630e49bac9d"
+            "sha256": "21d52573a7390018ae0069c613a2370b833161c6b72aa5834b08e79e2a9b6330"
           },
           {
             "path": "go/shadow.go",
