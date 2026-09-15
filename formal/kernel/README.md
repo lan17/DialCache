@@ -62,7 +62,9 @@ input, the public view and the two fixture constants named above.
 
 Run `make kernel-pilot` with the same Node, Go and Quint prerequisites as
 `make formal`. The target is included in `make formal` and the full formal
-workflow, independently of the unchanged full-profile replay lanes.
+workflow, independently of the unchanged full-profile replay lanes. Its
+generation-lane measurement deliberately runs each kernel view until Node's
+default heap is exhausted, twice per check, a few gigabytes each time.
 
 [`pilot.json`](./pilot.json) records twelve input-only histories. The runner
 executes each exact sequence in both the original profile and the shared
@@ -78,7 +80,7 @@ they receive no kernel state or expected result as an implementation input.
 | Shared failure followed by a fresh successful attempt | Layers and effects | C11, C15 |
 | Invalidation before acquisition suppresses source publication | Layers | C33, C34 |
 | Invalidation after acquisition permits publication but fences a later read | Layers | C33, C34, C36 |
-| Tracked source fills Redis; the next read warms local, then local serves; one further call past that boundary keeps the label | Layers | C05, C31 |
+| Tracked source fills Redis; the next read warms local, then local serves; the history continues one call past that boundary | Layers | C05, C31 |
 | Timed-out raw source settles during its replacement | Effects | C25 |
 | Accepted serialization and write finish after the source deadline | Effects | C26 |
 | Fulfillment or rejection at the exact deadline before timer delivery | Effects | C25 |
@@ -117,7 +119,9 @@ The check also requires:
   records each side's property cost; the without-invariants ratio (1.9 for
   layers, 3.5 for effects) is the transition-and-monitor ratio. Carrying the
   originals' properties is a #165 work item next to monitor cost and exported
-  state size.
+  state size, and which pairing the #165 budget eventually gates (this one, or
+  the plain or frozen pairing once monitor cost is addressed) is an open
+  decision recorded there.
 - Records, not gates, that locate the remaining cost: the same pairing without
   invariants; the kernel view with its monitor assignment replaced by
   `monitor' = monitor`, which skips the kernel's witness observation
@@ -137,12 +141,15 @@ The check also requires:
   signal, timeout, wall time, traces and bytes, and `generationParity`: the
   kernel view completed under the lane's own Node heap within
   `generation.maxRatio` in `pilot.json` (2.5) times the original in both wall
-  time and trace bytes. Trace size is part of parity on purpose: the traces are
-  what the replay lanes read and what exhausts the heap; the only completed
-  kernel generation on record, with a 12 GB heap, was 2.3 times the original's
-  time and 2.75 times its bytes. Peak memory is not measured; completion under
-  the default heap stands in for it, and the record notes the Node options in
-  effect so a raised heap is visible. This is the generation-runtime budget of
+  time and trace bytes. Trace size is part of parity on purpose: raw trace
+  bytes are the proxy for generation memory and time (the replay lanes read
+  projected traces, which drop the kernel state); the only completed kernel
+  generation on record, with a 12 GB heap, was 2.3 times the original's time
+  and 2.75 times its bytes. Peak memory is not measured; completion under the
+  default heap stands in for it, and the record notes the Node version, heap
+  limit and options that the attempts ran under, probed from the same `node`
+  the quint shim resolves, so a flip can be told apart from a runner or Node
+  change. This is the generation-runtime budget of
   #165 and it is currently unmet: under the default heap both kernel views run
   out of memory before writing a trace (see below). A property violation on
   either side, or an original that cannot complete its own command, fails the

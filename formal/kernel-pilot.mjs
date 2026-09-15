@@ -97,7 +97,11 @@ export function witnessCheckpoints(raw, required, path = 'pilot') {
     }
     for (const label of required) if (labels.includes(label)) checkpoints[label].push(index);
   }
-  for (const label of required) if (!checkpoints[label].length) throw new Error(`${path}: Quint never witnessed ${label}`);
+  for (const label of required) {
+    if (!checkpoints[label].length) throw new Error(`${path}: Quint never witnessed ${label}`);
+    // Labels accumulate, so a credited label is still recorded at the last state.
+    if (!checkpoints[label].includes(raw.states.length - 1)) throw new Error(`${path}: Quint did not retain ${label} at the final state`);
+  }
   return checkpoints;
 }
 
@@ -303,12 +307,21 @@ async function generateHistory(model, history, output, settings, invariant) {
   additions.push(`action pilotInit = all { ${calls[0]}, pilotCursor' = 0 }`);
   additions.push(`action pilotStep = any { ${calls.slice(1).map((call, index) => `all { pilotCursor == ${index}, ${call}, pilotCursor' = ${index + 1} }`).join(', ')} }`);
   const end = model.source.lastIndexOf('}');
-  writeFileSync(model.path, model.source.slice(0, end) + '\n' + additions.join('\n') + '\n' + model.source.slice(end));
-  const result = await execute('quint', ['run', model.path, `--backend=${settings.backend}`, '--n-threads=1', '--max-samples=1', `--seed=${settings.seed}`,
-    '--init=pilotInit', '--step=pilotStep', `--max-steps=${calls.length - 1}`, '--n-traces=1', `--out-itf=${output}`,
-    ...(invariant ? ['--invariants', invariant, `--out=${output}.result.json`] : [])], root, `${output}.log`, cleanEnvironment(process.env), invariant ? [0, 1] : [0]);
-  return { raw: json(output), durationMs: result.durationMs, status: result.status,
-    ...(invariant ? { result: json(`${output}.result.json`) } : {}) };
+  const scheduled = model.source.slice(0, end) + '\n' + additions.join('\n') + '\n' + model.source.slice(end);
+  // The scheduler is compiled from the prepared copy in place and the copy is
+  // restored afterwards, so every later reader of model.path sees the pristine
+  // module; the scheduled text stays beside the trace for a failing run's log.
+  writeFileSync(`${output}.qnt`, scheduled);
+  writeFileSync(model.path, scheduled);
+  try {
+    const result = await execute('quint', ['run', model.path, `--backend=${settings.backend}`, '--n-threads=1', '--max-samples=1', `--seed=${settings.seed}`,
+      '--init=pilotInit', '--step=pilotStep', `--max-steps=${calls.length - 1}`, '--n-traces=1', `--out-itf=${output}`,
+      ...(invariant ? ['--invariants', invariant, `--out=${output}.result.json`] : [])], root, `${output}.log`, cleanEnvironment(process.env), invariant ? [0, 1] : [0]);
+    return { raw: json(output), durationMs: result.durationMs, status: result.status,
+      ...(invariant ? { result: json(`${output}.result.json`) } : {}) };
+  } finally {
+    writeFileSync(model.path, model.source);
+  }
 }
 
 async function checkModel(profile, definition, model, settings, bounds, output) {
@@ -424,8 +437,22 @@ export const generationTimeout = { originalMs: 600_000, kernelFactor: 4, kernelF
 export function kernelGenerationTimeout(original) {
   return Math.min(Math.max(Math.round(generationTimeout.kernelFactor * original.durationMs), generationTimeout.kernelFloorMs), generationTimeout.originalMs);
 }
+// What "completes under the default heap" means depends on the node that the
+// quint shim resolves on PATH and on NODE_OPTIONS, which the attempts inherit;
+// neither is necessarily the pilot's own process (direct invocation, per-process
+// node flags), so the probe is a child of the same environment.
+export function parseNodeEnvironment(result) {
+  if (result.error || result.status !== 0) throw new Error(`Cannot probe the node that runs quint: ${result.error?.message ?? result.stderr.trim()}`);
+  const probed = JSON.parse(result.stdout);
+  for (const field of ['version', 'execPath']) if (typeof probed[field] !== 'string' || !probed[field]) throw new Error(`Node probe returned no ${field}`);
+  for (const field of ['heapSizeLimit', 'totalMemory']) if (!Number.isSafeInteger(probed[field]) || probed[field] <= 0) throw new Error(`Node probe returned no ${field}`);
+  return { version: probed.version, execPath: probed.execPath, heapSizeLimit: probed.heapSizeLimit, totalMemory: probed.totalMemory };
+}
+export const nodeProbe = ['-p', 'JSON.stringify({ version: process.version, execPath: process.execPath, '
+  + 'heapSizeLimit: require("v8").getHeapStatistics().heap_size_limit, totalMemory: require("os").totalmem() })'];
 async function measureGeneration(profile, baseline, kernel, settings, generation, baselineInvariants, maxRatio, output) {
   const environment = cleanEnvironment(process.env);
+  const node = parseNodeEnvironment(await spawnBuffered('node', nodeProbe, { cwd: root, env: environment, timeoutMs: 30_000 }));
   const attempt = async (name, model, invariants, timeoutMs) => {
     const directory = resolve(output, 'checks', profile, `generation-${name}`); mkdirSync(directory, { recursive: true });
     const logPath = resolve(output, 'checks', profile, `generation-${name}.log`);
@@ -435,9 +462,7 @@ async function measureGeneration(profile, baseline, kernel, settings, generation
       writeFileSync(logPath, result.stdout + result.stderr);
       const traces = readdirSync(directory).filter(file => file.endsWith('.itf.json'));
       const bytes = traces.reduce((sum, file) => sum + statSync(resolve(directory, file)).size, 0);
-      // A raised Node heap in the environment would change what "completes" means.
-      return { ...generationOutcome(name, result, traces.length, generation, bytes, timeoutMs), invariants: [...invariants], log: relative(root, logPath),
-        nodeOptions: environment.NODE_OPTIONS ?? null };
+      return { ...generationOutcome(name, result, traces.length, generation, bytes, timeoutMs), invariants: [...invariants], log: relative(root, logPath) };
     } finally {
       // The traces are the lane's full corpus; the evidence artifact keeps only the counts.
       rmSync(directory, { recursive: true, force: true });
@@ -449,6 +474,7 @@ async function measureGeneration(profile, baseline, kernel, settings, generation
     : { status: 'not-attempted', reason: 'the original profile did not complete its own generation command', invariants: [...pilotInvariants] };
   const record = { kind: 'generation-workload', gated: false, tracesWritten: true, mbt: true,
     bounds: { maxSamples: generation.maxSamples, maxSteps: generation.maxSteps, traces: generation.traces },
+    environment: { nodeOptions: environment.NODE_OPTIONS ?? null, node },
     baseline: original, kernel: view, ...generationParity(original, view, maxRatio) };
   const problems = [];
   if (original.status !== 'completed') {
@@ -496,7 +522,6 @@ async function checkChallenges(catalog, pilot, settings, output, report, persist
         writeFileSync(mutationPath, expectation === 'baseline' ? source : source.replace(challenge.before, challenge.after));
         // Compile before running either property measurement. Scheduler code is
         // regenerated from the same unmodified profile for both measurements.
-        writeFileSync(model.path, model.source);
         await execute('quint', ['typecheck', model.path], root, resolve(directory, `${expectation}-typecheck.log`));
         const path = resolve(directory, `${expectation}.itf.json`);
         const measured = await generateHistory(model, history, path, settings, check.invariant);
@@ -588,9 +613,6 @@ export async function runPilot(mode = 'check') {
       // job that is killed mid-measurement (report.json then stays at status
       // running) still carries the histories, replays and faults. Their own
       // failures are recorded here and raised with the sampling bound below.
-      // generateHistory rewrote each prepared model in place; sampling needs the
-      // pristine sources back.
-      for (const model of models.values()) writeFileSync(model.path, model.source);
       for (const [profile, definition] of Object.entries(catalog.profiles)) {
         const original = originals.get(profile);
         try {

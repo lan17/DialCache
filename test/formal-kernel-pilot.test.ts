@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 type Trace = { states: Array<Record<string, any>>; [key: string]: unknown };
 type Schedule = Array<[string, number]>;
-const { projectPilotTrace, comparePilotHistory, witnessCheckpoints, validatePilot, validatePilotChallenges, validatePilotChallengeResult, validateWitnessControlResult, explorationComparison, generationOutcome, generationParity, generationTimeout, kernelGenerationTimeout, monitorAssignment, validateMonitorAnchor, pilotInvariants, explorationRepetitions } = await import(
+const { projectPilotTrace, comparePilotHistory, witnessCheckpoints, validatePilot, validatePilotChallenges, validatePilotChallengeResult, validateWitnessControlResult, explorationComparison, generationOutcome, generationParity, generationTimeout, kernelGenerationTimeout, monitorAssignment, validateMonitorAnchor, parseNodeEnvironment, nodeProbe, pilotInvariants, explorationRepetitions } = await import(
   new URL("../formal/kernel-pilot.mjs", import.meta.url).href,
 ) as {
   projectPilotTrace(raw: unknown, path?: string): Trace;
@@ -22,6 +22,8 @@ const { projectPilotTrace, comparePilotHistory, witnessCheckpoints, validatePilo
   kernelGenerationTimeout(original: { durationMs: number }): number;
   monitorAssignment: { before: string; after: string };
   validateMonitorAnchor(source: string, context?: string): string;
+  parseNodeEnvironment(result: Record<string, unknown>): Record<string, unknown>;
+  nodeProbe: string[];
   pilotInvariants: string[];
   explorationRepetitions: number;
 };
@@ -91,9 +93,11 @@ describe("supplemental kernel pilot evidence", () => {
     expect(() => comparePilotHistory("effects", baseline, pilot, schedule(baseline), "effects/truncated")).toThrow(/effects\/truncated: incomplete schedule/);
   });
 
-  it("requires the declared consequential labels exported by Quint", () => {
+  it("requires the declared consequential labels exported by Quint and their retention at the final state", () => {
     const pilot = projectPilotTrace(exported(read("formal/effects-smoke.itf.json")));
     expect(witnessCheckpoints(pilot, ["coalesced-success"])["coalesced-success"]).toHaveLength(pilot.states.length);
+    const dropped = structuredClone(pilot); dropped.states.at(-1)!.pilotWitnesses = { "#set": [] };
+    expect(() => witnessCheckpoints(dropped, ["coalesced-success"], "effects/dropped")).toThrow(/effects\/dropped: Quint did not retain coalesced-success at the final state/);
     expect(() => witnessCheckpoints(pilot, ["shared-failure-retry"], "effects/missing-witness")).toThrow(/effects\/missing-witness: Quint never witnessed shared-failure-retry/);
     pilot.states[1]!.pilotWitnesses = { "#set": [1] };
     expect(() => witnessCheckpoints(pilot, [], "effects/invalid-witness")).toThrow(/effects\/invalid-witness step 1: invalid Quint witness set/);
@@ -236,6 +240,18 @@ describe("supplemental kernel pilot evidence", () => {
     expect(kernelGenerationTimeout({ durationMs: 10_900 })).toBe(150_000);
     expect(kernelGenerationTimeout({ durationMs: 40_000 })).toBe(160_000);
     expect(kernelGenerationTimeout({ durationMs: 200_000 })).toBe(600_000);
+  });
+
+  it("records the node that quint runs under from a probe of the attempts' own environment", () => {
+    expect(nodeProbe[0]).toBe("-p");
+    const probed = { version: "v24.20.0", execPath: "/opt/node/bin/node", heapSizeLimit: 4_345_298_944, totalMemory: 68_719_476_736 };
+    const ok = { error: undefined, status: 0, stdout: JSON.stringify(probed) + "\n", stderr: "" };
+    expect(parseNodeEnvironment(ok)).toEqual(probed);
+    expect(() => parseNodeEnvironment({ ...ok, status: 1, stderr: "node: not found" })).toThrow(/Cannot probe the node that runs quint: node: not found/);
+    expect(() => parseNodeEnvironment({ ...ok, error: new Error("spawn ENOENT") })).toThrow(/spawn ENOENT/);
+    for (const broken of [{ ...probed, version: "" }, { ...probed, execPath: 1 }, { ...probed, heapSizeLimit: 0 }, { ...probed, totalMemory: "big" }]) {
+      expect(() => parseNodeEnvironment({ ...ok, stdout: JSON.stringify(broken) })).toThrow(/Node probe returned no/);
+    }
   });
 
   it("credits only an invariant violation at its declared public input checkpoint", () => {
