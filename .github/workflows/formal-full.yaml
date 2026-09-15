@@ -20,7 +20,11 @@ concurrency:
 jobs:
   kernel-pilot:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Run 34916911057 took 15 minutes with the generation-lane and frozen-monitor
+    # measurements (7 to 9 minutes before them); 2x for a slow runner is 30, and
+    # 40 leaves margin. The pilot's per-process timeouts (300 s per Quint call,
+    # 600 s per generation attempt) only keep one hang from consuming the job.
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup-validation

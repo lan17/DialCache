@@ -229,8 +229,8 @@
       "edits": [
         {
           "path": "go/cache.go",
-          "before": "item.used = c.sequence\n\t\tc.local[key] = item",
-          "after": "item.used = c.sequence\n\t\titem.insertedMS = c.options.Clock.ElapsedMS()\n\t\tc.local[key] = item"
+          "before": "\tc.local.Get(key)\n\treturn item.value, true",
+          "after": "\titem.insertedMS = c.options.Clock.ElapsedMS()\n\tc.local.Add(key, item)\n\treturn item.value, true"
         }
       ],
       "requiredDetections": [
