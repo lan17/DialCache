@@ -63,8 +63,8 @@ input, the public view and the two fixture constants named above.
 Run `make kernel-pilot` with the same Node, Go and Quint prerequisites as
 `make formal`. The target is included in `make formal` and the full formal
 workflow, independently of the unchanged full-profile replay lanes. Its
-generation-lane measurement deliberately runs each kernel view until Node's
-default heap is exhausted, twice per check, a few gigabytes each time.
+generation-lane measurement deliberately runs each of the two kernel views
+once until Node's default heap is exhausted, a few gigabytes each time.
 
 [`pilot.json`](./pilot.json) records twelve input-only histories. The runner
 executes each exact sequence in both the original profile and the shared
@@ -125,8 +125,9 @@ The check also requires:
 - Records, not gates, that locate the remaining cost: the same pairing without
   invariants; the kernel view with its monitor assignment replaced by
   `monitor' = monitor`, which skips the kernel's witness observation
-  (`publicView`) and `Witness::advance` and nothing else, so its difference to
-  the full view is that cost; and the fixed cost of a one-sample, one-step run
+  (`publicView`) and `Witness::advance` at every step after initialization and
+  nothing else, so its difference to the full view is that cost; and the fixed
+  cost of a one-sample, one-step run
   of each model. The cost measurements run after the histories, replays and
   faults, so a job killed mid-measurement still carries the correctness record.
 - The generation lane's own command for both models, built by the same
@@ -192,18 +193,23 @@ against 10.7 s with invariants and 2.4 s against 8.3 s without. In the same
 check the kernel views with the monitor assignment frozen took 5.8 s (layers)
 and 7.1 s (effects) against those originals with their nine invariants, so the
 witness observation and monitor advance cost 2.1 s and 3.6 s of the gated runs,
-about 13 to 15 microseconds per step; the kernel's own transitions and five
-properties sit at or below the originals. With the refolding monitor, at 2,000
-samples of 40 steps, the kernel views had taken 4 to 7 times the originals with
-invariants and 9 to 13 times without. Making the monitor cheaper is the next
-parity work item for sampling cost.
+about 13 to 15 microseconds per step. The frozen layers view is below its
+original; the frozen effects view is about 8 percent above its original. With
+the monitor's share removed from the plain runs, the kernel's transitions alone
+take about 2.9 s (layers) against the original's 2.7 s, within the noise of two
+runs, and about 4.7 s (effects) against 2.4 s, roughly double; the gated pairing
+masks the effects gap because the originals carry nine properties. With the
+refolding monitor, at 2,000 samples of 40 steps, the kernel views had taken 4
+to 7 times the originals with invariants and 9 to 13 times without. Making the
+monitor cheaper is the next parity work item for sampling cost; the effects
+view's transitions are the one after it.
 
 The generation lane writes 512 traces per profile with `--mbt`. The originals
 complete that command in 11 s (effects, 108 MB of traces) and 14 s (layers,
 168 MB) with a peak of about 3 GB of memory. Both kernel views exhaust Node's
 default heap before writing a trace; given a 12 GB heap the effects kernel view
 completes in 25 s with 297 MB of traces and a 7 GB peak, 2.3 times the
-original's wall time and 2.5 times its memory. The exported state is the
+original's wall time and its memory. The exported state is the
 cause: per state the kernel's `s` is 61 to 83 percent of the bytes, the
 effects view's projection up to 29 percent and the monitor about 10 percent.
 Until that state shrinks or the lane's configuration for kernel-based profiles

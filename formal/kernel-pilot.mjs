@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { copyFileSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { basename, dirname, relative, resolve } from 'node:path';
+import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { constrainAction } from './generated-fixtures.mjs';
@@ -307,21 +307,17 @@ async function generateHistory(model, history, output, settings, invariant) {
   additions.push(`action pilotInit = all { ${calls[0]}, pilotCursor' = 0 }`);
   additions.push(`action pilotStep = any { ${calls.slice(1).map((call, index) => `all { pilotCursor == ${index}, ${call}, pilotCursor' = ${index + 1} }`).join(', ')} }`);
   const end = model.source.lastIndexOf('}');
-  const scheduled = model.source.slice(0, end) + '\n' + additions.join('\n') + '\n' + model.source.slice(end);
-  // The scheduler is compiled from the prepared copy in place and the copy is
-  // restored afterwards, so every later reader of model.path sees the pristine
-  // module; the scheduled text stays beside the trace for a failing run's log.
-  writeFileSync(`${output}.qnt`, scheduled);
-  writeFileSync(model.path, scheduled);
-  try {
-    const result = await execute('quint', ['run', model.path, `--backend=${settings.backend}`, '--n-threads=1', '--max-samples=1', `--seed=${settings.seed}`,
-      '--init=pilotInit', '--step=pilotStep', `--max-steps=${calls.length - 1}`, '--n-traces=1', `--out-itf=${output}`,
-      ...(invariant ? ['--invariants', invariant, `--out=${output}.result.json`] : [])], root, `${output}.log`, cleanEnvironment(process.env), invariant ? [0, 1] : [0]);
-    return { raw: json(output), durationMs: result.durationMs, status: result.status,
-      ...(invariant ? { result: json(`${output}.result.json`) } : {}) };
-  } finally {
-    writeFileSync(model.path, model.source);
-  }
+  // The scheduler compiles as a sibling of the prepared copy, so its relative
+  // imports resolve and the copy itself is never rewritten; Quint selects the
+  // main module by content, not by file name. The sibling holds the schedule
+  // of the last history it ran, which is the failing one when a check stops.
+  const scheduledPath = `${model.path.slice(0, -'.qnt'.length)}.scheduled.qnt`;
+  writeFileSync(scheduledPath, model.source.slice(0, end) + '\n' + additions.join('\n') + '\n' + model.source.slice(end));
+  const result = await execute('quint', ['run', scheduledPath, `--backend=${settings.backend}`, '--n-threads=1', '--max-samples=1', `--seed=${settings.seed}`,
+    '--init=pilotInit', '--step=pilotStep', `--max-steps=${calls.length - 1}`, '--n-traces=1', `--out-itf=${output}`,
+    ...(invariant ? ['--invariants', invariant, `--out=${output}.result.json`] : [])], root, `${output}.log`, cleanEnvironment(process.env), invariant ? [0, 1] : [0]);
+  return { raw: json(output), durationMs: result.durationMs, status: result.status, scheduled: relative(root, scheduledPath),
+    ...(invariant ? { result: json(`${output}.result.json`) } : {}) };
 }
 
 async function checkModel(profile, definition, model, settings, bounds, output) {
@@ -597,7 +593,7 @@ export async function runPilot(mode = 'check') {
       const baseline = normalizeReplayInputs(baselineRun.raw), pilot = projectPilotTrace(pilotRun.raw, rawPath);
       const traceBytes = { baseline: statSync(baselinePath).size, kernel: statSync(rawPath).size };
       result.generation = { baselineMs: baselineRun.durationMs, kernelMs: pilotRun.durationMs, ratio: pilotRun.durationMs / baselineRun.durationMs,
-        traceBytes: { ...traceBytes, ratio: traceBytes.kernel / traceBytes.baseline } };
+        traceBytes: { ...traceBytes, ratio: traceBytes.kernel / traceBytes.baseline }, scheduled: { baseline: baselineRun.scheduled, kernel: pilotRun.scheduled } };
       result.differential = comparePilotHistory(history.profile, baseline, pilot, history.actions, `${history.profile}/${history.id}`);
       result.witnesses = witnessCheckpoints(pilot, history.witnesses, `${history.profile}/${history.id}`);
       const path = resolve(directory, `${history.id}.itf.json`); save(path, pilot);
