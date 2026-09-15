@@ -643,13 +643,13 @@
           "test": "TestInlineFallbackDeadlineSnapshot",
           "path": "go/api_boundary_test.go",
           "scope": "Per-invocation fallback deadline remains captured while the policy provider or initial remote read is pending.",
-          "sha256": "1028fb26afe921ca730435829213546870fb5a48e49251a3914a924506ec5903"
+          "sha256": "0424b4a182c609e7a5fdacaf248c8b7c1ef977ed05607e52815388eadd75ab9b"
         },
         {
           "test": "TestInvalidOperationCodecFailsOpenWithoutDefaultSubstitution",
           "path": "go/api_boundary_test.go",
           "scope": "Malformed operation codec fails open without substituting the instance/default codec or writing invalid data.",
-          "sha256": "1028fb26afe921ca730435829213546870fb5a48e49251a3914a924506ec5903"
+          "sha256": "0424b4a182c609e7a5fdacaf248c8b7c1ef977ed05607e52815388eadd75ab9b"
         },
         {
           "path": "go/feature_boundary_test.go",
@@ -890,7 +890,7 @@
           "test": "TestInstanceCapacitySafeIntegerBounds",
           "path": "go/api_boundary_test.go",
           "scope": "On 64-bit Go, local and shadow capacity construction rejects values above the safe-integer maximum and accepts the exact maximum without proportional allocation.",
-          "sha256": "1028fb26afe921ca730435829213546870fb5a48e49251a3914a924506ec5903"
+          "sha256": "0424b4a182c609e7a5fdacaf248c8b7c1ef977ed05607e52815388eadd75ab9b"
         },
         {
           "path": "go/feature_boundary_test.go",
@@ -1023,7 +1023,7 @@
           "test": "TestLoggerFailuresPreserveSourceAndMaintenanceResults",
           "path": "go/api_boundary_test.go",
           "scope": "Failing native loggers preserve original source values/errors and explicit invalidation errors.",
-          "sha256": "1028fb26afe921ca730435829213546870fb5a48e49251a3914a924506ec5903"
+          "sha256": "0424b4a182c609e7a5fdacaf248c8b7c1ef977ed05607e52815388eadd75ab9b"
         },
         {
           "test": "TestObserverIsolationAndBoundedNativeJSONLogs",
