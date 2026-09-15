@@ -118,6 +118,15 @@ module lifecycle_witnesses_test {
     .then(check(lateSource.append(observed("rejectLoader", 0, List(4), 10, 1, 1, 0, 0)), true))
     .expect(labels.contains("late-reject-rejected"))
 
+  // Labels accumulate: a label earned at one step survives every later step,
+  // including those that re-earn nothing.
+  run oneShotLabelSurvivesLaterStepsTest = check(lateSource.append(
+      observed("resolveLoader", 0, List(4), 10, 1, 1, 0, 0)), true)
+    .expect(labels.contains("late-resolve-rejected"))
+    .then(check(lateSource.append(observed("resolveLoader", 0, List(4), 10, 1, 1, 0, 0))
+      .append(observed("tick", -1, List(4), 20, 1, 1, 0, 0)), true))
+    .expect(labels.contains("late-resolve-rejected"))
+
   run layersImmediatePublicationAndSameIdentityProbeTest = check(List(initialized,
     observed("beginCall", 0, List(0), 0, 1, 1, 0, 0),
     observed("beginCall", 4, List(0, 0), 0, 1, 1, 0, 0),
@@ -185,6 +194,11 @@ module lifecycle_witnesses_test {
     .then(check(invalidationBeforeAcquisition.replaceAt(3,
       observed("resolveLoader", 1, List(1), 10000, 1, 1, 1, 1)), false))
     .expect(not(labels.contains("acquired-fence-suppresses-publication")))
+    // A write without a serialization is the one variant only the writes
+    // expectation rejects.
+    .then(check(invalidationBeforeAcquisition.replaceAt(3,
+      observed("resolveLoader", 1, List(1), 10000, 1, 1, 0, 1)), false))
+    .expect(not(labels.contains("acquired-fence-suppresses-publication")))
     .then(check(invalidationBeforeAcquisition, false))
     .expect(labels.contains("acquired-fence-suppresses-publication"))
 
@@ -213,7 +227,8 @@ module lifecycle_witnesses_test {
     observed("resolveLoader", 1, List(1), 10000, 1, 1, 1, 1),
     observed("beginCall", 12, List(1, 1), 10000, 2, 1, 1, 1),
     observed("beginCall", 12, List(1, 1, 1), 10000, 2, 1, 1, 1))
-  // A history that continues past a completed script keeps the label.
+  // A completed script's cursor stays put, so a history that continues past
+  // the script still carries its label at the later step.
   run completedScriptRetainsLabelTest = check(trackedLocalWarming.append(
       observed("beginCall", 12, List(1, 1, 1, 1), 10000, 2, 1, 1, 1)), false)
     .expect(labels.contains("tracked-redis-warms-local"))

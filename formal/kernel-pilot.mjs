@@ -161,7 +161,7 @@ export function validateWitnessControlResult(output, exitCode, required) {
 // without maxRatio the comparison is informational. Every run must itself
 // succeed. This bounds sampling cost, not the generation lane's trace output;
 // measureGeneration records that.
-export function explorationComparison(baseline, kernel, settings, bounds, { label = 'exploration', fixedCost, maxRatio } = {}) {
+export function explorationComparison(baseline, kernel, settings, bounds, fixedCost, { label, maxRatio }) {
   const timings = {};
   for (const [name, measured] of Object.entries({ baseline, kernel })) {
     if (!Array.isArray(measured?.runs) || !measured.runs.length) throw new Error(`${label}: missing ${name} sampled exploration measurement`);
@@ -204,7 +204,8 @@ export function explorationComparison(baseline, kernel, settings, bounds, { labe
 // recorded, not gated, until the kernel's exported state fits the lane; a
 // property violation on either side and an original that cannot complete its
 // own command are raised by the caller after the correctness evidence.
-export function generationOutcome(name, result, traces, generation, bytes, { timeoutMs } = {}) {
+export function generationOutcome(name, result, traces, generation, bytes, timeoutMs) {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error(`${name}: a generation attempt records the timeout it ran under`);
   const output = result.stdout + result.stderr;
   const completed = !result.error && result.status === 0 && traces === generation.traces;
   const violated = /^error: Invariant violated$/m.test(output) || /^\[violation\]/m.test(output);
@@ -212,8 +213,7 @@ export function generationOutcome(name, result, traces, generation, bytes, { tim
   const diagnostics = [...(result.error ? [result.error.message] : []),
     ...output.split('\n').map(line => line.trim()).filter(line => /out of memory|heap|fatal|error|killed|QNT\d{3}/i.test(line)).slice(0, 3)];
   return { status, exitStatus: result.status ?? null, signal: result.signal ?? null, durationMs: result.durationMs,
-    traces, expectedTraces: generation.traces, traceBytes: bytes,
-    ...(timeoutMs === undefined ? {} : { timeoutMs, timedOut: result.error?.code === 'ETIMEDOUT' }),
+    traces, expectedTraces: generation.traces, traceBytes: bytes, timeoutMs, timedOut: result.error?.code === 'ETIMEDOUT',
     ...(completed ? {} : { diagnostics: diagnostics.length ? diagnostics : [`${name} wrote ${traces} of ${generation.traces} traces`] }) };
 }
 
@@ -337,11 +337,11 @@ async function checkModel(profile, definition, model, settings, bounds, output) 
 
 // Sampling pairings at the original profile's generation bounds (its sample
 // count and step bound from execution.json), without trace output, two
-// repetitions per pairing with the original and the kernel view alternating
-// so a sustained slowdown lands on both sides. With each model's own
-// invariants is the gated pairing: it bounds the kernel's sampling cost. Two
-// records isolate where the remaining cost sits: both models without
-// invariants, and the kernel view with its witness monitor frozen. A
+// repetitions per sample with its sides alternating so a sustained slowdown
+// lands on every side. With each model's own invariants is the gated pairing:
+// it bounds the kernel's sampling cost; the kernel view with its witness
+// monitor frozen runs as a third side of that sample so its record shares the
+// window. Both models without invariants form a second, ungated sample. A
 // one-sample, one-step run of each model measures the fixed CLI cost. Equal
 // seeds do not imply equal inputs across different choice trees. A violation
 // is recorded here and raised by the caller after the correctness evidence.
@@ -353,18 +353,26 @@ export const monitorAssignment = {
   before: "monitor' = Witness::advance(monitor, { input: command, observation: publicView(updated) },\n      not(SETTLE.read), updated.config.sourceBudget)",
   after: "monitor' = monitor"
 };
+export function validateMonitorAnchor(source, context = 'formal/kernel/cache-kernel.qnt') {
+  if (source.split(monitorAssignment.before).length !== 2) throw new Error(`${context}: the kernel's monitor assignment anchor must match exactly once`);
+  return source;
+}
 async function measureExploration(profile, models, settings, generation, output, { baselineInvariants, maxRatio }) {
   const { baseline, kernel, frozen } = models;
   const bounds = { maxSamples: generation.maxSamples, maxSteps: generation.maxSteps };
   const options = [`--backend=${settings.backend}`, '--n-threads=1', `--seed=${settings.seed}`];
   // A property violation in a sampling run exits 1 with a counterexample in
-  // the --out report; it must surface as one, not as a failed command.
+  // the --out report; it must surface as one, naming the run that found it.
   const run = async (name, model, invariants, samples, steps, repetition) => {
     const path = resolve(output, 'checks', profile, `exploration-${name}-${repetition}.json`);
     const measured = await execute('quint', ['run', model.path, ...options, `--max-samples=${samples}`, `--max-steps=${steps}`,
       ...(invariants.length ? ['--invariants', ...invariants] : []), `--out=${path}`], root, `${path}.log`, cleanEnvironment(process.env), [0, 1]);
     const result = json(path);
-    validatePropertyResult(result, measured.status, 'baseline');
+    try {
+      validatePropertyResult(result, measured.status, 'baseline');
+    } catch (error) {
+      throw new Error(`${name} run ${repetition}: ${error.message}; see ${relative(root, path)}`);
+    }
     return { result, status: measured.status, durationMs: measured.durationMs, report: relative(root, path) };
   };
   // sides: [name, model, invariants]; every side runs once per repetition, in order.
@@ -376,23 +384,23 @@ async function measureExploration(profile, models, settings, generation, output,
     return Object.fromEntries(sides.map(([name, , invariants]) => [name, { runs: runs[name], invariants }]));
   };
   const fixed = await sample([['fixed-baseline', baseline, []], ['fixed-kernel', kernel, []]], 1, 1);
-  for (const side of Object.values(fixed)) for (const measured of side.runs) validatePropertyResult(measured.result, measured.status, 'baseline');
   const fixedCost = { baseline: Math.min(...fixed['fixed-baseline'].runs.map(measured => measured.durationMs)),
     kernel: Math.min(...fixed['fixed-kernel'].runs.map(measured => measured.durationMs)) };
   const report = { repetitions: explorationRepetitions, interleaved: true, fixedCost };
-  const gated = await sample([['baseline-invariants', baseline, baselineInvariants], ['kernel-invariants', kernel, pilotInvariants]], bounds.maxSamples, bounds.maxSteps);
-  report.withInvariants = explorationComparison(gated['baseline-invariants'], gated['kernel-invariants'], settings, bounds,
-    { label: `${profile} exploration with invariants`, fixedCost, maxRatio });
+  const gated = await sample([['baseline-invariants', baseline, baselineInvariants], ['kernel-invariants', kernel, pilotInvariants],
+    ['kernel-frozen-monitor', frozen, pilotInvariants]], bounds.maxSamples, bounds.maxSteps);
+  report.withInvariants = explorationComparison(gated['baseline-invariants'], gated['kernel-invariants'], settings, bounds, fixedCost,
+    { label: `${profile} exploration with invariants`, maxRatio });
   const plain = await sample([['baseline', baseline, []], ['kernel', kernel, []]], bounds.maxSamples, bounds.maxSteps);
-  report.withoutInvariants = explorationComparison(plain.baseline, plain.kernel, settings, bounds,
-    { label: `${profile} exploration without invariants`, fixedCost });
-  const frozenRuns = await sample([['kernel-frozen-monitor', frozen, pilotInvariants]], bounds.maxSamples, bounds.maxSteps);
+  report.withoutInvariants = explorationComparison(plain.baseline, plain.kernel, settings, bounds, fixedCost,
+    { label: `${profile} exploration without invariants` });
   // The kernel view with its monitor frozen, against the original with its own
-  // invariants: the difference to the gated kernel run is the monitor's cost.
-  // The unfrozen view's fixed cost serves the frozen one; freezing changes no
-  // CLI startup.
-  const frozenComparison = explorationComparison(gated['baseline-invariants'], frozenRuns['kernel-frozen-monitor'], settings, bounds,
-    { label: `${profile} exploration with frozen monitor`, fixedCost });
+  // invariants, from the same interleaved sample as the gated pairing: the
+  // difference to the gated kernel run is the cost of the kernel's witness
+  // observation (publicView) and the monitor's advance. The unfrozen view's
+  // fixed cost serves the frozen one; freezing changes no CLI startup.
+  const frozenComparison = explorationComparison(gated['baseline-invariants'], gated['kernel-frozen-monitor'], settings, bounds, fixedCost,
+    { label: `${profile} exploration with frozen monitor` });
   report.monitorFrozen = { ...frozenComparison, monitorMs: report.withInvariants.kernel.durationMs - frozenComparison.kernel.durationMs };
   // Each side's property cost is its gated run less its plain run; the gated
   // ratio flatters a kernel that carries fewer, cheaper properties than the
@@ -403,28 +411,33 @@ async function measureExploration(profile, models, settings, generation, output,
   return report;
 }
 
-// The original runs under the lane's own ceiling. The kernel view may take at
-// most the bound times the original, so a run well past that cannot reach
-// parity; its timeout is derived from the original's wall time, with a floor
-// above the observed heap-exhaustion abort (78 to 84 s hosted) so that abort
-// stays observable instead of being cut off by the timer. A timeout ends the
-// quint process; its Rust evaluator exits with it (verified: none survived a
-// SIGTERM mid-sampling).
+// These are the pilot's own bounds; the generation lane has no per-command
+// ceiling, only its job timeout. The original's attempt gets a fixed ceiling
+// far above its observed 27 to 32 s hosted. The kernel view may take at most
+// the bound times the original, so a run well past that cannot reach parity;
+// its timeout is four times the original's wall time, at least 150 s so the
+// observed heap-exhaustion abort (78 to 84 s hosted) stays observable instead
+// of being cut off by the timer, and at most the original's ceiling. A timeout
+// ends the quint process; its Rust evaluator exits with it (verified: none
+// survived a SIGTERM mid-sampling).
 export const generationTimeout = { originalMs: 600_000, kernelFactor: 4, kernelFloorMs: 150_000 };
 export function kernelGenerationTimeout(original) {
-  return Math.max(Math.round(generationTimeout.kernelFactor * original.durationMs), generationTimeout.kernelFloorMs);
+  return Math.min(Math.max(Math.round(generationTimeout.kernelFactor * original.durationMs), generationTimeout.kernelFloorMs), generationTimeout.originalMs);
 }
 async function measureGeneration(profile, baseline, kernel, settings, generation, baselineInvariants, maxRatio, output) {
+  const environment = cleanEnvironment(process.env);
   const attempt = async (name, model, invariants, timeoutMs) => {
     const directory = resolve(output, 'checks', profile, `generation-${name}`); mkdirSync(directory, { recursive: true });
     const logPath = resolve(output, 'checks', profile, `generation-${name}.log`);
     try {
       const result = await spawnBuffered('quint', generationArguments(model.path, generation, invariants, { settings, seed: settings.seed, outputDirectory: directory }),
-        { cwd: root, env: cleanEnvironment(process.env), timeoutMs });
+        { cwd: root, env: environment, timeoutMs });
       writeFileSync(logPath, result.stdout + result.stderr);
       const traces = readdirSync(directory).filter(file => file.endsWith('.itf.json'));
       const bytes = traces.reduce((sum, file) => sum + statSync(resolve(directory, file)).size, 0);
-      return { ...generationOutcome(name, result, traces.length, generation, bytes, { timeoutMs }), invariants: [...invariants], log: relative(root, logPath) };
+      // A raised Node heap in the environment would change what "completes" means.
+      return { ...generationOutcome(name, result, traces.length, generation, bytes, timeoutMs), invariants: [...invariants], log: relative(root, logPath),
+        nodeOptions: environment.NODE_OPTIONS ?? null };
     } finally {
       // The traces are the lane's full corpus; the evidence artifact keeps only the counts.
       rmSync(directory, { recursive: true, force: true });
@@ -451,9 +464,8 @@ async function measureGeneration(profile, baseline, kernel, settings, generation
 // A copy of the kernel view whose monitor never advances, for cost attribution.
 async function prepareFrozenModel(definition, directory) {
   const model = await prepareModel(definition.model, definition.module, directory);
-  const kernelPath = resolve(directory, 'formal/kernel/cache-kernel.qnt'), kernel = read(kernelPath);
-  if (kernel.split(monitorAssignment.before).length !== 2) throw new Error(`${definition.model}: the kernel's monitor assignment anchor must match exactly once`);
-  writeFileSync(kernelPath, kernel.replace(monitorAssignment.before, monitorAssignment.after));
+  const kernelPath = resolve(directory, 'formal/kernel/cache-kernel.qnt');
+  writeFileSync(kernelPath, validateMonitorAnchor(read(kernelPath), definition.model).replace(monitorAssignment.before, monitorAssignment.after));
   await execute('quint', ['typecheck', model.path], root, resolve(directory, 'typecheck.log'));
   return model;
 }
@@ -527,12 +539,13 @@ export async function runPilot(mode = 'check') {
   try {
     const catalog = validatePilot(json(resolve(root, catalogPath)));
     const challenges = mode === 'check' ? validatePilotChallenges(json(resolve(root, challengePath)), catalog) : undefined;
+    if (mode === 'check') validateMonitorAnchor(read(resolve(root, 'formal/kernel/cache-kernel.qnt')));
     const execution = readExecution(), settings = execution.settings;
     validateExecution(execution);
     report.sources = sources(); report.seed = settings.seed;
     report.models = {}; report.challenges = []; report.exploration = {}; report.generation = {};
     if (mode === 'check') report.witnessControls = await checkWitnessControls(settings, output);
-    const models = new Map();
+    const models = new Map(), originals = new Map();
     const violations = [];
     for (const [profile, definition] of Object.entries(catalog.profiles)) {
       for (const flavor of ['baseline', 'pilot']) {
@@ -542,34 +555,11 @@ export async function runPilot(mode = 'check') {
         models.set(`${profile}/${flavor}`, prepared);
         if (mode === 'check' && flavor === 'pilot') report.models[profile] = await checkModel(profile, definition, prepared, settings, execution.check, output);
       }
-      if (mode === 'check') {
-        // validateExecution has already checked every scheduled model's
-        // invariants and generation bounds; only the mapping can be missing.
-        const original = execution.models.find(model => model.path === definition.baseline);
-        if (!original?.generate) throw new Error(`${profile}: execution.json schedules no generation for ${definition.baseline}`);
-        // Cost measurements are infrastructure around the correctness evidence:
-        // their failures are recorded here and raised after that evidence.
-        try {
-          const frozen = await prepareFrozenModel(definition, resolve(output, 'build', profile, 'frozen-monitor'));
-          report.exploration[profile] = await measureExploration(profile, { baseline: models.get(`${profile}/baseline`), kernel: models.get(`${profile}/pilot`), frozen },
-            settings, original.generate, output, { baselineInvariants: original.invariants, maxRatio: catalog.exploration.maxRatio });
-          if (report.exploration[profile].withInvariants.violation) violations.push(report.exploration[profile].withInvariants.violation);
-        } catch (error) {
-          report.exploration[profile] = { status: 'failed', error: String(error) };
-          violations.push(`${profile} exploration: ${error.message}`);
-        }
-        save(reportPath, report);
-        try {
-          const { record, problems } = await measureGeneration(profile, models.get(`${profile}/baseline`), models.get(`${profile}/pilot`), settings, original.generate,
-            original.invariants, catalog.generation.maxRatio, output);
-          report.generation[profile] = record;
-          violations.push(...problems);
-        } catch (error) {
-          report.generation[profile] = { status: 'failed', error: String(error), parity: false };
-          violations.push(`${profile} generation: ${error.message}`);
-        }
-        save(reportPath, report);
-      }
+      // validateExecution has already checked every scheduled model's
+      // invariants and generation bounds; only the mapping can be missing.
+      const original = execution.models.find(model => model.path === definition.baseline);
+      if (!original?.generate) throw new Error(`${profile}: execution.json schedules no generation for ${definition.baseline}`);
+      originals.set(profile, original);
     }
     for (const history of catalog.histories) {
       console.log(`Kernel pilot ${history.profile}/${history.id}`);
@@ -593,6 +583,38 @@ export async function runPilot(mode = 'check') {
       result.status = 'passed'; save(reportPath, report);
     }
     if (mode === 'check') await checkChallenges(challenges, catalog, settings, output, report, () => save(reportPath, report));
+    if (mode === 'check') {
+      // Cost measurements run after every correctness record is persisted, so a
+      // job that is killed mid-measurement (report.json then stays at status
+      // running) still carries the histories, replays and faults. Their own
+      // failures are recorded here and raised with the sampling bound below.
+      // generateHistory rewrote each prepared model in place; sampling needs the
+      // pristine sources back.
+      for (const model of models.values()) writeFileSync(model.path, model.source);
+      for (const [profile, definition] of Object.entries(catalog.profiles)) {
+        const original = originals.get(profile);
+        try {
+          const frozen = await prepareFrozenModel(definition, resolve(output, 'build', profile, 'frozen-monitor'));
+          report.exploration[profile] = await measureExploration(profile, { baseline: models.get(`${profile}/baseline`), kernel: models.get(`${profile}/pilot`), frozen },
+            settings, original.generate, output, { baselineInvariants: original.invariants, maxRatio: catalog.exploration.maxRatio });
+          if (report.exploration[profile].withInvariants.violation) violations.push(report.exploration[profile].withInvariants.violation);
+        } catch (error) {
+          report.exploration[profile] = { status: 'failed', error: String(error) };
+          violations.push(`${profile} exploration: ${error.message}`);
+        }
+        save(reportPath, report);
+        try {
+          const { record, problems } = await measureGeneration(profile, models.get(`${profile}/baseline`), models.get(`${profile}/pilot`), settings, original.generate,
+            original.invariants, catalog.generation.maxRatio, output);
+          report.generation[profile] = record;
+          violations.push(...problems);
+        } catch (error) {
+          report.generation[profile] = { status: 'failed', error: String(error), parity: false };
+          violations.push(`${profile} generation: ${error.message}`);
+        }
+        save(reportPath, report);
+      }
+    }
     const after = sources();
     const changed = [...new Set([...Object.keys(after), ...Object.keys(report.sources)])].filter(path => after[path] !== report.sources[path]);
     if (changed.length) throw new Error(`Kernel pilot inputs changed during validation: ${changed.join(', ')}`);

@@ -135,7 +135,11 @@ describe("Quint process pool", () => {
     const planned = executionPlan("generate", manifest, manifest.settings.seed).find(job => job.command === "quint" && job.args[1] === layers.path && job.args.includes("--mbt"))!;
     const options = { settings: manifest.settings, seed: manifest.settings.seed, outputDirectory: layers.generate!.outputDirectory };
     expect(generationArguments(layers.path, layers.generate!, layers.invariants, options)).toEqual(planned.args);
-    expect(planned.args).toContain("--verbosity=1");
+    // The lane's command, literally, so a change to it is a deliberate one.
+    expect(planned.args).toEqual(["run", "formal/dialcache-layers-conformance.qnt", "--mbt", "--backend=rust", "--n-threads=1", "--seed=0xd1a1ca",
+      "--max-samples=2048", "--max-steps=80", "--n-traces=512", "--out-itf=.formal-traces/features/layers/trace_{seq}.itf.json", "--verbosity=1", "--invariants",
+      "sourceEffectsMatch", "capacityIsPerInstance", "closedScopesHaveNoMemo", "registeredSourcesArePending", "zeroCapacityHasNoLocalValues", "callsKeepSourceOutcome",
+      "localMembershipMatchesLru", "absentRemoteHasNoAdapterEffects", "sourceOwnershipNeverCrossesKeyOrInstance"]);
     const pilot = generationArguments("/build/layers/pilot/formal/kernel/layers-pilot.qnt", layers.generate!, ["a", "b"], { ...options, outputDirectory: "/scratch" });
     const shared = planned.args.slice(0, planned.args.indexOf("--invariants") + 1)
       .map(arg => arg === layers.path ? "/build/layers/pilot/formal/kernel/layers-pilot.qnt" : arg.startsWith("--out-itf=") ? "--out-itf=/scratch/trace_{seq}.itf.json" : arg);

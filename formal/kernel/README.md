@@ -38,7 +38,9 @@ monitor value and the current step alone; no input history is retained or
 refolded, so witness bookkeeping no longer grows with the length of a history.
 It still scales with the number of calls the view admits, which the fixture
 bounds, and it is the largest remaining cost of the kernel views (below). The
-monitor carries the credited label set. Four boundaries are scripted prefixes:
+kernel hands the monitor the public input, the public view, and two fixture
+constants: whether effects are held and the source budget. The monitor carries
+the credited label set. Four boundaries are scripted prefixes:
 a fixed public input order, for one view, with the observation fields that
 establish each consequence, written as data so each input sits next to what it
 must produce and one rule covers all four: a history that departs from a
@@ -54,7 +56,7 @@ The witness-isolation lint enforces one direction: nothing reachable from a
 transition, guard, choice domain or projection may read the monitor. The other
 direction, that the monitor reads only public data, rests on the monitor module
 importing nothing from the kernel and on the kernel handing it only the public
-input and view.
+input, the public view and the two fixture constants named above.
 
 ## Executable comparison
 
@@ -76,7 +78,7 @@ they receive no kernel state or expected result as an implementation input.
 | Shared failure followed by a fresh successful attempt | Layers and effects | C11, C15 |
 | Invalidation before acquisition suppresses source publication | Layers | C33, C34 |
 | Invalidation after acquisition permits publication but fences a later read | Layers | C33, C34, C36 |
-| Tracked source fills Redis; the next read warms local, then local serves | Layers | C05, C31 |
+| Tracked source fills Redis; the next read warms local, then local serves; one further call past that boundary keeps the label | Layers | C05, C31 |
 | Timed-out raw source settles during its replacement | Effects | C25 |
 | Accepted serialization and write finish after the source deadline | Effects | C26 |
 | Fulfillment or rejection at the exact deadline before timer delivery | Effects | C25 |
@@ -99,32 +101,38 @@ The check also requires:
 - A sampling-cost bound: in the same job, the original profile and the kernel
   view each sample the original's generation bounds from `execution.json` (its
   sample count and step bound, one thread, the pinned seed, no trace output)
-  with their own invariants, twice each, alternating. The kernel view's
-  fastest wall time may be at most `exploration.maxRatio` in `pilot.json`
+  with their own invariants, twice each, alternating with the frozen-monitor
+  copy below. The kernel view's fastest wall time may be at most
+  `exploration.maxRatio` in `pilot.json`
   (2.5) times the original's fastest wall time. The first hosted measurements
   were 1.1 to 1.2 for layers and 1.6 to 1.8 for effects; the bound leaves room
   for runner variance and still fails on the 4 to 7 times of the refolding
   monitor. A violation is raised only after the histories, replays and faults
   below have been recorded. The pairing compares unequal property sets: the
   originals' nine invariants each against the kernel's five, and the originals
-  pay about 1.6 times as much for their properties (layers 4.6 s against
-  2.8 s, effects 4.1 s against 2.6 s on the machine below), so the gated ratio
+  pay about 1.7 times as much for their properties (layers 4.8 s against
+  2.9 s, effects 4.2 s against 2.4 s in the recorded check below), so the gated
+  ratio
   understates a kernel view that carried the originals' properties. The report
-  records each side's property cost; the without-invariants ratio (1.8 for
-  layers, 3.8 for effects) is the transition-and-monitor ratio. Carrying the
+  records each side's property cost; the without-invariants ratio (1.9 for
+  layers, 3.5 for effects) is the transition-and-monitor ratio. Carrying the
   originals' properties is a #165 work item next to monitor cost and exported
   state size.
 - Records, not gates, that locate the remaining cost: the same pairing without
   invariants; the kernel view with its monitor assignment replaced by
-  `monitor' = monitor`, whose difference to the full view is the monitor's
-  cost; and the fixed cost of a one-sample, one-step run of each model.
+  `monitor' = monitor`, which skips the kernel's witness observation
+  (`publicView`) and `Witness::advance` and nothing else, so its difference to
+  the full view is that cost; and the fixed cost of a one-sample, one-step run
+  of each model. The cost measurements run after the histories, replays and
+  faults, so a job killed mid-measurement still carries the correctness record.
 - The generation lane's own command for both models, built by the same
   function the lane uses (`generationArguments` in `run-models.mjs`): `--mbt`,
   the original's trace count, ITF output to a scratch directory that is removed
-  after counting. The original runs under the lane's 600 s ceiling; the kernel
-  view's timeout is four times the original's wall time with a floor of 150 s,
-  above the observed heap-exhaustion abort, so that abort stays visible in the
-  record. The report records each model's outcome (completed, violation,
+  after counting. The bounds are the pilot's own; the lane has no per-command
+  ceiling, only its job timeout. The original's attempt gets 600 s; the kernel
+  view's timeout is four times the original's wall time, at least 150 s so the
+  observed heap-exhaustion abort stays visible in the record, and at most
+  600 s. The report records each model's outcome (completed, violation,
   aborted, failed, or not attempted when the original failed), exit status,
   signal, timeout, wall time, traces and bytes, and `generationParity`: the
   kernel view completed under the lane's own Node heap within
@@ -133,7 +141,8 @@ The check also requires:
   what the replay lanes read and what exhausts the heap; the only completed
   kernel generation on record, with a 12 GB heap, was 2.3 times the original's
   time and 2.75 times its bytes. Peak memory is not measured; completion under
-  the default heap stands in for it. This is the generation-runtime budget of
+  the default heap stands in for it, and the record notes the Node options in
+  effect so a raised heap is visible. This is the generation-runtime budget of
   #165 and it is currently unmet: under the default heap both kernel views run
   out of memory before writing a trace (see below). A property violation on
   either side, or an original that cannot complete its own command, fails the
@@ -168,17 +177,19 @@ per-history comparison and witness checkpoints, native reports, model faults,
 original/kernel generation times and raw trace sizes, the sampling pairings
 with every run's wall time, the fixed CLI cost and the ratios with and without
 it, the frozen-monitor record, and the generation-lane measurement. Wall times
-include CLI startup, about one second per run locally. On one machine at the
-generation bounds, taking the faster of two runs: layers took 8.5 s in the
-original against 8.6 s in the kernel view with invariants and 3.0 s against
-5.5 s without; effects took 7.7 s against 12.0 s with invariants and 2.5 s
-against 9.5 s without. With the refolding monitor, at 2,000 samples of 40
-steps, the kernel views had taken 4 to 7 times the originals with invariants
-and 9 to 13 times without. Freezing the monitor puts the kernel views at about
-1.05 times the originals with invariants: nearly all of the remaining
-difference is the monitor's per-step bookkeeping, about 13 to 17 microseconds
-per step, not the kernel's state. Making the monitor cheaper is the next parity
-work item.
+include CLI startup, about one second per run locally. One recorded local
+check, at the generation bounds, taking the faster of two runs: layers took
+7.5 s in the original with its nine invariants against 7.9 s in the kernel view
+with its five, and 2.7 s against 5.0 s without invariants; effects took 6.6 s
+against 10.7 s with invariants and 2.4 s against 8.3 s without. In the same
+check the kernel views with the monitor assignment frozen took 5.8 s (layers)
+and 7.1 s (effects) against those originals with their nine invariants, so the
+witness observation and monitor advance cost 2.1 s and 3.6 s of the gated runs,
+about 13 to 15 microseconds per step; the kernel's own transitions and five
+properties sit at or below the originals. With the refolding monitor, at 2,000
+samples of 40 steps, the kernel views had taken 4 to 7 times the originals with
+invariants and 9 to 13 times without. Making the monitor cheaper is the next
+parity work item for sampling cost.
 
 The generation lane writes 512 traces per profile with `--mbt`. The originals
 complete that command in 11 s (effects, 108 MB of traces) and 14 s (layers,

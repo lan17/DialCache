@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 type Trace = { states: Array<Record<string, any>>; [key: string]: unknown };
 type Schedule = Array<[string, number]>;
-const { projectPilotTrace, comparePilotHistory, witnessCheckpoints, validatePilot, validatePilotChallenges, validatePilotChallengeResult, validateWitnessControlResult, explorationComparison, generationOutcome, generationParity, generationTimeout, kernelGenerationTimeout, monitorAssignment, pilotInvariants, explorationRepetitions } = await import(
+const { projectPilotTrace, comparePilotHistory, witnessCheckpoints, validatePilot, validatePilotChallenges, validatePilotChallengeResult, validateWitnessControlResult, explorationComparison, generationOutcome, generationParity, generationTimeout, kernelGenerationTimeout, monitorAssignment, validateMonitorAnchor, pilotInvariants, explorationRepetitions } = await import(
   new URL("../formal/kernel-pilot.mjs", import.meta.url).href,
 ) as {
   projectPilotTrace(raw: unknown, path?: string): Trace;
@@ -15,12 +15,13 @@ const { projectPilotTrace, comparePilotHistory, witnessCheckpoints, validatePilo
   validatePilotChallengeResult(result: unknown, exitCode: number, raw: unknown, history: unknown, check: unknown, expectation: string): { status: string };
   validateWitnessControlResult(output: string, exitCode: number, required: string[]): { status: string; tests: string[] };
   explorationComparison(baseline: unknown, kernel: unknown, settings: { backend: string; seed: string }, bounds: { maxSamples: number; maxSteps: number },
-    options?: Record<string, unknown>): Record<string, unknown>;
-  generationOutcome(name: string, result: Record<string, unknown>, traces: number, generation: { traces: number }, bytes: number, options?: { timeoutMs?: number }): Record<string, unknown>;
+    fixedCost: unknown, options: Record<string, unknown>): Record<string, unknown>;
+  generationOutcome(name: string, result: Record<string, unknown>, traces: number, generation: { traces: number }, bytes: number, timeoutMs: number): Record<string, unknown>;
   generationParity(baseline: Record<string, unknown>, kernel: Record<string, unknown>, maxRatio: number): Record<string, unknown>;
   generationTimeout: { originalMs: number; kernelFactor: number; kernelFloorMs: number };
   kernelGenerationTimeout(original: { durationMs: number }): number;
   monitorAssignment: { before: string; after: string };
+  validateMonitorAnchor(source: string, context?: string): string;
   pilotInvariants: string[];
   explorationRepetitions: number;
 };
@@ -98,7 +99,7 @@ describe("supplemental kernel pilot evidence", () => {
     expect(() => witnessCheckpoints(pilot, [], "effects/invalid-witness")).toThrow(/effects\/invalid-witness step 1: invalid Quint witness set/);
   });
 
-  it("pins the pilot inventory: twelve histories, eleven labels, six faults with nine checks, five properties, sixteen controls", () => {
+  it("pins the pilot inventory: twelve histories, eleven labels, six faults with nine checks, five properties, seventeen controls", () => {
     const catalog = read("formal/kernel/pilot.json"), challenges = read("formal/kernel/challenges.json");
     const byProfile = (profile: string) => catalog.histories.filter((history: { profile: string }) => history.profile === profile);
     expect(catalog.histories).toHaveLength(12);
@@ -119,10 +120,12 @@ describe("supplemental kernel pilot evidence", () => {
       pilotInvariants.filter(invariant => invariant !== "closedScopesHaveNoMemo").sort());
     expect(explorationRepetitions).toBe(2);
     const controls = readFileSync(resolve("formal/kernel/lifecycle-witnesses-test.qnt"), "utf8").match(/^\s*run \w+Test\b/gm) ?? [];
-    expect(controls).toHaveLength(16);
+    expect(controls).toHaveLength(17);
     const kernel = readFileSync(resolve("formal/kernel/cache-kernel.qnt"), "utf8");
-    expect(kernel.split(monitorAssignment.before)).toHaveLength(2);
+    expect(validateMonitorAnchor(kernel)).toBe(kernel);
     expect(kernel).not.toContain(monitorAssignment.after);
+    expect(() => validateMonitorAnchor(kernel.replace(monitorAssignment.before, monitorAssignment.after), "frozen copy")).toThrow(/frozen copy: the kernel's monitor assignment anchor must match exactly once/);
+    expect(() => validateMonitorAnchor(kernel + monitorAssignment.before)).toThrow(/match exactly once/);
     const monitor = readFileSync(resolve("formal/kernel/lifecycle-witnesses.qnt"), "utf8");
     expect(monitor.match(/^\s*pure val \w+: Script = \{/gm)).toHaveLength(4);
     expect([...monitor.matchAll(/label: "([a-z-]+)"/g)].map(match => match[1]).sort()).toEqual([
@@ -162,12 +165,12 @@ describe("supplemental kernel pilot evidence", () => {
   it("bounds the kernel view's wall time against the original profile and records the evaluation-only ratio", () => {
     const settings = { backend: "rust", seed: "0xd1a1ca" }, bounds = { maxSamples: 2048, maxSteps: 80 };
     const fixedCost = { baseline: 40, kernel: 50 };
-    const options = { label: "layers exploration with invariants", fixedCost, maxRatio: 2 };
+    const options = { label: "layers exploration with invariants", maxRatio: 2 };
     const run = (durationMs: number, report: string, patch: Record<string, unknown> = {}) =>
       ({ result: { status: "ok", errors: [], trace: [{}] }, status: 0, durationMs, report, ...patch });
     const baseline = { runs: [run(120, "baseline-1.json"), run(100, "baseline-2.json")], invariants: ["sourceEffectsMatch"] };
     const kernel = { runs: [run(150, "kernel-1.json"), run(180, "kernel-2.json")], invariants: ["publicationHasTimelySource"] };
-    expect(explorationComparison(baseline, kernel, settings, bounds, options)).toEqual({
+    expect(explorationComparison(baseline, kernel, settings, bounds, fixedCost, options)).toEqual({
       status: "passed", kind: "sampled-exploration", backend: "rust", seed: "0xd1a1ca", threads: 1, bounds,
       includesCliStartup: true, sameInputHistories: false, tracesWritten: false,
       baseline: { invariants: ["sourceEffectsMatch"], durationMs: 100, durations: [120, 100], reports: ["baseline-1.json", "baseline-2.json"], fixedCostMs: 40, evaluationMs: 60 },
@@ -175,59 +178,64 @@ describe("supplemental kernel pilot evidence", () => {
       ratio: 1.5, evaluationRatio: 100 / 60, gated: true, maxRatio: 2,
     });
     const kernelAt = (durationMs: number) => ({ runs: [run(durationMs, "k.json")], invariants: [] });
-    expect(explorationComparison(baseline, kernelAt(200), settings, bounds, options)).toMatchObject({ status: "passed", ratio: 2 });
-    expect(explorationComparison(baseline, kernelAt(201), settings, bounds, options)).toMatchObject({
+    expect(explorationComparison(baseline, kernelAt(200), settings, bounds, fixedCost, options)).toMatchObject({ status: "passed", ratio: 2 });
+    expect(explorationComparison(baseline, kernelAt(201), settings, bounds, fixedCost, options)).toMatchObject({
       status: "failed", ratio: 2.01, gated: true, maxRatio: 2,
       violation: "layers exploration with invariants: the kernel view took 2.01x the original profile's wall time (bound 2x); 201 ms against 100 ms",
     });
-    const { maxRatio: _unused, ...ungated } = options;
-    expect(explorationComparison(baseline, kernelAt(900), settings, bounds, ungated)).toMatchObject({ status: "passed", ratio: 9, gated: false });
-    expect(explorationComparison(baseline, kernelAt(900), settings, bounds, ungated)).not.toHaveProperty("maxRatio");
-    const broken: Array<Record<string, unknown>> = [{}, { fixedCost, maxRatio: 0.5 }, { fixedCost, maxRatio: NaN }, { fixedCost: { baseline: 40 }, maxRatio: 2 },
-      { fixedCost: { baseline: 0, kernel: 50 }, maxRatio: 2 }, { fixedCost: { baseline: 100, kernel: 50 }, maxRatio: 2 }];
-    for (const options of broken) expect(() => explorationComparison(baseline, kernel, settings, bounds, options)).toThrow();
+    const ungated = { label: "layers exploration without invariants" };
+    expect(explorationComparison(baseline, kernelAt(900), settings, bounds, fixedCost, ungated)).toMatchObject({ status: "passed", ratio: 9, gated: false });
+    expect(explorationComparison(baseline, kernelAt(900), settings, bounds, fixedCost, ungated)).not.toHaveProperty("maxRatio");
+    for (const bound of [0.5, NaN, Infinity, "2"]) expect(() => explorationComparison(baseline, kernel, settings, bounds, fixedCost, { ...options, maxRatio: bound })).toThrow(/invalid exploration bound/);
+    for (const fixed of [undefined, {}, { baseline: 40 }, { baseline: 0, kernel: 50 }, { baseline: 100, kernel: 50 }]) {
+      expect(() => explorationComparison(baseline, kernel, settings, bounds, fixed, options)).toThrow(/fixed.cost/);
+    }
     const invalid = [undefined, {}, { runs: [] }, { runs: baseline.runs }, { runs: [run(100, "r.json", { status: 1 })], invariants: [] },
       { runs: [run(100, "r.json", { result: {} })], invariants: [] },
       { runs: [run(100, "r.json", { result: { status: "ok", errors: ["evaluator failed"], trace: [{}] } })], invariants: [] },
       ...[undefined, 0, -1, NaN, Infinity].map(durationMs => ({ runs: [run(100, "ok.json"), run(durationMs as number, "bad.json")], invariants: [] }))];
     for (const measured of invalid) {
-      expect(() => explorationComparison(measured, kernel, settings, bounds, options)).toThrow();
-      expect(() => explorationComparison(baseline, measured, settings, bounds, options)).toThrow();
+      expect(() => explorationComparison(measured, kernel, settings, bounds, fixedCost, options)).toThrow();
+      expect(() => explorationComparison(baseline, measured, settings, bounds, fixedCost, options)).toThrow();
     }
   });
 
   it("classifies how each model's generation run ended and whether the kernel reached parity in time and bytes", () => {
     const generation = { traces: 512 };
     const ok = { error: undefined, status: 0, signal: null, stdout: "", stderr: "", durationMs: 10_900 };
-    const completed = generationOutcome("baseline", ok, 512, generation, 108_000_000, { timeoutMs: 600_000 });
+    const completed = generationOutcome("baseline", ok, 512, generation, 108_000_000, 600_000);
+    for (const timeoutMs of [undefined, 0, -1, NaN]) expect(() => generationOutcome("baseline", ok, 512, generation, 1, timeoutMs as number)).toThrow(/records the timeout/);
     expect(completed).toEqual({ status: "completed", exitStatus: 0, signal: null, durationMs: 10_900, traces: 512, expectedTraces: 512, traceBytes: 108_000_000,
       timeoutMs: 600_000, timedOut: false });
     // Node reports an aborted child as status null with the signal; the shell's 134 never appears.
     const oom = generationOutcome("kernel", { ...ok, status: null, signal: "SIGABRT", durationMs: 21_300,
-      stderr: "\nFATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory\n 1: 0x1 node::OOMErrorHandler\n" }, 0, generation, 0, { timeoutMs: 150_000 });
+      stderr: "\nFATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory\n 1: 0x1 node::OOMErrorHandler\n" }, 0, generation, 0, 150_000);
     expect(oom).toMatchObject({ status: "aborted", exitStatus: null, signal: "SIGABRT", traces: 0, expectedTraces: 512, traceBytes: 0, timeoutMs: 150_000, timedOut: false });
     expect(oom.diagnostics).toEqual(["FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory", "1: 0x1 node::OOMErrorHandler"]);
     // A timeout kills the quint process with SIGTERM and prints nothing; the record must say why.
-    const timedOut = generationOutcome("kernel", { ...ok, status: null, signal: "SIGTERM", error: Object.assign(new Error("Timed out after 150000 ms"), { code: "ETIMEDOUT" }) }, 0, generation, 0, { timeoutMs: 150_000 });
+    const timedOut = generationOutcome("kernel", { ...ok, status: null, signal: "SIGTERM", error: Object.assign(new Error("Timed out after 150000 ms"), { code: "ETIMEDOUT" }) }, 0, generation, 0, 150_000);
     expect(timedOut).toMatchObject({ status: "aborted", signal: "SIGTERM", timeoutMs: 150_000, timedOut: true, diagnostics: ["Timed out after 150000 ms"] });
     // Quint exits 1 for every failure; only its own marker says a property was violated.
-    const violation = generationOutcome("kernel", { ...ok, status: 1, stdout: "[violation] Found an issue (1234ms).\n", stderr: "error: Invariant violated\n" }, 3, generation, 900);
+    const violation = generationOutcome("kernel", { ...ok, status: 1, stdout: "[violation] Found an issue (1234ms).\n", stderr: "error: Invariant violated\n" }, 3, generation, 900, 150_000);
     expect(violation).toMatchObject({ status: "violation", exitStatus: 1, traces: 3, diagnostics: ["error: Invariant violated"] });
-    const evaluatorCrash = generationOutcome("kernel", { ...ok, status: 1, stderr: "error: [QNT517] Out of memory (OOM killer)\nerror: Runtime error\n" }, 0, generation, 0);
+    const evaluatorCrash = generationOutcome("kernel", { ...ok, status: 1, stderr: "error: [QNT517] Out of memory (OOM killer)\nerror: Runtime error\n" }, 0, generation, 0, 150_000);
     expect(evaluatorCrash).toMatchObject({ status: "failed", exitStatus: 1, diagnostics: ["error: [QNT517] Out of memory (OOM killer)", "error: Runtime error"] });
-    expect(generationOutcome("kernel", ok, 500, generation, 1)).toMatchObject({ status: "failed", diagnostics: ["kernel wrote 500 of 512 traces"] });
-    expect(generationOutcome("kernel", { ...ok, status: null, signal: "SIGKILL", stderr: "Killed" }, 0, generation, 0)).toMatchObject({ status: "aborted", exitStatus: null, signal: "SIGKILL", diagnostics: ["Killed"] });
-    const kernel = generationOutcome("kernel", { ...ok, durationMs: 24_900 }, 512, generation, 297_000_000);
+    expect(generationOutcome("kernel", ok, 500, generation, 1, 150_000)).toMatchObject({ status: "failed", diagnostics: ["kernel wrote 500 of 512 traces"] });
+    expect(generationOutcome("kernel", { ...ok, status: null, signal: "SIGKILL", stderr: "Killed" }, 0, generation, 0, 150_000)).toMatchObject({ status: "aborted", exitStatus: null, signal: "SIGKILL", diagnostics: ["Killed"] });
+    const kernel = generationOutcome("kernel", { ...ok, durationMs: 24_900 }, 512, generation, 297_000_000, 150_000);
     // 2.3x the time but 2.75x the bytes: exported-state size is part of parity.
     expect(generationParity(completed, kernel, 2.5)).toEqual({ ratio: 24_900 / 10_900, traceBytesRatio: 297_000_000 / 108_000_000, parity: false, maxRatio: 2.5 });
     expect(generationParity(completed, kernel, 3)).toMatchObject({ parity: true });
     expect(generationParity(completed, { ...kernel, traceBytes: 200_000_000 }, 2.5)).toMatchObject({ parity: true });
+    // Over the time bound while within the bytes bound: time decides on its own.
+    expect(generationParity(completed, { ...kernel, durationMs: 30_000, traceBytes: 200_000_000 }, 2.5)).toMatchObject({ parity: false, ratio: 30_000 / 10_900, traceBytesRatio: 200_000_000 / 108_000_000 });
     expect(generationParity(completed, oom, 2.5)).toEqual({ ratio: null, traceBytesRatio: null, parity: false, maxRatio: 2.5 });
     expect(generationParity(oom, kernel, 2.5)).toEqual({ ratio: null, traceBytesRatio: null, parity: false, maxRatio: 2.5 });
     expect(generationParity(completed, { status: "not-attempted" }, 2.5)).toMatchObject({ parity: false, ratio: null });
     expect(generationTimeout).toEqual({ originalMs: 600_000, kernelFactor: 4, kernelFloorMs: 150_000 });
     expect(kernelGenerationTimeout({ durationMs: 10_900 })).toBe(150_000);
     expect(kernelGenerationTimeout({ durationMs: 40_000 })).toBe(160_000);
+    expect(kernelGenerationTimeout({ durationMs: 200_000 })).toBe(600_000);
   });
 
   it("credits only an invariant violation at its declared public input checkpoint", () => {
