@@ -1,124 +1,116 @@
 module dialcache_runtime_boundaries_conformance {
   import conformance_observations.* from "./conformance-observations"
   import cohort_boundaries.* from "./cohort-boundaries"
+  import encodings.* from "./kernel/encodings"
+  import calls.* from "./kernel/calls"
+  import runtime_policy.* from "./kernel/runtime-policy"
+  import serving as Serving from "./kernel/serving"
+  import flights as Flights from "./kernel/flights"
+  import policy_gate as Gate from "./kernel/policy-gate"
 
   // C06/C13/C16/C19: one key, one request lifetime and one initially selected layer.
-  // Operation defaults either omit or disable coalescing. Runtime policy can inherit, disable,
-  // or enable it independently of the serving cohort. Sources may overlap and
-  // settle in either order; subsequent public calls observe retained values.
-  // The all-features fixture permits only the full kill switch and restoration,
-  // retaining its request memo. Thus its initial remote miss and subsequent
-  // first-layer hits never admit shadow or recovery work. Other fixtures start
-  // with one layer. A local-TTL overlay can add an earlier local layer to a
-  // remote fixture; its retained value survives later remote-only overwrites.
-  // Redis/codec work is healthy and immediate; no time advances.
-  // The separate clock profile owns fractional expiry and instance clock grids.
+  // Operation defaults either omit or disable coalescing; runtime policy can
+  // inherit, disable or enable it independently of the serving cohort. Sources
+  // may overlap and settle in either order; later public calls observe the
+  // retained values. The all-features fixture permits only the full kill
+  // switch and restoration, retaining its request memo, so its initial remote
+  // miss and later first-layer hits never admit shadow or recovery work. Other
+  // fixtures start with one layer; a local-TTL overlay can add an earlier local
+  // layer to a remote fixture, whose retained value survives later remote-only
+  // overwrites. Redis/codec work is healthy and immediate; no time advances
+  // (the clock profile owns expiry).
+  // Every rule is a kernel transition (formal/kernel); this module owns the
+  // bounded state, the fixture decoding, the input choices and the guards.
+  // The drivers hold every policy reply, so admission and traversal are two
+  // steps here (Serving::admit, then Serving::release with the reply resolved
+  // by runtime_policy against the fixture's baseline).
 
   pure val REQUEST_LAYER = 0
   pure val LOCAL_LAYER = 1
   pure val REMOTE_LAYER = 2
-  pure val INHERIT_SHARING = 0
-  pure val DISABLE_SHARING = 1
-  pure val ENABLE_SHARING = 2
-  pure val FULL_COHORT = 3
   pure val DEFAULT_POLICY = 9
-  pure val NULL_PROVIDER = 12
-  pure val DISABLE_REQUEST = 13
-  pure val INVALID_COALESCE = 14
-  pure val INVALID_REQUEST_LOCAL = 15
-  pure val NULL_COALESCE = 16
-  pure val NULL_REQUEST_LOCAL = 17
   pure val DEFAULT_SHARING_FIXTURE_OFFSET = 3
   pure val NO_LOCAL_TTL_FIXTURE = 6
   pure val NO_REMOTE_TTL_FIXTURE = 7
   pure val DISABLED_BASELINE_FIXTURE = 8
-  pure val RUNTIME_LOCAL_TTL = 18
-  pure val RUNTIME_REMOTE_TTL = 19
-  pure val RAMP_UP_DISABLED_BASELINE = 20
   pure val ALL_FEATURES_FIXTURE = 9
-  pure val KILL_ALL_FEATURES = 21
   pure val EXTENDED_RETENTION_MS = 120000
   pure val VALUE_UNDEFINED_STRING = 11
   pure val SOURCE_VALUES = List(VALUE_ONE, VALUE_TWO, VALUE_ABSENT, VALUE_UNDEFINED_STRING, VALUE_NULL, VALUE_FALSE, VALUE_ZERO, VALUE_EMPTY_STRING)
   pure val MAX_CALLERS = 8
-  pure val NO_OWNER = -1
-  pure val EMPTY_CACHE = 0
   pure val TTL_MS = 60000
+  pure val INITIAL_TIME_MS = 10000
+  pure val SAMPLES: Samples = { local: 4292886220, remote: 1018911151 }
+  pure val CALL: Call = { instance: 0, key: 0, context: 0 }
+  pure def layoutFor(ttlMs: int): Serving::Layout =
+    { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 1, operationsPerEntity: 1, servingTtlMs: ttlMs }
 
-  // Fixed W03 fixture: untracked urn:id:1#Behavior, no arguments.
-  // The independent uint32 samples bind the strict admission rule to exact
-  // public percentage inputs, without consulting either implementation hash.
-  pure val LOCAL_SAMPLE = 4292886220
-  pure val REMOTE_SAMPLE = 1018911151
-
-  type Source = { caches: bool, localCaches: bool, shared: bool, result: int }
-  type Admission = {
-    open: bool, policy: int, joined: bool, remoteReads: int, cacheHit: bool, localHit: bool
-  }
   type State = {
     o: Observation,
-    layer: int,
-    defaultSharing: bool,
-    configured: bool,
-    disabledBaseline: bool,
-    allFeatures: bool,
-    open: bool,
+    now: int,
+    tracked: bool,
+    remoteAvailable: bool,
+    capacity: int,
     policy: int,
-    waitingPolicy: int,
-    cached: int,
-    localCached: int,
-    registered: int,
+    baseline: Baseline,
+    layout: Serving::Layout,
+    closed: List[bool],
+    memo: List[int],
+    requestFlights: List[int],
+    processFlights: List[int],
+    localValues: List[int],
+    lru: List[List[int]],
+    remoteValues: List[int],
+    created: List[int],
+    watermark: List[int],
+    sources: List[Flights::Source],
     owners: List[int],
-    sources: List[Source],
-    settlements: List[int],
-    admissions: List[Admission]
+    memoSlots: List[int],
+    held: List[Gate::Held]
   }
   var s: State
   var input: { name: str, choice: int }
 
-  pure def sample(layer: int): int = if (layer == LOCAL_LAYER) LOCAL_SAMPLE else REMOTE_SAMPLE
-  pure def cohortRelation(policy: int): int = if (policy >= NULL_PROVIDER) FULL_COHORT else policy / 3
-  pure def sharingMode(policy: int): int = if (policy >= NULL_PROVIDER) INHERIT_SHARING else policy % 3
-  pure def cohortThreshold(layer: int, policy: int): int =
-    if (cohortRelation(policy) == FULL_COHORT) COHORT_DENOMINATOR
-    else thresholdForRelation(sample(layer), cohortRelation(policy))
-  pure def layerConfigured(state: State): bool = state.configured
-    or (state.layer == LOCAL_LAYER and Set(RUNTIME_LOCAL_TTL, RAMP_UP_DISABLED_BASELINE).contains(state.policy))
-    or (state.layer == REMOTE_LAYER and state.policy == RUNTIME_REMOTE_TTL)
-  pure def participates(state: State): bool = state.open and state.policy != KILL_ALL_FEATURES
-    and not(Set(INVALID_COALESCE, INVALID_REQUEST_LOCAL, NULL_COALESCE, NULL_REQUEST_LOCAL).contains(state.policy))
-    and layerConfigured(state)
-    and (not(state.disabledBaseline) or state.policy == RAMP_UP_DISABLED_BASELINE)
-    and (if (state.layer == REQUEST_LAYER) state.policy != DISABLE_REQUEST
-      else cohortAdmits(sample(state.layer), cohortThreshold(state.layer, state.policy)))
-  pure def shares(state: State): bool = sharingMode(state.policy) == ENABLE_SHARING
-    or (sharingMode(state.policy) == INHERIT_SHARING and state.defaultSharing)
-  // Local storage exists even on an instance initially configured only for
-  // Redis. Supplying its TTL admits it at the default full ramp. A remote TTL
-  // cannot similarly add Redis when the fixture has no Redis client.
-  pure def extraLocalParticipates(state: State): bool = state.open and state.layer == REMOTE_LAYER
-    and Set(RUNTIME_LOCAL_TTL, RAMP_UP_DISABLED_BASELINE).contains(state.policy)
+  // Fixture decoding (input only): the initially configured layer, the
+  // operation default for coalescing, whether the layer has a TTL, a disabled
+  // baseline, the all-features fixture and whether a Redis client exists.
+  pure def layerOf(fixture: int): int = if (fixture == ALL_FEATURES_FIXTURE) REQUEST_LAYER
+    else if (fixture < NO_LOCAL_TTL_FIXTURE) fixture % DEFAULT_SHARING_FIXTURE_OFFSET
+    else if (fixture == NO_REMOTE_TTL_FIXTURE) REMOTE_LAYER else LOCAL_LAYER
+  pure def configured(fixture: int): bool = fixture < NO_LOCAL_TTL_FIXTURE or fixture == ALL_FEATURES_FIXTURE
+  pure def baselineOf(fixture: int): Baseline = {
+    request: layerOf(fixture) == REQUEST_LAYER,
+    local: (layerOf(fixture) == LOCAL_LAYER and configured(fixture)) or fixture == ALL_FEATURES_FIXTURE,
+    remote: (layerOf(fixture) == REMOTE_LAYER and configured(fixture)) or fixture == ALL_FEATURES_FIXTURE,
+    coalesce: fixture >= DEFAULT_SHARING_FIXTURE_OFFSET,
+    disabled: fixture == DISABLED_BASELINE_FIXTURE
+  }
+  val allFeatures = s.baseline.request and s.baseline.local
 
   action initialize(fixture: int): bool = all {
     s' = {
       o: empty,
-      layer: if (fixture == ALL_FEATURES_FIXTURE) REQUEST_LAYER
-        else if (fixture < NO_LOCAL_TTL_FIXTURE) fixture % DEFAULT_SHARING_FIXTURE_OFFSET
-        else if (fixture == NO_REMOTE_TTL_FIXTURE) REMOTE_LAYER else LOCAL_LAYER,
-      defaultSharing: fixture >= DEFAULT_SHARING_FIXTURE_OFFSET,
-      configured: fixture < NO_LOCAL_TTL_FIXTURE or fixture == ALL_FEATURES_FIXTURE,
-      disabledBaseline: fixture == DISABLED_BASELINE_FIXTURE,
-      allFeatures: fixture == ALL_FEATURES_FIXTURE,
-      open: true,
+      now: INITIAL_TIME_MS,
+      tracked: false,
+      remoteAvailable: (fixture < NO_LOCAL_TTL_FIXTURE and fixture % DEFAULT_SHARING_FIXTURE_OFFSET == REMOTE_LAYER)
+        or fixture == NO_REMOTE_TTL_FIXTURE or fixture == ALL_FEATURES_FIXTURE,
+      capacity: 1,
       policy: DEFAULT_POLICY,
-      waitingPolicy: NO_OWNER,
-      cached: EMPTY_CACHE,
-      localCached: EMPTY_CACHE,
-      registered: NO_OWNER,
-      owners: List(),
+      baseline: baselineOf(fixture),
+      layout: layoutFor(if (fixture == ALL_FEATURES_FIXTURE) EXTENDED_RETENTION_MS else TTL_MS),
+      closed: List(false),
+      memo: List(NO_VALUE),
+      requestFlights: List(NO_OWNER),
+      processFlights: List(NO_OWNER),
+      localValues: List(NO_VALUE),
+      lru: List(List()),
+      remoteValues: List(NO_VALUE),
+      created: List(0),
+      watermark: List(0),
       sources: List(),
-      settlements: List(),
-      admissions: List()
+      owners: List(),
+      memoSlots: List(),
+      held: List()
     },
     input' = { name: "init", choice: fixture }
   }
@@ -127,94 +119,35 @@ module dialcache_runtime_boundaries_conformance {
     initialize(choice)
   }
 
-  pure def startSource(state: State, caller: int, caches: bool, localCaches: bool, shared: bool): State = {
-    sources: state.sources.append({ caches: caches, localCaches: localCaches, shared: shared, result: CALL_PENDING }),
-    owners: state.owners.replaceAt(caller, state.sources.length()),
-    registered: if (shared) state.sources.length() else state.registered,
-    o: { loaders: state.o.loaders + 1, ...state.o },
-    ...state
-  }
   action beginCall = all {
-    s.waitingPolicy == NO_OWNER,
+    not(Gate::holding(s)),
     s.o.calls.length() < MAX_CALLERS,
-    val admitted = {
-      owners: s.owners.append(NO_OWNER),
-      waitingPolicy: if (s.open) s.o.calls.length() else NO_OWNER,
-      o: {
-        calls: s.o.calls.append(CALL_PENDING),
-        policyCalls: s.o.policyCalls + (if (s.open) 1 else 0),
-        ...s.o
-      },
-      ...s
-    }
-    s' = if (s.open) admitted else startSource(admitted, s.o.calls.length(), false, false, false),
+    s' = Serving::admit(s, s.layout, CALL),
     input' = { name: "beginCall", choice: -1 }
   }
   action releasePolicy = all {
-    s.waitingPolicy >= 0,
-    val primaryActive = participates(s)
-    val localActive = extraLocalParticipates(s)
-    val active = primaryActive or localActive
-    val shared = active and shares(s)
-    val joined = shared and s.registered >= 0
-    val localHit = not(joined) and localActive and s.localCached != EMPTY_CACHE
-    val hit = localHit or (not(joined) and primaryActive and s.cached != EMPTY_CACHE)
-    val returned = if (localHit) s.localCached else s.cached
-    val reads = if (not(joined) and not(localHit) and primaryActive
-      and (s.layer == REMOTE_LAYER or (s.allFeatures and not(hit)))) 1 else 0
-    val afterRead = {
-      waitingPolicy: NO_OWNER,
-      // A remote hit fills the newly active local layer with the acquired
-      // value. Later remote writes cannot change this process-local snapshot.
-      localCached: if (localActive and hit and not(localHit)) returned else s.localCached,
-      admissions: s.admissions.append({
-        open: s.open, policy: s.policy, joined: joined, remoteReads: reads, cacheHit: hit, localHit: localHit
-      }),
-      o: { reads: s.o.reads + reads, loads: s.o.loads + (if (hit and reads == 1) 1 else 0), ...s.o },
-      ...s
-    }
-    s' = if (joined) { owners: s.owners.replaceAt(s.waitingPolicy, s.registered), ...afterRead }
-      else if (hit) { o: { calls: s.o.calls.replaceAt(s.waitingPolicy, returned), ...afterRead.o }, ...afterRead }
-      else startSource(afterRead, s.waitingPolicy, primaryActive, localActive, shared),
+    Gate::holding(s),
+    s' = Serving::release(s, s.layout, Gate::latest(s), resolve(s, SAMPLES)),
     input' = { name: "releasePolicy", choice: -1 }
   }
-
   action changePolicy(policy: int): bool = all {
     s' = { policy: policy, ...s },
     input' = { name: "policy", choice: policy }
   }
   action policy = {
     nondet choice = 0.to(KILL_ALL_FEATURES)
-      .filter(code => not(s.allFeatures) or Set(DEFAULT_POLICY, KILL_ALL_FEATURES).contains(code)).oneOf()
+      .filter(code => not(allFeatures) or Set(DEFAULT_POLICY, KILL_ALL_FEATURES).contains(code)).oneOf()
     changePolicy(choice)
   }
   action closeScope = all {
-    s.layer == REQUEST_LAYER,
-    not(s.allFeatures),
-    s.open,
-    s' = { open: false, cached: EMPTY_CACHE, registered: NO_OWNER, ...s },
+    s.baseline.request,
+    not(allFeatures),
+    not(s.closed.nth(0)),
+    s' = Serving::closeScope(s, s.layout, 0),
     input' = { name: "closeScope", choice: -1 }
   }
   action finishSource(loader: int, valueIndex: int): bool = all {
-    val source = s.sources.nth(loader)
-    val value = SOURCE_VALUES.nth(valueIndex)
-    val publish = source.caches and (s.layer != REQUEST_LAYER or s.open)
-    val writes = publish and (s.layer == REMOTE_LAYER or s.allFeatures)
-    s' = {
-      cached: if (publish) value else s.cached,
-      localCached: if (source.localCaches) value else s.localCached,
-      registered: if (s.registered == loader) NO_OWNER else s.registered,
-      sources: s.sources.replaceAt(loader, { result: value, ...source }),
-      settlements: s.settlements.append(loader),
-      o: {
-        calls: finishOwnedCalls(s.o.calls, s.owners, loader, value),
-        writes: s.o.writes + (if (writes) 1 else 0),
-        dumps: s.o.dumps + (if (writes) 1 else 0),
-        writeTtls: if (writes) s.o.writeTtls.append(if (s.allFeatures) EXTENDED_RETENTION_MS else TTL_MS) else s.o.writeTtls,
-        ...s.o
-      },
-      ...s
-    },
+    s' = Serving::settle(s, s.layout, loader, SOURCE_VALUES.nth(valueIndex)),
     input' = { name: "resolveLoader", choice: loader * SOURCE_VALUES.length() + valueIndex }
   }
   action resolveLoader = {
@@ -225,34 +158,61 @@ module dialcache_runtime_boundaries_conformance {
   }
   action step = any { beginCall, releasePolicy, resolveLoader, policy, closeScope }
 
-  // These checks spell out the boundary independently of cohortAdmits/shares.
-  val equalAndLowerCohortsNeverTraverse = s.admissions.indices().forall(index => {
-    val admitted = s.admissions.nth(index)
-    s.layer == REQUEST_LAYER or admitted.policy >= NULL_PROVIDER or admitted.policy / 3 > AT_SAMPLE or
-      (not(admitted.joined) and admitted.remoteReads == 0 and not(admitted.cacheHit))
-  })
-  val inheritedDisabledSharingNeverJoins = s.admissions.indices().forall(index => {
-    val admitted = s.admissions.nth(index)
-    (admitted.policy < NULL_PROVIDER and admitted.policy % 3 == ENABLE_SHARING)
-      or (s.defaultSharing and (admitted.policy >= NULL_PROVIDER or admitted.policy % 3 == INHERIT_SHARING))
-      or not(admitted.joined)
-  })
-  val invalidBooleanLeavesBypassAllCaching = s.admissions.indices().forall(index => {
-    val admitted = s.admissions.nth(index)
-    admitted.policy < INVALID_COALESCE or admitted.policy > NULL_REQUEST_LOCAL or
-      (not(admitted.joined) and admitted.remoteReads == 0 and not(admitted.cacheHit))
-  })
+  // -- Independently stated safety properties --------------------------------
+  // The boundary properties are stated about the step that just happened: the
+  // released caller, the policy in force and the registry, or the source that
+  // just settled. One reply is held at a time (beginCall waits for the
+  // release), so the caller a release served is the last admitted one; a
+  // source it started has that caller as its only owner, a source it joined
+  // has at least one more.
+
+  val justReleased = input.name == "releasePolicy"
+  val releasedCaller = s.o.calls.length() - 1
+  pure def joinedCaller(x: State, caller: int): bool =
+    x.owners.nth(caller) >= 0 and Flights::ownedBy(x, x.owners.nth(caller)) != Set(caller)
+  pure def bypassed(x: State, caller: int): bool = x.owners.nth(caller) >= 0
+    and Flights::ownedBy(x, x.owners.nth(caller)) == Set(caller) and {
+      val source = x.sources.nth(x.owners.nth(caller))
+      not(source.local) and not(source.remote) and not(source.shared)
+    }
+  val equalAndLowerCohortsNeverTraverse = not(justReleased) or s.baseline.request
+    or s.policy >= NULL_PROVIDER or s.policy / 3 > AT_SAMPLE or bypassed(s, releasedCaller)
+  val inheritedDisabledSharingNeverJoins = not(justReleased)
+    or (s.policy < NULL_PROVIDER and s.policy % 3 == ENABLE_SHARING)
+    or (s.baseline.coalesce and (s.policy >= NULL_PROVIDER or s.policy % 3 == INHERIT_SHARING))
+    or not(joinedCaller(s, releasedCaller))
+  val invalidBooleanLeavesBypassAllCaching = not(justReleased)
+    or s.policy < INVALID_COALESCE or s.policy > NULL_REQUEST_LOCAL or bypassed(s, releasedCaller)
   val callersKeepTheirSourceValue = s.owners.indices().forall(caller =>
     s.owners.nth(caller) < 0 or s.o.calls.nth(caller) == s.sources.nth(s.owners.nth(caller)).result)
-  val retainedValueFollowsSettlementOrder = {
-    val lastPublished = s.settlements.foldl(EMPTY_CACHE, (value, loader) =>
-      if (s.sources.nth(loader).caches) s.sources.nth(loader).result else value)
-    (s.layer == REQUEST_LAYER and not(s.open)) or s.cached == lastPublished
-  }
-  val earlierLocalHitStopsRemoteTraversal = s.admissions.indices().forall(index => {
-    val admitted = s.admissions.nth(index)
-    admitted.localHit implies (admitted.cacheHit and not(admitted.joined) and admitted.remoteReads == 0)
-  })
+  // Every layer holds nothing or a value a settled source put there (remote
+  // only from a source that read it; local also from a remote hit warming it;
+  // the memo also from a local or remote hit), and the settlement that just
+  // happened left its value in every layer its source publishes to (remote
+  // when the flight read it, local when it may warm it, the request memo of
+  // each owner memoizing into the open scope), whatever the admission order of
+  // the sources; no source errors here.
+  pure def memoizes(x: State, loader: int): bool =
+    Flights::ownedBy(x, loader).exists(caller => x.memoSlots.nth(caller) >= 0)
+  pure def publishedBy(x: State, value: int, publishes: (int) => bool): bool =
+    value == NO_VALUE or x.sources.indices().exists(loader => publishes(loader) and x.sources.nth(loader).result == value)
+  val justSettled = input.name == "resolveLoader"
+  val settledSource = input.choice / SOURCE_VALUES.length()
+  val retainedValueFollowsSettlementOrder = publishedBy(s, s.remoteValues.nth(0), loader => s.sources.nth(loader).remote)
+    and publishedBy(s, s.localValues.nth(0), loader => s.sources.nth(loader).local or s.sources.nth(loader).remote)
+    and publishedBy(s, s.memo.nth(0), loader =>
+      s.sources.nth(loader).local or s.sources.nth(loader).remote or memoizes(s, loader))
+    and (not(justSettled) or {
+      val source = s.sources.nth(settledSource)
+      (not(source.remote) or s.remoteValues.nth(0) == source.result)
+        and (not(source.local) or s.localValues.nth(0) == source.result)
+        and (s.closed.nth(0) or Flights::ownedBy(s, settledSource).forall(caller =>
+          s.memoSlots.nth(caller) < 0 or s.memo.nth(0) == source.result))
+    })
+  val sourceEffectsMatch = s.sources.length() == s.o.loaders and s.owners.length() == s.o.calls.length()
+    and s.held.length() <= 1
+
+  // -- Deterministic regression schedules (verbatim) --------------------------
 
   run runtimeLocalTtlAddsEarlierLayerToRemoteFixtureTest = initialize(REMOTE_LAYER)
     .then(changePolicy(RUNTIME_LOCAL_TTL))
@@ -466,4 +426,19 @@ module dialcache_runtime_boundaries_conformance {
       and s.o.loaders == 3 and s.o.reads == 1 and s.o.writes == 1
       and s.o.writeTtls == List(EXTENDED_RETENTION_MS)
       and s.o.shadow == List() and s.o.recovery == List())
+
+  // The coalesce gate covers the request registry's lookup as well as its
+  // registration: once sharing is disabled, a caller does not join the flight
+  // an earlier shared caller registered under the same memo slot, and the
+  // independent sources memoize in settlement order.
+  run disabledSharingDoesNotJoinRegisteredFlightTest = initialize(REQUEST_LAYER)
+    .then(changePolicy(FULL_COHORT * 3 + ENABLE_SHARING))
+    .then(beginCall).then(releasePolicy).then(beginCall).then(releasePolicy)
+    .expect(s.o.loaders == 1)
+    .then(changePolicy(FULL_COHORT * 3 + DISABLE_SHARING))
+    .then(beginCall).then(releasePolicy)
+    .expect(s.o.loaders == 2 and s.o.calls == List(CALL_PENDING, CALL_PENDING, CALL_PENDING))
+    .then(finishSource(1, 1)).then(finishSource(0, 0))
+    .then(beginCall).then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_TWO, VALUE_ONE) and s.o.loaders == 2)
 }

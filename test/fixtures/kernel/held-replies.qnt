@@ -29,11 +29,12 @@ module held_replies {
   var s: State
   var input: { name: str, choice: int }
 
+  pure val INITIAL: State = { o: empty, now: 10000, policy: ALL_LAYERS, remoteAvailable: true, tracked: false, capacity: 1,
+    closed: List(false, false), memo: List(0, 0), requestFlights: List(NO_OWNER, NO_OWNER), processFlights: List(NO_OWNER, NO_OWNER),
+    localValues: List(0, 0), lru: List(List(), List()), remoteValues: List(0), created: List(0), watermark: List(0),
+    sources: List(), owners: List(), memoSlots: List(), held: List() }
   action init = all {
-    s' = { o: empty, now: 10000, policy: ALL_LAYERS, remoteAvailable: true, tracked: false, capacity: 1,
-      closed: List(false, false), memo: List(0, 0), requestFlights: List(NO_OWNER, NO_OWNER), processFlights: List(NO_OWNER, NO_OWNER),
-      localValues: List(0, 0), lru: List(List(), List()), remoteValues: List(0), created: List(0), watermark: List(0),
-      sources: List(), owners: List(), memoSlots: List(), held: List() },
+    s' = INITIAL,
     input' = { name: "init", choice: -1 }
   }
   // Context 0 and 1 are persistent scopes on instance 0; context 2 is a fresh
@@ -131,8 +132,10 @@ module held_replies {
     .then(admit(0)).then(releaseLatest(ALL))
     .expect(s.o.reads == 1 and s.o.loads == 1 and s.o.calls == List(CALL_PENDING, VALUE_TWO) and s.localValues == List(VALUE_TWO, 0))
 
-  // The facade equals admission followed by an immediate release.
+  // The facade is admission followed by an immediate release with the
+  // resolution the profile supplies: the same state, field for field.
   run beginIsAdmitThenReleaseTest = init
-    .then(all { s' = Serving::begin(s, LAYOUT, 0, 0, 0), input' = { name: "beginCall", choice: 0 } })
-    .expect(s.o.policyCalls == 1 and s.o.loaders == 1 and s.o.reads == 1 and s.held == List())
+    .then(all { s' = Serving::begin(s, LAYOUT, call(0), ALL), input' = { name: "beginCall", choice: 0 } })
+    .expect(s == Serving::release(Serving::admit(INITIAL, LAYOUT, call(0)), LAYOUT, 0, ALL)
+      and s.o.policyCalls == 1 and s.o.loaders == 1 and s.o.reads == 1 and s.held == List())
 }

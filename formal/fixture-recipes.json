@@ -275,39 +275,6 @@
       "remoteValue": true,
       "scope": true
     },
-    "runtime-boundaries": {
-      "admissions": true,
-      "allFeatures": true,
-      "cached": true,
-      "configured": true,
-      "defaultSharing": true,
-      "disabledBaseline": true,
-      "layer": true,
-      "o": {
-        "calls": true,
-        "classifications": true,
-        "comparisons": true,
-        "dumps": true,
-        "invalidations": true,
-        "loaders": true,
-        "loads": true,
-        "maintenance": true,
-        "policyCalls": true,
-        "reads": true,
-        "recovery": true,
-        "shadow": true,
-        "sourceScopes": true,
-        "writeTtls": true,
-        "writes": true
-      },
-      "open": true,
-      "owners": true,
-      "policy": true,
-      "registered": true,
-      "settlements": true,
-      "sources": true,
-      "waitingPolicy": true
-    },
     "shadow-layers": {
       "calls": true,
       "dumps": true,
@@ -1298,7 +1265,7 @@
             ["beginCall", -1],
             ["releasePolicy", -1]
           ],
-          "projection": "runtime-boundaries"
+          "projection": "observations"
         }
       ]
     },

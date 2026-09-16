@@ -14,6 +14,7 @@ design and its history; this file describes what is here and how to use it.
 | `encodings` | Sentinels shared by the modules: 0 for an absent value, -1 for an unowned slot, 0 for no fence | constants only |
 | `calls` | What a caller asks for: instance, key and request context | the `Call` type only |
 | `layer_policy` | Which layers a call may use, from the drivers' layer policy code and remote availability; the immediate reply `resolution` and the `BYPASS` reply | `enabledLayers`, `sharedLayers`, `resolution` |
+| `runtime_policy` | How a runtime policy reply (the runtime-boundaries drivers' codes 0 to 21) resolves against an instance's configured baseline: serving cohorts, omitted, null and invalid leaves, runtime TTLs, the kill switch | `resolve` |
 | `request_memo` | Request-scoped memo rows and scope closure | `scopeOpen`, `memoSlot`, `memoValue`, `memoize`, `closeScope` |
 | `local_storage` | Per-instance local storage with LRU eviction and a hit that renews recency, not insertion | `localValue`, `promote`, `putLocal` |
 | `remote_frames` | Remote frames with creation stamps, per-entity watermarks and fences (`cache_rules.fenceAllows`) | `seedFrame`, `raiseWatermark`, `readableFrame`, `missFence`, `writeAllowed` |
@@ -41,9 +42,14 @@ and per scope row, persistent contexts, operations per entity, the serving TTL)
 are passed as a `serving::Layout` record, so a profile with a different bound
 composes the same transitions. A call is a `calls::Call` (instance, key,
 context) and a policy reply resolves to a `layer_policy::Resolution` (the
-enabled layers and whether the call coalesces); `resolution(policy, remote)`
-is the immediate reply from the drivers' policy codes and `BYPASS` the reply
-of a call that uses no layer and neither registry.
+enabled layers and whether the call coalesces). The library never decodes a
+profile's policy field: `layer_policy::resolution(policy, remote)` is the
+immediate reply from the drivers' layer policy codes 0 to 5, which the layers
+wrapper passes to `begin`; `runtime_policy::resolve(state, samples)` resolves
+the runtime-boundaries drivers' codes 0 to 21 against the instance's
+configured `Baseline`, which its wrapper passes to `release`; `BYPASS` is the
+reply of a call that uses no layer and neither registry. Each profile owns its
+policy field with one meaning.
 
 The traversal is one statement of the fall-through order (request memo, local,
 remote, source) and of publication authority, split in time rather than by
@@ -68,7 +74,9 @@ strict and an untracked flight's fence is 0, so a profile that initializes
 
 ## Composing a profile
 
-`formal/dialcache-layers-conformance.qnt` is the first composed profile. It keeps
+`formal/dialcache-layers-conformance.qnt` is the first composed profile
+(`formal/dialcache-runtime-boundaries-conformance.qnt` is the second, with held
+policy replies and a runtime policy resolution). It keeps
 its constants, its flat `State`, `var s` and `var input`, its `nondet` input
 choices, its guards, its invariants and its regressions. Each wrapper action
 assigns `s'` to one library transition and `input'` to the driver record:
@@ -76,8 +84,8 @@ assigns `s'` to one library transition and `input'` to the driver record:
 ```quint
 action startCall(choice: int): bool = all {
   s.o.calls.length() < MAX_CALLERS,
-  s' = Flights::recordIdentity(Serving::begin(s, LAYOUT, instance(choice / KEYS_PER_INSTANCE), choice % KEYS_PER_INSTANCE,
-    choice / KEYS_PER_INSTANCE), instance(choice / KEYS_PER_INSTANCE), choice % KEYS_PER_INSTANCE),
+  s' = Flights::recordIdentity(Serving::begin(s, LAYOUT, call(choice), resolution(s.policy, s.remoteAvailable)),
+    instance(choice / KEYS_PER_INSTANCE), choice % KEYS_PER_INSTANCE),
   input' = { name: "beginCall", choice: choice }
 }
 ```

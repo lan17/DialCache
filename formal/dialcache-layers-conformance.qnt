@@ -1,6 +1,7 @@
 module dialcache_layers_conformance {
   import conformance_observations.* from "./conformance-observations"
   import encodings.* from "./kernel/encodings"
+  import calls.* from "./kernel/calls"
   import layer_policy.* from "./kernel/layer-policy"
   import serving as Serving from "./kernel/serving"
   import remote_frames as Remote from "./kernel/remote-frames"
@@ -81,9 +82,12 @@ module dialcache_layers_conformance {
   var input: { name: str, choice: int }
   pure def zeros(n: int): List[int] = 0.to(n - 1).fold(List(), (out, _) => out.append(0))
   pure def slots(n: int): List[int] = 0.to(n - 1).fold(List(), (out, _) => out.append(NO_OWNER))
-  // Input decoding: which instance each context lives on.
+  // Input decoding: which instance each context lives on, and the call a
+  // context-and-key choice asks for.
   pure def instance(context: int): int = if (context == OTHER_INSTANCE_REQUEST_CONTEXT
     or context == FRESH_OTHER_INSTANCE_CONTEXT) OTHER_INSTANCE else FIRST_INSTANCE
+  pure def call(choice: int): Call =
+    { instance: instance(choice / KEYS_PER_INSTANCE), key: choice % KEYS_PER_INSTANCE, context: choice / KEYS_PER_INSTANCE }
   pure val LAYOUT: Serving::Layout = {
     keysPerInstance: KEYS_PER_INSTANCE,
     keysPerScope: KEYS_PER_INSTANCE,
@@ -127,8 +131,8 @@ module dialcache_layers_conformance {
   }
   action startCall(choice: int): bool = all {
     s.o.calls.length() < MAX_CALLERS,
-    s' = Flights::recordIdentity(Serving::begin(s, LAYOUT, instance(choice / KEYS_PER_INSTANCE), choice % KEYS_PER_INSTANCE,
-      choice / KEYS_PER_INSTANCE), instance(choice / KEYS_PER_INSTANCE), choice % KEYS_PER_INSTANCE),
+    s' = Flights::recordIdentity(Serving::begin(s, LAYOUT, call(choice), resolution(s.policy, s.remoteAvailable)),
+      instance(choice / KEYS_PER_INSTANCE), choice % KEYS_PER_INSTANCE),
     input' = { name: "beginCall", choice: choice }
   }
   action beginCall = {
