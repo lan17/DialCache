@@ -47,7 +47,7 @@ const validate = (value: unknown, options?: { readSource?(path: string): string;
 
 describe("formal execution schedule", () => {
   it("accounts for all models, selected invariants, regressions, generated traces and challenges without Quint", () => {
-    expect(validate(manifest())).toEqual({ models: 32, libraries: 17, profiles: 15, invariants: 218, regressions: 411,
+    expect(validate(manifest())).toEqual({ models: 32, libraries: 18, profiles: 15, invariants: 218, regressions: 411,
       generatedTraces: 5280, exportedRegressionTraces: 244, vectorModels: 4, generatedVectors: 1631,
       challenges: 68, distinctFaults: 64, challengedModels: 32, waivedModels: 0, reproducers: 8, reproducerBacklog: 60 });
   });
@@ -326,12 +326,20 @@ describe("formal execution schedule", () => {
     expect(() => validate(exported(r => { r.exclusions = { invented: "no such profile" }; }))).toThrow(/reproducer exclusion must name an unlisted known profile with a reason: invented/);
     expect(() => validate(exported(r => { r.exclusions = { "source-budgets": "listed and excluded" }; }))).toThrow(/reproducer exclusion must name an unlisted known profile/);
     expect(() => validate(exported(r => { r.exclusions = { effects: "  " }; }))).toThrow(/reproducer exclusion must name an unlisted known profile with a reason: effects/);
-    expect(validate(exported(r => { r.profiles = ["source-budgets", "effects"]; r.exclusions = { independent: "Its sources settle only through explicit deadlines." }; })).reproducers).toBe(8);
+    // A shared-library fault partitions every profile between the listed and the excluded.
+    expect(() => validate(exported(r => { r.profiles = ["source-budgets", "effects"]; r.exclusions = { independent: "Its sources settle only through explicit deadlines." }; })))
+      .toThrow(/a shared-library fault must list or exclude every profile; missing core/);
+    expect(validate(exported(r => { r.profiles = ["source-budgets", "effects"]; delete r.exclusions.effects; r.exclusions.independent = "Its sources settle only through explicit deadlines."; })).reproducers).toBe(8);
     expect(() => validate(exported(r => { r.scope = "not model-only"; }))).toThrow(/scope belongs only to a model-run reproducer/);
     // Another profile model's exported run may be cited only for a fault in a shared library.
-    const policy = { model: "formal/dialcache-policy-conformance.qnt", run: "wallRollbackRejectsFutureRemoteFrameTest", failure: "s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.loaders == 2" };
-    expect(() => validate(exported(r => { Object.assign(r, policy); })))
-      .toThrow(/reproducer model must name another profile model and is allowed only for an exported-regression of a shared-library fault: formal\/dialcache-policy-conformance\.qnt/);
+    const local = (edit: (reproducer: Reproducer) => void) => {
+      const edited = manifest();
+      edit(edited.challenges.find(challenge => challenge.id === "policy-inclusive-local-expiry")!.reproducer!);
+      return edited;
+    };
+    const budgetsRun = { model: "formal/dialcache-source-budgets-conformance.qnt", run: "defaultSourceBudgetExpiresAtSixtySecondsTest", failure: "s.o.calls == List(DEADLINE_ERROR, CALL_PENDING) and s.o.loaders == 2" };
+    expect(() => validate(local(r => { Object.assign(r, budgetsRun); })))
+      .toThrow(/reproducer model must name another profile model and is allowed only for an exported-regression of a shared-library fault: formal\/dialcache-source-budgets-conformance\.qnt/);
     expect(() => validate(shared(r => { r.model = "formal/dialcache-stale-recovery.qnt"; }))).toThrow(/reproducer model must name another profile model/);
     expect(() => validate(shared(r => { r.model = "formal/dialcache-core.qnt"; }))).toThrow(/reproducer model must name another profile model .*: formal\/dialcache-core\.qnt/);
     expect(() => validate(shared(r => { r.model = "formal/invented.qnt"; }))).toThrow(/reproducer model must name another profile model .*: formal\/invented\.qnt/);

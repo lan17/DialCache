@@ -67,6 +67,7 @@ module dialcache_layers_conformance {
     requestFlights: List[int],
     processFlights: List[int],
     localValues: List[int],
+    localExpires: List[int],
     lru: List[List[int]],
     remoteValues: List[int],
     created: List[int],
@@ -83,17 +84,20 @@ module dialcache_layers_conformance {
   pure def zeros(n: int): List[int] = 0.to(n - 1).fold(List(), (out, _) => out.append(0))
   pure def slots(n: int): List[int] = 0.to(n - 1).fold(List(), (out, _) => out.append(NO_OWNER))
   // Input decoding: which instance each context lives on, and the call a
-  // context-and-key choice asks for.
+  // context-and-key choice asks for (every context here is enabled).
   pure def instance(context: int): int = if (context == OTHER_INSTANCE_REQUEST_CONTEXT
     or context == FRESH_OTHER_INSTANCE_CONTEXT) OTHER_INSTANCE else FIRST_INSTANCE
-  pure def call(choice: int): Call =
-    { instance: instance(choice / KEYS_PER_INSTANCE), key: choice % KEYS_PER_INSTANCE, context: choice / KEYS_PER_INSTANCE, enabled: true }
+  pure def call(choice: int): Call = {
+    instance: instance(choice / KEYS_PER_INSTANCE), key: choice % KEYS_PER_INSTANCE, context: choice / KEYS_PER_INSTANCE,
+    enabled: true, outside: false
+  }
   pure val LAYOUT: Serving::Layout = {
     keysPerInstance: KEYS_PER_INSTANCE,
     keysPerScope: KEYS_PER_INSTANCE,
     persistentContexts: PERSISTENT_CONTEXTS,
     operationsPerEntity: OPERATIONS_PER_ENTITY,
     servingTtlMs: SERVING_TTL_MS,
+    localTtlMs: SERVING_TTL_MS,
     probeSourceScope: false
   }
 
@@ -113,6 +117,7 @@ module dialcache_layers_conformance {
       requestFlights: slots(12),
       processFlights: slots(8),
       localValues: zeros(8),
+      localExpires: zeros(8),
       lru: List(List(), List()),
       remoteValues: zeros(4),
       created: zeros(4),

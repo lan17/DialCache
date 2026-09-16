@@ -42,7 +42,7 @@ module dialcache_scope_conformance {
   // two outer ones are persistent scopes; no remote layer writes a TTL; the
   // drivers probe each source for the scope it started under.
   pure val LAYOUT: Serving::Layout = {
-    keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, servingTtlMs: 0, probeSourceScope: true
+    keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, servingTtlMs: 0, localTtlMs: 0, probeSourceScope: true
   }
 
   // -- State and initial environment -----------------------------------------
@@ -73,7 +73,7 @@ module dialcache_scope_conformance {
   // disabling flight sharing.
   pure def holder(scope: int): int = if (scope == REPLACEMENT_REQUEST) REPLACEMENT_REQUEST else ROOT_REQUEST
   pure def call(scope: int): Call =
-    { instance: 0, key: 0, context: holder(scope), enabled: scope != NESTED_DISABLED and scope != OUTSIDE_REQUEST }
+    { instance: 0, key: 0, context: holder(scope), enabled: scope != NESTED_DISABLED and scope != OUTSIDE_REQUEST, outside: scope == OUTSIDE_REQUEST }
   pure def resolutionOf(overlay: int): Resolution = {
     layers: { request: overlay != POLICY_NO_REQUEST, local: false, remote: false },
     coalesce: overlay != POLICY_NO_COALESCING

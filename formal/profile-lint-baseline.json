@@ -4,6 +4,7 @@
   "kernelModules": [
     "calls",
     "clock",
+    "deadlines",
     "diagnostics",
     "encodings",
     "flights",
@@ -141,8 +142,13 @@
       "id": "source-budgets",
       "model": "formal/dialcache-source-budgets-conformance.qnt",
       "module": "dialcache_source_budgets_conformance",
-      "libraryTransitions": [],
-      "compositionViolations": 35
+      "libraryTransitions": [
+        "deadlines::admitLocal",
+        "deadlines::advanceLocal",
+        "deadlines::releaseLocal",
+        "deadlines::settleLocal"
+      ],
+      "compositionViolations": 0
     }
   ]
 }

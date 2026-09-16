@@ -11,7 +11,7 @@ module policy_gate {
   type Held = { policyCall: int, caller: int, call: Call }
   type Gated[r] = { held: List[Held] | r }
 
-  pure val NOT_HELD: Held = { policyCall: NO_OWNER, caller: NO_OWNER, call: { instance: NO_OWNER, key: NO_OWNER, context: NO_OWNER, enabled: false } }
+  pure val NOT_HELD: Held = { policyCall: NO_OWNER, caller: NO_OWNER, call: { instance: NO_OWNER, key: NO_OWNER, context: NO_OWNER, enabled: false, outside: false } }
 
   pure def hold(state: Gated[r], policyCall: int, caller: int, call: Call): Gated[r] =
     { held: state.held.append({ policyCall: policyCall, caller: caller, call: call }), ...state }
@@ -22,6 +22,7 @@ module policy_gate {
   // The entry held under a policy call; NOT_HELD (caller -1) when none is.
   pure def entry(state: Gated[r], policyCall: int): Held =
     state.held.foldl(NOT_HELD, (found, held) => if (held.policyCall == policyCall) held else found)
+  pure def holds(state: Gated[r], policyCall: int): bool = entry(state, policyCall).caller >= 0
   pure def release(state: Gated[r], policyCall: int): Gated[r] =
     { held: state.held.select(held => held.policyCall != policyCall), ...state }
 }

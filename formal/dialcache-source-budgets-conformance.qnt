@@ -1,6 +1,11 @@
 module dialcache_source_budgets_conformance {
-  import cache_rules.* from "./cache-rules"
   import conformance_observations.* from "./conformance-observations"
+  import encodings.* from "./kernel/encodings"
+  import calls.* from "./kernel/calls"
+  import layer_policy.* from "./kernel/layer-policy"
+  import serving as Serving from "./kernel/serving"
+  import deadlines as Deadlines from "./kernel/deadlines"
+  import policy_gate as Gate from "./kernel/policy-gate"
 
   // C01/C23-C27: source deadlines belong to source execution, not policy work
   // or the waiting caller. One local key and eight calls permit delayed policy,
@@ -8,6 +13,10 @@ module dialcache_source_budgets_conformance {
   // Sources and policy replies are external gates. Timers are delivered on an
   // advance; late settlement before timer delivery is covered by effects.
   // Remote I/O, request memo and shadow work are outside this focused profile.
+  // Every rule is a kernel transition (formal/kernel): the local projection of
+  // the traversal with its budgeted variants. This module owns the bounded
+  // state, the fixture decoding (the configured source budget and the identity
+  // a call is admitted with), the input choices and the guards.
 
   // Initialization choices are part of the replay input: keep these codes stable.
   pure val DEFAULT_BUDGET_MODE = 0
@@ -19,45 +28,77 @@ module dialcache_source_budgets_conformance {
   pure val OUTSIDE_INVALID_KEY = 3
   pure val MAX_CALLS = 8
   pure val LOCAL_TTL_MS = 1000
-
-  // All times are monotonic milliseconds. A budget of -1 is unbounded.
-  // rawPending can remain true after result becomes DEADLINE_ERROR: the caller
-  // has stopped waiting, but its abandoned source can still finish externally.
-  type Source = {
-    rawPending: bool, result: int, started: int, settled: int,
-    budget: int, cacheable: bool, outside: bool
+  pure val MAX_TIME_MS = 180000
+  // One key on one instance, no persistent request scope, a 1 s local TTL and
+  // no remote layer; every reply enables the local layer with sharing.
+  pure val LAYOUT: Serving::Layout = {
+    keysPerInstance: 1, keysPerScope: 1, persistentContexts: 0, operationsPerEntity: 1,
+    servingTtlMs: 0, localTtlMs: LOCAL_TTL_MS, probeSourceScope: false
   }
+  pure val LOCAL: Resolution = { layers: { request: false, local: true, remote: false }, coalesce: true }
+
+  // All times are monotonic milliseconds. A budget of -1 is unbounded. A
+  // source's external work can remain undelivered after its deadline completed
+  // its callers: the abandoned source can still finish externally.
   type State = {
-    o: Observation, mode: int, now: int,
-    kinds: List[int], owners: List[int], policyOwners: List[int],
-    sources: List[Source], registered: int,
-    localValue: int, localExpires: int, localWriter: int
+    o: Observation,
+    now: int,
+    sourceBudget: int,
+    capacity: int,
+    closed: List[bool],
+    memo: List[int],
+    requestFlights: List[int],
+    processFlights: List[int],
+    localValues: List[int],
+    localExpires: List[int],
+    lru: List[List[int]],
+    sources: List[Serving::LocalSource],
+    owners: List[int],
+    memoSlots: List[int],
+    held: List[Gate::Held],
+    started: List[int],
+    budgets: List[int],
+    settledAt: List[int],
+    drained: List[bool]
   }
   var s: State
   // input records the external command. s.o predicts public observations;
-  // owners, registered and local storage describe model-owned state, not inputs
+  // owners, registries and local storage describe model-owned state, not inputs
   // a native replay driver may read to decide what the implementation should do.
   var input: { name: str, choice: int }
 
+  // Input decoding: the fixture's configured source budget, and the identity a
+  // call is admitted with (an outside call also has no source deadline; a key
+  // that failed to construct keeps the enabled budget, C27).
   pure def configuredBudget(mode: int): int =
     if (mode == DEFAULT_BUDGET_MODE) 60000
-    else if (mode == UNBOUNDED_BUDGET_MODE) -1
+    else if (mode == UNBOUNDED_BUDGET_MODE) Deadlines::UNBOUNDED
     else 10
+  pure def call(kind: int): Call =
+    { instance: 0, key: 0, context: 0, enabled: kind == ENABLED, outside: kind == OUTSIDE or kind == OUTSIDE_INVALID_KEY }
 
   action initialize(mode: int): bool = all {
     input' = { name: "init", choice: mode },
     s' = {
       o: empty,
-      mode: mode,
       now: 0,
-      kinds: List(),
-      owners: List(),
-      policyOwners: List(),
+      sourceBudget: configuredBudget(mode),
+      capacity: 1,
+      closed: List(),
+      memo: List(),
+      requestFlights: List(),
+      processFlights: List(NO_OWNER),
+      localValues: List(NO_VALUE),
+      localExpires: List(0),
+      lru: List(List()),
       sources: List(),
-      registered: -1,
-      localValue: 0,
-      localExpires: 0,
-      localWriter: -1
+      owners: List(),
+      memoSlots: List(),
+      held: List(),
+      started: List(),
+      budgets: List(),
+      settledAt: List(),
+      drained: List()
     }
   }
   action init = {
@@ -65,80 +106,29 @@ module dialcache_source_budgets_conformance {
     initialize(choice)
   }
 
-  pure def startSource(x: State, call: int, kind: int): State = {
-    val outside = kind == OUTSIDE or kind == OUTSIDE_INVALID_KEY
-    val source = x.sources.length()
-    {
-      owners: x.owners.replaceAt(call, source),
-      sources: x.sources.append({
-        rawPending: true, result: CALL_PENDING, started: x.now, settled: -1,
-        budget: if (outside) -1 else configuredBudget(x.mode),
-        cacheable: kind == ENABLED, outside: outside
-      }),
-      registered: if (kind == ENABLED) source else x.registered,
-      o: { loaders: x.o.loaders + 1, ...x.o }, ...x
-    }
-  }
-
   action begin(kind: int): bool = all {
     s.o.calls.length() < MAX_CALLS,
     input' = { name: "beginCall", choice: kind },
-    val call = s.o.calls.length()
-    val entered = {
-      kinds: s.kinds.append(kind), owners: s.owners.append(-1),
-      o: { calls: s.o.calls.append(CALL_PENDING), ...s.o }, ...s
-    }
-    s' = if (kind == ENABLED) {
-      policyOwners: entered.policyOwners.append(call),
-      o: { policyCalls: entered.o.policyCalls + 1, ...entered.o }, ...entered
-    } else startSource(entered, call, kind)
+    s' = Deadlines::admitLocal(s, LAYOUT, call(kind))
   }
   action beginCall = {
     nondet choice = Set(ENABLED, OUTSIDE, INVALID_KEY, OUTSIDE_INVALID_KEY).oneOf()
     begin(choice)
   }
 
+  // The drivers release a held policy reply by its policy call index.
   action release(id: int): bool = all {
-    id < s.policyOwners.length(),
-    s.policyOwners.nth(id) >= 0,
+    Gate::holds(s, id),
     input' = { name: "releasePolicy", choice: id },
-    val call = s.policyOwners.nth(id)
-    val admitted = { policyOwners: s.policyOwners.replaceAt(id, -1), ...s }
-    s' = if (s.registered >= 0) {
-      owners: s.owners.replaceAt(call, s.registered), ...admitted
-    } else if (s.localValue > 0 and localEntryLiveAt(s.now, s.localExpires)) {
-      o: { calls: s.o.calls.replaceAt(call, s.localValue), ...s.o }, ...admitted
-    } else startSource(admitted, call, ENABLED)
+    s' = Deadlines::releaseLocal(s, LAYOUT, id, LOCAL)
   }
   action releasePolicy = { nondet choice = 0.to(MAX_CALLS - 1).oneOf(); release(choice) }
 
-  pure def complete(x: State, id: int, outcome: int): State = {
-    val source = x.sources.nth(id)
-    val accepted = outcome == VALUE_ONE or outcome == VALUE_TWO
-    {
-      sources: x.sources.replaceAt(id, { result: outcome, settled: x.now, ...source }),
-      registered: if (x.registered == id) -1 else x.registered,
-      localValue: if (source.cacheable and accepted) outcome else x.localValue,
-      localExpires: if (source.cacheable and accepted) x.now + LOCAL_TTL_MS else x.localExpires,
-      localWriter: if (source.cacheable and accepted) id else x.localWriter,
-      o: { calls: finishOwnedCalls(x.o.calls, x.owners, id, outcome), ...x.o }, ...x
-    }
-  }
-  // The profile's one deadline judgment. Timer delivery on an advance and the
-  // settle-time check share it, so the two sites cannot disagree at the boundary.
-  pure def sourceDeadlineReached(source: Source, now: int): bool =
-    not(sourceAcceptsAt(source.started, now, source.budget))
-  pure def settleSource(x: State, id: int, outcome: int): State = {
-    val source = x.sources.nth(id)
-    val drained = { sources: x.sources.replaceAt(id, { rawPending: false, ...source }), ...x }
-    if (source.result != CALL_PENDING) drained else complete(drained, id,
-      if (sourceDeadlineReached(source, x.now)) DEADLINE_ERROR else outcome)
-  }
   action resolved(id: int, value: int): bool = all {
     id < s.sources.length(),
-    s.sources.nth(id).rawPending,
+    Deadlines::pending(s, id),
     input' = { name: "resolveLoader", choice: id * 2 + value },
-    s' = settleSource(s, id, value)
+    s' = Deadlines::settleLocal(s, LAYOUT, id, value)
   }
   action resolveLoader = {
     nondet choice = 1.to(MAX_CALLS * 2).oneOf()
@@ -146,47 +136,49 @@ module dialcache_source_budgets_conformance {
   }
   action rejected(id: int): bool = all {
     id < s.sources.length(),
-    s.sources.nth(id).rawPending,
+    Deadlines::pending(s, id),
     input' = { name: "rejectLoader", choice: id },
-    s' = settleSource(s, id, SOURCE_ERROR)
+    s' = Deadlines::settleLocal(s, LAYOUT, id, SOURCE_ERROR)
   }
   action rejectLoader = { nondet choice = 0.to(MAX_CALLS - 1).oneOf(); rejected(choice) }
 
   action advanced(delta: int): bool = all {
-    s.now + delta <= 180000,
+    s.now + delta <= MAX_TIME_MS,
     input' = { name: "advance", choice: delta },
-    val advanced = { now: s.now + delta, ...s }
-    s' = s.sources.indices().fold(advanced, (current, id) => {
-      val source = current.sources.nth(id)
-      if (source.result == CALL_PENDING and sourceDeadlineReached(source, current.now))
-        complete(current, id, DEADLINE_ERROR) else current
-    })
+    s' = Deadlines::advanceLocal(s, LAYOUT, delta)
   }
   action advance = { nondet choice = Set(1, 3, 6, 9, 10, 100, 59999, 60001).oneOf(); advanced(choice) }
   action step = any { beginCall, releasePolicy, resolveLoader, rejectLoader, advance }
 
-  val outsideSourcesHaveNoDeadline = s.sources.indices().forall(i => {
-    val source = s.sources.nth(i)
-    not(source.outside) or (source.budget == -1 and source.result != DEADLINE_ERROR and not(source.cacheable))
-  })
-  val acceptedSourceRespectsItsOwnStart = s.sources.indices().forall(i => {
-    val source = s.sources.nth(i)
-    not(source.result == VALUE_ONE or source.result == VALUE_TWO)
-      or (source.settled >= source.started and
-        (source.budget < 0 or source.settled < source.started + source.budget))
-  })
-  val registeredWorkIsNotAbandoned = s.registered < 0 or s.sources.nth(s.registered).result == CALL_PENDING
-  val localPublicationRequiresAcceptedSource = s.localWriter < 0 or {
-    val writer = s.sources.nth(s.localWriter)
-    writer.cacheable and (writer.result == VALUE_ONE or writer.result == VALUE_TWO)
-      and s.localValue == writer.result
-  }
+  // -- Independently stated safety properties --------------------------------
+  // A property about an admission is stated about the step that just admitted:
+  // the newest caller and, when it started one, the newest source.
+
+  val newestSource = s.sources.length() - 1
+  val justAdmitted = input.name == "beginCall"
+  val outsideAdmission = justAdmitted and (input.choice == OUTSIDE or input.choice == OUTSIDE_INVALID_KEY)
+  // A source started outside every request has no deadline, warms nothing and
+  // shares nothing; a source without a deadline never expires.
+  val outsideSourcesHaveNoDeadline = s.budgets.indices().forall(i =>
+      s.budgets.nth(i) >= 0 or s.sources.nth(i).result != DEADLINE_ERROR)
+    and (not(outsideAdmission) or (s.budgets.nth(newestSource) == Deadlines::UNBOUNDED
+      and not(s.sources.nth(newestSource).local) and not(s.sources.nth(newestSource).shared)))
+  val acceptedSourceRespectsItsOwnStart = s.sources.indices().forall(i =>
+    not(accepted(s.sources.nth(i).result))
+      or (s.settledAt.nth(i) >= s.started.nth(i) and
+        (s.budgets.nth(i) < 0 or s.settledAt.nth(i) < s.started.nth(i) + s.budgets.nth(i))))
+  val registeredWorkIsNotAbandoned = s.processFlights.nth(0) < 0
+    or s.sources.nth(s.processFlights.nth(0)).result == CALL_PENDING
+  val localPublicationRequiresAcceptedSource = s.localValues.nth(0) == NO_VALUE or s.sources.indices().exists(i =>
+    s.sources.nth(i).local and accepted(s.sources.nth(i).result) and s.sources.nth(i).result == s.localValues.nth(0))
   val followersKeepTheirOwnersOutcome = s.owners.indices().forall(call => {
     val owner = s.owners.nth(call)
     owner < 0 or s.o.calls.nth(call) == s.sources.nth(owner).result
   })
-  val onlyEnabledValidCallsResolvePolicy = s.o.policyCalls == s.kinds.foldl(0,
-    (count, kind) => count + (if (kind == ENABLED) 1 else 0))
+  // Only an enabled call makes a policy call: the newest caller waits for a
+  // reply exactly when it was admitted enabled.
+  val onlyEnabledValidCallsResolvePolicy = not(justAdmitted)
+    or ((input.choice == ENABLED) == (s.held.select(held => held.caller == s.o.calls.length() - 1).length() > 0))
 
   run outsideAndInvalidOutsideCallsIgnoreDeadlineAndSharingTest = initialize(FINITE_BUDGET_MODE)
     .then(begin(OUTSIDE)).then(begin(OUTSIDE_INVALID_KEY)).then(advanced(100))

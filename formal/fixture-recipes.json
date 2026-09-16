@@ -361,35 +361,6 @@
       "probes": true,
       "ticks": true
     },
-    "source-budgets": {
-      "kinds": true,
-      "localExpires": true,
-      "localValue": true,
-      "localWriter": true,
-      "mode": true,
-      "now": true,
-      "o": {
-        "calls": true,
-        "classifications": true,
-        "comparisons": true,
-        "dumps": true,
-        "invalidations": true,
-        "loaders": true,
-        "loads": true,
-        "maintenance": true,
-        "policyCalls": true,
-        "reads": true,
-        "recovery": true,
-        "shadow": true,
-        "sourceScopes": true,
-        "writeTtls": true,
-        "writes": true
-      },
-      "owners": true,
-      "policyOwners": true,
-      "registered": true,
-      "sources": true
-    },
     "effects-13": {
       "calls": true,
       "reads": true,
@@ -1443,7 +1414,7 @@
             ["advance", 3],
             ["advance", 1]
           ],
-          "projection": "source-budgets"
+          "projection": "observations"
         }
       ]
     },

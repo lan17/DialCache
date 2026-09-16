@@ -513,7 +513,7 @@
     },
     "source-budgets": {
       "sampledHistories": 256,
-      "corpusSha256": "b3f6b1d0778632287eaaad8df40abc4a4d56ed9d427e042f6448e026a2445681",
+      "corpusSha256": "70bd33f072dff3f0dd9fc6108e58c96ad7b068c332c8e22755ae13183357687b",
       "labels": {
         "outside-calls-skip-source-deadlines-sharing-and-publication": 0,
         "default-source-budget-expires-at-sixty-seconds": 0,

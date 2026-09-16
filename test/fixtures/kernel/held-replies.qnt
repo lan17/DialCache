@@ -15,7 +15,7 @@ module held_replies {
   import flights as Flights from "../../../formal/kernel/flights"
   import policy_gate as Gate from "../../../formal/kernel/policy-gate"
 
-  pure val LAYOUT: Serving::Layout = { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, servingTtlMs: 60000, probeSourceScope: false }
+  pure val LAYOUT: Serving::Layout = { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, servingTtlMs: 60000, localTtlMs: 60000, probeSourceScope: false }
   pure val ALL: Resolution = { layers: { request: true, local: true, remote: true }, coalesce: true }
   pure val UNCOALESCED: Resolution = { layers: { request: true, local: true, remote: true }, coalesce: false }
   pure val REQUEST_ONLY: Resolution = { layers: { request: true, local: false, remote: false }, coalesce: true }
@@ -23,7 +23,7 @@ module held_replies {
   type State = {
     o: Observation, now: int, policy: int, remoteAvailable: bool, tracked: bool, capacity: int,
     closed: List[bool], memo: List[int], requestFlights: List[int], processFlights: List[int],
-    localValues: List[int], lru: List[List[int]], remoteValues: List[int], created: List[int], watermark: List[int],
+    localValues: List[int], localExpires: List[int], lru: List[List[int]], remoteValues: List[int], created: List[int], watermark: List[int],
     sources: List[Serving::LayeredSource], owners: List[int], memoSlots: List[int], held: List[Gate::Held]
   }
   var s: State
@@ -31,7 +31,7 @@ module held_replies {
 
   pure val INITIAL: State = { o: empty, now: 10000, policy: ALL_LAYERS, remoteAvailable: true, tracked: false, capacity: 1,
     closed: List(false, false), memo: List(0, 0), requestFlights: List(NO_OWNER, NO_OWNER), processFlights: List(NO_OWNER, NO_OWNER),
-    localValues: List(0, 0), lru: List(List(), List()), remoteValues: List(0), created: List(0), watermark: List(0),
+    localValues: List(0, 0), localExpires: List(0, 0), lru: List(List(), List()), remoteValues: List(0), created: List(0), watermark: List(0),
     sources: List(), owners: List(), memoSlots: List(), held: List() }
   action init = all {
     s' = INITIAL,
@@ -39,7 +39,7 @@ module held_replies {
   }
   // Context 0 and 1 are persistent scopes on instance 0; context 2 is a fresh
   // context on instance 1.
-  pure def call(context: int): Call = { instance: if (context == 2) 1 else 0, key: 0, context: context, enabled: true }
+  pure def call(context: int): Call = { instance: if (context == 2) 1 else 0, key: 0, context: context, enabled: true, outside: false }
   action admit(context: int): bool = all {
     s' = Serving::admit(s, LAYOUT, call(context)),
     input' = { name: "beginCall", choice: context }

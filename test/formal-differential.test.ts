@@ -18,6 +18,7 @@ const differential = await import(new URL("../formal/differential.mjs", import.m
   compareHistory(reference: History, replayed: History): { agree: boolean; step?: number; action?: string; choice?: number; reason?: string; fields?: string[] };
   chunked<T>(items: T[], size: number): T[][];
   bytesPerState(directory: string): { traces: number; states: number; bytes: number; bytesPerState: number };
+  normalizeGeneratedTraces(folders: string[]): number;
   recordedStates(raw: { states: unknown[] }): { states: unknown[] };
   runDiagnostic(log: string, run: string): string | null;
   replayedHistory(raw: { states: unknown[] }, reference: History, descriptor: unknown): History;
@@ -53,6 +54,20 @@ const manifests = (models: Array<Record<string, unknown>>, version = 2): Manifes
 });
 const layersModel = (extra: Record<string, unknown> = {}) => ({ path: "formal/dialcache-layers-conformance.qnt", profile: "layers", invariants: ["a"], regressions: [],
   generate: { maxSamples: 4, maxSteps: 4, traces: 2, outputDirectory: ".formal-traces/features/layers" }, ...extra });
+
+describe("generated trace normalization", () => {
+  it("rewrites the simulator's action and choice annotations from the explicit input record", () => {
+    const folder = mkdtempSync(join(tmpdir(), "differential-normalize-"));
+    const step = (name: string, choice: number, taken: string) => ({ input: { name, choice: { "#bigint": String(choice) } }, "mbt::actionTaken": taken, s: {} });
+    writeFileSync(join(folder, "trace_0.itf.json"), JSON.stringify({ vars: ["input", "s"], states: [step("init", 2, "step"), step("beginCall", 0, "beginCall"), step("advance", -1, "advance")] }));
+    writeFileSync(join(folder, "notes.txt"), "ignored");
+    expect(differential.normalizeGeneratedTraces([folder])).toBe(1);
+    const trace = JSON.parse(readFileSync(join(folder, "trace_0.itf.json"), "utf8")) as { vars: string[]; states: Array<Record<string, unknown>> };
+    expect(trace.states.map(state => state["mbt::actionTaken"])).toEqual(["init", "beginCall", "advance"]);
+    expect(trace.states[2]!["mbt::nondetPicks"]).toEqual({ choice: { tag: "None", value: { "#tup": [] } } });
+    expect(trace.vars).toEqual(["input", "s", "mbt::actionTaken", "mbt::nondetPicks"]);
+  });
+});
 
 describe("corpus differential comparison", () => {
   it("agrees on identical histories and names the differing channel and field", () => {
@@ -166,7 +181,7 @@ describe("corpus differential comparison", () => {
   });
 
   it("selects the composed profiles by their kernel imports in either revision, following helper libraries, and lists every Quint source", () => {
-    expect(differential.composedProfiles(readExecution())).toEqual(["scope", "layers", "runtime-boundaries"]);
+    expect(differential.composedProfiles(readExecution())).toEqual(["scope", "layers", "runtime-boundaries", "source-budgets"]);
     // A profile composed only at the reference (a rewrite off the library) is still selected.
     const referenceTree = mkdtempSync(join(tmpdir(), "differential-reference-"));
     const candidateTree = mkdtempSync(join(tmpdir(), "differential-candidate-"));
