@@ -2,11 +2,13 @@
   "schemaVersion": 3,
   "quintVersion": "0.32.0",
   "kernelModules": [
+    "calls",
     "clock",
     "encodings",
     "flights",
     "layer_policy",
     "local_storage",
+    "policy_gate",
     "remote_frames",
     "request_memo",
     "serving"
@@ -67,6 +69,7 @@
       "module": "dialcache_layers_conformance",
       "libraryTransitions": [
         "clock::advance",
+        "flights::recordIdentity",
         "remote_frames::seedFrame",
         "serving::begin",
         "serving::closeScope",

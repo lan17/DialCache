@@ -21,12 +21,14 @@
     "formal/cache-rules.qnt",
     "formal/cache-contract.qnt",
     "formal/kernel/encodings.qnt",
+    "formal/kernel/calls.qnt",
     "formal/kernel/layer-policy.qnt",
     "formal/kernel/request-memo.qnt",
     "formal/kernel/local-storage.qnt",
     "formal/kernel/remote-frames.qnt",
     "formal/kernel/flights.qnt",
     "formal/kernel/clock.qnt",
+    "formal/kernel/policy-gate.qnt",
     "formal/kernel/serving.qnt"
   ],
   "models": [

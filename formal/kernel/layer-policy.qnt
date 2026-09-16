@@ -10,12 +10,20 @@ module layer_policy {
   pure val NO_LAYERS = 5
 
   type Layers = { request: bool, local: bool, remote: bool }
+  // What a policy reply resolves to for one call: its layers and whether it
+  // coalesces with other callers (C13; `coalesce: false` skips both registries).
+  type Resolution = { layers: Layers, coalesce: bool }
+  // The reply of a call that uses no layer and neither registry: a caller in a
+  // closed scope (C01) or, in a profile with runtime replies, an invalid leaf.
+  pure val BYPASS: Resolution = { layers: { request: false, local: false, remote: false }, coalesce: false }
 
   pure def enabledLayers(policy: int, remoteAvailable: bool): Layers = {
     request: policy != NO_REQUEST_LAYER and policy != NO_LAYERS,
     local: Set(ALL_LAYERS, NO_REQUEST_LAYER, NO_REMOTE_LAYER).contains(policy),
     remote: remoteAvailable and Set(ALL_LAYERS, NO_REQUEST_LAYER, NO_LOCAL_LAYER).contains(policy)
   }
+  pure def resolution(policy: int, remoteAvailable: bool): Resolution =
+    { layers: enabledLayers(policy, remoteAvailable), coalesce: true }
   // Sharing across callers exists only where a shared layer (local or remote)
   // participates; a request-only call is never coalesced across scopes.
   pure def sharedLayers(layers: Layers): bool = layers.local or layers.remote
