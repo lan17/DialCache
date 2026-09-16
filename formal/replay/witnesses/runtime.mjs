@@ -133,29 +133,49 @@ function policyWitnesses(steps, recorder) {
   }
 }
 
+// Scope witnesses read only the inputs and the public observation: the memo
+// row a source fills is the outer lifetime of the context its caller began in
+// (the input choice), a held reply is a beginCall that counted a policy call,
+// the policy overlay is the last policy input, closure is the closeScope input.
+const scopeHolder = scope => scope === 1 ? 1 : 0;
+const scopeSourceValues = [1, 2, 5, 6, 7, 8, 9];
 function scopeWitnesses(steps, recorder) {
   const overlaps = new Set();
   const publications = new Map();
   const lastWriter = new Map();
+  const callerScope = [];
+  const sources = [];
+  const closed = [false, false];
+  let overlay = 0;
+  let pending = -1;
   for (let i = 1; i < steps.length; i++) {
     recorder.step(i);
-    const step = steps[i], before = steps[i - 1].s, after = step.s;
-    const prior = before.o, current = after.o, action = step.input.name, choice = step.input.choice;
+    const step = steps[i], prior = steps[i - 1].s.o, current = step.s.o, action = step.input.name, choice = step.input.choice;
+    if (action === "policy") overlay = choice;
+    if (action === "beginCall") {
+      callerScope.push(choice);
+      pending = current.policyCalls > prior.policyCalls ? prior.calls.length : -1;
+      if (current.loaders > prior.loaders) sources.push({ slot: -1, shared: false, pending: true });
+    }
     if (action === "releasePolicy") {
+      const holder = scopeHolder(callerScope[pending]);
+      const slot = overlay !== 1 && !closed[holder] ? holder : -1;
       if (current.loaders > prior.loaders) {
-        const loader = after.sources.length - 1, admitted = after.sources[loader];
-        for (const [other, source] of before.sources.entries()) if (admitted.slot >= 0 && source.slot === admitted.slot &&
-          source.result === 0 && !source.shared && !admitted.shared) overlaps.add(`${other}:${loader}`);
-      } else if (successful(current.calls[before.policyCall]) && before.overlay === 2) {
+        const loader = sources.length, shared = slot >= 0 && overlay !== 2;
+        for (const [other, source] of sources.entries()) if (slot >= 0 && source.slot === slot &&
+          source.pending && !source.shared && !shared) overlaps.add(`${other}:${loader}`);
+        sources.push({ slot, shared, pending: true });
+      } else if (successful(current.calls[pending]) && overlay === 2) {
         recorder.credit("uncoalesced-request-settled-hit");
-        const slot = before.scope === 1 ? 1 : 0;
-        if (lastWriter.get(slot)?.value === current.calls[before.policyCall]) recorder.credit("independent-request-last-completion-probed");
+        if (lastWriter.get(holder)?.value === current.calls[pending]) recorder.credit("independent-request-last-completion-probed");
       }
     }
+    if (action === "rejectLoader") sources[choice].pending = false;
     if (action === "resolveLoader") {
-      const loader = Math.floor((choice - 1) / 7);
-      const source = before.sources[loader], value = after.sources[loader].result;
-      if (source.slot < 0 || before.completed[source.slot]) continue;
+      const loader = Math.floor((choice - 1) / 7), value = scopeSourceValues[(choice - 1) % 7];
+      const source = sources[loader];
+      source.pending = false;
+      if (source.slot < 0 || closed[source.slot]) continue;
       const preceding = publications.get(source.slot);
       lastWriter.delete(source.slot);
       if (!source.shared && preceding !== undefined && preceding.value !== value &&
@@ -165,6 +185,7 @@ function scopeWitnesses(steps, recorder) {
       publications.set(source.slot, { loader, value, kind: "request" });
     }
     if (action === "closeScope" && choice < 2) {
+      closed[choice] = true;
       publications.delete(choice);
       lastWriter.delete(choice);
     }

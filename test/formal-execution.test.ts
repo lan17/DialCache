@@ -47,9 +47,9 @@ const validate = (value: unknown, options?: { readSource?(path: string): string;
 
 describe("formal execution schedule", () => {
   it("accounts for all models, selected invariants, regressions, generated traces and challenges without Quint", () => {
-    expect(validate(manifest())).toEqual({ models: 32, libraries: 16, profiles: 15, invariants: 217, regressions: 407,
+    expect(validate(manifest())).toEqual({ models: 32, libraries: 17, profiles: 15, invariants: 217, regressions: 407,
       generatedTraces: 5280, exportedRegressionTraces: 240, vectorModels: 4, generatedVectors: 1631,
-      challenges: 67, distinctFaults: 64, challengedModels: 32, waivedModels: 0, reproducers: 7, reproducerBacklog: 60 });
+      challenges: 67, distinctFaults: 63, challengedModels: 32, waivedModels: 0, reproducers: 7, reproducerBacklog: 60 });
   });
 
   it("rejects omitted models and dropped or renamed regressions", () => {

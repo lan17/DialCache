@@ -41,9 +41,9 @@ module dialcache_runtime_boundaries_conformance {
   pure val TTL_MS = 60000
   pure val INITIAL_TIME_MS = 10000
   pure val SAMPLES: Samples = { local: 4292886220, remote: 1018911151 }
-  pure val CALL: Call = { instance: 0, key: 0, context: 0 }
+  pure val CALL: Call = { instance: 0, key: 0, context: 0, enabled: true }
   pure def layoutFor(ttlMs: int): Serving::Layout =
-    { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 1, operationsPerEntity: 1, servingTtlMs: ttlMs }
+    { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 1, operationsPerEntity: 1, servingTtlMs: ttlMs, probeSourceScope: false }
 
   type State = {
     o: Observation,
@@ -63,7 +63,7 @@ module dialcache_runtime_boundaries_conformance {
     remoteValues: List[int],
     created: List[int],
     watermark: List[int],
-    sources: List[Flights::Source],
+    sources: List[Serving::LayeredSource],
     owners: List[int],
     memoSlots: List[int],
     held: List[Gate::Held]

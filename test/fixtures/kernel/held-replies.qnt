@@ -15,7 +15,7 @@ module held_replies {
   import flights as Flights from "../../../formal/kernel/flights"
   import policy_gate as Gate from "../../../formal/kernel/policy-gate"
 
-  pure val LAYOUT: Serving::Layout = { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, servingTtlMs: 60000 }
+  pure val LAYOUT: Serving::Layout = { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, servingTtlMs: 60000, probeSourceScope: false }
   pure val ALL: Resolution = { layers: { request: true, local: true, remote: true }, coalesce: true }
   pure val UNCOALESCED: Resolution = { layers: { request: true, local: true, remote: true }, coalesce: false }
   pure val REQUEST_ONLY: Resolution = { layers: { request: true, local: false, remote: false }, coalesce: true }
@@ -24,7 +24,7 @@ module held_replies {
     o: Observation, now: int, policy: int, remoteAvailable: bool, tracked: bool, capacity: int,
     closed: List[bool], memo: List[int], requestFlights: List[int], processFlights: List[int],
     localValues: List[int], lru: List[List[int]], remoteValues: List[int], created: List[int], watermark: List[int],
-    sources: List[Flights::Source], owners: List[int], memoSlots: List[int], held: List[Gate::Held]
+    sources: List[Serving::LayeredSource], owners: List[int], memoSlots: List[int], held: List[Gate::Held]
   }
   var s: State
   var input: { name: str, choice: int }
@@ -39,7 +39,7 @@ module held_replies {
   }
   // Context 0 and 1 are persistent scopes on instance 0; context 2 is a fresh
   // context on instance 1.
-  pure def call(context: int): Call = { instance: if (context == 2) 1 else 0, key: 0, context: context }
+  pure def call(context: int): Call = { instance: if (context == 2) 1 else 0, key: 0, context: context, enabled: true }
   action admit(context: int): bool = all {
     s' = Serving::admit(s, LAYOUT, call(context)),
     input' = { name: "beginCall", choice: context }

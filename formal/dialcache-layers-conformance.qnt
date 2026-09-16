@@ -71,7 +71,7 @@ module dialcache_layers_conformance {
     remoteValues: List[int],
     created: List[int],
     watermark: List[int],
-    sources: List[Flights::Source],
+    sources: List[Serving::LayeredSource],
     owners: List[int],
     memoSlots: List[int],
     callerInstances: List[int],
@@ -87,13 +87,14 @@ module dialcache_layers_conformance {
   pure def instance(context: int): int = if (context == OTHER_INSTANCE_REQUEST_CONTEXT
     or context == FRESH_OTHER_INSTANCE_CONTEXT) OTHER_INSTANCE else FIRST_INSTANCE
   pure def call(choice: int): Call =
-    { instance: instance(choice / KEYS_PER_INSTANCE), key: choice % KEYS_PER_INSTANCE, context: choice / KEYS_PER_INSTANCE }
+    { instance: instance(choice / KEYS_PER_INSTANCE), key: choice % KEYS_PER_INSTANCE, context: choice / KEYS_PER_INSTANCE, enabled: true }
   pure val LAYOUT: Serving::Layout = {
     keysPerInstance: KEYS_PER_INSTANCE,
     keysPerScope: KEYS_PER_INSTANCE,
     persistentContexts: PERSISTENT_CONTEXTS,
     operationsPerEntity: OPERATIONS_PER_ENTITY,
-    servingTtlMs: SERVING_TTL_MS
+    servingTtlMs: SERVING_TTL_MS,
+    probeSourceScope: false
   }
 
   // -- Public fixture inputs and external effects ----------------------------

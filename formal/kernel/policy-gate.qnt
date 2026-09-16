@@ -11,7 +11,7 @@ module policy_gate {
   type Held = { policyCall: int, caller: int, call: Call }
   type Gated[r] = { held: List[Held] | r }
 
-  pure val NOT_HELD: Held = { policyCall: NO_OWNER, caller: NO_OWNER, call: { instance: NO_OWNER, key: NO_OWNER, context: NO_OWNER } }
+  pure val NOT_HELD: Held = { policyCall: NO_OWNER, caller: NO_OWNER, call: { instance: NO_OWNER, key: NO_OWNER, context: NO_OWNER, enabled: false } }
 
   pure def hold(state: Gated[r], policyCall: int, caller: int, call: Call): Gated[r] =
     { held: state.held.append({ policyCall: policyCall, caller: caller, call: call }), ...state }

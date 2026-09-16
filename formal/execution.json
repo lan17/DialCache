@@ -30,7 +30,8 @@
     "formal/kernel/clock.qnt",
     "formal/kernel/policy-gate.qnt",
     "formal/kernel/runtime-policy.qnt",
-    "formal/kernel/serving.qnt"
+    "formal/kernel/serving.qnt",
+    "formal/kernel/diagnostics.qnt"
   ],
   "models": [
     {
@@ -1731,20 +1732,20 @@
     {
       "id": "scope-late-source-repopulates-closed-memo",
       "contract": "C03",
-      "source": "formal/dialcache-scope-conformance.qnt",
+      "source": "formal/kernel/request-memo.qnt",
       "model": "formal/dialcache-scope-conformance.qnt",
       "invariant": "closedScopesHaveNoMemo",
-      "before": "val memoScopeStillOpen = sourceRecord.slot >= 0 and not(state.completed.nth(sourceRecord.slot))",
-      "after": "val memoScopeStillOpen = sourceRecord.slot >= 0"
+      "before": "if (slot < 0 or state.closed.nth(slot / keysPerScope)) state else {",
+      "after": "if (slot < 0) state else {"
     },
     {
       "id": "scope-source-error-memoized",
       "contract": "C15",
-      "source": "formal/dialcache-scope-conformance.qnt",
+      "source": "formal/kernel/serving.qnt",
       "model": "formal/dialcache-scope-conformance.qnt",
       "invariant": "memoFollowsLatestSuccessfulSettlement",
-      "before": "memo: if (memoScopeStillOpen and result != SOURCE_ERROR) state.memo.replaceAt(sourceRecord.slot, result)",
-      "after": "memo: if (memoScopeStillOpen) state.memo.replaceAt(sourceRecord.slot, result)"
+      "before": "if (value == SOURCE_ERROR) settled else Flights::ownedBy(state, index).fold(settled, (out, call) =>",
+      "after": "Flights::ownedBy(state, index).fold(settled, (out, call) =>"
     },
     {
       "id": "admission-duplicate-key-admitted",
@@ -1777,11 +1778,11 @@
     {
       "id": "layers-process-flight-crosses-instance",
       "contract": "C11",
-      "source": "formal/kernel/flights.qnt",
+      "source": "formal/kernel/serving.qnt",
       "model": "formal/dialcache-layers-conformance.qnt",
       "invariant": "sourceOwnershipNeverCrossesKeyOrInstance",
-      "before": "state.processFlights.nth(instance * keysPerInstance + key)",
-      "after": "state.processFlights.nth(key)"
+      "before": "pure def identity(layout: Layout, call: Call): int = call.instance * layout.keysPerInstance + call.key",
+      "after": "pure def identity(layout: Layout, call: Call): int = call.key"
     },
     {
       "id": "layers-late-memo-into-closed-scope",
@@ -1790,7 +1791,8 @@
       "model": "formal/dialcache-layers-conformance.qnt",
       "invariant": "closedScopesHaveNoMemo",
       "before": "if (slot < 0 or state.closed.nth(slot / keysPerScope)) state else {",
-      "after": "if (slot < 0) state else {"
+      "after": "if (slot < 0) state else {",
+      "measures": "The layers model measures this fault across keys and instances; scope-late-source-repopulates-closed-memo measures it where nested handles memoize into their outer lifetime's row and a replacement request opens beside a closed root."
     },
     {
       "id": "independent-fresh-frame-retained",

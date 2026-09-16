@@ -9,9 +9,9 @@
   },
   "inputs": {
     "semanticCasesSha256": "1f0ce439d35caf402af09c159bbfa8d1b57cc3c6f27690d7ff8e8fd17f2f0d40",
-    "executionSha256": "caf3bb7201d14fd3e5337ecfd3796a06551ea76f5d3d7013e0cc9f989d426cc4",
-    "sourceAuditSha256": "171a5278bec0c012ee8c789c27ef6a48498240014d2da46d83c09ed59e398566",
-    "quintCaseAuditSha256": "bf8bf7b117c7e4d24837d76cdd92a27f39168a2d630758d31efdfe60cf0f5065",
+    "executionSha256": "412a979c57acd0f702e1c54b5fbc71b011b6b6db62f6ac753e992144de475aa5",
+    "sourceAuditSha256": "c775b5ce04e57c477d3f922ec3db6929379775522a8e14d2c33cafdcd4aa49e9",
+    "quintCaseAuditSha256": "df41821eef49f85cff83f95f4431979bc629c43642c11ee3820887408ac59894",
     "featureCoverageSha256": "56eedfa865682db6ad8e73b8673c7dac1c30d301e9bce3390246d6994aba9dcb",
     "coverageWitnessesSha256": "8fc8ab123150fdec059f5b75f84172d39af80d08d7a4211fa88c63c5a3f2874b",
     "profilesSha256": "34b1d77a25a92b0d5d6703a379902fae95f51227dca201613233592ba4f590c8"
@@ -963,8 +963,8 @@
       },
       "quintDefinitions": [
         "formal/dialcache-scope-conformance.qnt:resolveLoader",
-        "formal/dialcache-scope-conformance.qnt:settle",
-        "formal/dialcache-scope-conformance.qnt:releasePolicy"
+        "formal/kernel/serving.qnt:finish",
+        "formal/kernel/serving.qnt:releaseRequest"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -1086,8 +1086,8 @@
       },
       "quintDefinitions": [
         "formal/dialcache-scope-conformance.qnt:resolveLoader",
-        "formal/dialcache-scope-conformance.qnt:settle",
-        "formal/dialcache-scope-conformance.qnt:releasePolicy"
+        "formal/kernel/serving.qnt:finish",
+        "formal/kernel/serving.qnt:releaseRequest"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -1211,8 +1211,8 @@
       },
       "quintDefinitions": [
         "formal/dialcache-scope-conformance.qnt:resolveLoader",
-        "formal/dialcache-scope-conformance.qnt:settle",
-        "formal/dialcache-scope-conformance.qnt:releasePolicy"
+        "formal/kernel/serving.qnt:finish",
+        "formal/kernel/serving.qnt:releaseRequest"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -1336,8 +1336,8 @@
       },
       "quintDefinitions": [
         "formal/dialcache-scope-conformance.qnt:resolveLoader",
-        "formal/dialcache-scope-conformance.qnt:settle",
-        "formal/dialcache-scope-conformance.qnt:releasePolicy"
+        "formal/kernel/serving.qnt:finish",
+        "formal/kernel/serving.qnt:releaseRequest"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -1577,9 +1577,9 @@
       },
       "quintDefinitions": [
         "formal/dialcache-scope-conformance.qnt:holder",
-        "formal/dialcache-scope-conformance.qnt:source",
-        "formal/dialcache-scope-conformance.qnt:releasePolicy",
-        "formal/dialcache-scope-conformance.qnt:settle"
+        "formal/kernel/serving.qnt:startRequestSource",
+        "formal/kernel/serving.qnt:releaseRequest",
+        "formal/kernel/serving.qnt:finish"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -2572,7 +2572,7 @@
         "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
       },
       "quintDefinitions": [
-        "formal/dialcache-scope-conformance.qnt:releasePolicy",
+        "formal/kernel/serving.qnt:releaseRequest",
         "formal/dialcache-scope-conformance.qnt:policy"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
@@ -18278,7 +18278,7 @@
   ],
   "reviewedTestAndDocumentationAudit": {
     "path": "formal/source-audit.json",
-    "sha256": "171a5278bec0c012ee8c789c27ef6a48498240014d2da46d83c09ed59e398566",
+    "sha256": "c775b5ce04e57c477d3f922ec3db6929379775522a8e14d2c33cafdcd4aa49e9",
     "sourceFiles": 44,
     "status": "reviewed-applicability-not-execution",
     "limitations": "These rows review Go applicability for the public documentation and ordinary test files in source-audit.json sources, inheriting their C/W/E/B/X classifications. They map subjects to native artifacts without claiming one Go test per TypeScript assertion or turning documentation counts into executed coverage. The same audit hash also binds reviewedGuides for formal and Go documentation; those guide reviews are freshness/scope records, not additional behavioral applicability rows. Per-case Quint and replay evidence is recorded separately.",

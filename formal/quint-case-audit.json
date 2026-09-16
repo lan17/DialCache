@@ -3582,15 +3582,15 @@
     },
     {
       "case": "C06.null-request",
-      "reference": "formal/dialcache-scope-conformance.qnt:settle",
+      "reference": "formal/kernel/serving.qnt:finish",
       "kind": "helper",
-      "scope": "Positive value codes preserve this falsy native value across source settlement, memo publication, and a later memo hit; the value code/native mapping is specified by the profile."
+      "scope": "Settlement completes every owning caller and memoizes a success into each owner's still-open row; positive value codes, including the falsy natives and absence, are memoized and served alike."
     },
     {
       "case": "C06.null-request",
-      "reference": "formal/dialcache-scope-conformance.qnt:releasePolicy",
-      "kind": "transition",
-      "scope": "Positive value codes preserve this falsy native value across source settlement, memo publication, and a later memo hit; the value code/native mapping is specified by the profile."
+      "reference": "formal/kernel/serving.qnt:releaseRequest",
+      "kind": "helper",
+      "scope": "The request-only release joins the pending request flight of the caller's own row when the call coalesces, else serves the memo row, else starts a source; the row is the caller's memo slot, decided with the state current at release."
     },
     {
       "case": "C06.null-local",
@@ -3636,15 +3636,15 @@
     },
     {
       "case": "C06.false-request",
-      "reference": "formal/dialcache-scope-conformance.qnt:settle",
+      "reference": "formal/kernel/serving.qnt:finish",
       "kind": "helper",
-      "scope": "Positive value codes preserve this falsy native value across source settlement, memo publication, and a later memo hit; the value code/native mapping is specified by the profile."
+      "scope": "Settlement completes every owning caller and memoizes a success into each owner's still-open row; positive value codes, including the falsy natives and absence, are memoized and served alike."
     },
     {
       "case": "C06.false-request",
-      "reference": "formal/dialcache-scope-conformance.qnt:releasePolicy",
-      "kind": "transition",
-      "scope": "Positive value codes preserve this falsy native value across source settlement, memo publication, and a later memo hit; the value code/native mapping is specified by the profile."
+      "reference": "formal/kernel/serving.qnt:releaseRequest",
+      "kind": "helper",
+      "scope": "The request-only release joins the pending request flight of the caller's own row when the call coalesces, else serves the memo row, else starts a source; the row is the caller's memo slot, decided with the state current at release."
     },
     {
       "case": "C06.false-local",
@@ -3690,15 +3690,15 @@
     },
     {
       "case": "C06.zero-request",
-      "reference": "formal/dialcache-scope-conformance.qnt:settle",
+      "reference": "formal/kernel/serving.qnt:finish",
       "kind": "helper",
-      "scope": "Positive value codes preserve this falsy native value across source settlement, memo publication, and a later memo hit; the value code/native mapping is specified by the profile."
+      "scope": "Settlement completes every owning caller and memoizes a success into each owner's still-open row; positive value codes, including the falsy natives and absence, are memoized and served alike."
     },
     {
       "case": "C06.zero-request",
-      "reference": "formal/dialcache-scope-conformance.qnt:releasePolicy",
-      "kind": "transition",
-      "scope": "Positive value codes preserve this falsy native value across source settlement, memo publication, and a later memo hit; the value code/native mapping is specified by the profile."
+      "reference": "formal/kernel/serving.qnt:releaseRequest",
+      "kind": "helper",
+      "scope": "The request-only release joins the pending request flight of the caller's own row when the call coalesces, else serves the memo row, else starts a source; the row is the caller's memo slot, decided with the state current at release."
     },
     {
       "case": "C06.zero-local",
@@ -3744,15 +3744,15 @@
     },
     {
       "case": "C06.empty-string-request",
-      "reference": "formal/dialcache-scope-conformance.qnt:settle",
+      "reference": "formal/kernel/serving.qnt:finish",
       "kind": "helper",
-      "scope": "Positive value codes preserve this falsy native value across source settlement, memo publication, and a later memo hit; the value code/native mapping is specified by the profile."
+      "scope": "Settlement completes every owning caller and memoizes a success into each owner's still-open row; positive value codes, including the falsy natives and absence, are memoized and served alike."
     },
     {
       "case": "C06.empty-string-request",
-      "reference": "formal/dialcache-scope-conformance.qnt:releasePolicy",
-      "kind": "transition",
-      "scope": "Positive value codes preserve this falsy native value across source settlement, memo publication, and a later memo hit; the value code/native mapping is specified by the profile."
+      "reference": "formal/kernel/serving.qnt:releaseRequest",
+      "kind": "helper",
+      "scope": "The request-only release joins the pending request flight of the caller's own row when the call coalesces, else serves the memo row, else starts a source; the row is the caller's memo slot, decided with the state current at release."
     },
     {
       "case": "C06.empty-string-local",
@@ -3816,21 +3816,21 @@
     },
     {
       "case": "C07.scope-isolation",
-      "reference": "formal/dialcache-scope-conformance.qnt:source",
+      "reference": "formal/kernel/serving.qnt:startRequestSource",
       "kind": "helper",
-      "scope": "Per-root slots index memo and flight ownership; source settlement updates only its own slot. This bounded profile has two independent root slots."
+      "scope": "A request-only source records only its outcome and process sharing; the row it fills is the memo slot attached to the caller that started it, so settlement updates one row."
     },
     {
       "case": "C07.scope-isolation",
-      "reference": "formal/dialcache-scope-conformance.qnt:releasePolicy",
-      "kind": "transition",
-      "scope": "Per-root slots index memo and flight ownership; source settlement updates only its own slot. This bounded profile has two independent root slots."
+      "reference": "formal/kernel/serving.qnt:releaseRequest",
+      "kind": "helper",
+      "scope": "The request-only release joins the pending request flight of the caller's own row when the call coalesces, else serves the memo row, else starts a source; the row is the caller's memo slot, decided with the state current at release."
     },
     {
       "case": "C07.scope-isolation",
-      "reference": "formal/dialcache-scope-conformance.qnt:settle",
+      "reference": "formal/kernel/serving.qnt:finish",
       "kind": "helper",
-      "scope": "Per-root slots index memo and flight ownership; source settlement updates only its own slot. This bounded profile has two independent root slots."
+      "scope": "Settlement completes every owning caller and memoizes a success into each owner's still-open row; positive value codes, including the falsy natives and absence, are memoized and served alike."
     },
     {
       "case": "C08.instance-capacity",
@@ -3870,9 +3870,9 @@
     },
     {
       "case": "C19.memo-bypass",
-      "reference": "formal/dialcache-scope-conformance.qnt:releasePolicy",
-      "kind": "transition",
-      "scope": "POLICY_NO_REQUEST uses no memo slot; the policy transition leaves stored memo intact for later reenable."
+      "reference": "formal/kernel/serving.qnt:releaseRequest",
+      "kind": "helper",
+      "scope": "The request-only release joins the pending request flight of the caller's own row when the call coalesces, else serves the memo row, else starts a source; the row is the caller's memo slot, decided with the state current at release."
     },
     {
       "case": "C19.memo-bypass",
