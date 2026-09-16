@@ -1098,7 +1098,9 @@
         "heldPolicyDoesNotSpendSourceBudgetTest",
         "invalidKeyStillKeepsEnabledSourceDeadlineTest",
         "abandonedSourceCannotReplaceSuccessfulRetryTest",
-        "localEntryExpiresAfterItsTtlTest"
+        "localEntryExpiresAfterItsTtlTest",
+        "rejectedSourceLeavesPublishedLocalEntryTest",
+        "republishedEqualValueRestampsLocalExpiryTest"
       ],
       "replayRegressions": [
         "outsideAndInvalidOutsideCallsIgnoreDeadlineAndSharingTest",
@@ -1108,7 +1110,9 @@
         "heldPolicyDoesNotSpendSourceBudgetTest",
         "invalidKeyStillKeepsEnabledSourceDeadlineTest",
         "abandonedSourceCannotReplaceSuccessfulRetryTest",
-        "localEntryExpiresAfterItsTtlTest"
+        "localEntryExpiresAfterItsTtlTest",
+        "rejectedSourceLeavesPublishedLocalEntryTest",
+        "republishedEqualValueRestampsLocalExpiryTest"
       ],
       "generate": {
         "maxSamples": 1024,
@@ -2198,6 +2202,40 @@
         "run": "localEntryExpiresAfterItsTtlTest",
         "failure": "s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_TWO, VALUE_TWO) and s.o.loaders == 2",
         "family": "local-publication-never-replaces",
+        "profiles": [
+          "source-budgets"
+        ],
+        "exclusions": {
+          "core": "Composes no kernel module, so serving.settleLocal is never executed.",
+          "effects": "Composes no kernel module, so serving.settleLocal is never executed.",
+          "recovery": "Composes no kernel module, so serving.settleLocal is never executed.",
+          "policy": "Composes no kernel module, so serving.settleLocal is never executed.",
+          "shadow": "Composes no kernel module, so serving.settleLocal is never executed.",
+          "scope": "Composes the request-only projection without local storage: its sources settle through serving.settleRequest.",
+          "admission": "Composes no kernel module, so serving.settleLocal is never executed.",
+          "layers": "Composes the layered traversal: its sources settle through serving.settle, not the local projection.",
+          "independent": "Composes no kernel module, so serving.settleLocal is never executed.",
+          "recovery-read": "Composes no kernel module, so serving.settleLocal is never executed.",
+          "local-failure": "Composes no kernel module, so serving.settleLocal is never executed.",
+          "runtime-boundaries": "Composes the layered traversal: its sources settle through serving.settle, not the local projection.",
+          "shadow-layers": "Composes no kernel module, so serving.settleLocal is never executed.",
+          "local-clock": "Composes no kernel module, so serving.settleLocal is never executed."
+        }
+      }
+    },
+    {
+      "id": "source-budgets-failed-settlement-clears-local-entry",
+      "contract": "C13",
+      "source": "formal/kernel/serving.qnt",
+      "model": "formal/dialcache-source-budgets-conformance.qnt",
+      "invariant": "localPublicationRequiresAcceptedSource",
+      "before": "Local::putLocal(state, source.instance, source.key, value, source.localMs, layout.keysPerInstance) else state",
+      "after": "Local::putLocal(state, source.instance, source.key, value, source.localMs, layout.keysPerInstance) else { localValues: state.localValues.replaceAt(source.instance * layout.keysPerInstance + source.key, NO_VALUE), localExpires: state.localExpires.replaceAt(source.instance * layout.keysPerInstance + source.key, 0), ...state }",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "rejectedSourceLeavesPublishedLocalEntryTest",
+        "failure": "s.o.calls == List(VALUE_ONE, SOURCE_ERROR, VALUE_ONE) and s.o.loaders == 2",
+        "family": "failed-settlement-clears-local-entry",
         "profiles": [
           "source-budgets"
         ],

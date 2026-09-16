@@ -8,10 +8,10 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "718c4a20ad7eb11de5a7f1067b0813cf36d1692af05354521173413c74a36fc2",
-    "executionSha256": "ccc15cb036812a10b5d2183fbd111261019034f4045fbeba3b818d88c14db602",
+    "semanticCasesSha256": "7054107347f57a452e17de99f74310553b7af4350363c674e70ff8184d0610be",
+    "executionSha256": "feee09a3487deb2694f8784b7e8d2d0ee28050dae03ac43ac2613608ce5ab1c6",
     "sourceAuditSha256": "e99ecb35404fea425f4852c099d0e025dc887fc7f77d074752e2e995d0d7a237",
-    "quintCaseAuditSha256": "e4a6b612ba9d697ff2ae732e7b6afc25fedc0709a79260f579af47c5e18250d4",
+    "quintCaseAuditSha256": "dcb576948a68a066e43259d4bee2b3cdadbe82e657ae9af99e4b21ed7b95dbb3",
     "featureCoverageSha256": "56eedfa865682db6ad8e73b8673c7dac1c30d301e9bce3390246d6994aba9dcb",
     "coverageWitnessesSha256": "8fc8ab123150fdec059f5b75f84172d39af80d08d7a4211fa88c63c5a3f2874b",
     "profilesSha256": "b8fa4f399a163bc8793bf76b6ba3503a415fcf3c8509cf98d964e4f067e6660f"
@@ -46,11 +46,11 @@
     "withoutModelDrivenReplay": [],
     "quintModels": 32,
     "scheduledInvariants": 219,
-    "scheduledRegressions": 415,
+    "scheduledRegressions": 417,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
     "caseReferencedWitnesses": 285,
-    "exportedRegressionHistories": 248
+    "exportedRegressionHistories": 250
   },
   "profiles": [
     {
@@ -556,7 +556,9 @@
         "heldPolicyDoesNotSpendSourceBudgetTest",
         "invalidKeyStillKeepsEnabledSourceDeadlineTest",
         "abandonedSourceCannotReplaceSuccessfulRetryTest",
-        "localEntryExpiresAfterItsTtlTest"
+        "localEntryExpiresAfterItsTtlTest",
+        "rejectedSourceLeavesPublishedLocalEntryTest",
+        "republishedEqualValueRestampsLocalExpiryTest"
       ],
       "status": "executable-profile-schedule",
       "witnessSources": [
@@ -2105,7 +2107,9 @@
       "kind": "portable-behavior",
       "group": "request-and-layers",
       "quintProperties": [
-        "formal/dialcache-policy-conformance.qnt:independentLocalPublicationUsesLastCompletionTest"
+        "formal/dialcache-policy-conformance.qnt:independentLocalPublicationUsesLastCompletionTest",
+        "formal/dialcache-source-budgets-conformance.qnt:rejectedSourceLeavesPublishedLocalEntryTest",
+        "formal/dialcache-source-budgets-conformance.qnt:republishedEqualValueRestampsLocalExpiryTest"
       ],
       "requiredGenerated": [
         {
@@ -2132,7 +2136,9 @@
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
-        "policy/independentLocalPublicationUsesLastCompletionTest"
+        "policy/independentLocalPublicationUsesLastCompletionTest",
+        "source-budgets/rejectedSourceLeavesPublishedLocalEntryTest",
+        "source-budgets/republishedEqualValueRestampsLocalExpiryTest"
       ],
       "generatedVectors": []
     },

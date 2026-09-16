@@ -176,22 +176,27 @@ module dialcache_source_budgets_conformance {
         (s.budgets.nth(i) < 0 or s.settledAt.nth(i) < s.started.nth(i) + s.budgets.nth(i))))
   val registeredWorkIsNotAbandoned = s.processFlights.nth(0) < 0
     or s.sources.nth(s.processFlights.nth(0)).result == CALL_PENDING
-  // The local slot holds nothing or a value an accepted source that captured a
-  // local TTL published there (never an error code, never a bypass source's
-  // value), and the settlement that just happened owns the slot: when the
-  // source the resolve input names captured a local TTL and its outcome is
-  // accepted (the kernel settles a late result as a deadline error and drains
-  // an already-settled source without effect), the slot holds the value the
-  // input delivered, stamped with that TTL from now, whatever it held before.
-  // A rejection settles SOURCE_ERROR and publishes nothing.
+  // The local slot is empty exactly when no source that captured a local TTL
+  // has settled accepted, and otherwise holds a value one of them published
+  // (never an error code, never a bypass source's value; a failed settlement
+  // leaves the slot as it was); and the settlement that just happened owns the
+  // slot: when the source the resolve input names captured a local TTL and its
+  // outcome is accepted (the kernel settles a late result as a deadline error
+  // and drains an already-settled source without effect), the slot holds the
+  // value the input delivered, stamped with that TTL from now, whatever it held
+  // before. A rejection settles SOURCE_ERROR and publishes nothing.
   val justSettled = input.name == "resolveLoader"
-  val localPublicationRequiresAcceptedSource = (s.localValues.nth(0) == NO_VALUE or s.sources.indices().exists(i =>
-      s.sources.nth(i).localMs > 0 and accepted(s.sources.nth(i).result) and s.sources.nth(i).result == s.localValues.nth(0)))
-    and (not(justSettled) or {
-      val source = s.sources.nth(resolvedSource(input.choice))
-      not(source.localMs > 0 and accepted(source.result))
-        or (s.localValues.nth(0) == resolvedValue(input.choice) and s.localExpires.nth(0) == s.now + source.localMs)
-    })
+  val localPublicationRequiresAcceptedSource = {
+    val publishers = s.sources.indices().filter(i => s.sources.nth(i).localMs > 0 and accepted(s.sources.nth(i).result))
+    val value = s.localValues.nth(0)
+    (value != NO_VALUE) == (publishers.size() > 0)
+      and (value == NO_VALUE or publishers.exists(i => s.sources.nth(i).result == value))
+      and (not(justSettled) or {
+        val source = s.sources.nth(resolvedSource(input.choice))
+        not(source.localMs > 0 and accepted(source.result))
+          or (value == resolvedValue(input.choice) and s.localExpires.nth(0) == s.now + source.localMs)
+      })
+  }
   val followersKeepTheirOwnersOutcome = s.owners.indices().forall(call => {
     val owner = s.owners.nth(call)
     owner < 0 or s.o.calls.nth(call) == s.sources.nth(owner).result
@@ -267,4 +272,33 @@ module dialcache_source_budgets_conformance {
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, CALL_PENDING) and s.o.loaders == 2)
     .then(resolved(1, VALUE_TWO)).then(begin(ENABLED)).then(release(3))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_TWO, VALUE_TWO) and s.o.loaders == 2)
+
+  // A failed settlement is not a writer (C13): a rejected source completes its
+  // caller with the source error and leaves the published local entry, which
+  // still serves the next enabled call.
+  run rejectedSourceLeavesPublishedLocalEntryTest = initialize(DEFAULT_BUDGET_MODE)
+    .then(begin(ENABLED)).then(release(0)).then(resolved(0, VALUE_ONE))
+    .then(begin(OUTSIDE)).then(rejected(1))
+    .expect(s.o.calls == List(VALUE_ONE, SOURCE_ERROR) and s.o.loaders == 2)
+    .then(begin(ENABLED)).then(release(1))
+    .expect(s.o.calls == List(VALUE_ONE, SOURCE_ERROR, VALUE_ONE) and s.o.loaders == 2)
+
+  // The latest accepted source owns the entry even when its value equals the
+  // one it replaces (C13): the entry published at 0 expires at LOCAL_TTL_MS,
+  // the enabled call at that instant starts a source, and the equal value it
+  // republishes serves one millisecond before 2 * LOCAL_TTL_MS because the
+  // insertion expiry was stamped again. The clock reaches each instant
+  // through the drivers' advance choices (ten hundreds; nine hundreds, nine
+  // tens, one nine).
+  run republishedEqualValueRestampsLocalExpiryTest = initialize(DEFAULT_BUDGET_MODE)
+    .then(begin(ENABLED)).then(release(0)).then(resolved(0, VALUE_ONE))
+    .then(10.reps(_ => advanced(100)))
+    .expect(s.now == LOCAL_TTL_MS)
+    .then(begin(ENABLED)).then(release(1))
+    .expect(s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.loaders == 2)
+    .then(resolved(1, VALUE_ONE))
+    .then(9.reps(_ => advanced(100))).then(9.reps(_ => advanced(10))).then(advanced(9))
+    .expect(s.now == 2 * LOCAL_TTL_MS - 1)
+    .then(begin(ENABLED)).then(release(2))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_ONE) and s.o.loaders == 2)
 }
