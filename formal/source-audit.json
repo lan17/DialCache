@@ -1005,7 +1005,7 @@
   "reviewedGuides": [
     {
       "path": "formal/AUTHORING.md",
-      "sha256": "256554073228210df65c5c2c13dcb581a69b83880452581fb177a259eb6f41c2",
+      "sha256": "35f00c622fc42ab636fd915b15e61dbb5bd8bfdc89715e1c85fa359bbec4e1d1",
       "entries": [
         {"line":1,"title":"Reading and extending the DialCache models"},
         {"line":16,"title":"Reading a model"},
@@ -1287,7 +1287,7 @@
     },
     {
       "path": "formal/PORTING.md",
-      "sha256": "2da74eca9f76afae7f635c30a790030ff7175816c5594cab773c9c5f8ffc24cf",
+      "sha256": "ae7780bea1efc026232b3b48af92bce6f40df9591d6fc633c9c6130cea1ebd5f",
       "entries": [
         {"line":1,"title":"Implementing another DialCache port"},
         {"line":14,"title":"What a port supplies"},

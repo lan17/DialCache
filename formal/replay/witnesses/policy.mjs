@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { actionLabels } from "./labels.mjs";
 import { createWitnessRecorder } from "./recorder.mjs";
 
@@ -16,16 +17,15 @@ import { createWitnessRecorder } from "./recorder.mjs";
 // Two things bind the shadow to the model. Public-only cross-checks inside the
 // shadow throw on a contradiction between a recorded outcome and the shadowed
 // contents (a stored write's retention, a remote hit's frame, a local hit's
-// entry). And assertShadowFidelity compares the shadow after every step with
-// the model's private predictions wherever a history still carries them; that
-// assertion, not a classifier, is what a composition of this profile re-encodes
-// against its new private layout.
+// entry). And the fidelity check compares the shadow after every step with
+// the model's private predictions in every history that still carries them;
+// that check, not a classifier, is what a composition of this profile
+// re-encodes against its new private layout.
 
 // conformance_observations.values: the outcome codes of successValues in order.
 const outcomeCodes = [1, 2, 5, 6, 7, 8, 9];
 const SOURCE_ERROR = 3;
 const DEFAULT_RETENTION_MS = 5000;
-const successful = value => value > 0 && value !== 3 && value !== 4;
 const independent = overlay => overlay >= 10 && overlay < 20;
 
 // The publication policy a provider reply carries (the model's localTtl,
@@ -49,8 +49,10 @@ const initialShadow = () => ({ now: 0, wall: 100000, overlay: 0, epoch: 0, provi
   key: 0, call: -1, local: { key: 0, value: 0, expires: 0 }, remote: [{ value: 0, created: 0, expires: 0 }, { value: 0, created: 0, expires: 0 }], sources: [] });
 
 // One frame per transition: the recorded input, the asserted observation
-// before and after it, and the shadow before and after it. A recorded outcome
-// the shadowed contents cannot explain is a contradiction and throws.
+// before and after it, the shadow before and after it, the effective policy
+// before it and, for a released reply, the receipt read from the observation
+// (the caller's result and which effect counters grew). A recorded outcome the
+// shadowed contents cannot explain is a contradiction and throws.
 function shadowHistory(steps, path) {
   const contradiction = (index, message) => new Error(`${path} step ${index}: ${message}`);
   let shadow = initialShadow();
@@ -58,23 +60,26 @@ function shadowHistory(steps, path) {
   for (let index = 1; index < steps.length; index++) {
     const { action, choice, expected: current } = steps[index], prior = steps[index - 1].expected;
     const before = shadow, after = { ...shadow, remote: [...shadow.remote], sources: [...shadow.sources] };
+    const policy = effectivePolicy(before.overlay, before.providerFailed);
+    let receipt;
     switch (action) {
       case "beginCall": after.key = choice; after.call = current.calls.length - 1; break;
       case "releasePolicy": {
         if (before.call < 0) throw contradiction(index, "released a policy reply without a pending caller");
-        const policy = effectivePolicy(before.overlay, before.providerFailed), key = before.key, value = current.calls[before.call];
+        const key = before.key, value = current.calls[before.call];
         const read = current.reads > prior.reads, starts = current.loaders > prior.loaders, load = current.loads > prior.loads;
+        receipt = { key, value, read, starts, localHit: value > 0 && !read && !starts, remoteHit: value > 0 && load && !starts };
         const remote = before.remote[key], local = before.local;
-        if (load && !starts && (remote.value !== value || before.now >= remote.expires)) {
+        if (receipt.remoteHit && (remote.value !== value || before.now >= remote.expires)) {
           throw contradiction(index, `remote hit of ${value} on key ${key} but the shadowed frame holds ${remote.value} until ${remote.expires} at ${before.now}`);
         }
-        if (value > 0 && !read && !starts && (policy.localTtl === 0 || local.key !== key || local.value !== value || before.now >= local.expires)) {
+        if (receipt.localHit && (policy.localTtl === 0 || local.key !== key || local.value !== value || before.now >= local.expires)) {
           throw contradiction(index, `local hit of ${value} on key ${key} but the shadowed slot holds ${local.value} for key ${local.key} until ${local.expires} at ${before.now} with local TTL ${policy.localTtl}`);
         }
         if (starts) after.sources.push({ key, localTtl: policy.localTtl, remoteTtl: read && !before.readFailed ? policy.remoteTtl : 0,
           retention: policy.retention, shared: policy.shared, result: 0, overlay: before.overlay, epoch: before.epoch });
         // A remote hit warms an active local layer for a full insertion TTL.
-        if (load && !starts && policy.localTtl > 0) after.local = { key, value, expires: before.now + policy.localTtl };
+        if (receipt.remoteHit && policy.localTtl > 0) after.local = { key, value, expires: before.now + policy.localTtl };
         after.call = -1;
         break;
       }
@@ -102,7 +107,7 @@ function shadowHistory(steps, path) {
       case "writeFault": after.writeFailed = choice === 1; break;
       default: throw contradiction(index, `unknown policy action ${action}`);
     }
-    frames.push({ index, action, choice, prior, current, before, after });
+    frames.push({ index, action, choice, prior, current, before, after, policy, receipt });
     shadow = after;
   }
   return frames;
@@ -116,42 +121,27 @@ function modelView(shadow) {
     remoteValues: shadow.remote.map(frame => frame.value), remoteCreated: shadow.remote.map(frame => frame.created), remoteExpires: shadow.remote.map(frame => frame.expires),
     sources: shadow.sources.map(({ key, localTtl, remoteTtl, retention, shared, result }) => ({ key, localTtl, remoteTtl, retention, shared, result })) };
 }
-function same(left, right) {
-  if (Array.isArray(left) || Array.isArray(right)) return Array.isArray(left) && Array.isArray(right) && left.length === right.length && left.every((item, index) => same(item, right[index]));
-  if (left !== null && right !== null && typeof left === "object" && typeof right === "object") {
-    const keys = Object.keys(left).sort();
-    return same(keys, Object.keys(right).sort()) && keys.every(key => same(left[key], right[key]));
-  }
-  return left === right;
-}
 
-// The binding between the public-only shadow and the model: in every history
-// that still carries the model's private predictions, the shadow after each
-// step must equal them field by field. A history projected to its public
-// channels has nothing to compare and is skipped. When the profile is
-// recomposed from the kernel library, this view is re-encoded against the new
-// private layout; the classifiers do not change.
-export function assertShadowFidelity(histories) {
-  for (const { path, steps, predictions } of histories) {
-    if (predictions?.[0]?.sources === undefined) continue;
-    const shadows = [initialShadow(), ...shadowHistory(steps, path).map(frame => frame.after)];
-    for (const [index, shadow] of shadows.entries()) {
-      const model = predictions[index];
-      for (const [field, value] of Object.entries(modelView(shadow))) {
-        if (!same(value, model[field])) throw new Error(`${path} step ${index}: shadow ${field} ${JSON.stringify(value)} differs from the model's ${JSON.stringify(model[field])}`);
-      }
+// A history projected to its public channels carries nothing to compare; any
+// other decoded state is the model's private layout and must match the shadow.
+const publicChannels = ["o", "policyErrors"];
+const carriesPrivateState = predictions => predictions !== undefined
+  && predictions.some(state => Object.keys(state).some(field => !publicChannels.includes(field)));
+
+// The binding between the public-only shadow and the model: the shadow after
+// each step must equal the model's private predictions field by field. When
+// the profile is recomposed from the kernel library, this view is re-encoded
+// against the new private layout; the classifiers do not change.
+function checkFidelity(frames, predictions, path) {
+  const shadows = [initialShadow(), ...frames.map(frame => frame.after)];
+  for (const [index, shadow] of shadows.entries()) {
+    const model = predictions[index];
+    for (const [field, value] of Object.entries(modelView(shadow))) {
+      if (!isDeepStrictEqual(value, model[field])) throw new Error(`${path} step ${index}: shadow ${field} ${JSON.stringify(value)} differs from the model's ${JSON.stringify(model[field])}`);
     }
   }
 }
 
-// What the released reply did for the pending caller, read from the
-// observation: the caller's result and which effect counters grew.
-function receipt({ prior, current, before }) {
-  const value = current.calls[before.call], starts = current.loaders > prior.loaders;
-  return { key: before.key, value, starts, read: current.reads > prior.reads,
-    localHit: successful(value) && current.reads === prior.reads && !starts,
-    remoteHit: successful(value) && current.loads > prior.loads && !starts };
-}
 const pendingSources = shadow => shadow.sources.filter(source => source.result === 0);
 
 // Invalid overlays, overlapping sources, joins and publications across policy
@@ -159,14 +149,14 @@ const pendingSources = shadow => shadow.sources.filter(source => source.result =
 function settlementWitnesses(frames, recorder) {
   for (const frame of frames) {
     recorder.step(frame.index);
-    const { action, choice, prior, current, before } = frame;
+    const { action, choice, prior, current, before, receipt } = frame;
     if (action === "releasePolicy") {
-      const { key, value, starts, read } = receipt(frame), overlay = before.overlay;
+      const { key, value, starts, read, localHit, remoteHit } = receipt, overlay = before.overlay;
       if (!before.providerFailed) {
         if (overlay === 20 && starts && !read) recorder.credit("invalid-read-budget-bypasses-caching");
         if (overlay === 21 && read) recorder.credit("invalid-local-ramp-preserves-remote");
-        if (overlay === 22 && value > 0 && !read && !starts) recorder.credit("invalid-remote-ramp-preserves-local");
-        if (overlay === 25 && current.loads > prior.loads && !starts) recorder.credit("invalid-shadow-preserves-serving");
+        if (overlay === 22 && localHit) recorder.credit("invalid-remote-ramp-preserves-local");
+        if (overlay === 25 && remoteHit) recorder.credit("invalid-shadow-preserves-serving");
       }
       if (starts) {
         for (const source of pendingSources(before)) {
@@ -176,8 +166,8 @@ function settlementWitnesses(frames, recorder) {
       } else if (value === 0) {
         if (pendingSources(before).some(source => source.key === key && source.epoch < before.epoch)) recorder.credit("join-after-policy-change");
       } else {
-        if (current.loads > prior.loads) { recorder.credit("remote-hit"); recorder.credit(`remote-value:${value}`); }
-        if (!read) { recorder.credit("local-hit"); recorder.credit(`local-value:${value}`); }
+        if (remoteHit) { recorder.credit("remote-hit"); recorder.credit(`remote-value:${value}`); }
+        if (localHit) { recorder.credit("local-hit"); recorder.credit(`local-value:${value}`); }
       }
     }
     if (action === "resolveLoader" || action === "rejectLoader") {
@@ -202,27 +192,28 @@ function clockWitnesses(frames, recorder) {
   let rolledLocal, hitBeforeExpiry, rolled = false;
   for (const frame of frames) {
     recorder.step(frame.index);
-    const { action, prior, current, before } = frame;
+    const { action, before, policy, receipt } = frame;
     if (action === "rollbackWall") {
       rolled = true;
       if (before.local.value > 0) rolledLocal = { key: before.local.key, expires: before.local.expires };
     }
     if (action !== "releasePolicy") continue;
-    const { key, value: result, starts, read } = receipt(frame), missed = read || starts;
-    const { now, local } = before, active = effectivePolicy(before.overlay, before.providerFailed).localTtl > 0;
+    const { key, starts, read, localHit } = receipt, missed = read || starts;
+    const { now, local } = before, active = policy.localTtl > 0;
     const sameEntry = active && local.key === key && local.value > 0;
     // The probe occurs after the original expiry but before even the shortest
     // permitted TTL could expire if the preceding hit had renewed it.
     if (sameEntry && hitBeforeExpiry?.key === key && hitBeforeExpiry.value === local.value && hitBeforeExpiry.expires === local.expires &&
       now >= local.expires && now < hitBeforeExpiry.at + 1000 && missed) recorder.credit("local-hit-preserves-insertion-expiry");
-    if (sameEntry && now < local.expires && result > 0 && !missed) hitBeforeExpiry = { key, value: local.value, expires: local.expires, at: now };
+    if (sameEntry && now < local.expires && localHit) hitBeforeExpiry = { key, value: local.value, expires: local.expires, at: now };
     if (active && rolledLocal?.key === key && local.key === key && local.expires === rolledLocal.expires) {
-      if (now < rolledLocal.expires && result > 0 && !missed) recorder.credit("rollback-preserves-live-local");
+      if (now < rolledLocal.expires && localHit) recorder.credit("rollback-preserves-live-local");
       if (now >= rolledLocal.expires && missed) recorder.credit("rollback-does-not-extend-local-ttl");
     }
     const remote = before.remote[key];
-    if (rolled && !before.readFailed && remote.value > 0 && now < remote.expires && remote.created > before.wall &&
-      read && current.loads === prior.loads && starts) recorder.credit("rollback-rejects-future-remote");
+    if (rolled && !before.readFailed && remote.value > 0 && now < remote.expires && remote.created > before.wall && read && starts) {
+      recorder.credit("rollback-rejects-future-remote");
+    }
   }
 }
 
@@ -239,10 +230,9 @@ function layerWitnesses(frames, recorder) {
   const failedReadValues = new Map();
   for (const frame of frames) {
     recorder.step(frame.index);
-    const { action, choice, prior, current, before, after } = frame;
+    const { action, choice, prior, current, before, after, policy, receipt } = frame;
     if (action === "releasePolicy") {
-      const { key, value, starts, read, localHit, remoteHit } = receipt(frame);
-      const policy = effectivePolicy(before.overlay, before.providerFailed), remote = before.remote[key], local = before.local;
+      const { key, value, starts, read, localHit, remoteHit } = receipt, remote = before.remote[key], local = before.local;
       if (starts) {
         const loader = after.sources.length - 1;
         for (const [other, source] of before.sources.entries()) {
@@ -285,9 +275,7 @@ function layerWitnesses(frames, recorder) {
         if (lastWriter.get(`remote:${key}`)?.value === value) recorder.credit("independent-remote-last-completion-probed");
         const age = before.wall - remote.created;
         if (age >= 1000 && policy.remoteTtl > 1000) recorder.credit("increased-fresh-ttl-reuses-retained-frame");
-        // Record the warming from the slot the shadow filled; an absent warming
-        // leaves the slot empty and must not match a later entry by equal expiries.
-        if (policy.localTtl > 0 && age > 0 && after.local.value > 0) warmed.set(key, { value, expires: after.local.expires, freshUntil: remote.created + policy.remoteTtl });
+        if (policy.localTtl > 0 && age > 0) warmed.set(key, { value, expires: after.local.expires, freshUntil: remote.created + policy.remoteTtl });
       }
       // A frame Redis still retains was read and missed: at exactly the fresh
       // boundary, or fresh under a larger TTL after physical retention ended.
@@ -332,9 +320,10 @@ function layerWitnesses(frames, recorder) {
 
 export function policyWitnesses(histories, recorder = createWitnessRecorder()) {
   actionLabels(histories, recorder);
-  for (const { path, steps } of histories) {
+  for (const { path, steps, predictions } of histories) {
     recorder.enter(path);
     const frames = shadowHistory(steps, path);
+    if (carriesPrivateState(predictions)) checkFidelity(frames, predictions, path);
     settlementWitnesses(frames, recorder);
     clockWitnesses(frames, recorder);
     layerWitnesses(frames, recorder);

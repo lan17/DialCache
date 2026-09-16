@@ -11,7 +11,7 @@ import { actionLabels, flowLabels } from "./labels.mjs";
 import { layersWitnesses } from "./layers.mjs";
 import { localClockWitnesses } from "./local-clock.mjs";
 import { localFailureWitnesses } from "./local-failure.mjs";
-import { assertShadowFidelity, policyWitnesses } from "./policy.mjs";
+import { policyWitnesses } from "./policy.mjs";
 import { createWitnessRecorder } from "./recorder.mjs";
 import { recoveryWitnesses } from "./recovery.mjs";
 import { recoveryAdmissionWitnesses } from "./recovery-admission.mjs";
@@ -62,7 +62,7 @@ export function evaluateCorpus(profile, corpus, recorder = createWitnessRecorder
   switch (profile) {
     case "effects": effectsWitnesses(corpus, recorder); effectsAuthorityWitnesses(corpus, recorder); break;
     case "local-clock": localClockWitnesses(corpus, recorder); break;
-    case "policy": assertShadowFidelity(corpus); policyWitnesses(corpus, recorder); break;
+    case "policy": policyWitnesses(corpus, recorder); break;
     case "scope": scopeWitnesses(corpus, recorder); break;
     case "layers": layersWitnesses(corpus, recorder); runtimeWitnesses(profile, corpus, recorder); break;
     case "admission": admissionWitnesses(corpus, recorder); break;

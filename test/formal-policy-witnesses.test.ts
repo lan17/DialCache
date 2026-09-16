@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { parseTrace, profiles } from "../formal/replay/features.mjs";
 import { loadCorpus } from "../formal/replay/witnesses/index.mjs";
-import { assertShadowFidelity, policyWitnesses } from "../formal/replay/witnesses/policy.mjs";
+import { policyWitnesses } from "../formal/replay/witnesses/policy.mjs";
 import { witnessStates } from "../formal/replay/witnesses/trace.mjs";
 
 type Integer = { "#bigint": string };
@@ -185,11 +185,20 @@ describe("shadow fidelity against the model's private predictions", () => {
   };
 
   it("matches the model at every step of the committed smoke history", () => {
-    expect(() => assertShadowFidelity(loadCorpus("policy", [smoke]))).not.toThrow();
+    expect(() => policyWitnesses(loadCorpus("policy", [smoke]))).not.toThrow();
   });
 
   it("has nothing to compare in a history projected to its public channels", () => {
-    expect(() => assertShadowFidelity([parseTrace({ states: history("localHitDoesNotRenewInsertionTtlTest") }, "public", policy)])).not.toThrow();
+    const states = history("localHitDoesNotRenewInsertionTtlTest");
+    expect(() => policyWitnesses([parseTrace({ states }, "public", policy)])).not.toThrow();
+    expect(() => policyWitnesses([{ ...parseTrace({ states }, "public", policy), ...witnessStates({ states }, "public") }])).not.toThrow();
+  });
+
+  it.each([
+    ["sources", /step 0: shadow sources \[\] differs from the model's undefined/],
+    ["localExpires", /step 0: shadow localExpires 0 differs from the model's undefined/],
+  ])("requires every shadowed field of a private layout: %s", (field, message) => {
+    expect(() => policyWitnesses([predicted(states => { for (const state of states) delete state.s[field]; })])).toThrow(message);
   });
 
   it.each([
@@ -198,6 +207,6 @@ describe("shadow fidelity against the model's private predictions", () => {
     ["sources", 3, (s: Record<string, unknown>) => { (s.sources as Array<Record<string, unknown>>)[0]!.retention = { "#bigint": "1000" }; }, /step 3: shadow sources .* differs from the model's/],
     ["dumpFailed", 4, (s: Record<string, unknown>) => { s.dumpFailed = true; }, /step 4: shadow dumpFailed false differs from the model's true/],
   ])("names the first field the model predicts differently: %s", (_field, step, mutate, message) => {
-    expect(() => assertShadowFidelity([predicted(states => mutate(states[step]!.s))])).toThrow(message);
+    expect(() => policyWitnesses([predicted(states => mutate(states[step]!.s))])).toThrow(message);
   });
 });
