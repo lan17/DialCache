@@ -1,20 +1,25 @@
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
 import { parseTrace, profiles } from "../formal/replay/features.mjs";
-import { policyWitnesses } from "../formal/replay/witnesses/policy.mjs";
+import { loadCorpus } from "../formal/replay/witnesses/index.mjs";
+import { assertShadowFidelity, policyWitnesses } from "../formal/replay/witnesses/policy.mjs";
+import { witnessStates } from "../formal/replay/witnesses/trace.mjs";
 
 type Integer = { "#bigint": string };
 interface State { input: { name: string; choice: Integer }; "mbt::actionTaken"?: string; "mbt::nondetPicks"?: unknown; s: Record<string, unknown> }
 interface History { source: { model: string; recipe: string }; states: State[] }
-const fixtures = JSON.parse(readFileSync(new URL("./fixtures/formal-policy-witnesses.json", import.meta.url), "utf8")) as Record<string, History>;
+const fixtures = JSON.parse(readFileSync(new URL("./fixtures/policy-witnesses.json", import.meta.url), "utf8")) as Record<string, History>;
 const policy = profiles.policy!;
+const smoke = resolve("formal/policy-smoke.itf.json");
 
-// The fixtures are named public Quint runs of the policy model projected to
-// the recorded inputs and the observation a driver is asserted against. The
+// The fixtures are public Quint runs of the policy model projected to the
+// recorded inputs and the observation a driver is asserted against. The
 // classifier has nothing else to read; a probe that changes one recorded
-// input must lose the label even though the recorded outcome stays.
+// input must lose the label, or be refused as a contradiction, even though the
+// recorded outcome stays.
 function history(name: string): State[] {
   const fixture = fixtures[name];
   if (fixture === undefined) throw new Error(`Missing policy witness fixture ${name}`);
@@ -28,18 +33,17 @@ const nth = (states: State[], action: string, index = 0): State => {
   if (state === undefined) throw new Error(`No ${action} input #${index}`);
   return state;
 };
-// Re-record an input. The simulator annotations must agree with the record.
-function record(state: State, name: string, choice: number): void {
-  state.input = { name, choice: { "#bigint": String(choice) } };
-  state["mbt::actionTaken"] = name;
-  state["mbt::nondetPicks"] = { choice: choice === -1 ? { tag: "None", value: { "#tup": [] } } : { tag: "Some", value: { "#bigint": String(choice) } } };
+// Re-record an input's choice. The simulator annotation must agree with the record.
+function rechoose(state: State, choice: number): void {
+  state.input.choice = { "#bigint": String(choice) };
+  state["mbt::nondetPicks"] = { choice: { tag: "Some", value: { "#bigint": String(choice) } } };
 }
-const rechoose = (state: State, choice: number) => record(state, state.input.name, choice);
 
 const positive: Array<[string, string]> = [
   ["localHitDoesNotRenewInsertionTtlTest", "local-hit-preserves-insertion-expiry"],
   ["wallRollbackDoesNotExtendLocalTtlTest", "rollback-preserves-live-local"],
   ["wallRollbackDoesNotExtendLocalTtlTest", "rollback-does-not-extend-local-ttl"],
+  ["expiredLocalEntryMissesAfterRollback", "rollback-does-not-extend-local-ttl"],
   ["wallRollbackRejectsFutureRemoteFrameTest", "rollback-rejects-future-remote"],
   ["exactRemoteFreshBoundaryStartsSourceTest", "remote-exact-fresh-boundary-miss"],
   ["increasedFreshTtlCanReusePhysicallyRetainedValueTest", "increased-fresh-ttl-reuses-retained-frame"],
@@ -71,18 +75,20 @@ describe("policy witnesses from inputs and public observations", () => {
     expect(witnesses("probe", states).has("local-hit-preserves-insertion-expiry")).toBe(false);
   });
 
-  it("without the wall rollback the served-then-missed local entry earns neither rollback label", () => {
-    const states = history("wallRollbackDoesNotExtendLocalTtlTest");
-    record(nth(states, "rollbackWall"), "dumpFault", 0);
-    const labels = witnesses("probe", states);
-    expect(labels.has("rollback-preserves-live-local")).toBe(false);
-    expect(labels.has("rollback-does-not-extend-local-ttl")).toBe(false);
+  it("a rollback that only cancels elapsed time leaves an expired entry expired", () => {
+    expect(witnesses("probe", history("expiredLocalEntryMissesAfterRollback")).has("rollback-preserves-live-local")).toBe(false);
   });
 
-  it("a frame created at or before the observed wall is not a rejected future frame", () => {
-    const states = history("wallRollbackRejectsFutureRemoteFrameTest");
-    record(nth(states, "rollbackWall"), "dumpFault", 0);
-    expect(witnesses("probe", states).has("rollback-rejects-future-remote")).toBe(false);
+  it("a miss while the rolled-back entry is still live does not show its TTL unextended", () => {
+    const states = history("wallRollbackDoesNotExtendLocalTtlTest");
+    rechoose(nth(states, "advance"), 500);
+    expect(witnesses("probe", states).has("rollback-does-not-extend-local-ttl")).toBe(false);
+  });
+
+  it("a frame created at the rolled-back wall is not in the future and serves", () => {
+    const labels = witnesses("probe", history("rollbackWithinElapsedTimeServesFrame"));
+    expect(labels.has("rollback-rejects-future-remote")).toBe(false);
+    expect(labels.has("remote-hit")).toBe(true);
   });
 
   it("a remote miss inside the fresh window is not the exact boundary", () => {
@@ -109,10 +115,22 @@ describe("policy witnesses from inputs and public observations", () => {
     expect(witnesses("probe", states).has("remote-hit-local-ttl-outlives-remote-freshness")).toBe(false);
   });
 
-  it("a later local hit without the provider failure is not a preserved bypass", () => {
+  it("a recorded local hit without a local layer is a contradiction, not a warmed entry", () => {
+    const states = history("remoteHitStartsFullLocalInsertionTtlTest");
+    rechoose(nth(states, "policy", 1), 3);
+    expect(() => witnesses("probe", states)).toThrow(/step 11: local hit of 1 on key 0 but the shadowed slot holds 0/);
+  });
+
+  it("a bypassed result equal to the retained value cannot show the entry was preserved", () => {
+    const states = history("providerFailureBypassesAndPreservesExistingLocalTest");
+    rechoose(nth(states, "resolveLoader", 1), 8); // the bypassing source also resolves to 1
+    expect(witnesses("probe", states).has("provider-failure-preserves-existing-local")).toBe(false);
+  });
+
+  it("a recorded hit of the retained value after a healthy reply contradicts the shadowed publication", () => {
     const states = history("providerFailureBypassesAndPreservesExistingLocalTest");
     rechoose(nth(states, "providerFault"), 0);
-    expect(witnesses("probe", states).has("provider-failure-preserves-existing-local")).toBe(false);
+    expect(() => witnesses("probe", states)).toThrow(/step 10: local hit of 1 on key 0 but the shadowed slot holds 2/);
   });
 
   it("disabling only the local layer is not the serving kill switch", () => {
@@ -130,7 +148,7 @@ describe("policy witnesses from inputs and public observations", () => {
   it.each([["independentLocalPublicationUsesLastCompletionTest", "local"], ["independentRemotePublicationUsesLastCompletionTest", "remote"]])(
     "%s needs the overlapping sources to publish different values", (name, layer) => {
       const states = history(name);
-      rechoose(nth(states, "resolveLoader", 1), 2); // source 0 also resolves to 2
+      rechoose(nth(states, "resolveLoader"), 8); // source 1 also resolves to 1
       expect(witnesses("probe", states).has(`independent-${layer}-last-completion-probed`)).toBe(false);
     });
 
@@ -143,6 +161,43 @@ describe("policy witnesses from inputs and public observations", () => {
   it("rejects a settlement of a source the observation never started", () => {
     const states = history("untrackedReadFailureStillWarmsActiveLocalTest");
     rechoose(nth(states, "resolveLoader"), 8); // loader 1, value 1
-    expect(() => witnesses("probe", states)).toThrow(/pending source 1/);
+    expect(() => witnesses("probe", states)).toThrow(/step 4: settles no pending source 1/);
+  });
+
+  it("rejects a stored write whose TTL is not the source's captured retention", () => {
+    const states = history("increasedFreshTtlCannotResurrectExpiredStorageTest");
+    rechoose(nth(states, "policy"), 0); // recorded TTL 2000 from the two-second recovery overlay
+    expect(() => witnesses("probe", states)).toThrow(/step 4: write with TTL 2000 but source 0 captured retention 5000/);
+  });
+
+  it("rejects a recorded remote hit once the shadowed frame's retention has ended", () => {
+    const states = history("increasedFreshTtlCanReusePhysicallyRetainedValueTest");
+    rechoose(nth(states, "advance"), 5000);
+    expect(() => witnesses("probe", states)).toThrow(/step 8: remote hit of 1 on key 0 but the shadowed frame holds 1 until 5000 at 5000/);
+  });
+});
+
+describe("shadow fidelity against the model's private predictions", () => {
+  const predicted = (mutate: (states: Array<{ s: Record<string, unknown> }>) => void) => {
+    const raw = JSON.parse(readFileSync(smoke, "utf8")) as { states: Array<{ s: Record<string, unknown> }> };
+    mutate(raw.states);
+    return { ...parseTrace(raw, smoke, policy), ...witnessStates(raw, smoke) };
+  };
+
+  it("matches the model at every step of the committed smoke history", () => {
+    expect(() => assertShadowFidelity(loadCorpus("policy", [smoke]))).not.toThrow();
+  });
+
+  it("has nothing to compare in a history projected to its public channels", () => {
+    expect(() => assertShadowFidelity([parseTrace({ states: history("localHitDoesNotRenewInsertionTtlTest") }, "public", policy)])).not.toThrow();
+  });
+
+  it.each([
+    ["localValue", 3, (s: Record<string, unknown>) => { s.localValue = { "#bigint": "2" }; }, /step 3: shadow localValue 1 differs from the model's 2/],
+    ["wall", 0, (s: Record<string, unknown>) => { s.wall = { "#bigint": "1" }; }, /step 0: shadow wall 100000 differs from the model's 1/],
+    ["sources", 3, (s: Record<string, unknown>) => { (s.sources as Array<Record<string, unknown>>)[0]!.retention = { "#bigint": "1000" }; }, /step 3: shadow sources .* differs from the model's/],
+    ["dumpFailed", 4, (s: Record<string, unknown>) => { s.dumpFailed = true; }, /step 4: shadow dumpFailed false differs from the model's true/],
+  ])("names the first field the model predicts differently: %s", (_field, step, mutate, message) => {
+    expect(() => assertShadowFidelity([predicted(states => mutate(states[step]!.s))])).toThrow(message);
   });
 });

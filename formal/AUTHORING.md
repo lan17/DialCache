@@ -256,12 +256,12 @@ before the event being tested; even an equal-value replacement cannot prove
 that the earlier publication survived. Late-effect suppression alone does not
 prove that raw work retained capacity.
 
-Witness classifiers are the shared modules under
-[replay/witnesses/](./replay/witnesses/), one per profile. They read the
-explicit Quint `input` record, public observations and private predictions;
-their inputs must never name a TypeScript or Go file, because
-`node formal/witnesses.mjs evaluate` runs them for every port. Declare a new
-module in the profile's `witnessSources` in `profiles.json`.
+Witness classifiers, one per profile, are the shared modules under
+[replay/witnesses/](./replay/witnesses/). They read the Quint `input` record and
+public observations, and private predictions only in a profile not yet composed
+([kernel/README.md](./kernel/README.md)). Their inputs never name a TypeScript
+or Go file: `node formal/witnesses.mjs evaluate` runs them for every port.
+Declare a new module in the profile's `witnessSources` in `profiles.json`.
 
 Add discriminating negative controls when introducing or changing witness
 classification. Preserve the matching fixture or phase, then remove or alter

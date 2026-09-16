@@ -370,9 +370,9 @@ profile. Each `witness/<profile>` completion leaf is decided by one shared,
 language-neutral evaluator under [replay/witnesses/](./replay/witnesses/). It
 reads the same histories every port replays (the profile's sampled traces plus
 its exported `replayRegressions`), keys every rule on the explicit Quint `input`
-record, and classifies from declared inputs, public observations and, where a
-rule needs it, the model's private predictions. Driver observations never enter
-it, and it never supplies an implementation's inputs.
+record, and classifies from declared inputs and public observations (the
+model's private predictions only for profiles not yet composed). Driver
+observations never enter it, and it never supplies an implementation's inputs.
 
 Run it once over a generated corpus:
 

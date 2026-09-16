@@ -115,8 +115,19 @@ belong to `policy_gate` (empty in a profile with immediate replies); the caller
 identity the ownership invariant reads is the opt-in record the wrapper
 composes around `begin`. Composing `serving`
 adopts the layers encoding of every field it names; a profile with a different
-private layout re-encodes when it composes, and the witness classifiers that
-read its private fields move with it.
+private layout re-encodes when it composes.
+
+The witness classifiers of a composed profile, and of a profile about to be
+composed, read the recorded inputs and public observations only
+([replay/witnesses/policy.mjs](../replay/witnesses/policy.mjs)): they shadow
+the cache contents they need from those and bind the shadow to the model with
+a fidelity assertion over the model's private predictions
+(`assertShadowFidelity`), which is what a composition re-encodes against the
+new private layout; the classifiers themselves do not change. The classifiers
+still reading private predictions, to migrate the same way before or with
+their profile's composition: `effects.mjs`, `independent.mjs`, `layers.mjs`,
+`recovery.mjs` (the scope and wall-rollback rules), `recovery-shadow.mjs`,
+`shadow.mjs`, and the scope and layers rules of `runtime.mjs`.
 
 The rules a profile may keep are wiring: record literals for the initial state,
 record updates with inputs (`{ policy: policy, ...s }`), and input decoding

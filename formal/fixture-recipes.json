@@ -2445,7 +2445,7 @@
       ]
     },
     {
-      "path": "test/fixtures/formal-policy-witnesses.json",
+      "path": "test/fixtures/policy-witnesses.json",
       "model": "formal/dialcache-policy-conformance.qnt",
       "format": "named-map",
       "recipes": [
@@ -2526,6 +2526,90 @@
             ],
             [
               "releasePolicy",
+              -1
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "releasePolicy",
+              -1
+            ]
+          ],
+          "projection": "policy-observations"
+        },
+        {
+          "id": "expiredLocalEntryMissesAfterRollback",
+          "actions": [
+            [
+              "init",
+              -1
+            ],
+            [
+              "policy",
+              4
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "releasePolicy",
+              -1
+            ],
+            [
+              "resolveLoader",
+              1
+            ],
+            [
+              "advance",
+              1000
+            ],
+            [
+              "rollbackWall",
+              -1
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "releasePolicy",
+              -1
+            ]
+          ],
+          "projection": "policy-observations"
+        },
+        {
+          "id": "rollbackWithinElapsedTimeServesFrame",
+          "actions": [
+            [
+              "init",
+              -1
+            ],
+            [
+              "policy",
+              3
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "releasePolicy",
+              -1
+            ],
+            [
+              "resolveLoader",
+              1
+            ],
+            [
+              "advance",
+              1000
+            ],
+            [
+              "rollbackWall",
               -1
             ],
             [
