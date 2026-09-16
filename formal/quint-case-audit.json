@@ -99,6 +99,12 @@
       "scope": "A hit at 500ms leaves the original 1000ms insertion deadline; the exact-boundary probe starts a new source."
     },
     {
+      "case": "C09.fixed-local-ttl",
+      "reference": "formal/dialcache-source-budgets-conformance.qnt:localEntryExpiresAfterItsTtlTest",
+      "kind": "regression",
+      "scope": "In the composed source-budgets profile a local entry published at settlement is served to a same-key enabled call one millisecond before its 1000ms insertion expiry and no longer at the exact boundary, where the next call starts a source; the deterministic regression pins the public result and loader count at both instants."
+    },
+    {
       "case": "C09.wall-rollback",
       "reference": "formal/dialcache-policy-conformance.qnt:wallRollbackDoesNotExtendLocalTtlTest",
       "kind": "regression",

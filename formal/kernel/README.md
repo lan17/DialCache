@@ -12,7 +12,7 @@ design and its history; this file describes what is here and how to use it.
 | Module | Concern | Transitions and judgments |
 | --- | --- | --- |
 | `encodings` | Sentinels shared by the modules: 0 for an absent value, -1 for an unowned slot, 0 for no fence; the `accepted` judgment over outcome codes | `accepted` |
-| `calls` | What a caller asks for: instance, key, request context, whether it is enabled (a disabled context, a failed key or a call outside every request is not) and whether it is outside every request | the `Call` type only |
+| `calls` | What a caller asks for: instance, key, request context, whether it is enabled (a disabled context, a failed key or a call outside every request is not) and whether its key failed to construct, the one bypass whose source keeps the configured deadline (C27) | the `Call` type only |
 | `layer_policy` | Which layers a call may use, from the drivers' layer policy code and remote availability; the immediate reply `resolution` and the `BYPASS` reply | `enabledLayers`, `sharedLayers`, `resolution` |
 | `runtime_policy` | How a runtime policy reply (the runtime-boundaries drivers' codes 0 to 21) resolves against an instance's configured baseline: serving cohorts, omitted, null and invalid leaves, runtime TTLs, the kill switch | `resolve` |
 | `request_memo` | Request-scoped memo rows and their closure; `openScope` and `Opened` are environment bookkeeping (which contexts an input has created) that no memo rule reads, kept beside the memo rows because the composition lint has no environment allowance yet | `scopeOpen`, `memoSlot`, `memoValue`, `memoize`, `openScope`, `closeScope` |
@@ -22,7 +22,7 @@ design and its history; this file describes what is here and how to use it.
 | `clock` | Elapsed time | `advance` |
 | `policy_gate` | Callers whose policy reply the environment holds, with their calls, indexed by their policy call | `hold`, `holding`, `latest`, `entry`, `release` |
 | `serving` | Admission, traversal order (`decide`), ownership precedence, publication and refill authority, scope closure, maintenance; the layered shape and its local and request-only projections | `admit`, `release`, `begin`, `settle`, `admitLocal`, `releaseLocal`, `settleLocal`, `admitRequest`, `releaseRequest`, `settleRequest`, `closeScope`, `invalidate` |
-| `deadlines` | Source budgets: the budget a call's source gets, the deadline measured from the source's own start, expiry on timer delivery or late arrival, abandoned work draining, as budgeted variants of the local lifecycle | `admitLocal`, `releaseLocal`, `settleLocal`, `advanceLocal` |
+| `deadlines` | Source budgets: the budget a source starts with (a source started at admission is bounded only when its key failed, C27, a disabled context and an outside call run theirs unbounded, C01; a source started at release is bounded, its caller was enabled when admitted), the deadline measured from the source's own start, expiry on timer delivery or late arrival, abandoned work draining, as budgeted variants of the local lifecycle | `admitLocal`, `releaseLocal`, `settleLocal`, `advanceLocal` |
 | `diagnostics` | The diagnostics channel: the singleflight a caller coalesced into and the layer a failed source is attributed to, as diagnosed variants of the request-only traversal | `admitRequest`, `releaseRequest`, `settleRequest` |
 
 `cache_rules` (age, expiry, deadline and fence judgments) stays the layer under
@@ -98,6 +98,17 @@ A composed profile's clock must start above zero: `cache_rules.fenceAllows` is
 strict and an untracked flight's fence is 0, so a profile that initializes
 `now` to 0 refuses every remote refill without any other symptom.
 
+## Kernel fixtures
+
+The library's transitions are pure, so the seams a scheduled profile may not
+reach (held policy replies released out of order, coalescing off against both
+registries, a scope closed between admission and release, the request-only
+projection with its diagnostics, the budgeted local lifecycle with its expiry
+boundaries) are exercised by small profiles under `test/fixtures/kernel`. Each
+typechecks and every run it declares passes: `make kernel-fixtures` runs them
+locally with Quint on the PATH, and the model-check and differential lanes run
+the same check.
+
 ## Composing a profile
 
 `formal/dialcache-layers-conformance.qnt` is the first composed profile
@@ -111,8 +122,7 @@ assigns `s'` to one library transition and `input'` to the driver record:
 ```quint
 action startCall(choice: int): bool = all {
   s.o.calls.length() < MAX_CALLERS,
-  s' = Flights::recordIdentity(Serving::begin(s, LAYOUT, call(choice), resolution(s.policy, s.remoteAvailable)),
-    instance(choice / KEYS_PER_INSTANCE), choice % KEYS_PER_INSTANCE),
+  s' = Flights::recordIdentity(Serving::begin(s, LAYOUT, call(choice), resolution(s.policy, s.remoteAvailable)), call(choice)),
   input' = { name: "beginCall", choice: choice }
 }
 ```

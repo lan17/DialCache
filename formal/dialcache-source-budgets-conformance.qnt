@@ -68,14 +68,15 @@ module dialcache_source_budgets_conformance {
   var input: { name: str, choice: int }
 
   // Input decoding: the fixture's configured source budget, and the identity a
-  // call is admitted with (an outside call also has no source deadline; a key
-  // that failed to construct keeps the enabled budget, C27).
+  // call is admitted with. A key that failed to construct is the one bypass
+  // whose source keeps the configured budget (C27); an outside call returns
+  // before its key is constructed, so both outside kinds run unbounded (C01).
   pure def configuredBudget(mode: int): int =
     if (mode == DEFAULT_BUDGET_MODE) 60000
     else if (mode == UNBOUNDED_BUDGET_MODE) Deadlines::UNBOUNDED
     else 10
   pure def call(kind: int): Call =
-    { instance: 0, key: 0, context: 0, enabled: kind == ENABLED, outside: kind == OUTSIDE or kind == OUTSIDE_INVALID_KEY }
+    { instance: 0, key: 0, context: 0, enabled: kind == ENABLED, keyFailed: kind == INVALID_KEY }
 
   action initialize(mode: int): bool = all {
     input' = { name: "init", choice: mode },
@@ -176,9 +177,13 @@ module dialcache_source_budgets_conformance {
     owner < 0 or s.o.calls.nth(call) == s.sources.nth(owner).result
   })
   // Only an enabled call makes a policy call: the newest caller waits for a
-  // reply exactly when it was admitted enabled.
-  val onlyEnabledValidCallsResolvePolicy = not(justAdmitted)
-    or ((input.choice == ENABLED) == (s.held.select(held => held.caller == s.o.calls.length() - 1).length() > 0))
+  // reply exactly when it was admitted enabled, and over the whole history the
+  // policy calls are the callers admitted enabled: each is held, served from
+  // local or owns a shared source (every reply here enables the shared local
+  // layer), while a bypass caller owns an unshared one.
+  val onlyEnabledValidCallsResolvePolicy = (not(justAdmitted)
+      or ((input.choice == ENABLED) == (s.held.select(held => held.caller == s.o.calls.length() - 1).length() > 0)))
+    and s.o.policyCalls == s.owners.indices().filter(c => s.owners.nth(c) == NO_OWNER or s.sources.nth(s.owners.nth(c)).shared).size()
 
   run outsideAndInvalidOutsideCallsIgnoreDeadlineAndSharingTest = initialize(FINITE_BUDGET_MODE)
     .then(begin(OUTSIDE)).then(begin(OUTSIDE_INVALID_KEY)).then(advanced(100))
@@ -226,4 +231,18 @@ module dialcache_source_budgets_conformance {
     .then(begin(ENABLED)).then(release(1)).then(resolved(1, VALUE_TWO))
     .then(resolved(0, VALUE_ONE)).then(begin(ENABLED)).then(release(2))
     .expect(s.o.calls == List(DEADLINE_ERROR, VALUE_TWO, VALUE_TWO) and s.o.loaders == 2)
+
+  // A published local entry serves until its insertion TTL and not at it: a
+  // same-key call one millisecond before expiry is served locally, the next
+  // call at the exact boundary starts a source (C09). The clock reaches
+  // LOCAL_TTL_MS - 1 through the drivers' advance choices (nine hundreds,
+  // nine tens, one nine).
+  run localEntryExpiresAfterItsTtlTest = initialize(DEFAULT_BUDGET_MODE)
+    .then(begin(ENABLED)).then(release(0)).then(resolved(0, VALUE_ONE))
+    .then(9.reps(_ => advanced(100))).then(9.reps(_ => advanced(10))).then(advanced(9))
+    .expect(s.now == LOCAL_TTL_MS - 1)
+    .then(begin(ENABLED)).then(release(1))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loaders == 1)
+    .then(advanced(1)).then(begin(ENABLED)).then(release(2))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, CALL_PENDING) and s.o.loaders == 2)
 }

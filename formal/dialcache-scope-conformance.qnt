@@ -73,7 +73,7 @@ module dialcache_scope_conformance {
   // disabling flight sharing.
   pure def holder(scope: int): int = if (scope == REPLACEMENT_REQUEST) REPLACEMENT_REQUEST else ROOT_REQUEST
   pure def call(scope: int): Call =
-    { instance: 0, key: 0, context: holder(scope), enabled: scope != NESTED_DISABLED and scope != OUTSIDE_REQUEST, outside: scope == OUTSIDE_REQUEST }
+    { instance: 0, key: 0, context: holder(scope), enabled: scope != NESTED_DISABLED and scope != OUTSIDE_REQUEST, keyFailed: false }
   pure def resolutionOf(overlay: int): Resolution = {
     layers: { request: overlay != POLICY_NO_REQUEST, local: false, remote: false },
     coalesce: overlay != POLICY_NO_COALESCING

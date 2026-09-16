@@ -1087,7 +1087,8 @@
         "lateFollowerUsesLeadersRemainingBudgetTest",
         "heldPolicyDoesNotSpendSourceBudgetTest",
         "invalidKeyStillKeepsEnabledSourceDeadlineTest",
-        "abandonedSourceCannotReplaceSuccessfulRetryTest"
+        "abandonedSourceCannotReplaceSuccessfulRetryTest",
+        "localEntryExpiresAfterItsTtlTest"
       ],
       "replayRegressions": [
         "outsideAndInvalidOutsideCallsIgnoreDeadlineAndSharingTest",
@@ -1096,7 +1097,8 @@
         "lateFollowerUsesLeadersRemainingBudgetTest",
         "heldPolicyDoesNotSpendSourceBudgetTest",
         "invalidKeyStillKeepsEnabledSourceDeadlineTest",
-        "abandonedSourceCannotReplaceSuccessfulRetryTest"
+        "abandonedSourceCannotReplaceSuccessfulRetryTest",
+        "localEntryExpiresAfterItsTtlTest"
       ],
       "generate": {
         "maxSamples": 1024,
@@ -1962,8 +1964,8 @@
       "source": "formal/kernel/deadlines.qnt",
       "model": "formal/dialcache-source-budgets-conformance.qnt",
       "invariant": "outsideSourcesHaveNoDeadline",
-      "before": "pure def budgetFor(state: Budgeted[r], call: Call): int = if (call.outside) UNBOUNDED else state.sourceBudget",
-      "after": "pure def budgetFor(state: Budgeted[r], call: Call): int = state.sourceBudget"
+      "before": "pure def admissionBudget(state: Budgeted[r], call: Call): int = if (call.keyFailed) state.sourceBudget else UNBOUNDED",
+      "after": "pure def admissionBudget(state: Budgeted[r], call: Call): int = state.sourceBudget"
     },
     {
       "id": "source-budgets-settled-flight-stays-registered",

@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 // Quint's deterministic test export omits MBT metadata. These models record
 // their external inputs explicitly. Normalize that declaration into the same
 // portable envelope as sampled histories; never reconstruct inputs from state
@@ -21,4 +24,17 @@ export function normalizeReplayInputs(trace) {
   }
   trace.vars = [...new Set([...(trace.vars ?? []), 'mbt::actionTaken', 'mbt::nondetPicks'])];
   return trace;
+}
+
+// Normalize every ITF history a directory holds, in place, as the generation
+// lane and the differential both do before a corpus is read or fingerprinted;
+// returns how many histories were rewritten.
+export function normalizeTraceFiles(directory) {
+  let normalized = 0;
+  for (const name of readdirSync(directory).filter(name => name.endsWith('.itf.json'))) {
+    const path = resolve(directory, name);
+    writeFileSync(path, JSON.stringify(normalizeReplayInputs(JSON.parse(readFileSync(path, 'utf8')))) + '\n');
+    normalized++;
+  }
+  return normalized;
 }

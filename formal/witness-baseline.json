@@ -342,7 +342,7 @@
     },
     "runtime-boundaries": {
       "sampledHistories": 256,
-      "corpusSha256": "7cca9500d8ee91fd52df7993bac59bbbf7a71c8c6cf1cb469980df2b703ad617",
+      "corpusSha256": "307de595a8fa48730834f8bebbcbf63ea905bb2ba7fe26785eee39d3315df048",
       "labels": {
         "runtime-enables-sharing": 1,
         "inherited-false-request-last-writer": 0,
@@ -370,7 +370,7 @@
     },
     "scope": {
       "sampledHistories": 256,
-      "corpusSha256": "b0cc621a21af923ba3db7240e281591583c5bc8602cec1731922113975766de8",
+      "corpusSha256": "a41df8a359c2377a93005a4b6dd8ebaa45ee7d0b1f04e8bb33bc8d8f65e8ab75",
       "labels": {
         "failure-layer:request_local": 146,
         "failure-layer:local": 114,
@@ -513,7 +513,7 @@
     },
     "source-budgets": {
       "sampledHistories": 256,
-      "corpusSha256": "70bd33f072dff3f0dd9fc6108e58c96ad7b068c332c8e22755ae13183357687b",
+      "corpusSha256": "887282cbd5baf546e9392808792bdb9c0ae52e9eb24a12d5021397c74e3d66d0",
       "labels": {
         "outside-calls-skip-source-deadlines-sharing-and-publication": 0,
         "default-source-budget-expires-at-sixty-seconds": 0,

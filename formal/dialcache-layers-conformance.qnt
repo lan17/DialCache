@@ -89,7 +89,7 @@ module dialcache_layers_conformance {
     or context == FRESH_OTHER_INSTANCE_CONTEXT) OTHER_INSTANCE else FIRST_INSTANCE
   pure def call(choice: int): Call = {
     instance: instance(choice / KEYS_PER_INSTANCE), key: choice % KEYS_PER_INSTANCE, context: choice / KEYS_PER_INSTANCE,
-    enabled: true, outside: false
+    enabled: true, keyFailed: false
   }
   pure val LAYOUT: Serving::Layout = {
     keysPerInstance: KEYS_PER_INSTANCE,

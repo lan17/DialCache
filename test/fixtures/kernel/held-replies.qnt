@@ -40,7 +40,7 @@ module held_replies {
   }
   // Context 0 and 1 are persistent scopes on instance 0; context 2 is a fresh
   // context on instance 1.
-  pure def call(context: int): Call = { instance: if (context == 2) 1 else 0, key: 0, context: context, enabled: true, outside: false }
+  pure def call(context: int): Call = { instance: if (context == 2) 1 else 0, key: 0, context: context, enabled: true, keyFailed: false }
   action admit(context: int): bool = all {
     s' = Serving::admit(s, LAYOUT, call(context)),
     input' = { name: "beginCall", choice: context }

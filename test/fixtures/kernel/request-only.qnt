@@ -34,7 +34,7 @@ module request_only {
   }
   // Contexts 0 and 1 are persistent scopes over the same instance and key;
   // context 2 is a disabled context.
-  pure def call(context: int): Call = { instance: 0, key: 0, context: context, enabled: context != 2, outside: false }
+  pure def call(context: int): Call = { instance: 0, key: 0, context: context, enabled: context != 2, keyFailed: false }
   action admit(context: int): bool = all {
     s' = Diag::admitRequest(s, LAYOUT, call(context)),
     input' = { name: "beginCall", choice: context }

@@ -1,10 +1,10 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readExecution, root, validateExecution } from './execution.mjs';
 import { CommandFailure, printGroup, resolveConcurrency, runPool, seconds, spawnBuffered } from './quint-pool.mjs';
-import { normalizeReplayInputs } from './replay-inputs.mjs';
+import { normalizeTraceFiles } from './replay-inputs.mjs';
 import { bindTrace } from './replay/bindings.mjs';
 
 // The generation lane's command for one model, also issued by the corpus
@@ -101,14 +101,9 @@ async function executeJob(job) {
     const files = readdirSync(resolve(root, job.outputDirectory)).filter(name => name.endsWith('.itf.json'));
     if (files.length !== job.expectedTraces) throw new Error(`Expected ${job.expectedTraces} traces in ${job.outputDirectory}; generated ${files.length}`);
     if (job.expectedFiles && JSON.stringify([...files].sort()) !== JSON.stringify([...job.expectedFiles].sort())) throw new Error(`Regression trace inventory differs in ${job.outputDirectory}`);
-    if (job.explicitInputs || job.profile) for (const name of files) {
-      const path = resolve(root, job.outputDirectory, name);
-      let text = readFileSync(path, 'utf8');
-      if (job.explicitInputs) {
-        text = JSON.stringify(normalizeReplayInputs(JSON.parse(text))) + '\n';
-        writeFileSync(path, text);
-      }
-      if (job.profile) bindGeneratedTrace(job.profile, text, `${job.outputDirectory}/${name}`);
+    if (job.explicitInputs) normalizeTraceFiles(resolve(root, job.outputDirectory));
+    if (job.profile) for (const name of files) {
+      bindGeneratedTrace(job.profile, readFileSync(resolve(root, job.outputDirectory, name), 'utf8'), `${job.outputDirectory}/${name}`);
     }
   }
 }
