@@ -16,9 +16,10 @@ design and its history; this file describes what is here and how to use it.
 | `request_memo` | Request-scoped memo rows and scope closure | `scopeOpen`, `memoSlot`, `memoValue`, `memoize`, `closeScope` |
 | `local_storage` | Per-instance local storage with LRU eviction and a hit that renews recency, not insertion | `localValue`, `promote`, `putLocal` |
 | `remote_frames` | Remote frames with creation stamps, per-entity watermarks and fences (`cache_rules.fenceAllows`) | `seedFrame`, `raiseWatermark`, `readableFrame`, `missFence`, `writeAllowed` |
-| `flights` | Source executions, the process and request registries that coalesce callers, and per caller its owner, memo slot and identity | `processOwner`, `requestOwner`, `admitCaller`, `joinRequestFlight`, `registerSource`, `settleSource`, `forgetScope`, `ownedBy` |
+| `flights` | Source executions, the process and request registries that coalesce callers, and per caller its owner and memo slot; an opt-in record of the identity each caller asked for | `processOwner`, `requestOwner`, `admitCaller`, `ownCaller`, `joinRequestFlight`, `registerSource`, `settleSource`, `forgetScope`, `ownedBy`, `recordIdentity` |
 | `clock` | Elapsed time | `advance` |
-| `serving` | Admission, traversal order, ownership precedence, publication and refill authority, scope closure, maintenance | `begin`, `settle`, `closeScope`, `invalidate` |
+| `policy_gate` | Callers whose policy reply the environment holds, indexed by their policy call; the caller the latest release served | `hold`, `holding`, `latest`, `heldCaller`, `release` |
+| `serving` | Admission, traversal order, ownership precedence, publication and refill authority, scope closure, maintenance | `admit`, `release`, `begin`, `settle`, `closeScope`, `invalidate` |
 
 `cache_rules` (age, expiry, deadline and fence judgments) stays the layer under
 these modules and is imported, never restated.
@@ -37,7 +38,28 @@ codes, layer policy codes are `layer_policy`'s, storage slots hold the value or
 0 and registries a source index or -1 (`encodings`). Layouts (keys per instance
 and per scope row, persistent contexts, operations per entity, the serving TTL)
 are passed as a `serving::Layout` record, so a profile with a different bound
-composes the same transitions.
+composes the same transitions. A call is a `serving::Call` (instance, key,
+context) and a policy reply resolves to a `layer_policy::Resolution` (the
+enabled layers and whether the call coalesces); `resolution(policy, remote)`
+is the immediate reply from the drivers' policy codes.
+
+The traversal is one statement of the fall-through order (request memo, local,
+remote, source) and of publication authority, split in time rather than by
+concern: `admit` appends the caller, counts its policy call and holds it in the
+policy gate (a caller in a closed scope bypasses every layer and starts its own
+unshared source at once), `release` traverses for a held caller with the state
+current at release and the resolution the profile supplies, and `begin` is
+their composition for a profile whose replies are immediate. A profile whose
+drivers hold policy replies composes `admit` and `release` as separate steps.
+Per-concern entry points a profile would sequence are not offered: the order is
+the rule, and the lint reports a branch between library transitions. A profile
+composes an opt-in record after a transition when one of its own properties
+needs it (`Flights::recordIdentity(Serving::begin(...), instance, key)`);
+records the traversal itself does not read are never mandatory fields.
+
+A composed profile's clock must start above zero: `cache_rules.fenceAllows` is
+strict and an untracked flight's fence is 0, so a profile that initializes
+`now` to 0 refuses every remote refill without any other symptom.
 
 ## Composing a profile
 
@@ -49,19 +71,21 @@ assigns `s'` to one library transition and `input'` to the driver record:
 ```quint
 action startCall(choice: int): bool = all {
   s.o.calls.length() < MAX_CALLERS,
-  s' = Serving::begin(s, LAYOUT, instance(choice / KEYS_PER_INSTANCE), choice % KEYS_PER_INSTANCE,
-    choice / KEYS_PER_INSTANCE),
+  s' = Flights::recordIdentity(Serving::begin(s, LAYOUT, instance(choice / KEYS_PER_INSTANCE), choice % KEYS_PER_INSTANCE,
+    choice / KEYS_PER_INSTANCE), instance(choice / KEYS_PER_INSTANCE), choice % KEYS_PER_INSTANCE),
   input' = { name: "beginCall", choice: choice }
 }
 ```
 
 Each state field has one owning module: the request flight registry and the
-per-caller record (owner, memo slot, instance, key) belong to `flights`, which
-the scope closure in `serving` asks to forget a closed scope's slots, and the
-profile's ownership invariant reads that record rather than keeping its own.
-Composing `serving` adopts the layers encoding of every field it names; a
-profile with a different private layout re-encodes when it composes, and the
-witness classifiers that read its private fields move with it.
+per-caller record (owner, memo slot) belong to `flights`, which the scope
+closure in `serving` asks to forget a closed scope's slots; the held callers
+and the last released one belong to `policy_gate` (empty and -1 in a profile
+with immediate replies); the caller identity the ownership invariant reads is
+the opt-in record the wrapper composes around `begin`. Composing `serving`
+adopts the layers encoding of every field it names; a profile with a different
+private layout re-encodes when it composes, and the witness classifiers that
+read its private fields move with it.
 
 The rules a profile may keep are wiring: record literals for the initial state,
 record updates with inputs (`{ policy: policy, ...s }`), and input decoding

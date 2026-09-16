@@ -6,6 +6,7 @@ module dialcache_layers_conformance {
   import remote_frames as Remote from "./kernel/remote-frames"
   import flights as Flights from "./kernel/flights"
   import clock as Clock from "./kernel/clock"
+  import policy_gate as Gate from "./kernel/policy-gate"
   // Composition boundary: request -> process flight -> local -> remote -> source.
   // Two entities x two operations; two instances; three persistent request scopes.
   // Fresh entries throughout this profile; policy/storage profiles cover expiry.
@@ -73,7 +74,9 @@ module dialcache_layers_conformance {
     owners: List[int],
     memoSlots: List[int],
     callerInstances: List[int],
-    callerKeys: List[int]
+    callerKeys: List[int],
+    held: List[Gate::Held],
+    lastReleased: int
   }
   var s: State
   var input: { name: str, choice: int }
@@ -114,7 +117,9 @@ module dialcache_layers_conformance {
       owners: List(),
       memoSlots: List(),
       callerInstances: List(),
-      callerKeys: List()
+      callerKeys: List(),
+      held: List(),
+      lastReleased: NO_OWNER
     },
     input' = { name: "init", choice: fixture }
   }
@@ -124,8 +129,8 @@ module dialcache_layers_conformance {
   }
   action startCall(choice: int): bool = all {
     s.o.calls.length() < MAX_CALLERS,
-    s' = Serving::begin(s, LAYOUT, instance(choice / KEYS_PER_INSTANCE), choice % KEYS_PER_INSTANCE,
-      choice / KEYS_PER_INSTANCE),
+    s' = Flights::recordIdentity(Serving::begin(s, LAYOUT, instance(choice / KEYS_PER_INSTANCE), choice % KEYS_PER_INSTANCE,
+      choice / KEYS_PER_INSTANCE), instance(choice / KEYS_PER_INSTANCE), choice % KEYS_PER_INSTANCE),
     input' = { name: "beginCall", choice: choice }
   }
   action beginCall = {

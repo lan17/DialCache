@@ -27,6 +27,7 @@
     "formal/kernel/remote-frames.qnt",
     "formal/kernel/flights.qnt",
     "formal/kernel/clock.qnt",
+    "formal/kernel/policy-gate.qnt",
     "formal/kernel/serving.qnt"
   ],
   "models": [

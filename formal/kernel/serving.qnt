@@ -4,6 +4,11 @@ module serving {
   // settle a source and publish its value to the layers that own it. Every
   // portable rule about ownership, traversal order and publication authority
   // is stated here once; profiles supply bounded state, inputs and layouts.
+  //
+  // Admission and traversal are two transitions because the drivers can hold
+  // a policy reply: `admit` counts the policy call and holds the caller,
+  // `release` traverses for it with the state current at release. `begin` is
+  // their composition for a profile whose replies are immediate.
   import conformance_observations.* from "../conformance-observations"
   import encodings.* from "./encodings"
   import layer_policy.* from "./layer-policy"
@@ -11,12 +16,15 @@ module serving {
   import local_storage as Local from "./local-storage"
   import remote_frames as Remote from "./remote-frames"
   import flights as Flights from "./flights"
+  import policy_gate as Gate from "./policy-gate"
 
   // How a profile lays out its bounded identities: keys per instance (local
   // storage and process flights), keys per scope row (request memo), how many
   // contexts are persistent scopes, keys per entity, and the serving TTL
   // written with each remote frame.
   type Layout = { keysPerInstance: int, keysPerScope: int, persistentContexts: int, operationsPerEntity: int, servingTtlMs: int }
+  // What a caller asks for.
+  type Call = { instance: int, key: int, context: int }
   type Served[r] = {
     o: Observation,
     now: int,
@@ -36,14 +44,17 @@ module serving {
     sources: List[Flights::Source],
     owners: List[int],
     memoSlots: List[int],
-    callerInstances: List[int],
-    callerKeys: List[int] | r
+    held: List[Gate::Held],
+    lastReleased: int | r
   }
 
-  // The last admitted caller returns a layer value; an attached request memoizes it.
-  pure def serve(state: Served[r], layout: Layout, slot: int, value: int): Served[r] =
+  pure def participating(state: Served[r], layout: Layout, call: Call): bool =
+    Memo::scopeOpen(state, call.context, layout.persistentContexts)
+
+  // A caller returns a layer value; an attached request memoizes it.
+  pure def serve(state: Served[r], layout: Layout, caller: int, slot: int, value: int): Served[r] =
     Memo::memoize({
-      o: { calls: state.o.calls.replaceAt(state.o.calls.length() - 1, value), ...state.o },
+      o: { calls: state.o.calls.replaceAt(caller, value), ...state.o },
       ...state
     }, slot, value, layout.keysPerScope)
 
@@ -51,59 +62,85 @@ module serving {
   // flight that read the remote layer may not warm local storage directly (a
   // later validated remote hit does), and only a flight that read the remote
   // layer may refill it, fenced by the watermark it observed.
-  pure def startSource(state: Served[r], layout: Layout, instance: int, key: int, slot: int,
-      participating: bool, read: bool, layers: Layers): Served[r] =
+  pure def startSource(state: Served[r], layout: Layout, caller: int, call: Call, slot: int,
+      participating: bool, read: bool, resolved: Resolution): Served[r] =
     Flights::registerSource({ o: { loaders: state.o.loaders + 1, ...state.o }, ...state }, {
-      instance: instance,
-      key: key,
-      local: participating and layers.local and not(state.tracked and read),
+      instance: call.instance,
+      key: call.key,
+      local: participating and resolved.layers.local and not(state.tracked and read),
       remote: read,
-      fence: if (read) Remote::missFence(state, key, layout.operationsPerEntity) else NO_FENCE,
+      fence: if (read) Remote::missFence(state, call.key, layout.operationsPerEntity) else NO_FENCE,
       result: CALL_PENDING,
-      shared: participating and sharedLayers(layers)
-    }, slot, layout.keysPerInstance)
+      shared: participating and resolved.coalesce and sharedLayers(resolved.layers)
+    }, caller, slot, resolved.coalesce, layout.keysPerInstance)
 
-  // Admission and traversal. Ownership precedence: a pending request flight in
-  // the caller's own scope, else (with no memoized value) the process flight
-  // for the instance and key while a shared layer participates. A joined
-  // caller consults no layer. Otherwise request memo, then local (a hit
-  // renews recency), then remote (a hit warms local when local participates).
-  pure def begin(state: Served[r], layout: Layout, instance: int, key: int, context: int): Served[r] = {
-    val layers = enabledLayers(state.policy, state.remoteAvailable)
-    val participating = Memo::scopeOpen(state, context, layout.persistentContexts)
-    val slot = Memo::memoSlot(context, key, layout.keysPerScope,
-      participating and Memo::persistent(context, layout.persistentContexts) and layers.request)
-    val requestOwner = Flights::requestOwner(state, slot)
-    val memoValue = Memo::memoValue(state, slot)
-    val sharing = participating and sharedLayers(layers)
-    val processOwner = if (sharing) Flights::processOwner(state, instance, key, layout.keysPerInstance) else NO_OWNER
-    val owner = if (requestOwner >= 0) requestOwner
-      else if (memoValue == NO_VALUE) processOwner else NO_OWNER
+  // Admission. A caller in an open scope (or a fresh context) makes a policy
+  // call and waits for the reply; a caller in a closed scope bypasses every
+  // layer and starts its own unshared source at once (C01).
+  pure def admit(state: Served[r], layout: Layout, call: Call): Served[r] = {
+    val open = participating(state, layout, call)
+    val caller = state.o.calls.length()
     val admitted = Flights::admitCaller({
       o: {
         calls: state.o.calls.append(CALL_PENDING),
-        policyCalls: state.o.policyCalls + (if (participating) 1 else 0),
+        policyCalls: state.o.policyCalls + (if (open) 1 else 0),
         ...state.o
       },
       ...state
-    }, owner, slot, instance, key)
-    val localValue = if (participating and layers.local) Local::localValue(state, instance, key, layout.keysPerInstance) else NO_VALUE
-    val readsRemote = participating and layers.remote
-    val remoteValue = if (readsRemote) Remote::readableFrame(state, key, layout.operationsPerEntity) else NO_VALUE
+    }, NO_OWNER, NO_OWNER)
+    if (open) Gate::hold(admitted, state.o.policyCalls, caller)
+    else startSource(admitted, layout, caller, call, NO_OWNER, false, false, { layers: { request: false, local: false, remote: false }, coalesce: false })
+  }
+
+  // Traversal for a held caller once its policy reply resolves. Ownership
+  // precedence: a pending request flight in the caller's own scope, else (with
+  // no memoized value) the process flight for the instance and key while a
+  // shared layer participates; neither registry is consulted when the call
+  // does not coalesce. A joined caller consults no layer. Otherwise request
+  // memo, then local (a hit renews recency), then remote (a hit warms local
+  // when local participates). The scope may have closed since admission: a
+  // released caller of a closed scope memoizes nothing and shares nothing.
+  pure def release(state: Served[r], layout: Layout, policyCall: int, call: Call, resolved: Resolution): Served[r] = {
+    val caller = Gate::heldCaller(state, policyCall)
+    val released = Gate::release(state, policyCall)
+    val layers = resolved.layers
+    val open = participating(state, layout, call)
+    val slot = Memo::memoSlot(call.context, call.key, layout.keysPerScope,
+      open and Memo::persistent(call.context, layout.persistentContexts) and layers.request)
+    val requestOwner = if (resolved.coalesce) Flights::requestOwner(state, slot) else NO_OWNER
+    val memoValue = Memo::memoValue(state, slot)
+    val sharing = open and resolved.coalesce and sharedLayers(layers)
+    val processOwner = if (sharing) Flights::processOwner(state, call.instance, call.key, layout.keysPerInstance) else NO_OWNER
+    val owner = if (requestOwner >= 0) requestOwner
+      else if (memoValue == NO_VALUE) processOwner else NO_OWNER
+    val attached = Flights::ownCaller({ memoSlots: released.memoSlots.replaceAt(caller, slot), ...released }, caller, owner)
+    val localValue = if (open and layers.local) Local::localValue(state, call.instance, call.key, layout.keysPerInstance) else NO_VALUE
+    val readsRemote = open and layers.remote
+    val remoteValue = if (readsRemote) Remote::readableFrame(state, call.key, layout.operationsPerEntity) else NO_VALUE
     val observedRead = if (readsRemote) {
       o: {
-        reads: admitted.o.reads + 1,
-        loads: admitted.o.loads + (if (remoteValue > NO_VALUE) 1 else 0),
-        ...admitted.o
+        reads: attached.o.reads + 1,
+        loads: attached.o.loads + (if (remoteValue > NO_VALUE) 1 else 0),
+        ...attached.o
       },
-      ...admitted
-    } else admitted
-    if (owner >= 0) Flights::joinRequestFlight(admitted, slot, owner)
-    else if (memoValue > NO_VALUE) serve(admitted, layout, slot, memoValue)
-    else if (localValue > NO_VALUE) serve(Local::promote(admitted, instance, key), layout, slot, localValue)
+      ...attached
+    } else attached
+    if (owner >= 0) Flights::joinRequestFlight(attached, slot, owner)
+    else if (memoValue > NO_VALUE) serve(attached, layout, caller, slot, memoValue)
+    else if (localValue > NO_VALUE) serve(Local::promote(attached, call.instance, call.key), layout, caller, slot, localValue)
     else if (remoteValue > NO_VALUE) serve(if (layers.local)
-      Local::putLocal(observedRead, instance, key, remoteValue, layout.keysPerInstance) else observedRead, layout, slot, remoteValue)
-    else startSource(observedRead, layout, instance, key, slot, participating, readsRemote, layers)
+      Local::putLocal(observedRead, call.instance, call.key, remoteValue, layout.keysPerInstance) else observedRead, layout, caller, slot, remoteValue)
+    else startSource(observedRead, layout, caller, call, slot, open, readsRemote, resolved)
+  }
+
+  // An immediate policy reply: admission and traversal in one step, with the
+  // layers the profile's policy code enables and coalescing on.
+  pure def begin(state: Served[r], layout: Layout, instance: int, key: int, context: int): Served[r] = {
+    val call = { instance: instance, key: key, context: context }
+    val admitted = admit(state, layout, call)
+    if (participating(state, layout, call))
+      release(admitted, layout, state.o.policyCalls, call, resolution(state.policy, state.remoteAvailable))
+    else admitted
   }
 
   // Settlement. Every caller the source owns receives its outcome. A success
