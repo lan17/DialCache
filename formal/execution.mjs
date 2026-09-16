@@ -1,18 +1,47 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
+import { dirname, posix, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const root = fileURLToPath(new URL('../', import.meta.url));
+// The kernel library's concern modules live in one directory; every tool that
+// needs to know that asks here.
+export const kernelDirectory = 'formal/kernel';
+export const isKernelSource = path => path.startsWith(`${kernelDirectory}/`);
 // Every Quint source a model may import: the scheduled models and helper
 // libraries at formal/ and the kernel library modules at formal/kernel/.
 export function quintSources(directory = root) {
   const files = [];
-  for (const relative of ['formal', 'formal/kernel']) {
+  for (const relative of ['formal', kernelDirectory]) {
     const absolute = resolve(directory, relative);
     if (!existsSync(absolute)) continue;
     for (const name of readdirSync(absolute)) if (name.endsWith('.qnt')) files.push(`${relative}/${name}`);
   }
   return files.sort();
+}
+// A model's import closure: its own text and every Quint source it reaches
+// through relative imports, in dependency order. What a model's behavior
+// depends on, so tools that hash, compare or classify a model walk it here.
+export function importClosure(path, directory = root) {
+  const closure = [];
+  const visit = source => {
+    if (closure.includes(source) || !existsSync(resolve(directory, source))) return;
+    closure.push(source);
+    for (const [, target] of readFileSync(resolve(directory, source), 'utf8').matchAll(/from\s+"(\.\.?\/[^"]+)"/g)) {
+      visit(posix.normalize(posix.join(posix.dirname(source), `${target}.qnt`)));
+    }
+  };
+  visit(path);
+  return closure;
+}
+// Copy every Quint source of one tree into another, keeping the formal/ layout
+// so relative imports resolve there as they do in the repository.
+export function copySources(from, to) {
+  const files = quintSources(from);
+  for (const path of files) {
+    mkdirSync(resolve(to, dirname(path)), { recursive: true });
+    copyFileSync(resolve(from, path), resolve(to, path));
+  }
+  return files;
 }
 const read = path => readFileSync(root + path, 'utf8');
 export const readExecution = () => JSON.parse(read('formal/execution.json'));
@@ -399,7 +428,7 @@ export function validateExecution(manifest = readExecution(), {
   // fault in one is measured through the profiles that compose it.
   const paths = [...manifest.models.map(model => model.path), ...manifest.libraries];
   if (manifest.models.some(model => typeof model.path !== 'string' || !/^formal\/[\w-]+\.qnt$/.test(model.path)) ||
-      manifest.libraries.some(path => typeof path !== 'string' || !/^formal\/(kernel\/)?[\w-]+\.qnt$/.test(path)) ||
+      manifest.libraries.some(path => typeof path !== 'string' || !/^formal\/[\w-]+\.qnt$/.test(isKernelSource(path) ? `formal/${path.slice(kernelDirectory.length + 1)}` : path)) ||
       new Set(paths).size !== paths.length || !sameMembers(paths, files)) throw new Error('Model/library file inventory changed; review the execution schedule');
   const profileIds = [], outputDirectories = new Set([check.outputDirectory]), publicOnly = new Map();
   let invariants = 0, regressions = 0, generatedTraces = 0;
@@ -433,9 +462,9 @@ export function validateExecution(manifest = readExecution(), {
     // not compare that profile against the reference revision), and
     // maxBytesPerStateRatio is the trace-size growth the profile may take.
     if (model.differential !== undefined) {
+      if (!model.differential || typeof model.differential !== 'object' || Array.isArray(model.differential) || model.generate === undefined) throw new Error(`${model.path}: unsupported differential settings`);
       const keys = Object.keys(model.differential);
-      if (!model.differential || typeof model.differential !== 'object' || Array.isArray(model.differential) || !keys.length ||
-          keys.some(key => !['behaviorVersion', 'maxBytesPerStateRatio'].includes(key))) throw new Error(`${model.path}: unsupported differential settings`);
+      if (!keys.length || keys.some(key => !['behaviorVersion', 'maxBytesPerStateRatio'].includes(key))) throw new Error(`${model.path}: unsupported differential settings`);
       const { behaviorVersion, maxBytesPerStateRatio } = model.differential;
       if (behaviorVersion !== undefined && (!Number.isSafeInteger(behaviorVersion) || behaviorVersion < 1)) throw new Error(`${model.path}: differential.behaviorVersion must be a positive integer`);
       if (maxBytesPerStateRatio !== undefined && (typeof maxBytesPerStateRatio !== 'number' || !(maxBytesPerStateRatio >= 1))) throw new Error(`${model.path}: differential.maxBytesPerStateRatio must be at least 1`);

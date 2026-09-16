@@ -13,12 +13,13 @@ design and its history; this file describes what is here and how to use it.
 | --- | --- | --- |
 | `encodings` | Sentinels shared by the modules: 0 for an absent value, -1 for an unowned slot, 0 for no fence | constants only |
 | `layer_policy` | Which layers a call may use, from the drivers' policy code and remote availability | `enabledLayers`, `sharedLayers` |
-| `request_memo` | Request-scoped memo rows, request flights and scope closure | `scopeOpen`, `memoSlot`, `memoValue`, `requestOwner`, `memoize`, `joinRequestFlight`, `closeScope` |
+| `request_memo` | Request-scoped memo rows and scope closure | `scopeOpen`, `memoSlot`, `memoValue`, `memoize`, `closeScope` |
 | `local_storage` | Per-instance local storage with LRU eviction and a hit that renews recency, not insertion | `localValue`, `promote`, `putLocal` |
 | `remote_frames` | Remote frames with creation stamps, per-entity watermarks and fences (`cache_rules.fenceAllows`) | `seedFrame`, `raiseWatermark`, `readableFrame`, `missFence`, `writeAllowed` |
-| `flights` | Source executions, the registries that coalesce callers, and the callers each source owns | `processOwner`, `admitCaller`, `registerSource`, `settleSource`, `ownedBy` |
+| `flights` | Source executions, the process and request registries that coalesce callers, and the callers each source owns | `processOwner`, `requestOwner`, `admitCaller`, `joinRequestFlight`, `registerSource`, `settleSource`, `forgetScope`, `ownedBy` |
 | `clock` | Elapsed time | `advance` |
-| `serving` | Admission, traversal order, ownership precedence, publication and refill authority, maintenance | `begin`, `settle`, `invalidate` |
+| `callers` | Per-caller context and key a profile records for its own properties; no rule reads it | `record` |
+| `serving` | Admission, traversal order, ownership precedence, publication and refill authority, scope closure, maintenance | `begin`, `settle`, `closeScope`, `invalidate` |
 
 `cache_rules` (age, expiry, deadline and fence judgments) stays the layer under
 these modules and is imported, never restated.
@@ -49,11 +50,16 @@ assigns `s'` to one library transition and `input'` to the driver record:
 ```quint
 action startCall(choice: int): bool = all {
   s.o.calls.length() < MAX_CALLERS,
-  s' = Serving::begin(s, LAYOUT, instance(choice / KEYS_PER_INSTANCE), choice % KEYS_PER_INSTANCE,
-    choice / KEYS_PER_INSTANCE),
+  s' = Callers::record(Serving::begin(s, LAYOUT, instance(choice / KEYS_PER_INSTANCE), choice % KEYS_PER_INSTANCE,
+    choice / KEYS_PER_INSTANCE), choice / KEYS_PER_INSTANCE, choice % KEYS_PER_INSTANCE),
   input' = { name: "beginCall", choice: choice }
 }
 ```
+
+Two library transitions compose here: the serving path, and the optional
+`callers` record the profile's ownership invariant reads. Each state field has
+one owning module (the request flight registry belongs to `flights`, which the
+scope closure in `serving` asks to forget a closed scope's slots).
 
 The rules a profile may keep are wiring: record literals for the initial state,
 record updates with inputs (`{ policy: policy, ...s }`), and input decoding
@@ -74,7 +80,11 @@ reviewer sees, not a rule). `formal/profile-lint-baseline.json` records each
 profile's count; a composed profile reports zero and the other counts are the
 migration list. `node formal/lint-profiles.mjs baseline --check` is a step of
 `make differential` (the pull request lane) and of `make formal-check` (the
-weekly full run), so a composed profile cannot regain rule logic unnoticed.
+weekly full run); it fails on drift from the recorded counts and, whatever the
+record says, on any composition violation in a profile that composes a kernel
+module. The lint sees the shape of assignments, not their meaning: a record
+literal that overrides a library result, or a let-bound lambda, passes it; the
+corpus differential is the behavioral check.
 
 ## Migrating a profile
 
@@ -99,6 +109,10 @@ the model's `differential.maxBytesPerStateRatio` (default 1.2); generation wall
 time is recorded and reported as advisory above 1.5, because the two
 generations run concurrently and hosted runners are noisy.
 
+The report records the import closure of both texts (the profile and every
+Quint source it reaches) with per-file digests, so a red run on a kernel-only
+change names the module that changed.
+
 An intended change of observable behavior is declared in the manifest: bump
 the model's `differential.behaviorVersion` in `formal/execution.json` in the
 same change (or the profile's observation schema `version` in
@@ -118,15 +132,15 @@ scheduled invariant, as before.
 
 ## Record of the layers rewrite
 
-Measured on 2026-09-15 against `main` at bf3c7e8 with the manifest seed:
+Measured on 2026-09-16 against `main` at bf3c7e8 with the manifest seed:
 
 | | Reference | Composed |
 | --- | --- | --- |
 | Sampled histories agreeing step for step, both directions | | 512 of 512 |
 | Exported regressions agreeing, both directions | | 15 of 15 |
-| Generation wall time (512 traces, 80 steps) | 13.4 s | 13.6 s |
+| Generation wall time (512 traces, 80 steps) | 14.0 s | 14.0 s |
 | Bytes per state | 4226 | 4226 |
-| Profile lines | 549 | 389 |
+| Profile lines | 549 | 385 |
 | Composition-lint violations (rule logic in the profile) | 73 | 0 |
 
 The pilot that preceded the library (#171, #172) instantiated one kernel state

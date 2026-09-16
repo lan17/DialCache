@@ -3,7 +3,7 @@ module dialcache_layers_conformance {
   import encodings.* from "./kernel/encodings"
   import layer_policy.* from "./kernel/layer-policy"
   import serving as Serving from "./kernel/serving"
-  import request_memo as Memo from "./kernel/request-memo"
+  import callers as Callers from "./kernel/callers"
   import remote_frames as Remote from "./kernel/remote-frames"
   import flights as Flights from "./kernel/flights"
   import clock as Clock from "./kernel/clock"
@@ -125,8 +125,8 @@ module dialcache_layers_conformance {
   }
   action startCall(choice: int): bool = all {
     s.o.calls.length() < MAX_CALLERS,
-    s' = Serving::begin(s, LAYOUT, instance(choice / KEYS_PER_INSTANCE), choice % KEYS_PER_INSTANCE,
-      choice / KEYS_PER_INSTANCE),
+    s' = Callers::record(Serving::begin(s, LAYOUT, instance(choice / KEYS_PER_INSTANCE), choice % KEYS_PER_INSTANCE,
+      choice / KEYS_PER_INSTANCE), choice / KEYS_PER_INSTANCE, choice % KEYS_PER_INSTANCE),
     input' = { name: "beginCall", choice: choice }
   }
   action beginCall = {
@@ -150,7 +150,7 @@ module dialcache_layers_conformance {
     finishSource(choice, SOURCE_ERROR)
   }
   action closeContext(context: int): bool = all {
-    s' = Memo::closeScope(s, context, KEYS_PER_INSTANCE),
+    s' = Serving::closeScope(s, LAYOUT, context),
     input' = { name: "closeScope", choice: context }
   }
   action closeScope = {

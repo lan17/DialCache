@@ -35,9 +35,7 @@ module serving {
     watermark: List[int],
     sources: List[Flights::Source],
     owners: List[int],
-    memoSlots: List[int],
-    callerContexts: List[int],
-    callerKeys: List[int] | r
+    memoSlots: List[int] | r
   }
 
   // The last admitted caller returns a layer value; an attached request memoizes it.
@@ -73,7 +71,7 @@ module serving {
     val participating = Memo::scopeOpen(state, context, layout.persistentContexts)
     val slot = Memo::memoSlot(context, key, layout.keysPerScope,
       participating and Memo::persistent(context, layout.persistentContexts) and layers.request)
-    val requestOwner = Memo::requestOwner(state, slot)
+    val requestOwner = Flights::requestOwner(state, slot)
     val memoValue = Memo::memoValue(state, slot)
     val sharing = participating and sharedLayers(layers)
     val processOwner = if (sharing) Flights::processOwner(state, instance, key, layout.keysPerInstance) else NO_OWNER
@@ -86,7 +84,7 @@ module serving {
         ...state.o
       },
       ...state
-    }, owner, slot, context, key)
+    }, owner, slot)
     val localValue = if (participating and layers.local) Local::localValue(state, instance, key, layout.keysPerInstance) else NO_VALUE
     val readsRemote = participating and layers.remote
     val remoteValue = if (readsRemote) Remote::readableFrame(state, key, layout.operationsPerEntity) else NO_VALUE
@@ -98,7 +96,7 @@ module serving {
       },
       ...admitted
     } else admitted
-    if (owner >= 0) Memo::joinRequestFlight(admitted, slot, owner)
+    if (owner >= 0) Flights::joinRequestFlight(admitted, slot, owner)
     else if (memoValue > NO_VALUE) serve(admitted, layout, slot, memoValue)
     else if (localValue > NO_VALUE) serve(Local::promote(admitted, instance, key), layout, slot, localValue)
     else if (remoteValue > NO_VALUE) serve(if (layers.local)
@@ -130,6 +128,10 @@ module serving {
     if (not(success)) warmed else Flights::ownedBy(state, index).fold(warmed, (out, call) =>
       Memo::memoize(out, state.memoSlots.nth(call), value, layout.keysPerScope))
   }
+
+  // Closing a request scope forgets its memo row and its request flights.
+  pure def closeScope(state: Served[r], layout: Layout, context: int): Served[r] =
+    Flights::forgetScope(Memo::closeScope(state, context, layout.keysPerScope), context, layout.keysPerScope)
 
   // Maintenance: invalidating an entity raises its watermark; without remote
   // storage the request reports the missing layer and changes nothing.

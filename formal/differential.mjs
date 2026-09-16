@@ -2,10 +2,10 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, posix, resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
-import { quintSources, readExecution, root, validateExecution } from './execution.mjs';
+import { copySources, importClosure, isKernelSource, kernelDirectory, quintSources, root, validateExecution } from './execution.mjs';
 import { parseWithSourceMap, scheduleHistories, spliceDeclarations } from './generated-fixtures.mjs';
 import { CommandFailure, printGroup, resolveConcurrency, runPool, seconds, spawnBuffered } from './quint-pool.mjs';
 import { parseTrace, profiles } from './replay/features.mjs';
@@ -59,15 +59,6 @@ export function exportRevision(revision, directory, { cwd = root } = {}) {
     writeFileSync(resolve(directory, path), gitShow(revision, path, cwd));
   }
   return listing;
-}
-
-export function copySources(from, to) {
-  const files = quintSources(from);
-  for (const path of files) {
-    mkdirSync(resolve(to, dirname(path)), { recursive: true });
-    writeFileSync(resolve(to, path), readFileSync(resolve(from, path)));
-  }
-  return files;
 }
 
 export function resolveMergeBase(revision, { cwd = root } = {}) {
@@ -227,7 +218,14 @@ export function runDiagnostic(log, run) {
 // Replay histories through a tree's text in chunks; one verdict per history in
 // input order. `model` is the tree's own manifest entry.
 export async function replayHistories(tree, model, descriptor, histories, { chunk, output, concurrency }) {
-  if (!histories.length) return [];
+  const prepared = await prepareReplay(tree, model, descriptor, histories, { chunk, output });
+  return prepared.collect(await runPool(prepared.tasks, { concurrency }));
+}
+
+// The replay as pool tasks, so both directions of a differential share one
+// pool: `tasks` are the chunk thunks and `collect` places their results.
+export async function prepareReplay(tree, model, descriptor, histories, { chunk, output }) {
+  if (!histories.length) return { tasks: [], collect: () => [] };
   const parseDirectory = mkdtempSync(resolve(tmpdir(), 'dialcache-differential-parse-'));
   let parsed, sourceMap;
   try {
@@ -239,26 +237,22 @@ export async function replayHistories(tree, model, descriptor, histories, { chun
   const moduleName = parsed.modules.at(-1).name;
   const declarations = new Map(parsed.modules.find(candidate => candidate.name === moduleName).declarations.map(declaration => [declaration.name, declaration]));
   const source = readFileSync(resolve(tree, model.path), 'utf8');
-  const results = await runPool(chunked(histories, chunk).map((batch, position) => async () => {
+  // A history whose input the tree has no public action for cannot be
+  // scheduled: it disagrees at that step; the others are replayed.
+  const verdicts = new Array(histories.length);
+  const scheduled = [];
+  histories.forEach((history, index) => {
+    const unknown = history.steps.findIndex(step => !declarations.has(step.action));
+    if (unknown === -1) scheduled.push({ history, index });
+    else verdicts[index] = { path: history.path, agree: false, step: unknown, action: history.steps[unknown].action, choice: history.steps[unknown].choice,
+      reason: `${moduleName} has no public action ${history.steps[unknown].action} (step ${unknown})` };
+  });
+  const tasks = chunked(scheduled, chunk).map((batch, position) => async () => {
     const workspace = resolve(output, `replay-${position}`);
     rmSync(workspace, { recursive: true, force: true });
     copySources(tree, workspace);
-    let schedule;
-    try {
-      schedule = scheduleHistories(source, declarations, sourceMap, batch.map(history => history.steps.map(step => [step.action, step.choice])),
-        { prefix: 'replay', cursor: cursorVariable });
-    } catch (error) {
-      // The tree lacks a public action a history took: every history of the
-      // chunk that took it disagrees; the others are replayed without it.
-      const missing = /no public action (\w+)/.exec(error.message)?.[1];
-      if (!missing) throw error;
-      const affected = batch.map(history => history.steps.some(step => step.action === missing));
-      const rest = await replayHistories(tree, model, descriptor, batch.filter((_, index) => !affected[index]), { chunk, output: resolve(workspace, 'rest'), concurrency });
-      let next = 0;
-      return batch.map((history, index) => affected[index]
-        ? { path: history.path, agree: false, step: history.steps.findIndex(step => step.action === missing), reason: `${moduleName} has no public action ${missing}` }
-        : rest[next++]);
-    }
+    const schedule = scheduleHistories(source, declarations, sourceMap, batch.map(({ history }) => history.steps.map(step => [step.action, step.choice])),
+      { prefix: 'replay', cursor: cursorVariable });
     const runs = schedule.schedules.flatMap((entry, index) => [
       ...(entry.steps ? [`action replaySchedule${index} = ${entry.step}`] : []),
       `run replay${index} = ${entry.steps ? `(${entry.init}).then((${entry.steps}).reps(_ => replaySchedule${index}))` : entry.init}`,
@@ -271,65 +265,108 @@ export async function replayHistories(tree, model, descriptor, histories, { chun
       '--match=^replay\\d+$', `--out-itf=${traces}/{test}.itf.json`], { cwd: workspace });
     const log = test.stdout + test.stderr;
     writeFileSync(resolve(workspace, 'quint-test.log'), log);
-    return batch.map((history, index) => {
+    return batch.map(({ history, index: position }, index) => {
       const file = resolve(traces, `replay${index}.itf.json`);
       const diagnostic = runDiagnostic(log, `replay${index}`);
-      if (!existsSync(file)) return { path: history.path, agree: false, step: 0, reason: `no replay trace (quint test exit ${test.status}${diagnostic ? `; ${diagnostic}` : ''}); see ${workspace}/quint-test.log` };
+      const withDiagnostic = verdict => ({ path: history.path, ...verdict, ...(verdict.agree || !diagnostic ? {} : { reason: `${verdict.reason}; ${diagnostic}` }) });
+      if (!existsSync(file)) return [position, withDiagnostic({ agree: false, step: 0, reason: `no replay trace (quint test exit ${test.status}); see ${workspace}/quint-test.log` })];
       let replayed;
-      try { replayed = historyOf(recordedStates(JSON.parse(readFileSync(file, 'utf8'))), history.path, descriptor); }
-      catch (error) { return { path: history.path, agree: false, step: 0, reason: `replay trace unreadable: ${error.message}` }; }
-      const verdict = compareHistory(history, replayed);
-      return { path: history.path, ...verdict, ...(verdict.agree || !diagnostic ? {} : { reason: `${verdict.reason}; ${diagnostic}` }) };
+      try { replayed = replayedHistory(JSON.parse(readFileSync(file, 'utf8')), history, descriptor); }
+      catch (error) { return [position, withDiagnostic({ agree: false, step: 0, reason: `replay trace unreadable: ${error.message}` })]; }
+      return [position, withDiagnostic(compareHistory(history, replayed))];
     });
-  }), { concurrency });
-  return results.flat();
+  });
+  return { tasks, collect: results => { for (const [position, verdict] of results.flat()) verdicts[position] = verdict; return verdicts; } };
+}
+
+// The replayed history a trace records. A run refused at its first input or
+// at init leaves fewer than the two states a trace needs: one recorded state
+// is the initialization the reference also took, none is a refused init.
+export function replayedHistory(raw, reference, descriptor) {
+  const recorded = recordedStates(raw);
+  if (recorded.states.length >= 2) return historyOf(recorded, reference.path, descriptor);
+  return { path: reference.path, steps: recorded.states.length === 1 ? reference.steps.slice(0, 1) : [] };
+}
+
+// Per-file digests over a model's import closure: the provenance a compared
+// or skipped report records, and what the unchanged-closure skip compares.
+export function closureDigests(path, { cwd = root } = {}) {
+  return Object.fromEntries(importClosure(path, cwd).map(source => [source, sha256(readFileSync(resolve(cwd, source), 'utf8'))]));
 }
 
 // The profiles the differential applies to: every generation profile whose
 // text, directly or through a helper library, imports a kernel module.
 export function composedProfiles(manifest, { cwd = root } = {}) {
-  const importsKernel = (path, seen = new Set()) => {
-    if (seen.has(path) || !existsSync(resolve(cwd, path))) return false;
-    seen.add(path);
-    const text = readFileSync(resolve(cwd, path), 'utf8');
-    return [...text.matchAll(/from\s+"(\.\.?\/[^"]+)"/g)].some(([, target]) => {
-      const imported = posix.normalize(posix.join(posix.dirname(path), `${target}.qnt`));
-      return imported.startsWith('formal/kernel/') || importsKernel(imported, seen);
-    });
-  };
-  return manifest.models.filter(model => model.profile !== undefined && importsKernel(model.path)).map(model => model.profile);
+  return manifest.models.filter(model => model.profile !== undefined && importClosure(model.path, cwd).some(isKernelSource)).map(model => model.profile);
 }
 export function kernelModuleCount(directory = root) {
-  const kernel = resolve(directory, 'formal/kernel');
-  return existsSync(kernel) ? readdirSync(kernel).filter(name => name.endsWith('.qnt')).length : 0;
+  return quintSources(directory).filter(isKernelSource).length;
+}
+
+// The reference: the merge base with a revision, its Quint sources and
+// manifests exported once for every profile of a run.
+export function prepareReference(reference, { cwd = root, output = defaultOutput } = {}) {
+  const revision = resolveMergeBase(reference, { cwd });
+  const tree = resolve(cwd, output, 'reference', revision.slice(0, 12));
+  rmSync(tree, { recursive: true, force: true });
+  exportRevision(revision, tree, { cwd });
+  return { revision, tree, manifests: readManifests(tree) };
+}
+
+// The profiles a run replays: every profile composed in either revision, so
+// a rewrite that moves a profile off the library is checked like one that
+// moves it on. A profile composed at the reference that the candidate no
+// longer generates is a failure, never a silent skip.
+export function selectProfiles(referenceManifests, referenceTree, candidateManifests, cwd = root) {
+  return [...new Set([...composedProfiles(referenceManifests.execution, { cwd: referenceTree }), ...composedProfiles(candidateManifests.execution, { cwd })])].sort();
+}
+
+// A generation whose inputs are byte-identical in both revisions is the same
+// deterministic computation under the pinned Quint and seed: nothing to compare.
+export function closureSkip(referenceModel, candidateModel, referenceSources, candidateSources) {
+  const generationInputs = model => ({ settings: model.settings, generate: model.generate, invariants: model.invariants, replayRegressions: model.replayRegressions ?? [] });
+  return isDeepStrictEqual(referenceSources, candidateSources) && isDeepStrictEqual(generationInputs(referenceModel), generationInputs(candidateModel))
+    ? 'identical import closure and generation settings' : null;
 }
 
 // The differential for one profile. `reference` is a git revision whose merge
-// base with HEAD supplies the reference text and manifests; the candidate is
-// the working tree.
-export async function runDifferential(profileId, { reference = 'origin/main', chunk = defaultChunk, output = defaultOutput,
+// base with HEAD supplies the reference text and manifests (or a prepared
+// reference); the candidate is the working tree.
+export async function runDifferential(profileId, { reference = 'origin/main', prepared, chunk = defaultChunk, output = defaultOutput,
     concurrency = resolveConcurrency(), cwd = root, log = console.log } = {}) {
   const candidateManifests = readManifests(cwd);
   validateExecution(candidateManifests.execution);
-  const revision = resolveMergeBase(reference, { cwd });
+  const { revision, tree: referenceTree, manifests: referenceManifests } = prepared ?? prepareReference(reference, { cwd, output });
   const outputDirectory = resolve(cwd, output, profileId);
   rmSync(outputDirectory, { recursive: true, force: true });
   mkdirSync(outputDirectory, { recursive: true });
-  const referenceTree = resolve(outputDirectory, 'reference');
   const candidateTree = resolve(outputDirectory, 'candidate');
-  exportRevision(revision, referenceTree, { cwd });
   copySources(cwd, candidateTree);
-  const referenceManifests = readManifests(referenceTree);
-  const plan = differentialPlan(referenceManifests, candidateManifests, profileId);
-  const base = { schemaVersion: 2, profile: profileId, reference: { revision }, candidate: { path: plan.candidate.path, sha256: sha256(readFileSync(resolve(cwd, plan.candidate.path), 'utf8')),
-    behaviorVersion: plan.candidate.behaviorVersion, schemaVersion: plan.candidate.schemaVersion } };
-  if (plan.action === 'skip') {
-    const report = { ...base, skipped: plan.reason, ...(plan.reference ? { reference: { revision, path: plan.reference.path, behaviorVersion: plan.reference.behaviorVersion, schemaVersion: plan.reference.schemaVersion } } : {}) };
-    writeFileSync(resolve(outputDirectory, 'report.json'), JSON.stringify(report, null, 2) + '\n');
-    return report;
+  const write = report => { writeFileSync(resolve(outputDirectory, 'report.json'), JSON.stringify(report, null, 2) + '\n'); return report; };
+  const referenceEntry = model => model ? { revision, path: model.path, behaviorVersion: model.behaviorVersion, schemaVersion: model.schemaVersion } : { revision };
+  let plan;
+  try { plan = differentialPlan(referenceManifests, candidateManifests, profileId); }
+  catch (error) {
+    const atReference = generationModel(referenceManifests, profileId);
+    if (!atReference) throw error;
+    // A profile deleted from both candidate manifests is a visible removal
+    // with no behavior left to protect; one still registered but no longer
+    // generated is the smuggling case.
+    const registered = candidateManifests.execution.models.some(model => model.profile === profileId) || candidateManifests.registry.profiles.some(entry => entry.id === profileId);
+    const report = { schemaVersion: 2, profile: profileId, reference: referenceEntry(atReference) };
+    return write(registered
+      ? { ...report, removed: `composed at ${revision.slice(0, 12)} but the candidate still registers the profile without generating it; a profile that stays has a corpus to replay` }
+      : { ...report, skipped: `profile removed: absent from the candidate's formal/execution.json and formal/profiles.json` });
   }
+  const base = { schemaVersion: 2, profile: profileId, reference: referenceEntry(plan.reference), candidate: { path: plan.candidate.path,
+    behaviorVersion: plan.candidate.behaviorVersion, schemaVersion: plan.candidate.schemaVersion } };
+  if (plan.action === 'skip') return write({ ...base, skipped: plan.reason });
   const { reference: referenceModel, candidate: candidateModel, descriptor } = plan;
-  const referenceText = readFileSync(resolve(referenceTree, referenceModel.path), 'utf8');
+  const referenceSources = closureDigests(referenceModel.path, { cwd: referenceTree });
+  const candidateSources = closureDigests(candidateModel.path, { cwd: candidateTree });
+  const withSources = { ...base, reference: { ...base.reference, sources: referenceSources }, candidate: { ...base.candidate, sources: candidateSources } };
+  const unchanged = closureSkip(referenceModel, candidateModel, referenceSources, candidateSources);
+  if (unchanged) return write({ ...withSources, skipped: unchanged });
   log(`Corpus differential for ${profileId}: reference ${revision.slice(0, 12)} (${referenceModel.path}), candidate working tree (${candidateModel.path}).`);
   const [referenceCorpus, candidateCorpus] = await Promise.all([
     generateCorpus(referenceTree, referenceModel),
@@ -342,17 +379,18 @@ export async function runDifferential(profileId, { reference = 'origin/main', ch
   const candidateHistories = [...loadHistories(candidateCorpus.directory, descriptor), ...label(loadHistories(candidateCorpus.regressions, descriptor), 'regression:')];
   log(`Replaying ${referenceHistories.length} reference histories through the candidate and ${candidateHistories.length} candidate histories through the reference, ${chunk} per process.`);
   const started = performance.now();
-  const forward = await replayHistories(candidateTree, candidateModel, descriptor, referenceHistories, { chunk, output: resolve(outputDirectory, 'forward'), concurrency });
-  const reverse = await replayHistories(referenceTree, referenceModel, descriptor, candidateHistories, { chunk, output: resolve(outputDirectory, 'reverse'), concurrency });
+  const forwardReplay = await prepareReplay(candidateTree, candidateModel, descriptor, referenceHistories, { chunk, output: resolve(outputDirectory, 'forward') });
+  const reverseReplay = await prepareReplay(referenceTree, referenceModel, descriptor, candidateHistories, { chunk, output: resolve(outputDirectory, 'reverse') });
+  const results = await runPool([...forwardReplay.tasks, ...reverseReplay.tasks], { concurrency });
+  const forward = forwardReplay.collect(results.slice(0, forwardReplay.tasks.length));
+  const reverse = reverseReplay.collect(results.slice(forwardReplay.tasks.length));
   const replayMs = performance.now() - started;
   const direction = (name, verdicts, sampled, regressions) => ({ sampled, regressions, agreed: verdicts.filter(verdict => verdict.agree).length,
     disagreed: verdicts.filter(verdict => !verdict.agree).length, disagreements: verdicts.filter(verdict => !verdict.agree).slice(0, 20).map(verdict => ({ direction: name, ...verdict })) });
   const referenceSize = bytesPerState(referenceCorpus.directory);
   const candidateSize = bytesPerState(candidateCorpus.directory);
-  const report = {
-    ...base,
-    reference: { revision, path: referenceModel.path, sha256: sha256(referenceText), behaviorVersion: referenceModel.behaviorVersion, schemaVersion: referenceModel.schemaVersion },
-    identicalText: referenceText === readFileSync(resolve(cwd, candidateModel.path), 'utf8'),
+  return write({
+    ...withSources,
     forward: direction('forward', forward, referenceHistories.length - referenceHistories.filter(history => history.path.startsWith('regression:')).length, referenceHistories.filter(history => history.path.startsWith('regression:')).length),
     reverse: direction('reverse', reverse, candidateHistories.length - candidateHistories.filter(history => history.path.startsWith('regression:')).length, candidateHistories.filter(history => history.path.startsWith('regression:')).length),
     generation: { referenceMs: Math.round(referenceCorpus.generationMs), candidateMs: Math.round(candidateCorpus.generationMs),
@@ -361,9 +399,7 @@ export async function runDifferential(profileId, { reference = 'origin/main', ch
       bytesPerStateRatio: referenceSize.bytesPerState ? candidateSize.bytesPerState / referenceSize.bytesPerState : null,
       maxBytesPerStateRatio: candidateModel.maxBytesPerStateRatio },
     replay: { chunk, wallMs: Math.round(replayMs) },
-  };
-  writeFileSync(resolve(outputDirectory, 'report.json'), JSON.stringify(report, null, 2) + '\n');
-  return report;
+  });
 }
 
 // The run's verdict: any disagreement in either direction fails, as does trace
@@ -371,6 +407,7 @@ export async function runDifferential(profileId, { reference = 'origin/main', ch
 // run concurrently and hosted runners are noisy.
 export function verdict(report) {
   const reasons = [];
+  if (report.removed) return { failed: true, reasons: [`removed: ${report.removed}`] };
   if (report.skipped) return { failed: false, reasons: [`skipped: ${report.skipped}`] };
   for (const name of ['forward', 'reverse']) if (report[name].disagreed) reasons.push(`${report[name].disagreed} ${name} disagreement(s)`);
   const ratio = report.generation.bytesPerStateRatio;
@@ -380,16 +417,18 @@ export function verdict(report) {
   return { failed: reasons.length > 0, reasons: [...reasons, ...advisory] };
 }
 
+const ratio = (value, digits) => value === null || value === undefined ? 'ratio unavailable' : `x${value.toFixed(digits)}`;
 export function formatReport(report) {
+  if (report.removed) return `${report.profile}: ${report.removed}.`;
   if (report.skipped) return `${report.profile}: not compared (${report.skipped}).`;
   const total = direction => direction.sampled + direction.regressions;
   const lines = [
     `${report.profile}: forward ${report.forward.agreed} of ${total(report.forward)} reference histories agree through the candidate` +
       ` (${report.forward.sampled} sampled, ${report.forward.regressions} regressions); reverse ${report.reverse.agreed} of ${total(report.reverse)} candidate histories agree through the reference;` +
       ` replay ${seconds(report.replay.wallMs)} at ${report.replay.chunk} per process.`,
-    `generation wall ${seconds(report.generation.referenceMs)} -> ${seconds(report.generation.candidateMs)} (x${report.generation.wallRatio?.toFixed(2)}, advisory),` +
+    `generation wall ${seconds(report.generation.referenceMs)} -> ${seconds(report.generation.candidateMs)} (${ratio(report.generation.wallRatio, 2)}, advisory),` +
       ` bytes/state ${report.generation.reference.bytesPerState.toFixed(0)} -> ${report.generation.candidate.bytesPerState.toFixed(0)}` +
-      ` (x${report.generation.bytesPerStateRatio?.toFixed(3)}, bound x${report.generation.maxBytesPerStateRatio})` + (report.identicalText ? '; the texts are identical' : ''),
+      ` (${ratio(report.generation.bytesPerStateRatio, 3)}, bound x${report.generation.maxBytesPerStateRatio})`,
   ];
   for (const name of ['forward', 'reverse']) {
     for (const disagreement of report[name].disagreements) lines.push(`  ${name} ${disagreement.path}: ${disagreement.reason}`);
@@ -411,7 +450,11 @@ either text refuses, or on trace bytes per state above the model's bound
 A profile whose differential.behaviorVersion or observation schema version
 differs between the revisions is reported as an intended divergence and not
 compared; a profile the reference does not generate is reported as new.
---composed selects every profile that imports a kernel module. Reports:
+A profile whose import closure and generation settings are byte-identical in
+both revisions is reported as unchanged and not regenerated. --composed selects
+every profile that imports a kernel module in either revision; one the working
+tree removed from both manifests is reported as removed, one it still registers
+without generating fails. Reports:
 report.json under --out (default ${defaultOutput}/<profile>).`;
 
 async function main(argv) {
@@ -426,15 +469,17 @@ async function main(argv) {
   if (!Number.isSafeInteger(chunk) || chunk < 1) throw new Error('--chunk must be a positive integer');
   const settings = { ...(typeof options.reference === 'string' ? { reference: options.reference } : {}),
     chunk, ...(typeof options.out === 'string' ? { output: options.out } : {}) };
-  const selected = options.composed ? composedProfiles(readExecution()) : positional;
+  const prepared = prepareReference(settings.reference ?? 'origin/main', { output: settings.output ?? defaultOutput });
+  const selected = options.composed ? selectProfiles(prepared.manifests, prepared.tree, readManifests(root)) : positional;
   if (!selected.length) {
-    if (kernelModuleCount() > 0) throw new Error('formal/kernel has modules but no generation profile imports one; compose a profile or delete the modules');
-    console.log('No profile imports a kernel module; nothing to replay.');
+    if (kernelModuleCount() > 0) throw new Error(`${kernelDirectory} has modules but no generation profile imports one in either revision; compose a profile or delete the modules`);
+    console.log('No profile imports a kernel module in either revision; nothing to replay.');
     return 0;
   }
+  console.log(`Reference ${prepared.revision.slice(0, 12)}; profiles: ${selected.join(', ')}.`);
   let failed = false;
   for (const profileId of selected) {
-    const report = await runDifferential(profileId, settings);
+    const report = await runDifferential(profileId, { ...settings, prepared });
     console.log(formatReport(report));
     if (verdict(report).failed) failed = true;
   }

@@ -31,10 +31,11 @@
 // builtin operators and lambda parameters have no usable table entry; the
 // table copies each declaration, so module attribution comes from
 // `modules[].declarations`, never from the copy.
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isKernelSource, quintSources } from './execution.mjs';
 import { CommandFailure, runPool, spawnBuffered } from './quint-pool.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -310,7 +311,10 @@ export function lintComposition(index, { kernelModules = [] } = {}) {
     const declaration = resolveTarget(index, expr);
     const stateful = expr.args.map(again);
     if (declaration) {
-      if (isKernel(declaration)) { transitions.add(index.labelOf(declaration.module, declaration.name)); return true; }
+      if (isKernel(declaration)) {
+        if (declaration.kind === 'def') transitions.add(index.labelOf(declaration.module, declaration.name));
+        return true;
+      }
       if (declaration.owner === node.key) return again(declaration.expr) || stateful.some(Boolean);
       if (isProfile(declaration)) return callProfile(declaration, stateful, { node, chain, variable });
       if (stateful.some(Boolean)) report(node, chain, `${index.labelOf(declaration.module, declaration.name)} applied to cache state in the value of ${variable}`);
@@ -343,9 +347,9 @@ export function lintComposition(index, { kernelModules = [] } = {}) {
       const assignments = assignmentsOf(index, node);
       if (assignments.length) assigning.add(node.label);
       for (const { variable, value } of assignments) {
-        // A library module's own transitions compute over the state they own;
-        // only values the profile assigns are held to the rule.
-        if (variable.name === inputField || kernel.has(node.module)) continue;
+        // A library module has no state to assign (the manifest keeps libraries
+        // pure), so every assignment reached here is the profile's.
+        if (variable.name === inputField) continue;
         const parameters = node.expr?.kind === 'lambda' ? node.expr.params.map(parameter => [parameter.name, false]) : [];
         walk(value, { node, chain, tainted: new Map(parameters), variable: variableLabel(index, variable) });
       }
@@ -515,11 +519,10 @@ export function lintWitnessIsolation(index, { witnessPattern, observationField =
 // plus the judgment library the modules build on. A profile may assign only
 // values these modules compute.
 export function kernelModulesOf(directory = root) {
-  const kernelDirectory = resolve(directory, 'formal/kernel');
-  const declared = existsSync(kernelDirectory) ? readdirSync(kernelDirectory).filter(name => name.endsWith('.qnt')).flatMap(name => {
-    const match = /^module\s+([A-Za-z_]\w*)\s*\{/m.exec(readFileSync(resolve(kernelDirectory, name), 'utf8'));
+  const declared = quintSources(directory).filter(isKernelSource).flatMap(path => {
+    const match = /^module\s+([A-Za-z_]\w*)\s*\{/m.exec(readFileSync(resolve(directory, path), 'utf8'));
     return match ? [match[1]] : [];
-  }) : [];
+  });
   return [...new Set([...declared, 'cache_rules'])].sort(compareStrings);
 }
 
@@ -587,10 +590,19 @@ export function readBaseline(directory = root, path = baselinePath) {
   return JSON.parse(readFileSync(file, 'utf8'));
 }
 
+// A profile that composes a kernel module must have no composition violation,
+// whatever count the baseline recorded: rewriting the baseline cannot admit
+// rule logic into a composed profile.
+export function composedViolations(baseline) {
+  return baseline.profiles.filter(profile => profile.compositionViolations > 0 &&
+    profile.libraryTransitions.some(transition => !transition.startsWith('cache_rules::')))
+    .map(profile => `${profile.id}: ${profile.compositionViolations} composition violation(s) in a profile that composes ${profile.libraryTransitions.filter(t => !t.startsWith('cache_rules::')).join(', ')}`);
+}
+
 export async function checkBaseline({ cwd = root, path = baselinePath, profiles, concurrency } = {}) {
   const expected = readBaseline(cwd, path);
   const actual = await computeBaseline({ profiles, cwd, concurrency });
-  return { expected, actual, differences: diffBaseline(expected, actual) };
+  return { expected, actual, differences: [...diffBaseline(expected, actual), ...composedViolations(actual)] };
 }
 
 export const formatBaseline = baseline => `${JSON.stringify(baseline, null, 2)}\n`;

@@ -3,6 +3,7 @@
   "quintVersion": "0.32.0",
   "kernelModules": [
     "cache_rules",
+    "callers",
     "clock",
     "encodings",
     "flights",
@@ -218,9 +219,9 @@
       "id": "layers",
       "model": "formal/dialcache-layers-conformance.qnt",
       "module": "dialcache_layers_conformance",
-      "tableSize": 1373,
+      "tableSize": 1393,
       "actions": 19,
-      "reachableDefinitions": 92,
+      "reachableDefinitions": 95,
       "stateAssigningDefinitions": 8,
       "stateAssigningDefinitionNames": [
         "changePolicy",
@@ -233,10 +234,11 @@
         "tick"
       ],
       "libraryTransitions": [
+        "callers::record",
         "clock::advance",
         "remote_frames::seedFrame",
-        "request_memo::closeScope",
         "serving::begin",
+        "serving::closeScope",
         "serving::invalidate",
         "serving::settle"
       ],

@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, copyFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
-import { quintSources, readExecution, root, validateExecution } from './execution.mjs';
+import { copySources, readExecution, root, validateExecution } from './execution.mjs';
 import { resolveConcurrency, runPool, spawnBuffered } from './quint-pool.mjs';
 
 const recipePath = 'formal/fixture-recipes.json';
@@ -130,7 +130,7 @@ async function execute(args) {
   if (run.status !== 0) fail(`Quint ${args[0]} failed:\n${run.stdout}\n${run.stderr}`);
 }
 // Parse a model with its source map; the result feeds constrainAction.
-export async function parseWithSourceMap(model, directory, execute = executeQuint) {
+export async function parseWithSourceMap(model, directory, execute) {
   const parsedPath = resolve(directory, 'parsed.json'), mapPath = resolve(directory, 'source-map.json');
   await execute(['parse', model, `--out=${parsedPath}`, `--source-map=${mapPath}`]);
   const parsed = JSON.parse(readFileSync(parsedPath, 'utf8')), sourceMap = JSON.parse(readFileSync(mapPath, 'utf8'));
@@ -186,9 +186,8 @@ async function exportModel(model, requests, directory, settings) {
   };
   referencedActions(declarations.get('step')?.expr);
   // Copy source/imports to an ignored directory; all computed state stays in Quint.
-  mkdirSync(resolve(directory, 'kernel'), { recursive: true });
-  for (const path of quintSources()) copyFileSync(resolve(root, path), resolve(directory, path.slice('formal/'.length)));
-  const input = resolve(directory, basename(model));
+  copySources(root, directory);
+  const input = resolve(directory, model);
   const named = requests.filter(r => r.recipe.regression);
   for (const request of named) {
     const regression = request.recipe.regression;

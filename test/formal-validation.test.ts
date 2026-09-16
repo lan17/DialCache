@@ -398,6 +398,6 @@ describe("full formal workflow shape", () => {
     expect(run.if).toBe("steps.fixture-scope.outputs.recompute == 'true'");
     const upload = job.steps.find(step => step.uses?.startsWith("actions/upload-artifact"))!;
     expect(upload.with!.name).toBe("formal-differential");
-    expect(String(upload.with!.path)).toContain("replay-*/quint-test.log");
+    expect(String(upload.with!.path)).toContain("**/replay-*/quint-test.log");
   });
 });

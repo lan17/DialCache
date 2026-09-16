@@ -75,6 +75,6 @@ jobs:
           name: formal-differential
           path: |
             .formal-traces/differential/*/report.json
-            .formal-traces/differential/*/*/replay-*/quint-test.log
+            .formal-traces/differential/**/replay-*/quint-test.log
           if-no-files-found: warn
           retention-days: 14

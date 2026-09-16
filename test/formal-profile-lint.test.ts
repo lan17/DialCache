@@ -103,14 +103,17 @@ describe.skipIf(!quintAvailable)("profile lint over synthetic kernel instances",
     }
   }, quintTimeout * 3);
 
-  it("accepts the clean instance under both rules and lists the roots it examined", async () => {
+  it("reports an instantiated stateful kernel's rule logic like a profile's and lists the roots it examined", async () => {
     const report = await lintModel(fixture("profile-clean"), { kernelModules: ["kernel"], ...witness });
     expect(report.main).toBe("profile_clean");
     expect(report.composition.publicActions).toEqual(["init", "bumpWrapper", "resetWrapper", "step"]);
-    // Kernel actions assign the state they own; only profile assignments are held to the rule.
+    // A library may not assign state (the manifest keeps libraries pure), so the
+    // instantiated kernel's transitions are held to the rule whether or not it is named.
     expect(report.composition.stateAssigningDefinitions).toEqual(["kernel::bump", "kernel::init", "kernel::reset"]);
+    // Kernel actions are assignments, not transitions a profile composes; the operator constant is a value.
     expect(report.composition.libraryTransitions).toEqual([]);
-    expect(report.composition.violations).toEqual([]);
+    expect(report.composition.count).toBe(7);
+    expect(report.composition.violations).toContainEqual({ definition: "kernel::bump", detail: "iadd over cache state in the value of kernel::count", chain: ["bumpWrapper", "kernel::bump"] });
     expect(report.witnessIsolation.witnessVariables).toEqual(["kernel::witnessed"]);
     expect(report.witnessIsolation.violations).toEqual([]);
     expect(report.witnessIsolation.roots).toEqual({
@@ -122,11 +125,10 @@ describe.skipIf(!quintAvailable)("profile lint over synthetic kernel instances",
     });
   }, quintTimeout);
 
-  it("treats the instantiated kernel's own rule logic as profile logic when the kernel module is not named", async () => {
+  it("names the operator constant a kernel applies to state when the kernel module is not named", async () => {
     const report = await lintModel(fixture("profile-clean"), { kernelModules: [], ...witness });
     expect(report.composition.kernelModules).toEqual([]);
     expect(report.composition.count).toBe(8);
-    expect(report.composition.violations).toContainEqual({ definition: "kernel::bump", detail: "iadd over cache state in the value of kernel::count", chain: ["bumpWrapper", "kernel::bump"] });
     expect(report.composition.violations).toContainEqual({ definition: "kernel::bump", detail: "kernel::PROJECT applied to cache state in the value of kernel::o", chain: ["bumpWrapper", "kernel::bump"] });
     expect(report.witnessIsolation.violations).toEqual([]);
   }, quintTimeout);
@@ -183,7 +185,8 @@ describe.skipIf(!quintAvailable)("profile lint over synthetic kernel instances",
 
   it("names the choice domain when a nondet filters on witness state behind a helper in a lambda", async () => {
     const report = await lintModel(fixture("profile-witness-choice"), { kernelModules: ["kernel"], ...witness });
-    expect(report.composition.violations).toEqual([]);
+    // The instantiated stateful kernel's own assignments are reported; the profile adds none.
+    expect(report.composition.violations.filter(violation => !violation.definition.startsWith("kernel"))).toEqual([]);
     expect(report.witnessIsolation.violations).toEqual([
       { kind: "choice domain", detail: "choice", root: { kind: "step", definition: "step" }, chain: ["step", "bumpWrapper", "allowed"], variable: "kernel::witnessed" },
     ]);
@@ -191,7 +194,8 @@ describe.skipIf(!quintAvailable)("profile lint over synthetic kernel instances",
 
   it("names the projection when the observation field is computed from witness state", async () => {
     const report = await lintModel(fixture("profile-witness-projection"), { kernelModules: ["kernel_leaky"], ...witness });
-    expect(report.composition.violations).toEqual([]);
+    // The instantiated stateful kernel's own assignments are reported; the profile adds none.
+    expect(report.composition.violations.filter(violation => !violation.definition.startsWith("kernel"))).toEqual([]);
     expect(report.witnessIsolation.roots.projections).toEqual(["kernel_leaky::bump", "kernel_leaky::init", "kernel_leaky::reset"]);
     expect(report.witnessIsolation.violations).toEqual([
       { kind: "projection", detail: "o", root: { kind: "step", definition: "step" }, chain: ["step", "bumpWrapper", "kernel_leaky::bump"], variable: "kernel_leaky::witnessed" },
@@ -201,7 +205,8 @@ describe.skipIf(!quintAvailable)("profile lint over synthetic kernel instances",
 
   it("names the guard when a transition is enabled by witness state through a helper", async () => {
     const report = await lintModel(fixture("profile-witness-guard"), { kernelModules: ["kernel"], ...witness });
-    expect(report.composition.violations).toEqual([]);
+    // The instantiated stateful kernel's own assignments are reported; the profile adds none.
+    expect(report.composition.violations.filter(violation => !violation.definition.startsWith("kernel"))).toEqual([]);
     expect(report.witnessIsolation.violations).toEqual([
       { kind: "guard", root: { kind: "step", definition: "step" }, chain: ["step", "bumpWrapper", "unlabeled"], variable: "kernel::witnessed" },
     ]);
@@ -233,8 +238,8 @@ describe.skipIf(!quintAvailable)("profile lint over synthetic kernel instances",
     const report = await lintModel(fixture("profile-shadow"), { kernelModules: ["kernel"], ...witness });
     expect(report.composition.publicActions).toEqual(["init", "viaKernel", "viaLocal", "step"]);
     expect(report.composition.stateAssigningDefinitions).toEqual(["bump", "kernel::bump", "kernel::init"]);
-    // Only the profile's own `bump` is private; `K::bump` through the instance is kernel logic.
-    expect(report.composition.violations).toEqual([
+    // The profile's own `bump` is resolved by declaration, not by name; the instantiated kernel's `bump` is reported under its own label.
+    expect(report.composition.violations.filter(violation => !violation.definition.startsWith("kernel::"))).toEqual([
       { definition: "bump", detail: "iadd over cache state in the value of kernel::count", chain: ["viaLocal", "bump"] },
       { definition: "bump", detail: "iadd over cache state in the value of kernel::o", chain: ["viaLocal", "bump"] },
       { definition: "project", detail: "imul over cache state in the value of kernel::o", chain: ["viaLocal", "bump", "project"] },
@@ -247,7 +252,8 @@ describe.skipIf(!quintAvailable)("profile lint over synthetic kernel instances",
 
   it("follows a guard two pure calls deep and through an operator argument", async () => {
     const report = await lintModel(fixture("profile-witness-deep"), { kernelModules: ["kernel"], ...witness });
-    expect(report.composition.violations).toEqual([]);
+    // The instantiated stateful kernel's own assignments are reported; the profile adds none.
+    expect(report.composition.violations.filter(violation => !violation.definition.startsWith("kernel"))).toEqual([]);
     expect(report.witnessIsolation.violations).toEqual([
       { kind: "guard", root: { kind: "step", definition: "step" }, chain: ["step", "bumpWrapper", "screen", "blocked"], variable: "kernel::witnessed" },
     ]);
@@ -255,7 +261,8 @@ describe.skipIf(!quintAvailable)("profile lint over synthetic kernel instances",
 
   it("names the choice domain when a helper computes the set the nondet draws from", async () => {
     const report = await lintModel(fixture("profile-witness-domain"), { kernelModules: ["kernel"], ...witness });
-    expect(report.composition.violations).toEqual([]);
+    // The instantiated stateful kernel's own assignments are reported; the profile adds none.
+    expect(report.composition.violations.filter(violation => !violation.definition.startsWith("kernel"))).toEqual([]);
     expect(report.witnessIsolation.violations).toEqual([
       { kind: "choice domain", detail: "choice", root: { kind: "step", definition: "step" }, chain: ["step", "bumpWrapper", "domain"], variable: "kernel::witnessed" },
     ]);
@@ -263,7 +270,8 @@ describe.skipIf(!quintAvailable)("profile lint over synthetic kernel instances",
 
   it("reports witness state flowing into a kernel action's input under the step root itself", async () => {
     const report = await lintModel(fixture("profile-witness-input"), { kernelModules: ["kernel"], ...witness });
-    expect(report.composition.violations).toEqual([]);
+    // The instantiated stateful kernel's own assignments are reported; the profile adds none.
+    expect(report.composition.violations.filter(violation => !violation.definition.startsWith("kernel"))).toEqual([]);
     expect(report.witnessIsolation.violations).toEqual([
       { kind: "step", root: { kind: "step", definition: "step" }, chain: ["step", "bumpWrapper"], variable: "kernel::witnessed" },
     ]);
@@ -271,7 +279,8 @@ describe.skipIf(!quintAvailable)("profile lint over synthetic kernel instances",
 
   it("treats the scrutinee of a match over kernel actions as a guard", async () => {
     const report = await lintModel(fixture("profile-witness-match"), { kernelModules: ["kernel"], ...witness });
-    expect(report.composition.violations).toEqual([]);
+    // The instantiated stateful kernel's own assignments are reported; the profile adds none.
+    expect(report.composition.violations.filter(violation => !violation.definition.startsWith("kernel"))).toEqual([]);
     expect(report.witnessIsolation.violations).toEqual([
       { kind: "guard", root: { kind: "step", definition: "step" }, chain: ["step", "bumpWrapper", "mode"], variable: "kernel::witnessed" },
     ]);
@@ -288,8 +297,8 @@ describe.skipIf(!quintAvailable)("profile lint over synthetic kernel instances",
       { kind: "projection", detail: "kernel::o", root: { kind: "init", definition: "init" }, chain: ["init", "kernel::init", "K.PROJECT", "project", "label"], variable: "seen" },
     ]);
     // The profile-local witness variable is state the profile computes itself.
-    expect(report.composition.violations.map(violation => violation.definition)).toEqual(["bumpWrapper", "bumpWrapper", "bumpWrapper", "bumpWrapper"]);
-    expect(report.composition.violations.map(violation => violation.detail)).toEqual(["eq", "iadd", "ite", "union"].map(opcode => `${opcode} over cache state in the value of seen`));
+    const own = report.composition.violations.filter(violation => violation.definition === "bumpWrapper");
+    expect(own.map(violation => violation.detail)).toEqual(["eq", "iadd", "ite", "union"].map(opcode => `${opcode} over cache state in the value of seen`));
   }, quintTimeout);
 
   it("checks witness isolation only for the variables the pattern selects", async () => {
@@ -304,7 +313,7 @@ describe.skipIf(!quintAvailable)("profile lint over synthetic kernel instances",
   }, quintTimeout * 2);
 
   it("exits non-zero from the CLI exactly when a rule is violated", () => {
-    const clean = cli(fixture("profile-clean"), "--kernel=kernel", "--witness=^witnessed$");
+    const clean = cli(fixture("composition-clean"), "--kernel=library");
     expect(clean.status, clean.stderr).toBe(0);
     expect((JSON.parse(clean.stdout) as Report).composition.count).toBe(0);
     const thick = cli(fixture("profile-thick"), "--kernel=kernel");
