@@ -44,11 +44,10 @@ module serving {
   // publish, captured from the reply that started it so each source publishes
   // with that reply's TTLs: a layered source carries its publication authority
   // (the identity it serves, the local TTL it may warm local storage for, 0
-  // when it may not, whether it refills the remote layer, the fence it
-  // observed and the retention its refill is written with, 0 when it does not
-  // refill); a local source carries the identity it serves and its local TTL;
-  // a request-only source carries none.
-  type LayeredPayload = { instance: int, key: int, localMs: int, remote: bool, fence: int, retentionMs: int }
+  // when it may not, the retention its refill is written with, 0 when it does
+  // not refill, and the fence it observed); a local source carries the
+  // identity it serves and its local TTL; a request-only source carries none.
+  type LayeredPayload = { instance: int, key: int, localMs: int, fence: int, retentionMs: int }
   type LocalPayload = { instance: int, key: int, localMs: int }
   type LayeredSource = Flights::Source[LayeredPayload]
   type LocalSource = Flights::Source[LocalPayload]
@@ -168,17 +167,17 @@ module serving {
   // A miss starts a layered source with the layers the call resolved to. Its
   // publication authority is fixed here: a tracked flight that read the remote
   // layer may not warm local storage directly (a later validated remote hit
-  // does), and only a flight whose remote read completed may refill it, fenced
-  // by the watermark it observed; a flight whose read failed never refills and
-  // takes no fence.
+  // does), and only a flight whose remote read completed under a reply with a
+  // positive retention may refill it, fenced by the watermark it observed; a
+  // flight whose read failed, or whose reply carries no retention, captures no
+  // retention, never refills and takes no fence.
   pure def startSource(state: Served[r], layout: Layout, caller: int, call: Call, slot: int, participating: bool, resolved: Resolution, ttls: Ttls): Served[r] = {
     val read = resolved.layers.remote
-    val refills = read and not(state.readFailed)
+    val refills = read and not(state.readFailed) and ttls.retentionMs > 0
     Flights::registerSource(started(state, layout, participating), {
       instance: call.instance,
       key: call.key,
       localMs: if (resolved.layers.local and not(state.tracked and read)) ttls.localMs else 0,
-      remote: refills,
       fence: if (refills) Remote::missFence(state, call.key, layout.operationsPerEntity) else NO_FENCE,
       retentionMs: if (refills) ttls.retentionMs else 0,
       result: CALL_PENDING,
@@ -364,7 +363,7 @@ module serving {
   pure def settle(state: Served[r], layout: Layout, index: int, value: int): Served[r] = {
     val source = state.sources.nth(index)
     val success = accepted(value)
-    val serializes = success and source.remote and Remote::writeAllowed(state, source.fence)
+    val serializes = success and source.retentionMs > 0 and Remote::writeAllowed(state, source.fence)
     val dispatches = serializes and not(state.dumpFailed)
     val stored = dispatches and not(state.writeFailed)
     val frames = if (stored) Remote::seedFrame(state, source.key, value, source.retentionMs) else state

@@ -94,7 +94,7 @@ module frames_and_faults {
     .then(seed(KEY, VALUE_ONE, LONG_RETENTION_MS))
     .then(begin(KEY, REMOTE_ONLY, NO_REMOTE_TTLS))
     .expect(s.o.calls == List(CALL_PENDING) and s.o.reads == 0 and s.o.loads == 0 and s.o.loaders == 1
-      and not(s.sources.nth(0).remote) and s.sources.nth(0).localMs == 0 and s.sources.nth(0).retentionMs == 0
+      and s.sources.nth(0).localMs == 0 and s.sources.nth(0).retentionMs == 0
       and not(s.sources.nth(0).shared) and s.sources.nth(0).fence == NO_FENCE)
     .then(settle(0, VALUE_TWO))
     .expect(s.o.calls == List(VALUE_TWO) and s.o.dumps == 0 and s.o.writes == 0 and s.remoteValues == List(VALUE_ONE, NO_VALUE))
@@ -108,7 +108,7 @@ module frames_and_faults {
     .then(settle(0, VALUE_ONE))
     .expect(s.localValues == List(NO_VALUE, VALUE_ONE) and s.lru == List(List(OTHER_KEY)))
     .then(begin(KEY, LOCAL_AND_REMOTE, NO_LOCAL_TTLS))
-    .expect(s.o.reads == 2 and s.o.loaders == 2 and s.sources.nth(1).localMs == 0 and s.sources.nth(1).remote)
+    .expect(s.o.reads == 2 and s.o.loaders == 2 and s.sources.nth(1).localMs == 0 and s.sources.nth(1).retentionMs == RETENTION_MS)
     .then(settle(1, VALUE_TWO))
     .expect(s.localValues == List(NO_VALUE, VALUE_ONE) and s.lru == List(List(OTHER_KEY))
       and s.remoteValues == List(VALUE_TWO, VALUE_ONE) and s.o.writes == 2)
@@ -127,7 +127,7 @@ module frames_and_faults {
     .then(fault("readFault", true))
     .then(begin(KEY, REMOTE_ONLY, TTLS))
     .expect(s.o.calls == List(CALL_PENDING) and s.o.reads == 1 and s.o.loads == 0 and s.o.loaders == 1
-      and not(s.sources.nth(0).remote) and s.sources.nth(0).fence == NO_FENCE and s.sources.nth(0).retentionMs == 0)
+      and s.sources.nth(0).fence == NO_FENCE and s.sources.nth(0).retentionMs == 0)
     .then(fault("readFault", false))
     .then(settle(0, VALUE_TWO))
     .expect(s.o.calls == List(VALUE_TWO) and s.o.dumps == 0 and s.o.writes == 0 and s.remoteValues == List(VALUE_ONE, NO_VALUE))
@@ -136,7 +136,7 @@ module frames_and_faults {
   // afterwards does not stop its settlement from refilling.
   run laterReadFaultDoesNotStopTheRefillTest = init
     .then(begin(KEY, REMOTE_ONLY, TTLS))
-    .expect(s.sources.nth(0).remote and s.sources.nth(0).retentionMs == RETENTION_MS)
+    .expect(s.sources.nth(0).retentionMs == RETENTION_MS)
     .then(fault("readFault", true))
     .then(settle(0, VALUE_ONE))
     .expect(s.o.calls == List(VALUE_ONE) and s.o.dumps == 1 and s.o.writes == 1
@@ -149,7 +149,7 @@ module frames_and_faults {
     .then(fault("readFault", true))
     .then(begin(KEY, LOCAL_AND_REMOTE, TTLS))
     .expect(s.o.reads == 1 and s.o.loads == 0 and s.o.loaders == 1
-      and s.sources.nth(0).localMs == LOCAL_MS and not(s.sources.nth(0).remote))
+      and s.sources.nth(0).localMs == LOCAL_MS and s.sources.nth(0).retentionMs == 0)
     .then(settle(0, VALUE_TWO))
     .expect(s.o.calls == List(VALUE_TWO) and s.localValues == List(VALUE_TWO, NO_VALUE) and s.localExpires == List(INITIAL_TIME_MS + LOCAL_MS, 0)
       and s.remoteValues == List(VALUE_ONE, NO_VALUE) and s.o.dumps == 0 and s.o.writes == 0)
@@ -165,7 +165,7 @@ module frames_and_faults {
     .then(fault("readFault", true))
     .then(begin(KEY, LOCAL_AND_REMOTE, TTLS))
     .expect(s.o.reads == 1 and s.o.loaders == 1 and s.sources.nth(0).localMs == 0
-      and not(s.sources.nth(0).remote) and s.sources.nth(0).retentionMs == 0)
+      and s.sources.nth(0).retentionMs == 0)
     .then(settle(0, VALUE_TWO))
     .expect(s.o.calls == List(VALUE_TWO) and s.localValues == List(NO_VALUE, NO_VALUE)
       and s.remoteValues == List(NO_VALUE, NO_VALUE) and s.o.dumps == 0 and s.o.writes == 0)

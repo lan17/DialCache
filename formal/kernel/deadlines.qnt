@@ -71,7 +71,7 @@ module deadlines {
     val advanced = Clock::advance(state, ms)
     advanced.sources.indices().fold(advanced, (current, index) =>
       if (current.sources.nth(index).result == CALL_PENDING and reached(current, index))
-        markSettled(Serving::finish(current, layout, index, DEADLINE_ERROR), index)
+        markSettled(Serving::settleLocal(current, layout, index, DEADLINE_ERROR), index)
       else current)
   }
 }

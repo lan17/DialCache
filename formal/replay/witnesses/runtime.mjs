@@ -68,7 +68,7 @@ function layersWitnesses(steps, recorder) {
       }
       if (warmsLocal) localOwners.set(source.instance * 4 + source.key, loader);
       if (current.writes > prior.writes) remoteOwners.set(source.key, loader);
-      if (before.tracked && warmsLocal && !source.remote) trackedLocalOnly.set(source.instance * 4 + source.key, value);
+      if (before.tracked && warmsLocal && source.retentionMs === 0) trackedLocalOnly.set(source.instance * 4 + source.key, value);
       else if (warmsLocal) trackedLocalOnly.delete(source.instance * 4 + source.key);
     }
     if (action !== "beginCall") continue;

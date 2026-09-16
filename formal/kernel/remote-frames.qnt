@@ -10,7 +10,9 @@ module remote_frames {
   // invalidation raises it to the wall clock only when the wall clock is
   // ahead, as the implementation's invalidation script keeps the larger of the
   // current and the proposed watermark. A tracked miss carries the watermark
-  // it observed as its refill fence.
+  // it observed as its refill fence. A frame stamped at a wall clock of zero
+  // or below is never served to a tracked reader (`fenceAllows` is strict
+  // against the zero watermark), as the implementation treats a zero createdAt.
   import cache_rules.* from "../cache-rules"
   import encodings.* from "./encodings"
   import clock as Clock from "./clock"

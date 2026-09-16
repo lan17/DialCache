@@ -86,12 +86,15 @@ module frame_clocks {
   // -- Retention and freshness -------------------------------------------------
 
   // A frame still fresh but past its retention is gone: a source starts and
-  // loads do not move, where one millisecond earlier the frame was served.
+  // loads do not move, where one millisecond earlier the frame was served. A
+  // remote-only reply's hit warms no local storage although its TTLs carry a
+  // local TTL: the layer flag gates the warming, not the TTL alone.
   run retainedFrameServesUntilItsRetentionTest = init
     .then(seed(VALUE_ONE, SHORT_RETENTION_MS))
     .then(elapse(SHORT_RETENTION_MS - 1))
     .then(begin(TTLS))
-    .expect(s.o.calls == List(VALUE_ONE) and s.o.reads == 1 and s.o.loads == 1 and s.o.loaders == 0)
+    .expect(s.o.calls == List(VALUE_ONE) and s.o.reads == 1 and s.o.loads == 1 and s.o.loaders == 0
+      and s.localValues == List(NO_VALUE, NO_VALUE) and s.lru == List(List()))
     .then(elapse(1))
     .then(begin(TTLS))
     .expect(s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.reads == 2 and s.o.loads == 1 and s.o.loaders == 1

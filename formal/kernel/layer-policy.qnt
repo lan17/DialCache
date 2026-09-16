@@ -16,11 +16,9 @@ module layer_policy {
   // The TTLs a reply resolves to, passed beside the resolution to the
   // traversal: the local insertion TTL, the remote frame's logical freshness
   // and the physical retention written with each remote frame. A layer whose
-  // TTL is 0 is off (`gated`). The seam relies on an implementation invariant
-  // it does not gate: retention is at least the fresh TTL (the implementation
-  // derives it from staleOnErrorMaxAgeSec or ttlSec and rejects a stale-on-error
-  // age not greater than the remote TTL), so a reply with `freshMs > 0` and
-  // `retentionMs` 0 is not a shape the drivers produce.
+  // TTL is 0 is off (`gated`), and a source refills the remote layer iff it
+  // captured a positive retention: a reply with `freshMs > 0` and
+  // `retentionMs` 0 reads the remote layer and never refills it.
   type Ttls = { localMs: int, freshMs: int, retentionMs: int }
   // The TTLs of a call that uses no layer: the bypass reply's.
   pure val NO_TTLS: Ttls = { localMs: 0, freshMs: 0, retentionMs: 0 }
