@@ -27,7 +27,6 @@ module serving {
   type Served[r] = {
     o: Observation,
     now: int,
-    policy: int,
     remoteAvailable: bool,
     tracked: bool,
     capacity: int,
@@ -137,14 +136,12 @@ module serving {
     else startSource(observedRead, layout, caller, call, slot, effective)
   }
 
-  // An immediate policy reply: admission and traversal in one step, with the
-  // layers the profile's policy code enables and coalescing on.
-  pure def begin(state: Served[r], layout: Layout, instance: int, key: int, context: int): Served[r] = {
-    val call = { instance: instance, key: key, context: context }
+  // An immediate policy reply: admission and traversal in one step with the
+  // resolution the profile supplies (`layer_policy::resolution` for the
+  // drivers' layer policy codes).
+  pure def begin(state: Served[r], layout: Layout, call: Call, resolved: Resolution): Served[r] = {
     val admitted = admit(state, layout, call)
-    if (participating(state, layout, call))
-      release(admitted, layout, state.o.policyCalls, resolution(state.policy, state.remoteAvailable))
-    else admitted
+    if (participating(state, layout, call)) release(admitted, layout, state.o.policyCalls, resolved) else admitted
   }
 
   // Settlement. Every caller the source owns receives its outcome. A success

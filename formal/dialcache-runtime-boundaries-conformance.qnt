@@ -66,8 +66,7 @@ module dialcache_runtime_boundaries_conformance {
     sources: List[Flights::Source],
     owners: List[int],
     memoSlots: List[int],
-    held: List[Gate::Held],
-    settled: List[int]
+    held: List[Gate::Held]
   }
   var s: State
   var input: { name: str, choice: int }
@@ -111,8 +110,7 @@ module dialcache_runtime_boundaries_conformance {
       sources: List(),
       owners: List(),
       memoSlots: List(),
-      held: List(),
-      settled: List()
+      held: List()
     },
     input' = { name: "init", choice: fixture }
   }
@@ -149,7 +147,7 @@ module dialcache_runtime_boundaries_conformance {
     input' = { name: "closeScope", choice: -1 }
   }
   action finishSource(loader: int, valueIndex: int): bool = all {
-    s' = Flights::recordSettlement(Serving::settle(s, s.layout, loader, SOURCE_VALUES.nth(valueIndex)), loader),
+    s' = Serving::settle(s, s.layout, loader, SOURCE_VALUES.nth(valueIndex)),
     input' = { name: "resolveLoader", choice: loader * SOURCE_VALUES.length() + valueIndex }
   }
   action resolveLoader = {
@@ -161,17 +159,19 @@ module dialcache_runtime_boundaries_conformance {
   action step = any { beginCall, releasePolicy, resolveLoader, policy, closeScope }
 
   // -- Independently stated safety properties --------------------------------
-  // The boundary properties are stated about the release step that just
-  // happened: the released caller, the policy in force and the registry. One
-  // reply is held at a time (beginCall waits for the release), so the caller
-  // a release served is the last admitted one.
+  // The boundary properties are stated about the step that just happened: the
+  // released caller, the policy in force and the registry, or the source that
+  // just settled. One reply is held at a time (beginCall waits for the
+  // release), so the caller a release served is the last admitted one; a
+  // source it started has that caller as its only owner, a source it joined
+  // has at least one more.
 
   val justReleased = input.name == "releasePolicy"
   val releasedCaller = s.o.calls.length() - 1
   pure def joinedCaller(x: State, caller: int): bool =
-    x.owners.nth(caller) >= 0 and Flights::starter(x, x.owners.nth(caller)) != caller
+    x.owners.nth(caller) >= 0 and Flights::ownedBy(x, x.owners.nth(caller)) != Set(caller)
   pure def bypassed(x: State, caller: int): bool = x.owners.nth(caller) >= 0
-    and Flights::starter(x, x.owners.nth(caller)) == caller and {
+    and Flights::ownedBy(x, x.owners.nth(caller)) == Set(caller) and {
       val source = x.sources.nth(x.owners.nth(caller))
       not(source.local) and not(source.remote) and not(source.shared)
     }
@@ -185,18 +185,32 @@ module dialcache_runtime_boundaries_conformance {
     or s.policy < INVALID_COALESCE or s.policy > NULL_REQUEST_LOCAL or bypassed(s, releasedCaller)
   val callersKeepTheirSourceValue = s.owners.indices().forall(caller =>
     s.owners.nth(caller) < 0 or s.o.calls.nth(caller) == s.sources.nth(s.owners.nth(caller)).result)
-  pure def primaryStorage(x: State): int =
-    if (x.baseline.request) x.memo.nth(0) else if (x.baseline.local) x.localValues.nth(0) else x.remoteValues.nth(0)
-  pure def publishes(x: State, loader: int): bool =
-    if (x.baseline.request) Flights::ownedBy(x, loader).exists(caller => x.memoSlots.nth(caller) >= 0)
-    else if (x.baseline.local) x.sources.nth(loader).local else x.sources.nth(loader).remote
-  val retainedValueFollowsSettlementOrder = {
-    val lastPublished = s.settled.foldl(NO_VALUE, (value, loader) =>
-      if (publishes(s, loader)) s.sources.nth(loader).result else value)
-    (s.baseline.request and s.closed.nth(0)) or primaryStorage(s) == lastPublished
-  }
+  // Every layer holds nothing or a value a settled source put there (remote
+  // only from a source that read it; local also from a remote hit warming it;
+  // the memo also from a local or remote hit), and the settlement that just
+  // happened left its value in every layer its source publishes to (remote
+  // when the flight read it, local when it may warm it, the request memo of
+  // each owner memoizing into the open scope), whatever the admission order of
+  // the sources; no source errors here.
+  pure def memoizes(x: State, loader: int): bool =
+    Flights::ownedBy(x, loader).exists(caller => x.memoSlots.nth(caller) >= 0)
+  pure def publishedBy(x: State, value: int, publishes: (int) => bool): bool =
+    value == NO_VALUE or x.sources.indices().exists(loader => publishes(loader) and x.sources.nth(loader).result == value)
+  val justSettled = input.name == "resolveLoader"
+  val settledSource = input.choice / SOURCE_VALUES.length()
+  val retainedValueFollowsSettlementOrder = publishedBy(s, s.remoteValues.nth(0), loader => s.sources.nth(loader).remote)
+    and publishedBy(s, s.localValues.nth(0), loader => s.sources.nth(loader).local or s.sources.nth(loader).remote)
+    and publishedBy(s, s.memo.nth(0), loader =>
+      s.sources.nth(loader).local or s.sources.nth(loader).remote or memoizes(s, loader))
+    and (not(justSettled) or {
+      val source = s.sources.nth(settledSource)
+      (not(source.remote) or s.remoteValues.nth(0) == source.result)
+        and (not(source.local) or s.localValues.nth(0) == source.result)
+        and (s.closed.nth(0) or Flights::ownedBy(s, settledSource).forall(caller =>
+          s.memoSlots.nth(caller) < 0 or s.memo.nth(0) == source.result))
+    })
   val sourceEffectsMatch = s.sources.length() == s.o.loaders and s.owners.length() == s.o.calls.length()
-    and s.settled.length() == s.sources.select(source => source.result != CALL_PENDING).length()
+    and s.held.length() <= 1
 
   // -- Deterministic regression schedules (verbatim) --------------------------
 

@@ -71,6 +71,7 @@
       "libraryTransitions": [
         "clock::advance",
         "flights::recordIdentity",
+        "layer_policy::resolution",
         "remote_frames::seedFrame",
         "serving::begin",
         "serving::closeScope",
@@ -105,7 +106,6 @@
       "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
       "module": "dialcache_runtime_boundaries_conformance",
       "libraryTransitions": [
-        "flights::recordSettlement",
         "policy_gate::latest",
         "runtime_policy::resolve",
         "serving::admit",

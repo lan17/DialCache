@@ -48,14 +48,17 @@ module runtime_policy {
   pure def remoteConfigured(baseline: Baseline, policy: int): bool =
     (baseline.remote or policy == RUNTIME_REMOTE_TTL) and not(baseline.disabled)
 
+  // An invalid leaf or the kill switch is the bypass reply; otherwise each
+  // layer serves when configured and admitted, and coalescing is the explicit
+  // leaf or the operation default.
   pure def resolve(state: Configured[r], samples: Samples): Resolution = {
     val policy = state.policy
     val baseline = state.baseline
-    {
+    if (not(valid(policy))) BYPASS else {
       layers: {
-        request: valid(policy) and baseline.request and policy != DISABLE_REQUEST,
-        local: valid(policy) and localConfigured(baseline, policy) and admits(samples.local, policy),
-        remote: valid(policy) and state.remoteAvailable and remoteConfigured(baseline, policy) and admits(samples.remote, policy)
+        request: baseline.request and policy != DISABLE_REQUEST,
+        local: localConfigured(baseline, policy) and admits(samples.local, policy),
+        remote: state.remoteAvailable and remoteConfigured(baseline, policy) and admits(samples.remote, policy)
       },
       coalesce: sharingMode(policy) == ENABLE_SHARING
         or (sharingMode(policy) == INHERIT_SHARING and baseline.coalesce)

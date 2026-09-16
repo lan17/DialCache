@@ -133,9 +133,9 @@ module held_replies {
     .expect(s.o.reads == 1 and s.o.loads == 1 and s.o.calls == List(CALL_PENDING, VALUE_TWO) and s.localValues == List(VALUE_TWO, 0))
 
   // The facade is admission followed by an immediate release with the
-  // resolution of the profile's policy code: the same state, field for field.
+  // resolution the profile supplies: the same state, field for field.
   run beginIsAdmitThenReleaseTest = init
-    .then(all { s' = Serving::begin(s, LAYOUT, 0, 0, 0), input' = { name: "beginCall", choice: 0 } })
+    .then(all { s' = Serving::begin(s, LAYOUT, call(0), ALL), input' = { name: "beginCall", choice: 0 } })
     .expect(s == Serving::release(Serving::admit(INITIAL, LAYOUT, call(0)), LAYOUT, 0, ALL)
       and s.o.policyCalls == 1 and s.o.loaders == 1 and s.o.reads == 1 and s.held == List())
 }

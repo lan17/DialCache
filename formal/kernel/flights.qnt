@@ -7,10 +7,9 @@ module flights {
   // layer). Settling a source clears every registry slot that named it, so a
   // finished flight never coalesces a later caller.
   //
-  // Records a profile composes only when a property of its own needs them:
+  // A record a profile composes only when a property of its own needs it:
   // the identity each caller asked for (recordIdentity, the layers ownership
-  // property) and the order in which sources settled (recordSettlement, the
-  // runtime-boundaries retention property).
+  // property).
 
   import encodings.* from "./encodings"
 
@@ -33,7 +32,6 @@ module flights {
     requestFlights: List[int] | r
   }
   type Identified[r] = { callerInstances: List[int], callerKeys: List[int] | r }
-  type Ordered[r] = { settled: List[int] | r }
 
   pure def processOwner(state: Registry[r], instance: int, key: int, keysPerInstance: int): int =
     state.processFlights.nth(instance * keysPerInstance + key)
@@ -80,19 +78,12 @@ module flights {
   }
   pure def ownedBy(state: Registry[r], index: int): Set[int] =
     state.owners.indices().filter(call => state.owners.nth(call) == index)
-  // The caller that started a source: the first it owns.
-  pure def starter(state: Registry[r], index: int): int =
-    state.owners.indices().fold(NO_OWNER, (found, call) =>
-      if (state.owners.nth(call) == index and (found < 0 or call < found)) call else found)
 
-  // Opt-in records. The identity of the last admitted caller, for a property
+  // Opt-in record: the identity of the last admitted caller, for a property
   // that no source completes a caller for another instance or key.
   pure def recordIdentity(state: Identified[r], instance: int, key: int): Identified[r] = {
     callerInstances: state.callerInstances.append(instance),
     callerKeys: state.callerKeys.append(key),
     ...state
   }
-  // The order in which sources settled, for a property over the last publisher.
-  pure def recordSettlement(state: Ordered[r], index: int): Ordered[r] =
-    { settled: state.settled.append(index), ...state }
 }
