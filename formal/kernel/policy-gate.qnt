@@ -11,18 +11,18 @@ module policy_gate {
   type Held = { policyCall: int, caller: int, call: Call }
   type Gated[r] = { held: List[Held] | r }
 
-  pure val NOT_HELD: Held = { policyCall: NO_OWNER, caller: NO_OWNER, call: { instance: NO_OWNER, key: NO_OWNER, context: NO_OWNER, enabled: false, outside: false } }
-
   pure def hold(state: Gated[r], policyCall: int, caller: int, call: Call): Gated[r] =
     { held: state.held.append({ policyCall: policyCall, caller: caller, call: call }), ...state }
   pure def holding(state: Gated[r]): bool = state.held.length() > 0
   // The policy call of the latest held caller (the drivers' `policyCalls - 1`).
   pure def latest(state: Gated[r]): int =
     if (state.held.length() == 0) NO_OWNER else state.held.nth(state.held.length() - 1).policyCall
-  // The entry held under a policy call; NOT_HELD (caller -1) when none is.
+  pure def holds(state: Gated[r], policyCall: int): bool =
+    state.held.select(held => held.policyCall == policyCall).length() > 0
+  // The entry held under a policy call. Releasing a policy call the gate does
+  // not hold is a modeling error: the lookup fails here, out of bounds.
   pure def entry(state: Gated[r], policyCall: int): Held =
-    state.held.foldl(NOT_HELD, (found, held) => if (held.policyCall == policyCall) held else found)
-  pure def holds(state: Gated[r], policyCall: int): bool = entry(state, policyCall).caller >= 0
+    state.held.select(held => held.policyCall == policyCall).nth(0)
   pure def release(state: Gated[r], policyCall: int): Gated[r] =
     { held: state.held.select(held => held.policyCall != policyCall), ...state }
 }

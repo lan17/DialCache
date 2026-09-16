@@ -19,9 +19,10 @@ module held_replies {
   pure val ALL: Resolution = { layers: { request: true, local: true, remote: true }, coalesce: true }
   pure val UNCOALESCED: Resolution = { layers: { request: true, local: true, remote: true }, coalesce: false }
   pure val REQUEST_ONLY: Resolution = { layers: { request: true, local: false, remote: false }, coalesce: true }
+  pure val UNCOALESCED_REQUEST_ONLY: Resolution = { layers: { request: true, local: false, remote: false }, coalesce: false }
 
   type State = {
-    o: Observation, now: int, policy: int, remoteAvailable: bool, tracked: bool, capacity: int,
+    o: Observation, now: int, remoteAvailable: bool, tracked: bool, capacity: int,
     closed: List[bool], memo: List[int], requestFlights: List[int], processFlights: List[int],
     localValues: List[int], localExpires: List[int], lru: List[List[int]], remoteValues: List[int], created: List[int], watermark: List[int],
     sources: List[Serving::LayeredSource], owners: List[int], memoSlots: List[int], held: List[Gate::Held]
@@ -29,7 +30,7 @@ module held_replies {
   var s: State
   var input: { name: str, choice: int }
 
-  pure val INITIAL: State = { o: empty, now: 10000, policy: ALL_LAYERS, remoteAvailable: true, tracked: false, capacity: 1,
+  pure val INITIAL: State = { o: empty, now: 10000, remoteAvailable: true, tracked: false, capacity: 1,
     closed: List(false, false), memo: List(0, 0), requestFlights: List(NO_OWNER, NO_OWNER), processFlights: List(NO_OWNER, NO_OWNER),
     localValues: List(0, 0), localExpires: List(0, 0), lru: List(List(), List()), remoteValues: List(0), created: List(0), watermark: List(0),
     sources: List(), owners: List(), memoSlots: List(), held: List() }
@@ -81,6 +82,23 @@ module held_replies {
     .expect(s.o.loaders == 1 and s.o.reads == 1 and s.owners == List(0, 0) and not(Gate::holding(s)))
     .then(settle(0, VALUE_TWO))
     .expect(s.o.calls == List(VALUE_TWO, VALUE_TWO) and s.memo == List(VALUE_TWO, VALUE_TWO) and s.o.writes == 1)
+
+  // An earlier held caller that misses while a later admission is still held
+  // starts a source owned at its own index; the later caller stays held.
+  run earlierHeldCallerStartsItsOwnSourceTest = init
+    .then(admit(0)).then(admit(1))
+    .then(release(0, ALL))
+    .expect(s.o.loaders == 1 and s.owners == List(0, NO_OWNER) and s.o.calls == List(CALL_PENDING, CALL_PENDING)
+      and s.held == List({ policyCall: 1, caller: 1, call: call(1) }) and s.processFlights == List(0, NO_OWNER))
+    .then(settle(0, VALUE_ONE))
+    .expect(s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.memo == List(VALUE_ONE, 0))
+
+  // Coalescing off still serves the request memo: the second caller of a scope
+  // whose source settled reads the memo instead of starting a source.
+  run uncoalescedReleaseStillServesTheMemoTest = init
+    .then(admit(0)).then(release(0, ALL)).then(settle(0, VALUE_ONE))
+    .then(admit(0)).then(release(1, UNCOALESCED_REQUEST_ONLY))
+    .expect(s.o.loaders == 1 and s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.owners == List(0, NO_OWNER))
 
   // An earlier held caller served from a layer while a later admission is
   // still held receives the value at its own index, and only its scope memoizes.

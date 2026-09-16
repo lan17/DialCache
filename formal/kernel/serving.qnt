@@ -216,12 +216,12 @@ module serving {
 
   // Traversal for the caller held under a policy call once its reply resolves;
   // the policy call must be held (a wrapper guards on the gate), an unheld
-  // release is a modeling error that fails when the caller is attached. The
-  // scope may have closed since admission: a released caller of a closed scope
-  // resolves to the bypass reply. Each caller is attached once, to the flight
-  // that completes it or to none; a join happens before any layer is read, so
-  // the join arms count no remote read. The remote read is observed only when
-  // the traversal reaches it.
+  // release is a modeling error that fails in the gate's lookup. The scope may
+  // have closed since admission: a released caller of a closed scope resolves
+  // to the bypass reply. Each caller is attached once, to the flight that
+  // completes it or to none; a join happens before any layer is read, so the
+  // join arms count no remote read. The remote read is observed only when the
+  // traversal reaches it.
   pure def release(state: Served[r], layout: Layout, policyCall: int, resolved: Resolution): Served[r] = {
     val held = Gate::entry(state, policyCall)
     val caller = held.caller

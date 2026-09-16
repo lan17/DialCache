@@ -3870,9 +3870,9 @@
     },
     {
       "case": "C08.instance-capacity",
-      "reference": "formal/kernel/serving.qnt:begin",
+      "reference": "formal/kernel/serving.qnt:identity",
       "kind": "helper",
-      "scope": "Instance indexes partition local entries, LRU order, and process flights. Remote storage is intentionally shared, not partitioned by process instance."
+      "scope": "The process identity a call serves is its instance's row of keys: local entries, LRU order and process flights are partitioned by instance; remote storage is intentionally shared, not partitioned by process instance."
     },
     {
       "case": "C08.instance-capacity",

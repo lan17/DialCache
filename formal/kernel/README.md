@@ -44,14 +44,17 @@ and per scope row, persistent contexts, operations per entity, the serving TTL)
 are passed as a `serving::Layout` record, so a profile with a different bound
 composes the same transitions. A call is a `calls::Call` (instance, key,
 context) and a policy reply resolves to a `layer_policy::Resolution` (the
-enabled layers and whether the call coalesces). The library never decodes a
-profile's policy field: `layer_policy::resolution(policy, remote)` is the
+enabled layers and whether the call coalesces). The serving transitions never
+decode a profile's policy field: `layer_policy::resolution(policy, remote)` is the
 immediate reply from the drivers' layer policy codes 0 to 5, which the layers
 wrapper passes to `begin`; `runtime_policy::resolve(state, samples)` resolves
 the runtime-boundaries drivers' codes 0 to 21 against the instance's
 configured `Baseline`, which its wrapper passes to `release`; `BYPASS` is the
 reply of a call that uses no layer and neither registry. Each profile owns its
-policy field with one meaning.
+policy field with one meaning. A resolution already reflects remote
+availability: the traversal reads the remote layer whenever the resolution
+enables it, so a profile without remote storage resolves `remote` to false (as
+`resolution` and `runtime_policy::resolve` do).
 
 The traversal is one statement of the fall-through order (request memo, local,
 remote, source) and of publication authority, split in time rather than by
@@ -63,11 +66,11 @@ the profile supplies (a scope closed since admission resolves to `BYPASS`), and
 `begin` is their composition for a profile whose replies are immediate. A
 profile whose drivers hold policy replies composes `admit` and `release` as
 separate steps; releasing a policy call the gate does not hold is a modeling
-error that fails when the caller is attached, so a wrapper guards on the gate.
+error that fails in the gate's lookup, so a wrapper guards on the gate.
 Per-concern entry points a profile would sequence are not offered: the order is
 the rule, and the lint reports a branch between library transitions. A profile
 composes an opt-in record after a transition when one of its own properties
-needs it (`Flights::recordIdentity(Serving::begin(...), instance, key)`);
+needs it (`Flights::recordIdentity(Serving::begin(...), call)`);
 records the traversal itself does not read are never mandatory fields.
 
 The traversal has three shapes over one statement of the order (`decide`,

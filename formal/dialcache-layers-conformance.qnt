@@ -137,8 +137,7 @@ module dialcache_layers_conformance {
   }
   action startCall(choice: int): bool = all {
     s.o.calls.length() < MAX_CALLERS,
-    s' = Flights::recordIdentity(Serving::begin(s, LAYOUT, call(choice), resolution(s.policy, s.remoteAvailable)),
-      instance(choice / KEYS_PER_INSTANCE), choice % KEYS_PER_INSTANCE),
+    s' = Flights::recordIdentity(Serving::begin(s, LAYOUT, call(choice), resolution(s.policy, s.remoteAvailable)), call(choice)),
     input' = { name: "beginCall", choice: choice }
   }
   action beginCall = {

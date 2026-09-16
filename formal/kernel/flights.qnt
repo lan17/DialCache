@@ -16,6 +16,7 @@ module flights {
   // property).
 
   import encodings.* from "./encodings"
+  import calls.* from "./calls"
 
   type Source[p] = { result: int, shared: bool | p }
   // Per caller, parallel to the callers' outcomes: the owner that will
@@ -76,9 +77,9 @@ module flights {
 
   // Opt-in record: the identity of the last admitted caller, for a property
   // that no source completes a caller for another instance or key.
-  pure def recordIdentity(state: Identified[r], instance: int, key: int): Identified[r] = {
-    callerInstances: state.callerInstances.append(instance),
-    callerKeys: state.callerKeys.append(key),
+  pure def recordIdentity(state: Identified[r], call: Call): Identified[r] = {
+    callerInstances: state.callerInstances.append(call.instance),
+    callerKeys: state.callerKeys.append(call.key),
     ...state
   }
 }
