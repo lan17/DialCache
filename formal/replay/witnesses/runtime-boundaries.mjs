@@ -1,11 +1,11 @@
 import { itfInteger, record } from "../itf.mjs";
-import { explicitInput, readTrace, traceStates } from "./trace.mjs";
+import { explicitInput } from "./trace.mjs";
 import { createWitnessRecorder, standaloneRecorder } from "./recorder.mjs";
 
 const values = [1, 2, 5, 11, 6, 7, 8, 9];
 const layerNames = ["request", "local", "remote"];
-function publicStates(raw) {
-  return traceStates(raw, "runtime-boundaries trace").map(rawState => {
+function publicStates(rawStates) {
+  return rawStates.map(rawState => {
     const state = record(rawState, "state");
     const input = explicitInput(state, "input");
     const o = record(record(state.s, "state").o, "observation");
@@ -19,8 +19,8 @@ function publicStates(raw) {
 // Evidence is attributed from external policy/settlement commands and public
 // returns/effects. Private model admissions, cache values and owners are never
 // consulted. The replay separately checks every observation in these traces.
-export function runtimeBoundaryTraceWitnesses(raw, recorder = standaloneRecorder()) {
-  const states = publicStates(raw);
+export function runtimeBoundaryTraceWitnesses(history, recorder = standaloneRecorder()) {
+  const states = publicStates(history.states);
   const fixture = states[0].choice;
   const layer = fixture < 6 ? fixture % 3 : fixture === 7 ? 2 : fixture === 9 ? 0 : 1;
   const defaultSharing = fixture >= 3;
@@ -112,11 +112,11 @@ export function runtimeBoundaryTraceWitnesses(raw, recorder = standaloneRecorder
   return recorder.labels();
 }
 
-export function runtimeBoundaryWitnesses(profile, paths, recorder = createWitnessRecorder()) {
+export function runtimeBoundaryWitnesses(profile, histories, recorder = createWitnessRecorder()) {
   if (profile !== "runtime-boundaries") return recorder.labels();
-  for (const path of paths) {
-    recorder.enter(path);
-    runtimeBoundaryTraceWitnesses(readTrace(path), recorder);
+  for (const history of histories) {
+    recorder.enter(history.path);
+    runtimeBoundaryTraceWitnesses(history, recorder);
   }
   return recorder.labels();
 }

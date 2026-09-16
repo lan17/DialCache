@@ -448,9 +448,9 @@ No input names a TypeScript or Go file, so completing the witness leaves does
 not require running another port's test suite. A port either runs the CLI
 itself before its native replay or consumes an evidence file whose `inputs`
 and `corpus` hashes match its own checkout and corpus byte for byte, as the Go
-replay does. The TypeScript suite calls the same `checkWitnesses` function for
-its gate; it no longer produces evidence. The Go replay also checks that every
-required label names at least one history of the bound corpus.
+replay does. The TypeScript suite runs the same evaluator over the histories
+it parsed for replay and writes no evidence. The Go replay also checks that
+every required label names at least one history of the bound corpus.
 
 ## Current limitations for a third port
 

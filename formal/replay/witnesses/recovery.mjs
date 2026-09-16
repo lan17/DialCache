@@ -3,7 +3,7 @@ import { flowLabels } from "./labels.mjs";
 import { createWitnessRecorder } from "./recorder.mjs";
 
 function recoveryScopeWitnesses(histories, recorder) {
-  for (const { path, steps, states } of histories) {
+  for (const { path, steps, predictions: states } of histories) {
     recorder.enter(path);
     const memo = new Map();
     const probes = new Map();

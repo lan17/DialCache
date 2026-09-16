@@ -1,5 +1,5 @@
 import { profiles, parseTrace, featureInput, assertFeatureObservation, type Trace } from "../formal/replay/features.mjs";
-import { checkWitnesses } from "../formal/replay/witnesses/index.mjs";
+import { checkCorpus, loadCorpus } from "../formal/replay/witnesses/index.mjs";
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -47,15 +47,19 @@ for (const [name, profile] of Object.entries(profiles)) {
   }
   if (single === undefined && paths.length === 0) throw new Error(`No ${name} traces found`);
   if (paths.length === 0) continue;
-  const traces = paths.map((path) => parseTrace(JSON.parse(readFileSync(path, "utf8")), path, profile));
+  // Each history is read and parsed once. The completion gate runs the shared
+  // language-neutral evaluator over that corpus here, so only the steps the
+  // replays need stay in memory for the rest of the file. `node
+  // formal/witnesses.mjs evaluate` is the sole producer of the reusable
+  // evidence files; the gate only checks reachability.
+  const corpus = loadCorpus(name, paths);
+  const missing = directory !== undefined && single === undefined ? checkCorpus(name, corpus).missing : undefined;
+  const traces: Trace[] = corpus.map(({ path, steps }) => ({ path, steps }));
   describe(`generated ${name} conformance`, () => {
     for (const trace of traces) it(`replays ${trace.path}`, async () => { await replay(profile, trace); });
-    // The completion gate runs the shared language-neutral evaluator over the
-    // same histories. `node formal/witnesses.mjs evaluate` is the sole producer
-    // of the reusable evidence files; this test only checks reachability.
-    if (directory !== undefined && single === undefined) it("reaches every action and required outcome or race", () => {
-      expect(checkWitnesses(name, traces.map(trace => trace.path)).missing, `Missing ${name} coverage witnesses`).toEqual([]);
-    }, 30_000);
+    if (missing !== undefined) it("reaches every action and required outcome or race", () => {
+      expect(missing, `Missing ${name} coverage witnesses`).toEqual([]);
+    });
     if (traces.length > 0) {
       it("rejects missing observations, unknown actions and invalid choices", () => {
         const raw = JSON.parse(readFileSync(traces[0]!.path, "utf8"));

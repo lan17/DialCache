@@ -1,4 +1,5 @@
 import type { WitnessRecorder } from "./recorder.mjs";
+import type { RawHistory } from "./trace.mjs";
 
 export interface PublicCheckpoint {
   step: number;
@@ -14,4 +15,4 @@ export interface PublicPrefixWitnessRule {
 export function witnessCommand(name: string, choice?: number): string;
 export function publicCheckpoint(step: number, observation: Record<string, unknown>, diagnostics?: Record<string, unknown>): PublicCheckpoint;
 export function publicPrefixRule(name: string, regression: string, commands: string[], ...checkpoints: PublicCheckpoint[]): PublicPrefixWitnessRule;
-export function publicPrefixWitnesses(paths: readonly string[], rules: readonly PublicPrefixWitnessRule[], recorder?: WitnessRecorder): Set<string>;
+export function publicPrefixWitnesses(histories: readonly RawHistory[], rules: readonly PublicPrefixWitnessRule[], recorder?: WitnessRecorder): Set<string>;

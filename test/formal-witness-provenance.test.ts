@@ -54,18 +54,16 @@ describe("witness recorder provenance", () => {
   });
 
   it("credits a public-prefix rule at its declared checkpoints", () => {
-    const directory = scratch();
-    const path = join(directory, "trace_7.itf.json");
     const state = (name: string, choice: number, calls: number[]) => ({ input: { name, choice: integer(choice) }, s: { o: { calls: calls.map(integer) } } });
-    writeFileSync(path, JSON.stringify({ states: [state("init", -1, []), state("beginCall", 0, [0]), state("resolveLoader", 1, [1]), state("beginCall", 1, [1, 0])] }));
+    const history = { path: "trace_7.itf.json", states: [state("init", -1, []), state("beginCall", 0, [0]), state("resolveLoader", 1, [1]), state("beginCall", 1, [1, 0])] };
     const rule = publicPrefixRule("settled-then-probed", "settledThenProbedTest",
       [witnessCommand("init"), witnessCommand("beginCall", 0), witnessCommand("resolveLoader", 1)],
       publicCheckpoint(1, { calls: [0] }), publicCheckpoint(2, { calls: [1] }));
     const recorder = createWitnessRecorder();
-    expect(publicPrefixWitnesses([path], [rule], recorder).has(rule.name)).toBe(true);
+    expect(publicPrefixWitnesses([history], [rule], recorder).has(rule.name)).toBe(true);
     expect(recorder.provenance()).toEqual({ "settled-then-probed": [{ name: "trace_7.itf.json", checkpoints: [1, 2] }] });
     const unmet = publicPrefixRule("unmet", "unmetTest", rule.commands, publicCheckpoint(2, { calls: [2] }));
-    expect(publicPrefixWitnesses([path], [unmet]).size).toBe(0);
+    expect(publicPrefixWitnesses([history], [unmet]).size).toBe(0);
   });
 });
 

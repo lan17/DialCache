@@ -1,5 +1,5 @@
 import { record } from "../itf.mjs";
-import { decodeIntegers, explicitInput, readTrace, traceStates, witnessCommand as command } from "./trace.mjs";
+import { decodeIntegers, explicitInput, witnessCommand as command } from "./trace.mjs";
 import { createWitnessRecorder } from "./recorder.mjs";
 
 // These boundary histories are intentionally narrow. Inputs identify the
@@ -109,11 +109,11 @@ function contains(actual, expected) {
   return Object.entries(expected).every(([key, value]) => contains(actual[key], value));
 }
 
-export function recoveryReadWitnesses(paths, recorder = createWitnessRecorder()) {
-  for (const path of paths) {
+export function recoveryReadWitnesses(histories, recorder = createWitnessRecorder()) {
+  for (const { path, states } of histories) {
     recorder.enter(path);
     const commands = [];
-    const observations = traceStates(readTrace(path), path).map(rawState => {
+    const observations = states.map(rawState => {
       const state = record(rawState, path);
       const input = explicitInput(state, path);
       commands.push(command(input.name, input.choice));

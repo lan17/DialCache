@@ -1,24 +1,18 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
 import { shadowDiagnosticsWitnessRules, shadowDiagnosticsWitnesses } from "../formal/replay/witnesses/shadow-diagnostics.mjs";
 
 const fixtures = JSON.parse(readFileSync(new URL("./fixtures/shadow-diagnostics-witnesses.json", import.meta.url), "utf8")) as Array<{
   regression: string;
   trace: { states: Array<{ input: { name: string; choice: unknown }; s: { o: Record<string, unknown>; d: Record<string, unknown> } }> };
 }>;
-const directory = mkdtempSync(join(tmpdir(), "dialcache-shadow-diagnostics-witness-"));
-afterAll(() => rmSync(directory, { recursive: true, force: true }));
 const integer = (value: number) => ({ "#bigint": String(value) });
 function traceFor(name: string) {
   const rule = shadowDiagnosticsWitnessRules.find(rule => rule.name === name)!;
   return structuredClone(fixtures.find(fixture => fixture.regression === rule.regression)!.trace);
 }
-function classified(name: string, trace: unknown): boolean {
-  const path = join(directory, "trace.itf.json");
-  writeFileSync(path, JSON.stringify(trace));
-  return shadowDiagnosticsWitnesses([path]).has(name);
+function classified(name: string, trace: { states: unknown[] }): boolean {
+  return shadowDiagnosticsWitnesses([{ path: "trace.itf.json", states: trace.states }]).has(name);
 }
 
 // Input/public-diagnostic excerpts are produced by Quint. These negative

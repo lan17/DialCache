@@ -21,6 +21,6 @@ export const recoveryAdmissionWitnessRules = [
     check(6, { calls: [1, 1], reads: 1, loaders: 1, loads: 1, classifications: 1, recovery: ["served"], ...noShadow })),
 ];
 
-export function recoveryAdmissionWitnesses(paths, recorder) {
-  return publicPrefixWitnesses(paths, recoveryAdmissionWitnessRules, recorder);
+export function recoveryAdmissionWitnesses(histories, recorder) {
+  return publicPrefixWitnesses(histories, recoveryAdmissionWitnessRules, recorder);
 }

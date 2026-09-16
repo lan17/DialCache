@@ -1,7 +1,5 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
 import { recoveryReadWitnesses, recoveryReadWitnessRules } from "../formal/replay/witnesses/recovery-read.mjs";
 
 // Actual Quint input/observation excerpts; private state is deliberately absent.
@@ -11,12 +9,8 @@ const fixtures = JSON.parse(readFileSync(new URL("./fixtures/recovery-read-witne
   regression: string;
   trace: { states: Array<{ input: unknown; s: { o: Record<string, unknown>; io: Record<string, unknown>; markers: unknown[]; compression: string[] } }> };
 }>;
-const directory = mkdtempSync(join(tmpdir(), "dialcache-recovery-read-witness-"));
-afterAll(() => rmSync(directory, { recursive: true, force: true }));
-function classify(trace: unknown): Set<string> {
-  const path = join(directory, "trace.itf.json");
-  writeFileSync(path, JSON.stringify(trace));
-  return recoveryReadWitnesses([path]);
+function classify(trace: { states: unknown[] }): Set<string> {
+  return recoveryReadWitnesses([{ path: "trace.itf.json", states: trace.states }]);
 }
 function traceFor(name: string) {
   const rule = recoveryReadWitnessRules.find(rule => rule.name === name)!;
