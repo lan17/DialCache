@@ -86,10 +86,10 @@ and time. Their introduction does not imply that every product of those domains
 is explored. [profiles.json](./profiles.json) records profile versions, input
 encodings, smoke traces and implementation declarations.
 
-The supplemental [shared lifecycle pilot](./kernel/README.md) exercises layers
-and effects views of one kernel against their original profiles and both ports.
-Its bounded histories evaluate a first migration slice; the profiles above
-remain authoritative and their coverage totals are unchanged.
+The [kernel library](./kernel/README.md) states each portable rule once as pure
+transitions; a composed profile assigns state only through them. The layers
+profile is composed today, verified by the corpus differential; the other
+profiles remain authoritative and their coverage totals are unchanged.
 
 ## Generating and replaying behavior
 
@@ -117,7 +117,7 @@ make help          # Targets and prerequisites.
 make check         # Native checks, package, docs and inventories.
 make smoke         # Committed Quint-derived histories in both ports.
 make formal        # Rust model checks, full corpus and both-port completion.
-make kernel-pilot  # Supplemental shared lifecycle comparison and both-port replay.
+make differential  # Replay composed profiles' reference corpus through the working tree.
 make model-check   # Separate finite symbolic checks; Java 21 and tar required.
 make mutations     # Challenge assertions after full replay has passed.
 make integration   # Real Redis/Valkey/Cluster and interoperability.
@@ -139,9 +139,9 @@ edit, update them with `node formal/generate-artifacts.mjs --write` first.
 `make ci` includes the separate symbolic checks after `make formal`, as well as
 the other local lanes.
 
-`make formal` also requires `make kernel-pilot`. Its report separately records
-the shared kernel's sampled invariants, exact-input comparisons, native replays
-and deliberate model faults. It never substitutes for full-profile completion.
+`make differential` regenerates each composed profile's corpus from the merge
+base with `origin/main` and replays every history through the working tree,
+comparing the driver-asserted observation at every step (see kernel/README.md).
 
 Pinned acceptance clears inherited trace selectors and `QUINT_SEED`. Exploration
 keeps a separate source snapshot, seed, corpus and diagnostic replay evidence. See

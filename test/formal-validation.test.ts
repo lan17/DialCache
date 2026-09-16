@@ -121,7 +121,7 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     expect(plan[1]!.remove).toEqual([".formal-traces/ts-completion.json", ".formal-traces/go-completion.json"]);
     // The aggregate is exactly these lanes in order, so a CI job running
     // one lane executes the same steps as the local sequential run.
-    expect(plan).toEqual(["formal-check", "formal-generate", "formal-ts", "formal-go", "kernel-pilot"].flatMap(target => validationPlan(target, { directory })));
+    expect(plan).toEqual(["formal-check", "formal-generate", "formal-ts", "formal-go"].flatMap(target => validationPlan(target, { directory })));
   });
 
   it("keeps the model check as its own lane that produces nothing the port lanes consume", () => {
@@ -211,7 +211,7 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
 
   it("requires Quint only for generation and recomputation, not for replay or mutation lanes", () => {
     fakeTool("quint", 'console.error("quint: not installed"); process.exit(1)');
-    for (const target of ["formal-check", "formal-generate", "formal", "fixtures-check", "explore", "kernel-pilot", "ci"]) {
+    for (const target of ["formal-check", "formal-generate", "formal", "fixtures-check", "explore", "ci"]) {
       expect(() => checkPrerequisites(target, { directory, environment, nodeVersion: "v24.20.0" })).toThrow(/Cannot run quint/);
     }
     for (const target of ["formal-ts", "formal-go", "mutations-ts", "mutations-go", "mutations", "mutations-merge-ts", "mutations-merge-go"]) {
@@ -221,7 +221,7 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     for (const target of ["formal-ts", "mutations-ts", "mutations-merge-ts", "mutations-merge-go"]) {
       expect(() => checkPrerequisites(target, { directory, environment, nodeVersion: "v24.20.0" })).not.toThrow();
     }
-    for (const target of ["formal-go", "mutations-go", "kernel-pilot"]) {
+    for (const target of ["formal-go", "mutations-go"]) {
       expect(() => checkPrerequisites(target, { directory, environment, nodeVersion: "v24.20.0" })).toThrow(/Cannot run go/);
     }
   });
@@ -373,21 +373,5 @@ describe("full formal workflow shape", () => {
     expect(aggregate.steps.some(step => step.uses?.startsWith("actions/download-artifact") && step.with?.name === "model-check-evidence")).toBe(true);
     const summary = aggregate.steps.find(step => step.uses?.startsWith("actions/upload-artifact"))!.with!;
     expect(summary.path).toContain("formal-summary/model-check/model-properties/report.json");
-  });
-
-  it("requires the supplemental kernel pilot without substituting it for full profile replay", () => {
-    const pilot = jobs["kernel-pilot"]!;
-    expect(needsOf(pilot)).toEqual([]);
-    expect(pilot.steps.map(step => step.run).filter(Boolean)).toEqual(["make kernel-pilot"]);
-    expect(pilot.steps.find(step => step.uses === "./.github/actions/setup-validation")!.with)
-      .toEqual({ quint: "true", go: "true" });
-    expect(validationPlan("kernel-pilot")[0]!.args).toEqual(["formal/kernel-pilot.mjs", "check"]);
-    const aggregate = jobs["formal-full"]!;
-    expect(needsOf(aggregate)).toEqual(expect.arrayContaining(["kernel-pilot", "typescript-parity", "go-parity"]));
-    const gate = aggregate.steps.find(step => step.run?.includes("_RESULT"))!;
-    expect(gate.env).toMatchObject({ KERNEL_PILOT_RESULT: "${{ needs.kernel-pilot.result }}" });
-    expect(gate.run).toMatch(/test "\$KERNEL_PILOT_RESULT" = success/);
-    expect(aggregate.steps.find(step => step.uses?.startsWith("actions/upload-artifact"))!.with!.path)
-      .toContain("formal-summary/kernel-pilot/report.json");
   });
 });

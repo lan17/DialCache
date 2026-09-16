@@ -1005,7 +1005,7 @@
   "reviewedGuides": [
     {
       "path": "formal/AUTHORING.md",
-      "sha256": "1ecedbfba86c0480444368e9cd4003b2b3e984dab79940006d55c25e6cef416e",
+      "sha256": "1fb5d8bcdc67bbb3b2eb4490f1a611500e96fdc9a025f9a40f872831710786ee",
       "entries": [
         {"line":1,"title":"Reading and extending the DialCache models"},
         {"line":16,"title":"Reading a model"},
@@ -1346,7 +1346,7 @@
     },
     {
       "path": "formal/README.md",
-      "sha256": "3060e31b6de766c2f795dc54d65f32155b4f77aef9666736e9fabfb49e2653d8",
+      "sha256": "27cd2593414aa0d0685419e52e0073bde37ebd9aedc74f4200d3ed80315744df",
       "entries": [
         {"line":1,"title":"Executable DialCache specification"},
         {"line":7,"title":"Start with your task"},
@@ -1362,7 +1362,7 @@
     },
     {
       "path": "formal/SEMANTIC-COVERAGE.md",
-      "sha256": "c2153f2236e9629234c6089df22842219e04aae286dea85d14a5947db55bd0ef",
+      "sha256": "e583ec308fed54a0a1c11d2058af7b41a59be8e2a59757bfec4e3302b5e8a31c",
       "entries": [
         {"line":1,"title":"Measuring semantic coverage"},
         {"line":5,"title":"Evidence inventory"},
@@ -1485,7 +1485,7 @@
     },
     {
       "path": "formal/TEST-MAP.md",
-      "sha256": "14e7af8dc644f3c0aca567b72124974d55bb690d6d4c66760fda8e5abf4f3ce6",
+      "sha256": "b41628eb0cf5fe7c3a24334bf88e758c93b5c7fcd885e9dbf67a6959aaa8d3b5",
       "entries": [
         {"line":1,"title":"Formal contract and implementation evidence map"},
         {"line":18,"title":"Behavioral map"},
@@ -1501,7 +1501,7 @@
     },
     {
       "path": "formal/VALIDATION.md",
-      "sha256": "603459ed95bdb141bfbe840852c532920d20dfe2abb0eeaecb4ff9dd712c4dac",
+      "sha256": "51ce388ede1af25ee2cd553f564349979597a5956111ec5de5f231eb5b645dba",
       "entries": [
         {"line":1,"title":"Validation and evidence"},
         {"line":7,"title":"Choosing a run"},

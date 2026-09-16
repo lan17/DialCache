@@ -87,33 +87,33 @@ Where representations differ, add an executable projection/connection check
 that compares profile history with the contract. Give the projection an explicit
 scope and challenge mistakes in policy capture, event timing or ownership.
 
-`node formal/lint-profiles.mjs <model.qnt> --kernel=<module,...> --witness=<regex>`
+`node formal/lint-profiles.mjs <model.qnt> [--kernel=<module,...>] --witness=<regex>`
 checks that structure rather than the text: it follows the resolved references
 in Quint's parsed IR through helpers, lambda arguments and constants bound at
 instantiation, and reports two kinds of violation with the definition chain
-that reaches them. The thin-profile rule fails on any state assignment
-reachable from a profile action outside the named kernel modules. Witness
-isolation fails on any reference to a variable matching the witness pattern
-from a cache guard or assignment, the profile's `init` or `step`, a `nondet`
-choice domain, the definition assigning the observation field (`o` unless
-`--observation` says otherwise) or the body of an operator constant; a witness
-assignment may read its own prior state. Until a kernel module exists, every
-reachable assignment is private, so
+that reaches them. The composition rule walks every value a profile assigns to
+a state variable other than `input` and fails on any comparison, branch,
+arithmetic or collection operator over cache state, and on any non-library
+definition applied to cache state; library modules (`formal/kernel`, `cache_rules`)
+compute freely. Witness isolation fails on any reference to a variable matching
+the witness pattern from a cache guard or assignment, `init` or `step`, a
+`nondet` domain, the definition assigning the observation field (`o` unless
+`--observation` says otherwise) or an operator constant's body; a witness
+assignment may read its own prior state.
 [`profile-lint-baseline.json`](./profile-lint-baseline.json) records, per
-conformance profile, how many definitions its public actions reach and which of
-them assign state: that list is the profile's migration work list for the
-kernel described in issue #165, and `node formal/lint-profiles.mjs baseline
---check` fails when a profile drifts from it (`--write` refreshes it after a
-reviewed change). The baseline is not yet part of `make audit`, because that
+conformance profile, the definitions its public actions reach and assign state,
+the library transitions it composes and its composition-violation count: a
+composed profile reports zero and the other counts are the migration work list
+for issue #165; `node formal/lint-profiles.mjs baseline
 lane runs without Quint.
 
-The [layers/effects lifecycle pilot](./kernel/README.md) now uses these checks
-with `cache_kernel` as the assignment owner. Its input catalog, independent
-properties and exact-checkpoint faults are executed by `make kernel-pilot`.
-The baseline above still describes the original profiles; no profile has yet
-been replaced. Compare the same recorded inputs before attributing a change
-in observations to the extraction. Reusing a random seed does not preserve an
-input history when a model's choice structure changes.
+The [kernel library](./kernel/README.md) holds the concern modules a composed
+profile assigns through; `formal/dialcache-layers-conformance.qnt` is the first.
+A rewrite lands only when `node formal/differential.mjs <profile>` replays the
+profile's whole reference corpus and exported regressions through the new text
+with step-by-step agreement. Compare the same recorded inputs before attributing
+a change in observations to the rewrite. Reusing a random seed does not preserve
+an input history when a model's choice structure changes.
 
 Connection models advance the imported profile and save its preceding context
 in the same `all` action. Views such as `acquired` and `observedSources` combine
@@ -128,7 +128,7 @@ in [conformance-observations.qnt](./conformance-observations.qnt). Name repeated
 transition conditions locally, including the time or snapshot they inspect.
 Keep request lifetime, flight ownership, deadline acceptance, and publication
 policy in the model that explains them. A shared lifecycle must keep these
-differences explicit; the bounded pilot is evaluated before any full migration.
+differences explicit; a profile rewrite is admitted only by its corpus differential.
 
 An assertion needs an independent way to detect a wrong transition. Do not
 rewrite both sides of a check to call the same newly extracted eligibility

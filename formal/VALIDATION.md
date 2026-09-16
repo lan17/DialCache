@@ -14,7 +14,7 @@ lists tool prerequisites and focused reproduction commands.
 | Challenge implementation assertions | `make mutations` | Compiling semantic faults tested against both completed ports |
 | Real server behavior | `make integration` | Redis, Valkey, Cluster and cross-language interoperability |
 | Explore another schedule sample | `make explore` | Separate source snapshot, recorded random seed, both-port replay |
-| Check the shared lifecycle pilot | `make kernel-pilot` | Supplemental original/kernel comparison, both native replays and exact-checkpoint model faults |
+| Replay composed profiles against their previous text | `make differential` | Reference corpus from the merge base with `origin/main`, step-by-step observation agreement, generation cost ratios |
 | All required local lanes | `make ci NODE22_BIN=/absolute/path/to/node22/bin/node` | Native, formal, separate symbolic, integration and mutation runs |
 
 `make formal-check` is the Quint evidence lane: typechecks and bounded runs of
@@ -29,10 +29,10 @@ the TypeScript suite only checks the same gate. `make formal-ts`, `make formal-g
 and that witness evidence, so the hosted workflow runs them in parallel and the
 aggregate requires all of them.
 
-The supplemental `kernel-pilot` job runs independently and is also required by
-the full aggregate and local `make formal`. Its
-[scoped report](./kernel/README.md#evidence-and-next-decision) cannot serve as a
-full conformance completion report; the original profile lanes still run.
+The pull request lane's `differential` job runs `make differential` against the
+base branch whenever a Quint input changes, so a rewritten profile that changes
+any observation of its previous corpus fails before generation. Its report is
+migration evidence, not a conformance completion report; the profile lanes still run.
 
 The evaluator ends with a per-profile witness report: required labels with at
 most three sampled hits and no regression, labels pinned by a regression but

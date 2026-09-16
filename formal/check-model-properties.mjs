@@ -84,8 +84,13 @@ export async function measureModelProperties({ only, concurrency = resolveConcur
   const { settings, check } = manifest;
   const options = [`--backend=${settings.backend}`, `--n-threads=${settings.threads}`, `--seed=${settings.seed}`,
     `--max-samples=${check.maxSamples}`, `--max-steps=${check.maxSteps}`];
-  const files = readdirSync(resolve(root, 'formal')).filter(name => name.endsWith('.qnt')).sort();
-  const sources = new Map(files.map(name => [`formal/${name}`, readFileSync(resolve(root, 'formal', name), 'utf8')]));
+  // Every Quint source a model can import: the scheduled models and libraries
+  // at formal/ and the kernel library at formal/kernel/.
+  const files = [
+    ...readdirSync(resolve(root, 'formal')).filter(name => name.endsWith('.qnt')).map(name => `formal/${name}`),
+    ...readdirSync(resolve(root, 'formal/kernel')).filter(name => name.endsWith('.qnt')).map(name => `formal/kernel/${name}`),
+  ].sort();
+  const sources = new Map(files.map(path => [path, readFileSync(resolve(root, path), 'utf8')]));
   mkdirSync(output, { recursive: true });
   const report = { schemaVersion: 4, complete: false, partial: only !== undefined, mode: 'bounded-simulation', options,
     sources: Object.fromEntries([...sources].map(([path, source]) => [path, createHash('sha256').update(source).digest('hex')])),
@@ -113,7 +118,7 @@ export async function measureModelProperties({ only, concurrency = resolveConcur
     let detail = '';
     try {
       for (const label of ['baseline', 'mutant']) {
-        mkdirSync(resolve(workspace, 'formal'), { recursive: true });
+        mkdirSync(resolve(workspace, 'formal/kernel'), { recursive: true });
         for (const [path, text] of sources) writeFileSync(resolve(workspace, path), text);
         if (label === 'mutant') writeFileSync(resolve(workspace, challenge.source), source.replace(challenge.before, challenge.after));
         const model = resolve(workspace, challenge.model);

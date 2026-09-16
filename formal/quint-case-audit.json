@@ -3834,25 +3834,25 @@
     },
     {
       "case": "C08.instance-capacity",
-      "reference": "formal/dialcache-layers-conformance.qnt:putLocal",
+      "reference": "formal/kernel/local-storage.qnt:putLocal",
       "kind": "helper",
       "scope": "Instance indexes partition local entries, LRU order, and process flights. Remote storage is intentionally shared, not partitioned by process instance."
     },
     {
       "case": "C08.instance-capacity",
-      "reference": "formal/dialcache-layers-conformance.qnt:start",
+      "reference": "formal/kernel/flights.qnt:registerSource",
       "kind": "helper",
       "scope": "Instance indexes partition local entries, LRU order, and process flights. Remote storage is intentionally shared, not partitioned by process instance."
     },
     {
       "case": "C08.instance-capacity",
-      "reference": "formal/dialcache-layers-conformance.qnt:begin",
+      "reference": "formal/kernel/serving.qnt:begin",
       "kind": "helper",
       "scope": "Instance indexes partition local entries, LRU order, and process flights. Remote storage is intentionally shared, not partitioned by process instance."
     },
     {
       "case": "C08.instance-capacity",
-      "reference": "formal/dialcache-layers-conformance.qnt:settle",
+      "reference": "formal/kernel/serving.qnt:settle",
       "kind": "helper",
       "scope": "Instance indexes partition local entries, LRU order, and process flights. Remote storage is intentionally shared, not partitioned by process instance."
     },
@@ -3960,13 +3960,13 @@
     },
     {
       "case": "C32.grouped-invalidation",
-      "reference": "formal/dialcache-layers-conformance.qnt:begin",
+      "reference": "formal/kernel/remote-frames.qnt:readableFrame",
       "kind": "helper",
       "scope": "Invalidation chooses an entity watermark; tracked reads index it by key/operations-per-entity, covering two operation variants without fencing the other entity."
     },
     {
       "case": "C32.untracked-unaffected",
-      "reference": "formal/dialcache-layers-conformance.qnt:begin",
+      "reference": "formal/kernel/remote-frames.qnt:readableFrame",
       "kind": "helper",
       "scope": "Untracked reads omit the watermark comparison while retaining ordinary cache presence checks."
     },

@@ -170,9 +170,9 @@ export const contractIds = text => [...text.matchAll(/^\| ([CWEB]\d{2}) \|/gm)].
 // A deterministic reproducer pins one challenge to a named run that passes on
 // the clean model and fails, at one declared expectation, under the fault. An
 // exported-regression cites a public-only run both ports replay, so the fault
-// is portable behavior; for a fault in a shared library the run may live in a
-// profile model other than the challenged one, since every importer executes
-// the mutated text. A model-run cites a run that only the model executes and
+// is portable behavior; for a fault in a shared library or kernel module the
+// run may live in a profile model other than the challenged one, since every
+// importer executes the mutated text. A model-run cites a run that only the model executes and
 // must say why the fault has no native counterpart. `failure` is the expect
 // condition the fault breaks. `profiles` names where the fault is observable:
 // the challenged model's own profile, or its path for a model without one,
@@ -182,14 +182,14 @@ export const contractIds = text => [...text.matchAll(/^\| ([CWEB]\d{2}) \|/gm)].
 // because no other profile executes that text.
 const reproducerKinds = ['exported-regression', 'model-run'];
 const reproducerFields = ['kind', 'run', 'model', 'failure', 'family', 'profiles', 'exclusions', 'scope'];
-function validateReproducer(challenge, model, { models, libraries, profileIds, publicOnly, readSource }) {
+function validateReproducer(challenge, model, { models, libraries, kernel, profileIds, publicOnly, readSource }) {
   const { id, reproducer } = challenge;
   if (!reproducer || typeof reproducer !== 'object' || Array.isArray(reproducer)) throw new Error(`${id}: invalid reproducer`);
   const unknown = Object.keys(reproducer).filter(key => !reproducerFields.includes(key));
   if (unknown.length) throw new Error(`${id}: unsupported reproducer field ${unknown.join(', ')}`);
   const { kind, run, failure, family, profiles, exclusions, scope } = reproducer;
   if (!reproducerKinds.includes(kind)) throw new Error(`${id}: reproducer kind must be one of ${reproducerKinds.join(', ')}`);
-  const shared = libraries.includes(challenge.source);
+  const shared = libraries.includes(challenge.source) || kernel.includes(challenge.source);
   const cited = reproducer.model === undefined ? model : models.get(reproducer.model);
   if (reproducer.model !== undefined && (!cited?.profile || kind !== 'exported-regression' || !shared || cited === model)) {
     throw new Error(`${id}: reproducer model must name another profile model and is allowed only for an exported-regression of a shared-library fault: ${reproducer.model}`);
@@ -330,7 +330,7 @@ function validateChallenges(manifest, { readSource, contracts, sources, profileI
     if (!faults.has(fault)) faults.set(fault, challenge.id);
     challengedModels.add(challenge.model);
     if (challenge.reproducer !== undefined) {
-      validateReproducer(challenge, model, { models, libraries: manifest.libraries, profileIds, publicOnly, readSource });
+      validateReproducer(challenge, model, { models, libraries: manifest.libraries, kernel: manifest.kernel, profileIds, publicOnly, readSource });
       reproducers++;
     }
   }
@@ -365,11 +365,12 @@ export function validateExecution(manifest = readExecution(), {
   readSource = read,
   grandfathered = grandfatheredReproducerBacklog,
   files = readdirSync(root + 'formal').filter(name => name.endsWith('.qnt')).map(name => 'formal/' + name),
+  kernelFiles = readdirSync(root + 'formal/kernel').filter(name => name.endsWith('.qnt')).map(name => 'formal/kernel/' + name),
   profiles = JSON.parse(read('formal/profiles.json')).profiles,
   contracts = contractIds(read('formal/CONTRACTS.md')),
 } = {}) {
   if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.models) || !manifest.models.length ||
-      !Array.isArray(manifest.libraries)) throw new Error('Unsupported model execution manifest');
+      !Array.isArray(manifest.libraries) || !Array.isArray(manifest.kernel)) throw new Error('Unsupported model execution manifest');
   if (!Array.isArray(profiles) || !profiles.length || profiles.some(profile =>
     typeof profile.id !== 'string' || !/^[a-z][a-z-]*$/.test(profile.id)) ||
     new Set(profiles.map(profile => profile.id)).size !== profiles.length) throw new Error('Invalid execution profile IDs');
@@ -384,6 +385,11 @@ export function validateExecution(manifest = readExecution(), {
   const paths = [...manifest.models.map(model => model.path), ...manifest.libraries];
   if (paths.some(path => typeof path !== 'string' || !/^formal\/[\w-]+\.qnt$/.test(path)) ||
       new Set(paths).size !== paths.length || !sameMembers(paths, files)) throw new Error('Model/library file inventory changed; review the execution schedule');
+  // The kernel library is the concern modules every composed profile imports.
+  // Its modules are never scheduled on their own: a profile executes them, and
+  // a fault in one is measured through the profiles that compose it.
+  if (manifest.kernel.some(path => typeof path !== 'string' || !/^formal\/kernel\/[\w-]+\.qnt$/.test(path)) ||
+      new Set(manifest.kernel).size !== manifest.kernel.length || !sameMembers(manifest.kernel, kernelFiles)) throw new Error('Kernel library file inventory changed; review the execution schedule');
   const profileIds = [], outputDirectories = new Set([check.outputDirectory]), publicOnly = new Map();
   let invariants = 0, regressions = 0, generatedTraces = 0;
   let exportedRegressionTraces = 0, generatedVectors = 0, vectorModels = 0;
@@ -466,7 +472,7 @@ export function validateExecution(manifest = readExecution(), {
     if ([...declarations.values()].some(kind => ['action', 'run', 'var'].includes(kind))) throw new Error(`${path}: a stateful model cannot be classified as a pure helper library`);
   }
   if (!sameMembers(profileIds, profiles.map(profile => profile.id))) throw new Error('Generated profile inventory differs from claim registry');
-  const challenges = validateChallenges(manifest, { readSource, contracts, sources: new Set(paths), profileIds: new Set(profileIds), publicOnly, grandfathered });
+  const challenges = validateChallenges(manifest, { readSource, contracts, sources: new Set([...paths, ...manifest.kernel]), profileIds: new Set(profileIds), publicOnly, grandfathered });
   return { models: manifest.models.length, libraries: manifest.libraries.length, profiles: profileIds.length, invariants, regressions, generatedTraces, exportedRegressionTraces, vectorModels, generatedVectors, ...challenges };
 }
 

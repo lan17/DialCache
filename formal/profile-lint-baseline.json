@@ -1,7 +1,17 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "quintVersion": "0.32.0",
-  "kernelModules": [],
+  "kernelModules": [
+    "cache_rules",
+    "clock",
+    "encodings",
+    "flights",
+    "layer_policy",
+    "local_storage",
+    "remote_frames",
+    "request_memo",
+    "serving"
+  ],
   "profiles": [
     {
       "id": "core",
@@ -21,7 +31,9 @@
         "remoteCall",
         "remoteReadFailureCall",
         "requestLocalPair"
-      ]
+      ],
+      "libraryTransitions": [],
+      "compositionViolations": 11
     },
     {
       "id": "effects",
@@ -53,7 +65,12 @@
         "rollbackWall",
         "seedRemote",
         "tick"
-      ]
+      ],
+      "libraryTransitions": [
+        "cache_rules::deadlinePendingAt",
+        "cache_rules::fenceAllows"
+      ],
+      "compositionViolations": 78
     },
     {
       "id": "scope",
@@ -71,7 +88,9 @@
         "openContext",
         "releasePolicy",
         "startCall"
-      ]
+      ],
+      "libraryTransitions": [],
+      "compositionViolations": 39
     },
     {
       "id": "recovery",
@@ -97,7 +116,14 @@
         "resolveWith",
         "rollbackWall",
         "seedWith"
-      ]
+      ],
+      "libraryTransitions": [
+        "cache_rules::deadlinePendingAt",
+        "cache_rules::fenceAllows",
+        "cache_rules::freshAgeAllowed",
+        "cache_rules::recoveryAgeAllowed"
+      ],
+      "compositionViolations": 74
     },
     {
       "id": "policy",
@@ -117,7 +143,12 @@
         "seedRemote",
         "setFault",
         "startCall"
-      ]
+      ],
+      "libraryTransitions": [
+        "cache_rules::freshAgeAllowed",
+        "cache_rules::localEntryLiveAt"
+      ],
+      "compositionViolations": 45
     },
     {
       "id": "shadow",
@@ -151,7 +182,13 @@
         "setLogging",
         "shadowPolicy",
         "writeFault"
-      ]
+      ],
+      "libraryTransitions": [
+        "cache_rules::deadlinePendingAt",
+        "cache_rules::fenceAllows",
+        "cache_rules::freshAgeAllowed"
+      ],
+      "compositionViolations": 82
     },
     {
       "id": "admission",
@@ -171,15 +208,19 @@
         "rejectWith",
         "resolveWith",
         "seedWith"
-      ]
+      ],
+      "libraryTransitions": [
+        "cache_rules::deadlinePendingAt"
+      ],
+      "compositionViolations": 64
     },
     {
       "id": "layers",
       "model": "formal/dialcache-layers-conformance.qnt",
       "module": "dialcache_layers_conformance",
-      "tableSize": 1216,
+      "tableSize": 1387,
       "actions": 19,
-      "reachableDefinitions": 70,
+      "reachableDefinitions": 96,
       "stateAssigningDefinitions": 8,
       "stateAssigningDefinitionNames": [
         "changePolicy",
@@ -190,7 +231,16 @@
         "seedRemote",
         "startCall",
         "tick"
-      ]
+      ],
+      "libraryTransitions": [
+        "clock::advance",
+        "remote_frames::seedFrame",
+        "request_memo::closeScope",
+        "serving::begin",
+        "serving::invalidate",
+        "serving::settle"
+      ],
+      "compositionViolations": 0
     },
     {
       "id": "independent",
@@ -213,7 +263,14 @@
         "rejectAt",
         "resolveWith",
         "seedWith"
-      ]
+      ],
+      "libraryTransitions": [
+        "cache_rules::fenceAllows",
+        "cache_rules::freshAgeAllowed",
+        "cache_rules::recoveryAgeAllowed",
+        "cache_rules::retainedAgeAllowed"
+      ],
+      "compositionViolations": 61
     },
     {
       "id": "recovery-read",
@@ -237,7 +294,14 @@
         "resolveLoader",
         "seedWith",
         "writeFaultWith"
-      ]
+      ],
+      "libraryTransitions": [
+        "cache_rules::fenceAllows",
+        "cache_rules::freshAgeAllowed",
+        "cache_rules::localEntryLiveAt",
+        "cache_rules::recoveryAgeAllowed"
+      ],
+      "compositionViolations": 74
     },
     {
       "id": "local-failure",
@@ -255,7 +319,9 @@
         "remotePolicy",
         "resolve",
         "seeded"
-      ]
+      ],
+      "libraryTransitions": [],
+      "compositionViolations": 24
     },
     {
       "id": "runtime-boundaries",
@@ -272,7 +338,9 @@
         "finishSource",
         "initialize",
         "releasePolicy"
-      ]
+      ],
+      "libraryTransitions": [],
+      "compositionViolations": 58
     },
     {
       "id": "shadow-layers",
@@ -293,7 +361,13 @@
         "resolveAt",
         "seedAt",
         "setPolicy"
-      ]
+      ],
+      "libraryTransitions": [
+        "cache_rules::deadlinePendingAt",
+        "cache_rules::freshAgeAllowed",
+        "cache_rules::localEntryLiveAt"
+      ],
+      "compositionViolations": 98
     },
     {
       "id": "local-clock",
@@ -308,7 +382,11 @@
         "construct",
         "elapse",
         "init"
-      ]
+      ],
+      "libraryTransitions": [
+        "cache_rules::localEntryLiveOnGrid"
+      ],
+      "compositionViolations": 10
     },
     {
       "id": "source-budgets",
@@ -325,7 +403,12 @@
         "rejected",
         "release",
         "resolved"
-      ]
+      ],
+      "libraryTransitions": [
+        "cache_rules::localEntryLiveAt",
+        "cache_rules::sourceAcceptsAt"
+      ],
+      "compositionViolations": 35
     }
   ]
 }

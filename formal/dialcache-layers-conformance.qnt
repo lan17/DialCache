@@ -1,11 +1,17 @@
 module dialcache_layers_conformance {
-  import cache_rules.* from "./cache-rules"
   import conformance_observations.* from "./conformance-observations"
+  import serving as Serving from "./kernel/serving"
+  import request_memo as Memo from "./kernel/request-memo"
+  import remote_frames as Remote from "./kernel/remote-frames"
+  import flights as Flights from "./kernel/flights"
+  import clock as Clock from "./kernel/clock"
   // Composition boundary: request -> process flight -> local -> remote -> source.
   // Two entities x two operations; two instances; three persistent request scopes.
   // Fresh entries throughout this profile; policy/storage profiles cover expiry.
   // State: o is the replay projection. Memo/flight ownership, LRU membership,
   // remote frames and watermarks are predictions tested through public calls.
+  // Every rule is a kernel transition (formal/kernel); this module owns only the
+  // bounded state, the input choices and the environment steps.
   // Environment: explicit request closure, source settlement, remote seeding,
   // invalidation, and 1 ms clock steps. All serving TTLs are 60 seconds.
   // Bounds: four identities (two entities x two operations), two instances,
@@ -51,17 +57,8 @@ module dialcache_layers_conformance {
   pure val INITIAL_TIME_MS = 10000
   pure val SERVING_TTL_MS = 60000
 
-  // -- State and fixture helpers ---------------------------------------------
+  // -- Bounded state and layout ----------------------------------------------
 
-  type Source = {
-    instance: int,
-    key: int,
-    local: bool,
-    remote: bool,
-    fence: int,
-    result: int,
-    shared: bool
-  }
   type State = {
     o: Observation,
     now: int,
@@ -78,7 +75,7 @@ module dialcache_layers_conformance {
     remoteValues: List[int],
     created: List[int],
     watermark: List[int],
-    sources: List[Source],
+    sources: List[Flights::Source],
     owners: List[int],
     memoSlots: List[int],
     callerContexts: List[int],
@@ -88,149 +85,14 @@ module dialcache_layers_conformance {
   var input: { name: str, choice: int }
   pure def zeros(n: int): List[int] = 0.to(n - 1).fold(List(), (out, _) => out.append(0))
   pure def slots(n: int): List[int] = 0.to(n - 1).fold(List(), (out, _) => out.append(NO_OWNER))
+  // Input decoding: which instance each context lives on.
   pure def instance(context: int): int = if (context == OTHER_INSTANCE_REQUEST_CONTEXT
     or context == FRESH_OTHER_INSTANCE_CONTEXT) OTHER_INSTANCE else FIRST_INSTANCE
-  pure def persistent(context: int): bool = context < PERSISTENT_CONTEXTS
-  pure def active(state: State, context: int): bool = not(persistent(context)) or not(state.closed.nth(context))
-  // 0 all; 1 no request; 2 no local; 3 no remote; 4 request only; 5 no layers.
-  pure def requestEnabled(state: State): bool = state.policy != POLICY_NO_REQUEST and state.policy != POLICY_NO_LAYERS
-  pure def localEnabled(state: State): bool = Set(POLICY_ALL_LAYERS, POLICY_NO_REQUEST,
-    POLICY_NO_REMOTE).contains(state.policy)
-  pure def remoteEnabled(state: State): bool = state.remoteAvailable and Set(POLICY_ALL_LAYERS,
-    POLICY_NO_REQUEST, POLICY_NO_LOCAL).contains(state.policy)
-
-  // -- Local LRU and request memo publication --------------------------------
-
-  pure def touch(order: List[int], key: int): List[int] = order.select(k => k != key).append(key)
-  pure def putLocal(state: State, inst: int, key: int, value: int): State = {
-    val order = touch(state.lru.nth(inst), key)
-    val evicts = order.length() > state.capacity
-    val kept = if (evicts) order.slice(1, order.length()) else order
-    if (state.capacity == NO_LOCAL_CAPACITY) state else {
-      lru: state.lru.replaceAt(inst, kept),
-      localValues: (if (evicts) state.localValues.replaceAt(inst * KEYS_PER_INSTANCE + order.nth(0),
-        NO_CACHED_VALUE) else state.localValues).replaceAt(inst * KEYS_PER_INSTANCE + key, value),
-      ...state
-    }
-  }
-  pure def memoize(state: State, slot: int, value: int): State =
-    if (slot < 0 or state.closed.nth(slot / KEYS_PER_INSTANCE)) state else {
-      memo: state.memo.replaceAt(slot, value),
-      ...state
-    }
-  pure def result(state: State, slot: int, value: int): State =
-    memoize({
-      o: {
-        calls: state.o.calls.replaceAt(state.o.calls.length() - 1, value),
-        ...state.o
-      },
-      ...state
-    }, slot, value)
-
-  // -- Caller admission and layer traversal ----------------------------------
-
-  pure def start(state: State, inst: int, key: int, slot: int, participating: bool, read: bool): State = {
-    val shared = participating and (localEnabled(state) or remoteEnabled(state))
-    val index = state.sources.length()
-    {
-      sources: state.sources.append({
-        instance: inst,
-        key: key,
-        local: participating and localEnabled(state) and not(state.tracked and read),
-        remote: read,
-        fence: if (state.tracked and read) state.watermark.nth(key / OPERATIONS_PER_ENTITY) else 0,
-        result: CALL_PENDING,
-        shared: shared
-      }),
-      owners: state.owners.replaceAt(state.owners.length() - 1, index),
-      requestFlights: if (slot >= 0) state.requestFlights.replaceAt(slot, index) else state.requestFlights,
-      processFlights: if (shared) state.processFlights.replaceAt(inst * KEYS_PER_INSTANCE + key, index)
-        else state.processFlights,
-      o: { loaders: state.o.loaders + 1, ...state.o },
-      ...state
-    }
-  }
-  pure def begin(state: State, choice: int): State = {
-    val context = choice / KEYS_PER_INSTANCE
-    val key = choice % KEYS_PER_INSTANCE
-    val inst = instance(context)
-    val participating = active(state, context)
-    val slot = if (participating and persistent(context)
-      and requestEnabled(state)) context * KEYS_PER_INSTANCE + key else NO_OWNER
-    val requestOwner = if (slot < 0) NO_OWNER else state.requestFlights.nth(slot)
-    val memoValue = if (slot < 0) NO_CACHED_VALUE else state.memo.nth(slot)
-    val processOwner = if (participating and (localEnabled(state)
-      or remoteEnabled(state))) state.processFlights.nth(inst * KEYS_PER_INSTANCE + key) else NO_OWNER
-    val owner = if (requestOwner >= 0) requestOwner else if (memoValue == NO_CACHED_VALUE) processOwner else NO_OWNER
-    val withCaller = {
-      owners: state.owners.append(owner),
-      memoSlots: state.memoSlots.append(slot),
-      callerContexts: state.callerContexts.append(context),
-      callerKeys: state.callerKeys.append(key),
-      o: {
-        calls: state.o.calls.append(CALL_PENDING),
-        policyCalls: state.o.policyCalls + (if (participating) 1 else 0),
-        ...state.o
-      },
-      ...state
-    }
-    val localValue = if (participating
-      and localEnabled(state)) state.localValues.nth(inst * KEYS_PER_INSTANCE + key) else NO_CACHED_VALUE
-    val readsRemote = participating and remoteEnabled(state)
-    val remoteValue =
-      if (readsRemote and (not(state.tracked)
-        or fenceAllows(state.created.nth(key), state.watermark.nth(key / OPERATIONS_PER_ENTITY))))
-        state.remoteValues.nth(key)
-      else NO_CACHED_VALUE
-    val withRemoteObservation = if (readsRemote) {
-      o: {
-        reads: withCaller.o.reads + 1,
-        loads: withCaller.o.loads + (if (remoteValue > 0) 1 else 0),
-        ...withCaller.o
-      },
-      ...withCaller
-    } else withCaller
-    if (owner >= 0) {
-      requestFlights: if (slot < 0) withCaller.requestFlights else withCaller.requestFlights.replaceAt(slot, owner),
-      ...withCaller
-    }
-    else if (memoValue > 0) result(withCaller, slot, memoValue)
-    else if (localValue > 0) result({
-      lru: withCaller.lru.replaceAt(inst, touch(withCaller.lru.nth(inst), key)),
-      ...withCaller
-    }, slot, localValue)
-    else if (remoteValue > 0) result(if (localEnabled(state)) putLocal(withRemoteObservation, inst, key,
-      remoteValue) else withRemoteObservation, slot, remoteValue)
-    else start(withRemoteObservation, inst, key, slot, participating, readsRemote)
-  }
-
-  // -- Source settlement and owned publication -------------------------------
-
-  pure def settle(state: State, index: int, value: int): State = {
-    val source = state.sources.nth(index)
-    val success = value != SOURCE_ERROR
-    val write = success and source.remote and fenceAllows(state.now, source.fence)
-    val withSourceResult = {
-      sources: state.sources.replaceAt(index, { result: value, ...source }),
-      processFlights: state.processFlights.foldl(List(), (out, owner) =>
-        out.append(if (owner == index) NO_OWNER else owner)),
-      requestFlights: state.requestFlights.foldl(List(), (out, owner) =>
-        out.append(if (owner == index) NO_OWNER else owner)),
-      remoteValues: if (write) state.remoteValues.replaceAt(source.key, value) else state.remoteValues,
-      created: if (write) state.created.replaceAt(source.key, state.now) else state.created,
-      o: {
-        calls: finishOwnedCalls(state.o.calls, state.owners, index, value),
-        dumps: state.o.dumps + (if (write) 1 else 0),
-        writes: state.o.writes + (if (write) 1 else 0),
-        writeTtls: if (write) state.o.writeTtls.append(SERVING_TTL_MS) else state.o.writeTtls,
-        ...state.o
-      },
-      ...state
-    }
-    val withLocalPublication = if (success and source.local) putLocal(withSourceResult, source.instance,
-      source.key, value) else withSourceResult
-    if (not(success)) withLocalPublication else state.owners.indices().fold(withLocalPublication, (out, call) =>
-      if (state.owners.nth(call) == index) memoize(out, state.memoSlots.nth(call), value) else out)
+  pure val LAYOUT: Serving::Layout = {
+    keys: KEYS_PER_INSTANCE,
+    persistentContexts: PERSISTENT_CONTEXTS,
+    operationsPerEntity: OPERATIONS_PER_ENTITY,
+    servingTtlMs: SERVING_TTL_MS
   }
 
   // -- Public fixture inputs and external effects ----------------------------
@@ -267,7 +129,8 @@ module dialcache_layers_conformance {
   }
   action startCall(choice: int): bool = all {
     s.o.calls.length() < MAX_CALLERS,
-    s' = begin(s, choice),
+    s' = Serving::begin(s, LAYOUT, instance(choice / KEYS_PER_INSTANCE), choice % KEYS_PER_INSTANCE,
+      choice / KEYS_PER_INSTANCE),
     input' = { name: "beginCall", choice: choice }
   }
   action beginCall = {
@@ -275,7 +138,7 @@ module dialcache_layers_conformance {
     startCall(choice)
   }
   action finishSource(loader: int, value: int): bool = all {
-    s' = settle(s, loader, value),
+    s' = Serving::settle(s, LAYOUT, loader, value),
     input' = if (value == SOURCE_ERROR) { name: "rejectLoader", choice: loader }
       else { name: "resolveLoader", choice: loader * SOURCE_VALUE_COUNT + value }
   }
@@ -291,14 +154,7 @@ module dialcache_layers_conformance {
     finishSource(choice, SOURCE_ERROR)
   }
   action closeContext(context: int): bool = all {
-    s' = {
-      closed: s.closed.replaceAt(context, true),
-      memo: s.memo.indices().fold(s.memo, (out, slot) =>
-        if (slot / KEYS_PER_INSTANCE == context) out.replaceAt(slot, NO_CACHED_VALUE) else out),
-      requestFlights: s.requestFlights.indices().fold(s.requestFlights, (out, slot) =>
-        if (slot / KEYS_PER_INSTANCE == context) out.replaceAt(slot, NO_OWNER) else out),
-      ...s
-    },
+    s' = Memo::closeScope(s, context, KEYS_PER_INSTANCE),
     input' = { name: "closeScope", choice: context }
   }
   action closeScope = {
@@ -315,11 +171,7 @@ module dialcache_layers_conformance {
     changePolicy(choice)
   }
   action seedRemote(key: int, value: int): bool = all {
-    s' = {
-      remoteValues: s.remoteValues.replaceAt(key, value),
-      created: s.created.replaceAt(key, s.now),
-      ...s
-    },
+    s' = Remote::seedFrame(s, key, value),
     input' = { name: "seed", choice: key * SOURCE_VALUE_COUNT + value - 1 }
   }
   action seed = {
@@ -327,18 +179,7 @@ module dialcache_layers_conformance {
     seedRemote(choice / SOURCE_VALUE_COUNT, choice % SOURCE_VALUE_COUNT + VALUE_ONE)
   }
   action invalidateEntity(entity: int): bool = all {
-    s' = if (not(s.remoteAvailable)) {
-      o: { maintenance: s.o.maintenance.append("missing_remote"), ...s.o },
-      ...s
-    } else {
-      watermark: s.watermark.replaceAt(entity, s.now),
-      o: {
-        invalidations: s.o.invalidations + 1,
-        maintenance: s.o.maintenance.append("ok"),
-        ...s.o
-      },
-      ...s
-    },
+    s' = Serving::invalidate(s, entity),
     input' = { name: "invalidate", choice: entity }
   }
   action invalidate = {
@@ -346,7 +187,7 @@ module dialcache_layers_conformance {
     invalidateEntity(choice)
   }
   action tick = all {
-    s' = { now: s.now + 1, ...s },
+    s' = Clock::advance(s, 1),
     input' = { name: "tick", choice: -1 }
   }
 

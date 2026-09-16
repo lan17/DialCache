@@ -21,6 +21,16 @@
     "formal/cache-rules.qnt",
     "formal/cache-contract.qnt"
   ],
+  "kernel": [
+    "formal/kernel/encodings.qnt",
+    "formal/kernel/layer-policy.qnt",
+    "formal/kernel/request-memo.qnt",
+    "formal/kernel/local-storage.qnt",
+    "formal/kernel/remote-frames.qnt",
+    "formal/kernel/flights.qnt",
+    "formal/kernel/clock.qnt",
+    "formal/kernel/serving.qnt"
+  ],
   "models": [
     {
       "path": "formal/dialcache-core.qnt",
@@ -1764,19 +1774,19 @@
     {
       "id": "layers-process-flight-crosses-instance",
       "contract": "C11",
-      "source": "formal/dialcache-layers-conformance.qnt",
+      "source": "formal/kernel/flights.qnt",
       "model": "formal/dialcache-layers-conformance.qnt",
       "invariant": "sourceOwnershipNeverCrossesKeyOrInstance",
-      "before": "or remoteEnabled(state))) state.processFlights.nth(inst * KEYS_PER_INSTANCE + key) else NO_OWNER",
-      "after": "or remoteEnabled(state))) state.processFlights.nth(key) else NO_OWNER"
+      "before": "state.processFlights.nth(instance * keysPerInstance + key)",
+      "after": "state.processFlights.nth(key)"
     },
     {
       "id": "layers-late-memo-into-closed-scope",
       "contract": "C03",
-      "source": "formal/dialcache-layers-conformance.qnt",
+      "source": "formal/kernel/request-memo.qnt",
       "model": "formal/dialcache-layers-conformance.qnt",
       "invariant": "closedScopesHaveNoMemo",
-      "before": "if (slot < 0 or state.closed.nth(slot / KEYS_PER_INSTANCE)) state else {",
+      "before": "if (slot < 0 or state.closed.nth(slot / keysPerScope)) state else {",
       "after": "if (slot < 0) state else {"
     },
     {

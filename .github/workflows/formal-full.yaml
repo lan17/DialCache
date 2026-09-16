@@ -18,31 +18,6 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  kernel-pilot:
-    runs-on: ubuntu-latest
-    # Run 34916911057 took 15 minutes with the generation-lane and frozen-monitor
-    # measurements (7 to 9 minutes before them); 2x for a slow runner is 30, and
-    # 40 leaves margin. The pilot's per-process timeouts (300 s per Quint call,
-    # 600 s per generation attempt) only keep one hang from consuming the job.
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-      - uses: ./.github/actions/setup-validation
-        with:
-          quint: "true"
-          go: "true"
-      - name: Compare shared lifecycle histories and replay both ports
-        run: make kernel-pilot
-      - name: Preserve pilot sources, histories, native reports and faults
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: kernel-pilot-evidence
-          path: .formal-traces/kernel-pilot/
-          include-hidden-files: true
-          if-no-files-found: warn
-          retention-days: 14
-
   exploration:
     if: (github.event_name == 'schedule' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.exploration)
     runs-on: ubuntu-latest
@@ -341,7 +316,7 @@ jobs:
   # The mutation lanes count through their merge jobs: a merge succeeds only
   # when every shard's report is present, consistent and free of lost detections.
   formal-full:
-    needs: [check-models, generate, typescript-parity, symbolic, typescript-mutations-merge, go-parity, go-mutations-merge, exploration, kernel-pilot]
+    needs: [check-models, generate, typescript-parity, symbolic, typescript-mutations-merge, go-parity, go-mutations-merge, exploration]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -371,13 +346,6 @@ jobs:
         with:
           name: model-check-evidence
           path: formal-summary/model-check
-      - name: Collect kernel pilot report
-        if: always()
-        continue-on-error: true
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: kernel-pilot-evidence
-          path: formal-summary/kernel-pilot
       - name: Collect symbolic verification report
         if: always()
         continue-on-error: true
@@ -404,7 +372,6 @@ jobs:
             formal-summary/go/go-context.json
             formal-summary/go/go-replay-summary.json
             formal-summary/model-check/model-properties/report.json
-            formal-summary/kernel-pilot/report.json
             formal-summary/symbolic/report.json
             formal-summary/exploration/*/report.json
           include-hidden-files: true
@@ -413,7 +380,6 @@ jobs:
       - name: Require the model check, the generated corpus, both port replays and both merged mutation measurements
         env:
           CHECK_MODELS_RESULT: ${{ needs.check-models.result }}
-          KERNEL_PILOT_RESULT: ${{ needs.kernel-pilot.result }}
           GENERATE_RESULT: ${{ needs.generate.result }}
           TYPESCRIPT_RESULT: ${{ needs.typescript-parity.result }}
           TYPESCRIPT_MUTATIONS_MERGE_RESULT: ${{ needs.typescript-mutations-merge.result }}
@@ -424,7 +390,6 @@ jobs:
           EXPLORATION_REQUIRED: ${{ github.event_name == 'schedule' || inputs.exploration == true }}
         run: |
           test "$CHECK_MODELS_RESULT" = success
-          test "$KERNEL_PILOT_RESULT" = success
           test "$GENERATE_RESULT" = success
           test "$TYPESCRIPT_RESULT" = success
           test "$TYPESCRIPT_MUTATIONS_MERGE_RESULT" = success

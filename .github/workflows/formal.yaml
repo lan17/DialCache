@@ -43,3 +43,34 @@ jobs:
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 14
+
+  # A profile composed from the kernel library must reproduce every history its
+  # previous text generated. The reference corpus comes from the merge base
+  # with the pull request's base branch; a push to main has no reference.
+  differential:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-validation
+      - name: Detect changes requiring fresh Quint artifact generation
+        id: fixture-scope
+        run: node .github/scripts/fixture-scope.mjs
+      - uses: ./.github/actions/setup-quint
+        if: steps.fixture-scope.outputs.recompute == 'true'
+      - name: Replay every composed profile's reference corpus through the pull request's text
+        if: steps.fixture-scope.outputs.recompute == 'true'
+        env:
+          DIFFERENTIAL_REFERENCE: origin/${{ github.base_ref }}
+        run: make differential
+      - name: Preserve differential reports
+        if: always() && steps.fixture-scope.outputs.recompute == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: formal-differential
+          path: .formal-traces/differential/*/report.json
+          if-no-files-found: warn
+          retention-days: 14

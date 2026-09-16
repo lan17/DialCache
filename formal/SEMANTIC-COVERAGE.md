@@ -46,10 +46,10 @@ where to retain behavioral, primitive-vector and mutation results.
 
 ## Model assurance
 
-The [shared lifecycle pilot](./kernel/README.md) reports exact-history
-observation agreement, native replay and kernel property challenges separately. Its
-sampled invariant runs are model-only evidence; its fixed histories reuse
-existing obligations and add no semantic completeness percentage.
+The [kernel library](./kernel/README.md) restates no coverage: a composed
+profile's cases, witnesses and regressions count exactly as before, and the
+corpus differential that admits a rewrite is migration evidence, adding no
+semantic completeness percentage.
 
 A model's transition helpers, independent properties and implementation replay
 answer different questions. The shared `cache-rules.qnt` judgments own age,

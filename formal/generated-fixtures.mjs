@@ -145,7 +145,9 @@ async function exportModel(model, requests, directory, settings) {
   };
   referencedActions(declarations.get('step')?.expr);
   // Copy source/imports to an ignored directory; all computed state stays in Quint.
-  for (const file of readdirSync(resolve(root, 'formal')).filter(file => file.endsWith('.qnt'))) copyFileSync(resolve(root, 'formal', file), resolve(directory, file));
+  for (const file of readdirSync(resolve(root, 'formal')).filter(file => file.endsWith('.qnt'))) copyFileSync(resolve(root, 'formal', file), resolve(directory, file))
+  mkdirSync(resolve(directory, 'kernel'), { recursive: true });
+  for (const file of readdirSync(resolve(root, 'formal/kernel')).filter(file => file.endsWith('.qnt'))) copyFileSync(resolve(root, 'formal/kernel', file), resolve(directory, 'kernel', file));;
   const input = resolve(directory, basename(model));
   const named = requests.filter(r => r.recipe.regression);
   for (const request of named) {
@@ -202,7 +204,7 @@ async function exportModel(model, requests, directory, settings) {
 function inputs(book) {
   const execution = readExecution();
   return Object.fromEntries([...new Set([recipePath, generator, 'formal/execution.mjs', 'formal/execution.json', 'formal/profiles.json',
-    ...execution.libraries, ...book.artifacts.flatMap(a => a.recipes.map(r => r.model ?? a.model))])].sort().map(path => [path, hash(read(path))]));
+    ...execution.libraries, ...execution.kernel, ...book.artifacts.flatMap(a => a.recipes.map(r => r.model ?? a.model))])].sort().map(path => [path, hash(read(path))]));
 }
 export function verifyFixtures(book = validateRecipes(json(recipePath))) {
   const lock = json(lockPath);

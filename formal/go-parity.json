@@ -9,9 +9,9 @@
   },
   "inputs": {
     "semanticCasesSha256": "6f57159edeb9ec1a54e22953562cb38ed4bafe067432fc20426173ca2d4173aa",
-    "executionSha256": "1d025fe0ac5b68a685ae4969c8c4ab4da9157c9c409fabe0d5ef337d18c3b96a",
-    "sourceAuditSha256": "3b074690114d57db2fd0b259dd0c0611f1b8be6f49d3b65ab6adcb854e3147f4",
-    "quintCaseAuditSha256": "8fad76f6d14655d735864cd43532b7160553d38810a67311eba9523d9235827d",
+    "executionSha256": "eb37fea3d0bb9d8d99e528dab0ef45d7959221031be6240711691d8646ed71b3",
+    "sourceAuditSha256": "619d73cb979441795e29fa6143ec4344cfdef35338f3dc30b4ec0bb308457ba0",
+    "quintCaseAuditSha256": "e0b5119fcfdded17805af45f9825714f89d093c1ddbdf1dbda0eb05cb1b423a1",
     "featureCoverageSha256": "56eedfa865682db6ad8e73b8673c7dac1c30d301e9bce3390246d6994aba9dcb",
     "coverageWitnessesSha256": "8fc8ab123150fdec059f5b75f84172d39af80d08d7a4211fa88c63c5a3f2874b",
     "profilesSha256": "34b1d77a25a92b0d5d6703a379902fae95f51227dca201613233592ba4f590c8"
@@ -1699,10 +1699,10 @@
         "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
       },
       "quintDefinitions": [
-        "formal/dialcache-layers-conformance.qnt:putLocal",
-        "formal/dialcache-layers-conformance.qnt:start",
-        "formal/dialcache-layers-conformance.qnt:begin",
-        "formal/dialcache-layers-conformance.qnt:settle"
+        "formal/kernel/local-storage.qnt:putLocal",
+        "formal/kernel/flights.qnt:registerSource",
+        "formal/kernel/serving.qnt:begin",
+        "formal/kernel/serving.qnt:settle"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -4071,7 +4071,7 @@
       },
       "quintDefinitions": [
         "formal/dialcache-layers-conformance.qnt:invalidate",
-        "formal/dialcache-layers-conformance.qnt:begin"
+        "formal/kernel/remote-frames.qnt:readableFrame"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -4111,7 +4111,7 @@
         "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
       },
       "quintDefinitions": [
-        "formal/dialcache-layers-conformance.qnt:begin"
+        "formal/kernel/remote-frames.qnt:readableFrame"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -18276,7 +18276,7 @@
   ],
   "reviewedTestAndDocumentationAudit": {
     "path": "formal/source-audit.json",
-    "sha256": "3b074690114d57db2fd0b259dd0c0611f1b8be6f49d3b65ab6adcb854e3147f4",
+    "sha256": "619d73cb979441795e29fa6143ec4344cfdef35338f3dc30b4ec0bb308457ba0",
     "sourceFiles": 44,
     "status": "reviewed-applicability-not-execution",
     "limitations": "These rows review Go applicability for the public documentation and ordinary test files in source-audit.json sources, inheriting their C/W/E/B/X classifications. They map subjects to native artifacts without claiming one Go test per TypeScript assertion or turning documentation counts into executed coverage. The same audit hash also binds reviewedGuides for formal and Go documentation; those guide reviews are freshness/scope records, not additional behavioral applicability rows. Per-case Quint and replay evidence is recorded separately.",
@@ -19658,14 +19658,14 @@
     {
       "id": "B03",
       "boundary": "Native value conventions",
-      "existingTreatment": "Shared object references, constructors/prototypes, JavaScript JSON coercion/lossiness, and default Node deep equality are not universal port requirements. Each binding documents its supported value domain and codec; W01–W09 apply wherever it shares Redis.",
+      "existingTreatment": "Shared object references, constructors/prototypes, JavaScript JSON coercion/lossiness, and default Node deep equality are not universal port requirements. Each binding documents its supported value domain and codec; W01\u2013W09 apply wherever it shares Redis.",
       "goStatus": "reviewed-native-binding",
       "goTreatment": "JSONCodec[any] supports the explicit portable JSON scalar-string domain plus Absent. JSONObject preserves insertion order when encoding; Go maps have no insertion order. Typed destinations impose Go field and numeric rules. Lone UTF-16 surrogate JSON escapes are rejected rather than silently replaced."
     },
     {
       "id": "X01",
       "boundary": "Optional observability integration",
-      "existingTreatment": "Backend metric names, histograms, exporter registry compatibility, coalescing-state inspection, bounded JSON logging, and telemetry timing precision are covered by implementation/integration tests. Current portable claims include C57–C60 diagnostic semantics and failure isolation; exact exporter schemas, buckets, registry compatibility, timing precision, and logging resource limits remain separate.",
+      "existingTreatment": "Backend metric names, histograms, exporter registry compatibility, coalescing-state inspection, bounded JSON logging, and telemetry timing precision are covered by implementation/integration tests. Current portable claims include C57\u2013C60 diagnostic semantics and failure isolation; exact exporter schemas, buckets, registry compatibility, timing precision, and logging resource limits remain separate.",
       "goStatus": "explicit-native-binding-adaptation",
       "goTreatment": "Portable diagnostics require shared generated histories. Native metric names, labels, buckets, units, counts and bounded logging have focused Go tests. NewPrometheusMetricsWithBindings reuses caller-owned individually registered CounterVec/HistogramVec objects after checking declared construction schema, public descriptors and registry identity; new collectors register atomically. Because client_golang exposes no bucket configuration for an empty histogram, accurate caller-supplied schema is an explicit binding precondition; construction must not race with collector registration/reconfiguration. No private-field inspection or temporary series is used.",
       "nativeTests": [
@@ -19680,7 +19680,7 @@
     {
       "id": "X02",
       "boundary": "Resource/algorithm implementation",
-      "existingTreatment": "Compression level tuning, native zstd availability/decoder quirks, huge payloads/512 MiB guard, decompression bombs, local allocation strategy, CPU/memory/throughput, connection lifecycle, retry APIs, and command queue limits remain implementation/integration tests. Envelope interoperability remains W06–W08.",
+      "existingTreatment": "Compression level tuning, native zstd availability/decoder quirks, huge payloads/512 MiB guard, decompression bombs, local allocation strategy, CPU/memory/throughput, connection lifecycle, retry APIs, and command queue limits remain implementation/integration tests. Envelope interoperability remains W06\u2013W08.",
       "goStatus": "reviewed-native-binding",
       "goTreatment": "Go uses native sparse maps and go-redis/zstd libraries with explicit decoder resource limits and caller-owned clients. Wire representation and round trips are shared-vector/integration checked; exact compressed bytes, allocation strategy, throughput and operating-system exhaustion are native boundaries. Quint computes envelope and size-selection behavior using native codec lengths that both test bindings independently verify. Different native lengths may cause compressed/not_smaller diagnostic differences at size boundaries; logical payload identity and wrapper rules remain shared."
     }
