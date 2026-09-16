@@ -295,7 +295,6 @@ export const grandfatheredReproducerBacklog = Object.freeze([
   'independent-source-wrong-clock',
   'independent-source-wrong-owner',
   'tracked-read-inclusive-fence',
-  'policy-inclusive-remote-freshness',
   'core-unhealthy-local-read-hits',
   'core-tracked-fallback-warms-local',
   'runtime-policy-coalesce-defaults-off',

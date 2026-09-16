@@ -116,13 +116,29 @@ function shadowHistory(steps, path) {
   return frames;
 }
 
-// The shadow in the model's own field names (dialcache-policy-conformance.qnt).
+// The shadow in the model's own field names: dialcache-policy-conformance.qnt
+// composed from formal/kernel. The wall clock is now plus skew; the pending
+// caller is the gate's one held entry (its policy call index is its caller
+// index, every caller makes a policy call); the single local slot is the one
+// non-empty per-key slot of a capacity-1 instance, whose LRU order names it;
+// the frames keep their names; the process registry holds the pending shared
+// source of each key; a source record carries the identity it serves, the
+// local TTL it warms with (0 when the local layer was off), the retention its
+// refill is written with (0 when it does not refill), and its outcome; the
+// freshness a reply was read under is not a source's to keep.
+const KEYS = 2;
 function modelView(shadow) {
-  return { now: shadow.now, wall: shadow.wall, overlay: shadow.overlay, providerFailed: shadow.providerFailed, readFailed: shadow.readFailed,
-    dumpFailed: shadow.dumpFailed, writeFailed: shadow.writeFailed, policyCall: shadow.call, key: shadow.key,
-    localKey: shadow.local.key, localValue: shadow.local.value, localExpires: shadow.local.expires,
-    remoteValues: shadow.remote.map(frame => frame.value), remoteCreated: shadow.remote.map(frame => frame.created), remoteExpires: shadow.remote.map(frame => frame.expires),
-    sources: shadow.sources.map(({ key, localTtl, remoteTtl, retention, shared, result }) => ({ key, localTtl, remoteTtl, retention, shared, result })) };
+  const { local } = shadow;
+  const slot = value => Array.from({ length: KEYS }, (_, key) => key === local.key && local.value > 0 ? value : 0);
+  const registered = key => shadow.sources.findIndex(source => source.result === 0 && source.shared && source.key === key);
+  return { now: shadow.now, skew: shadow.wall - shadow.now, policy: shadow.overlay, providerFailed: shadow.providerFailed, readFailed: shadow.readFailed,
+    dumpFailed: shadow.dumpFailed, writeFailed: shadow.writeFailed,
+    held: shadow.call < 0 ? [] : [{ policyCall: shadow.call, caller: shadow.call, call: { instance: 0, key: shadow.key, context: 0, enabled: true, keyFailed: false } }],
+    localValues: slot(local.value), localExpires: slot(local.expires), lru: [local.value > 0 ? [local.key] : []],
+    remoteValues: shadow.remote.map(frame => frame.value), created: shadow.remote.map(frame => frame.created), expires: shadow.remote.map(frame => frame.expires),
+    processFlights: Array.from({ length: KEYS }, (_, key) => registered(key)),
+    sources: shadow.sources.map(({ key, localTtl, remoteTtl, retention, shared, result }) =>
+      ({ instance: 0, key, localMs: localTtl, fence: 0, retentionMs: remoteTtl > 0 ? retention : 0, result, shared })) };
 }
 
 // A history projected to its public channels carries nothing to compare; any

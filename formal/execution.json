@@ -31,6 +31,9 @@
     "formal/kernel/policy-gate.qnt",
     "formal/kernel/runtime-policy.qnt",
     "formal/kernel/serving.qnt",
+    "formal/kernel/policy-overlay.qnt",
+    "formal/kernel/config-errors.qnt",
+    "formal/kernel/receipts.qnt",
     "formal/kernel/diagnostics.qnt",
     "formal/kernel/deadlines.qnt"
   ],
@@ -467,7 +470,6 @@
         "registeredSourcesArePending",
         "sharedSourcesKeepRegistration",
         "policyResolutionErrorsHaveStableClassification",
-        "eachFailedPolicyReplyHasOneDiagnostic",
         "localHitsRespectInsertionExpiry",
         "remoteHitsRespectAcquiredFreshness"
       ],
@@ -1363,20 +1365,35 @@
     {
       "id": "policy-inclusive-local-expiry",
       "contract": "C09",
-      "source": "formal/dialcache-policy-conformance.qnt",
+      "source": "formal/kernel/local-storage.qnt",
       "model": "formal/dialcache-policy-conformance.qnt",
       "invariant": "localHitsRespectInsertionExpiry",
-      "before": "val localHit = localEligible and localEntryLiveAt(s.now, s.localExpires)",
-      "after": "val localHit = localEligible and s.now <= s.localExpires",
+      "before": "if (localEntryLiveAt(state.now, state.localExpires.nth(slot))) state.localValues.nth(slot) else NO_VALUE",
+      "after": "if (state.now <= state.localExpires.nth(slot)) state.localValues.nth(slot) else NO_VALUE",
       "reproducer": {
         "kind": "exported-regression",
         "run": "localHitDoesNotRenewInsertionTtlTest",
         "failure": "s.o.calls == List(VALUE_ONE, VALUE_ONE, CALL_PENDING) and s.o.loaders == 2",
         "family": "inclusive-expiry-boundary",
         "profiles": [
-          "policy"
+          "policy",
+          "source-budgets"
         ],
-        "exclusions": {}
+        "exclusions": {
+          "core": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
+          "effects": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
+          "recovery": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
+          "shadow": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
+          "admission": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
+          "independent": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
+          "recovery-read": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
+          "local-failure": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
+          "shadow-layers": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
+          "local-clock": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
+          "scope": "Composes the request-only projection, which never reads local storage.",
+          "layers": "Composes local storage, but its 60 s entries never reach their insertion expiry within the bound of 1 ms ticks.",
+          "runtime-boundaries": "Composes local storage, but no input advances the clock, so no entry reaches its expiry."
+        }
       }
     },
     {
@@ -1527,11 +1544,36 @@
     {
       "id": "policy-inclusive-remote-freshness",
       "contract": "C22",
-      "source": "formal/dialcache-policy-conformance.qnt",
+      "source": "formal/kernel/remote-frames.qnt",
       "model": "formal/dialcache-policy-conformance.qnt",
       "invariant": "remoteHitsRespectAcquiredFreshness",
-      "before": "remoteEligible and freshAgeAllowed(s.remoteCreated.nth(s.key), s.wall, remoteTtl)",
-      "after": "remoteEligible and s.remoteCreated.nth(s.key) <= s.wall and s.wall - s.remoteCreated.nth(s.key) <= remoteTtl"
+      "before": "freshAgeAllowed(state.created.nth(key), Clock::wallOf(state), freshMs)",
+      "after": "state.created.nth(key) <= Clock::wallOf(state) and Clock::wallOf(state) - state.created.nth(key) <= freshMs",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "exactRemoteFreshBoundaryStartsSourceTest",
+        "failure": "s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.loaders == 2 and s.o.loads == 0 and s.expires.nth(0) == DEFAULT_RETENTION_MS",
+        "family": "inclusive-freshness-boundary",
+        "profiles": [
+          "policy"
+        ],
+        "exclusions": {
+          "core": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
+          "effects": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
+          "recovery": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
+          "shadow": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
+          "admission": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
+          "independent": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
+          "recovery-read": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
+          "local-failure": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
+          "shadow-layers": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
+          "local-clock": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
+          "scope": "Composes the request-only projection, which never reads a remote frame.",
+          "source-budgets": "Composes the local projection, which never reads a remote frame.",
+          "layers": "Composes remote frames, but its 60 s freshness is never reached within the bound of 1 ms ticks.",
+          "runtime-boundaries": "Composes remote frames, but no input advances the clock, so no frame ages to its freshness boundary."
+        }
+      }
     },
     {
       "id": "shadow-inclusive-c0-freshness",
@@ -2089,7 +2131,6 @@
     "independent-source-wrong-clock",
     "independent-source-wrong-owner",
     "tracked-read-inclusive-fence",
-    "policy-inclusive-remote-freshness",
     "core-unhealthy-local-read-hits",
     "core-tracked-fallback-warms-local",
     "runtime-policy-coalesce-defaults-off",

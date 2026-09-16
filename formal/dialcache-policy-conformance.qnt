@@ -1,253 +1,176 @@
 module dialcache_policy_conformance {
-  import cache_rules.* from "./cache-rules"
   import conformance_observations.* from "./conformance-observations"
+  import encodings.* from "./kernel/encodings"
+  import calls.* from "./kernel/calls"
+  import layer_policy.* from "./kernel/layer-policy"
+  import policy_overlay as Overlay from "./kernel/policy-overlay"
+  import config_errors as ConfigErrors from "./kernel/config-errors"
+  import receipts as Receipts from "./kernel/receipts"
+  import serving as Serving from "./kernel/serving"
+  import remote_frames as Remote from "./kernel/remote-frames"
+  import flights as Flights from "./kernel/flights"
+  import clock as Clock from "./kernel/clock"
+  import policy_gate as Gate from "./kernel/policy-gate"
   // Two logical keys, one process-local slot, untracked Redis. At most one
   // provider reply is held at a time, but accepted sources can overlap and
   // settle in either order. Every source owns its accepted publication policy.
-  // State: o is the replay projection. Cache entries, source ownership, and
-  // accepted publication policies are predictions checked by later calls.
+  // State: o is the replay projection and policyErrors the drivers' policy
+  // diagnostics channel. Cache entries, source ownership and captured
+  // publication policies are predictions checked by later calls.
   // Environment: untracked Redis, separate wall/elapsed clocks, held policy
   // replies and sources, injectable provider/read/dump/write failures.
   // Bounds: two keys, one local slot, twelve callers; no source deadline.
+  // Every rule is a kernel transition (formal/kernel): the layered traversal,
+  // whose sources carry the TTLs of the reply that started them, the overlay
+  // decoder (policy_overlay), the config error record and the receipt of the
+  // latest release. This module owns the bounded state, the input choices,
+  // the guards, the properties and the regressions.
 
   // -- Stable overlay, outcome, and duration encodings ------------------------
+  // The overlay codes are the library's (policy_overlay), named here as the
+  // regressions read them.
 
-  pure val POLICY_INHERIT = 0
-  pure val POLICY_LOCAL_TTL_TWO_SECONDS = 1
-  pure val POLICY_REMOTE_TTL_TWO_SECONDS = 2
-  pure val POLICY_NO_LOCAL = 3
-  pure val POLICY_NO_REMOTE = 4
-  pure val POLICY_INVALID_LOCAL_TTL = 5
-  pure val POLICY_INVALID_REMOTE_TTL = 6
-  pure val POLICY_RECOVERY_TWO_SECONDS = 7
-  pure val POLICY_NO_SERVING = 8
-  pure val POLICY_REMOTE_FOUR_SECONDS_NO_RECOVERY = 9
-  pure val INDEPENDENT_POLICY_OFFSET = 10
-  pure val POLICY_INVALID_READ_BUDGET = 20
-  pure val POLICY_INVALID_LOCAL_RAMP = 21
-  pure val POLICY_INVALID_REMOTE_RAMP = 22
-  pure val POLICY_INVALID_RECOVERY_AGE = 23
-  pure val POLICY_NEGATIVE_RECOVERY_AGE = 24
-  pure val POLICY_INVALID_SHADOW_RAMP = 25
-  pure val NO_OWNER = -1
-  pure val NO_CACHED_VALUE = 0
-  pure val DISABLED_TTL_MS = 0
+  pure val POLICY_INHERIT = Overlay::INHERIT
+  pure val POLICY_LOCAL_TTL_TWO_SECONDS = Overlay::LOCAL_TTL_TWO_SECONDS
+  pure val POLICY_REMOTE_TTL_TWO_SECONDS = Overlay::REMOTE_TTL_TWO_SECONDS
+  pure val POLICY_NO_LOCAL = Overlay::NO_LOCAL
+  pure val POLICY_NO_REMOTE = Overlay::NO_REMOTE
+  pure val POLICY_INVALID_LOCAL_TTL = Overlay::INVALID_LOCAL_TTL
+  pure val POLICY_INVALID_REMOTE_TTL = Overlay::INVALID_REMOTE_TTL
+  pure val POLICY_RECOVERY_TWO_SECONDS = Overlay::RECOVERY_TWO_SECONDS
+  pure val POLICY_NO_SERVING = Overlay::NO_SERVING
+  pure val POLICY_REMOTE_FOUR_SECONDS_NO_RECOVERY = Overlay::REMOTE_FOUR_SECONDS_NO_RECOVERY
+  pure val INDEPENDENT_POLICY_OFFSET = Overlay::INDEPENDENT_OFFSET
+  pure val POLICY_INVALID_READ_BUDGET = Overlay::INVALID_READ_BUDGET
+  pure val POLICY_INVALID_LOCAL_RAMP = Overlay::INVALID_LOCAL_RAMP
+  pure val POLICY_INVALID_REMOTE_RAMP = Overlay::INVALID_REMOTE_RAMP
+  pure val POLICY_INVALID_RECOVERY_AGE = Overlay::INVALID_RECOVERY_AGE
+  pure val POLICY_NEGATIVE_RECOVERY_AGE = Overlay::NEGATIVE_RECOVERY_AGE
+  pure val POLICY_INVALID_SHADOW_RAMP = Overlay::INVALID_SHADOW_RAMP
   pure val HALF_SECOND_MS = 500
   pure val ONE_SECOND_MS = 1000
   pure val TWO_SECONDS_MS = 2000
   pure val FOUR_SECONDS_MS = 4000
   pure val DEFAULT_RETENTION_MS = 5000
+  pure val INITIAL_WALL_MS = 100000
   pure val MAX_CALLERS = 12
   pure val SOURCE_VALUE_COUNT = 7
   pure val MAX_RESOLVE_CHOICE = 84
   pure val FAULT_HEALTHY = 0
   pure val FAULT_FAILED = 1
 
-  // -- State and initial environment -----------------------------------------
+  // -- Bounded state and layout ----------------------------------------------
 
-  type Source = {
-    key: int,
-    localTtl: int,
-    remoteTtl: int,
-    retention: int,
-    shared: bool,
-    result: int
-  }
-  type LocalReadReceipt = { eligible: bool, observed: int, expires: int, hit: bool }
-  type RemoteReadReceipt = { eligible: bool, created: int, observed: int, fresh: int, hit: bool }
   type State = {
     o: Observation,
-    policyErrors: List[{ layer: str, errorType: str }],
-    policyReplies: List[{ providerFailed: bool, invalidBudget: bool }],
-    localReadReceipts: List[LocalReadReceipt],
-    remoteReadReceipts: List[RemoteReadReceipt],
+    policyErrors: List[ConfigErrors::PolicyError],
     now: int,
-    wall: int,
-    policyCall: int,
-    overlay: int,
-    key: int,
-    localKey: int,
-    localValue: int,
-    localExpires: int,
-    remoteValues: List[int],
-    remoteCreated: List[int],
-    remoteExpires: List[int],
-    sources: List[Source],
-    owners: List[int],
-    registered: List[int],
+    skew: int,
+    policy: int,
     providerFailed: bool,
     readFailed: bool,
     dumpFailed: bool,
-    writeFailed: bool
+    writeFailed: bool,
+    remoteAvailable: bool,
+    tracked: bool,
+    capacity: int,
+    closed: List[bool],
+    memo: List[int],
+    requestFlights: List[int],
+    processFlights: List[int],
+    localValues: List[int],
+    localExpires: List[int],
+    lru: List[List[int]],
+    remoteValues: List[int],
+    created: List[int],
+    expires: List[int],
+    watermark: List[int],
+    sources: List[Serving::LayeredSource],
+    owners: List[int],
+    memoSlots: List[int],
+    held: List[Gate::Held],
+    receipt: Receipts::Receipt
   }
   var s: State
   // Recorded environment commands are replayable in sampled and fixed runs.
   var input: { name: str, choice: int }
+  // Two keys of one entity on one instance, no request scope (context 0 is a
+  // fresh scope without a memo row), one local slot (capacity 1), untracked
+  // remote frames; the drivers' fixture configures 1 s local and remote TTLs
+  // and a 5 s stale-on-error maximum, the baseline every overlay resolves
+  // against (formal/replay/features.mjs policy).
+  pure val LAYOUT: Serving::Layout =
+    { keysPerInstance: 2, keysPerScope: 1, persistentContexts: 0, operationsPerEntity: 2, probeSourceScope: false }
+  pure val BASELINE: Ttls = { localMs: ONE_SECOND_MS, freshMs: ONE_SECOND_MS, retentionMs: DEFAULT_RETENTION_MS }
+  // Input decoding: every caller is enabled and asks for one key.
+  pure def call(key: int): Call = { instance: 0, key: key, context: 0, enabled: true, keyFailed: false }
+
   action init = all {
     input' = { name: "init", choice: -1 },
     s' = {
       o: empty,
       policyErrors: List(),
-      policyReplies: List(), localReadReceipts: List(), remoteReadReceipts: List(),
       now: 0,
-      wall: 100000,
-      policyCall: NO_OWNER,
-      overlay: POLICY_INHERIT,
-      key: 0,
-      localKey: 0,
-      localValue: NO_CACHED_VALUE,
-      localExpires: 0,
-      remoteValues: List(NO_CACHED_VALUE, NO_CACHED_VALUE),
-      remoteCreated: List(0, 0),
-      remoteExpires: List(0, 0),
-      sources: List(),
-      owners: List(),
-      registered: List(NO_OWNER, NO_OWNER),
+      skew: INITIAL_WALL_MS,
+      policy: POLICY_INHERIT,
       providerFailed: false,
       readFailed: false,
       dumpFailed: false,
-      writeFailed: false
+      writeFailed: false,
+      remoteAvailable: true,
+      tracked: false,
+      capacity: 1,
+      closed: List(),
+      memo: List(),
+      requestFlights: List(),
+      processFlights: List(NO_OWNER, NO_OWNER),
+      localValues: List(NO_VALUE, NO_VALUE),
+      localExpires: List(0, 0),
+      lru: List(List()),
+      remoteValues: List(NO_VALUE, NO_VALUE),
+      created: List(0, 0),
+      expires: List(0, 0),
+      watermark: List(0),
+      sources: List(),
+      owners: List(),
+      memoSlots: List(),
+      held: List(),
+      receipt: Receipts::NO_RECEIPT
     }
   }
 
-  // -- Effective policy for the pending provider reply -----------------------
-
-  // Choices 10..19 repeat the same sparse overlays with coalescing disabled.
-  val baseOverlay = if (s.overlay < POLICY_INVALID_READ_BUDGET) s.overlay % INDEPENDENT_POLICY_OFFSET
-    else POLICY_INHERIT
-  val localTtl =
-    if (s.providerFailed or s.overlay == POLICY_INVALID_READ_BUDGET
-      or s.overlay == POLICY_INVALID_LOCAL_RAMP
-      or Set(POLICY_NO_LOCAL, POLICY_INVALID_LOCAL_TTL, POLICY_NO_SERVING).contains(baseOverlay))
-      DISABLED_TTL_MS
-    else if (baseOverlay == POLICY_LOCAL_TTL_TWO_SECONDS) TWO_SECONDS_MS
-    else ONE_SECOND_MS
-  val remoteTtl =
-    if (s.providerFailed or s.overlay == POLICY_INVALID_READ_BUDGET
-      or s.overlay == POLICY_INVALID_REMOTE_RAMP
-      or Set(POLICY_NO_REMOTE, POLICY_INVALID_REMOTE_TTL, POLICY_NO_SERVING).contains(baseOverlay))
-      DISABLED_TTL_MS
-    else if (baseOverlay == POLICY_REMOTE_TTL_TWO_SECONDS) TWO_SECONDS_MS
-    else if (baseOverlay == POLICY_REMOTE_FOUR_SECONDS_NO_RECOVERY) FOUR_SECONDS_MS
-    else ONE_SECOND_MS
-  val retention =
-    if (s.overlay == POLICY_INVALID_RECOVERY_AGE or s.overlay == POLICY_NEGATIVE_RECOVERY_AGE)
-      ONE_SECOND_MS
-    else if (baseOverlay == POLICY_RECOVERY_TWO_SECONDS) TWO_SECONDS_MS
-    else if (baseOverlay == POLICY_REMOTE_FOUR_SECONDS_NO_RECOVERY) FOUR_SECONDS_MS else DEFAULT_RETENTION_MS
-  val pendingSources = s.sources.indices().filter(i => s.sources.nth(i).result == CALL_PENDING)
-
   // -- Caller admission and layer traversal ----------------------------------
 
-  pure def begin(state: State, key: int): State = {
-    key: key,
-    policyCall: state.o.calls.length(),
-    owners: state.owners.append(NO_OWNER),
-    o: {
-      calls: state.o.calls.append(CALL_PENDING),
-      policyCalls: state.o.policyCalls + 1,
-      ...state.o
-    },
-    ...state
-  }
   action startCall(key: int): bool = all {
-    s' = begin(s, key),
+    s' = Serving::admit(s, LAYOUT, call(key)),
     input' = { name: "beginCall", choice: key }
   }
   action beginCall = {
     nondet choice = Set(0, 1).oneOf()
     all {
-      s.policyCall == NO_OWNER,
+      not(Gate::holding(s)),
       s.o.calls.length() < MAX_CALLERS,
       startCall(choice)
     }
   }
+  // The held reply resolves against the overlay in force: the traversal runs
+  // with the decoded layers and TTLs, the receipt records the layer that
+  // served, and a failed reply is reported once on the policy-error channel.
   action releasePolicy = all {
-    s.policyCall >= 0,
-    val shared = (s.overlay < INDEPENDENT_POLICY_OFFSET or s.overlay >= POLICY_INVALID_READ_BUDGET)
-      and (localTtl > 0 or remoteTtl > 0)
-    val joinsFlight = shared and s.registered.nth(s.key) >= 0
-    // Flight admission precedes reading the first participating cache layer.
-    val localEligible = not(joinsFlight) and localTtl > 0 and s.localKey == s.key and s.localValue > 0
-    val localHit = localEligible and localEntryLiveAt(s.now, s.localExpires)
-    val readsRemote = not(joinsFlight) and not(localHit) and remoteTtl > 0
-    val remoteEligible = readsRemote and not(s.readFailed) and s.remoteValues.nth(s.key) > 0
-      and s.now < s.remoteExpires.nth(s.key)
-    val remoteHit = remoteEligible and freshAgeAllowed(s.remoteCreated.nth(s.key), s.wall, remoteTtl)
-    val hitValue = if (localHit) s.localValue else if (remoteHit) s.remoteValues.nth(s.key) else NO_CACHED_VALUE
-    val startsSource = not(joinsFlight) and hitValue == NO_CACHED_VALUE
-    val owner = if (joinsFlight) s.registered.nth(s.key) else if (startsSource) s.sources.length() else NO_OWNER
-    s' = {
-      policyCall: NO_OWNER,
-      localReadReceipts: s.localReadReceipts.append({
-        eligible: localEligible, observed: s.now, expires: s.localExpires, hit: localHit
-      }),
-      remoteReadReceipts: s.remoteReadReceipts.append({
-        eligible: remoteEligible, created: s.remoteCreated.nth(s.key),
-        observed: s.wall, fresh: remoteTtl, hit: remoteHit
-      }),
-      policyReplies: s.policyReplies.append({
-        providerFailed: s.providerFailed, invalidBudget: s.overlay == POLICY_INVALID_READ_BUDGET
-      }),
-      policyErrors: if (s.providerFailed or s.overlay == POLICY_INVALID_READ_BUDGET)
-        s.policyErrors.append({ layer: "noop", errorType: "config_resolution" }) else s.policyErrors,
-      owners: s.owners.replaceAt(s.policyCall, owner),
-      sources: if (startsSource) s.sources.append({
-        key: s.key,
-        localTtl: localTtl,
-        remoteTtl: if (readsRemote and not(s.readFailed)) remoteTtl else DISABLED_TTL_MS,
-        retention: retention,
-        shared: shared,
-        result: CALL_PENDING
-      }) else s.sources,
-      registered: if (startsSource and shared) s.registered.replaceAt(s.key, owner) else s.registered,
-      localKey: if (remoteHit and localTtl > 0) s.key else s.localKey,
-      localValue: if (remoteHit and localTtl > 0) hitValue else s.localValue,
-      localExpires: if (remoteHit and localTtl > 0) s.now + localTtl else s.localExpires,
-      o: {
-        calls: s.o.calls.replaceAt(s.policyCall, hitValue),
-        reads: s.o.reads + (if (readsRemote) 1 else 0),
-        loads: s.o.loads + (if (remoteHit) 1 else 0),
-        loaders: s.o.loaders + (if (startsSource) 1 else 0),
-        ...s.o
-      },
-      ...s
-    },
+    Gate::holding(s),
+    s' = ConfigErrors::recordConfigError(
+      Receipts::record(
+        Serving::release(s, LAYOUT, Gate::latest(s), Overlay::resolve(s, BASELINE), Overlay::ttls(s, BASELINE)),
+        Serving::layeredRelease(s, LAYOUT, Gate::latest(s), Overlay::resolve(s, BASELINE), Overlay::ttls(s, BASELINE))),
+      Overlay::failed(s)),
     input' = { name: "releasePolicy", choice: -1 }
   }
 
   // -- Source settlement and accepted publication policy ---------------------
 
-  pure def settle(state: State, loader: int, value: int): State = {
-    val source = state.sources.nth(loader)
-    val serializes = value != SOURCE_ERROR and source.remoteTtl > 0
-    val dispatchesWrite = serializes and not(state.dumpFailed)
-    val writeSucceeded = dispatchesWrite and not(state.writeFailed)
-    val publishesLocal = value != SOURCE_ERROR and source.localTtl > 0
-    {
-      sources: state.sources.replaceAt(loader, { result: value, ...source }),
-      registered: if (state.registered.nth(source.key) == loader) state.registered.replaceAt(source.key,
-        NO_OWNER) else state.registered,
-      localKey: if (publishesLocal) source.key else state.localKey,
-      localValue: if (publishesLocal) value else state.localValue,
-      localExpires: if (publishesLocal) state.now + source.localTtl else state.localExpires,
-      remoteValues: if (writeSucceeded) state.remoteValues.replaceAt(source.key, value) else state.remoteValues,
-      remoteCreated: if (writeSucceeded) state.remoteCreated.replaceAt(source.key, state.wall)
-        else state.remoteCreated,
-      remoteExpires: if (writeSucceeded) state.remoteExpires.replaceAt(source.key,
-        state.now + source.retention) else state.remoteExpires,
-      o: {
-        calls: finishOwnedCalls(state.o.calls, state.owners, loader, value),
-        dumps: state.o.dumps + (if (serializes) 1 else 0),
-        writes: state.o.writes + (if (dispatchesWrite) 1 else 0),
-        writeTtls: if (dispatchesWrite) state.o.writeTtls.append(source.retention) else state.o.writeTtls,
-        ...state.o
-      },
-      ...state
-    }
-  }
+  val pendingSources = s.sources.indices().filter(i => s.sources.nth(i).result == CALL_PENDING)
   action finishSource(loader: int, value: int): bool = all {
-    s' = settle(s, loader, value),
+    s' = Serving::settle(s, LAYOUT, loader, value),
     input' = if (value == SOURCE_ERROR) { name: "rejectLoader", choice: loader }
       else { name: "resolveLoader", choice: loader * SOURCE_VALUE_COUNT
         + (if (value <= VALUE_TWO) value else value - 2) }
@@ -266,20 +189,15 @@ module dialcache_policy_conformance {
   // -- External policy, clocks, storage, and failures -------------------------
 
   action changePolicy(overlay: int): bool = all {
-    s' = { overlay: overlay, ...s },
+    s' = { policy: overlay, ...s },
     input' = { name: "policy", choice: overlay }
   }
   action policy = {
     nondet choice = POLICY_INHERIT.to(POLICY_INVALID_SHADOW_RAMP).oneOf()
     changePolicy(choice)
   }
-  pure def advanceTime(state: State, elapsedMs: int): State = {
-    now: state.now + elapsedMs,
-    wall: state.wall + elapsedMs,
-    ...state
-  }
   action elapse(ms: int): bool = all {
-    s' = advanceTime(s, ms),
+    s' = Clock::advance(s, ms),
     input' = { name: "advance", choice: ms }
   }
   action advance = {
@@ -287,12 +205,7 @@ module dialcache_policy_conformance {
     elapse(choice)
   }
   action seedRemote(key: int, value: int): bool = all {
-    s' = {
-      remoteValues: s.remoteValues.replaceAt(key, value),
-      remoteCreated: s.remoteCreated.replaceAt(key, s.wall),
-      remoteExpires: s.remoteExpires.replaceAt(key, s.now + DEFAULT_RETENTION_MS),
-      ...s
-    },
+    s' = Remote::seedFrame(s, key, value, DEFAULT_RETENTION_MS),
     input' = { name: "seed", choice: key * 2 + value - 1 }
   }
   action seed = {
@@ -300,31 +213,48 @@ module dialcache_policy_conformance {
     seedRemote(choice / 2, choice % 2 + 1)
   }
   action rollbackWall = all {
-    s' = { wall: s.wall - ONE_SECOND_MS, ...s },
+    s' = Clock::shiftWall(s, -ONE_SECOND_MS),
     input' = { name: "rollbackWall", choice: -1 }
   }
-  action setFault(name: str, failed: bool): bool = all {
-    s' = if (name == "providerFault") { providerFailed: failed, ...s }
-      else if (name == "readFault") { readFailed: failed, ...s }
-      else if (name == "dumpFault") { dumpFailed: failed, ...s }
-      else { writeFailed: failed, ...s },
-    input' = { name: name, choice: if (failed) FAULT_FAILED else FAULT_HEALTHY }
+  // The fault switches are environment inputs the traversal and the overlay
+  // decoder read, set by record update.
+  pure def faultChoice(failed: bool): int = if (failed) FAULT_FAILED else FAULT_HEALTHY
+  action setProviderFault(failed: bool): bool = all {
+    s' = { providerFailed: failed, ...s },
+    input' = { name: "providerFault", choice: faultChoice(failed) }
   }
+  action setReadFault(failed: bool): bool = all {
+    s' = { readFailed: failed, ...s },
+    input' = { name: "readFault", choice: faultChoice(failed) }
+  }
+  action setDumpFault(failed: bool): bool = all {
+    s' = { dumpFailed: failed, ...s },
+    input' = { name: "dumpFault", choice: faultChoice(failed) }
+  }
+  action setWriteFault(failed: bool): bool = all {
+    s' = { writeFailed: failed, ...s },
+    input' = { name: "writeFault", choice: faultChoice(failed) }
+  }
+  action setFault(name: str, failed: bool): bool =
+    if (name == "providerFault") setProviderFault(failed)
+    else if (name == "readFault") setReadFault(failed)
+    else if (name == "dumpFault") setDumpFault(failed)
+    else setWriteFault(failed)
   action providerFault = {
     nondet choice = Set(FAULT_HEALTHY, FAULT_FAILED).oneOf()
-    setFault("providerFault", choice == FAULT_FAILED)
+    setProviderFault(choice == FAULT_FAILED)
   }
   action readFault = {
     nondet choice = Set(FAULT_HEALTHY, FAULT_FAILED).oneOf()
-    setFault("readFault", choice == FAULT_FAILED)
+    setReadFault(choice == FAULT_FAILED)
   }
   action dumpFault = {
     nondet choice = Set(FAULT_HEALTHY, FAULT_FAILED).oneOf()
-    setFault("dumpFault", choice == FAULT_FAILED)
+    setDumpFault(choice == FAULT_FAILED)
   }
   action writeFault = {
     nondet choice = Set(FAULT_HEALTHY, FAULT_FAILED).oneOf()
-    setFault("writeFault", choice == FAULT_FAILED)
+    setWriteFault(choice == FAULT_FAILED)
   }
 
   // -- Exploration schedule (nesting/order preserve sampling weights) ---------
@@ -349,43 +279,69 @@ module dialcache_policy_conformance {
   }
 
   // -- Independently stated safety properties --------------------------------
+  // The read properties are stated about the release that just happened: one
+  // reply is held at a time (beginCall waits for the release), so the caller a
+  // release served is the last admitted one, and the receipt names its key and
+  // the layer that served it. The frames and clocks do not move during a
+  // release, so the entry or frame the caller read is the post-state's, and
+  // the reply's TTLs decode from the unchanged overlay. The boundaries are
+  // restated here, not read from the rules.
 
-  // The decision is checked against the entry and elapsed time acquired before
-  // this read. Do not call the transition helper from this independent check.
-  val localHitsRespectInsertionExpiry = s.localReadReceipts.indices().forall(index => {
-    val receipt = s.localReadReceipts.nth(index)
-    receipt.hit == (receipt.eligible and receipt.observed < receipt.expires)
-  })
-  // Recheck the acquired wall time and policy, not later storage or policy.
-  // Physical retention and layer eligibility are distinct from logical age.
-  val remoteHitsRespectAcquiredFreshness = s.remoteReadReceipts.indices().forall(index => {
-    val receipt = s.remoteReadReceipts.nth(index)
-    receipt.hit == (receipt.eligible and receipt.created <= receipt.observed
-      and receipt.observed - receipt.created < receipt.fresh)
-  })
+  val justReleased = input.name == "releasePolicy"
+  val releasedCaller = s.o.calls.length() - 1
+  val releasedValue = s.o.calls.nth(releasedCaller)
+  // The released caller started a source of its own (its only owner) rather
+  // than joining one or being served.
+  val startedSource = s.owners.nth(releasedCaller) >= 0
+    and Flights::ownedBy(s, s.owners.nth(releasedCaller)) == Set(releasedCaller)
+
+  // A local hit serves the live entry holding the caller's value and leaves
+  // its insertion expiry alone; a miss that started a source while the local
+  // layer was on found no live entry.
+  val localHitsRespectInsertionExpiry = not(justReleased) or {
+    val key = s.receipt.key
+    val live = s.localValues.nth(key) > NO_VALUE and s.now < s.localExpires.nth(key)
+    if (s.receipt.layer == Receipts::FROM_LOCAL) live and s.localValues.nth(key) == releasedValue
+    else not(startedSource and Overlay::localTtl(s, BASELINE) > 0 and live)
+  }
+  // A remote hit serves a retained frame holding the caller's value, stamped
+  // at or before the acquired wall time and younger than the reply's fresh
+  // TTL (physical retention and logical age are distinct); a miss that started
+  // a source with the remote layer on and the read healthy found no such frame.
+  val remoteHitsRespectAcquiredFreshness = not(justReleased) or {
+    val key = s.receipt.key
+    val fresh = Overlay::remoteTtl(s, BASELINE)
+    val wall = s.now + s.skew
+    val readable = s.remoteValues.nth(key) > NO_VALUE and s.now < s.expires.nth(key)
+      and s.created.nth(key) <= wall and wall - s.created.nth(key) < fresh
+    if (s.receipt.layer == Receipts::FROM_REMOTE) readable and s.remoteValues.nth(key) == releasedValue and not(s.readFailed)
+    else not(startedSource and fresh > 0 and not(s.readFailed) and readable)
+  }
 
   val writesHaveRetention = s.o.writes == s.o.writeTtls.length()
   val hitsSkipSource = s.o.loaders <= s.o.calls.length()
   val callsKeepSourceOutcome = s.o.calls.indices().forall(i =>
     if (s.owners.nth(i) >= 0) s.o.calls.nth(i) == s.sources.nth(s.owners.nth(i)).result
-  else (s.o.calls.nth(i) == CALL_PENDING) == (i == s.policyCall))
+    else (s.o.calls.nth(i) == CALL_PENDING) == (s.held.select(h => h.caller == i).length() > 0))
   val sourceCountsMatchEffects = s.sources.length() == s.o.loaders and s.owners.length() == s.o.calls.length()
-  val registeredSourcesArePending = s.registered.indices().forall(key => {
-    val loader = s.registered.nth(key)
+    and s.held.length() <= 1
+  val registeredSourcesArePending = s.processFlights.indices().forall(key => {
+    val loader = s.processFlights.nth(key)
     loader < 0 or (s.sources.nth(loader).key == key and s.sources.nth(loader).result == CALL_PENDING
       and s.sources.nth(loader).shared)
   })
   val sharedSourcesKeepRegistration = pendingSources.forall(i =>
-    not(s.sources.nth(i).shared) or s.registered.nth(s.sources.nth(i).key) == i)
+    not(s.sources.nth(i).shared) or s.processFlights.nth(s.sources.nth(i).key) == i)
   // This projection owns invocation-level configuration failure only. Optional
   // layer errors retain their independent layer-policy cases. The replay maps
-  // the public error label (not the source error object) into errorType.
+  // the public error label (not the source error object) into errorType. That
+  // each failed reply reports exactly one error is pinned by
+  // providerFailureReportsStablePolicyCategoryTest and by the drivers, which
+  // compare the policyErrors channel on every history.
   val policyResolutionErrorsHaveStableClassification = s.policyErrors.indices().forall(index => {
     val error = s.policyErrors.nth(index)
     error.layer == "noop" and error.errorType == "config_resolution"
   })
-  val eachFailedPolicyReplyHasOneDiagnostic = s.policyErrors.length() ==
-    s.policyReplies.select(reply => reply.providerFailed or reply.invalidBudget).length()
 
   // -- Deterministic regression schedules ------------------------------------
 
@@ -396,14 +352,14 @@ module dialcache_policy_conformance {
     .then(releasePolicy)
     .expect(s.o.loaders == 2 and s.o.reads == 0)
     .then(finishSource(0, VALUE_ONE))
-    .expect(s.localValue == NO_CACHED_VALUE and s.o.writes == 0)
+    .expect(s.localValues == List(NO_VALUE, NO_VALUE) and s.o.writes == 0)
   run invalidLocalRampPreservesRemoteTest = init.then(changePolicy(POLICY_INVALID_LOCAL_RAMP))
     .then(startCall(0))
     .then(releasePolicy)
     .then(finishSource(0, VALUE_ONE))
     .then(startCall(0))
     .then(releasePolicy)
-    .expect(s.o.reads == 2 and s.o.loads == 1 and s.localValue == NO_CACHED_VALUE)
+    .expect(s.o.reads == 2 and s.o.loads == 1 and s.localValues == List(NO_VALUE, NO_VALUE))
   run invalidRemoteRampPreservesLocalTest = init.then(changePolicy(POLICY_INVALID_REMOTE_RAMP))
     .then(startCall(0))
     .then(releasePolicy)
@@ -415,7 +371,7 @@ module dialcache_policy_conformance {
     .then(startCall(0))
     .then(releasePolicy)
     .then(finishSource(0, VALUE_ONE))
-    .expect(s.o.writeTtls == List(ONE_SECOND_MS) and s.remoteExpires == List(ONE_SECOND_MS, 0))
+    .expect(s.o.writeTtls == List(ONE_SECOND_MS) and s.expires == List(ONE_SECOND_MS, 0))
   run invalidShadowPreservesNormalServingTest = init.then(changePolicy(POLICY_INVALID_SHADOW_RAMP))
     .then(startCall(0))
     .then(releasePolicy)
@@ -437,7 +393,7 @@ module dialcache_policy_conformance {
     .then(elapse(HALF_SECOND_MS))
     .then(startCall(0))
     .then(releasePolicy)
-    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.localExpires == ONE_SECOND_MS)
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.localExpires.nth(0) == ONE_SECOND_MS)
     .then(elapse(HALF_SECOND_MS))
     .then(startCall(0))
     .then(releasePolicy)
@@ -471,7 +427,7 @@ module dialcache_policy_conformance {
     .then(startCall(0))
     .then(releasePolicy)
     .then(finishSource(1, VALUE_TWO))
-    .expect(s.o.calls == List(CALL_PENDING, VALUE_TWO) and s.registered == List(0, -1))
+    .expect(s.o.calls == List(CALL_PENDING, VALUE_TWO) and s.processFlights == List(0, -1))
     .then(changePolicy(POLICY_INHERIT))
     .then(startCall(0))
     .then(releasePolicy)
@@ -486,7 +442,7 @@ module dialcache_policy_conformance {
     .then(startCall(0))
     .then(releasePolicy)
     .then(finishSource(1, SOURCE_ERROR))
-    .expect(s.o.calls == List(CALL_PENDING, SOURCE_ERROR) and s.registered == List(0, -1))
+    .expect(s.o.calls == List(CALL_PENDING, SOURCE_ERROR) and s.processFlights == List(0, -1))
     .then(changePolicy(POLICY_INHERIT))
     .then(startCall(0))
     .then(releasePolicy)
@@ -569,7 +525,7 @@ module dialcache_policy_conformance {
     .then(elapse(ONE_SECOND_MS))
     .then(startCall(0)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, CALL_PENDING)
-      and s.o.loaders == 2 and s.o.loads == 0 and s.remoteExpires.nth(0) == DEFAULT_RETENTION_MS)
+      and s.o.loaders == 2 and s.o.loads == 0 and s.expires.nth(0) == DEFAULT_RETENTION_MS)
 
   // The first read proves the retained frame is usable; its hit cannot renew
   // logical freshness. Equality then refills and a later read reuses that fill.
@@ -598,7 +554,7 @@ module dialcache_policy_conformance {
     .then(elapse(HALF_SECOND_MS))
     .then(changePolicy(POLICY_INHERIT))
     .then(startCall(0)).then(releasePolicy)
-    .expect(s.localExpires == HALF_SECOND_MS + ONE_SECOND_MS)
+    .expect(s.localExpires.nth(0) == HALF_SECOND_MS + ONE_SECOND_MS)
     .then(elapse(HALF_SECOND_MS))
     .then(startCall(0)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_ONE)
@@ -666,5 +622,5 @@ module dialcache_policy_conformance {
     .then(startCall(0)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_FALSE, VALUE_FALSE, VALUE_ZERO, VALUE_ZERO, VALUE_EMPTY_STRING, VALUE_EMPTY_STRING)
       and s.o.loaders == 3 and s.o.reads == 6 and s.o.loads == 3 and s.o.writes == 3
-      and s.localValue == NO_CACHED_VALUE)
+      and s.localValues == List(NO_VALUE, NO_VALUE))
 }

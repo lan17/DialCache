@@ -238,29 +238,49 @@ module serving {
   // failed read observes nothing and still counts, a frame serves while
   // retained, fresh for the reply's freshness and (tracked) fence-cleared, and
   // a remote hit warms local storage for the reply's local TTL.
-  pure def release(state: Served[r], layout: Layout, policyCall: int, resolved: Resolution, ttls: Ttls): Served[r] = {
+  //
+  // The release is judged once (`layeredRelease`): the held caller and its
+  // call, whether its scope is still open, the resolution in effect, the value
+  // the remote layer offered and the decision. `release` applies the judgment;
+  // a record composed around the release (`receipts`) reads the same one. It
+  // is judged on the state before Gate::release, which edits only the held
+  // list, a field no layer read or decision consults.
+  type LayeredRelease = { caller: int, call: Call, open: bool, effective: Resolution, remoteValue: int, decision: Decision }
+  pure def layeredRelease(state: Served[r], layout: Layout, policyCall: int, resolved: Resolution, ttls: Ttls): LayeredRelease = {
     val held = Gate::entry(state, policyCall)
-    val caller = held.caller
     val call = held.call
-    val released = Gate::release(state, policyCall)
-    val open = participating(released, layout, call)
+    val open = participating(state, layout, call)
     val effective = if (open) gated(resolved, ttls) else BYPASS
     val layers = effective.layers
-    val localValue = if (layers.local) Local::localValue(released, call.instance, call.key, layout.keysPerInstance) else NO_VALUE
-    val remoteValue = if (layers.remote and not(released.readFailed))
-      Remote::readableFrame(released, call.key, layout.operationsPerEntity, ttls.freshMs) else NO_VALUE
-    val decision = decide(released, layout, call, effective, localValue, remoteValue)
-    val slot = decision.slot
-    val attached = Flights::attachCaller(released, caller, ownerOf(decision.outcome), slot)
+    val localValue = if (layers.local) Local::localValue(state, call.instance, call.key, layout.keysPerInstance) else NO_VALUE
+    val remoteValue = if (layers.remote and not(state.readFailed))
+      Remote::readableFrame(state, call.key, layout.operationsPerEntity, ttls.freshMs) else NO_VALUE
+    {
+      caller: held.caller,
+      call: call,
+      open: open,
+      effective: effective,
+      remoteValue: remoteValue,
+      decision: decide(state, layout, call, effective, localValue, remoteValue)
+    }
+  }
+  pure def release(state: Served[r], layout: Layout, policyCall: int, resolved: Resolution, ttls: Ttls): Served[r] = {
+    val judged = layeredRelease(state, layout, policyCall, resolved, ttls)
+    val caller = judged.caller
+    val call = judged.call
+    val layers = judged.effective.layers
+    val released = Gate::release(state, policyCall)
+    val slot = judged.decision.slot
+    val attached = Flights::attachCaller(released, caller, ownerOf(judged.decision.outcome), slot)
     val observed = if (layers.remote) {
       o: {
         reads: attached.o.reads + 1,
-        loads: attached.o.loads + (if (remoteValue > NO_VALUE) 1 else 0),
+        loads: attached.o.loads + (if (judged.remoteValue > NO_VALUE) 1 else 0),
         ...attached.o
       },
       ...attached
     } else attached
-    match decision.outcome {
+    match judged.decision.outcome {
       // A request-flight join is the attachment alone: the owner came from the
       // caller's own row. A process-flight join also registers that flight under
       // the row when the caller memoizes.
@@ -270,7 +290,7 @@ module serving {
       | ServesLocal(value) => serve(Local::promote(attached, call.instance, call.key), layout, caller, slot, value)
       | ServesRemote(value) => serve(if (layers.local)
         Local::putLocal(observed, call.instance, call.key, value, ttls.localMs, layout.keysPerInstance) else observed, layout, caller, slot, value)
-      | Starts => startSource(observed, layout, caller, call, slot, open, effective, ttls)
+      | Starts => startSource(observed, layout, caller, call, slot, judged.open, judged.effective, ttls)
     }
   }
   pure def releaseLocal(state: LocalServed[r], layout: Layout, policyCall: int, resolved: Resolution, ttls: Ttls): LocalServed[r] = {

@@ -81,11 +81,13 @@
       }
     },
     "policy": {
+      "created": true,
       "dumpFailed": true,
-      "key": true,
+      "expires": true,
+      "held": true,
       "localExpires": true,
-      "localKey": true,
-      "localValue": true,
+      "localValues": true,
+      "lru": true,
       "now": true,
       "o": {
         "calls": true,
@@ -104,19 +106,17 @@
         "writeTtls": true,
         "writes": true
       },
-      "overlay": true,
       "owners": true,
-      "policyCall": true,
+      "policy": true,
       "policyErrors": true,
-      "policyReplies": true,
+      "processFlights": true,
       "providerFailed": true,
       "readFailed": true,
-      "registered": true,
-      "remoteCreated": true,
-      "remoteExpires": true,
+      "receipt": true,
       "remoteValues": true,
+      "skew": true,
       "sources": true,
-      "wall": true,
+      "watermark": true,
       "writeFailed": true
     },
     "shadow": {

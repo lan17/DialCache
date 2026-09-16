@@ -9,9 +9,9 @@
   },
   "inputs": {
     "semanticCasesSha256": "fe0ad48baa7bfe85b61a3690aedd9e4024453fd568e5dd2b6da200201919eecd",
-    "executionSha256": "1cda2330ce587ed1660f1ceb927e959142ffb83350f688b0a35bffc2fab091bb",
-    "sourceAuditSha256": "cd30114ed026910d0966cfc7cdcd4cfb79c8ebb4b6d9d7f088accb747dbdf4f8",
-    "quintCaseAuditSha256": "928e3aef3896cfd0c95d4b476f06bf27de3bd5b73c8184eca29402a932d6c07b",
+    "executionSha256": "765d92166e3958ea8738759f4d0313d76d4e466629282420c4436889d2916bbe",
+    "sourceAuditSha256": "e99ecb35404fea425f4852c099d0e025dc887fc7f77d074752e2e995d0d7a237",
+    "quintCaseAuditSha256": "9786ad312deba8e69c0f9cc13662c717f5245685d1d4314f34a44fb0f3d8ca2e",
     "featureCoverageSha256": "56eedfa865682db6ad8e73b8673c7dac1c30d301e9bce3390246d6994aba9dcb",
     "coverageWitnessesSha256": "8fc8ab123150fdec059f5b75f84172d39af80d08d7a4211fa88c63c5a3f2874b",
     "profilesSha256": "b8fa4f399a163bc8793bf76b6ba3503a415fcf3c8509cf98d964e4f067e6660f"
@@ -45,7 +45,7 @@
     "casesWithQuintGeneratedVectors": 22,
     "withoutModelDrivenReplay": [],
     "quintModels": 32,
-    "scheduledInvariants": 218,
+    "scheduledInvariants": 217,
     "scheduledRegressions": 412,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
@@ -1007,7 +1007,7 @@
       },
       "quintDefinitions": [
         "formal/dialcache-policy-conformance.qnt:resolveLoader",
-        "formal/dialcache-policy-conformance.qnt:settle",
+        "formal/kernel/serving.qnt:settle",
         "formal/dialcache-policy-conformance.qnt:releasePolicy"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
@@ -1048,7 +1048,7 @@
       },
       "quintDefinitions": [
         "formal/dialcache-policy-conformance.qnt:resolveLoader",
-        "formal/dialcache-policy-conformance.qnt:settle",
+        "formal/kernel/serving.qnt:settle",
         "formal/dialcache-policy-conformance.qnt:releasePolicy"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
@@ -1130,7 +1130,7 @@
       },
       "quintDefinitions": [
         "formal/dialcache-policy-conformance.qnt:resolveLoader",
-        "formal/dialcache-policy-conformance.qnt:settle",
+        "formal/kernel/serving.qnt:settle",
         "formal/dialcache-policy-conformance.qnt:releasePolicy"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
@@ -1172,7 +1172,7 @@
       },
       "quintDefinitions": [
         "formal/dialcache-policy-conformance.qnt:resolveLoader",
-        "formal/dialcache-policy-conformance.qnt:settle",
+        "formal/kernel/serving.qnt:settle",
         "formal/dialcache-policy-conformance.qnt:releasePolicy"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
@@ -1255,7 +1255,7 @@
       },
       "quintDefinitions": [
         "formal/dialcache-policy-conformance.qnt:resolveLoader",
-        "formal/dialcache-policy-conformance.qnt:settle",
+        "formal/kernel/serving.qnt:settle",
         "formal/dialcache-policy-conformance.qnt:releasePolicy"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
@@ -1297,7 +1297,7 @@
       },
       "quintDefinitions": [
         "formal/dialcache-policy-conformance.qnt:resolveLoader",
-        "formal/dialcache-policy-conformance.qnt:settle",
+        "formal/kernel/serving.qnt:settle",
         "formal/dialcache-policy-conformance.qnt:releasePolicy"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
@@ -1380,7 +1380,7 @@
       },
       "quintDefinitions": [
         "formal/dialcache-policy-conformance.qnt:resolveLoader",
-        "formal/dialcache-policy-conformance.qnt:settle",
+        "formal/kernel/serving.qnt:settle",
         "formal/dialcache-policy-conformance.qnt:releasePolicy"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
@@ -1422,7 +1422,7 @@
       },
       "quintDefinitions": [
         "formal/dialcache-policy-conformance.qnt:resolveLoader",
-        "formal/dialcache-policy-conformance.qnt:settle",
+        "formal/kernel/serving.qnt:settle",
         "formal/dialcache-policy-conformance.qnt:releasePolicy"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
@@ -1538,7 +1538,7 @@
       },
       "quintDefinitions": [
         "formal/dialcache-policy-conformance.qnt:resolveLoader",
-        "formal/dialcache-policy-conformance.qnt:settle",
+        "formal/kernel/serving.qnt:settle",
         "formal/dialcache-policy-conformance.qnt:releasePolicy"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
@@ -1947,7 +1947,7 @@
       },
       "quintDefinitions": [
         "formal/dialcache-policy-conformance.qnt:releasePolicy",
-        "formal/dialcache-policy-conformance.qnt:settle"
+        "formal/kernel/serving.qnt:settle"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -2077,7 +2077,7 @@
       },
       "quintDefinitions": [
         "formal/dialcache-policy-conformance.qnt:releasePolicy",
-        "formal/dialcache-policy-conformance.qnt:settle"
+        "formal/kernel/serving.qnt:settle"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -2119,7 +2119,7 @@
       },
       "quintDefinitions": [
         "formal/dialcache-policy-conformance.qnt:releasePolicy",
-        "formal/dialcache-policy-conformance.qnt:settle"
+        "formal/kernel/serving.qnt:settle"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -2154,7 +2154,6 @@
       },
       "quintDefinitions": [
         "formal/dialcache-policy-conformance.qnt:releasePolicy",
-        "formal/dialcache-policy-conformance.qnt:settle",
         "formal/kernel/serving.qnt:settle"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
@@ -2624,8 +2623,8 @@
       },
       "quintDefinitions": [
         "formal/dialcache-policy-conformance.qnt:providerFault",
-        "formal/dialcache-policy-conformance.qnt:localTtl",
-        "formal/dialcache-policy-conformance.qnt:remoteTtl",
+        "formal/kernel/policy-overlay.qnt:localTtl",
+        "formal/kernel/policy-overlay.qnt:remoteTtl",
         "formal/dialcache-policy-conformance.qnt:releasePolicy"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
@@ -2702,8 +2701,8 @@
         "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
       },
       "quintDefinitions": [
-        "formal/dialcache-policy-conformance.qnt:localTtl",
-        "formal/dialcache-policy-conformance.qnt:remoteTtl",
+        "formal/kernel/policy-overlay.qnt:localTtl",
+        "formal/kernel/policy-overlay.qnt:remoteTtl",
         "formal/dialcache-policy-conformance.qnt:releasePolicy"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
@@ -2749,7 +2748,7 @@
         "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
       },
       "quintDefinitions": [
-        "formal/dialcache-policy-conformance.qnt:retention",
+        "formal/kernel/policy-overlay.qnt:retention",
         "formal/dialcache-policy-conformance.qnt:releasePolicy"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
@@ -2931,7 +2930,7 @@
       },
       "quintDefinitions": [
         "formal/dialcache-policy-conformance.qnt:releasePolicy",
-        "formal/dialcache-policy-conformance.qnt:settle"
+        "formal/kernel/serving.qnt:settle"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -18291,7 +18290,7 @@
   ],
   "reviewedTestAndDocumentationAudit": {
     "path": "formal/source-audit.json",
-    "sha256": "cd30114ed026910d0966cfc7cdcd4cfb79c8ebb4b6d9d7f088accb747dbdf4f8",
+    "sha256": "e99ecb35404fea425f4852c099d0e025dc887fc7f77d074752e2e995d0d7a237",
     "sourceFiles": 44,
     "status": "reviewed-applicability-not-execution",
     "limitations": "These rows review Go applicability for the public documentation and ordinary test files in source-audit.json sources, inheriting their C/W/E/B/X classifications. They map subjects to native artifacts without claiming one Go test per TypeScript assertion or turning documentation counts into executed coverage. The same audit hash also binds reviewedGuides for formal and Go documentation; those guide reviews are freshness/scope records, not additional behavioral applicability rows. Per-case Quint and replay evidence is recorded separately.",

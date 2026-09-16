@@ -22,19 +22,43 @@
           }
         },
         "s": {
+          "created": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
           "dumpFailed": false,
-          "key": {
-            "#bigint": "0"
-          },
-          "localExpires": {
-            "#bigint": "0"
-          },
-          "localKey": {
-            "#bigint": "0"
-          },
-          "localValue": {
-            "#bigint": "0"
-          },
+          "expires": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "held": [],
+          "localExpires": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "localValues": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "lru": [
+            []
+          ],
           "now": {
             "#bigint": "0"
           },
@@ -73,41 +97,32 @@
               "#bigint": "0"
             }
           },
-          "overlay": {
+          "owners": [],
+          "policy": {
             "#bigint": "0"
           },
-          "owners": [],
-          "policyCall": {
-            "#bigint": "-1"
-          },
           "policyErrors": [],
-          "policyReplies": [],
+          "processFlights": [
+            {
+              "#bigint": "-1"
+            },
+            {
+              "#bigint": "-1"
+            }
+          ],
           "providerFailed": false,
           "readFailed": false,
-          "registered": [
-            {
+          "receipt": {
+            "caller": {
               "#bigint": "-1"
             },
-            {
+            "key": {
               "#bigint": "-1"
-            }
-          ],
-          "remoteCreated": [
-            {
-              "#bigint": "0"
             },
-            {
+            "layer": {
               "#bigint": "0"
             }
-          ],
-          "remoteExpires": [
-            {
-              "#bigint": "0"
-            },
-            {
-              "#bigint": "0"
-            }
-          ],
+          },
           "remoteValues": [
             {
               "#bigint": "0"
@@ -116,10 +131,15 @@
               "#bigint": "0"
             }
           ],
-          "sources": [],
-          "wall": {
+          "skew": {
             "#bigint": "100000"
           },
+          "sources": [],
+          "watermark": [
+            {
+              "#bigint": "0"
+            }
+          ],
           "writeFailed": false
         }
       },
@@ -140,19 +160,43 @@
           }
         },
         "s": {
+          "created": [
+            {
+              "#bigint": "100000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
           "dumpFailed": false,
-          "key": {
-            "#bigint": "0"
-          },
-          "localExpires": {
-            "#bigint": "0"
-          },
-          "localKey": {
-            "#bigint": "0"
-          },
-          "localValue": {
-            "#bigint": "0"
-          },
+          "expires": [
+            {
+              "#bigint": "5000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "held": [],
+          "localExpires": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "localValues": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "lru": [
+            []
+          ],
           "now": {
             "#bigint": "0"
           },
@@ -191,41 +235,32 @@
               "#bigint": "0"
             }
           },
-          "overlay": {
+          "owners": [],
+          "policy": {
             "#bigint": "0"
           },
-          "owners": [],
-          "policyCall": {
-            "#bigint": "-1"
-          },
           "policyErrors": [],
-          "policyReplies": [],
+          "processFlights": [
+            {
+              "#bigint": "-1"
+            },
+            {
+              "#bigint": "-1"
+            }
+          ],
           "providerFailed": false,
           "readFailed": false,
-          "registered": [
-            {
+          "receipt": {
+            "caller": {
               "#bigint": "-1"
             },
-            {
+            "key": {
               "#bigint": "-1"
-            }
-          ],
-          "remoteCreated": [
-            {
-              "#bigint": "100000"
             },
-            {
+            "layer": {
               "#bigint": "0"
             }
-          ],
-          "remoteExpires": [
-            {
-              "#bigint": "5000"
-            },
-            {
-              "#bigint": "0"
-            }
-          ],
+          },
           "remoteValues": [
             {
               "#bigint": "2"
@@ -234,10 +269,15 @@
               "#bigint": "0"
             }
           ],
-          "sources": [],
-          "wall": {
+          "skew": {
             "#bigint": "100000"
           },
+          "sources": [],
+          "watermark": [
+            {
+              "#bigint": "0"
+            }
+          ],
           "writeFailed": false
         }
       },
@@ -258,19 +298,43 @@
           }
         },
         "s": {
+          "created": [
+            {
+              "#bigint": "100000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
           "dumpFailed": false,
-          "key": {
-            "#bigint": "0"
-          },
-          "localExpires": {
-            "#bigint": "0"
-          },
-          "localKey": {
-            "#bigint": "0"
-          },
-          "localValue": {
-            "#bigint": "0"
-          },
+          "expires": [
+            {
+              "#bigint": "5000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "held": [],
+          "localExpires": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "localValues": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "lru": [
+            []
+          ],
           "now": {
             "#bigint": "500"
           },
@@ -309,41 +373,32 @@
               "#bigint": "0"
             }
           },
-          "overlay": {
+          "owners": [],
+          "policy": {
             "#bigint": "0"
           },
-          "owners": [],
-          "policyCall": {
-            "#bigint": "-1"
-          },
           "policyErrors": [],
-          "policyReplies": [],
+          "processFlights": [
+            {
+              "#bigint": "-1"
+            },
+            {
+              "#bigint": "-1"
+            }
+          ],
           "providerFailed": false,
           "readFailed": false,
-          "registered": [
-            {
+          "receipt": {
+            "caller": {
               "#bigint": "-1"
             },
-            {
+            "key": {
               "#bigint": "-1"
-            }
-          ],
-          "remoteCreated": [
-            {
-              "#bigint": "100000"
             },
-            {
+            "layer": {
               "#bigint": "0"
             }
-          ],
-          "remoteExpires": [
-            {
-              "#bigint": "5000"
-            },
-            {
-              "#bigint": "0"
-            }
-          ],
+          },
           "remoteValues": [
             {
               "#bigint": "2"
@@ -352,10 +407,15 @@
               "#bigint": "0"
             }
           ],
-          "sources": [],
-          "wall": {
-            "#bigint": "100500"
+          "skew": {
+            "#bigint": "100000"
           },
+          "sources": [],
+          "watermark": [
+            {
+              "#bigint": "0"
+            }
+          ],
           "writeFailed": false
         }
       },
@@ -376,19 +436,43 @@
           }
         },
         "s": {
+          "created": [
+            {
+              "#bigint": "100000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
           "dumpFailed": false,
-          "key": {
-            "#bigint": "0"
-          },
-          "localExpires": {
-            "#bigint": "0"
-          },
-          "localKey": {
-            "#bigint": "0"
-          },
-          "localValue": {
-            "#bigint": "0"
-          },
+          "expires": [
+            {
+              "#bigint": "5000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "held": [],
+          "localExpires": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "localValues": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "lru": [
+            []
+          ],
           "now": {
             "#bigint": "500"
           },
@@ -427,41 +511,32 @@
               "#bigint": "0"
             }
           },
-          "overlay": {
+          "owners": [],
+          "policy": {
             "#bigint": "1"
           },
-          "owners": [],
-          "policyCall": {
-            "#bigint": "-1"
-          },
           "policyErrors": [],
-          "policyReplies": [],
+          "processFlights": [
+            {
+              "#bigint": "-1"
+            },
+            {
+              "#bigint": "-1"
+            }
+          ],
           "providerFailed": false,
           "readFailed": false,
-          "registered": [
-            {
+          "receipt": {
+            "caller": {
               "#bigint": "-1"
             },
-            {
+            "key": {
               "#bigint": "-1"
-            }
-          ],
-          "remoteCreated": [
-            {
-              "#bigint": "100000"
             },
-            {
+            "layer": {
               "#bigint": "0"
             }
-          ],
-          "remoteExpires": [
-            {
-              "#bigint": "5000"
-            },
-            {
-              "#bigint": "0"
-            }
-          ],
+          },
           "remoteValues": [
             {
               "#bigint": "2"
@@ -470,10 +545,15 @@
               "#bigint": "0"
             }
           ],
-          "sources": [],
-          "wall": {
-            "#bigint": "100500"
+          "skew": {
+            "#bigint": "100000"
           },
+          "sources": [],
+          "watermark": [
+            {
+              "#bigint": "0"
+            }
+          ],
           "writeFailed": false
         }
       },
@@ -494,19 +574,65 @@
           }
         },
         "s": {
+          "created": [
+            {
+              "#bigint": "100000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
           "dumpFailed": false,
-          "key": {
-            "#bigint": "0"
-          },
-          "localExpires": {
-            "#bigint": "0"
-          },
-          "localKey": {
-            "#bigint": "0"
-          },
-          "localValue": {
-            "#bigint": "0"
-          },
+          "expires": [
+            {
+              "#bigint": "5000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "held": [
+            {
+              "call": {
+                "context": {
+                  "#bigint": "0"
+                },
+                "enabled": true,
+                "instance": {
+                  "#bigint": "0"
+                },
+                "key": {
+                  "#bigint": "0"
+                },
+                "keyFailed": false
+              },
+              "caller": {
+                "#bigint": "0"
+              },
+              "policyCall": {
+                "#bigint": "0"
+              }
+            }
+          ],
+          "localExpires": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "localValues": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "lru": [
+            []
+          ],
           "now": {
             "#bigint": "500"
           },
@@ -549,45 +675,36 @@
               "#bigint": "0"
             }
           },
-          "overlay": {
-            "#bigint": "1"
-          },
           "owners": [
             {
               "#bigint": "-1"
             }
           ],
-          "policyCall": {
-            "#bigint": "0"
+          "policy": {
+            "#bigint": "1"
           },
           "policyErrors": [],
-          "policyReplies": [],
+          "processFlights": [
+            {
+              "#bigint": "-1"
+            },
+            {
+              "#bigint": "-1"
+            }
+          ],
           "providerFailed": false,
           "readFailed": false,
-          "registered": [
-            {
+          "receipt": {
+            "caller": {
               "#bigint": "-1"
             },
-            {
+            "key": {
               "#bigint": "-1"
-            }
-          ],
-          "remoteCreated": [
-            {
-              "#bigint": "100000"
             },
-            {
+            "layer": {
               "#bigint": "0"
             }
-          ],
-          "remoteExpires": [
-            {
-              "#bigint": "5000"
-            },
-            {
-              "#bigint": "0"
-            }
-          ],
+          },
           "remoteValues": [
             {
               "#bigint": "2"
@@ -596,10 +713,15 @@
               "#bigint": "0"
             }
           ],
-          "sources": [],
-          "wall": {
-            "#bigint": "100500"
+          "skew": {
+            "#bigint": "100000"
           },
+          "sources": [],
+          "watermark": [
+            {
+              "#bigint": "0"
+            }
+          ],
           "writeFailed": false
         }
       },
@@ -620,19 +742,47 @@
           }
         },
         "s": {
+          "created": [
+            {
+              "#bigint": "100000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
           "dumpFailed": false,
-          "key": {
-            "#bigint": "0"
-          },
-          "localExpires": {
-            "#bigint": "2500"
-          },
-          "localKey": {
-            "#bigint": "0"
-          },
-          "localValue": {
-            "#bigint": "2"
-          },
+          "expires": [
+            {
+              "#bigint": "5000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "held": [],
+          "localExpires": [
+            {
+              "#bigint": "2500"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "localValues": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "lru": [
+            [
+              {
+                "#bigint": "0"
+              }
+            ]
+          ],
           "now": {
             "#bigint": "500"
           },
@@ -675,50 +825,36 @@
               "#bigint": "0"
             }
           },
-          "overlay": {
-            "#bigint": "1"
-          },
           "owners": [
             {
               "#bigint": "-1"
             }
           ],
-          "policyCall": {
-            "#bigint": "-1"
+          "policy": {
+            "#bigint": "1"
           },
           "policyErrors": [],
-          "policyReplies": [
+          "processFlights": [
             {
-              "invalidBudget": false,
-              "providerFailed": false
+              "#bigint": "-1"
+            },
+            {
+              "#bigint": "-1"
             }
           ],
           "providerFailed": false,
           "readFailed": false,
-          "registered": [
-            {
-              "#bigint": "-1"
-            },
-            {
-              "#bigint": "-1"
-            }
-          ],
-          "remoteCreated": [
-            {
-              "#bigint": "100000"
-            },
-            {
+          "receipt": {
+            "caller": {
               "#bigint": "0"
-            }
-          ],
-          "remoteExpires": [
-            {
-              "#bigint": "5000"
             },
-            {
+            "key": {
               "#bigint": "0"
+            },
+            "layer": {
+              "#bigint": "3"
             }
-          ],
+          },
           "remoteValues": [
             {
               "#bigint": "2"
@@ -727,10 +863,15 @@
               "#bigint": "0"
             }
           ],
-          "sources": [],
-          "wall": {
-            "#bigint": "100500"
+          "skew": {
+            "#bigint": "100000"
           },
+          "sources": [],
+          "watermark": [
+            {
+              "#bigint": "0"
+            }
+          ],
           "writeFailed": false
         }
       },
@@ -751,19 +892,47 @@
           }
         },
         "s": {
+          "created": [
+            {
+              "#bigint": "100000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
           "dumpFailed": false,
-          "key": {
-            "#bigint": "0"
-          },
-          "localExpires": {
-            "#bigint": "2500"
-          },
-          "localKey": {
-            "#bigint": "0"
-          },
-          "localValue": {
-            "#bigint": "2"
-          },
+          "expires": [
+            {
+              "#bigint": "5000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "held": [],
+          "localExpires": [
+            {
+              "#bigint": "2500"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "localValues": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "lru": [
+            [
+              {
+                "#bigint": "0"
+              }
+            ]
+          ],
           "now": {
             "#bigint": "500"
           },
@@ -806,50 +975,36 @@
               "#bigint": "0"
             }
           },
-          "overlay": {
-            "#bigint": "1"
-          },
           "owners": [
             {
               "#bigint": "-1"
             }
           ],
-          "policyCall": {
-            "#bigint": "-1"
+          "policy": {
+            "#bigint": "1"
           },
           "policyErrors": [],
-          "policyReplies": [
+          "processFlights": [
             {
-              "invalidBudget": false,
-              "providerFailed": false
+              "#bigint": "-1"
+            },
+            {
+              "#bigint": "-1"
             }
           ],
           "providerFailed": false,
           "readFailed": false,
-          "registered": [
-            {
-              "#bigint": "-1"
-            },
-            {
-              "#bigint": "-1"
-            }
-          ],
-          "remoteCreated": [
-            {
-              "#bigint": "100000"
-            },
-            {
+          "receipt": {
+            "caller": {
               "#bigint": "0"
-            }
-          ],
-          "remoteExpires": [
-            {
-              "#bigint": "5000"
             },
-            {
+            "key": {
               "#bigint": "0"
+            },
+            "layer": {
+              "#bigint": "3"
             }
-          ],
+          },
           "remoteValues": [
             {
               "#bigint": "2"
@@ -858,10 +1013,15 @@
               "#bigint": "0"
             }
           ],
-          "sources": [],
-          "wall": {
-            "#bigint": "99500"
+          "skew": {
+            "#bigint": "99000"
           },
+          "sources": [],
+          "watermark": [
+            {
+              "#bigint": "0"
+            }
+          ],
           "writeFailed": false
         }
       },
@@ -882,19 +1042,47 @@
           }
         },
         "s": {
+          "created": [
+            {
+              "#bigint": "100000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
           "dumpFailed": false,
-          "key": {
-            "#bigint": "0"
-          },
-          "localExpires": {
-            "#bigint": "2500"
-          },
-          "localKey": {
-            "#bigint": "0"
-          },
-          "localValue": {
-            "#bigint": "2"
-          },
+          "expires": [
+            {
+              "#bigint": "5000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "held": [],
+          "localExpires": [
+            {
+              "#bigint": "2500"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "localValues": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "lru": [
+            [
+              {
+                "#bigint": "0"
+              }
+            ]
+          ],
           "now": {
             "#bigint": "500"
           },
@@ -937,50 +1125,36 @@
               "#bigint": "0"
             }
           },
-          "overlay": {
-            "#bigint": "1"
-          },
           "owners": [
             {
               "#bigint": "-1"
             }
           ],
-          "policyCall": {
-            "#bigint": "-1"
+          "policy": {
+            "#bigint": "1"
           },
           "policyErrors": [],
-          "policyReplies": [
+          "processFlights": [
             {
-              "invalidBudget": false,
-              "providerFailed": false
+              "#bigint": "-1"
+            },
+            {
+              "#bigint": "-1"
             }
           ],
           "providerFailed": false,
           "readFailed": true,
-          "registered": [
-            {
-              "#bigint": "-1"
-            },
-            {
-              "#bigint": "-1"
-            }
-          ],
-          "remoteCreated": [
-            {
-              "#bigint": "100000"
-            },
-            {
+          "receipt": {
+            "caller": {
               "#bigint": "0"
-            }
-          ],
-          "remoteExpires": [
-            {
-              "#bigint": "5000"
             },
-            {
+            "key": {
               "#bigint": "0"
+            },
+            "layer": {
+              "#bigint": "3"
             }
-          ],
+          },
           "remoteValues": [
             {
               "#bigint": "2"
@@ -989,10 +1163,15 @@
               "#bigint": "0"
             }
           ],
-          "sources": [],
-          "wall": {
-            "#bigint": "99500"
+          "skew": {
+            "#bigint": "99000"
           },
+          "sources": [],
+          "watermark": [
+            {
+              "#bigint": "0"
+            }
+          ],
           "writeFailed": false
         }
       },
@@ -1013,19 +1192,47 @@
           }
         },
         "s": {
+          "created": [
+            {
+              "#bigint": "100000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
           "dumpFailed": true,
-          "key": {
-            "#bigint": "0"
-          },
-          "localExpires": {
-            "#bigint": "2500"
-          },
-          "localKey": {
-            "#bigint": "0"
-          },
-          "localValue": {
-            "#bigint": "2"
-          },
+          "expires": [
+            {
+              "#bigint": "5000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "held": [],
+          "localExpires": [
+            {
+              "#bigint": "2500"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "localValues": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "lru": [
+            [
+              {
+                "#bigint": "0"
+              }
+            ]
+          ],
           "now": {
             "#bigint": "500"
           },
@@ -1068,50 +1275,36 @@
               "#bigint": "0"
             }
           },
-          "overlay": {
-            "#bigint": "1"
-          },
           "owners": [
             {
               "#bigint": "-1"
             }
           ],
-          "policyCall": {
-            "#bigint": "-1"
+          "policy": {
+            "#bigint": "1"
           },
           "policyErrors": [],
-          "policyReplies": [
+          "processFlights": [
             {
-              "invalidBudget": false,
-              "providerFailed": false
+              "#bigint": "-1"
+            },
+            {
+              "#bigint": "-1"
             }
           ],
           "providerFailed": false,
           "readFailed": true,
-          "registered": [
-            {
-              "#bigint": "-1"
-            },
-            {
-              "#bigint": "-1"
-            }
-          ],
-          "remoteCreated": [
-            {
-              "#bigint": "100000"
-            },
-            {
+          "receipt": {
+            "caller": {
               "#bigint": "0"
-            }
-          ],
-          "remoteExpires": [
-            {
-              "#bigint": "5000"
             },
-            {
+            "key": {
               "#bigint": "0"
+            },
+            "layer": {
+              "#bigint": "3"
             }
-          ],
+          },
           "remoteValues": [
             {
               "#bigint": "2"
@@ -1120,10 +1313,15 @@
               "#bigint": "0"
             }
           ],
-          "sources": [],
-          "wall": {
-            "#bigint": "99500"
+          "skew": {
+            "#bigint": "99000"
           },
+          "sources": [],
+          "watermark": [
+            {
+              "#bigint": "0"
+            }
+          ],
           "writeFailed": false
         }
       },
@@ -1144,19 +1342,47 @@
           }
         },
         "s": {
+          "created": [
+            {
+              "#bigint": "100000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
           "dumpFailed": true,
-          "key": {
-            "#bigint": "0"
-          },
-          "localExpires": {
-            "#bigint": "2500"
-          },
-          "localKey": {
-            "#bigint": "0"
-          },
-          "localValue": {
-            "#bigint": "2"
-          },
+          "expires": [
+            {
+              "#bigint": "5000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "held": [],
+          "localExpires": [
+            {
+              "#bigint": "2500"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "localValues": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "lru": [
+            [
+              {
+                "#bigint": "0"
+              }
+            ]
+          ],
           "now": {
             "#bigint": "500"
           },
@@ -1199,50 +1425,36 @@
               "#bigint": "0"
             }
           },
-          "overlay": {
-            "#bigint": "1"
-          },
           "owners": [
             {
               "#bigint": "-1"
             }
           ],
-          "policyCall": {
-            "#bigint": "-1"
+          "policy": {
+            "#bigint": "1"
           },
           "policyErrors": [],
-          "policyReplies": [
+          "processFlights": [
             {
-              "invalidBudget": false,
-              "providerFailed": false
+              "#bigint": "-1"
+            },
+            {
+              "#bigint": "-1"
             }
           ],
           "providerFailed": false,
           "readFailed": true,
-          "registered": [
-            {
-              "#bigint": "-1"
-            },
-            {
-              "#bigint": "-1"
-            }
-          ],
-          "remoteCreated": [
-            {
-              "#bigint": "100000"
-            },
-            {
+          "receipt": {
+            "caller": {
               "#bigint": "0"
-            }
-          ],
-          "remoteExpires": [
-            {
-              "#bigint": "5000"
             },
-            {
+            "key": {
               "#bigint": "0"
+            },
+            "layer": {
+              "#bigint": "3"
             }
-          ],
+          },
           "remoteValues": [
             {
               "#bigint": "2"
@@ -1251,10 +1463,15 @@
               "#bigint": "0"
             }
           ],
-          "sources": [],
-          "wall": {
-            "#bigint": "99500"
+          "skew": {
+            "#bigint": "99000"
           },
+          "sources": [],
+          "watermark": [
+            {
+              "#bigint": "0"
+            }
+          ],
           "writeFailed": true
         }
       },
@@ -1275,19 +1492,69 @@
           }
         },
         "s": {
+          "created": [
+            {
+              "#bigint": "100000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
           "dumpFailed": true,
-          "key": {
-            "#bigint": "1"
-          },
-          "localExpires": {
-            "#bigint": "2500"
-          },
-          "localKey": {
-            "#bigint": "0"
-          },
-          "localValue": {
-            "#bigint": "2"
-          },
+          "expires": [
+            {
+              "#bigint": "5000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "held": [
+            {
+              "call": {
+                "context": {
+                  "#bigint": "0"
+                },
+                "enabled": true,
+                "instance": {
+                  "#bigint": "0"
+                },
+                "key": {
+                  "#bigint": "1"
+                },
+                "keyFailed": false
+              },
+              "caller": {
+                "#bigint": "1"
+              },
+              "policyCall": {
+                "#bigint": "1"
+              }
+            }
+          ],
+          "localExpires": [
+            {
+              "#bigint": "2500"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "localValues": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "lru": [
+            [
+              {
+                "#bigint": "0"
+              }
+            ]
+          ],
           "now": {
             "#bigint": "500"
           },
@@ -1333,9 +1600,6 @@
               "#bigint": "0"
             }
           },
-          "overlay": {
-            "#bigint": "1"
-          },
           "owners": [
             {
               "#bigint": "-1"
@@ -1344,42 +1608,31 @@
               "#bigint": "-1"
             }
           ],
-          "policyCall": {
+          "policy": {
             "#bigint": "1"
           },
           "policyErrors": [],
-          "policyReplies": [
+          "processFlights": [
             {
-              "invalidBudget": false,
-              "providerFailed": false
+              "#bigint": "-1"
+            },
+            {
+              "#bigint": "-1"
             }
           ],
           "providerFailed": false,
           "readFailed": true,
-          "registered": [
-            {
-              "#bigint": "-1"
-            },
-            {
-              "#bigint": "-1"
-            }
-          ],
-          "remoteCreated": [
-            {
-              "#bigint": "100000"
-            },
-            {
+          "receipt": {
+            "caller": {
               "#bigint": "0"
-            }
-          ],
-          "remoteExpires": [
-            {
-              "#bigint": "5000"
             },
-            {
+            "key": {
               "#bigint": "0"
+            },
+            "layer": {
+              "#bigint": "3"
             }
-          ],
+          },
           "remoteValues": [
             {
               "#bigint": "2"
@@ -1388,10 +1641,15 @@
               "#bigint": "0"
             }
           ],
-          "sources": [],
-          "wall": {
-            "#bigint": "99500"
+          "skew": {
+            "#bigint": "99000"
           },
+          "sources": [],
+          "watermark": [
+            {
+              "#bigint": "0"
+            }
+          ],
           "writeFailed": true
         }
       },
@@ -1412,19 +1670,47 @@
           }
         },
         "s": {
+          "created": [
+            {
+              "#bigint": "100000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
           "dumpFailed": true,
-          "key": {
-            "#bigint": "1"
-          },
-          "localExpires": {
-            "#bigint": "2500"
-          },
-          "localKey": {
-            "#bigint": "0"
-          },
-          "localValue": {
-            "#bigint": "2"
-          },
+          "expires": [
+            {
+              "#bigint": "5000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "held": [],
+          "localExpires": [
+            {
+              "#bigint": "2500"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "localValues": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "lru": [
+            [
+              {
+                "#bigint": "0"
+              }
+            ]
+          ],
           "now": {
             "#bigint": "500"
           },
@@ -1470,9 +1756,6 @@
               "#bigint": "0"
             }
           },
-          "overlay": {
-            "#bigint": "1"
-          },
           "owners": [
             {
               "#bigint": "-1"
@@ -1481,23 +1764,11 @@
               "#bigint": "0"
             }
           ],
-          "policyCall": {
-            "#bigint": "-1"
+          "policy": {
+            "#bigint": "1"
           },
           "policyErrors": [],
-          "policyReplies": [
-            {
-              "invalidBudget": false,
-              "providerFailed": false
-            },
-            {
-              "invalidBudget": false,
-              "providerFailed": false
-            }
-          ],
-          "providerFailed": false,
-          "readFailed": true,
-          "registered": [
+          "processFlights": [
             {
               "#bigint": "-1"
             },
@@ -1505,22 +1776,19 @@
               "#bigint": "0"
             }
           ],
-          "remoteCreated": [
-            {
-              "#bigint": "100000"
+          "providerFailed": false,
+          "readFailed": true,
+          "receipt": {
+            "caller": {
+              "#bigint": "1"
             },
-            {
+            "key": {
+              "#bigint": "1"
+            },
+            "layer": {
               "#bigint": "0"
             }
-          ],
-          "remoteExpires": [
-            {
-              "#bigint": "5000"
-            },
-            {
-              "#bigint": "0"
-            }
-          ],
+          },
           "remoteValues": [
             {
               "#bigint": "2"
@@ -1529,29 +1797,37 @@
               "#bigint": "0"
             }
           ],
+          "skew": {
+            "#bigint": "99000"
+          },
           "sources": [
             {
+              "fence": {
+                "#bigint": "0"
+              },
+              "instance": {
+                "#bigint": "0"
+              },
               "key": {
                 "#bigint": "1"
               },
-              "localTtl": {
+              "localMs": {
                 "#bigint": "2000"
-              },
-              "remoteTtl": {
-                "#bigint": "0"
               },
               "result": {
                 "#bigint": "0"
               },
-              "retention": {
-                "#bigint": "5000"
+              "retentionMs": {
+                "#bigint": "0"
               },
               "shared": true
             }
           ],
-          "wall": {
-            "#bigint": "99500"
-          },
+          "watermark": [
+            {
+              "#bigint": "0"
+            }
+          ],
           "writeFailed": true
         }
       },
@@ -1572,19 +1848,47 @@
           }
         },
         "s": {
+          "created": [
+            {
+              "#bigint": "100000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
           "dumpFailed": true,
-          "key": {
-            "#bigint": "1"
-          },
-          "localExpires": {
-            "#bigint": "2500"
-          },
-          "localKey": {
-            "#bigint": "0"
-          },
-          "localValue": {
-            "#bigint": "2"
-          },
+          "expires": [
+            {
+              "#bigint": "5000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "held": [],
+          "localExpires": [
+            {
+              "#bigint": "2500"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "localValues": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "lru": [
+            [
+              {
+                "#bigint": "0"
+              }
+            ]
+          ],
           "now": {
             "#bigint": "500"
           },
@@ -1630,9 +1934,6 @@
               "#bigint": "0"
             }
           },
-          "overlay": {
-            "#bigint": "1"
-          },
           "owners": [
             {
               "#bigint": "-1"
@@ -1641,46 +1942,31 @@
               "#bigint": "0"
             }
           ],
-          "policyCall": {
-            "#bigint": "-1"
+          "policy": {
+            "#bigint": "1"
           },
           "policyErrors": [],
-          "policyReplies": [
+          "processFlights": [
             {
-              "invalidBudget": false,
-              "providerFailed": false
+              "#bigint": "-1"
             },
             {
-              "invalidBudget": false,
-              "providerFailed": false
+              "#bigint": "-1"
             }
           ],
           "providerFailed": false,
           "readFailed": true,
-          "registered": [
-            {
-              "#bigint": "-1"
+          "receipt": {
+            "caller": {
+              "#bigint": "1"
             },
-            {
-              "#bigint": "-1"
-            }
-          ],
-          "remoteCreated": [
-            {
-              "#bigint": "100000"
+            "key": {
+              "#bigint": "1"
             },
-            {
+            "layer": {
               "#bigint": "0"
             }
-          ],
-          "remoteExpires": [
-            {
-              "#bigint": "5000"
-            },
-            {
-              "#bigint": "0"
-            }
-          ],
+          },
           "remoteValues": [
             {
               "#bigint": "2"
@@ -1689,29 +1975,37 @@
               "#bigint": "0"
             }
           ],
+          "skew": {
+            "#bigint": "99000"
+          },
           "sources": [
             {
+              "fence": {
+                "#bigint": "0"
+              },
+              "instance": {
+                "#bigint": "0"
+              },
               "key": {
                 "#bigint": "1"
               },
-              "localTtl": {
+              "localMs": {
                 "#bigint": "2000"
-              },
-              "remoteTtl": {
-                "#bigint": "0"
               },
               "result": {
                 "#bigint": "3"
               },
-              "retention": {
-                "#bigint": "5000"
+              "retentionMs": {
+                "#bigint": "0"
               },
               "shared": true
             }
           ],
-          "wall": {
-            "#bigint": "99500"
-          },
+          "watermark": [
+            {
+              "#bigint": "0"
+            }
+          ],
           "writeFailed": true
         }
       },
@@ -1732,19 +2026,47 @@
           }
         },
         "s": {
+          "created": [
+            {
+              "#bigint": "100000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
           "dumpFailed": true,
-          "key": {
-            "#bigint": "1"
-          },
-          "localExpires": {
-            "#bigint": "2500"
-          },
-          "localKey": {
-            "#bigint": "0"
-          },
-          "localValue": {
-            "#bigint": "2"
-          },
+          "expires": [
+            {
+              "#bigint": "5000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "held": [],
+          "localExpires": [
+            {
+              "#bigint": "2500"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "localValues": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "lru": [
+            [
+              {
+                "#bigint": "0"
+              }
+            ]
+          ],
           "now": {
             "#bigint": "500"
           },
@@ -1790,9 +2112,6 @@
               "#bigint": "0"
             }
           },
-          "overlay": {
-            "#bigint": "1"
-          },
           "owners": [
             {
               "#bigint": "-1"
@@ -1801,46 +2120,31 @@
               "#bigint": "0"
             }
           ],
-          "policyCall": {
-            "#bigint": "-1"
+          "policy": {
+            "#bigint": "1"
           },
           "policyErrors": [],
-          "policyReplies": [
+          "processFlights": [
             {
-              "invalidBudget": false,
-              "providerFailed": false
+              "#bigint": "-1"
             },
             {
-              "invalidBudget": false,
-              "providerFailed": false
+              "#bigint": "-1"
             }
           ],
           "providerFailed": false,
           "readFailed": false,
-          "registered": [
-            {
-              "#bigint": "-1"
+          "receipt": {
+            "caller": {
+              "#bigint": "1"
             },
-            {
-              "#bigint": "-1"
-            }
-          ],
-          "remoteCreated": [
-            {
-              "#bigint": "100000"
+            "key": {
+              "#bigint": "1"
             },
-            {
+            "layer": {
               "#bigint": "0"
             }
-          ],
-          "remoteExpires": [
-            {
-              "#bigint": "5000"
-            },
-            {
-              "#bigint": "0"
-            }
-          ],
+          },
           "remoteValues": [
             {
               "#bigint": "2"
@@ -1849,29 +2153,37 @@
               "#bigint": "0"
             }
           ],
+          "skew": {
+            "#bigint": "99000"
+          },
           "sources": [
             {
+              "fence": {
+                "#bigint": "0"
+              },
+              "instance": {
+                "#bigint": "0"
+              },
               "key": {
                 "#bigint": "1"
               },
-              "localTtl": {
+              "localMs": {
                 "#bigint": "2000"
-              },
-              "remoteTtl": {
-                "#bigint": "0"
               },
               "result": {
                 "#bigint": "3"
               },
-              "retention": {
-                "#bigint": "5000"
+              "retentionMs": {
+                "#bigint": "0"
               },
               "shared": true
             }
           ],
-          "wall": {
-            "#bigint": "99500"
-          },
+          "watermark": [
+            {
+              "#bigint": "0"
+            }
+          ],
           "writeFailed": true
         }
       },
@@ -1892,19 +2204,47 @@
           }
         },
         "s": {
+          "created": [
+            {
+              "#bigint": "100000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
           "dumpFailed": false,
-          "key": {
-            "#bigint": "1"
-          },
-          "localExpires": {
-            "#bigint": "2500"
-          },
-          "localKey": {
-            "#bigint": "0"
-          },
-          "localValue": {
-            "#bigint": "2"
-          },
+          "expires": [
+            {
+              "#bigint": "5000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "held": [],
+          "localExpires": [
+            {
+              "#bigint": "2500"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "localValues": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "lru": [
+            [
+              {
+                "#bigint": "0"
+              }
+            ]
+          ],
           "now": {
             "#bigint": "500"
           },
@@ -1950,9 +2290,6 @@
               "#bigint": "0"
             }
           },
-          "overlay": {
-            "#bigint": "1"
-          },
           "owners": [
             {
               "#bigint": "-1"
@@ -1961,46 +2298,31 @@
               "#bigint": "0"
             }
           ],
-          "policyCall": {
-            "#bigint": "-1"
+          "policy": {
+            "#bigint": "1"
           },
           "policyErrors": [],
-          "policyReplies": [
+          "processFlights": [
             {
-              "invalidBudget": false,
-              "providerFailed": false
+              "#bigint": "-1"
             },
             {
-              "invalidBudget": false,
-              "providerFailed": false
+              "#bigint": "-1"
             }
           ],
           "providerFailed": false,
           "readFailed": false,
-          "registered": [
-            {
-              "#bigint": "-1"
+          "receipt": {
+            "caller": {
+              "#bigint": "1"
             },
-            {
-              "#bigint": "-1"
-            }
-          ],
-          "remoteCreated": [
-            {
-              "#bigint": "100000"
+            "key": {
+              "#bigint": "1"
             },
-            {
+            "layer": {
               "#bigint": "0"
             }
-          ],
-          "remoteExpires": [
-            {
-              "#bigint": "5000"
-            },
-            {
-              "#bigint": "0"
-            }
-          ],
+          },
           "remoteValues": [
             {
               "#bigint": "2"
@@ -2009,29 +2331,37 @@
               "#bigint": "0"
             }
           ],
+          "skew": {
+            "#bigint": "99000"
+          },
           "sources": [
             {
+              "fence": {
+                "#bigint": "0"
+              },
+              "instance": {
+                "#bigint": "0"
+              },
               "key": {
                 "#bigint": "1"
               },
-              "localTtl": {
+              "localMs": {
                 "#bigint": "2000"
-              },
-              "remoteTtl": {
-                "#bigint": "0"
               },
               "result": {
                 "#bigint": "3"
               },
-              "retention": {
-                "#bigint": "5000"
+              "retentionMs": {
+                "#bigint": "0"
               },
               "shared": true
             }
           ],
-          "wall": {
-            "#bigint": "99500"
-          },
+          "watermark": [
+            {
+              "#bigint": "0"
+            }
+          ],
           "writeFailed": true
         }
       },
@@ -2052,19 +2382,47 @@
           }
         },
         "s": {
+          "created": [
+            {
+              "#bigint": "100000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
           "dumpFailed": false,
-          "key": {
-            "#bigint": "1"
-          },
-          "localExpires": {
-            "#bigint": "2500"
-          },
-          "localKey": {
-            "#bigint": "0"
-          },
-          "localValue": {
-            "#bigint": "2"
-          },
+          "expires": [
+            {
+              "#bigint": "5000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "held": [],
+          "localExpires": [
+            {
+              "#bigint": "2500"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "localValues": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "lru": [
+            [
+              {
+                "#bigint": "0"
+              }
+            ]
+          ],
           "now": {
             "#bigint": "500"
           },
@@ -2110,9 +2468,6 @@
               "#bigint": "0"
             }
           },
-          "overlay": {
-            "#bigint": "1"
-          },
           "owners": [
             {
               "#bigint": "-1"
@@ -2121,46 +2476,31 @@
               "#bigint": "0"
             }
           ],
-          "policyCall": {
-            "#bigint": "-1"
+          "policy": {
+            "#bigint": "1"
           },
           "policyErrors": [],
-          "policyReplies": [
+          "processFlights": [
             {
-              "invalidBudget": false,
-              "providerFailed": false
+              "#bigint": "-1"
             },
             {
-              "invalidBudget": false,
-              "providerFailed": false
+              "#bigint": "-1"
             }
           ],
           "providerFailed": false,
           "readFailed": false,
-          "registered": [
-            {
-              "#bigint": "-1"
+          "receipt": {
+            "caller": {
+              "#bigint": "1"
             },
-            {
-              "#bigint": "-1"
-            }
-          ],
-          "remoteCreated": [
-            {
-              "#bigint": "100000"
+            "key": {
+              "#bigint": "1"
             },
-            {
+            "layer": {
               "#bigint": "0"
             }
-          ],
-          "remoteExpires": [
-            {
-              "#bigint": "5000"
-            },
-            {
-              "#bigint": "0"
-            }
-          ],
+          },
           "remoteValues": [
             {
               "#bigint": "2"
@@ -2169,29 +2509,37 @@
               "#bigint": "0"
             }
           ],
+          "skew": {
+            "#bigint": "99000"
+          },
           "sources": [
             {
+              "fence": {
+                "#bigint": "0"
+              },
+              "instance": {
+                "#bigint": "0"
+              },
               "key": {
                 "#bigint": "1"
               },
-              "localTtl": {
+              "localMs": {
                 "#bigint": "2000"
-              },
-              "remoteTtl": {
-                "#bigint": "0"
               },
               "result": {
                 "#bigint": "3"
               },
-              "retention": {
-                "#bigint": "5000"
+              "retentionMs": {
+                "#bigint": "0"
               },
               "shared": true
             }
           ],
-          "wall": {
-            "#bigint": "99500"
-          },
+          "watermark": [
+            {
+              "#bigint": "0"
+            }
+          ],
           "writeFailed": false
         }
       },
@@ -2212,19 +2560,69 @@
           }
         },
         "s": {
+          "created": [
+            {
+              "#bigint": "100000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
           "dumpFailed": false,
-          "key": {
-            "#bigint": "1"
-          },
-          "localExpires": {
-            "#bigint": "2500"
-          },
-          "localKey": {
-            "#bigint": "0"
-          },
-          "localValue": {
-            "#bigint": "2"
-          },
+          "expires": [
+            {
+              "#bigint": "5000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "held": [
+            {
+              "call": {
+                "context": {
+                  "#bigint": "0"
+                },
+                "enabled": true,
+                "instance": {
+                  "#bigint": "0"
+                },
+                "key": {
+                  "#bigint": "1"
+                },
+                "keyFailed": false
+              },
+              "caller": {
+                "#bigint": "2"
+              },
+              "policyCall": {
+                "#bigint": "2"
+              }
+            }
+          ],
+          "localExpires": [
+            {
+              "#bigint": "2500"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "localValues": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "lru": [
+            [
+              {
+                "#bigint": "0"
+              }
+            ]
+          ],
           "now": {
             "#bigint": "500"
           },
@@ -2273,9 +2671,6 @@
               "#bigint": "0"
             }
           },
-          "overlay": {
-            "#bigint": "1"
-          },
           "owners": [
             {
               "#bigint": "-1"
@@ -2287,46 +2682,31 @@
               "#bigint": "-1"
             }
           ],
-          "policyCall": {
-            "#bigint": "2"
+          "policy": {
+            "#bigint": "1"
           },
           "policyErrors": [],
-          "policyReplies": [
+          "processFlights": [
             {
-              "invalidBudget": false,
-              "providerFailed": false
+              "#bigint": "-1"
             },
             {
-              "invalidBudget": false,
-              "providerFailed": false
+              "#bigint": "-1"
             }
           ],
           "providerFailed": false,
           "readFailed": false,
-          "registered": [
-            {
-              "#bigint": "-1"
+          "receipt": {
+            "caller": {
+              "#bigint": "1"
             },
-            {
-              "#bigint": "-1"
-            }
-          ],
-          "remoteCreated": [
-            {
-              "#bigint": "100000"
+            "key": {
+              "#bigint": "1"
             },
-            {
+            "layer": {
               "#bigint": "0"
             }
-          ],
-          "remoteExpires": [
-            {
-              "#bigint": "5000"
-            },
-            {
-              "#bigint": "0"
-            }
-          ],
+          },
           "remoteValues": [
             {
               "#bigint": "2"
@@ -2335,29 +2715,37 @@
               "#bigint": "0"
             }
           ],
+          "skew": {
+            "#bigint": "99000"
+          },
           "sources": [
             {
+              "fence": {
+                "#bigint": "0"
+              },
+              "instance": {
+                "#bigint": "0"
+              },
               "key": {
                 "#bigint": "1"
               },
-              "localTtl": {
+              "localMs": {
                 "#bigint": "2000"
-              },
-              "remoteTtl": {
-                "#bigint": "0"
               },
               "result": {
                 "#bigint": "3"
               },
-              "retention": {
-                "#bigint": "5000"
+              "retentionMs": {
+                "#bigint": "0"
               },
               "shared": true
             }
           ],
-          "wall": {
-            "#bigint": "99500"
-          },
+          "watermark": [
+            {
+              "#bigint": "0"
+            }
+          ],
           "writeFailed": false
         }
       },
@@ -2378,19 +2766,47 @@
           }
         },
         "s": {
+          "created": [
+            {
+              "#bigint": "100000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
           "dumpFailed": false,
-          "key": {
-            "#bigint": "1"
-          },
-          "localExpires": {
-            "#bigint": "2500"
-          },
-          "localKey": {
-            "#bigint": "0"
-          },
-          "localValue": {
-            "#bigint": "2"
-          },
+          "expires": [
+            {
+              "#bigint": "5000"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "held": [],
+          "localExpires": [
+            {
+              "#bigint": "2500"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "localValues": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "0"
+            }
+          ],
+          "lru": [
+            [
+              {
+                "#bigint": "0"
+              }
+            ]
+          ],
           "now": {
             "#bigint": "500"
           },
@@ -2439,9 +2855,6 @@
               "#bigint": "0"
             }
           },
-          "overlay": {
-            "#bigint": "1"
-          },
           "owners": [
             {
               "#bigint": "-1"
@@ -2453,27 +2866,11 @@
               "#bigint": "1"
             }
           ],
-          "policyCall": {
-            "#bigint": "-1"
+          "policy": {
+            "#bigint": "1"
           },
           "policyErrors": [],
-          "policyReplies": [
-            {
-              "invalidBudget": false,
-              "providerFailed": false
-            },
-            {
-              "invalidBudget": false,
-              "providerFailed": false
-            },
-            {
-              "invalidBudget": false,
-              "providerFailed": false
-            }
-          ],
-          "providerFailed": false,
-          "readFailed": false,
-          "registered": [
+          "processFlights": [
             {
               "#bigint": "-1"
             },
@@ -2481,22 +2878,19 @@
               "#bigint": "1"
             }
           ],
-          "remoteCreated": [
-            {
-              "#bigint": "100000"
+          "providerFailed": false,
+          "readFailed": false,
+          "receipt": {
+            "caller": {
+              "#bigint": "2"
             },
-            {
+            "key": {
+              "#bigint": "1"
+            },
+            "layer": {
               "#bigint": "0"
             }
-          ],
-          "remoteExpires": [
-            {
-              "#bigint": "5000"
-            },
-            {
-              "#bigint": "0"
-            }
-          ],
+          },
           "remoteValues": [
             {
               "#bigint": "2"
@@ -2505,47 +2899,58 @@
               "#bigint": "0"
             }
           ],
+          "skew": {
+            "#bigint": "99000"
+          },
           "sources": [
             {
+              "fence": {
+                "#bigint": "0"
+              },
+              "instance": {
+                "#bigint": "0"
+              },
               "key": {
                 "#bigint": "1"
               },
-              "localTtl": {
+              "localMs": {
                 "#bigint": "2000"
-              },
-              "remoteTtl": {
-                "#bigint": "0"
               },
               "result": {
                 "#bigint": "3"
               },
-              "retention": {
-                "#bigint": "5000"
+              "retentionMs": {
+                "#bigint": "0"
               },
               "shared": true
             },
             {
+              "fence": {
+                "#bigint": "0"
+              },
+              "instance": {
+                "#bigint": "0"
+              },
               "key": {
                 "#bigint": "1"
               },
-              "localTtl": {
+              "localMs": {
                 "#bigint": "2000"
-              },
-              "remoteTtl": {
-                "#bigint": "1000"
               },
               "result": {
                 "#bigint": "0"
               },
-              "retention": {
+              "retentionMs": {
                 "#bigint": "5000"
               },
               "shared": true
             }
           ],
-          "wall": {
-            "#bigint": "99500"
-          },
+          "watermark": [
+            {
+              "#bigint": "0"
+            }
+          ],
           "writeFailed": false
         }
       },
@@ -2566,19 +2971,47 @@
           }
         },
         "s": {
+          "created": [
+            {
+              "#bigint": "100000"
+            },
+            {
+              "#bigint": "99500"
+            }
+          ],
           "dumpFailed": false,
-          "key": {
-            "#bigint": "1"
-          },
-          "localExpires": {
-            "#bigint": "2500"
-          },
-          "localKey": {
-            "#bigint": "1"
-          },
-          "localValue": {
-            "#bigint": "1"
-          },
+          "expires": [
+            {
+              "#bigint": "5000"
+            },
+            {
+              "#bigint": "5500"
+            }
+          ],
+          "held": [],
+          "localExpires": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "2500"
+            }
+          ],
+          "localValues": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "1"
+            }
+          ],
+          "lru": [
+            [
+              {
+                "#bigint": "1"
+              }
+            ]
+          ],
           "now": {
             "#bigint": "500"
           },
@@ -2631,9 +3064,6 @@
               "#bigint": "1"
             }
           },
-          "overlay": {
-            "#bigint": "1"
-          },
           "owners": [
             {
               "#bigint": "-1"
@@ -2645,50 +3075,31 @@
               "#bigint": "1"
             }
           ],
-          "policyCall": {
-            "#bigint": "-1"
+          "policy": {
+            "#bigint": "1"
           },
           "policyErrors": [],
-          "policyReplies": [
+          "processFlights": [
             {
-              "invalidBudget": false,
-              "providerFailed": false
+              "#bigint": "-1"
             },
             {
-              "invalidBudget": false,
-              "providerFailed": false
-            },
-            {
-              "invalidBudget": false,
-              "providerFailed": false
+              "#bigint": "-1"
             }
           ],
           "providerFailed": false,
           "readFailed": false,
-          "registered": [
-            {
-              "#bigint": "-1"
+          "receipt": {
+            "caller": {
+              "#bigint": "2"
             },
-            {
-              "#bigint": "-1"
-            }
-          ],
-          "remoteCreated": [
-            {
-              "#bigint": "100000"
+            "key": {
+              "#bigint": "1"
             },
-            {
-              "#bigint": "99500"
+            "layer": {
+              "#bigint": "0"
             }
-          ],
-          "remoteExpires": [
-            {
-              "#bigint": "5000"
-            },
-            {
-              "#bigint": "5500"
-            }
-          ],
+          },
           "remoteValues": [
             {
               "#bigint": "2"
@@ -2697,47 +3108,58 @@
               "#bigint": "1"
             }
           ],
+          "skew": {
+            "#bigint": "99000"
+          },
           "sources": [
             {
+              "fence": {
+                "#bigint": "0"
+              },
+              "instance": {
+                "#bigint": "0"
+              },
               "key": {
                 "#bigint": "1"
               },
-              "localTtl": {
+              "localMs": {
                 "#bigint": "2000"
-              },
-              "remoteTtl": {
-                "#bigint": "0"
               },
               "result": {
                 "#bigint": "3"
               },
-              "retention": {
-                "#bigint": "5000"
+              "retentionMs": {
+                "#bigint": "0"
               },
               "shared": true
             },
             {
+              "fence": {
+                "#bigint": "0"
+              },
+              "instance": {
+                "#bigint": "0"
+              },
               "key": {
                 "#bigint": "1"
               },
-              "localTtl": {
+              "localMs": {
                 "#bigint": "2000"
-              },
-              "remoteTtl": {
-                "#bigint": "1000"
               },
               "result": {
                 "#bigint": "1"
               },
-              "retention": {
+              "retentionMs": {
                 "#bigint": "5000"
               },
               "shared": true
             }
           ],
-          "wall": {
-            "#bigint": "99500"
-          },
+          "watermark": [
+            {
+              "#bigint": "0"
+            }
+          ],
           "writeFailed": false
         }
       }
