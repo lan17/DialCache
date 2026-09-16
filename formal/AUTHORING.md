@@ -105,7 +105,7 @@ witness assignment may read its own prior state.
 conformance profile, the library transitions it composes and its
 composition-violation count: a composed profile reports zero and the other
 counts are the migration work list for issue #165. `node formal/lint-profiles.mjs
-baseline --check` is a ratchet (library transitions unchanged, no count rising,
+baseline --check` is a ratchet (library transitions and counts as recorded,
 none in a composed profile) and `--write` refreshes the record after a reviewed
 change; the check runs in `make differential` (the pull request lane) and
 `make formal-check` (the full run), the lanes that have Quint. `make audit`

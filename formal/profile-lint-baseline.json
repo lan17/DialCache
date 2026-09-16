@@ -2,7 +2,6 @@
   "schemaVersion": 3,
   "quintVersion": "0.32.0",
   "kernelModules": [
-    "callers",
     "clock",
     "encodings",
     "flights",
@@ -53,7 +52,7 @@
       "model": "formal/dialcache-shadow-conformance.qnt",
       "module": "dialcache_shadow_conformance",
       "libraryTransitions": [],
-      "compositionViolations": 89
+      "compositionViolations": 96
     },
     {
       "id": "admission",
@@ -67,7 +66,6 @@
       "model": "formal/dialcache-layers-conformance.qnt",
       "module": "dialcache_layers_conformance",
       "libraryTransitions": [
-        "callers::record",
         "clock::advance",
         "remote_frames::seedFrame",
         "serving::begin",

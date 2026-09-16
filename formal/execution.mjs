@@ -7,6 +7,9 @@ export const root = fileURLToPath(new URL('../', import.meta.url));
 // needs to know that asks here.
 export const kernelDirectory = 'formal/kernel';
 export const isKernelSource = path => path.startsWith(`${kernelDirectory}/`);
+// Where a Quint source may live: formal/ for models and helper libraries,
+// formal/kernel/ for the kernel library's modules, no deeper.
+export const isQuintSourcePath = path => /^formal\/(kernel\/)?[\w-]+\.qnt$/.test(path);
 // Every Quint source a model may import: the scheduled models and helper
 // libraries at formal/ and the kernel library modules at formal/kernel/.
 export function quintSources(directory = root) {
@@ -428,7 +431,7 @@ export function validateExecution(manifest = readExecution(), {
   // fault in one is measured through the profiles that compose it.
   const paths = [...manifest.models.map(model => model.path), ...manifest.libraries];
   if (manifest.models.some(model => typeof model.path !== 'string' || !/^formal\/[\w-]+\.qnt$/.test(model.path)) ||
-      manifest.libraries.some(path => typeof path !== 'string' || !/^formal\/[\w-]+\.qnt$/.test(isKernelSource(path) ? `formal/${path.slice(kernelDirectory.length + 1)}` : path)) ||
+      manifest.libraries.some(path => typeof path !== 'string' || !isQuintSourcePath(path)) ||
       new Set(paths).size !== paths.length || !sameMembers(paths, files)) throw new Error('Model/library file inventory changed; review the execution schedule');
   const profileIds = [], outputDirectories = new Set([check.outputDirectory]), publicOnly = new Map();
   let invariants = 0, regressions = 0, generatedTraces = 0;
@@ -457,17 +460,14 @@ export function validateExecution(manifest = readExecution(), {
     invariants += model.invariants.length;
     regressions += model.regressions.length;
     if (model.propertyChallenge !== undefined) throw new Error(`${model.path}: property challenges live in the manifest challenges catalog`);
-    // A composed profile's differential knobs: bumping behaviorVersion declares
-    // an intended change of observable behavior (the differential then does
-    // not compare that profile against the reference revision), and
-    // maxBytesPerStateRatio is the trace-size growth the profile may take.
+    // A composed profile's declared behavior: bumping behaviorVersion says its
+    // observable behavior changed on purpose, so the corpus differential
+    // reports that profile instead of comparing it against the reference.
     if (model.differential !== undefined) {
-      if (!model.differential || typeof model.differential !== 'object' || Array.isArray(model.differential) || model.generate === undefined) throw new Error(`${model.path}: unsupported differential settings`);
-      const keys = Object.keys(model.differential);
-      if (!keys.length || keys.some(key => !['behaviorVersion', 'maxBytesPerStateRatio'].includes(key))) throw new Error(`${model.path}: unsupported differential settings`);
-      const { behaviorVersion, maxBytesPerStateRatio } = model.differential;
-      if (behaviorVersion !== undefined && (!Number.isSafeInteger(behaviorVersion) || behaviorVersion < 1)) throw new Error(`${model.path}: differential.behaviorVersion must be a positive integer`);
-      if (maxBytesPerStateRatio !== undefined && (typeof maxBytesPerStateRatio !== 'number' || !(maxBytesPerStateRatio >= 1))) throw new Error(`${model.path}: differential.maxBytesPerStateRatio must be at least 1`);
+      if (!model.differential || typeof model.differential !== 'object' || Array.isArray(model.differential) || model.generate === undefined ||
+          Object.keys(model.differential).join() !== 'behaviorVersion') throw new Error(`${model.path}: unsupported differential settings`);
+      const { behaviorVersion } = model.differential;
+      if (!Number.isSafeInteger(behaviorVersion) || behaviorVersion < 1) throw new Error(`${model.path}: differential.behaviorVersion must be a positive integer`);
     }
     if (model.profile !== undefined || model.generate !== undefined) {
       const profile = profiles.find(profile => profile.id === model.profile);
@@ -523,6 +523,11 @@ export function validateExecution(manifest = readExecution(), {
     const declarations = scanDeclarations(readSource(path));
     if ([...declarations.values()].some(kind => ['action', 'run', 'var'].includes(kind))) throw new Error(`${path}: a stateful model cannot be classified as a pure helper library`);
   }
+  // A kernel module exists to be composed: one no scheduled model reaches is
+  // never typechecked or executed by any lane, so it may not stay listed.
+  const reached = new Set(manifest.models.flatMap(model => importClosure(model.path)));
+  const orphans = manifest.libraries.filter(path => isKernelSource(path) && !reached.has(path));
+  if (orphans.length) throw new Error(`Kernel modules no scheduled model imports: ${orphans.join(', ')}; compose them or delete them`);
   if (!sameMembers(profileIds, profiles.map(profile => profile.id))) throw new Error('Generated profile inventory differs from claim registry');
   const challenges = validateChallenges(manifest, { readSource, contracts, sources: new Set(paths), profileIds: new Set(profileIds), publicOnly, grandfathered });
   return { models: manifest.models.length, libraries: manifest.libraries.length, profiles: profileIds.length, invariants, regressions, generatedTraces, exportedRegressionTraces, vectorModels, generatedVectors, ...challenges };

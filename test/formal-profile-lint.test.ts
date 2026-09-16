@@ -42,6 +42,7 @@ const fixtureNames = [
   "kernel", "kernel-leaky", "library", "profile-clean", "profile-thick", "profile-nested-let", "profile-lambda-assign", "profile-shadow",
   "profile-witness-choice", "profile-witness-projection", "profile-witness-guard", "profile-witness-deep", "profile-witness-domain",
   "profile-witness-input", "profile-witness-match", "composition-clean", "composition-thick", "composition-nondet-inline",
+  "composition-action-argument", "composition-wiring-passes",
 ];
 // Quint's effect checker rejects an operator constant that reads a variable
 // (QNT201), so this route can only be shown on the parsed IR; the lint must
@@ -61,11 +62,11 @@ describe("profile lint baseline diff", () => {
   ] };
   const clone = () => JSON.parse(JSON.stringify(baseline)) as Baseline;
 
-  it("reports nothing for an identical recomputation or a count that fell", () => {
+  it("reports nothing for an identical recomputation and asks for a refresh when a count fell", () => {
     expect(ratchetDifferences(baseline, clone())).toEqual([]);
     const improved = clone();
     improved.profiles[1]!.compositionViolations = 7;
-    expect(ratchetDifferences(baseline, improved)).toEqual([]);
+    expect(ratchetDifferences(baseline, improved)).toEqual(["baseline.profiles[1].compositionViolations: b fell from 12 to 7 (refresh the record with --write)"]);
   });
 
   it("fails when a count rises, a composed profile has any violation, or the library transitions move", () => {
@@ -168,6 +169,22 @@ describe.skipIf(!quintAvailable)("profile lint over synthetic kernel instances",
     expect(report.composition.violations.some(violation => violation.detail.includes("value of input"))).toBe(false);
   }, quintTimeout);
 
+  it("reports an argument a wrapper computes over state for a parametrized action, and taints the callee's parameter from a state read", async () => {
+    const report = await lintModel(fixture("composition-action-argument"), { kernelModules: ["library"] });
+    expect(report.composition.libraryTransitions).toEqual(["library::bump"]);
+    expect(report.composition.violations).toEqual([
+      { definition: "bumpWrapper", detail: "igt over cache state in the value of the argument delta of bumpBy", chain: ["bumpWrapper"] },
+      { definition: "bumpWrapper", detail: "ite over cache state in the value of the argument delta of bumpBy", chain: ["bumpWrapper"] },
+      { definition: "scaleBy", detail: "imul over cache state in the value of s", chain: ["scaleWrapper", "scaleBy"] },
+    ]);
+  }, quintTimeout);
+
+  it("accepts the wiring the rule admits by design: a record literal over a library result and a chosen input passed through", async () => {
+    const report = await lintModel(fixture("composition-wiring-passes"), { kernelModules: ["library"] });
+    expect(report.composition.libraryTransitions).toEqual(["library::bump"]);
+    expect(report.composition.violations).toEqual([]);
+  }, quintTimeout);
+
   it("treats a chosen input as wiring even when its inline nondet domain reads state", async () => {
     const report = await lintModel(fixture("composition-nondet-inline"), { kernelModules: ["library"] });
     expect(report.composition.libraryTransitions).toEqual(["library::bump"]);
@@ -177,7 +194,7 @@ describe.skipIf(!quintAvailable)("profile lint over synthetic kernel instances",
   it("discovers the kernel modules from formal/kernel only", () => {
     const modules = kernelModulesOf();
     expect(modules).toContain("serving");
-    expect(modules).toContain("callers");
+    expect(modules).toContain("flights");
     expect(modules).not.toContain("cache_rules");
     expect([...modules].sort()).toEqual(modules);
   });
@@ -372,14 +389,17 @@ describe.skipIf(!quintAvailable)("profile lint baseline", () => {
       ["clean", "profile_clean", [], 8],
       ["thick", "profile_thick", [], 3],
     ]);
-    // A stale record with lower counts fails as a rise; a higher recorded count passes as a fall.
+    // A record below reality fails as a rise; one above reality asks for a refresh.
     const stale = JSON.parse(JSON.stringify(fresh)) as Baseline;
     stale.profiles[0]!.compositionViolations = 6;
     stale.profiles[1]!.compositionViolations = 5;
     const path = join(temporary, "baseline.json");
     writeFileSync(path, formatBaseline(stale));
     const { differences } = await checkBaseline({ path, profiles, concurrency: 1 });
-    expect(differences).toEqual(["baseline.profiles[0].compositionViolations: clean rose from 6 to 8"]);
+    expect(differences).toEqual([
+      "baseline.profiles[0].compositionViolations: clean rose from 6 to 8",
+      "baseline.profiles[1].compositionViolations: thick fell from 5 to 3 (refresh the record with --write)",
+    ]);
     writeFileSync(path, formatBaseline(fresh));
     expect((await checkBaseline({ path, profiles, concurrency: 1 })).differences).toEqual([]);
   }, 120_000);

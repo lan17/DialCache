@@ -35,7 +35,9 @@ module serving {
     watermark: List[int],
     sources: List[Flights::Source],
     owners: List[int],
-    memoSlots: List[int] | r
+    memoSlots: List[int],
+    callerInstances: List[int],
+    callerKeys: List[int] | r
   }
 
   // The last admitted caller returns a layer value; an attached request memoizes it.
@@ -84,7 +86,7 @@ module serving {
         ...state.o
       },
       ...state
-    }, owner, slot)
+    }, owner, slot, instance, key)
     val localValue = if (participating and layers.local) Local::localValue(state, instance, key, layout.keysPerInstance) else NO_VALUE
     val readsRemote = participating and layers.remote
     val remoteValue = if (readsRemote) Remote::readableFrame(state, key, layout.operationsPerEntity) else NO_VALUE

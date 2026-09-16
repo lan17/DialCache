@@ -10,7 +10,7 @@ type History = { path: string; steps: Step[] };
 type Verdict = { path: string; agree: boolean; step?: number; action?: string; choice?: number; reason?: string; fields?: string[] };
 type Manifests = { execution: { settings: Record<string, unknown>; models: Array<Record<string, unknown>> }; registry: { profiles: Array<{ id: string; version?: number }> } };
 type Model = { path: string; generate: { outputDirectory: string; traces: number }; invariants: string[]; replayRegressions?: string[]; settings: { backend: string; seed: string };
-  behaviorVersion: number; schemaVersion: number | null; maxBytesPerStateRatio: number };
+  behaviorVersion: number; schemaVersion: number | null };
 type Plan = { action: "skip" | "compare"; reason?: string; reference?: Model; candidate: Model; descriptor: unknown };
 type Report = { profile: string; skipped?: string; forward: { disagreed: number }; reverse: { disagreed: number };
   generation: { bytesPerStateRatio: number | null; maxBytesPerStateRatio: number; wallRatio: number | null } };
@@ -26,13 +26,13 @@ const differential = await import(new URL("../formal/differential.mjs", import.m
   readManifests(directory: string): Manifests;
   replayHistories(tree: string, model: Model, descriptor: unknown, histories: History[], options: { chunk: number; output: string; concurrency: number }): Promise<Verdict[]>;
   composedProfiles(manifest: { models: Array<{ path: string; profile?: string }> }, options?: { cwd?: string }): string[];
-  selectProfiles(reference: Manifests, referenceTree: string, candidate: Manifests, cwd?: string): string[];
+  selectProfiles(prepared: { reference: { manifests: Manifests; tree: string }; candidate: { manifests: Manifests; tree: string } }): string[];
   closureSkip(reference: Model, candidate: Model, referenceSources: Record<string, string>, candidateSources: Record<string, string>): string | null;
-  kernelModuleCount(directory?: string): number;
   verdict(report: Report): { failed: boolean; reasons: string[] };
   formatReport(report: Report): string;
   defaultChunk: number;
   cursorVariable: string;
+  maxBytesPerStateRatio: number;
 };
 const fixtures = await import(new URL("../formal/generated-fixtures.mjs", import.meta.url).href) as {
   scheduleHistories(source: string, declarations: Map<string, unknown>, sourceMap: unknown, histories: Array<Array<[string, number]>>, options: { prefix: string; cursor: string }):
@@ -118,7 +118,7 @@ describe("corpus differential comparison", () => {
   it("plans a comparison only when both revisions generate the profile at the same declared behavior", () => {
     const candidate = manifests([layersModel()]);
     expect(differential.differentialPlan(manifests([layersModel()]), candidate, "layers")).toMatchObject({ action: "compare",
-      reference: { behaviorVersion: 0, schemaVersion: 2, maxBytesPerStateRatio: 1.2 }, candidate: { behaviorVersion: 0 } });
+      reference: { behaviorVersion: 0, schemaVersion: 2 }, candidate: { behaviorVersion: 0 } });
     // The reference manifest is read as recorded: extra or missing keys are not validated against the working tree.
     const older = manifests([{ ...layersModel(), unrelatedKey: true }]);
     (older.execution as Record<string, unknown>).kernel = ["formal/kernel/x.qnt"];
@@ -128,8 +128,6 @@ describe("corpus differential comparison", () => {
       .toMatchObject({ action: "skip", reason: "intended divergence: behaviorVersion 0 -> 1" });
     expect(differential.differentialPlan(manifests([layersModel()], 2), manifests([layersModel()], 3), "layers"))
       .toMatchObject({ action: "skip", reason: "intended divergence: observation schema version 2 -> 3" });
-    expect(differential.differentialPlan(manifests([layersModel()]), manifests([layersModel({ differential: { maxBytesPerStateRatio: 1.5 } })]), "layers"))
-      .toMatchObject({ action: "compare", candidate: { maxBytesPerStateRatio: 1.5 } });
     // A profile the candidate no longer generates is a visible removal, reported rather than compared; a profile neither revision generates is a misuse.
     expect(differential.differentialPlan(manifests([layersModel()]), manifests([]), "layers")).toMatchObject({ action: "skip", reason: /profile removed/ });
     expect(() => differential.differentialPlan(manifests([]), manifests([]), "layers")).toThrow(/No generation profile named layers in either revision/);
@@ -148,8 +146,8 @@ describe("corpus differential comparison", () => {
     expect(differential.verdict(report({}))).toEqual({ failed: false, reasons: [] });
     expect(differential.verdict(report({ forward: { disagreed: 2 } }))).toMatchObject({ failed: true, reasons: ["2 forward disagreement(s)"] });
     expect(differential.verdict(report({ reverse: { disagreed: 1 } }))).toMatchObject({ failed: true, reasons: ["1 reverse disagreement(s)"] });
+    expect(differential.maxBytesPerStateRatio).toBe(1.2);
     expect(differential.verdict(report({ generation: { bytesPerStateRatio: 1.25 } }))).toMatchObject({ failed: true, reasons: [expect.stringMatching(/x1\.250, above the bound x1\.2/)] });
-    expect(differential.verdict(report({ generation: { bytesPerStateRatio: 1.25, maxBytesPerStateRatio: 1.3 } }))).toEqual({ failed: false, reasons: [] });
     expect(differential.verdict(report({ generation: { wallRatio: 2 } }))).toEqual({ failed: false, reasons: [expect.stringMatching(/^advisory: generation wall time x2\.00/)] });
     expect(differential.verdict({ profile: "layers", skipped: "new profile" } as unknown as Report)).toEqual({ failed: false, reasons: ["skipped: new profile"] });
     expect(differential.formatReport({ profile: "layers", skipped: "intended divergence: behaviorVersion 0 -> 1" } as unknown as Report)).toBe("layers: not compared (intended divergence: behaviorVersion 0 -> 1).");
@@ -158,7 +156,7 @@ describe("corpus differential comparison", () => {
 
   it("skips a profile only when its import closure and generation inputs are identical in both revisions", () => {
     const model = (extra: Record<string, unknown> = {}): Model => ({ path: "formal/dialcache-layers-conformance.qnt", generate: { outputDirectory: "x", traces: 2 }, invariants: ["a"],
-      settings: { backend: "rust", seed: "0xd1a1ca" }, behaviorVersion: 0, schemaVersion: 2, maxBytesPerStateRatio: 1.2, ...extra } as Model);
+      settings: { backend: "rust", seed: "0xd1a1ca" }, behaviorVersion: 0, schemaVersion: 2, ...extra } as Model);
     const sources = { "formal/dialcache-layers-conformance.qnt": "aa", "formal/kernel/serving.qnt": "bb" };
     expect(differential.closureSkip(model(), model(), sources, { ...sources })).toBe("identical import closure and generation settings");
     expect(differential.closureSkip(model(), model(), sources, { ...sources, "formal/kernel/serving.qnt": "cc" })).toBeNull();
@@ -181,7 +179,7 @@ describe("corpus differential comparison", () => {
       writeFileSync(join(candidateTree, "formal/dialcache-c-conformance.qnt"), 'module c { import clock.* from "./kernel/clock" }');
       const reference = manifests([{ path: "formal/dialcache-a-conformance.qnt", profile: "a" }]);
       const candidate = manifests([{ path: "formal/dialcache-a-conformance.qnt", profile: "a" }, { path: "formal/dialcache-c-conformance.qnt", profile: "c" }]);
-      expect(differential.selectProfiles(reference, referenceTree, candidate, candidateTree)).toEqual(["a", "c"]);
+      expect(differential.selectProfiles({ reference: { manifests: reference, tree: referenceTree }, candidate: { manifests: candidate, tree: candidateTree } })).toEqual(["a", "c"]);
     } finally { rmSync(referenceTree, { recursive: true, force: true }); rmSync(candidateTree, { recursive: true, force: true }); }
     const tree = mkdtempSync(join(tmpdir(), "differential-composed-"));
     try {
@@ -192,7 +190,6 @@ describe("corpus differential comparison", () => {
       writeFileSync(join(tree, "formal/dialcache-b-conformance.qnt"), 'module b { import cache_rules.* from "./cache-rules" }');
       const manifest = { models: [{ path: "formal/dialcache-a-conformance.qnt", profile: "a" }, { path: "formal/dialcache-b-conformance.qnt", profile: "b" }, { path: "formal/other.qnt" }] };
       expect(differential.composedProfiles(manifest, { cwd: tree })).toEqual(["a"]);
-      expect(differential.kernelModuleCount(tree)).toBe(1);
       expect(importClosure("formal/dialcache-a-conformance.qnt", tree)).toEqual(["formal/dialcache-a-conformance.qnt", "formal/helper.qnt", "formal/kernel/clock.qnt"]);
       const digests = differential.closureDigests("formal/dialcache-a-conformance.qnt", { cwd: tree });
       expect(Object.keys(digests)).toHaveLength(3);

@@ -16,9 +16,8 @@ design and its history; this file describes what is here and how to use it.
 | `request_memo` | Request-scoped memo rows and scope closure | `scopeOpen`, `memoSlot`, `memoValue`, `memoize`, `closeScope` |
 | `local_storage` | Per-instance local storage with LRU eviction and a hit that renews recency, not insertion | `localValue`, `promote`, `putLocal` |
 | `remote_frames` | Remote frames with creation stamps, per-entity watermarks and fences (`cache_rules.fenceAllows`) | `seedFrame`, `raiseWatermark`, `readableFrame`, `missFence`, `writeAllowed` |
-| `flights` | Source executions, the process and request registries that coalesce callers, and the callers each source owns | `processOwner`, `requestOwner`, `admitCaller`, `joinRequestFlight`, `registerSource`, `settleSource`, `forgetScope`, `ownedBy` |
+| `flights` | Source executions, the process and request registries that coalesce callers, and per caller its owner, memo slot and identity | `processOwner`, `requestOwner`, `admitCaller`, `joinRequestFlight`, `registerSource`, `settleSource`, `forgetScope`, `ownedBy` |
 | `clock` | Elapsed time | `advance` |
-| `callers` | Per-caller context and key a profile records for its own properties; no rule reads it | `record` |
 | `serving` | Admission, traversal order, ownership precedence, publication and refill authority, scope closure, maintenance | `begin`, `settle`, `closeScope`, `invalidate` |
 
 `cache_rules` (age, expiry, deadline and fence judgments) stays the layer under
@@ -50,16 +49,19 @@ assigns `s'` to one library transition and `input'` to the driver record:
 ```quint
 action startCall(choice: int): bool = all {
   s.o.calls.length() < MAX_CALLERS,
-  s' = Callers::record(Serving::begin(s, LAYOUT, instance(choice / KEYS_PER_INSTANCE), choice % KEYS_PER_INSTANCE,
-    choice / KEYS_PER_INSTANCE), choice / KEYS_PER_INSTANCE, choice % KEYS_PER_INSTANCE),
+  s' = Serving::begin(s, LAYOUT, instance(choice / KEYS_PER_INSTANCE), choice % KEYS_PER_INSTANCE,
+    choice / KEYS_PER_INSTANCE),
   input' = { name: "beginCall", choice: choice }
 }
 ```
 
-Two library transitions compose here: the serving path, and the optional
-`callers` record the profile's ownership invariant reads. Each state field has
-one owning module (the request flight registry belongs to `flights`, which the
-scope closure in `serving` asks to forget a closed scope's slots).
+Each state field has one owning module: the request flight registry and the
+per-caller record (owner, memo slot, instance, key) belong to `flights`, which
+the scope closure in `serving` asks to forget a closed scope's slots, and the
+profile's ownership invariant reads that record rather than keeping its own.
+Composing `serving` adopts the layers encoding of every field it names; a
+profile with a different private layout re-encodes when it composes, and the
+witness classifiers that read its private fields move with it.
 
 The rules a profile may keep are wiring: record literals for the initial state,
 record updates with inputs (`{ policy: policy, ...s }`), and input decoding
@@ -82,10 +84,12 @@ profile's library transitions and violation count; a composed profile reports
 zero and the other counts are the migration list. `node formal/lint-profiles.mjs
 baseline --check` is a step of `make differential` (the pull request lane) and
 of `make formal-check` (the weekly full run); it is a ratchet: a profile's
-library transitions must match the record, its count may fall but not rise,
-and a profile that composes a kernel module may have none, whatever the record
-says. The lint sees the shape of assignments, not their meaning: a record
-literal that overrides a library result, or a let-bound lambda, passes it; the
+library transitions and violation count must match the record (a count that
+fell is refreshed with `--write`, one that rose fails), and a profile that
+composes a kernel module may have none, whatever the record says. Arguments a
+wrapper hands to a parametrized action are walked where they are written and
+taint the callee's parameters. The lint sees the shape of assignments, not
+their meaning: a record literal that overrides a library result passes it; the
 corpus differential is the behavioral check.
 
 ## Migrating a profile
@@ -107,9 +111,11 @@ disagrees in the reverse direction. Replays run as batched `quint test`
 processes (16 histories each, the measured optimum) built from constrained
 action clones shared across the batch, the same schedules fixture recipes use.
 The run fails on any disagreement and when trace bytes per state grow beyond
-the model's `differential.maxBytesPerStateRatio` (default 1.2); generation wall
-time is recorded and reported as advisory above 1.5, because the two
-generations run concurrently and hosted runners are noisy.
+1.2 times the reference's; generation wall time is recorded and reported as
+advisory above 1.5, because the two generations run concurrently and hosted
+runners are noisy. What is compared is what the drivers assert (the
+observation and the profile's side channels); private state is protected by
+the generation-time invariants and the witness lanes, not by this tool.
 
 The report records the import closure of both texts (the profile and every
 Quint source it reaches) with per-file digests, so a red run on a kernel-only

@@ -18,10 +18,16 @@ module flights {
     result: int,
     shared: bool
   }
+  // Per caller, parallel to the callers' outcomes: the owner that will complete
+  // it, the memo slot it fills, and the identity it asked for, so a registry
+  // property can state that no source completes a caller for another
+  // instance or key.
   type Registry[r] = {
     sources: List[Source],
     owners: List[int],
     memoSlots: List[int],
+    callerInstances: List[int],
+    callerKeys: List[int],
     processFlights: List[int],
     requestFlights: List[int] | r
   }
@@ -30,10 +36,12 @@ module flights {
     state.processFlights.nth(instance * keysPerInstance + key)
   pure def requestOwner(state: Registry[r], slot: int): int =
     if (slot < 0) NO_OWNER else state.requestFlights.nth(slot)
-  // Every caller is recorded with its owner and memo slot at admission.
-  pure def admitCaller(state: Registry[r], owner: int, slot: int): Registry[r] = {
+  // Every caller is recorded with its owner, memo slot and identity at admission.
+  pure def admitCaller(state: Registry[r], owner: int, slot: int, instance: int, key: int): Registry[r] = {
     owners: state.owners.append(owner),
     memoSlots: state.memoSlots.append(slot),
+    callerInstances: state.callerInstances.append(instance),
+    callerKeys: state.callerKeys.append(key),
     ...state
   }
   pure def lastCaller(state: Registry[r]): int = state.owners.length() - 1

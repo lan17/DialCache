@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
-import { copySources, importClosure, isKernelSource, kernelDirectory, quintSources, root, validateExecution } from './execution.mjs';
+import { copySources, importClosure, isKernelSource, isQuintSourcePath, root, validateExecution } from './execution.mjs';
 import { parseWithSourceMap, scheduleHistories, spliceDeclarations } from './generated-fixtures.mjs';
 import { CommandFailure, printGroup, resolveConcurrency, runPool, seconds, spawnBuffered } from './quint-pool.mjs';
 import { parseTrace, profiles } from './replay/features.mjs';
@@ -42,7 +42,7 @@ import { generationArguments } from './run-models.mjs';
 // measured fastest (15.5 s versus 21.9 s for 64 histories at 64 per process).
 export const defaultChunk = 16;
 export const defaultOutput = '.formal-traces/differential';
-export const defaultMaxBytesPerStateRatio = 1.2;
+export const maxBytesPerStateRatio = 1.2;
 export const advisoryWallRatio = 1.5;
 export const cursorVariable = 'replayCursor';
 
@@ -53,7 +53,7 @@ const gitShow = (revision, path, cwd) => execFileSync('git', ['show', `${revisio
 const manifestPaths = ['formal/execution.json', 'formal/profiles.json'];
 export function exportRevision(revision, directory, { cwd = root } = {}) {
   const listing = execFileSync('git', ['ls-tree', '-r', '--name-only', revision, '--', 'formal'], { cwd, encoding: 'utf8' })
-    .split('\n').filter(path => manifestPaths.includes(path) || (path.endsWith('.qnt') && (dirname(path) === 'formal' || isKernelSource(path))));
+    .split('\n').filter(path => manifestPaths.includes(path) || isQuintSourcePath(path));
   if (!listing.includes('formal/execution.json')) throw new Error(`Revision ${revision} has no formal/execution.json`);
   for (const path of listing) {
     mkdirSync(resolve(directory, dirname(path)), { recursive: true });
@@ -79,8 +79,7 @@ function generationModel(manifests, profileId) {
   const model = manifests.execution.models.find(candidate => candidate.profile === profileId);
   if (!model || !model.generate || typeof model.path !== 'string' || !Array.isArray(model.invariants)) return undefined;
   const entry = manifests.registry.profiles.find(candidate => candidate.id === profileId);
-  return { ...model, behaviorVersion: model.differential?.behaviorVersion ?? 0, schemaVersion: entry?.version ?? null,
-    maxBytesPerStateRatio: model.differential?.maxBytesPerStateRatio ?? defaultMaxBytesPerStateRatio, settings: manifests.execution.settings };
+  return { ...model, behaviorVersion: model.differential?.behaviorVersion ?? 0, schemaVersion: entry?.version ?? null, settings: manifests.execution.settings };
 }
 
 // What to do for one profile given both revisions' manifests. A profile the
@@ -260,11 +259,12 @@ export async function prepareReplay(tree, model, descriptor, histories, { chunk,
     writeFileSync(modelPath, spliceDeclarations(source, [...schedule.declarations, ...runs]));
     const traces = resolve(workspace, 'traces');
     mkdirSync(traces);
+    // A chunk replays in seconds; a stuck evaluator should not hold the job.
     const test = await quint(['test', modelPath, `--backend=${model.settings.backend}`, '--max-samples=1', `--seed=${model.settings.seed}`,
-      '--match=^replay\\d+$', `--out-itf=${traces}/{test}.itf.json`], { cwd: workspace });
+      '--match=^replay\\d+$', `--out-itf=${traces}/{test}.itf.json`], { cwd: workspace, timeoutMs: 300_000 });
     const log = test.stdout + test.stderr;
     writeFileSync(resolve(workspace, 'quint-test.log'), log);
-    return batch.map(({ history, index: position }, index) => {
+    const verdictsOfChunk = batch.map(({ history, index: position }, index) => {
       const file = resolve(traces, `replay${index}.itf.json`);
       const diagnostic = runDiagnostic(log, `replay${index}`);
       const withDiagnostic = verdict => ({ path: history.path, ...verdict, ...(verdict.agree || !diagnostic ? {} : { reason: `${verdict.reason}; ${diagnostic}` }) });
@@ -274,6 +274,9 @@ export async function prepareReplay(tree, model, descriptor, histories, { chunk,
       catch (error) { return [position, withDiagnostic({ agree: false, step: 0, reason: `replay trace unreadable: ${error.message}` })]; }
       return [position, withDiagnostic(compareHistory(history, replayed))];
     });
+    // Agreeing traces are not evidence anyone reads again; disagreements stay.
+    if (verdictsOfChunk.every(([, verdict]) => verdict.agree)) rmSync(traces, { recursive: true, force: true });
+    return verdictsOfChunk;
   });
   return { tasks, collect: results => { for (const [position, verdict] of results.flat()) verdicts[position] = verdict; return verdicts; } };
 }
@@ -298,27 +301,30 @@ export function closureDigests(path, { cwd = root } = {}) {
 export function composedProfiles(manifest, { cwd = root } = {}) {
   return manifest.models.filter(model => model.profile !== undefined && importClosure(model.path, cwd).some(isKernelSource)).map(model => model.profile);
 }
-export function kernelModuleCount(directory = root) {
-  return quintSources(directory).filter(isKernelSource).length;
-}
 
-// The reference: the merge base with a revision, its Quint sources and
-// manifests exported once for every profile of a run.
-export function prepareReference(reference, { cwd = root, output = defaultOutput } = {}) {
+// The two trees of a run, prepared once: the reference is the merge base with
+// a revision (its Quint sources and manifests exported as recorded), the
+// candidate is a copy of the working tree with its manifests validated.
+export function prepare(reference, { cwd = root, output = defaultOutput } = {}) {
+  const candidateManifests = readManifests(cwd);
+  validateExecution(candidateManifests.execution);
   const revision = resolveMergeBase(reference, { cwd });
-  // One reference per run; an earlier merge base's export and corpus go.
-  rmSync(resolve(cwd, output, 'reference'), { recursive: true, force: true });
-  const tree = resolve(cwd, output, 'reference', revision.slice(0, 12));
-  exportRevision(revision, tree, { cwd });
-  return { revision, tree, manifests: readManifests(tree) };
+  for (const stale of ['reference', 'candidate']) rmSync(resolve(cwd, output, stale), { recursive: true, force: true });
+  const referenceTree = resolve(cwd, output, 'reference', revision.slice(0, 12));
+  exportRevision(revision, referenceTree, { cwd });
+  const candidateTree = resolve(cwd, output, 'candidate');
+  copySources(cwd, candidateTree);
+  return { reference: { revision, tree: referenceTree, manifests: readManifests(referenceTree) }, candidate: { tree: candidateTree, manifests: candidateManifests } };
 }
 
-// The profiles a run replays: every profile composed in either revision, so
-// a rewrite that moves a profile off the library is checked like one that
-// moves it on. A profile composed at the reference that the candidate no
-// longer generates is a failure, never a silent skip.
-export function selectProfiles(referenceManifests, referenceTree, candidateManifests, cwd = root) {
-  return [...new Set([...composedProfiles(referenceManifests.execution, { cwd: referenceTree }), ...composedProfiles(candidateManifests.execution, { cwd })])].sort();
+// The profiles a run replays: every profile composed in either revision, so a
+// rewrite that moves a profile off the library is checked like one that moves
+// it on. A profile composed at the reference that the candidate no longer
+// generates is selected too and reported as removed (the manifest validators
+// own whether a profile may disappear; the differential only makes it visible).
+export function selectProfiles(prepared) {
+  return [...new Set([...composedProfiles(prepared.reference.manifests.execution, { cwd: prepared.reference.tree }),
+    ...composedProfiles(prepared.candidate.manifests.execution, { cwd: prepared.candidate.tree })])].sort();
 }
 
 // A generation whose inputs are byte-identical in both revisions is the same
@@ -329,18 +335,14 @@ export function closureSkip(referenceModel, candidateModel, referenceSources, ca
     ? 'identical import closure and generation settings' : null;
 }
 
-// The differential for one profile against a prepared reference (the merge
-// base's text and manifests); the candidate is the working tree.
+// The differential for one profile over the prepared trees.
 export async function runDifferential(profileId, prepared, { chunk = defaultChunk, output = defaultOutput,
     concurrency = resolveConcurrency(), cwd = root, log = console.log } = {}) {
-  const candidateManifests = readManifests(cwd);
-  validateExecution(candidateManifests.execution);
-  const { revision, tree: referenceTree, manifests: referenceManifests } = prepared;
+  const { revision, tree: referenceTree, manifests: referenceManifests } = prepared.reference;
+  const { tree: candidateTree, manifests: candidateManifests } = prepared.candidate;
   const outputDirectory = resolve(cwd, output, profileId);
   rmSync(outputDirectory, { recursive: true, force: true });
   mkdirSync(outputDirectory, { recursive: true });
-  const candidateTree = resolve(outputDirectory, 'candidate');
-  copySources(cwd, candidateTree);
   const write = report => { writeFileSync(resolve(outputDirectory, 'report.json'), JSON.stringify(report, null, 2) + '\n'); return report; };
   const entry = model => model ? { path: model.path, behaviorVersion: model.behaviorVersion, schemaVersion: model.schemaVersion } : {};
   const plan = differentialPlan(referenceManifests, candidateManifests, profileId);
@@ -382,14 +384,14 @@ export async function runDifferential(profileId, prepared, { chunk = defaultChun
       wallRatio: referenceCorpus.generationMs ? candidateCorpus.generationMs / referenceCorpus.generationMs : null,
       reference: referenceSize, candidate: candidateSize,
       bytesPerStateRatio: referenceSize.bytesPerState ? candidateSize.bytesPerState / referenceSize.bytesPerState : null,
-      maxBytesPerStateRatio: candidateModel.maxBytesPerStateRatio },
+      maxBytesPerStateRatio },
     replay: { chunk, wallMs: Math.round(replayMs) },
   });
 }
 
 // The run's verdict: any disagreement in either direction fails, as does trace
-// growth beyond the model's bound. Wall time is advisory: the two generations
-// run concurrently and hosted runners are noisy.
+// growth beyond the bound. Wall time is advisory: the two generations run
+// concurrently and hosted runners are noisy.
 export function verdict(report) {
   const reasons = [];
   if (report.skipped) return { failed: false, reasons: [`skipped: ${report.skipped}`] };
@@ -428,8 +430,7 @@ Generates <profile>'s corpus and exported regressions from the merge base with
 manifest entry and the lane's command; replays every reference history through
 the working tree's text and every working-tree history through the reference
 text; fails on any step whose driver-asserted observation differs, on an input
-either text refuses, or on trace bytes per state above the model's bound
-(differential.maxBytesPerStateRatio, default ${defaultMaxBytesPerStateRatio}).
+either text refuses, or on trace bytes per state above x${maxBytesPerStateRatio}.
 A profile whose differential.behaviorVersion or observation schema version
 differs between the revisions is reported as an intended divergence and not
 compared; a profile the reference does not generate is reported as new.
@@ -452,14 +453,10 @@ async function main(argv) {
   const chunk = options.chunk === undefined ? defaultChunk : Number(options.chunk);
   if (!Number.isSafeInteger(chunk) || chunk < 1) throw new Error('--chunk must be a positive integer');
   const settings = { chunk, ...(typeof options.out === 'string' ? { output: options.out } : {}) };
-  const prepared = prepareReference(typeof options.reference === 'string' ? options.reference : 'origin/main', { output: settings.output ?? defaultOutput });
-  const selected = options.composed ? selectProfiles(prepared.manifests, prepared.tree, readManifests(root)) : positional;
-  if (!selected.length) {
-    if (kernelModuleCount() > 0) throw new Error(`${kernelDirectory} has modules but no generation profile imports one in either revision; compose a profile or delete the modules`);
-    console.log('No profile imports a kernel module in either revision; nothing to replay.');
-    return 0;
-  }
-  console.log(`Reference ${prepared.revision.slice(0, 12)}; profiles: ${selected.join(', ')}.`);
+  const prepared = prepare(typeof options.reference === 'string' ? options.reference : 'origin/main', { output: settings.output ?? defaultOutput });
+  const selected = options.composed ? selectProfiles(prepared) : positional;
+  if (!selected.length) { console.log('No profile imports a kernel module in either revision; nothing to replay.'); return 0; }
+  console.log(`Reference ${prepared.reference.revision.slice(0, 12)}; profiles: ${selected.join(', ')}.`);
   let failed = false;
   for (const profileId of selected) {
     const report = await runDifferential(profileId, prepared, settings);

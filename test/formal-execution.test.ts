@@ -25,13 +25,14 @@ type Command = { command: string; args: string[]; outputDirectory?: string; expe
 const manifest = () => JSON.parse(readFileSync(new URL("../formal/execution.json", import.meta.url), "utf8")) as Manifest;
 const moduleUrl = new URL("../formal/execution.mjs", import.meta.url).href;
 const runner = fileURLToPath(new URL("../formal/run-models.mjs", import.meta.url));
-const { root, scanDeclarations, scanDeclarationBodies, classifyRuns, reproducerCheckpoint, validateExecution, grandfatheredReproducerBacklog } = await import(moduleUrl) as {
+const { root, scanDeclarations, scanDeclarationBodies, classifyRuns, reproducerCheckpoint, validateExecution, grandfatheredReproducerBacklog, quintSources } = await import(moduleUrl) as {
   root: string;
+  quintSources(directory?: string): string[];
   scanDeclarations(source: string): Map<string, string>;
   scanDeclarationBodies(source: string): Map<string, { kind: string; body: string[]; spans: Array<[number, number]> }>;
   classifyRuns(declarations: Map<string, { kind: string; body: string[] }>): { publicOnly: string[]; patching: string[] };
   reproducerCheckpoint(source: string, run: string, failure: unknown): { before: string; through: string };
-  validateExecution(value: unknown, options?: { readSource?(path: string): string; grandfathered?: readonly string[] }): Record<string, number>;
+  validateExecution(value: unknown, options?: { readSource?(path: string): string; grandfathered?: readonly string[]; files?: string[] }): Record<string, number>;
   grandfatheredReproducerBacklog: readonly string[];
 };
 const { checkSemanticCoverage } = await import(new URL("../formal/check-semantic-coverage.mjs", import.meta.url).href) as {
@@ -42,11 +43,11 @@ const { bindGeneratedTrace } = await import(new URL("../formal/run-models.mjs", 
 };
 // Exercise pure metadata checks directly: large catalogs must not depend on
 // synchronous stdin pipes. The CLI dry-run check below still tests the launcher.
-const validate = (value: unknown, options?: { readSource?(path: string): string; grandfathered?: readonly string[] }) => validateExecution(value, options);
+const validate = (value: unknown, options?: { readSource?(path: string): string; grandfathered?: readonly string[]; files?: string[] }) => validateExecution(value, options);
 
 describe("formal execution schedule", () => {
   it("accounts for all models, selected invariants, regressions, generated traces and challenges without Quint", () => {
-    expect(validate(manifest())).toEqual({ models: 32, libraries: 14, profiles: 15, invariants: 217, regressions: 406,
+    expect(validate(manifest())).toEqual({ models: 32, libraries: 13, profiles: 15, invariants: 217, regressions: 406,
       generatedTraces: 5280, exportedRegressionTraces: 239, vectorModels: 4, generatedVectors: 1631,
       challenges: 67, distinctFaults: 64, challengedModels: 32, waivedModels: 0, reproducers: 7, reproducerBacklog: 60 });
   });
@@ -81,23 +82,32 @@ describe("formal execution schedule", () => {
       .toThrow(/formal\/kernel\/clock\.qnt: a stateful model cannot be classified as a pure helper library/);
   });
 
-  it("validates a composed profile's differential settings", () => {
+  it("validates a composed profile's declared behavior version", () => {
     const layers = () => { const m = manifest(); return { m, model: m.models.find(model => model.profile === "layers")! as typeof m.models[number] & { differential?: unknown } }; };
     const versioned = layers();
-    versioned.model.differential = { behaviorVersion: 1, maxBytesPerStateRatio: 1.3 };
+    versioned.model.differential = { behaviorVersion: 1 };
     expect(() => validate(versioned.m)).not.toThrow();
     const zero = layers();
     zero.model.differential = { behaviorVersion: 0 };
     expect(() => validate(zero.m)).toThrow(/behaviorVersion must be a positive integer/);
-    const loose = layers();
-    loose.model.differential = { maxBytesPerStateRatio: 0.9 };
-    expect(() => validate(loose.m)).toThrow(/maxBytesPerStateRatio must be at least 1/);
-    const unknown = layers();
-    unknown.model.differential = { preserve: true };
-    expect(() => validate(unknown.m)).toThrow(/unsupported differential settings/);
-    const empty = layers();
-    empty.model.differential = {};
-    expect(() => validate(empty.m)).toThrow(/unsupported differential settings/);
+    for (const invalid of [{ preserve: true }, {}, null, { behaviorVersion: 1, maxBytesPerStateRatio: 1.3 }]) {
+      const bad = layers();
+      bad.model.differential = invalid;
+      expect(() => validate(bad.m), JSON.stringify(invalid)).toThrow(/unsupported differential settings/);
+    }
+    const unscheduled = manifest();
+    (unscheduled.models.find(model => model.path === "formal/dialcache-core.qnt")! as typeof unscheduled.models[number] & { differential?: unknown }).differential = { behaviorVersion: 1 };
+    expect(() => validate(unscheduled)).toThrow(/unsupported differential settings/);
+  });
+
+  it("refuses a kernel module no scheduled model imports", () => {
+    const orphan = manifest();
+    orphan.libraries.push("formal/kernel/orphan.qnt");
+    const sources = (path: string) => path === "formal/kernel/orphan.qnt" ? "module orphan { pure def unused(n: int): int = n }" : readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+    // Listed but absent from the tree: the inventory check speaks first.
+    expect(() => validate(orphan, { readSource: sources })).toThrow(/file inventory changed/);
+    // Listed and present, yet reached by no model: the orphan rule.
+    expect(() => validate(orphan, { readSource: sources, files: [...quintSources(), "formal/kernel/orphan.qnt"] })).toThrow(/Kernel modules no scheduled model imports: formal\/kernel\/orphan\.qnt/);
   });
 
   it("rejects invalid exploration bounds and unsafe generation output paths", () => {

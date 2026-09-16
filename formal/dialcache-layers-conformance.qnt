@@ -3,7 +3,6 @@ module dialcache_layers_conformance {
   import encodings.* from "./kernel/encodings"
   import layer_policy.* from "./kernel/layer-policy"
   import serving as Serving from "./kernel/serving"
-  import callers as Callers from "./kernel/callers"
   import remote_frames as Remote from "./kernel/remote-frames"
   import flights as Flights from "./kernel/flights"
   import clock as Clock from "./kernel/clock"
@@ -73,7 +72,7 @@ module dialcache_layers_conformance {
     sources: List[Flights::Source],
     owners: List[int],
     memoSlots: List[int],
-    callerContexts: List[int],
+    callerInstances: List[int],
     callerKeys: List[int]
   }
   var s: State
@@ -114,7 +113,7 @@ module dialcache_layers_conformance {
       sources: List(),
       owners: List(),
       memoSlots: List(),
-      callerContexts: List(),
+      callerInstances: List(),
       callerKeys: List()
     },
     input' = { name: "init", choice: fixture }
@@ -125,8 +124,8 @@ module dialcache_layers_conformance {
   }
   action startCall(choice: int): bool = all {
     s.o.calls.length() < MAX_CALLERS,
-    s' = Callers::record(Serving::begin(s, LAYOUT, instance(choice / KEYS_PER_INSTANCE), choice % KEYS_PER_INSTANCE,
-      choice / KEYS_PER_INSTANCE), choice / KEYS_PER_INSTANCE, choice % KEYS_PER_INSTANCE),
+    s' = Serving::begin(s, LAYOUT, instance(choice / KEYS_PER_INSTANCE), choice % KEYS_PER_INSTANCE,
+      choice / KEYS_PER_INSTANCE),
     input' = { name: "beginCall", choice: choice }
   }
   action beginCall = {
@@ -224,7 +223,7 @@ module dialcache_layers_conformance {
   val sourceOwnershipNeverCrossesKeyOrInstance = s.owners.indices().forall(call => {
     val owner = s.owners.nth(call)
     owner < 0 or (s.sources.nth(owner).key == s.callerKeys.nth(call)
-      and s.sources.nth(owner).instance == instance(s.callerContexts.nth(call)))
+      and s.sources.nth(owner).instance == s.callerInstances.nth(call))
   })
   val localMembershipMatchesLru = s.localValues.indices().forall(i =>
     (s.localValues.nth(i) > 0)

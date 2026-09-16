@@ -315,7 +315,9 @@ export function lintComposition(index, { kernelModules = [] } = {}) {
         if (declaration.kind === 'def') transitions.add(index.labelOf(declaration.module, declaration.name));
         return true;
       }
-      if (declaration.owner === node.key) return again(declaration.expr) || stateful.some(Boolean);
+      // A definition bound inside this body: its lambda parameters take the
+      // arguments' taint like a top-level helper's do.
+      if (declaration.owner === node.key) return applyBody(declaration.expr, stateful, { node, chain, variable, tainted });
       if (isProfile(declaration)) return callProfile(declaration, stateful, { node, chain, variable });
       if (stateful.some(Boolean)) report(node, chain, `${index.labelOf(declaration.module, declaration.name)} applied to cache state in the value of ${variable}`);
       return stateful.some(Boolean);
@@ -324,18 +326,46 @@ export function lintComposition(index, { kernelModules = [] } = {}) {
     if (stateful.some(Boolean)) report(node, chain, `${expr.opcode} over cache state in the value of ${variable}`);
     return stateful.some(Boolean);
   };
+  // A body applied to arguments: its lambda parameters take the arguments'
+  // taint; a parameterless body is a value walked as it stands.
+  const applyBody = (body, stateful, { node, chain, variable, tainted }) => {
+    const parameters = body.kind === 'lambda' ? body.params : [];
+    const inner = new Map(tainted ?? []);
+    parameters.forEach((parameter, position) => inner.set(parameter.name, stateful[position] === true));
+    return walk(body.kind === 'lambda' ? body.expr : body, { node, chain, tainted: inner, variable });
+  };
   // A profile definition applied to arguments: its body is walked with each
   // parameter tainted by its argument. A parameterless definition is a value.
   const callProfile = (declaration, stateful, { node, chain, variable }) => {
     const target = index.nodes.get(declaration.owner);
     if (!target) return stateful.some(Boolean);
-    const body = target.expr;
-    const parameters = body.kind === 'lambda' ? body.params : [];
-    const tainted = new Map(parameters.map((parameter, position) => [parameter.name, stateful[position] === true]));
-    const inner = body.kind === 'lambda' ? body.expr : body;
     reachable.add(target.key);
-    return walk(inner, { node: target, chain: [...chain, target.label], tainted, variable });
+    return applyBody(target.expr, stateful, { node: target, chain: [...chain, target.label], variable });
   };
+  // A wrapper that applies a parametrized action decides what that action
+  // assigns: each argument is walked where it is written (rule logic in an
+  // argument is the wrapper's), and the taint it carries reaches the callee's
+  // parameter at every call site before the callee's assignments are judged.
+  const parameterTaint = new Map();
+  const definitions = topLevelDefinitions(index).filter(node => node.module === index.main);
+  for (const caller of definitions) {
+    const own = caller.expr?.kind === 'lambda' ? new Map(caller.expr.params.map(parameter => [parameter.name, false])) : new Map();
+    for (const expr of nodes(caller.expr)) {
+      if (expr.kind !== 'app') continue;
+      const declaration = resolveTarget(index, expr);
+      if (declaration?.kind !== 'def' || declaration.qualifier !== 'action' || declaration.module !== index.main) continue;
+      const callee = index.nodes.get(declaration.owner);
+      if (!callee || callee.expr?.kind !== 'lambda') continue;
+      const taints = parameterTaint.get(callee.key) ?? new Array(callee.expr.params.length).fill(false);
+      expr.args.forEach((argument, position) => {
+        // An argument that itself assigns state is a transition fragment the
+        // caller's own assignments cover; a value argument is walked here.
+        if (hasEffects(index, argument)) return;
+        if (walk(argument, { node: caller, chain: [caller.label], tainted: own, variable: `the argument ${callee.expr.params[position]?.name} of ${callee.label}` })) taints[position] = true;
+      });
+      parameterTaint.set(callee.key, taints);
+    }
+  }
   for (const action of actions) {
     const parent = new Map([[action.key, undefined]]);
     const queue = [action];
@@ -350,7 +380,8 @@ export function lintComposition(index, { kernelModules = [] } = {}) {
         // A library module has no state to assign (the manifest keeps libraries
         // pure), so every assignment reached here is the profile's.
         if (variable.name === inputField) continue;
-        const parameters = node.expr?.kind === 'lambda' ? node.expr.params.map(parameter => [parameter.name, false]) : [];
+        const taints = parameterTaint.get(node.key) ?? [];
+        const parameters = node.expr?.kind === 'lambda' ? node.expr.params.map((parameter, position) => [parameter.name, taints[position] === true]) : [];
         walk(value, { node, chain, tainted: new Map(parameters), variable: variableLabel(index, variable) });
       }
       for (const next of referencesOf(index, node)) {
@@ -588,9 +619,11 @@ export function readBaseline(directory = root, path = baselinePath) {
 }
 
 // The check is a ratchet over what the rule protects. Every profile keeps the
-// library transitions it recorded; its violation count may fall but not rise;
-// and a profile that composes a kernel module has no violation whatever the
-// record says, so rewriting the baseline cannot admit rule logic into one.
+// library transitions it recorded; its violation count must match the record
+// (a fall is refreshed with --write so the record never sits above reality, a
+// rise fails); and a profile that composes a kernel module has no violation
+// whatever the record says, so rewriting the baseline cannot admit rule logic
+// into one.
 export function composedViolations(baseline) {
   return baseline.profiles.filter(profile => profile.compositionViolations > 0 && profile.libraryTransitions.length > 0)
     .map(profile => `${profile.id}: ${profile.compositionViolations} composition violation(s) in a profile that composes ${profile.libraryTransitions.join(', ')}`);
@@ -607,8 +640,9 @@ export function ratchetDifferences(expected, actual) {
     recorded.delete(profile.id);
     differences.push(...diffBaseline({ model: entry.model, module: entry.module, libraryTransitions: entry.libraryTransitions },
       { model: profile.model, module: profile.module, libraryTransitions: profile.libraryTransitions }, `baseline.profiles[${position}]`));
-    if (profile.compositionViolations > entry.compositionViolations) {
-      differences.push(`baseline.profiles[${position}].compositionViolations: ${profile.id} rose from ${entry.compositionViolations} to ${profile.compositionViolations}`);
+    if (profile.compositionViolations !== entry.compositionViolations) {
+      const moved = profile.compositionViolations > entry.compositionViolations ? 'rose' : 'fell';
+      differences.push(`baseline.profiles[${position}].compositionViolations: ${profile.id} ${moved} from ${entry.compositionViolations} to ${profile.compositionViolations}${moved === 'fell' ? ' (refresh the record with --write)' : ''}`);
     }
   }
   for (const entry of recorded.values()) differences.push(`baseline.profiles: missing ${JSON.stringify(entry)}`);
@@ -633,9 +667,9 @@ const usage = `Usage:
 The first form prints a JSON report and exits 1 when either rule is violated;
 --kernel defaults to the modules under formal/kernel. The second recomputes
 ${baselinePath} over every profile in formal/profiles.json and either checks
-it against the committed file (--check: library transitions unchanged, no
-violation count rising, none in a composed profile; exit 1 otherwise) or
-rewrites it (--write).`;
+it against the committed file (--check: library transitions and violation
+counts as recorded, none in a composed profile; exit 1 otherwise) or rewrites
+it (--write).`;
 
 function parseArguments(argv) {
   const options = {}, positional = [];
