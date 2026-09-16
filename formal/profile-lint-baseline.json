@@ -2,6 +2,7 @@
   "schemaVersion": 3,
   "quintVersion": "0.32.0",
   "kernelModules": [
+    "calls",
     "clock",
     "encodings",
     "flights",

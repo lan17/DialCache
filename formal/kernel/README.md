@@ -12,13 +12,14 @@ design and its history; this file describes what is here and how to use it.
 | Module | Concern | Transitions and judgments |
 | --- | --- | --- |
 | `encodings` | Sentinels shared by the modules: 0 for an absent value, -1 for an unowned slot, 0 for no fence | constants only |
-| `layer_policy` | Which layers a call may use, from the drivers' policy code and remote availability | `enabledLayers`, `sharedLayers` |
+| `calls` | What a caller asks for: instance, key and request context | the `Call` type only |
+| `layer_policy` | Which layers a call may use, from the drivers' layer policy code and remote availability; the immediate reply `resolution` and the `BYPASS` reply | `enabledLayers`, `sharedLayers`, `resolution` |
 | `request_memo` | Request-scoped memo rows and scope closure | `scopeOpen`, `memoSlot`, `memoValue`, `memoize`, `closeScope` |
 | `local_storage` | Per-instance local storage with LRU eviction and a hit that renews recency, not insertion | `localValue`, `promote`, `putLocal` |
 | `remote_frames` | Remote frames with creation stamps, per-entity watermarks and fences (`cache_rules.fenceAllows`) | `seedFrame`, `raiseWatermark`, `readableFrame`, `missFence`, `writeAllowed` |
-| `flights` | Source executions, the process and request registries that coalesce callers, and per caller its owner and memo slot; an opt-in record of the identity each caller asked for | `processOwner`, `requestOwner`, `admitCaller`, `ownCaller`, `joinRequestFlight`, `registerSource`, `settleSource`, `forgetScope`, `ownedBy`, `recordIdentity` |
+| `flights` | Source executions, the process and request registries that coalesce callers, and per caller its owner and memo slot; an opt-in record of the identity each caller asked for | `processOwner`, `requestOwner`, `admitCaller`, `attachCaller`, `joinRequestFlight`, `registerSource`, `settleSource`, `forgetScope`, `ownedBy`, `recordIdentity` |
 | `clock` | Elapsed time | `advance` |
-| `policy_gate` | Callers whose policy reply the environment holds, indexed by their policy call; the caller the latest release served | `hold`, `holding`, `latest`, `heldCaller`, `release` |
+| `policy_gate` | Callers whose policy reply the environment holds, with their calls, indexed by their policy call | `hold`, `holding`, `latest`, `entry`, `release` |
 | `serving` | Admission, traversal order, ownership precedence, publication and refill authority, scope closure, maintenance | `admit`, `release`, `begin`, `settle`, `closeScope`, `invalidate` |
 
 `cache_rules` (age, expiry, deadline and fence judgments) stays the layer under
@@ -38,19 +39,23 @@ codes, layer policy codes are `layer_policy`'s, storage slots hold the value or
 0 and registries a source index or -1 (`encodings`). Layouts (keys per instance
 and per scope row, persistent contexts, operations per entity, the serving TTL)
 are passed as a `serving::Layout` record, so a profile with a different bound
-composes the same transitions. A call is a `serving::Call` (instance, key,
+composes the same transitions. A call is a `calls::Call` (instance, key,
 context) and a policy reply resolves to a `layer_policy::Resolution` (the
 enabled layers and whether the call coalesces); `resolution(policy, remote)`
-is the immediate reply from the drivers' policy codes.
+is the immediate reply from the drivers' policy codes and `BYPASS` the reply
+of a call that uses no layer and neither registry.
 
 The traversal is one statement of the fall-through order (request memo, local,
 remote, source) and of publication authority, split in time rather than by
-concern: `admit` appends the caller, counts its policy call and holds it in the
-policy gate (a caller in a closed scope bypasses every layer and starts its own
-unshared source at once), `release` traverses for a held caller with the state
-current at release and the resolution the profile supplies, and `begin` is
-their composition for a profile whose replies are immediate. A profile whose
-drivers hold policy replies composes `admit` and `release` as separate steps.
+concern: `admit` appends the caller, counts its policy call and holds it with
+its call in the policy gate (a caller in a closed scope bypasses every layer
+and starts its own unshared source at once), `release` traverses for the caller
+held under a policy call with the state current at release and the resolution
+the profile supplies (a scope closed since admission resolves to `BYPASS`), and
+`begin` is their composition for a profile whose replies are immediate. A
+profile whose drivers hold policy replies composes `admit` and `release` as
+separate steps; releasing a policy call the gate does not hold is a modeling
+error that fails when the caller is attached, so a wrapper guards on the gate.
 Per-concern entry points a profile would sequence are not offered: the order is
 the rule, and the lint reports a branch between library transitions. A profile
 composes an opt-in record after a transition when one of its own properties
@@ -80,9 +85,9 @@ action startCall(choice: int): bool = all {
 Each state field has one owning module: the request flight registry and the
 per-caller record (owner, memo slot) belong to `flights`, which the scope
 closure in `serving` asks to forget a closed scope's slots; the held callers
-and the last released one belong to `policy_gate` (empty and -1 in a profile
-with immediate replies); the caller identity the ownership invariant reads is
-the opt-in record the wrapper composes around `begin`. Composing `serving`
+belong to `policy_gate` (empty in a profile with immediate replies); the caller
+identity the ownership invariant reads is the opt-in record the wrapper
+composes around `begin`. Composing `serving`
 adopts the layers encoding of every field it names; a profile with a different
 private layout re-encodes when it composes, and the witness classifiers that
 read its private fields move with it.

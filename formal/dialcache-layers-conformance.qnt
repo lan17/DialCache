@@ -75,8 +75,7 @@ module dialcache_layers_conformance {
     memoSlots: List[int],
     callerInstances: List[int],
     callerKeys: List[int],
-    held: List[Gate::Held],
-    lastReleased: int
+    held: List[Gate::Held]
   }
   var s: State
   var input: { name: str, choice: int }
@@ -118,8 +117,7 @@ module dialcache_layers_conformance {
       memoSlots: List(),
       callerInstances: List(),
       callerKeys: List(),
-      held: List(),
-      lastReleased: NO_OWNER
+      held: List()
     },
     input' = { name: "init", choice: fixture }
   }

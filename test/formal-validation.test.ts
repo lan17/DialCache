@@ -130,6 +130,7 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     expect(validationPlan("formal-check", { directory })).toEqual([
       { label: "Check every scheduled Quint model", command: process.execPath, args: ["formal/run-models.mjs", "check"] },
       { label: "Check the profile lint baseline", command: process.execPath, args: ["formal/lint-profiles.mjs", "baseline", "--check"] },
+      { label: "Check the kernel library fixtures", command: process.execPath, args: ["formal/check-kernel-fixtures.mjs"] },
     ]);
     const generate = validationPlan("formal-generate", { directory });
     expect(generate.some(step => step.args?.[0] === "formal/run-models.mjs" && step.args[1] === "check")).toBe(false);
@@ -145,6 +146,7 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
   it("gates composition in the differential lane: the lint baseline, then both-direction replay against the configured reference", () => {
     expect(validationPlan("differential", { directory, environment: { ...environment, DIFFERENTIAL_REFERENCE: "origin/release" } })).toEqual([
       { label: "Check the profile lint baseline", command: process.execPath, args: ["formal/lint-profiles.mjs", "baseline", "--check"] },
+      { label: "Check the kernel library fixtures", command: process.execPath, args: ["formal/check-kernel-fixtures.mjs"] },
       { label: "Replay composed profiles against their reference corpus", command: process.execPath, args: ["formal/differential.mjs", "--composed", "--reference=origin/release"] },
     ]);
     expect(validationPlan("differential", { directory, environment }).at(-1)!.args).toEqual(["formal/differential.mjs", "--composed", "--reference=origin/main"]);

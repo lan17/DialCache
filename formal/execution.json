@@ -21,6 +21,7 @@
     "formal/cache-rules.qnt",
     "formal/cache-contract.qnt",
     "formal/kernel/encodings.qnt",
+    "formal/kernel/calls.qnt",
     "formal/kernel/layer-policy.qnt",
     "formal/kernel/request-memo.qnt",
     "formal/kernel/local-storage.qnt",

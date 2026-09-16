@@ -112,6 +112,9 @@ export function validationPlan(target, { directory = root, environment = process
   // The composition rule is a gate wherever Quint is present: a composed
   // profile must keep zero composition violations against the recorded baseline.
   const lintBaseline = node('Check the profile lint baseline', 'formal/lint-profiles.mjs', 'baseline', '--check');
+  // The kernel fixtures (test/fixtures/kernel) exercise library seams no
+  // scheduled profile reaches; they run wherever Quint is present.
+  const kernelFixtures = node('Check the kernel library fixtures', 'formal/check-kernel-fixtures.mjs');
   // The complete replay outlives Go's default 10-minute test timeout on a slow
   // runner (run 34667733523 was killed at 10m0s); bound it explicitly, under
   // the go-parity job budget. The smoke run keeps the default.
@@ -131,13 +134,13 @@ export function validationPlan(target, { directory = root, environment = process
         node('Check conditional fixture regeneration scope', '--test', '.github/scripts/fixture-scope.test.mjs')),
     smoke: [tsReplay(false), nativeGo(false)],
     'fixtures-check': [node('Recompute all committed Quint artifacts', 'formal/generate-artifacts.mjs', '--check')],
-    differential: [lintBaseline, node('Replay composed profiles against their reference corpus', 'formal/differential.mjs', '--composed', `--reference=${environment.DIFFERENTIAL_REFERENCE ?? 'origin/main'}`)],
+    differential: [lintBaseline, kernelFixtures, node('Replay composed profiles against their reference corpus', 'formal/differential.mjs', '--composed', `--reference=${environment.DIFFERENTIAL_REFERENCE ?? 'origin/main'}`)],
     explore: [node('Explore and replay an isolated alternate-seed corpus', 'formal/explore.mjs')],
     'model-check': [node('Symbolically verify the scheduled finite rules', 'formal/check-symbolic-models.mjs')],
     // The model check is evidence about the Quint models (typechecks, bounded
     // runs, regressions and the mutation challenges). Nothing downstream reads
     // its output, so it is a sibling of generation rather than a prefix of it.
-    'formal-check': [node('Check every scheduled Quint model', 'formal/run-models.mjs', 'check'), lintBaseline],
+    'formal-check': [node('Check every scheduled Quint model', 'formal/run-models.mjs', 'check'), lintBaseline, kernelFixtures],
     // Generation is the single shared producer: the corpus, wire artifacts and
     // witness evidence depend only on the models. Both ports' replays and both
     // mutation measurements read that output and can run in parallel off it.

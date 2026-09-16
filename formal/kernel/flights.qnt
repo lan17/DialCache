@@ -37,17 +37,21 @@ module flights {
     state.processFlights.nth(instance * keysPerInstance + key)
   pure def requestOwner(state: Registry[r], slot: int): int =
     if (slot < 0) NO_OWNER else state.requestFlights.nth(slot)
-  // Every caller is recorded with its owner and memo slot at admission.
-  pure def admitCaller(state: Registry[r], owner: int, slot: int): Registry[r] = {
-    owners: state.owners.append(owner),
-    memoSlots: state.memoSlots.append(slot),
+  // Every caller is recorded at admission; its owner and memo slot are
+  // attached when the traversal serves it.
+  pure def admitCaller(state: Registry[r]): Registry[r] = {
+    owners: state.owners.append(NO_OWNER),
+    memoSlots: state.memoSlots.append(NO_OWNER),
+    ...state
+  }
+  pure def attachCaller(state: Registry[r], caller: int, owner: int, slot: int): Registry[r] = {
+    owners: state.owners.replaceAt(caller, owner),
+    memoSlots: state.memoSlots.replaceAt(caller, slot),
     ...state
   }
   // A caller that memoizes and coalesces registers its owner under its request memo slot.
   pure def joinRequestFlight(state: Registry[r], slot: int, owner: int): Registry[r] =
     if (slot < 0) state else { requestFlights: state.requestFlights.replaceAt(slot, owner), ...state }
-  pure def ownCaller(state: Registry[r], caller: int, owner: int): Registry[r] =
-    { owners: state.owners.replaceAt(caller, owner), ...state }
   // Starting a source makes it the caller's owner and registers it with the
   // request scope (when the call memoizes and coalesces) and the process (when shared).
   pure def registerSource(state: Registry[r], source: Source, caller: int, slot: int, coalesce: bool, keysPerInstance: int): Registry[r] = {
