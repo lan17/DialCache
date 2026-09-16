@@ -47,9 +47,9 @@ const validate = (value: unknown, options?: { readSource?(path: string): string;
 
 describe("formal execution schedule", () => {
   it("accounts for all models, selected invariants, regressions, generated traces and challenges without Quint", () => {
-    expect(validate(manifest())).toEqual({ models: 32, libraries: 21, profiles: 15, invariants: 218, regressions: 413,
-      generatedTraces: 5280, exportedRegressionTraces: 246, vectorModels: 4, generatedVectors: 1631,
-      challenges: 69, distinctFaults: 65, challengedModels: 32, waivedModels: 0, reproducers: 10, reproducerBacklog: 59 });
+    expect(validate(manifest())).toEqual({ models: 32, libraries: 21, profiles: 15, invariants: 219, regressions: 415,
+      generatedTraces: 5280, exportedRegressionTraces: 248, vectorModels: 4, generatedVectors: 1631,
+      challenges: 70, distinctFaults: 66, challengedModels: 32, waivedModels: 0, reproducers: 11, reproducerBacklog: 59 });
   });
 
   it("rejects omitted models and dropped or renamed regressions", () => {
@@ -259,11 +259,11 @@ describe("formal execution schedule", () => {
     expect(withReproducer.map(challenge => challenge.id)).toEqual([
       "policy-inclusive-local-expiry", "policy-inclusive-remote-freshness", "shadow-inclusive-c0-freshness", "scope-nested-close-evicts-outer-memo",
       "admission-capacity-off-by-one", "local-clock-precise-ttl", "stale-recovery-future-candidate", "envelope-strips-unknown-zero-prefix",
-      "source-budgets-accepts-at-deadline-equality", "policy-hit-before-join",
+      "source-budgets-accepts-at-deadline-equality", "policy-hit-before-join", "policy-join-ignores-coalesce",
     ]);
     expect(withReproducer.map(challenge => challenge.reproducer!.kind)).toEqual([
       "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "exported-regression", "model-run",
-      "exported-regression", "exported-regression",
+      "exported-regression", "exported-regression", "exported-regression",
     ]);
     // The shared-rule fault of a verification model is pinned by a profile's exported regression.
     expect(withReproducer.find(challenge => challenge.id === "stale-recovery-future-candidate")!.reproducer).toMatchObject({
@@ -319,8 +319,8 @@ describe("formal execution schedule", () => {
     expect(() => validate(exported(r => { r.failure = "s.o.calls == List(CALL_PENDING, DEADLINE_ERROR) and s.o.loaders == 2"; })))
       .toThrow(/defaultSourceBudgetExpiresAtSixtySecondsTest has no top-level expect whose condition is the declared failure/);
     expect(() => validate(exported(r => { r.failure = "s.o.loaders == 2"; }))).toThrow(/has no top-level expect whose condition is the declared failure/);
-    expect(validate(exported(r => { r.failure = "s.o.calls==List( DEADLINE_ERROR,CALL_PENDING )\n  and s.o.loaders == 2"; })).reproducers).toBe(10);
-    expect(validate(exported(r => { r.failure = "s.o.calls == List(CALL_PENDING)"; })).reproducers).toBe(10);
+    expect(validate(exported(r => { r.failure = "s.o.calls==List( DEADLINE_ERROR,CALL_PENDING )\n  and s.o.loaders == 2"; })).reproducers).toBe(11);
+    expect(validate(exported(r => { r.failure = "s.o.calls == List(CALL_PENDING)"; })).reproducers).toBe(11);
     expect(() => validate(exported(r => { r.family = "Inclusive Boundary"; }))).toThrow(/reproducer family must be a fault family slug/);
     expect(() => validate(exported(r => { r.profiles = []; }))).toThrow(/reproducer profiles must name known profiles and include source-budgets/);
     expect(() => validate(exported(r => { r.profiles = ["effects"]; }))).toThrow(/must name known profiles and include source-budgets/);
@@ -331,7 +331,7 @@ describe("formal execution schedule", () => {
     // A shared-library fault partitions every profile between the listed and the excluded.
     expect(() => validate(exported(r => { r.profiles = ["source-budgets", "effects"]; r.exclusions = { independent: "Its sources settle only through explicit deadlines." }; })))
       .toThrow(/a shared-library fault must list or exclude every profile; missing core/);
-    expect(validate(exported(r => { r.profiles = ["source-budgets", "effects"]; delete r.exclusions.effects; r.exclusions.independent = "Its sources settle only through explicit deadlines."; })).reproducers).toBe(10);
+    expect(validate(exported(r => { r.profiles = ["source-budgets", "effects"]; delete r.exclusions.effects; r.exclusions.independent = "Its sources settle only through explicit deadlines."; })).reproducers).toBe(11);
     expect(() => validate(exported(r => { r.scope = "not model-only"; }))).toThrow(/scope belongs only to a model-run reproducer/);
     // Another profile model's exported run may be cited only for a fault in a shared library.
     const local = (edit: (reproducer: Reproducer) => void) => {
@@ -351,7 +351,7 @@ describe("formal execution schedule", () => {
       .toThrow(/must name known profiles and include formal\/dialcache-stale-recovery\.qnt and policy/);
     // A shared-library fault lists or excludes every known profile.
     expect(() => validate(shared(r => { delete r.exclusions.core; delete r.exclusions.layers; }))).toThrow(/a shared-library fault must list or exclude every profile; missing core, layers/);
-    expect(validate(shared(r => { delete r.exclusions.layers; r.profiles.push("layers"); })).reproducers).toBe(10);
+    expect(validate(shared(r => { delete r.exclusions.layers; r.profiles.push("layers"); })).reproducers).toBe(11);
     // A state-patching run is a scheduled regression but never exported.
     const patching = manifest();
     const effects = patching.challenges.find(challenge => challenge.id === "effects-late-source-accepted")!;
@@ -360,7 +360,7 @@ describe("formal execution schedule", () => {
     effects.reproducer = { kind: "exported-regression", run: "followerKeepsAcceptedReadBudgetTest", failure: budget, family: "late-acceptance", profiles: ["effects"], exclusions: {} };
     expect(() => validate(patching)).toThrow(/exported-regression reproducer must cite an exported public-only run of formal\/dialcache-effects-conformance\.qnt: followerKeepsAcceptedReadBudgetTest/);
     effects.reproducer = { kind: "model-run", run: "followerKeepsAcceptedReadBudgetTest", failure: budget, family: "late-acceptance", profiles: ["effects"], exclusions: {}, scope: "Patches the follower budget directly." };
-    expect(validate(patching)).toMatchObject({ reproducers: 11, reproducerBacklog: 58 });
+    expect(validate(patching)).toMatchObject({ reproducers: 12, reproducerBacklog: 58 });
     expect(() => validate(modelRun(r => { delete r.scope; }))).toThrow(/model-run reproducer needs a scope/);
     expect(() => validate(modelRun(r => { r.profiles = ["recovery"]; }))).toThrow(/must name known profiles and include formal\/dialcache-envelope-vectors\.qnt/);
     const exportedAsModelRun = manifest();

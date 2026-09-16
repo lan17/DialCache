@@ -139,7 +139,7 @@ module dialcache_policy_conformance {
   action releasePolicy = all {
     Gate::holding(s),
     s' = ConfigErrors::recordConfigError(
-      Receipts::release(s, LAYOUT, Gate::latest(s), resolve(s, BASELINE), ttls(s, BASELINE)),
+      Receipts::release(s, LAYOUT, Gate::latest(s), resolve(s), ttls(s, BASELINE)),
       failed(s)),
     input' = { name: "releasePolicy", choice: -1 }
   }
@@ -269,8 +269,11 @@ module dialcache_policy_conformance {
   // with a shared layer on joins the pending flight registered for its key
   // rather than hitting a layer (a hit registers nothing, so the registry the
   // release saw is the post-state's).
-  val joinable = resolve(s, BASELINE).coalesce and (localTtl(s, BASELINE) > 0 or remoteTtl(s, BASELINE) > 0)
+  val joinable = resolve(s).coalesce and (localTtl(s, BASELINE) > 0 or remoteTtl(s, BASELINE) > 0)
     and s.processFlights.nth(s.receipt.key) >= 0
+  // A join changes no registry, so the registry the release read is the
+  // post-state's: a caller joins only a flight it could join.
+  val joinsOnlyJoinableFlights = not(justReleased) or not(joinedFlight) or joinable
 
   // A local hit is served only with the local layer on and no flight to join,
   // from the entry that was live at the read, holding the caller's value, and
@@ -418,6 +421,7 @@ module dialcache_policy_conformance {
     .then(changePolicy(INDEPENDENT_OFFSET))
     .then(startCall(0))
     .then(releasePolicy)
+    .expect(s.o.calls == List(CALL_PENDING, CALL_PENDING) and s.o.loaders == 2 and s.o.reads == 2)
     .then(finishSource(1, VALUE_TWO))
     .expect(s.o.calls == List(CALL_PENDING, VALUE_TWO) and s.processFlights == List(0, -1))
     .then(changePolicy(INHERIT))

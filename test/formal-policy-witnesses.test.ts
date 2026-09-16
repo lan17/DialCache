@@ -227,6 +227,8 @@ describe("shadow fidelity against the model's private predictions", () => {
     ["skew", 0, (s: Record<string, unknown>) => { s.skew = { "#bigint": "1" }; }, /step 0: shadow skew 100000 differs from the model's 1/],
     ["sources", 3, (s: Record<string, unknown>) => { (s.sources as Array<Record<string, unknown>>)[0]!.retentionMs = { "#bigint": "1000" }; }, /step 3: shadow sources .* differs from the model's/],
     ["dumpFailed", 4, (s: Record<string, unknown>) => { s.dumpFailed = true; }, /step 4: shadow dumpFailed false differs from the model's true/],
+    ["receipt", 2, (s: Record<string, unknown>) => { (s.receipt as Record<string, unknown>).layer = { "#bigint": "2" }; }, /step 2: shadow receipt .*"layer":4.* differs from the model's .*"layer":2/],
+    ["owners", 2, (s: Record<string, unknown>) => { (s.owners as Integer[])[0] = { "#bigint": "-1" }; }, /step 2: shadow owners \[0\] differs from the model's \[-1\]/],
   ])("names the first field the model predicts differently: %s", (_field, step, mutate, message) => {
     expect(() => policyWitnesses([predicted(states => mutate(states[step]!.s))])).toThrow(message);
   });

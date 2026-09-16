@@ -8,10 +8,10 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "d014f97a6abd46b0d2c1105c546b49736797466663f228d2c4cc8c530f515839",
-    "executionSha256": "0a768b16c93832f70b0c57a85faefc8c6e93e037d21f91b8ec7123e228f53df1",
+    "semanticCasesSha256": "718c4a20ad7eb11de5a7f1067b0813cf36d1692af05354521173413c74a36fc2",
+    "executionSha256": "50a22f808bc2892e4d0ff22280243ac7a3577b12d1550beb07f603bbd4c964e4",
     "sourceAuditSha256": "e99ecb35404fea425f4852c099d0e025dc887fc7f77d074752e2e995d0d7a237",
-    "quintCaseAuditSha256": "36ac23528a586895ed53b9501ccb9eb1b33691a28b2308ffb85415bd3609f507",
+    "quintCaseAuditSha256": "e4a6b612ba9d697ff2ae732e7b6afc25fedc0709a79260f579af47c5e18250d4",
     "featureCoverageSha256": "56eedfa865682db6ad8e73b8673c7dac1c30d301e9bce3390246d6994aba9dcb",
     "coverageWitnessesSha256": "8fc8ab123150fdec059f5b75f84172d39af80d08d7a4211fa88c63c5a3f2874b",
     "profilesSha256": "b8fa4f399a163bc8793bf76b6ba3503a415fcf3c8509cf98d964e4f067e6660f"
@@ -45,12 +45,12 @@
     "casesWithQuintGeneratedVectors": 22,
     "withoutModelDrivenReplay": [],
     "quintModels": 32,
-    "scheduledInvariants": 218,
-    "scheduledRegressions": 413,
+    "scheduledInvariants": 219,
+    "scheduledRegressions": 415,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
     "caseReferencedWitnesses": 285,
-    "exportedRegressionHistories": 246
+    "exportedRegressionHistories": 248
   },
   "profiles": [
     {
@@ -329,7 +329,8 @@
         "settledRequestMemoSurvivesSharedLayerRampDownTest",
         "untrackedReadsIgnoreGroupedInvalidationTest",
         "trackedWithoutRemotePublishesReusableLocalTest",
-        "untrackedSourcePublicationIsProbedInAllThreeLayersTest"
+        "untrackedSourcePublicationIsProbedInAllThreeLayersTest",
+        "coalescingCallerJoinsPendingFlightBeforeSeededFrameTest"
       ],
       "status": "executable-profile-schedule",
       "witnessSources": [
@@ -466,7 +467,8 @@
         "runtimeLocalTtlAddsEarlierLayerToRemoteFixtureTest",
         "runtimeLocalTtlEnablesSharingWithoutRemoteTtlTest",
         "remoteHitPromotesIntoNewlyEnabledLocalLayerTest",
-        "disabledSharingDoesNotJoinRegisteredFlightTest"
+        "disabledSharingDoesNotJoinRegisteredFlightTest",
+        "defaultSharingJoinsRegisteredLeaderOverWarmedLocalTest"
       ],
       "status": "executable-profile-schedule",
       "witnessSources": [
@@ -1971,7 +1973,8 @@
         "formal/dialcache-flight-deadlines.qnt:oneSourcePerRegisteredFlight",
         "formal/dialcache-runtime-boundaries-conformance.qnt:runtimeLocalTtlEnablesSharingWithoutRemoteTtlTest",
         "formal/dialcache-conformance.qnt:coalescedPairPublishesOneReusableValueTest",
-        "formal/dialcache-scope-conformance.qnt:pendingRequestFlightIsJoinedBeforeMemoReadTest"
+        "formal/dialcache-scope-conformance.qnt:pendingRequestFlightIsJoinedBeforeMemoReadTest",
+        "formal/dialcache-layers-conformance.qnt:coalescingCallerJoinsPendingFlightBeforeSeededFrameTest"
       ],
       "requiredGenerated": [
         {
@@ -1995,7 +1998,8 @@
       "quintReplays": [
         "runtime-boundaries/runtimeLocalTtlEnablesSharingWithoutRemoteTtlTest",
         "core/coalescedPairPublishesOneReusableValueTest",
-        "scope/pendingRequestFlightIsJoinedBeforeMemoReadTest"
+        "scope/pendingRequestFlightIsJoinedBeforeMemoReadTest",
+        "layers/coalescingCallerJoinsPendingFlightBeforeSeededFrameTest"
       ],
       "generatedVectors": []
     },
@@ -2047,7 +2051,8 @@
       "quintProperties": [
         "formal/dialcache-policy-conformance.qnt:independentLocalCallsStillReuseSettledValueTest",
         "formal/dialcache-runtime-boundaries-conformance.qnt:disabledSharingDoesNotJoinRegisteredFlightTest",
-        "formal/dialcache-scope-conformance.qnt:independentSourceIsNotRegisteredForLaterSharingTest"
+        "formal/dialcache-scope-conformance.qnt:independentSourceIsNotRegisteredForLaterSharingTest",
+        "formal/dialcache-runtime-boundaries-conformance.qnt:defaultSharingJoinsRegisteredLeaderOverWarmedLocalTest"
       ],
       "requiredGenerated": [
         {
@@ -2086,7 +2091,8 @@
       "quintReplays": [
         "policy/independentLocalCallsStillReuseSettledValueTest",
         "runtime-boundaries/disabledSharingDoesNotJoinRegisteredFlightTest",
-        "scope/independentSourceIsNotRegisteredForLaterSharingTest"
+        "scope/independentSourceIsNotRegisteredForLaterSharingTest",
+        "runtime-boundaries/defaultSharingJoinsRegisteredLeaderOverWarmedLocalTest"
       ],
       "generatedVectors": []
     },

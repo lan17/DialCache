@@ -3607,6 +3607,18 @@
       "reference": "formal/dialcache-independent-conformance.qnt:independentRecoveriesServeDistinctAcquiredSnapshotsTest",
       "kind": "regression",
       "scope": "Two uncoalesced callers acquire different stale frames before their sources fail; after invalidation each recovery serves the bytes its own read retained, with two reads, two sources, two decodes and no writes."
+    },
+    {
+      "case": "C11.one-registered-flight",
+      "reference": "formal/dialcache-layers-conformance.qnt:coalescingCallerJoinsPendingFlightBeforeSeededFrameTest",
+      "kind": "regression",
+      "scope": "A coalescing caller joins the flight registered for its identity before reading the remote layer; a frame seeded while the flight is pending does not serve it. This check covers the bounded model clause: coalescingCallerJoinsPendingFlightBeforeSeededFrameTest."
+    },
+    {
+      "case": "C13.uncoalesced-caching",
+      "reference": "formal/dialcache-runtime-boundaries-conformance.qnt:defaultSharingJoinsRegisteredLeaderOverWarmedLocalTest",
+      "kind": "regression",
+      "scope": "A reply that disables sharing starts its own source beside the registered leader; once its value has warmed local storage, a reply that shares again joins the leader rather than hitting the entry. This check covers the bounded model clause: defaultSharingJoinsRegisteredLeaderOverWarmedLocalTest."
     }
   ],
   "definitions": [

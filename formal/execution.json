@@ -472,7 +472,8 @@
         "policyResolutionErrorsHaveStableClassification",
         "localHitsRespectInsertionExpiry",
         "remoteHitsRespectAcquiredFreshness",
-        "remoteHitsWarmLocalForTheReplysLocalTtl"
+        "remoteHitsWarmLocalForTheReplysLocalTtl",
+        "joinsOnlyJoinableFlights"
       ],
       "regressions": [
         "invalidReadBudgetBypassesAllCachingTest",
@@ -729,7 +730,8 @@
         "settledRequestMemoSurvivesSharedLayerRampDownTest",
         "untrackedReadsIgnoreGroupedInvalidationTest",
         "trackedWithoutRemotePublishesReusableLocalTest",
-        "untrackedSourcePublicationIsProbedInAllThreeLayersTest"
+        "untrackedSourcePublicationIsProbedInAllThreeLayersTest",
+        "coalescingCallerJoinsPendingFlightBeforeSeededFrameTest"
       ],
       "profile": "layers",
       "generate": {
@@ -753,7 +755,8 @@
         "settledRequestMemoSurvivesSharedLayerRampDownTest",
         "untrackedReadsIgnoreGroupedInvalidationTest",
         "trackedWithoutRemotePublishesReusableLocalTest",
-        "untrackedSourcePublicationIsProbedInAllThreeLayersTest"
+        "untrackedSourcePublicationIsProbedInAllThreeLayersTest",
+        "coalescingCallerJoinsPendingFlightBeforeSeededFrameTest"
       ]
     },
     {
@@ -936,7 +939,8 @@
         "runtimeLocalTtlAddsEarlierLayerToRemoteFixtureTest",
         "runtimeLocalTtlEnablesSharingWithoutRemoteTtlTest",
         "remoteHitPromotesIntoNewlyEnabledLocalLayerTest",
-        "disabledSharingDoesNotJoinRegisteredFlightTest"
+        "disabledSharingDoesNotJoinRegisteredFlightTest",
+        "defaultSharingJoinsRegisteredLeaderOverWarmedLocalTest"
       ],
       "replayRegressions": [
         "runtimeTrueEnablesSharingOverFalseDefaultTest",
@@ -964,7 +968,8 @@
         "runtimeLocalTtlAddsEarlierLayerToRemoteFixtureTest",
         "runtimeLocalTtlEnablesSharingWithoutRemoteTtlTest",
         "remoteHitPromotesIntoNewlyEnabledLocalLayerTest",
-        "disabledSharingDoesNotJoinRegisteredFlightTest"
+        "disabledSharingDoesNotJoinRegisteredFlightTest",
+        "defaultSharingJoinsRegisteredLeaderOverWarmedLocalTest"
       ],
       "generate": {
         "maxSamples": 1024,
@@ -1825,7 +1830,7 @@
           "core": "Composes no kernel module, so request_memo.closeScope is never executed.",
           "effects": "Composes no kernel module, so request_memo.closeScope is never executed.",
           "recovery": "Composes no kernel module, so request_memo.closeScope is never executed.",
-          "policy": "Composes no kernel module, so request_memo.closeScope is never executed.",
+          "policy": "Has no request scopes (persistentContexts 0 and no closeScope input), so the memo fold the fault mutates is never executed.",
           "shadow": "Composes no kernel module, so request_memo.closeScope is never executed.",
           "admission": "Composes no kernel module, so request_memo.closeScope is never executed.",
           "independent": "Composes no kernel module, so request_memo.closeScope is never executed.",
@@ -2127,7 +2132,8 @@
         "family": "hit-before-join",
         "profiles": [
           "policy",
-          "runtime-boundaries"
+          "runtime-boundaries",
+          "layers"
         ],
         "exclusions": {
           "core": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
@@ -2140,9 +2146,42 @@
           "local-failure": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
           "shadow-layers": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
           "local-clock": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
-          "layers": "Its replies always coalesce, so the only source that may warm local storage for an identity is the one registered for it; a live entry and a pending registered flight for the same identity never coexist, and the order cannot be observed.",
           "scope": "Composes the request-only projection, which passes no layer values to the decision, so no layer hit can precede a join.",
           "source-budgets": "Its replies always coalesce and its bypass sources warm nothing, so a live entry and a pending registered flight never coexist."
+        }
+      }
+    },
+    {
+      "id": "policy-join-ignores-coalesce",
+      "contract": "C13",
+      "source": "formal/kernel/serving.qnt",
+      "model": "formal/dialcache-policy-conformance.qnt",
+      "invariant": "joinsOnlyJoinableFlights",
+      "before": "if (resolved.coalesce and sharedLayers(layers) and memoValue == NO_VALUE)",
+      "after": "if (sharedLayers(layers) and memoValue == NO_VALUE)",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "independentCompletionKeepsRegisteredLeaderTest",
+        "failure": "s.o.calls == List(CALL_PENDING, CALL_PENDING) and s.o.loaders == 2 and s.o.reads == 2",
+        "family": "join-ignores-coalesce",
+        "profiles": [
+          "policy",
+          "runtime-boundaries"
+        ],
+        "exclusions": {
+          "core": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
+          "effects": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
+          "recovery": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
+          "shadow": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
+          "admission": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
+          "independent": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
+          "recovery-read": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
+          "local-failure": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
+          "shadow-layers": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
+          "local-clock": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
+          "layers": "Its replies always coalesce, so the conjunct the fault removes is always true and no history observes it.",
+          "scope": "Composes the request-only projection, whose process join requires a shared layer this shape never has.",
+          "source-budgets": "Its replies always coalesce, so the conjunct the fault removes is always true and no history observes it."
         }
       }
     }
