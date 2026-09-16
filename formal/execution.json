@@ -471,7 +471,8 @@
         "sharedSourcesKeepRegistration",
         "policyResolutionErrorsHaveStableClassification",
         "localHitsRespectInsertionExpiry",
-        "remoteHitsRespectAcquiredFreshness"
+        "remoteHitsRespectAcquiredFreshness",
+        "remoteHitsWarmLocalForTheReplysLocalTtl"
       ],
       "regressions": [
         "invalidReadBudgetBypassesAllCachingTest",
@@ -2108,6 +2109,40 @@
           "runtime-boundaries": "does not compose the deadlines module: its sources have no budget",
           "shadow-layers": "does not compose the deadlines module: its sources have no budget",
           "local-clock": "does not compose the deadlines module: its sources have no budget"
+        }
+      }
+    },
+    {
+      "id": "policy-hit-before-join",
+      "contract": "C13",
+      "source": "formal/kernel/serving.qnt",
+      "model": "formal/dialcache-policy-conformance.qnt",
+      "invariant": "remoteHitsRespectAcquiredFreshness",
+      "before": "else if (processOwner >= 0) JoinsProcess(processOwner)\n        else if (memoValue > NO_VALUE) ServesMemo(memoValue)\n        else if (localValue > NO_VALUE) ServesLocal(localValue)\n        else if (remoteValue > NO_VALUE) ServesRemote(remoteValue)",
+      "after": "else if (memoValue > NO_VALUE) ServesMemo(memoValue)\n        else if (localValue > NO_VALUE) ServesLocal(localValue)\n        else if (remoteValue > NO_VALUE) ServesRemote(remoteValue)\n        else if (processOwner >= 0) JoinsProcess(processOwner)",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "independentCompletionKeepsRegisteredLeaderTest",
+        "failure": "s.o.calls == List(CALL_PENDING, VALUE_TWO, CALL_PENDING) and s.o.loaders == 2 and s.o.reads == 2",
+        "family": "hit-before-join",
+        "profiles": [
+          "policy",
+          "runtime-boundaries"
+        ],
+        "exclusions": {
+          "core": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
+          "effects": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
+          "recovery": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
+          "shadow": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
+          "admission": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
+          "independent": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
+          "recovery-read": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
+          "local-failure": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
+          "shadow-layers": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
+          "local-clock": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
+          "layers": "Its replies always coalesce, so the only source that may warm local storage for an identity is the one registered for it; a live entry and a pending registered flight for the same identity never coexist, and the order cannot be observed.",
+          "scope": "Composes the request-only projection, which passes no layer values to the decision, so no layer hit can precede a join.",
+          "source-budgets": "Its replies always coalesce and its bypass sources warm nothing, so a live entry and a pending registered flight never coexist."
         }
       }
     }

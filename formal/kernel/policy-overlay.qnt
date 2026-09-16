@@ -7,9 +7,10 @@ module policy_overlay {
   // invalid read budget: reported once as a config_resolution error and served
   // with every layer off). Codes are the drivers' contract; do not renumber:
   // 10..19 repeat 0..9 with coalescing disabled, 20..25 are the invalid
-  // overlays. The reply resolves to the fixture's configured layer set and the
-  // TTLs; which layers serve follows from the TTLs at release
-  // (`layer_policy::gated`), not from this decoder.
+  // overlays. The reply resolves to the layers the fixture configures (a
+  // baseline TTL for a layer configures it; the remote layer also needs remote
+  // storage) and to the TTLs; which layers serve the call follows from the
+  // TTLs at release (`layer_policy::gated`), not from this decoder.
   import layer_policy.* from "./layer-policy"
 
   pure val INHERIT = 0
@@ -32,8 +33,9 @@ module policy_overlay {
   pure val TWO_SECONDS_MS = 2000
   pure val FOUR_SECONDS_MS = 4000
 
-  // The overlay in force and whether the provider fails to reply.
-  type Overlaid[r] = { policy: int, providerFailed: bool | r }
+  // The overlay in force, whether the provider fails to reply, and whether
+  // remote storage exists.
+  type Overlaid[r] = { policy: int, providerFailed: bool, remoteAvailable: bool | r }
 
   // The sparse overlay a code repeats; an invalid overlay inherits the baseline.
   pure def base(policy: int): int = if (policy < INVALID_READ_BUDGET) policy % INDEPENDENT_OFFSET else INHERIT
@@ -64,8 +66,10 @@ module policy_overlay {
     else baseline.retentionMs
   pure def ttls(state: Overlaid[r], baseline: Ttls): Ttls =
     { localMs: localTtl(state, baseline), freshMs: remoteTtl(state, baseline), retentionMs: retention(state, baseline) }
-  // The reply: the fixture configures the local and remote layers and no
-  // request layer; an overlay adds whether the call coalesces.
-  pure def resolve(state: Overlaid[r], baseline: Ttls): Resolution =
-    { layers: { request: false, local: true, remote: true }, coalesce: not(independent(state.policy)) }
+  // The reply: the layers the fixture configures (no request layer in this
+  // shape) and whether the call coalesces.
+  pure def resolve(state: Overlaid[r], baseline: Ttls): Resolution = {
+    layers: { request: false, local: baseline.localMs > 0, remote: state.remoteAvailable and baseline.freshMs > 0 },
+    coalesce: not(independent(state.policy))
+  }
 }

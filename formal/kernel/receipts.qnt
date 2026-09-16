@@ -6,9 +6,10 @@ module receipts {
   // storage that served the caller: the frames and clocks do not move during
   // a release, so the frame it read is the post-state's, while the local slot
   // may have been warmed by the release and is kept here as read. A
-  // receipted variant of the layered release, judged once
-  // (`serving::layeredRelease`) on the pre-release state beside the release
-  // itself; the traversal never reads the receipt.
+  // receipted variant of the layered release: the release is judged once
+  // (`serving::layeredRelease`) on the pre-release state, the slot is read
+  // from that same state, and the release itself is applied beside them; the
+  // traversal never reads the receipt.
   import encodings.* from "./encodings"
   import layer_policy.* from "./layer-policy"
   import serving as Serving from "./serving"
@@ -41,8 +42,8 @@ module receipts {
         caller: judged.caller,
         key: judged.call.key,
         layer: servedLayer(judged.decision.outcome),
-        localValue: judged.localValue,
-        localExpires: judged.localExpires
+        localValue: state.localValues.nth(Serving::identity(layout, judged.call)),
+        localExpires: state.localExpires.nth(Serving::identity(layout, judged.call))
       },
       ...Serving::release(state, layout, policyCall, resolved, ttls)
     }

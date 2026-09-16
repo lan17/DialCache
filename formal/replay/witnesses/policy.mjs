@@ -47,11 +47,13 @@ function effectivePolicy(overlay, providerFailed) {
 // epoch it was started under, and its result (0 while pending), and the
 // receipt of the latest release: the caller, its key, which layer served it
 // (or that it started a source, or joined) and the local slot of its key as
-// the release found it. The receipt is read only by the fidelity check.
+// the release found it, and per caller the source that completes it (the one
+// it started, the registered pending shared one it joined, or none). The
+// receipt and the owners are read only by the fidelity check.
 const NOT_SERVED = 0, FROM_LOCAL = 2, FROM_REMOTE = 3, STARTED = 4;
 const initialShadow = () => ({ now: 0, wall: 100000, overlay: 0, epoch: 0, providerFailed: false, readFailed: false, dumpFailed: false, writeFailed: false,
   key: 0, call: -1, local: { key: 0, value: 0, expires: 0 }, remote: [{ value: 0, created: 0, expires: 0 }, { value: 0, created: 0, expires: 0 }], sources: [],
-  receipt: { caller: -1, key: -1, layer: NOT_SERVED, localValue: 0, localExpires: 0 } });
+  receipt: { caller: -1, key: -1, layer: NOT_SERVED, localValue: 0, localExpires: 0 }, owners: [] });
 
 // One frame per transition: the recorded action, the asserted observation
 // before and after it, the shadow before and after it, the effective policy
@@ -66,11 +68,11 @@ function shadowHistory(steps, path) {
   const frames = [];
   for (let index = 1; index < steps.length; index++) {
     const { action, choice, expected: current } = steps[index], prior = steps[index - 1].expected;
-    const before = shadow, after = { ...shadow, remote: [...shadow.remote], sources: [...shadow.sources] };
+    const before = shadow, after = { ...shadow, remote: [...shadow.remote], sources: [...shadow.sources], owners: [...shadow.owners] };
     const policy = effectivePolicy(before.overlay, before.providerFailed);
     let receipt, settlement, seeded;
     switch (action) {
-      case "beginCall": after.key = choice; after.call = current.calls.length - 1; break;
+      case "beginCall": after.key = choice; after.call = current.calls.length - 1; after.owners.push(-1); break;
       case "releasePolicy": {
         if (before.call < 0) throw contradiction(index, "released a policy reply without a pending caller");
         const key = before.key, value = current.calls[before.call];
@@ -89,6 +91,8 @@ function shadowHistory(steps, path) {
         if (receipt.remoteHit && policy.localTtl > 0) after.local = { key, value, expires: before.now + policy.localTtl };
         after.receipt = { caller: before.call, key, layer: receipt.localHit ? FROM_LOCAL : receipt.remoteHit ? FROM_REMOTE : starts ? STARTED : NOT_SERVED,
           localValue: local.key === key ? local.value : 0, localExpires: local.key === key ? local.expires : 0 };
+        after.owners[before.call] = starts ? after.sources.length - 1
+          : value === 0 ? before.sources.findIndex(source => source.result === 0 && source.shared && source.key === key) : -1;
         after.call = -1;
         break;
       }
@@ -144,7 +148,7 @@ function modelView(shadow) {
     held: shadow.call < 0 ? [] : [{ policyCall: shadow.call, caller: shadow.call, call: { instance: 0, key: shadow.key, context: 0, enabled: true, keyFailed: false } }],
     localValues: slot(local.value), localExpires: slot(local.expires), lru: [local.value > 0 ? [local.key] : []],
     remoteValues: shadow.remote.map(frame => frame.value), created: shadow.remote.map(frame => frame.created), expires: shadow.remote.map(frame => frame.expires),
-    processFlights: Array.from({ length: KEYS }, (_, key) => registered(key)), receipt: shadow.receipt,
+    processFlights: Array.from({ length: KEYS }, (_, key) => registered(key)), receipt: shadow.receipt, owners: shadow.owners,
     sources: shadow.sources.map(({ key, localTtl, remoteTtl, retention, shared, result }) =>
       ({ instance: 0, key, localMs: localTtl, fence: 0, retentionMs: remoteTtl > 0 ? retention : 0, result, shared })) };
 }

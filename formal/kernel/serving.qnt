@@ -240,23 +240,19 @@ module serving {
   // a remote hit warms local storage for the reply's local TTL.
   //
   // The release is judged once (`layeredRelease`): the held caller and its
-  // call, whether its scope is still open, the resolution in effect, the local
-  // slot of the call's identity as the release found it (its value and
-  // insertion expiry, whatever the local layer's state), the value the remote
-  // layer offered and the decision. `release` applies the judgment; a record
-  // composed around the release (`receipts`) reads the same one. It is judged
-  // on the state before Gate::release, which edits only the held list, a field
-  // no layer read or decision consults.
-  type LayeredRelease = {
-    caller: int, call: Call, open: bool, effective: Resolution, localValue: int, localExpires: int, remoteValue: int, decision: Decision
-  }
+  // call, whether its scope is still open, the resolution in effect, the value
+  // the remote layer offered and the decision. `release` applies the judgment;
+  // a variant composed around the release (`receipts`) judges the same one on
+  // the same state. It is judged on the state before Gate::release, which
+  // edits only the held list, a field no layer read or decision consults.
+  type LayeredRelease = { caller: int, call: Call, open: bool, effective: Resolution, remoteValue: int, decision: Decision }
   pure def layeredRelease(state: Served[r], layout: Layout, policyCall: int, resolved: Resolution, ttls: Ttls): LayeredRelease = {
     val held = Gate::entry(state, policyCall)
     val call = held.call
     val open = participating(state, layout, call)
     val effective = if (open) gated(resolved, ttls) else BYPASS
     val layers = effective.layers
-    val live = if (layers.local) Local::localValue(state, call.instance, call.key, layout.keysPerInstance) else NO_VALUE
+    val localValue = if (layers.local) Local::localValue(state, call.instance, call.key, layout.keysPerInstance) else NO_VALUE
     val remoteValue = if (layers.remote and not(state.readFailed))
       Remote::readableFrame(state, call.key, layout.operationsPerEntity, ttls.freshMs) else NO_VALUE
     {
@@ -264,10 +260,8 @@ module serving {
       call: call,
       open: open,
       effective: effective,
-      localValue: state.localValues.nth(identity(layout, call)),
-      localExpires: state.localExpires.nth(identity(layout, call)),
       remoteValue: remoteValue,
-      decision: decide(state, layout, call, effective, live, remoteValue)
+      decision: decide(state, layout, call, effective, localValue, remoteValue)
     }
   }
   pure def release(state: Served[r], layout: Layout, policyCall: int, resolved: Resolution, ttls: Ttls): Served[r] = {

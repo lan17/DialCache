@@ -3,7 +3,7 @@ module dialcache_policy_conformance {
   import encodings.* from "./kernel/encodings"
   import calls.* from "./kernel/calls"
   import layer_policy.* from "./kernel/layer-policy"
-  import policy_overlay as Overlay from "./kernel/policy-overlay"
+  import policy_overlay.* from "./kernel/policy-overlay"
   import config_errors as ConfigErrors from "./kernel/config-errors"
   import receipts as Receipts from "./kernel/receipts"
   import serving as Serving from "./kernel/serving"
@@ -26,31 +26,11 @@ module dialcache_policy_conformance {
   // owns the bounded state, the input choices, the guards, the properties and
   // the regressions.
 
-  // -- Stable overlay, outcome, and duration encodings ------------------------
-  // The overlay codes are the library's (policy_overlay), named here as the
-  // regressions read them.
+  // -- Stable outcome and duration encodings (the overlay codes are
+  // policy_overlay's) ---------------------------------------------------------
 
-  pure val POLICY_INHERIT = Overlay::INHERIT
-  pure val POLICY_LOCAL_TTL_TWO_SECONDS = Overlay::LOCAL_TTL_TWO_SECONDS
-  pure val POLICY_REMOTE_TTL_TWO_SECONDS = Overlay::REMOTE_TTL_TWO_SECONDS
-  pure val POLICY_NO_LOCAL = Overlay::NO_LOCAL
-  pure val POLICY_NO_REMOTE = Overlay::NO_REMOTE
-  pure val POLICY_INVALID_LOCAL_TTL = Overlay::INVALID_LOCAL_TTL
-  pure val POLICY_INVALID_REMOTE_TTL = Overlay::INVALID_REMOTE_TTL
-  pure val POLICY_RECOVERY_TWO_SECONDS = Overlay::RECOVERY_TWO_SECONDS
-  pure val POLICY_NO_SERVING = Overlay::NO_SERVING
-  pure val POLICY_REMOTE_FOUR_SECONDS_NO_RECOVERY = Overlay::REMOTE_FOUR_SECONDS_NO_RECOVERY
-  pure val INDEPENDENT_POLICY_OFFSET = Overlay::INDEPENDENT_OFFSET
-  pure val POLICY_INVALID_READ_BUDGET = Overlay::INVALID_READ_BUDGET
-  pure val POLICY_INVALID_LOCAL_RAMP = Overlay::INVALID_LOCAL_RAMP
-  pure val POLICY_INVALID_REMOTE_RAMP = Overlay::INVALID_REMOTE_RAMP
-  pure val POLICY_INVALID_RECOVERY_AGE = Overlay::INVALID_RECOVERY_AGE
-  pure val POLICY_NEGATIVE_RECOVERY_AGE = Overlay::NEGATIVE_RECOVERY_AGE
-  pure val POLICY_INVALID_SHADOW_RAMP = Overlay::INVALID_SHADOW_RAMP
   pure val HALF_SECOND_MS = 500
   pure val ONE_SECOND_MS = 1000
-  pure val TWO_SECONDS_MS = 2000
-  pure val FOUR_SECONDS_MS = 4000
   pure val DEFAULT_RETENTION_MS = 5000
   pure val INITIAL_WALL_MS = 100000
   pure val MAX_CALLERS = 12
@@ -112,7 +92,7 @@ module dialcache_policy_conformance {
       policyErrors: List(),
       now: 0,
       skew: INITIAL_WALL_MS,
-      policy: POLICY_INHERIT,
+      policy: INHERIT,
       providerFailed: false,
       readFailed: false,
       dumpFailed: false,
@@ -159,8 +139,8 @@ module dialcache_policy_conformance {
   action releasePolicy = all {
     Gate::holding(s),
     s' = ConfigErrors::recordConfigError(
-      Receipts::release(s, LAYOUT, Gate::latest(s), Overlay::resolve(s, BASELINE), Overlay::ttls(s, BASELINE)),
-      Overlay::failed(s)),
+      Receipts::release(s, LAYOUT, Gate::latest(s), resolve(s, BASELINE), ttls(s, BASELINE)),
+      failed(s)),
     input' = { name: "releasePolicy", choice: -1 }
   }
 
@@ -191,7 +171,7 @@ module dialcache_policy_conformance {
     input' = { name: "policy", choice: overlay }
   }
   action policy = {
-    nondet choice = POLICY_INHERIT.to(POLICY_INVALID_SHADOW_RAMP).oneOf()
+    nondet choice = INHERIT.to(INVALID_SHADOW_RAMP).oneOf()
     changePolicy(choice)
   }
   action elapse(ms: int): bool = all {
@@ -216,28 +196,23 @@ module dialcache_policy_conformance {
   }
   // The fault switches are environment inputs the traversal and the overlay
   // decoder read, set by record update.
-  pure def faultChoice(failed: bool): int = if (failed) FAULT_FAILED else FAULT_HEALTHY
-  action setProviderFault(failed: bool): bool = all {
-    s' = { providerFailed: failed, ...s },
-    input' = { name: "providerFault", choice: faultChoice(failed) }
+  pure def faultChoice(failing: bool): int = if (failing) FAULT_FAILED else FAULT_HEALTHY
+  action setProviderFault(failing: bool): bool = all {
+    s' = { providerFailed: failing, ...s },
+    input' = { name: "providerFault", choice: faultChoice(failing) }
   }
-  action setReadFault(failed: bool): bool = all {
-    s' = { readFailed: failed, ...s },
-    input' = { name: "readFault", choice: faultChoice(failed) }
+  action setReadFault(failing: bool): bool = all {
+    s' = { readFailed: failing, ...s },
+    input' = { name: "readFault", choice: faultChoice(failing) }
   }
-  action setDumpFault(failed: bool): bool = all {
-    s' = { dumpFailed: failed, ...s },
-    input' = { name: "dumpFault", choice: faultChoice(failed) }
+  action setDumpFault(failing: bool): bool = all {
+    s' = { dumpFailed: failing, ...s },
+    input' = { name: "dumpFault", choice: faultChoice(failing) }
   }
-  action setWriteFault(failed: bool): bool = all {
-    s' = { writeFailed: failed, ...s },
-    input' = { name: "writeFault", choice: faultChoice(failed) }
+  action setWriteFault(failing: bool): bool = all {
+    s' = { writeFailed: failing, ...s },
+    input' = { name: "writeFault", choice: faultChoice(failing) }
   }
-  action setFault(name: str, failed: bool): bool =
-    if (name == "providerFault") setProviderFault(failed)
-    else if (name == "readFault") setReadFault(failed)
-    else if (name == "dumpFault") setDumpFault(failed)
-    else setWriteFault(failed)
   action providerFault = {
     nondet choice = Set(FAULT_HEALTHY, FAULT_FAILED).oneOf()
     setProviderFault(choice == FAULT_FAILED)
@@ -290,17 +265,25 @@ module dialcache_policy_conformance {
   val releasedValue = s.o.calls.nth(releasedCaller)
   val startedSource = s.receipt.layer == Receipts::STARTED
   val joinedFlight = s.receipt.layer == Receipts::NOT_SERVED
+  // The flight registry is consulted before any layer: a coalescing reply
+  // with a shared layer on joins the pending flight registered for its key
+  // rather than hitting a layer (a hit registers nothing, so the registry the
+  // release saw is the post-state's).
+  val joinable = resolve(s, BASELINE).coalesce and (localTtl(s, BASELINE) > 0 or remoteTtl(s, BASELINE) > 0)
+    and s.processFlights.nth(s.receipt.key) >= 0
 
-  // A local hit serves the entry that was live at the read, holding the
-  // caller's value, and leaves its insertion expiry alone; every other
-  // release that reached the layers while the local layer was on (a remote
-  // hit, a started source) found no live entry.
+  // A local hit is served only with the local layer on and no flight to join,
+  // from the entry that was live at the read, holding the caller's value, and
+  // leaves its insertion expiry alone; every other release that reached the
+  // layers while the local layer was on (a remote hit, a started source)
+  // found no live entry.
   val localHitsRespectInsertionExpiry = not(justReleased) or joinedFlight or {
     val key = s.receipt.key
     val live = s.receipt.localValue > NO_VALUE and s.now < s.receipt.localExpires
     if (s.receipt.layer == Receipts::FROM_LOCAL)
-      live and s.receipt.localValue == releasedValue and s.localExpires.nth(key) == s.receipt.localExpires
-    else not(Overlay::localTtl(s, BASELINE) > 0 and live)
+      localTtl(s, BASELINE) > 0 and not(joinable)
+        and live and s.receipt.localValue == releasedValue and s.localExpires.nth(key) == s.receipt.localExpires
+    else not(localTtl(s, BASELINE) > 0 and live)
   }
   // A remote hit serves a retained frame holding the caller's value, stamped
   // at or before the acquired wall time and younger than the reply's fresh
@@ -308,13 +291,22 @@ module dialcache_policy_conformance {
   // a source with the remote layer on and the read healthy found no such frame.
   val remoteHitsRespectAcquiredFreshness = not(justReleased) or {
     val key = s.receipt.key
-    val fresh = Overlay::remoteTtl(s, BASELINE)
+    val fresh = remoteTtl(s, BASELINE)
     val wall = s.now + s.skew
     val readable = s.remoteValues.nth(key) > NO_VALUE and s.now < s.expires.nth(key)
       and s.created.nth(key) <= wall and wall - s.created.nth(key) < fresh
-    if (s.receipt.layer == Receipts::FROM_REMOTE) readable and s.remoteValues.nth(key) == releasedValue and not(s.readFailed)
+    if (s.receipt.layer == Receipts::FROM_REMOTE)
+      not(joinable) and readable and s.remoteValues.nth(key) == releasedValue and not(s.readFailed)
     else not(startedSource and fresh > 0 and not(s.readFailed) and readable)
   }
+  // A remote hit with the local layer on warms the entry of its key with the
+  // served value for the reply's local TTL, whatever the frame's remaining
+  // freshness.
+  val remoteHitsWarmLocalForTheReplysLocalTtl = not(justReleased) or s.receipt.layer != Receipts::FROM_REMOTE
+    or localTtl(s, BASELINE) == 0 or {
+      val key = s.receipt.key
+      s.localValues.nth(key) == releasedValue and s.localExpires.nth(key) == s.now + localTtl(s, BASELINE)
+    }
 
   val writesHaveRetention = s.o.writes == s.o.writeTtls.length()
   val hitsSkipSource = s.o.loaders <= s.o.calls.length()
@@ -344,7 +336,7 @@ module dialcache_policy_conformance {
 
   // -- Deterministic regression schedules ------------------------------------
 
-  run invalidReadBudgetBypassesAllCachingTest = init.then(changePolicy(POLICY_INVALID_READ_BUDGET))
+  run invalidReadBudgetBypassesAllCachingTest = init.then(changePolicy(INVALID_READ_BUDGET))
     .then(startCall(0))
     .then(releasePolicy)
     .then(startCall(0))
@@ -353,26 +345,26 @@ module dialcache_policy_conformance {
     .expect(s.policyErrors == List(ConfigErrors::CONFIG_RESOLUTION, ConfigErrors::CONFIG_RESOLUTION))
     .then(finishSource(0, VALUE_ONE))
     .expect(s.localValues == List(NO_VALUE, NO_VALUE) and s.o.writes == 0)
-  run invalidLocalRampPreservesRemoteTest = init.then(changePolicy(POLICY_INVALID_LOCAL_RAMP))
+  run invalidLocalRampPreservesRemoteTest = init.then(changePolicy(INVALID_LOCAL_RAMP))
     .then(startCall(0))
     .then(releasePolicy)
     .then(finishSource(0, VALUE_ONE))
     .then(startCall(0))
     .then(releasePolicy)
     .expect(s.o.reads == 2 and s.o.loads == 1 and s.localValues == List(NO_VALUE, NO_VALUE))
-  run invalidRemoteRampPreservesLocalTest = init.then(changePolicy(POLICY_INVALID_REMOTE_RAMP))
+  run invalidRemoteRampPreservesLocalTest = init.then(changePolicy(INVALID_REMOTE_RAMP))
     .then(startCall(0))
     .then(releasePolicy)
     .then(finishSource(0, VALUE_ONE))
     .then(startCall(0))
     .then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.reads == 0)
-  run invalidRecoveryUsesOrdinaryRetentionTest = init.then(changePolicy(POLICY_INVALID_RECOVERY_AGE))
+  run invalidRecoveryUsesOrdinaryRetentionTest = init.then(changePolicy(INVALID_RECOVERY_AGE))
     .then(startCall(0))
     .then(releasePolicy)
     .then(finishSource(0, VALUE_ONE))
     .expect(s.o.writeTtls == List(ONE_SECOND_MS) and s.expires == List(ONE_SECOND_MS, 0))
-  run invalidShadowPreservesNormalServingTest = init.then(changePolicy(POLICY_INVALID_SHADOW_RAMP))
+  run invalidShadowPreservesNormalServingTest = init.then(changePolicy(INVALID_SHADOW_RAMP))
     .then(startCall(0))
     .then(releasePolicy)
     .then(finishSource(0, VALUE_ONE))
@@ -386,7 +378,7 @@ module dialcache_policy_conformance {
   // A hit changes recency, but the insertion deadline stays at 1,000 ms.
   // The final probe distinguishes fixed TTL from renewing it on the middle hit.
   run localHitDoesNotRenewInsertionTtlTest = init
-    .then(changePolicy(POLICY_NO_REMOTE))
+    .then(changePolicy(NO_REMOTE))
     .then(startCall(0))
     .then(releasePolicy)
     .then(finishSource(0, VALUE_ONE))
@@ -399,7 +391,7 @@ module dialcache_policy_conformance {
     .then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, CALL_PENDING) and s.o.loaders == 2)
 
-  run wallRollbackDoesNotExtendLocalTtlTest = init.then(changePolicy(POLICY_NO_REMOTE))
+  run wallRollbackDoesNotExtendLocalTtlTest = init.then(changePolicy(NO_REMOTE))
     .then(startCall(0))
     .then(releasePolicy)
     .then(finishSource(0, VALUE_ONE))
@@ -411,7 +403,7 @@ module dialcache_policy_conformance {
     .then(startCall(0))
     .then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, CALL_PENDING) and s.o.loaders == 2)
-  run wallRollbackRejectsFutureRemoteFrameTest = init.then(changePolicy(POLICY_NO_LOCAL))
+  run wallRollbackRejectsFutureRemoteFrameTest = init.then(changePolicy(NO_LOCAL))
     .then(startCall(0))
     .then(releasePolicy)
     .then(finishSource(0, VALUE_ONE))
@@ -423,12 +415,12 @@ module dialcache_policy_conformance {
   run independentCompletionKeepsRegisteredLeaderTest = init
     .then(startCall(0))
     .then(releasePolicy)
-    .then(changePolicy(INDEPENDENT_POLICY_OFFSET))
+    .then(changePolicy(INDEPENDENT_OFFSET))
     .then(startCall(0))
     .then(releasePolicy)
     .then(finishSource(1, VALUE_TWO))
     .expect(s.o.calls == List(CALL_PENDING, VALUE_TWO) and s.processFlights == List(0, -1))
-    .then(changePolicy(POLICY_INHERIT))
+    .then(changePolicy(INHERIT))
     .then(startCall(0))
     .then(releasePolicy)
     .expect(s.o.calls == List(CALL_PENDING, VALUE_TWO, CALL_PENDING) and s.o.loaders == 2 and s.o.reads == 2)
@@ -438,12 +430,12 @@ module dialcache_policy_conformance {
   run independentFailureKeepsRegisteredLeaderTest = init
     .then(startCall(0))
     .then(releasePolicy)
-    .then(changePolicy(INDEPENDENT_POLICY_OFFSET))
+    .then(changePolicy(INDEPENDENT_OFFSET))
     .then(startCall(0))
     .then(releasePolicy)
     .then(finishSource(1, SOURCE_ERROR))
     .expect(s.o.calls == List(CALL_PENDING, SOURCE_ERROR) and s.processFlights == List(0, -1))
-    .then(changePolicy(POLICY_INHERIT))
+    .then(changePolicy(INHERIT))
     .then(startCall(0))
     .then(releasePolicy)
     .then(finishSource(0, VALUE_ONE))
@@ -452,7 +444,7 @@ module dialcache_policy_conformance {
   run eachSourceKeepsPublicationPolicyTest = init
     .then(startCall(0))
     .then(releasePolicy)
-    .then(changePolicy(INDEPENDENT_POLICY_OFFSET + POLICY_REMOTE_FOUR_SECONDS_NO_RECOVERY))
+    .then(changePolicy(INDEPENDENT_OFFSET + REMOTE_FOUR_SECONDS_NO_RECOVERY))
     .then(startCall(0))
     .then(releasePolicy)
     .then(finishSource(1, VALUE_TWO))
@@ -467,14 +459,14 @@ module dialcache_policy_conformance {
 
   // Coalescing controls pending work. It does not turn off settled caching.
   run independentLocalCallsStillReuseSettledValueTest = init
-    .then(changePolicy(INDEPENDENT_POLICY_OFFSET + POLICY_NO_REMOTE))
+    .then(changePolicy(INDEPENDENT_OFFSET + NO_REMOTE))
     .then(startCall(0)).then(releasePolicy)
     .then(finishSource(0, VALUE_ONE))
     .then(startCall(0)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loaders == 1 and s.o.reads == 0)
 
   run independentLocalPublicationUsesLastCompletionTest = init
-    .then(changePolicy(INDEPENDENT_POLICY_OFFSET + POLICY_NO_REMOTE))
+    .then(changePolicy(INDEPENDENT_OFFSET + NO_REMOTE))
     .then(startCall(0)).then(releasePolicy)
     .then(startCall(0)).then(releasePolicy)
     .then(finishSource(1, VALUE_TWO)).then(finishSource(0, VALUE_ONE))
@@ -482,7 +474,7 @@ module dialcache_policy_conformance {
     .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE) and s.o.loaders == 2)
 
   run independentRemotePublicationUsesLastCompletionTest = init
-    .then(changePolicy(INDEPENDENT_POLICY_OFFSET + POLICY_NO_LOCAL))
+    .then(changePolicy(INDEPENDENT_OFFSET + NO_LOCAL))
     .then(startCall(0)).then(releasePolicy)
     .then(startCall(0)).then(releasePolicy)
     .then(finishSource(1, VALUE_TWO)).then(finishSource(0, VALUE_ONE))
@@ -492,18 +484,18 @@ module dialcache_policy_conformance {
 
   run providerFailureBypassesAndPreservesExistingLocalTest = init
     .then(startCall(0)).then(releasePolicy).then(finishSource(0, VALUE_ONE))
-    .then(setFault("providerFault", true))
+    .then(setProviderFault(true))
     .then(startCall(0)).then(releasePolicy).then(finishSource(1, VALUE_TWO))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO) and s.o.reads == 1 and s.o.writes == 1)
-    .then(setFault("providerFault", false))
+    .then(setProviderFault(false))
     .then(startCall(0)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE) and s.o.loaders == 2)
 
   run disablingServingKeepsExistingLocalForReenablementTest = init
     .then(startCall(0)).then(releasePolicy).then(finishSource(0, VALUE_ONE))
-    .then(changePolicy(POLICY_NO_SERVING))
+    .then(changePolicy(NO_SERVING))
     .then(startCall(0)).then(releasePolicy).then(finishSource(1, VALUE_TWO))
-    .then(changePolicy(POLICY_INHERIT))
+    .then(changePolicy(INHERIT))
     .then(startCall(0)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE)
       and s.o.loaders == 2 and s.o.reads == 1 and s.o.writes == 1)
@@ -511,16 +503,16 @@ module dialcache_policy_conformance {
   // Redis physical retention may outlast logical freshness. Increasing the
   // fresh TTL can reuse retained bytes, but cannot recreate expired storage.
   run increasedFreshTtlCanReusePhysicallyRetainedValueTest = init
-    .then(changePolicy(POLICY_NO_LOCAL))
+    .then(changePolicy(NO_LOCAL))
     .then(startCall(0)).then(releasePolicy).then(finishSource(0, VALUE_ONE))
     .then(elapse(ONE_SECOND_MS))
-    .then(changePolicy(POLICY_REMOTE_TTL_TWO_SECONDS))
+    .then(changePolicy(REMOTE_TTL_TWO_SECONDS))
     .then(startCall(0)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE)
       and s.o.loaders == 1 and s.o.loads == 1 and s.o.writes == 1)
 
   run exactRemoteFreshBoundaryStartsSourceTest = init
-    .then(changePolicy(POLICY_NO_LOCAL))
+    .then(changePolicy(NO_LOCAL))
     .then(startCall(0)).then(releasePolicy).then(finishSource(0, VALUE_ONE))
     .then(elapse(ONE_SECOND_MS))
     .then(startCall(0)).then(releasePolicy)
@@ -530,7 +522,7 @@ module dialcache_policy_conformance {
   // The first read proves the retained frame is usable; its hit cannot renew
   // logical freshness. Equality then refills and a later read reuses that fill.
   run remoteHitBeforeBoundaryDoesNotRenewFreshnessTest = init
-    .then(changePolicy(POLICY_NO_LOCAL)).then(seedRemote(0, VALUE_ONE))
+    .then(changePolicy(NO_LOCAL)).then(seedRemote(0, VALUE_ONE))
     .then(elapse(HALF_SECOND_MS)).then(startCall(0)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE) and s.o.loaders == 0 and s.o.loads == 1)
     .then(elapse(HALF_SECOND_MS)).then(startCall(0)).then(releasePolicy)
@@ -540,19 +532,19 @@ module dialcache_policy_conformance {
       and s.o.loaders == 1 and s.o.loads == 2 and s.o.writes == 1)
 
   run increasedFreshTtlCannotResurrectExpiredStorageTest = init
-    .then(changePolicy(POLICY_RECOVERY_TWO_SECONDS))
+    .then(changePolicy(RECOVERY_TWO_SECONDS))
     .then(startCall(0)).then(releasePolicy).then(finishSource(0, VALUE_ONE))
     .then(elapse(TWO_SECONDS_MS))
-    .then(changePolicy(POLICY_REMOTE_FOUR_SECONDS_NO_RECOVERY))
+    .then(changePolicy(REMOTE_FOUR_SECONDS_NO_RECOVERY))
     .then(startCall(0)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, CALL_PENDING)
       and s.o.loaders == 2 and s.o.loads == 0 and s.o.writes == 1)
 
   run remoteHitStartsFullLocalInsertionTtlTest = init
-    .then(changePolicy(POLICY_NO_LOCAL))
+    .then(changePolicy(NO_LOCAL))
     .then(startCall(0)).then(releasePolicy).then(finishSource(0, VALUE_ONE))
     .then(elapse(HALF_SECOND_MS))
-    .then(changePolicy(POLICY_INHERIT))
+    .then(changePolicy(INHERIT))
     .then(startCall(0)).then(releasePolicy)
     .expect(s.localExpires.nth(0) == HALF_SECOND_MS + ONE_SECOND_MS)
     .then(elapse(HALF_SECOND_MS))
@@ -564,7 +556,7 @@ module dialcache_policy_conformance {
   // frame's remaining freshness: a 2 s local TTL keeps serving locally after
   // the 1 s remote freshness has passed.
   run remoteHitWarmsLocalForTheReplysLocalTtlTest = init.then(seedRemote(0, VALUE_ONE))
-    .then(changePolicy(POLICY_LOCAL_TTL_TWO_SECONDS))
+    .then(changePolicy(LOCAL_TTL_TWO_SECONDS))
     .then(startCall(0)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE) and s.o.loads == 1 and s.localExpires.nth(0) == TWO_SECONDS_MS)
     .then(elapse(ONE_SECOND_MS)).then(elapse(HALF_SECOND_MS))
@@ -572,14 +564,14 @@ module dialcache_policy_conformance {
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loaders == 0 and s.o.reads == 1)
 
   run untrackedReadFailureStillWarmsActiveLocalTest = init
-    .then(setFault("readFault", true))
+    .then(setReadFault(true))
     .then(startCall(0)).then(releasePolicy).then(finishSource(0, VALUE_ONE))
     .then(startCall(0)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE)
       and s.o.loaders == 1 and s.o.reads == 1 and s.o.dumps == 0 and s.o.writes == 0)
 
   run invalidRemoteTtlPreservesLocalServingTest = init
-    .then(changePolicy(POLICY_INVALID_REMOTE_TTL))
+    .then(changePolicy(INVALID_REMOTE_TTL))
     .then(startCall(0)).then(releasePolicy)
     .then(finishSource(0, VALUE_ONE))
     .then(startCall(0)).then(releasePolicy)
@@ -587,32 +579,32 @@ module dialcache_policy_conformance {
       and s.o.reads == 0 and s.o.writes == 0 and s.o.loads == 0)
 
   run invalidLocalTtlStillServesFreshRemoteTest = init
-    .then(seedRemote(0, VALUE_ONE)).then(changePolicy(POLICY_INVALID_LOCAL_TTL))
+    .then(seedRemote(0, VALUE_ONE)).then(changePolicy(INVALID_LOCAL_TTL))
     .then(startCall(0)).then(releasePolicy)
     .then(startCall(0)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loaders == 0
       and s.o.reads == 2 and s.o.loads == 2 and s.o.writes == 0)
 
   run recoveryAgeEqualToFreshTtlStillServesFreshRemoteTest = init
-    .then(seedRemote(0, VALUE_ONE)).then(changePolicy(POLICY_INVALID_RECOVERY_AGE))
+    .then(seedRemote(0, VALUE_ONE)).then(changePolicy(INVALID_RECOVERY_AGE))
     .then(startCall(0)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE) and s.o.loaders == 0
       and s.o.reads == 1 and s.o.loads == 1 and s.o.recovery == List())
 
   run negativeRecoveryAgeStillServesFreshRemoteTest = init
-    .then(seedRemote(0, VALUE_ONE)).then(changePolicy(POLICY_NEGATIVE_RECOVERY_AGE))
+    .then(seedRemote(0, VALUE_ONE)).then(changePolicy(NEGATIVE_RECOVERY_AGE))
     .then(startCall(0)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE) and s.o.loaders == 0
       and s.o.reads == 1 and s.o.loads == 1 and s.o.recovery == List())
 
   run providerFailureReportsStablePolicyCategoryTest = init
     .then(startCall(0)).then(releasePolicy).then(finishSource(0, VALUE_ONE))
-    .then(setFault("providerFault", true))
+    .then(setProviderFault(true))
     .then(startCall(0)).then(releasePolicy)
     .expect(s.policyErrors == List({ layer: "noop", errorType: "config_resolution" })
       and s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.loaders == 2
       and s.o.reads == 1 and s.o.writes == 1)
-    .then(finishSource(1, VALUE_TWO)).then(setFault("providerFault", false))
+    .then(finishSource(1, VALUE_TWO)).then(setProviderFault(false))
     .then(startCall(0)).then(releasePolicy)
     .expect(s.policyErrors == List({ layer: "noop", errorType: "config_resolution" })
       and s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE) and s.o.loaders == 2)
@@ -620,7 +612,7 @@ module dialcache_policy_conformance {
   // Falsy source results are values in Redis. With the local layer disabled,
   // each later same-key call within freshness is a remote hit returning the
   // stored falsy value; reaching the fresh boundary starts a source instead.
-  run falsyRemoteValuesAreServedFromRemoteTest = init.then(changePolicy(POLICY_NO_LOCAL))
+  run falsyRemoteValuesAreServedFromRemoteTest = init.then(changePolicy(NO_LOCAL))
     .then(startCall(0)).then(releasePolicy).then(finishSource(0, VALUE_FALSE))
     .then(startCall(0)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_FALSE, VALUE_FALSE) and s.o.loaders == 1 and s.o.loads == 1)
