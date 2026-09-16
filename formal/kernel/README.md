@@ -11,17 +11,18 @@ design and its history; this file describes what is here and how to use it.
 
 | Module | Concern | Transitions and judgments |
 | --- | --- | --- |
-| `encodings` | Sentinels shared by the modules: 0 for an absent value, -1 for an unowned slot, 0 for no fence | constants only |
-| `calls` | What a caller asks for: instance, key, request context and whether it is enabled (a disabled context or a call outside every request is not) | the `Call` type only |
+| `encodings` | Sentinels shared by the modules: 0 for an absent value, -1 for an unowned slot, 0 for no fence; the `accepted` judgment over outcome codes | `accepted` |
+| `calls` | What a caller asks for: instance, key, request context, whether it is enabled (a disabled context, a failed key or a call outside every request is not) and whether its key failed to construct, the one bypass whose source keeps the configured deadline (C27) | the `Call` type only |
 | `layer_policy` | Which layers a call may use, from the drivers' layer policy code and remote availability; the immediate reply `resolution` and the `BYPASS` reply | `enabledLayers`, `sharedLayers`, `resolution` |
 | `runtime_policy` | How a runtime policy reply (the runtime-boundaries drivers' codes 0 to 21) resolves against an instance's configured baseline: serving cohorts, omitted, null and invalid leaves, runtime TTLs, the kill switch | `resolve` |
 | `request_memo` | Request-scoped memo rows and their closure; `openScope` and `Opened` are environment bookkeeping (which contexts an input has created) that no memo rule reads, kept beside the memo rows because the composition lint has no environment allowance yet | `scopeOpen`, `memoSlot`, `memoValue`, `memoize`, `openScope`, `closeScope` |
-| `local_storage` | Per-instance local storage with LRU eviction and a hit that renews recency, not insertion | `localValue`, `promote`, `putLocal` |
+| `local_storage` | Per-instance local storage with LRU eviction, insertion expiry (`cache_rules.localEntryLiveAt`) and a hit that renews recency, not insertion | `localValue`, `promote`, `putLocal` |
 | `remote_frames` | Remote frames with creation stamps, per-entity watermarks and fences (`cache_rules.fenceAllows`) | `seedFrame`, `raiseWatermark`, `readableFrame`, `missFence`, `writeAllowed` |
 | `flights` | Source executions (a record of outcome and process sharing, with whatever payload the traversal that started it needs), the process and request registries that coalesce callers, and per caller its owner and memo slot; an opt-in record of the identity each caller asked for | `processOwner`, `requestOwner`, `admitCaller`, `attachCaller`, `joinRequestFlight`, `registerSource`, `settleSource`, `forgetScope`, `ownedBy`, `recordIdentity` |
 | `clock` | Elapsed time | `advance` |
-| `policy_gate` | Callers whose policy reply the environment holds, with their calls, indexed by their policy call | `hold`, `holding`, `latest`, `entry`, `release` |
-| `serving` | Admission, traversal order (`decide`), ownership precedence, publication and refill authority, scope closure, maintenance; the layered shape and its request-only projection | `admit`, `release`, `begin`, `settle`, `admitRequest`, `releaseRequest`, `settleRequest`, `closeScope`, `invalidate` |
+| `policy_gate` | Callers whose policy reply the environment holds, with their calls, indexed by their policy call | `hold`, `holding`, `holds`, `latest`, `entry`, `release` |
+| `serving` | Admission, traversal order (`decide`), ownership precedence, publication and refill authority, scope closure, maintenance; the layered shape and its local and request-only projections | `admit`, `release`, `begin`, `settle`, `admitLocal`, `releaseLocal`, `settleLocal`, `admitRequest`, `releaseRequest`, `settleRequest`, `closeScope`, `invalidate` |
+| `deadlines` | Source budgets: the budget a source starts with (a source started at admission is bounded only when its key failed, C27, a disabled context and an outside call run theirs unbounded, C01; a source started at release is bounded, its caller was enabled when admitted), the deadline measured from the source's own start, expiry on timer delivery or late arrival, abandoned work draining, as budgeted variants of the local lifecycle | `admitLocal`, `releaseLocal`, `settleLocal`, `advanceLocal` |
 | `diagnostics` | The diagnostics channel: the singleflight a caller coalesced into and the layer a failed source is attributed to, as diagnosed variants of the request-only traversal | `admitRequest`, `releaseRequest`, `settleRequest` |
 
 `cache_rules` (age, expiry, deadline and fence judgments) stays the layer under
@@ -43,14 +44,17 @@ and per scope row, persistent contexts, operations per entity, the serving TTL)
 are passed as a `serving::Layout` record, so a profile with a different bound
 composes the same transitions. A call is a `calls::Call` (instance, key,
 context) and a policy reply resolves to a `layer_policy::Resolution` (the
-enabled layers and whether the call coalesces). The library never decodes a
-profile's policy field: `layer_policy::resolution(policy, remote)` is the
+enabled layers and whether the call coalesces). The serving transitions never
+decode a profile's policy field: `layer_policy::resolution(policy, remote)` is the
 immediate reply from the drivers' layer policy codes 0 to 5, which the layers
 wrapper passes to `begin`; `runtime_policy::resolve(state, samples)` resolves
 the runtime-boundaries drivers' codes 0 to 21 against the instance's
 configured `Baseline`, which its wrapper passes to `release`; `BYPASS` is the
 reply of a call that uses no layer and neither registry. Each profile owns its
-policy field with one meaning.
+policy field with one meaning. A resolution already reflects remote
+availability: the traversal reads the remote layer whenever the resolution
+enables it, so a profile without remote storage resolves `remote` to false (as
+`resolution` and `runtime_policy::resolve` do).
 
 The traversal is one statement of the fall-through order (request memo, local,
 remote, source) and of publication authority, split in time rather than by
@@ -62,32 +66,48 @@ the profile supplies (a scope closed since admission resolves to `BYPASS`), and
 `begin` is their composition for a profile whose replies are immediate. A
 profile whose drivers hold policy replies composes `admit` and `release` as
 separate steps; releasing a policy call the gate does not hold is a modeling
-error that fails when the caller is attached, so a wrapper guards on the gate.
+error that fails in the gate's lookup, so a wrapper guards on the gate.
 Per-concern entry points a profile would sequence are not offered: the order is
 the rule, and the lint reports a branch between library transitions. A profile
 composes an opt-in record after a transition when one of its own properties
-needs it (`Flights::recordIdentity(Serving::begin(...), instance, key)`);
+needs it (`Flights::recordIdentity(Serving::begin(...), call)`);
 records the traversal itself does not read are never mandatory fields.
 
-The traversal has two shapes over one statement of the order (`decide`, which
-joins a pending flight, serves the memo, the local value, the remote value, or
-starts a source): the layered shape (`admit`, `release`, `settle` over
-`Served`, whose source record `LayeredSource` carries publication authority)
-and the request-only projection (`admitRequest`, `releaseRequest`,
-`settleRequest` over `RequestServed`, whose `RequestSource` carries none and
-whose state names no storage or clock). A projection exists only where the
-layered shape cannot meet a profile's bytes-per-state bound (scope measured
-x1.37 layered against x0.9 projected); it passes no layer values to `decide`
-and states no rule of its own. The projection carries the registry fields of
-`Traversed`, `processFlights` among them although that shape never writes it,
-as the accepted cost of one `decide` over both shapes. A profile whose
-drivers compare the diagnostics channel composes the `diagnostics` variants,
-which record the coalesced scope and each source's layer around the same
-transitions; a profile whose drivers do not carries no `d`.
+The traversal has three shapes over one statement of the order (`decide`,
+which joins a pending flight, serves the memo, the local value, the remote
+value, or starts a source): the layered shape (`admit`, `release`, `settle`
+over `Served`, whose source record `LayeredSource` carries publication
+authority), the local projection (`admitLocal`, `releaseLocal`, `settleLocal`
+over `LocalServed`, without a remote layer, whose `LocalSource` carries the
+identity it serves and whether it may warm local storage) and the
+request-only projection (`admitRequest`, `releaseRequest`, `settleRequest`
+over `RequestServed`, whose `RequestSource` carries none and whose state names
+no storage or clock). A projection exists only where the layered shape cannot
+meet a profile's bytes-per-state bound (scope measured x1.37 layered against
+x0.98 projected; source-budgets x1.5 layered); it passes fewer layer values to
+`decide` and states no rule of its own. The projections carry the registry
+fields of `Traversed`, `processFlights` among them although the request-only
+shape never writes it, as the accepted cost of one `decide` over every shape.
+Records only some profiles' drivers compare or bound compose as variants
+around the same transitions: the `diagnostics` variants record the coalesced
+scope and each source's layer, the `deadlines` variants stamp each source's
+start and budget and complete expired sources; a profile whose drivers do not
+compare or bound them carries nothing.
 
 A composed profile's clock must start above zero: `cache_rules.fenceAllows` is
 strict and an untracked flight's fence is 0, so a profile that initializes
 `now` to 0 refuses every remote refill without any other symptom.
+
+## Kernel fixtures
+
+The library's transitions are pure, so the seams a scheduled profile may not
+reach (held policy replies released out of order, coalescing off against both
+registries, a scope closed between admission and release, the request-only
+projection with its diagnostics, the budgeted local lifecycle with its expiry
+boundaries) are exercised by small profiles under `test/fixtures/kernel`. Each
+typechecks and every run it declares passes: `make kernel-fixtures` runs them
+locally with Quint on the PATH, and the model-check and differential lanes run
+the same check.
 
 ## Composing a profile
 
@@ -102,8 +122,7 @@ assigns `s'` to one library transition and `input'` to the driver record:
 ```quint
 action startCall(choice: int): bool = all {
   s.o.calls.length() < MAX_CALLERS,
-  s' = Flights::recordIdentity(Serving::begin(s, LAYOUT, call(choice), resolution(s.policy, s.remoteAvailable)),
-    instance(choice / KEYS_PER_INSTANCE), choice % KEYS_PER_INSTANCE),
+  s' = Flights::recordIdentity(Serving::begin(s, LAYOUT, call(choice), resolution(s.policy, s.remoteAvailable)), call(choice)),
   input' = { name: "beginCall", choice: choice }
 }
 ```

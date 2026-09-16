@@ -13,7 +13,7 @@ module request_only {
   import diagnostics as Diag from "../../../formal/kernel/diagnostics"
   import policy_gate as Gate from "../../../formal/kernel/policy-gate"
 
-  pure val LAYOUT: Serving::Layout = { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, servingTtlMs: 0, probeSourceScope: true }
+  pure val LAYOUT: Serving::Layout = { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, servingTtlMs: 0, localTtlMs: 0, probeSourceScope: true }
   pure val ALL: Resolution = { layers: { request: true, local: true, remote: true }, coalesce: true }
   pure val NO_REQUEST: Resolution = { layers: { request: false, local: true, remote: true }, coalesce: true }
 
@@ -34,7 +34,7 @@ module request_only {
   }
   // Contexts 0 and 1 are persistent scopes over the same instance and key;
   // context 2 is a disabled context.
-  pure def call(context: int): Call = { instance: 0, key: 0, context: context, enabled: context != 2 }
+  pure def call(context: int): Call = { instance: 0, key: 0, context: context, enabled: context != 2, keyFailed: false }
   action admit(context: int): bool = all {
     s' = Diag::admitRequest(s, LAYOUT, call(context)),
     input' = { name: "beginCall", choice: context }

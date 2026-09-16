@@ -31,7 +31,8 @@
     "formal/kernel/policy-gate.qnt",
     "formal/kernel/runtime-policy.qnt",
     "formal/kernel/serving.qnt",
-    "formal/kernel/diagnostics.qnt"
+    "formal/kernel/diagnostics.qnt",
+    "formal/kernel/deadlines.qnt"
   ],
   "models": [
     {
@@ -1086,7 +1087,8 @@
         "lateFollowerUsesLeadersRemainingBudgetTest",
         "heldPolicyDoesNotSpendSourceBudgetTest",
         "invalidKeyStillKeepsEnabledSourceDeadlineTest",
-        "abandonedSourceCannotReplaceSuccessfulRetryTest"
+        "abandonedSourceCannotReplaceSuccessfulRetryTest",
+        "localEntryExpiresAfterItsTtlTest"
       ],
       "replayRegressions": [
         "outsideAndInvalidOutsideCallsIgnoreDeadlineAndSharingTest",
@@ -1095,7 +1097,8 @@
         "lateFollowerUsesLeadersRemainingBudgetTest",
         "heldPolicyDoesNotSpendSourceBudgetTest",
         "invalidKeyStillKeepsEnabledSourceDeadlineTest",
-        "abandonedSourceCannotReplaceSuccessfulRetryTest"
+        "abandonedSourceCannotReplaceSuccessfulRetryTest",
+        "localEntryExpiresAfterItsTtlTest"
       ],
       "generate": {
         "maxSamples": 1024,
@@ -1406,20 +1409,20 @@
     {
       "id": "profile-source-wrong-clock",
       "contract": "C23",
-      "source": "formal/dialcache-source-budgets-conformance.qnt",
+      "source": "formal/kernel/deadlines.qnt",
       "model": "formal/dialcache-source-connection.qnt",
       "invariant": "sourceOriginsMatchContract",
-      "before": "rawPending: true, result: CALL_PENDING, started: x.now, settled: -1,",
-      "after": "rawPending: true, result: CALL_PENDING, started: 0, settled: -1,"
+      "before": "started: state.started.append(state.now),",
+      "after": "started: state.started.append(0),"
     },
     {
       "id": "profile-source-wrong-owner",
       "contract": "C24",
-      "source": "formal/dialcache-source-budgets-conformance.qnt",
+      "source": "formal/kernel/flights.qnt",
       "model": "formal/dialcache-source-connection.qnt",
       "invariant": "sourceOwnersMatchContract",
-      "before": "owners: x.owners.replaceAt(call, source),",
-      "after": "owners: x.owners.replaceAt(call, 0),"
+      "before": "owners: state.owners.replaceAt(caller, index),",
+      "after": "owners: state.owners.replaceAt(caller, 0),"
     },
     {
       "id": "profile-recovery-wrong-snapshot",
@@ -1753,7 +1756,7 @@
       "source": "formal/kernel/serving.qnt",
       "model": "formal/dialcache-scope-conformance.qnt",
       "invariant": "memoFollowsLatestSuccessfulSettlement",
-      "before": "if (value == SOURCE_ERROR) settled else Flights::ownedBy(state, index).fold(settled, (out, call) =>",
+      "before": "if (not(accepted(value))) settled else Flights::ownedBy(state, index).fold(settled, (out, call) =>",
       "after": "Flights::ownedBy(state, index).fold(settled, (out, call) =>"
     },
     {
@@ -1786,7 +1789,7 @@
           "runtime-boundaries": "One persistent scope owns the only memo row, so a close that clears every row clears exactly its own.",
           "shadow-layers": "Composes no kernel module, so request_memo.closeScope is never executed.",
           "local-clock": "Composes no kernel module, so request_memo.closeScope is never executed.",
-          "source-budgets": "Composes no kernel module, so request_memo.closeScope is never executed."
+          "source-budgets": "Composes the local projection with no request scope: no input opens or closes a scope and every reply disables the request layer, so request_memo.closeScope is never executed."
         }
       }
     },
@@ -1958,20 +1961,20 @@
     {
       "id": "source-budgets-outside-call-has-deadline",
       "contract": "C01",
-      "source": "formal/dialcache-source-budgets-conformance.qnt",
+      "source": "formal/kernel/deadlines.qnt",
       "model": "formal/dialcache-source-budgets-conformance.qnt",
       "invariant": "outsideSourcesHaveNoDeadline",
-      "before": "budget: if (outside) -1 else configuredBudget(x.mode),",
-      "after": "budget: configuredBudget(x.mode),"
+      "before": "pure def admissionBudget(state: Budgeted[r], call: Call): int = if (call.keyFailed) state.sourceBudget else UNBOUNDED",
+      "after": "pure def admissionBudget(state: Budgeted[r], call: Call): int = state.sourceBudget"
     },
     {
       "id": "source-budgets-settled-flight-stays-registered",
       "contract": "C15",
-      "source": "formal/dialcache-source-budgets-conformance.qnt",
+      "source": "formal/kernel/flights.qnt",
       "model": "formal/dialcache-source-budgets-conformance.qnt",
       "invariant": "registeredWorkIsNotAbandoned",
-      "before": "registered: if (x.registered == id) -1 else x.registered,",
-      "after": "registered: x.registered,"
+      "before": "processFlights: state.processFlights.foldl(List(), (out, owner) => out.append(if (owner == index) NO_OWNER else owner)),",
+      "after": "processFlights: state.processFlights,"
     },
     {
       "id": "stale-recovery-future-candidate",
@@ -2033,11 +2036,11 @@
     {
       "id": "source-budgets-accepts-at-deadline-equality",
       "contract": "C25",
-      "source": "formal/dialcache-source-budgets-conformance.qnt",
+      "source": "formal/kernel/deadlines.qnt",
       "model": "formal/dialcache-source-budgets-conformance.qnt",
       "invariant": "acceptedSourceRespectsItsOwnStart",
-      "before": "not(sourceAcceptsAt(source.started, now, source.budget))",
-      "after": "source.budget >= 0 and now > source.started + source.budget",
+      "before": "not(sourceAcceptsAt(state.started.nth(index), state.now, state.budgets.nth(index)))",
+      "after": "state.budgets.nth(index) >= 0 and state.now > state.started.nth(index) + state.budgets.nth(index)",
       "reproducer": {
         "kind": "exported-regression",
         "run": "defaultSourceBudgetExpiresAtSixtySecondsTest",
@@ -2046,7 +2049,22 @@
         "profiles": [
           "source-budgets"
         ],
-        "exclusions": {}
+        "exclusions": {
+          "core": "does not compose the deadlines module: its sources have no budget",
+          "effects": "does not compose the deadlines module: its sources have no budget",
+          "recovery": "does not compose the deadlines module: its sources have no budget",
+          "policy": "does not compose the deadlines module: its sources have no budget",
+          "shadow": "does not compose the deadlines module: its sources have no budget",
+          "scope": "does not compose the deadlines module: its sources have no budget",
+          "admission": "does not compose the deadlines module: its sources have no budget",
+          "layers": "does not compose the deadlines module: its sources have no budget",
+          "independent": "does not compose the deadlines module: its sources have no budget",
+          "recovery-read": "does not compose the deadlines module: its sources have no budget",
+          "local-failure": "does not compose the deadlines module: its sources have no budget",
+          "runtime-boundaries": "does not compose the deadlines module: its sources have no budget",
+          "shadow-layers": "does not compose the deadlines module: its sources have no budget",
+          "local-clock": "does not compose the deadlines module: its sources have no budget"
+        }
       }
     }
   ],

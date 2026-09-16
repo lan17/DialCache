@@ -11,6 +11,7 @@ export function affectsQuintArtifacts(path, declaredInputs = new Set()) {
     || /^formal\/quint-.*\.json$/.test(path)
     || /^formal\/(execution|profiles|fixture-recipes|generated-fixtures\.lock|profile-lint-baseline)\.json$/.test(path)
     || /^test\/fixtures\/.*witness.*\.json$/.test(path)
+    || /^test\/fixtures\/kernel\/.*\.qnt$/.test(path)
     || /^\.github\/(actions|scripts|workflows)\//.test(path)
     || /^(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|\.npmrc|\.nvmrc|\.node-version|\.tool-versions|Makefile|go\/go\.(mod|sum))$/.test(path);
 }

@@ -8,10 +8,10 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "86e3afcf4a8abd63d55f800d5e886b1e763012afc07003b92b1fc0acf4d5bd1a",
-    "executionSha256": "57f02f4cf2394cf340a204cdf8a75a394d58bd7483c66cebb869e89e3f0727b2",
+    "semanticCasesSha256": "fe0ad48baa7bfe85b61a3690aedd9e4024453fd568e5dd2b6da200201919eecd",
+    "executionSha256": "9429670268cfe00e01435fee5a938ca17681bd351f03f96b9a49f2b254fd4056",
     "sourceAuditSha256": "cd30114ed026910d0966cfc7cdcd4cfb79c8ebb4b6d9d7f088accb747dbdf4f8",
-    "quintCaseAuditSha256": "deba04a19c1e76479ff46775e082e28f212f02effd5eabe639e2e44b36b28ba2",
+    "quintCaseAuditSha256": "928e3aef3896cfd0c95d4b476f06bf27de3bd5b73c8184eca29402a932d6c07b",
     "featureCoverageSha256": "56eedfa865682db6ad8e73b8673c7dac1c30d301e9bce3390246d6994aba9dcb",
     "coverageWitnessesSha256": "8fc8ab123150fdec059f5b75f84172d39af80d08d7a4211fa88c63c5a3f2874b",
     "profilesSha256": "b8fa4f399a163bc8793bf76b6ba3503a415fcf3c8509cf98d964e4f067e6660f"
@@ -46,11 +46,11 @@
     "withoutModelDrivenReplay": [],
     "quintModels": 32,
     "scheduledInvariants": 218,
-    "scheduledRegressions": 411,
+    "scheduledRegressions": 412,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
     "caseReferencedWitnesses": 285,
-    "exportedRegressionHistories": 244
+    "exportedRegressionHistories": 245
   },
   "profiles": [
     {
@@ -552,7 +552,8 @@
         "lateFollowerUsesLeadersRemainingBudgetTest",
         "heldPolicyDoesNotSpendSourceBudgetTest",
         "invalidKeyStillKeepsEnabledSourceDeadlineTest",
-        "abandonedSourceCannotReplaceSuccessfulRetryTest"
+        "abandonedSourceCannotReplaceSuccessfulRetryTest",
+        "localEntryExpiresAfterItsTtlTest"
       ],
       "status": "executable-profile-schedule",
       "witnessSources": [
@@ -1704,7 +1705,7 @@
       "quintDefinitions": [
         "formal/kernel/local-storage.qnt:putLocal",
         "formal/kernel/flights.qnt:registerSource",
-        "formal/kernel/serving.qnt:begin",
+        "formal/kernel/serving.qnt:identity",
         "formal/kernel/serving.qnt:settle"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
@@ -1765,7 +1766,8 @@
         "formal/dialcache-policy-conformance.qnt:localHitDoesNotRenewInsertionTtlTest",
         "formal/dialcache-policy-conformance.qnt:localHitsRespectInsertionExpiry",
         "formal/dialcache-rule-checks.qnt:localBoundaryIsExclusive",
-        "formal/dialcache-rule-checks.qnt:localGridUsesWholeMilliseconds"
+        "formal/dialcache-rule-checks.qnt:localGridUsesWholeMilliseconds",
+        "formal/dialcache-source-budgets-conformance.qnt:localEntryExpiresAfterItsTtlTest"
       ],
       "requiredGenerated": [
         {
@@ -1789,7 +1791,8 @@
       "quintDefinitions": [],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
-        "policy/localHitDoesNotRenewInsertionTtlTest"
+        "policy/localHitDoesNotRenewInsertionTtlTest",
+        "source-budgets/localEntryExpiresAfterItsTtlTest"
       ],
       "generatedVectors": []
     },

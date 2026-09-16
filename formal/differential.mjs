@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { copySources, importClosure, isKernelSource, isQuintSourcePath, root, validateExecution } from './execution.mjs';
 import { parseWithSourceMap, scheduleHistories, spliceDeclarations } from './generated-fixtures.mjs';
+import { normalizeTraceFiles } from './replay-inputs.mjs';
 import { CommandFailure, printGroup, resolveConcurrency, runPool, seconds, spawnBuffered } from './quint-pool.mjs';
 import { parseTrace, profiles } from './replay/features.mjs';
 import { generationArguments } from './run-models.mjs';
@@ -165,6 +166,10 @@ async function quint(args, { cwd, timeoutMs = 900_000 }) {
   return result;
 }
 
+// As in the generation lane: the explicit input record is authoritative, and
+// the simulator's action and choice annotations are rewritten from it (the
+// simulator can stamp a stale action on a trace's initial state; a test export
+// carries no annotations at all).
 // Generate a tree's corpus and exported regressions with that tree's own
 // manifest entry: the lane's command, seed, invariants and bounds as recorded there.
 export async function generateCorpus(tree, model, { timeoutMs } = {}) {
@@ -186,6 +191,8 @@ export async function generateCorpus(tree, model, { timeoutMs } = {}) {
   }
   const files = readdirSync(directory).filter(name => name.endsWith('.itf.json'));
   if (files.length !== model.generate.traces) throw new Error(`${model.path} generated ${files.length} traces, expected ${model.generate.traces}`);
+  normalizeTraceFiles(directory);
+  normalizeTraceFiles(resolve(tree, regressions));
   return { directory, regressions: resolve(tree, regressions), generationMs: generation.durationMs, regressionMs: exported.durationMs,
     log: generation.stdout + generation.stderr };
 }
