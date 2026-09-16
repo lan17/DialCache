@@ -14,7 +14,7 @@
     "quintCaseAuditSha256": "deba04a19c1e76479ff46775e082e28f212f02effd5eabe639e2e44b36b28ba2",
     "featureCoverageSha256": "56eedfa865682db6ad8e73b8673c7dac1c30d301e9bce3390246d6994aba9dcb",
     "coverageWitnessesSha256": "8fc8ab123150fdec059f5b75f84172d39af80d08d7a4211fa88c63c5a3f2874b",
-    "profilesSha256": "344734025c4573cd6816670863c95ec169c63e9230ae3b41db1c3319b4cb9234"
+    "profilesSha256": "b1e53020ab02ac890ac0294ecf7102a1ce58188239adcb26e159e208cf2eaab5"
   },
   "inventory": {
     "behavioralCases": 240,
@@ -205,7 +205,6 @@
         "formal/replay/witnesses/trace.mjs",
         "formal/replay/witnesses/evidence.mjs",
         "formal/replay/witnesses/recovery.mjs",
-        "formal/replay/witnesses/policy.mjs",
         "formal/replay/witnesses/labels.mjs",
         "formal/replay/witnesses/recovery-shadow.mjs"
       ]
@@ -253,8 +252,7 @@
         "formal/replay/witnesses/index.mjs",
         "formal/replay/witnesses/trace.mjs",
         "formal/replay/witnesses/evidence.mjs",
-        "formal/replay/witnesses/policy.mjs",
-        "formal/replay/witnesses/runtime.mjs"
+        "formal/replay/witnesses/policy.mjs"
       ]
     },
     {

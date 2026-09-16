@@ -146,6 +146,26 @@
         "futureOffsets": true
       }
     },
+    "policy-observations": {
+      "o": {
+        "calls": true,
+        "classifications": true,
+        "comparisons": true,
+        "dumps": true,
+        "invalidations": true,
+        "loaders": true,
+        "loads": true,
+        "maintenance": true,
+        "policyCalls": true,
+        "reads": true,
+        "recovery": true,
+        "shadow": true,
+        "sourceScopes": true,
+        "writeTtls": true,
+        "writes": true
+      },
+      "policyErrors": true
+    },
     "observations": {
       "o": {
         "calls": true,
@@ -2421,6 +2441,103 @@
           "id": "unboundedEnabledSourcePublishesAfterSixtySecondsTest",
           "regression": "unboundedEnabledSourcePublishesAfterSixtySecondsTest",
           "projection": "observations"
+        }
+      ]
+    },
+    {
+      "path": "test/fixtures/formal-policy-witnesses.json",
+      "model": "formal/dialcache-policy-conformance.qnt",
+      "format": "named-map",
+      "recipes": [
+        {
+          "id": "localHitDoesNotRenewInsertionTtlTest",
+          "regression": "localHitDoesNotRenewInsertionTtlTest",
+          "projection": "policy-observations"
+        },
+        {
+          "id": "wallRollbackDoesNotExtendLocalTtlTest",
+          "regression": "wallRollbackDoesNotExtendLocalTtlTest",
+          "projection": "policy-observations"
+        },
+        {
+          "id": "wallRollbackRejectsFutureRemoteFrameTest",
+          "regression": "wallRollbackRejectsFutureRemoteFrameTest",
+          "projection": "policy-observations"
+        },
+        {
+          "id": "exactRemoteFreshBoundaryStartsSourceTest",
+          "regression": "exactRemoteFreshBoundaryStartsSourceTest",
+          "projection": "policy-observations"
+        },
+        {
+          "id": "increasedFreshTtlCanReusePhysicallyRetainedValueTest",
+          "regression": "increasedFreshTtlCanReusePhysicallyRetainedValueTest",
+          "projection": "policy-observations"
+        },
+        {
+          "id": "increasedFreshTtlCannotResurrectExpiredStorageTest",
+          "regression": "increasedFreshTtlCannotResurrectExpiredStorageTest",
+          "projection": "policy-observations"
+        },
+        {
+          "id": "remoteHitStartsFullLocalInsertionTtlTest",
+          "regression": "remoteHitStartsFullLocalInsertionTtlTest",
+          "projection": "policy-observations"
+        },
+        {
+          "id": "providerFailureBypassesAndPreservesExistingLocalTest",
+          "regression": "providerFailureBypassesAndPreservesExistingLocalTest",
+          "projection": "policy-observations"
+        },
+        {
+          "id": "disablingServingKeepsExistingLocalForReenablementTest",
+          "regression": "disablingServingKeepsExistingLocalForReenablementTest",
+          "projection": "policy-observations"
+        },
+        {
+          "id": "untrackedReadFailureStillWarmsActiveLocalTest",
+          "regression": "untrackedReadFailureStillWarmsActiveLocalTest",
+          "projection": "policy-observations"
+        },
+        {
+          "id": "independentLocalPublicationUsesLastCompletionTest",
+          "regression": "independentLocalPublicationUsesLastCompletionTest",
+          "projection": "policy-observations"
+        },
+        {
+          "id": "independentRemotePublicationUsesLastCompletionTest",
+          "regression": "independentRemotePublicationUsesLastCompletionTest",
+          "projection": "policy-observations"
+        },
+        {
+          "id": "inactiveLayersStartIndependentSources",
+          "actions": [
+            [
+              "init",
+              -1
+            ],
+            [
+              "policy",
+              8
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "releasePolicy",
+              -1
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "releasePolicy",
+              -1
+            ]
+          ],
+          "projection": "policy-observations"
         }
       ]
     }

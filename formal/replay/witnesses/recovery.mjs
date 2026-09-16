@@ -1,4 +1,3 @@
-import { clockWitnesses } from "./policy.mjs";
 import { flowLabels } from "./labels.mjs";
 import { createWitnessRecorder } from "./recorder.mjs";
 
@@ -45,11 +44,27 @@ function recoveryScopeWitnesses(histories, recorder) {
   return recorder.labels();
 }
 
+// A wall rollback during decode leaves the retained candidate created after
+// the observed wall; the recovery must miss. Reads the private phase, load
+// fault and candidate creation time that select this schedule.
+function rollbackWitnesses(histories, recorder) {
+  for (const { path, steps, predictions: states } of histories) {
+    recorder.enter(path);
+    for (const [i, step] of steps.entries()) {
+      recorder.step(i);
+      if (i === 0) continue;
+      const before = states[i - 1], previous = steps[i - 1].expected, o = step.expected;
+      if (step.action === "releaseLoad" && before.phase === 3 && before.loadFailed === false &&
+        before.wall < before.candidateCreated && o.recovery.length > previous.recovery.length && o.recovery.at(-1) === "miss") recorder.credit("rollback-rejects-retained-future");
+    }
+  }
+}
+
 // Stale-recovery flow witnesses over declared inputs, public results, recovery
 // outcomes and fallback diagnostics. Classifier choices come from the init and
 // beginCall inputs of the history, never from private model state.
 export function recoveryWitnesses(histories, recorder = createWitnessRecorder()) {
-  clockWitnesses("recovery", histories, recorder);
+  rollbackWitnesses(histories, recorder);
   recoveryScopeWitnesses(histories, recorder);
   flowLabels(histories, true, recorder);
   for (const { path, steps } of histories) {

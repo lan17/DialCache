@@ -1,0 +1,148 @@
+import { readFileSync } from "node:fs";
+
+import { describe, expect, it } from "vitest";
+
+import { parseTrace, profiles } from "../formal/replay/features.mjs";
+import { policyWitnesses } from "../formal/replay/witnesses/policy.mjs";
+
+type Integer = { "#bigint": string };
+interface State { input: { name: string; choice: Integer }; "mbt::actionTaken"?: string; "mbt::nondetPicks"?: unknown; s: Record<string, unknown> }
+interface History { source: { model: string; recipe: string }; states: State[] }
+const fixtures = JSON.parse(readFileSync(new URL("./fixtures/formal-policy-witnesses.json", import.meta.url), "utf8")) as Record<string, History>;
+const policy = profiles.policy!;
+
+// The fixtures are named public Quint runs of the policy model projected to
+// the recorded inputs and the observation a driver is asserted against. The
+// classifier has nothing else to read; a probe that changes one recorded
+// input must lose the label even though the recorded outcome stays.
+function history(name: string): State[] {
+  const fixture = fixtures[name];
+  if (fixture === undefined) throw new Error(`Missing policy witness fixture ${name}`);
+  return structuredClone(fixture.states);
+}
+function witnesses(name: string, states: State[]): Set<string> {
+  return policyWitnesses([parseTrace({ states }, name, policy)]);
+}
+const nth = (states: State[], action: string, index = 0): State => {
+  const state = states.filter(candidate => candidate.input.name === action)[index];
+  if (state === undefined) throw new Error(`No ${action} input #${index}`);
+  return state;
+};
+// Re-record an input. The simulator annotations must agree with the record.
+function record(state: State, name: string, choice: number): void {
+  state.input = { name, choice: { "#bigint": String(choice) } };
+  state["mbt::actionTaken"] = name;
+  state["mbt::nondetPicks"] = { choice: choice === -1 ? { tag: "None", value: { "#tup": [] } } : { tag: "Some", value: { "#bigint": String(choice) } } };
+}
+const rechoose = (state: State, choice: number) => record(state, state.input.name, choice);
+
+const positive: Array<[string, string]> = [
+  ["localHitDoesNotRenewInsertionTtlTest", "local-hit-preserves-insertion-expiry"],
+  ["wallRollbackDoesNotExtendLocalTtlTest", "rollback-preserves-live-local"],
+  ["wallRollbackDoesNotExtendLocalTtlTest", "rollback-does-not-extend-local-ttl"],
+  ["wallRollbackRejectsFutureRemoteFrameTest", "rollback-rejects-future-remote"],
+  ["exactRemoteFreshBoundaryStartsSourceTest", "remote-exact-fresh-boundary-miss"],
+  ["increasedFreshTtlCanReusePhysicallyRetainedValueTest", "increased-fresh-ttl-reuses-retained-frame"],
+  ["increasedFreshTtlCannotResurrectExpiredStorageTest", "increased-fresh-ttl-cannot-resurrect-expired-storage"],
+  ["remoteHitStartsFullLocalInsertionTtlTest", "remote-hit-local-ttl-outlives-remote-freshness"],
+  ["providerFailureBypassesAndPreservesExistingLocalTest", "provider-failure-preserves-existing-local"],
+  ["disablingServingKeepsExistingLocalForReenablementTest", "serving-disabled-preserves-existing-local"],
+  ["untrackedReadFailureStillWarmsActiveLocalTest", "failed-untracked-read-still-warms-local"],
+  ["independentLocalPublicationUsesLastCompletionTest", "independent-local-last-completion-probed"],
+  ["independentRemotePublicationUsesLastCompletionTest", "independent-remote-last-completion-probed"],
+  ["inactiveLayersStartIndependentSources", "inactive-layers-independent-sources"],
+];
+
+describe("policy witnesses from inputs and public observations", () => {
+  it("reads fixtures that carry only the recorded input and the asserted observation", () => {
+    for (const [name, fixture] of Object.entries(fixtures)) {
+      expect(fixture.source.model, name).toBe("formal/dialcache-policy-conformance.qnt");
+      for (const state of fixture.states) expect(Object.keys(state.s).sort(), name).toEqual(["o", "policyErrors"]);
+    }
+  });
+
+  it.each(positive)("%s earns %s", (name, witness) => {
+    expect(witnesses(name, history(name)).has(witness)).toBe(true);
+  });
+
+  it("a miss before the shadowed insertion expiry is not a preserved-expiry probe", () => {
+    const states = history("localHitDoesNotRenewInsertionTtlTest");
+    rechoose(nth(states, "advance", 1), 1);
+    expect(witnesses("probe", states).has("local-hit-preserves-insertion-expiry")).toBe(false);
+  });
+
+  it("without the wall rollback the served-then-missed local entry earns neither rollback label", () => {
+    const states = history("wallRollbackDoesNotExtendLocalTtlTest");
+    record(nth(states, "rollbackWall"), "dumpFault", 0);
+    const labels = witnesses("probe", states);
+    expect(labels.has("rollback-preserves-live-local")).toBe(false);
+    expect(labels.has("rollback-does-not-extend-local-ttl")).toBe(false);
+  });
+
+  it("a frame created at or before the observed wall is not a rejected future frame", () => {
+    const states = history("wallRollbackRejectsFutureRemoteFrameTest");
+    record(nth(states, "rollbackWall"), "dumpFault", 0);
+    expect(witnesses("probe", states).has("rollback-rejects-future-remote")).toBe(false);
+  });
+
+  it("a remote miss inside the fresh window is not the exact boundary", () => {
+    const states = history("exactRemoteFreshBoundaryStartsSourceTest");
+    rechoose(nth(states, "advance"), 500);
+    expect(witnesses("probe", states).has("remote-exact-fresh-boundary-miss")).toBe(false);
+  });
+
+  it("a remote hit under the unchanged fresh TTL does not reuse a retained frame", () => {
+    const states = history("increasedFreshTtlCanReusePhysicallyRetainedValueTest");
+    rechoose(nth(states, "policy", 1), 0);
+    expect(witnesses("probe", states).has("increased-fresh-ttl-reuses-retained-frame")).toBe(false);
+  });
+
+  it("a remote miss while Redis still retains the frame is not resurrection", () => {
+    const states = history("increasedFreshTtlCannotResurrectExpiredStorageTest");
+    rechoose(nth(states, "advance"), 1000);
+    expect(witnesses("probe", states).has("increased-fresh-ttl-cannot-resurrect-expired-storage")).toBe(false);
+  });
+
+  it("a warmed local hit while the remote frame is still fresh does not outlive its freshness", () => {
+    const states = history("remoteHitStartsFullLocalInsertionTtlTest");
+    rechoose(nth(states, "advance", 1), 1);
+    expect(witnesses("probe", states).has("remote-hit-local-ttl-outlives-remote-freshness")).toBe(false);
+  });
+
+  it("a later local hit without the provider failure is not a preserved bypass", () => {
+    const states = history("providerFailureBypassesAndPreservesExistingLocalTest");
+    rechoose(nth(states, "providerFault"), 0);
+    expect(witnesses("probe", states).has("provider-failure-preserves-existing-local")).toBe(false);
+  });
+
+  it("disabling only the local layer is not the serving kill switch", () => {
+    const states = history("disablingServingKeepsExistingLocalForReenablementTest");
+    rechoose(nth(states, "policy"), 3);
+    expect(witnesses("probe", states).has("serving-disabled-preserves-existing-local")).toBe(false);
+  });
+
+  it("a healthy untracked read cannot credit the failed-read warming", () => {
+    const states = history("untrackedReadFailureStillWarmsActiveLocalTest");
+    rechoose(nth(states, "readFault"), 0);
+    expect(witnesses("probe", states).has("failed-untracked-read-still-warms-local")).toBe(false);
+  });
+
+  it.each([["independentLocalPublicationUsesLastCompletionTest", "local"], ["independentRemotePublicationUsesLastCompletionTest", "remote"]])(
+    "%s needs the overlapping sources to publish different values", (name, layer) => {
+      const states = history(name);
+      rechoose(nth(states, "resolveLoader", 1), 2); // source 0 also resolves to 2
+      expect(witnesses("probe", states).has(`independent-${layer}-last-completion-probed`)).toBe(false);
+    });
+
+  it("an overlapping source with an active remote layer is not an inactive-layers overlap", () => {
+    const states = history("inactiveLayersStartIndependentSources");
+    rechoose(nth(states, "policy"), 3);
+    expect(witnesses("probe", states).has("inactive-layers-independent-sources")).toBe(false);
+  });
+
+  it("rejects a settlement of a source the observation never started", () => {
+    const states = history("untrackedReadFailureStillWarmsActiveLocalTest");
+    rechoose(nth(states, "resolveLoader"), 8); // loader 1, value 1
+    expect(() => witnesses("probe", states)).toThrow(/pending source 1/);
+  });
+});

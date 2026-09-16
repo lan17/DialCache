@@ -69,7 +69,6 @@
         "formal/replay/witnesses/trace.mjs",
         "formal/replay/witnesses/evidence.mjs",
         "formal/replay/witnesses/recovery.mjs",
-        "formal/replay/witnesses/policy.mjs",
         "formal/replay/witnesses/labels.mjs",
         "formal/replay/witnesses/recovery-shadow.mjs"
       ],
@@ -87,8 +86,7 @@
         "formal/replay/witnesses/index.mjs",
         "formal/replay/witnesses/trace.mjs",
         "formal/replay/witnesses/evidence.mjs",
-        "formal/replay/witnesses/policy.mjs",
-        "formal/replay/witnesses/runtime.mjs"
+        "formal/replay/witnesses/policy.mjs"
       ]
     },
     {

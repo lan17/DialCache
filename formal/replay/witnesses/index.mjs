@@ -29,9 +29,13 @@ import { readTrace, traceStates, witnessStates } from "./trace.mjs";
 // One language-neutral witness evaluator for every profile with a completion
 // gate. Any port runs it over the same sampled histories and exported
 // regressions; TypeScript's test suite calls the same functions. Classifiers
-// read declared inputs, public observations and private model predictions from
-// the Quint histories only. Driver observations never reach this module, and
-// nothing here supplies an implementation's inputs.
+// read the declared inputs and public observations of the Quint histories; the
+// policy classifier (policy.mjs) reads nothing else and shadows the cache
+// contents it needs from those, while the effects, independent, layers,
+// recovery, recovery-shadow and shadow classifiers and the scope/layers
+// runtime rules (runtime.mjs) also read the model's private predictions.
+// Driver observations never reach this module, and nothing here supplies an
+// implementation's inputs.
 export const witnessProfiles = [...Object.keys(featureProfiles), "effects", "local-clock"];
 
 // The shared strict parser for a profile's histories. Effects and feature
@@ -60,7 +64,7 @@ export function evaluateCorpus(profile, corpus, recorder = createWitnessRecorder
   switch (profile) {
     case "effects": effectsWitnesses(corpus, recorder); effectsAuthorityWitnesses(corpus, recorder); break;
     case "local-clock": localClockWitnesses(corpus, recorder); break;
-    case "policy": policyWitnesses(corpus, recorder); runtimeWitnesses(profile, corpus, recorder); break;
+    case "policy": policyWitnesses(corpus, recorder); break;
     case "scope": scopeWitnesses(corpus, recorder); break;
     case "layers": layersWitnesses(corpus, recorder); runtimeWitnesses(profile, corpus, recorder); break;
     case "admission": admissionWitnesses(corpus, recorder); break;

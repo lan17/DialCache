@@ -14,7 +14,7 @@ const book = () => JSON.parse(readFileSync("formal/fixture-recipes.json", "utf8"
 
 describe("reproducible Quint fixtures", () => {
   it("binds every committed fixture to its recipes, models and exporter without requiring Quint", () => {
-    expect(verifyFixtures()).toEqual({ artifacts: 26, histories: 126 });
+    expect(verifyFixtures()).toEqual({ artifacts: 27, histories: 139 });
   });
   it("rejects missing fixtures, duplicate identities and expected-state recipes", () => {
     const missing = book(); missing.artifacts.pop();
