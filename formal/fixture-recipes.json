@@ -905,6 +905,95 @@
       ]
     },
     {
+      "path": "test/fixtures/policy-shadow-witnesses.json",
+      "model": "formal/dialcache-policy-conformance.qnt",
+      "format": "named-map",
+      "recipes": [
+        {
+          "id": "shadowWalk",
+          "actions": [
+            [
+              "init",
+              -1
+            ],
+            [
+              "seed",
+              1
+            ],
+            [
+              "advance",
+              500
+            ],
+            [
+              "policy",
+              1
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "releasePolicy",
+              -1
+            ],
+            [
+              "rollbackWall",
+              -1
+            ],
+            [
+              "readFault",
+              1
+            ],
+            [
+              "dumpFault",
+              1
+            ],
+            [
+              "writeFault",
+              1
+            ],
+            [
+              "beginCall",
+              1
+            ],
+            [
+              "releasePolicy",
+              -1
+            ],
+            [
+              "rejectLoader",
+              0
+            ],
+            [
+              "readFault",
+              0
+            ],
+            [
+              "dumpFault",
+              0
+            ],
+            [
+              "writeFault",
+              0
+            ],
+            [
+              "beginCall",
+              1
+            ],
+            [
+              "releasePolicy",
+              -1
+            ],
+            [
+              "resolveLoader",
+              8
+            ]
+          ],
+          "projection": "policy"
+        }
+      ]
+    },
+    {
       "path": "formal/shadow-smoke.itf.json",
       "model": "formal/dialcache-shadow-conformance.qnt",
       "format": "smoke",
@@ -2607,6 +2696,48 @@
             [
               "advance",
               1000
+            ],
+            [
+              "rollbackWall",
+              -1
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "releasePolicy",
+              -1
+            ]
+          ],
+          "projection": "policy-observations"
+        },
+        {
+          "id": "staleFrameMissesAfterRollback",
+          "actions": [
+            [
+              "init",
+              -1
+            ],
+            [
+              "policy",
+              3
+            ],
+            [
+              "beginCall",
+              0
+            ],
+            [
+              "releasePolicy",
+              -1
+            ],
+            [
+              "resolveLoader",
+              1
+            ],
+            [
+              "advance",
+              2000
             ],
             [
               "rollbackWall",

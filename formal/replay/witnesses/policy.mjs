@@ -48,11 +48,13 @@ function effectivePolicy(overlay, providerFailed) {
 const initialShadow = () => ({ now: 0, wall: 100000, overlay: 0, epoch: 0, providerFailed: false, readFailed: false, dumpFailed: false, writeFailed: false,
   key: 0, call: -1, local: { key: 0, value: 0, expires: 0 }, remote: [{ value: 0, created: 0, expires: 0 }, { value: 0, created: 0, expires: 0 }], sources: [] });
 
-// One frame per transition: the recorded input, the asserted observation
+// One frame per transition: the recorded action, the asserted observation
 // before and after it, the shadow before and after it, the effective policy
-// before it and, for a released reply, the receipt read from the observation
-// (the caller's result and which effect counters grew). A recorded outcome the
-// shadowed contents cannot explain is a contradiction and throws.
+// before it and the decoded input: for a released reply the receipt read from
+// the observation (the caller's result and which effect counters grew), for a
+// settlement the loader, its source record before settling and the settled
+// value, for a seed the seeded key. A recorded outcome the shadowed contents
+// cannot explain is a contradiction and throws.
 function shadowHistory(steps, path) {
   const contradiction = (index, message) => new Error(`${path} step ${index}: ${message}`);
   let shadow = initialShadow();
@@ -61,7 +63,7 @@ function shadowHistory(steps, path) {
     const { action, choice, expected: current } = steps[index], prior = steps[index - 1].expected;
     const before = shadow, after = { ...shadow, remote: [...shadow.remote], sources: [...shadow.sources] };
     const policy = effectivePolicy(before.overlay, before.providerFailed);
-    let receipt;
+    let receipt, settlement, seeded;
     switch (action) {
       case "beginCall": after.key = choice; after.call = current.calls.length - 1; break;
       case "releasePolicy": {
@@ -88,6 +90,7 @@ function shadowHistory(steps, path) {
         const value = action === "resolveLoader" ? outcomeCodes[(choice - 1) % outcomeCodes.length] : SOURCE_ERROR;
         const source = before.sources[loader];
         if (source === undefined || source.result !== 0) throw contradiction(index, `settles no pending source ${loader}`);
+        settlement = { loader, source, value };
         after.sources[loader] = { ...source, result: value };
         if (value !== SOURCE_ERROR && source.localTtl > 0) after.local = { key: source.key, value, expires: before.now + source.localTtl };
         if (current.writes > prior.writes) {
@@ -97,7 +100,7 @@ function shadowHistory(steps, path) {
         }
         break;
       }
-      case "seed": after.remote[Math.floor(choice / 2)] = { value: choice % 2 + 1, created: before.wall, expires: before.now + DEFAULT_RETENTION_MS }; break;
+      case "seed": seeded = Math.floor(choice / 2); after.remote[seeded] = { value: choice % 2 + 1, created: before.wall, expires: before.now + DEFAULT_RETENTION_MS }; break;
       case "policy": after.overlay = choice; if (choice !== before.overlay) after.epoch = before.epoch + 1; break;
       case "advance": after.now = before.now + choice; after.wall = before.wall + choice; break;
       case "rollbackWall": after.wall = before.wall - 1000; break;
@@ -107,7 +110,7 @@ function shadowHistory(steps, path) {
       case "writeFault": after.writeFailed = choice === 1; break;
       default: throw contradiction(index, `unknown policy action ${action}`);
     }
-    frames.push({ index, action, choice, prior, current, before, after, policy, receipt });
+    frames.push({ index, action, prior, current, before, after, policy, receipt, settlement, seeded });
     shadow = after;
   }
   return frames;
@@ -149,7 +152,7 @@ const pendingSources = shadow => shadow.sources.filter(source => source.result =
 function settlementWitnesses(frames, recorder) {
   for (const frame of frames) {
     recorder.step(frame.index);
-    const { action, choice, prior, current, before, receipt } = frame;
+    const { action, prior, current, before, receipt, settlement } = frame;
     if (action === "releasePolicy") {
       const { key, value, starts, read, localHit, remoteHit } = receipt, overlay = before.overlay;
       if (!before.providerFailed) {
@@ -171,8 +174,7 @@ function settlementWitnesses(frames, recorder) {
       }
     }
     if (action === "resolveLoader" || action === "rejectLoader") {
-      const loader = action === "resolveLoader" ? Math.floor((choice - 1) / outcomeCodes.length) : choice;
-      const source = before.sources[loader];
+      const { loader, source } = settlement;
       if (before.sources.some((other, index) => index < loader && other.result === 0)) recorder.credit("reverse-source-settlement");
       if (prior.calls.filter((call, index) => call === 0 && current.calls[index] !== 0).length > 1) recorder.credit("coalesced-result");
       if (current.writes > prior.writes) {
@@ -189,14 +191,11 @@ function settlementWitnesses(frames, recorder) {
 // insertion expiry it was stored with, a wall rollback neither extends the
 // local entry nor lets a frame created after the rolled-back wall serve.
 function clockWitnesses(frames, recorder) {
-  let rolledLocal, hitBeforeExpiry, rolled = false;
+  let rolledLocal, hitBeforeExpiry;
   for (const frame of frames) {
     recorder.step(frame.index);
     const { action, before, policy, receipt } = frame;
-    if (action === "rollbackWall") {
-      rolled = true;
-      if (before.local.value > 0) rolledLocal = { key: before.local.key, expires: before.local.expires };
-    }
+    if (action === "rollbackWall" && before.local.value > 0) rolledLocal = { key: before.local.key, expires: before.local.expires };
     if (action !== "releasePolicy") continue;
     const { key, starts, read, localHit } = receipt, missed = read || starts;
     const { now, local } = before, active = policy.localTtl > 0;
@@ -205,13 +204,17 @@ function clockWitnesses(frames, recorder) {
     // permitted TTL could expire if the preceding hit had renewed it.
     if (sameEntry && hitBeforeExpiry?.key === key && hitBeforeExpiry.value === local.value && hitBeforeExpiry.expires === local.expires &&
       now >= local.expires && now < hitBeforeExpiry.at + 1000 && missed) recorder.credit("local-hit-preserves-insertion-expiry");
-    if (sameEntry && now < local.expires && localHit) hitBeforeExpiry = { key, value: local.value, expires: local.expires, at: now };
+    // On a local hit the shadow already vouches for the entry: an active local
+    // layer, the caller's key and value, and an insertion expiry still ahead.
+    if (localHit) hitBeforeExpiry = { key, value: local.value, expires: local.expires, at: now };
     if (active && rolledLocal?.key === key && local.key === key && local.expires === rolledLocal.expires) {
-      if (now < rolledLocal.expires && localHit) recorder.credit("rollback-preserves-live-local");
+      if (localHit) recorder.credit("rollback-preserves-live-local");
       if (now >= rolledLocal.expires && missed) recorder.credit("rollback-does-not-extend-local-ttl");
     }
+    // Frames are stamped with the wall and only a rollback lowers it, so a
+    // frame created after the observed wall is one a rollback left in the future.
     const remote = before.remote[key];
-    if (rolled && !before.readFailed && remote.value > 0 && now < remote.expires && remote.created > before.wall && read && starts) {
+    if (!before.readFailed && remote.value > 0 && now < remote.expires && remote.created > before.wall && read && starts) {
       recorder.credit("rollback-rejects-future-remote");
     }
   }
@@ -230,7 +233,7 @@ function layerWitnesses(frames, recorder) {
   const failedReadValues = new Map();
   for (const frame of frames) {
     recorder.step(frame.index);
-    const { action, choice, prior, current, before, after, policy, receipt } = frame;
+    const { action, prior, current, before, after, policy, receipt, settlement, seeded } = frame;
     if (action === "releasePolicy") {
       const { key, value, starts, read, localHit, remoteHit } = receipt, remote = before.remote[key], local = before.local;
       if (starts) {
@@ -286,8 +289,7 @@ function layerWitnesses(frames, recorder) {
       }
     }
     if (action === "resolveLoader") {
-      const loader = Math.floor((choice - 1) / outcomeCodes.length);
-      const source = before.sources[loader], value = after.sources[loader].result;
+      const { loader, source, value } = settlement;
       for (const kind of ["local", "remote"]) {
         const published = kind === "local" ? source.localTtl > 0 : current.writes > prior.writes && !before.writeFailed;
         if (!published) continue;
@@ -310,11 +312,8 @@ function layerWitnesses(frames, recorder) {
         bypassed.set(source.key, { ...bypass, settled: true });
       }
     }
-    if (action === "rejectLoader") {
-      const key = before.sources[choice].key;
-      if (bypassed.get(key)?.loader === choice) bypassed.delete(key);
-    }
-    if (action === "seed") lastWriter.delete(`remote:${Math.floor(choice / 2)}`);
+    if (action === "rejectLoader" && bypassed.get(settlement.source.key)?.loader === settlement.loader) bypassed.delete(settlement.source.key);
+    if (action === "seed") lastWriter.delete(`remote:${seeded}`);
   }
 }
 

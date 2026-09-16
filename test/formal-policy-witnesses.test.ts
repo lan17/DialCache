@@ -12,6 +12,8 @@ type Integer = { "#bigint": string };
 interface State { input: { name: string; choice: Integer }; "mbt::actionTaken"?: string; "mbt::nondetPicks"?: unknown; s: Record<string, unknown> }
 interface History { source: { model: string; recipe: string }; states: State[] }
 const fixtures = JSON.parse(readFileSync(new URL("./fixtures/policy-witnesses.json", import.meta.url), "utf8")) as Record<string, History>;
+// The same model's runs projected with their private layout, for the fidelity check.
+const predictedFixtures = JSON.parse(readFileSync(new URL("./fixtures/policy-shadow-witnesses.json", import.meta.url), "utf8")) as Record<string, History>;
 const policy = profiles.policy!;
 const smoke = resolve("formal/policy-smoke.itf.json");
 
@@ -91,10 +93,16 @@ describe("policy witnesses from inputs and public observations", () => {
     expect(labels.has("remote-hit")).toBe(true);
   });
 
-  it("a remote miss inside the fresh window is not the exact boundary", () => {
+  it.each([[500, "inside the fresh window"], [2000, "past the fresh TTL while still retained"]])("a remote miss %i ms after the write, %s, is not the exact boundary", (elapsed) => {
     const states = history("exactRemoteFreshBoundaryStartsSourceTest");
-    rechoose(nth(states, "advance"), 500);
+    rechoose(nth(states, "advance"), elapsed);
     expect(witnesses("probe", states).has("remote-exact-fresh-boundary-miss")).toBe(false);
+  });
+
+  it("a retained frame that misses for staleness after a rollback is not a rejected future frame", () => {
+    const labels = witnesses("probe", history("staleFrameMissesAfterRollback"));
+    expect(labels.has("rollback-rejects-future-remote")).toBe(false);
+    expect(labels.has("remote-hit")).toBe(false);
   });
 
   it("a remote hit under the unchanged fresh TTL does not reuse a retained frame", () => {
@@ -184,8 +192,21 @@ describe("shadow fidelity against the model's private predictions", () => {
     return { ...parseTrace(raw, smoke, policy), ...witnessStates(raw, smoke) };
   };
 
-  it("matches the model at every step of the committed smoke history", () => {
+  const walk = (mutate: (states: State[]) => void = () => {}) => {
+    const states = structuredClone(predictedFixtures.shadowWalk!.states);
+    mutate(states);
+    return { ...parseTrace({ states }, "shadowWalk", policy), ...witnessStates({ states }, "shadowWalk") };
+  };
+
+  it("matches the model at every step of the committed smoke history and the shadow walk", () => {
     expect(() => policyWitnesses(loadCorpus("policy", [smoke]))).not.toThrow();
+    expect(() => policyWitnesses([walk()])).not.toThrow();
+    expect(predictedFixtures.shadowWalk!.states.map(state => state.input.name)).toEqual(expect.arrayContaining(["seed", "advance", "policy", "rollbackWall", "readFault", "dumpFault", "writeFault", "rejectLoader"]));
+  });
+
+  it("names a seed the model stamped at another wall time", () => {
+    expect(() => policyWitnesses([walk(states => { (states[1]!.s.remoteCreated as Integer[])[0] = { "#bigint": "1" }; })]))
+      .toThrow(/step 1: shadow remoteCreated \[100000,0\] differs from the model's \[1,0\]/);
   });
 
   it("has nothing to compare in a history projected to its public channels", () => {

@@ -23,7 +23,7 @@
     "formal/dialcache-source-budgets-conformance.qnt": "a298d30efda5eb05487aa2e02d0c41b7aa299bb2f43979ed06473f3465b6cc4c",
     "formal/execution.json": "57f02f4cf2394cf340a204cdf8a75a394d58bd7483c66cebb869e89e3f0727b2",
     "formal/execution.mjs": "98f9a4944af1b233d81812a52736c8940e1f390f756fbaac27e8eae6c51802f1",
-    "formal/fixture-recipes.json": "187d3646ea14c50d85e6abeee05ad81415d056405001a4925ab292822ab27d56",
+    "formal/fixture-recipes.json": "0dcbb99f1c0b29bca6b9619ee2657bb9da5e6eadd145a8d1343c0327f28bda0a",
     "formal/generated-fixtures.mjs": "fcef898e1125686589a69c8065d8f883ac5aeb2a469ba7e260e95c6a9a9a78ed",
     "formal/kernel/calls.qnt": "8ad0aa1069865cfc262d508dd702552416c4de5801be90caf257f05930142341",
     "formal/kernel/clock.qnt": "3b60205315e40e3213dcbc8692bf5b68f638999bc770231df473a7e2e06e4f70",
@@ -46,6 +46,7 @@
     "formal/scope-smoke.itf.json": "ad2e95b0e2e65084d186ea98c059376e52bcdc64cb5d170b6ffd59826123ca34",
     "formal/recovery-smoke.itf.json": "9d1944978851bf4b4740863ada0196f005cae4e95c91e259c673a8dc0197c8d4",
     "formal/policy-smoke.itf.json": "b9f35acd37c3b9d13a1c36935bf9960740045b184dcc0fcd195a2a4bade26440",
+    "test/fixtures/policy-shadow-witnesses.json": "deda418846c1420a397f4b46c21ce372f20d0adcaf74662e4118e5d61af57954",
     "formal/shadow-smoke.itf.json": "1eb269629755bcd41f26aadce34547b114584155461d125c5c4b9fe8e5b516d9",
     "formal/admission-smoke.itf.json": "4b79d1ddb7075649e4fb71eb91f2097bf13c674b2718ea95f014d40691984f2d",
     "formal/layers-smoke.itf.json": "d0c44b5604988865e572da70e8189e749ba5e485c5aac7cd3185bbb709ecfd97",
@@ -67,6 +68,6 @@
     "test/fixtures/shadow-diagnostics-witnesses.json": "a5c0fd8aba474d75b325e8c229e394792153d125f6ebd514767a4b1b63fecdf9",
     "test/fixtures/shadow-layers-witnesses.json": "ce5b362357fd3dd1ba7dbc08099ab0cb4b97042a8362e096cb84c73d088d8612",
     "test/fixtures/source-budgets-witnesses.json": "d1a9a0156102d805da4f11f6ec3d1c81950aac73681c34cc0eee15a4174a8df1",
-    "test/fixtures/policy-witnesses.json": "c632cec60edd57f8148038db91b69914dfdddd09f3daa113748a37be6bf5aa2c"
+    "test/fixtures/policy-witnesses.json": "53f9602f51c3e27164c4fdf6d6d54d0a0e707327fd76938e22ed7eadbeba0e04"
   }
 }
