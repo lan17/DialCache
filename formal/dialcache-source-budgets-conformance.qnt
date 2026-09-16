@@ -129,7 +129,7 @@ module dialcache_source_budgets_conformance {
     id < s.sources.length(),
     Deadlines::pending(s, id),
     input' = { name: "resolveLoader", choice: id * 2 + value },
-    s' = Deadlines::settleLocal(s, LAYOUT, id, value, TTLS)
+    s' = Deadlines::settleLocal(s, LAYOUT, id, value)
   }
   action resolveLoader = {
     nondet choice = 1.to(MAX_CALLS * 2).oneOf()
@@ -139,7 +139,7 @@ module dialcache_source_budgets_conformance {
     id < s.sources.length(),
     Deadlines::pending(s, id),
     input' = { name: "rejectLoader", choice: id },
-    s' = Deadlines::settleLocal(s, LAYOUT, id, SOURCE_ERROR, TTLS)
+    s' = Deadlines::settleLocal(s, LAYOUT, id, SOURCE_ERROR)
   }
   action rejectLoader = { nondet choice = 0.to(MAX_CALLS - 1).oneOf(); rejected(choice) }
 
@@ -163,7 +163,7 @@ module dialcache_source_budgets_conformance {
   val outsideSourcesHaveNoDeadline = s.budgets.indices().forall(i =>
       s.budgets.nth(i) >= 0 or s.sources.nth(i).result != DEADLINE_ERROR)
     and (not(outsideAdmission) or (s.budgets.nth(newestSource) == Deadlines::UNBOUNDED
-      and not(s.sources.nth(newestSource).local) and not(s.sources.nth(newestSource).shared)))
+      and s.sources.nth(newestSource).localMs == 0 and not(s.sources.nth(newestSource).shared)))
   val acceptedSourceRespectsItsOwnStart = s.sources.indices().forall(i =>
     not(accepted(s.sources.nth(i).result))
       or (s.settledAt.nth(i) >= s.started.nth(i) and
@@ -171,7 +171,7 @@ module dialcache_source_budgets_conformance {
   val registeredWorkIsNotAbandoned = s.processFlights.nth(0) < 0
     or s.sources.nth(s.processFlights.nth(0)).result == CALL_PENDING
   val localPublicationRequiresAcceptedSource = s.localValues.nth(0) == NO_VALUE or s.sources.indices().exists(i =>
-    s.sources.nth(i).local and accepted(s.sources.nth(i).result) and s.sources.nth(i).result == s.localValues.nth(0))
+    s.sources.nth(i).localMs > 0 and accepted(s.sources.nth(i).result) and s.sources.nth(i).result == s.localValues.nth(0))
   val followersKeepTheirOwnersOutcome = s.owners.indices().forall(call => {
     val owner = s.owners.nth(call)
     owner < 0 or s.o.calls.nth(call) == s.sources.nth(owner).result

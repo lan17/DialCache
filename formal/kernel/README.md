@@ -21,7 +21,7 @@ design and its history; this file describes what is here and how to use it.
 | `flights` | Source executions (a record of outcome and process sharing, with whatever payload the traversal that started it needs), the process and request registries that coalesce callers, and per caller its owner and memo slot; an opt-in record of the identity each caller asked for | `processOwner`, `requestOwner`, `admitCaller`, `attachCaller`, `joinRequestFlight`, `registerSource`, `settleSource`, `forgetScope`, `ownedBy`, `recordIdentity` |
 | `clock` | Elapsed time on the monotonic clock; the wall clock is that clock plus a skew (`wallOf`), so one transition moves both and only the skew shifts on a rollback | `advance`, `wallOf`, `shiftWall` |
 | `policy_gate` | Callers whose policy reply the environment holds, with their calls, indexed by their policy call | `hold`, `holding`, `holds`, `latest`, `entry`, `release` |
-| `serving` | Admission, traversal order (`decide`), ownership precedence, publication and refill authority with the TTLs a reply resolved to, the remote adapter's read, dump and write faults along a refill, scope closure, maintenance; the layered shape and its local and request-only projections | `admit`, `release`, `begin`, `settle`, `admitLocal`, `releaseLocal`, `settleLocal`, `admitRequest`, `releaseRequest`, `settleRequest`, `closeScope`, `invalidate` |
+| `serving` | Admission, traversal order (`decide`), ownership precedence, publication and refill authority with the TTLs each source captured from the reply that started it, the remote adapter's read, dump and write faults along a refill, scope closure, maintenance; the layered shape and its local and request-only projections; `finish` completes a source with an outcome that publishes to no layer | `admit`, `release`, `begin`, `settle`, `admitLocal`, `releaseLocal`, `settleLocal`, `admitRequest`, `releaseRequest`, `settleRequest`, `finish`, `closeScope`, `invalidate` |
 | `deadlines` | Source budgets: the budget a source starts with (a source started at admission is bounded only when its key failed, C27, a disabled context and an outside call run theirs unbounded, C01; a source started at release is bounded, its caller was enabled when admitted), the deadline measured from the source's own start, expiry on timer delivery or late arrival, abandoned work draining, as budgeted variants of the local lifecycle | `admitLocal`, `releaseLocal`, `settleLocal`, `advanceLocal` |
 | `diagnostics` | The diagnostics channel: the singleflight a caller coalesced into and the layer a failed source is attributed to, as diagnosed variants of the request-only traversal | `admitRequest`, `releaseRequest`, `settleRequest` |
 
@@ -51,10 +51,15 @@ every release and settlement takes beside the resolution; a profile whose
 replies carry none passes its fixture's constant. A layer whose TTL is 0 is
 off: the traversal uses local storage only for a positive local TTL and the
 remote layer only for a positive freshness (`layer_policy::gated`), whatever
-the reply's layer flags say. TTLs travel beside the reply rather than in each
-source record by design: carrying them in `LayeredSource` was measured at
-about x1.17 to x1.26 bytes per state on the layers profile, straddling the
-x1.2 differential bound, and rejected. The serving transitions never decode a
+the reply's layer flags say. The TTLs settlement publishes with travel in the
+source record, captured from the reply that started it
+(`LayeredPayload.localMs` and `retentionMs`, `LocalPayload.localMs`), so each
+source publishes with its own reply's TTLs and no settlement can disagree with
+them; freshness is read only at release and travels beside the reply. The two
+captured integers measured about x1.13 bytes per state on the layers profile
+against the slice 8 base, inside the x1.2 differential bound; an earlier
+three-integer payload that also carried the freshness settlement never reads
+measured about x1.17 to x1.26 and was rejected. The serving transitions never decode a
 profile's policy field: `layer_policy::resolution(policy, remote)` is the
 immediate reply from the drivers' layer policy codes 0 to 5, which the layers
 wrapper passes to `begin` with its TTLs; `runtime_policy::resolve(state,
@@ -142,7 +147,7 @@ assigns `s'` to one library transition and `input'` to the driver record:
 ```quint
 action startCall(choice: int): bool = all {
   s.o.calls.length() < MAX_CALLERS,
-  s' = Flights::recordIdentity(Serving::begin(s, LAYOUT, call(choice), resolution(s.policy, s.remoteAvailable), LAYOUT.ttls), call(choice)),
+  s' = Flights::recordIdentity(Serving::begin(s, LAYOUT, call(choice), resolution(s.policy, s.remoteAvailable), TTLS), call(choice)),
   input' = { name: "beginCall", choice: choice }
 }
 ```

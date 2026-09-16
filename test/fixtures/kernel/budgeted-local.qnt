@@ -75,7 +75,7 @@ module budgeted_local {
     input' = { name: "releasePolicy", choice: -1 }
   }
   action settle(index: int, value: int): bool = all {
-    s' = Deadlines::settleLocal(s, LAYOUT, index, value, TTLS),
+    s' = Deadlines::settleLocal(s, LAYOUT, index, value),
     input' = { name: "resolveLoader", choice: index }
   }
   action advance(ms: int): bool = all {
@@ -95,7 +95,7 @@ module budgeted_local {
     input' = { name: "releasePolicy", choice: -1 }
   }
   action settleTwoKeys(index: int, value: int): bool = all {
-    s' = Deadlines::settleLocal(s, TWO_KEYS, index, value, TTLS),
+    s' = Deadlines::settleLocal(s, TWO_KEYS, index, value),
     input' = { name: "resolveLoader", choice: index }
   }
 
@@ -117,7 +117,7 @@ module budgeted_local {
   run releasedSourceIsBoundedAfterItsScopeClosedTest = init
     .then(admit(ENABLED)).then(close(0)).then(release)
     .expect(s.o.loaders == 1 and s.o.policyCalls == 1 and s.budgets == List(BUDGET)
-      and not(s.sources.nth(0).shared) and not(s.sources.nth(0).local))
+      and not(s.sources.nth(0).shared) and s.sources.nth(0).localMs == 0)
     .then(advance(BUDGET))
     .expect(s.o.calls == List(DEADLINE_ERROR))
 

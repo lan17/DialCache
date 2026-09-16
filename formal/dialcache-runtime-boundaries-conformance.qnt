@@ -165,7 +165,7 @@ module dialcache_runtime_boundaries_conformance {
     input' = { name: "closeScope", choice: -1 }
   }
   action finishSource(loader: int, valueIndex: int): bool = all {
-    s' = Serving::settle(s, LAYOUT, loader, SOURCE_VALUES.nth(valueIndex), s.ttls),
+    s' = Serving::settle(s, LAYOUT, loader, SOURCE_VALUES.nth(valueIndex)),
     input' = { name: "resolveLoader", choice: loader * SOURCE_VALUES.length() + valueIndex }
   }
   action resolveLoader = {
@@ -191,7 +191,7 @@ module dialcache_runtime_boundaries_conformance {
   pure def bypassed(x: State, caller: int): bool = x.owners.nth(caller) >= 0
     and Flights::ownedBy(x, x.owners.nth(caller)) == Set(caller) and {
       val source = x.sources.nth(x.owners.nth(caller))
-      not(source.local) and not(source.remote) and not(source.shared)
+      source.localMs == 0 and not(source.remote) and not(source.shared)
     }
   val equalAndLowerCohortsNeverTraverse = not(justReleased) or s.baseline.request
     or s.policy >= NULL_PROVIDER or s.policy / 3 > AT_SAMPLE or bypassed(s, releasedCaller)
@@ -217,13 +217,13 @@ module dialcache_runtime_boundaries_conformance {
   val justSettled = input.name == "resolveLoader"
   val settledSource = input.choice / SOURCE_VALUES.length()
   val retainedValueFollowsSettlementOrder = publishedBy(s, s.remoteValues.nth(0), loader => s.sources.nth(loader).remote)
-    and publishedBy(s, s.localValues.nth(0), loader => s.sources.nth(loader).local or s.sources.nth(loader).remote)
+    and publishedBy(s, s.localValues.nth(0), loader => s.sources.nth(loader).localMs > 0 or s.sources.nth(loader).remote)
     and publishedBy(s, s.memo.nth(0), loader =>
-      s.sources.nth(loader).local or s.sources.nth(loader).remote or memoizes(s, loader))
+      s.sources.nth(loader).localMs > 0 or s.sources.nth(loader).remote or memoizes(s, loader))
     and (not(justSettled) or {
       val source = s.sources.nth(settledSource)
       (not(source.remote) or s.remoteValues.nth(0) == source.result)
-        and (not(source.local) or s.localValues.nth(0) == source.result)
+        and (source.localMs == 0 or s.localValues.nth(0) == source.result)
         and (s.closed.nth(0) or Flights::ownedBy(s, settledSource).forall(caller =>
           s.memoSlots.nth(caller) < 0 or s.memo.nth(0) == source.result))
     })

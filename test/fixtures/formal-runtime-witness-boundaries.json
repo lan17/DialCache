@@ -342,10 +342,15 @@
               "key": {
                 "#bigint": "2"
               },
-              "local": false,
+              "localMs": {
+                "#bigint": "0"
+              },
               "remote": true,
               "result": {
                 "#bigint": "0"
+              },
+              "retentionMs": {
+                "#bigint": "60000"
               },
               "shared": true
             }
@@ -547,10 +552,15 @@
               "key": {
                 "#bigint": "2"
               },
-              "local": false,
+              "localMs": {
+                "#bigint": "0"
+              },
               "remote": true,
               "result": {
                 "#bigint": "2"
+              },
+              "retentionMs": {
+                "#bigint": "60000"
               },
               "shared": true
             }
@@ -981,10 +991,15 @@
               "key": {
                 "#bigint": "2"
               },
-              "local": false,
+              "localMs": {
+                "#bigint": "0"
+              },
               "remote": true,
               "result": {
                 "#bigint": "0"
+              },
+              "retentionMs": {
+                "#bigint": "60000"
               },
               "shared": true
             }
@@ -1159,10 +1174,15 @@
               "key": {
                 "#bigint": "2"
               },
-              "local": false,
+              "localMs": {
+                "#bigint": "0"
+              },
               "remote": true,
               "result": {
                 "#bigint": "1"
+              },
+              "retentionMs": {
+                "#bigint": "60000"
               },
               "shared": true
             }
@@ -1287,10 +1307,15 @@
               "key": {
                 "#bigint": "2"
               },
-              "local": false,
+              "localMs": {
+                "#bigint": "0"
+              },
               "remote": true,
               "result": {
                 "#bigint": "1"
+              },
+              "retentionMs": {
+                "#bigint": "60000"
               },
               "shared": true
             },
@@ -1304,10 +1329,15 @@
               "key": {
                 "#bigint": "3"
               },
-              "local": false,
+              "localMs": {
+                "#bigint": "0"
+              },
               "remote": true,
               "result": {
                 "#bigint": "0"
+              },
+              "retentionMs": {
+                "#bigint": "60000"
               },
               "shared": true
             }
@@ -1370,10 +1400,15 @@
               "key": {
                 "#bigint": "2"
               },
-              "local": false,
+              "localMs": {
+                "#bigint": "0"
+              },
               "remote": true,
               "result": {
                 "#bigint": "1"
+              },
+              "retentionMs": {
+                "#bigint": "60000"
               },
               "shared": true
             },
@@ -1387,10 +1422,15 @@
               "key": {
                 "#bigint": "3"
               },
-              "local": false,
+              "localMs": {
+                "#bigint": "0"
+              },
               "remote": true,
               "result": {
                 "#bigint": "1"
+              },
+              "retentionMs": {
+                "#bigint": "60000"
               },
               "shared": true
             }
@@ -1526,10 +1566,15 @@
               "key": {
                 "#bigint": "2"
               },
-              "local": false,
+              "localMs": {
+                "#bigint": "0"
+              },
               "remote": true,
               "result": {
                 "#bigint": "1"
+              },
+              "retentionMs": {
+                "#bigint": "60000"
               },
               "shared": true
             },
@@ -1543,10 +1588,15 @@
               "key": {
                 "#bigint": "3"
               },
-              "local": false,
+              "localMs": {
+                "#bigint": "0"
+              },
               "remote": true,
               "result": {
                 "#bigint": "1"
+              },
+              "retentionMs": {
+                "#bigint": "60000"
               },
               "shared": true
             },
@@ -1560,10 +1610,15 @@
               "key": {
                 "#bigint": "3"
               },
-              "local": false,
+              "localMs": {
+                "#bigint": "0"
+              },
               "remote": true,
               "result": {
                 "#bigint": "0"
+              },
+              "retentionMs": {
+                "#bigint": "60000"
               },
               "shared": true
             }

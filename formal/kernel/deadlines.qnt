@@ -59,10 +59,10 @@ module deadlines {
   }
   // A source's outcome arriving after its deadline is a deadline error; work
   // whose deadline already completed its callers drains without effect.
-  pure def settleLocal(state: BudgetedLocal[r], layout: Serving::Layout, index: int, value: int, ttls: Ttls): BudgetedLocal[r] = {
+  pure def settleLocal(state: BudgetedLocal[r], layout: Serving::Layout, index: int, value: int): BudgetedLocal[r] = {
     val drained = drain(state, index)
     if (state.sources.nth(index).result != CALL_PENDING) drained
-    else markSettled(Serving::settleLocal(drained, layout, index, if (reached(state, index)) DEADLINE_ERROR else value, ttls), index)
+    else markSettled(Serving::settleLocal(drained, layout, index, if (reached(state, index)) DEADLINE_ERROR else value), index)
   }
   // Time passes and every pending source whose deadline is reached completes
   // its callers with a deadline error, which publishes to no layer; its

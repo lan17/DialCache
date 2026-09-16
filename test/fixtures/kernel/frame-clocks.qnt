@@ -62,7 +62,7 @@ module frame_clocks {
     input' = { name: "beginCall", choice: KEY }
   }
   action settle(index: int, value: int): bool = all {
-    s' = Serving::settle(s, LAYOUT, index, value, TTLS),
+    s' = Serving::settle(s, LAYOUT, index, value),
     input' = { name: "resolveLoader", choice: index }
   }
   action seed(value: int, retentionMs: int): bool = all {

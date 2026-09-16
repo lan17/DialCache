@@ -4,7 +4,8 @@
 // the local-and-remote runs pass through local storage on the way. Exercises
 // the seams the scheduled profiles hold fixed (their replies carry constant
 // TTLs and their faults are off): a layer turned off by a zero TTL, each fault
-// along a refill with and without a local layer, and per-source TTLs.
+// along a refill with and without a local layer, and sources started under
+// different replies publishing with the TTLs each captured.
 module frames_and_faults {
   import conformance_observations.* from "../../../formal/conformance-observations"
   import encodings.* from "../../../formal/kernel/encodings"
@@ -29,6 +30,8 @@ module frames_and_faults {
   pure val TTLS: Ttls = { localMs: LOCAL_MS, freshMs: FRESH_MS, retentionMs: RETENTION_MS }
   pure val NO_REMOTE_TTLS: Ttls = { localMs: LOCAL_MS, freshMs: 0, retentionMs: RETENTION_MS }
   pure val NO_LOCAL_TTLS: Ttls = { localMs: 0, freshMs: FRESH_MS, retentionMs: RETENTION_MS }
+  pure val SHORT_LOCAL_TTLS: Ttls = { localMs: SHORT_LOCAL_MS, freshMs: FRESH_MS, retentionMs: RETENTION_MS }
+  pure val LONG_RETENTION_TTLS: Ttls = { localMs: LOCAL_MS, freshMs: FRESH_MS, retentionMs: LONG_RETENTION_MS }
   pure val REMOTE_ONLY: Resolution = { layers: { request: false, local: false, remote: true }, coalesce: true }
   pure val LOCAL_AND_REMOTE: Resolution = { layers: { request: false, local: true, remote: true }, coalesce: true }
   pure def call(key: int): Call = { instance: 0, key: key, context: 0, enabled: true, keyFailed: false }
@@ -62,9 +65,9 @@ module frames_and_faults {
     s' = Serving::begin(s, LAYOUT, call(key), resolved, ttls),
     input' = { name: "beginCall", choice: key }
   }
-  // Settlement with the TTLs the source's reply resolved to.
-  action settle(index: int, value: int, ttls: Ttls): bool = all {
-    s' = Serving::settle(s, LAYOUT, index, value, ttls),
+  // Settlement publishes with the TTLs the source captured from its reply.
+  action settle(index: int, value: int): bool = all {
+    s' = Serving::settle(s, LAYOUT, index, value),
     input' = { name: "resolveLoader", choice: index }
   }
   action seed(key: int, value: int, retentionMs: int): bool = all {
@@ -85,27 +88,28 @@ module frames_and_faults {
   // -- A zero TTL turns its layer off ------------------------------------------
 
   // A reply enabling the remote layer with a zero freshness reads nothing: no
-  // read is counted over a seeded frame, the source it starts neither refills
-  // nor shares, and its settlement writes nothing.
+  // read is counted over a seeded frame, the source it starts captures no
+  // retention, neither refills nor shares, and its settlement writes nothing.
   run zeroFreshnessTurnsTheRemoteLayerOffTest = init
     .then(seed(KEY, VALUE_ONE, LONG_RETENTION_MS))
     .then(begin(KEY, REMOTE_ONLY, NO_REMOTE_TTLS))
     .expect(s.o.calls == List(CALL_PENDING) and s.o.reads == 0 and s.o.loads == 0 and s.o.loaders == 1
-      and not(s.sources.nth(0).remote) and not(s.sources.nth(0).local) and not(s.sources.nth(0).shared)
-      and s.sources.nth(0).fence == NO_FENCE)
-    .then(settle(0, VALUE_TWO, NO_REMOTE_TTLS))
+      and not(s.sources.nth(0).remote) and s.sources.nth(0).localMs == 0 and s.sources.nth(0).retentionMs == 0
+      and not(s.sources.nth(0).shared) and s.sources.nth(0).fence == NO_FENCE)
+    .then(settle(0, VALUE_TWO))
     .expect(s.o.calls == List(VALUE_TWO) and s.o.dumps == 0 and s.o.writes == 0 and s.remoteValues == List(VALUE_ONE, NO_VALUE))
 
   // A reply enabling local storage with a zero local TTL uses no local
-  // storage: neither its settlement nor its remote hit warms the slot, so the
-  // other key's live entry is not evicted.
+  // storage: the source captures no local TTL, so neither its settlement nor
+  // the reply's remote hit warms the slot and the other key's live entry is not
+  // evicted.
   run zeroLocalTtlTurnsTheLocalLayerOffTest = init
     .then(begin(OTHER_KEY, LOCAL_AND_REMOTE, TTLS))
-    .then(settle(0, VALUE_ONE, TTLS))
+    .then(settle(0, VALUE_ONE))
     .expect(s.localValues == List(NO_VALUE, VALUE_ONE) and s.lru == List(List(OTHER_KEY)))
     .then(begin(KEY, LOCAL_AND_REMOTE, NO_LOCAL_TTLS))
-    .expect(s.o.reads == 2 and s.o.loaders == 2 and not(s.sources.nth(1).local) and s.sources.nth(1).remote)
-    .then(settle(1, VALUE_TWO, NO_LOCAL_TTLS))
+    .expect(s.o.reads == 2 and s.o.loaders == 2 and s.sources.nth(1).localMs == 0 and s.sources.nth(1).remote)
+    .then(settle(1, VALUE_TWO))
     .expect(s.localValues == List(NO_VALUE, VALUE_ONE) and s.lru == List(List(OTHER_KEY))
       and s.remoteValues == List(VALUE_TWO, VALUE_ONE) and s.o.writes == 2)
     .then(begin(KEY, LOCAL_AND_REMOTE, NO_LOCAL_TTLS))
@@ -115,25 +119,26 @@ module frames_and_faults {
   // -- Faults along a refill ---------------------------------------------------
 
   // A failed read is counted and observes nothing, so a source starts over a
-  // readable frame; that source never refills, even once the adapter is
-  // healthy again: no dump, no write, the frame keeps its value.
+  // readable frame; that source captures no retention and never refills, even
+  // once the adapter is healthy again: no dump, no write, the frame keeps its
+  // value.
   run readFaultCountsTheReadAndNeverRefillsTest = init
     .then(seed(KEY, VALUE_ONE, LONG_RETENTION_MS))
     .then(fault("readFault", true))
     .then(begin(KEY, REMOTE_ONLY, TTLS))
     .expect(s.o.calls == List(CALL_PENDING) and s.o.reads == 1 and s.o.loads == 0 and s.o.loaders == 1
-      and not(s.sources.nth(0).remote) and s.sources.nth(0).fence == NO_FENCE)
+      and not(s.sources.nth(0).remote) and s.sources.nth(0).fence == NO_FENCE and s.sources.nth(0).retentionMs == 0)
     .then(fault("readFault", false))
-    .then(settle(0, VALUE_TWO, TTLS))
+    .then(settle(0, VALUE_TWO))
     .expect(s.o.calls == List(VALUE_TWO) and s.o.dumps == 0 and s.o.writes == 0 and s.remoteValues == List(VALUE_ONE, NO_VALUE))
 
   // Refill authority is fixed when the source starts: a read fault raised
   // afterwards does not stop its settlement from refilling.
   run laterReadFaultDoesNotStopTheRefillTest = init
     .then(begin(KEY, REMOTE_ONLY, TTLS))
-    .expect(s.sources.nth(0).remote)
+    .expect(s.sources.nth(0).remote and s.sources.nth(0).retentionMs == RETENTION_MS)
     .then(fault("readFault", true))
-    .then(settle(0, VALUE_ONE, TTLS))
+    .then(settle(0, VALUE_ONE))
     .expect(s.o.calls == List(VALUE_ONE) and s.o.dumps == 1 and s.o.writes == 1
       and s.remoteValues == List(VALUE_ONE, NO_VALUE) and s.created == List(INITIAL_TIME_MS, 0))
 
@@ -144,8 +149,8 @@ module frames_and_faults {
     .then(fault("readFault", true))
     .then(begin(KEY, LOCAL_AND_REMOTE, TTLS))
     .expect(s.o.reads == 1 and s.o.loads == 0 and s.o.loaders == 1
-      and s.sources.nth(0).local and not(s.sources.nth(0).remote))
-    .then(settle(0, VALUE_TWO, TTLS))
+      and s.sources.nth(0).localMs == LOCAL_MS and not(s.sources.nth(0).remote))
+    .then(settle(0, VALUE_TWO))
     .expect(s.o.calls == List(VALUE_TWO) and s.localValues == List(VALUE_TWO, NO_VALUE) and s.localExpires == List(INITIAL_TIME_MS + LOCAL_MS, 0)
       and s.remoteValues == List(VALUE_ONE, NO_VALUE) and s.o.dumps == 0 and s.o.writes == 0)
     .then(begin(KEY, LOCAL_AND_REMOTE, TTLS))
@@ -153,14 +158,15 @@ module frames_and_faults {
 
   // Tracked, the source a failed read starts publishes nowhere, as the
   // implementation does (a read error never reaches the write path, and only
-  // an untracked key warms local storage fail-open): settlement warms nothing
-  // and writes nothing, and the next call reads the remote layer again and
-  // starts a second source.
+  // an untracked key warms local storage fail-open): it captures no TTL,
+  // settlement warms nothing and writes nothing, and the next call reads the
+  // remote layer again and starts a second source.
   run trackedReadFaultSourcePublishesNowhereTest = trackedInit
     .then(fault("readFault", true))
     .then(begin(KEY, LOCAL_AND_REMOTE, TTLS))
-    .expect(s.o.reads == 1 and s.o.loaders == 1 and not(s.sources.nth(0).local) and not(s.sources.nth(0).remote))
-    .then(settle(0, VALUE_TWO, TTLS))
+    .expect(s.o.reads == 1 and s.o.loaders == 1 and s.sources.nth(0).localMs == 0
+      and not(s.sources.nth(0).remote) and s.sources.nth(0).retentionMs == 0)
+    .then(settle(0, VALUE_TWO))
     .expect(s.o.calls == List(VALUE_TWO) and s.localValues == List(NO_VALUE, NO_VALUE)
       and s.remoteValues == List(NO_VALUE, NO_VALUE) and s.o.dumps == 0 and s.o.writes == 0)
     .then(fault("readFault", false))
@@ -172,7 +178,7 @@ module frames_and_faults {
   run dumpFaultStopsTheDispatchTest = init
     .then(fault("dumpFault", true))
     .then(begin(KEY, REMOTE_ONLY, TTLS))
-    .then(settle(0, VALUE_ONE, TTLS))
+    .then(settle(0, VALUE_ONE))
     .expect(s.o.calls == List(VALUE_ONE) and s.o.dumps == 1 and s.o.writes == 0 and s.o.writeTtls == List()
       and s.remoteValues == List(NO_VALUE, NO_VALUE) and s.expires == List(0, 0))
 
@@ -181,43 +187,56 @@ module frames_and_faults {
   run writeFaultStoresNothingTest = init
     .then(fault("writeFault", true))
     .then(begin(KEY, REMOTE_ONLY, TTLS))
-    .then(settle(0, VALUE_ONE, TTLS))
+    .then(settle(0, VALUE_ONE))
     .expect(s.o.calls == List(VALUE_ONE) and s.o.dumps == 1 and s.o.writes == 1 and s.o.writeTtls == List(RETENTION_MS)
       and s.remoteValues == List(NO_VALUE, NO_VALUE) and s.created == List(0, 0) and s.expires == List(0, 0))
 
-  // -- Per-source TTLs -----------------------------------------------------------
+  // -- Each source publishes with the TTLs of the reply that started it ----------
 
-  // A source settled with its own TTLs writes that retention and stamps the
-  // frame with the wall clock at settlement, retained for that long.
-  run settleWritesTheSourcesRetentionTest = init
+  // Two sources started under replies with different retentions each write
+  // their own: the second settles first with the long retention, the first
+  // then with the short one, both stamped with the wall clock at settlement.
+  run eachSourceWritesItsOwnRetentionTest = init
     .then(begin(KEY, REMOTE_ONLY, TTLS))
+    .then(begin(OTHER_KEY, REMOTE_ONLY, LONG_RETENTION_TTLS))
+    .expect(s.o.loaders == 2 and s.sources.nth(0).retentionMs == RETENTION_MS and s.sources.nth(1).retentionMs == LONG_RETENTION_MS)
     .then(elapse(1))
-    .then(settle(0, VALUE_ONE, { localMs: LOCAL_MS, freshMs: FRESH_MS, retentionMs: LONG_RETENTION_MS }))
-    .expect(s.o.calls == List(VALUE_ONE) and s.o.dumps == 1 and s.o.writes == 1 and s.o.writeTtls == List(LONG_RETENTION_MS)
-      and s.remoteValues == List(VALUE_ONE, NO_VALUE) and s.created == List(INITIAL_TIME_MS + 1, 0)
-      and s.expires == List(INITIAL_TIME_MS + 1 + LONG_RETENTION_MS, 0))
+    .then(settle(1, VALUE_TWO))
+    .expect(s.o.writeTtls == List(LONG_RETENTION_MS) and s.remoteValues == List(NO_VALUE, VALUE_TWO)
+      and s.created == List(0, INITIAL_TIME_MS + 1) and s.expires == List(0, INITIAL_TIME_MS + 1 + LONG_RETENTION_MS))
+    .then(settle(0, VALUE_ONE))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO) and s.o.dumps == 2 and s.o.writes == 2
+      and s.o.writeTtls == List(LONG_RETENTION_MS, RETENTION_MS) and s.remoteValues == List(VALUE_ONE, VALUE_TWO)
+      and s.expires == List(INITIAL_TIME_MS + 1 + RETENTION_MS, INITIAL_TIME_MS + 1 + LONG_RETENTION_MS))
 
-  // A source settled with its own local TTL warms local storage for that TTL,
-  // not the fixture's: the entry serves one millisecond before it and the call
-  // after that reads the remote frame.
-  run settlementWarmsLocalForTheSourcesLocalTtlTest = init
-    .then(begin(KEY, LOCAL_AND_REMOTE, TTLS))
-    .then(settle(0, VALUE_ONE, { localMs: SHORT_LOCAL_MS, freshMs: FRESH_MS, retentionMs: RETENTION_MS }))
-    .expect(s.localValues == List(VALUE_ONE, NO_VALUE) and s.localExpires == List(INITIAL_TIME_MS + SHORT_LOCAL_MS, 0)
-      and s.remoteValues == List(VALUE_ONE, NO_VALUE) and s.o.writes == 1)
-    .then(elapse(SHORT_LOCAL_MS - 1))
-    .then(begin(KEY, LOCAL_AND_REMOTE, TTLS))
-    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.reads == 1)
+  // Two sources started under replies with different local TTLs each warm
+  // local storage for their own; with one slot the second settlement evicts
+  // the first entry, and the second entry serves one millisecond before its
+  // own TTL and misses locally after it (the frame written at the same
+  // settlement is then at its own retention boundary too, so a source starts).
+  run eachSourceWarmsLocalForItsOwnLocalTtlTest = init
+    .then(begin(KEY, LOCAL_AND_REMOTE, SHORT_LOCAL_TTLS))
+    .then(begin(OTHER_KEY, LOCAL_AND_REMOTE, TTLS))
+    .expect(s.o.loaders == 2 and s.sources.nth(0).localMs == SHORT_LOCAL_MS and s.sources.nth(1).localMs == LOCAL_MS)
+    .then(settle(0, VALUE_ONE))
+    .expect(s.localValues == List(VALUE_ONE, NO_VALUE) and s.localExpires == List(INITIAL_TIME_MS + SHORT_LOCAL_MS, 0))
+    .then(settle(1, VALUE_TWO))
+    .expect(s.localValues == List(NO_VALUE, VALUE_TWO) and s.localExpires == List(0, INITIAL_TIME_MS + LOCAL_MS)
+      and s.lru == List(List(OTHER_KEY)) and s.o.writes == 2)
+    .then(elapse(LOCAL_MS - 1))
+    .then(begin(OTHER_KEY, LOCAL_AND_REMOTE, TTLS))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_TWO) and s.o.reads == 2)
     .then(elapse(1))
-    .then(begin(KEY, LOCAL_AND_REMOTE, TTLS))
-    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_ONE) and s.o.reads == 2 and s.o.loads == 1 and s.o.loaders == 1)
+    .then(begin(OTHER_KEY, LOCAL_AND_REMOTE, TTLS))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_TWO, CALL_PENDING) and s.o.reads == 3 and s.o.loads == 0 and s.o.loaders == 3
+      and not(Remote::retained(s, OTHER_KEY)))
 
   // A remote hit warms local storage for the reply's local TTL, not the
   // fixture's: the entry serves one millisecond before that TTL and a later
   // remote hit under the fixture's TTLs warms it for the fixture's.
   run remoteHitWarmsLocalForTheReplysLocalTtlTest = init
     .then(seed(KEY, VALUE_ONE, LONG_RETENTION_MS))
-    .then(begin(KEY, LOCAL_AND_REMOTE, { localMs: SHORT_LOCAL_MS, freshMs: FRESH_MS, retentionMs: RETENTION_MS }))
+    .then(begin(KEY, LOCAL_AND_REMOTE, SHORT_LOCAL_TTLS))
     .expect(s.o.calls == List(VALUE_ONE) and s.o.reads == 1 and s.o.loads == 1
       and s.localValues == List(VALUE_ONE, NO_VALUE) and s.localExpires == List(INITIAL_TIME_MS + SHORT_LOCAL_MS, 0))
     .then(elapse(SHORT_LOCAL_MS - 1))

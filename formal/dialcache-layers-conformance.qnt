@@ -155,7 +155,7 @@ module dialcache_layers_conformance {
     startCall(choice)
   }
   action finishSource(loader: int, value: int): bool = all {
-    s' = Serving::settle(s, LAYOUT, loader, value, TTLS),
+    s' = Serving::settle(s, LAYOUT, loader, value),
     input' = if (value == SOURCE_ERROR) { name: "rejectLoader", choice: loader }
       else { name: "resolveLoader", choice: loader * SOURCE_VALUE_COUNT + value }
   }

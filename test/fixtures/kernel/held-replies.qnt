@@ -63,7 +63,7 @@ module held_replies {
     input' = { name: "releasePolicy", choice: -1 }
   }
   action settle(index: int, value: int): bool = all {
-    s' = Serving::settle(s, LAYOUT, index, value, TTLS),
+    s' = Serving::settle(s, LAYOUT, index, value),
     input' = { name: "resolveLoader", choice: index }
   }
   action close(context: int): bool = all {
