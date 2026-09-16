@@ -58,7 +58,7 @@ module dialcache_layers_conformance {
   type State = {
     o: Observation,
     now: int,
-    wall: int,
+    skew: int,
     tracked: bool,
     remoteAvailable: bool,
     capacity: int,
@@ -101,9 +101,10 @@ module dialcache_layers_conformance {
     keysPerScope: KEYS_PER_INSTANCE,
     persistentContexts: PERSISTENT_CONTEXTS,
     operationsPerEntity: OPERATIONS_PER_ENTITY,
-    ttls: { localMs: SERVING_TTL_MS, freshMs: SERVING_TTL_MS, retentionMs: SERVING_TTL_MS },
     probeSourceScope: false
   }
+  // Every reply here carries the fixture's TTLs: 60 s local, fresh and retained.
+  pure val TTLS: Ttls = { localMs: SERVING_TTL_MS, freshMs: SERVING_TTL_MS, retentionMs: SERVING_TTL_MS }
 
   // -- Public fixture inputs and external effects ----------------------------
 
@@ -111,7 +112,7 @@ module dialcache_layers_conformance {
     s' = {
       o: empty,
       now: INITIAL_TIME_MS,
-      wall: INITIAL_TIME_MS,
+      skew: 0,
       tracked: fixture % 2 == FIXTURE_TRACKED,
       remoteAvailable: fixture < FIXTURE_WITHOUT_REMOTE,
       capacity: if (Set(FIXTURE_ZERO_CAPACITY_UNTRACKED, FIXTURE_ZERO_CAPACITY_TRACKED).contains(fixture))
@@ -146,7 +147,7 @@ module dialcache_layers_conformance {
   }
   action startCall(choice: int): bool = all {
     s.o.calls.length() < MAX_CALLERS,
-    s' = Flights::recordIdentity(Serving::begin(s, LAYOUT, call(choice), resolution(s.policy, s.remoteAvailable), LAYOUT.ttls), call(choice)),
+    s' = Flights::recordIdentity(Serving::begin(s, LAYOUT, call(choice), resolution(s.policy, s.remoteAvailable), TTLS), call(choice)),
     input' = { name: "beginCall", choice: choice }
   }
   action beginCall = {
@@ -154,7 +155,7 @@ module dialcache_layers_conformance {
     startCall(choice)
   }
   action finishSource(loader: int, value: int): bool = all {
-    s' = Serving::settle(s, LAYOUT, loader, value, LAYOUT.ttls),
+    s' = Serving::settle(s, LAYOUT, loader, value, TTLS),
     input' = if (value == SOURCE_ERROR) { name: "rejectLoader", choice: loader }
       else { name: "resolveLoader", choice: loader * SOURCE_VALUE_COUNT + value }
   }
@@ -203,7 +204,7 @@ module dialcache_layers_conformance {
     invalidateEntity(choice)
   }
   action tick = all {
-    s' = Clock::elapse(s, 1),
+    s' = Clock::advance(s, 1),
     input' = { name: "tick", choice: -1 }
   }
 

@@ -53,24 +53,25 @@ module deadlines {
   }
   // A source started at release is bounded: its caller was enabled when
   // admitted, whether or not its scope has closed since.
-  pure def releaseLocal(state: BudgetedLocal[r], layout: Serving::Layout, policyCall: int, resolved: Resolution): BudgetedLocal[r] = {
-    val released = Serving::releaseLocal(state, layout, policyCall, resolved)
+  pure def releaseLocal(state: BudgetedLocal[r], layout: Serving::Layout, policyCall: int, resolved: Resolution, ttls: Ttls): BudgetedLocal[r] = {
+    val released = Serving::releaseLocal(state, layout, policyCall, resolved, ttls)
     if (released.sources.length() > state.sources.length()) stamp(released, state.sourceBudget) else released
   }
   // A source's outcome arriving after its deadline is a deadline error; work
   // whose deadline already completed its callers drains without effect.
-  pure def settleLocal(state: BudgetedLocal[r], layout: Serving::Layout, index: int, value: int): BudgetedLocal[r] = {
+  pure def settleLocal(state: BudgetedLocal[r], layout: Serving::Layout, index: int, value: int, ttls: Ttls): BudgetedLocal[r] = {
     val drained = drain(state, index)
     if (state.sources.nth(index).result != CALL_PENDING) drained
-    else markSettled(Serving::settleLocal(drained, layout, index, if (reached(state, index)) DEADLINE_ERROR else value), index)
+    else markSettled(Serving::settleLocal(drained, layout, index, if (reached(state, index)) DEADLINE_ERROR else value, ttls), index)
   }
   // Time passes and every pending source whose deadline is reached completes
-  // its callers with a deadline error; its external work is not drained.
+  // its callers with a deadline error, which publishes to no layer; its
+  // external work is not drained.
   pure def advanceLocal(state: BudgetedLocal[r], layout: Serving::Layout, ms: int): BudgetedLocal[r] = {
     val advanced = Clock::advance(state, ms)
     advanced.sources.indices().fold(advanced, (current, index) =>
       if (current.sources.nth(index).result == CALL_PENDING and reached(current, index))
-        markSettled(Serving::settleLocal(current, layout, index, DEADLINE_ERROR), index)
+        markSettled(Serving::finish(current, layout, index, DEADLINE_ERROR), index)
       else current)
   }
 }

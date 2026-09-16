@@ -1,12 +1,13 @@
 module clock {
   // Elapsed time. Profiles advance it by whole milliseconds; local entries,
-  // retention and deadlines read it. A profile whose remote frames carry
-  // wall-clock stamps also keeps a wall clock: both move together on
-  // `elapse`, and only the wall clock may be shifted (a rollback, C22).
+  // retention and deadlines read it. The wall clock is the monotonic clock
+  // plus a skew, so one transition moves both and only the skew can be
+  // shifted (a rollback, C22): a profile without wall-clock divergence holds
+  // the skew at 0.
   type Timed[r] = { now: int | r }
-  type Walled[r] = { now: int, wall: int | r }
+  type Skewed[r] = { now: int, skew: int | r }
 
   pure def advance(state: Timed[r], ms: int): Timed[r] = { now: state.now + ms, ...state }
-  pure def elapse(state: Walled[r], ms: int): Walled[r] = { now: state.now + ms, wall: state.wall + ms, ...state }
-  pure def shiftWall(state: Walled[r], ms: int): Walled[r] = { wall: state.wall + ms, ...state }
+  pure def wallOf(state: Skewed[r]): int = state.now + state.skew
+  pure def shiftWall(state: Skewed[r], ms: int): Skewed[r] = { skew: state.skew + ms, ...state }
 }

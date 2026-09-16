@@ -32,10 +32,10 @@ module dialcache_source_budgets_conformance {
   // One key on one instance, no persistent request scope, a 1 s local TTL and
   // no remote layer; every reply enables the local layer with sharing.
   pure val LAYOUT: Serving::Layout = {
-    keysPerInstance: 1, keysPerScope: 1, persistentContexts: 0, operationsPerEntity: 1,
-    ttls: { localMs: LOCAL_TTL_MS, freshMs: 0, retentionMs: 0 }, probeSourceScope: false
+    keysPerInstance: 1, keysPerScope: 1, persistentContexts: 0, operationsPerEntity: 1, probeSourceScope: false
   }
   pure val LOCAL: Resolution = { layers: { request: false, local: true, remote: false }, coalesce: true }
+  pure val TTLS: Ttls = { localMs: LOCAL_TTL_MS, freshMs: 0, retentionMs: 0 }
 
   // All times are monotonic milliseconds. A budget of -1 is unbounded. A
   // source's external work can remain undelivered after its deadline completed
@@ -121,7 +121,7 @@ module dialcache_source_budgets_conformance {
   action release(id: int): bool = all {
     Gate::holds(s, id),
     input' = { name: "releasePolicy", choice: id },
-    s' = Deadlines::releaseLocal(s, LAYOUT, id, LOCAL)
+    s' = Deadlines::releaseLocal(s, LAYOUT, id, LOCAL, TTLS)
   }
   action releasePolicy = { nondet choice = 0.to(MAX_CALLS - 1).oneOf(); release(choice) }
 
@@ -129,7 +129,7 @@ module dialcache_source_budgets_conformance {
     id < s.sources.length(),
     Deadlines::pending(s, id),
     input' = { name: "resolveLoader", choice: id * 2 + value },
-    s' = Deadlines::settleLocal(s, LAYOUT, id, value)
+    s' = Deadlines::settleLocal(s, LAYOUT, id, value, TTLS)
   }
   action resolveLoader = {
     nondet choice = 1.to(MAX_CALLS * 2).oneOf()
@@ -139,7 +139,7 @@ module dialcache_source_budgets_conformance {
     id < s.sources.length(),
     Deadlines::pending(s, id),
     input' = { name: "rejectLoader", choice: id },
-    s' = Deadlines::settleLocal(s, LAYOUT, id, SOURCE_ERROR)
+    s' = Deadlines::settleLocal(s, LAYOUT, id, SOURCE_ERROR, TTLS)
   }
   action rejectLoader = { nondet choice = 0.to(MAX_CALLS - 1).oneOf(); rejected(choice) }
 

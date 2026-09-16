@@ -33,14 +33,12 @@ module serving {
 
   // How a profile lays out its bounded identities: keys per instance (local
   // storage and process flights), keys per scope row (request memo), how many
-  // contexts are persistent scopes, keys per entity, the fixture's configured
-  // TTLs (the local insertion TTL, the remote frame's freshness and the
-  // retention a refill is written with; a profile whose replies carry no TTLs
-  // of their own passes `layout.ttls` to the traversal), and whether the
-  // drivers probe each source for the scope it started under (o.sourceScopes).
+  // contexts are persistent scopes, keys per entity, and whether the drivers
+  // probe each source for the scope it started under (o.sourceScopes). TTLs
+  // are not layout: every release and settlement takes the `Ttls` the reply
+  // resolved to (a fixture's constant where replies carry none).
   type Layout = {
-    keysPerInstance: int, keysPerScope: int, persistentContexts: int, operationsPerEntity: int,
-    ttls: Ttls, probeSourceScope: bool
+    keysPerInstance: int, keysPerScope: int, persistentContexts: int, operationsPerEntity: int, probeSourceScope: bool
   }
   // A source record is flights::Source over the payload the traversal needs to
   // publish: a layered source carries its publication authority (the identity
@@ -65,16 +63,16 @@ module serving {
     memoSlots: List[int],
     held: List[Gate::Held] | r
   }
-  // The layered shape adds both clocks (remote frames are stamped on the wall
-  // clock and retained on the monotonic one), the environment's remote
-  // availability and tracking, the local capacity, the remote adapter's fault
-  // switches (a failed read observes nothing, a failed dump dispatches no
-  // write, a failed write stores nothing) and the local and remote storage;
-  // the local projection adds the clock, the local capacity and local storage;
-  // the request-only projection adds nothing.
+  // The layered shape adds the clock with its wall skew (remote frames are
+  // stamped on the wall clock and retained on the monotonic one), the
+  // environment's remote availability and tracking, the local capacity, the
+  // remote adapter's fault switches (a failed read observes nothing, a failed
+  // dump dispatches no write, a failed write stores nothing) and the local and
+  // remote storage; the local projection adds the clock, the local capacity
+  // and local storage; the request-only projection adds nothing.
   type Served[r] = Traversed[{
     now: int,
-    wall: int,
+    skew: int,
     remoteAvailable: bool,
     tracked: bool,
     capacity: int,
@@ -231,20 +229,20 @@ module serving {
   // the policy call must be held (a wrapper guards on the gate), an unheld
   // release is a modeling error that fails in the gate's lookup. The scope may
   // have closed since admission: a released caller of a closed scope resolves
-  // to the bypass reply. Each caller is attached once, to the flight that
-  // completes it or to none; a join happens before any layer is read, so the
-  // join arms count no remote read. The remote read is observed only when the
-  // traversal reaches it: a failed read observes nothing and still counts, a
-  // frame serves while retained, fresh for the reply's freshness and (tracked)
-  // fence-cleared, and a remote hit warms local storage for the reply's local
-  // TTL.
+  // to the bypass reply, and a layer whose TTL is 0 is off (`gated`). Each
+  // caller is attached once, to the flight that completes it or to none; a
+  // join happens before any layer is read, so the join arms count no remote
+  // read. The remote read is observed only when the traversal reaches it: a
+  // failed read observes nothing and still counts, a frame serves while
+  // retained, fresh for the reply's freshness and (tracked) fence-cleared, and
+  // a remote hit warms local storage for the reply's local TTL.
   pure def release(state: Served[r], layout: Layout, policyCall: int, resolved: Resolution, ttls: Ttls): Served[r] = {
     val held = Gate::entry(state, policyCall)
     val caller = held.caller
     val call = held.call
     val released = Gate::release(state, policyCall)
     val open = participating(released, layout, call)
-    val effective = if (open) resolved else BYPASS
+    val effective = if (open) gated(resolved, ttls) else BYPASS
     val layers = effective.layers
     val localValue = if (layers.local) Local::localValue(released, call.instance, call.key, layout.keysPerInstance) else NO_VALUE
     val remoteValue = if (layers.remote and not(released.readFailed))
@@ -273,13 +271,13 @@ module serving {
       | Starts => startSource(observed, layout, caller, call, slot, open, effective)
     }
   }
-  pure def releaseLocal(state: LocalServed[r], layout: Layout, policyCall: int, resolved: Resolution): LocalServed[r] = {
+  pure def releaseLocal(state: LocalServed[r], layout: Layout, policyCall: int, resolved: Resolution, ttls: Ttls): LocalServed[r] = {
     val held = Gate::entry(state, policyCall)
     val caller = held.caller
     val call = held.call
     val released = Gate::release(state, policyCall)
     val open = participating(released, layout, call)
-    val effective = if (open) localOnly(resolved) else BYPASS
+    val effective = if (open) localOnly(gated(resolved, ttls)) else BYPASS
     val localValue = if (effective.layers.local) Local::localValue(released, call.instance, call.key, layout.keysPerInstance) else NO_VALUE
     val decision = decide(released, layout, call, effective, localValue, NO_VALUE)
     val slot = decision.slot
@@ -380,11 +378,12 @@ module serving {
       Local::putLocal(recorded, source.instance, source.key, value, ttls.localMs, layout.keysPerInstance) else recorded
     finish(warmed, layout, index, value)
   }
-  // A local accepted value warms the identity's local slot when the flight may.
-  pure def settleLocal(state: LocalServed[r], layout: Layout, index: int, value: int): LocalServed[r] = {
+  // A local accepted value warms the identity's local slot when the flight
+  // may, for the reply's local TTL.
+  pure def settleLocal(state: LocalServed[r], layout: Layout, index: int, value: int, ttls: Ttls): LocalServed[r] = {
     val source = state.sources.nth(index)
     val warmed = if (accepted(value) and source.local)
-      Local::putLocal(state, source.instance, source.key, value, layout.ttls.localMs, layout.keysPerInstance) else state
+      Local::putLocal(state, source.instance, source.key, value, ttls.localMs, layout.keysPerInstance) else state
     finish(warmed, layout, index, value)
   }
   pure def settleRequest(state: RequestServed[r], layout: Layout, index: int, value: int): RequestServed[r] =

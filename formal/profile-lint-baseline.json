@@ -78,7 +78,7 @@
       "model": "formal/dialcache-layers-conformance.qnt",
       "module": "dialcache_layers_conformance",
       "libraryTransitions": [
-        "clock::elapse",
+        "clock::advance",
         "flights::recordIdentity",
         "layer_policy::resolution",
         "remote_frames::seedFrame",

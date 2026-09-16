@@ -15,17 +15,15 @@ module held_replies {
   import flights as Flights from "../../../formal/kernel/flights"
   import policy_gate as Gate from "../../../formal/kernel/policy-gate"
 
-  pure val LAYOUT: Serving::Layout = {
-    keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1,
-    ttls: { localMs: 60000, freshMs: 60000, retentionMs: 60000 }, probeSourceScope: false
-  }
+  pure val LAYOUT: Serving::Layout =
+    { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, probeSourceScope: false }
   pure val ALL: Resolution = { layers: { request: true, local: true, remote: true }, coalesce: true }
   pure val UNCOALESCED: Resolution = { layers: { request: true, local: true, remote: true }, coalesce: false }
   pure val REQUEST_ONLY: Resolution = { layers: { request: true, local: false, remote: false }, coalesce: true }
   pure val UNCOALESCED_REQUEST_ONLY: Resolution = { layers: { request: true, local: false, remote: false }, coalesce: false }
 
   type State = {
-    o: Observation, now: int, wall: int, remoteAvailable: bool, tracked: bool, capacity: int,
+    o: Observation, now: int, skew: int, remoteAvailable: bool, tracked: bool, capacity: int,
     readFailed: bool, dumpFailed: bool, writeFailed: bool,
     closed: List[bool], memo: List[int], requestFlights: List[int], processFlights: List[int],
     localValues: List[int], localExpires: List[int], lru: List[List[int]],
@@ -35,13 +33,14 @@ module held_replies {
   var s: State
   var input: { name: str, choice: int }
 
-  pure val INITIAL: State = { o: empty, now: 10000, wall: 10000, remoteAvailable: true, tracked: false, capacity: 1,
+  pure val INITIAL: State = { o: empty, now: 10000, skew: 0, remoteAvailable: true, tracked: false, capacity: 1,
     readFailed: false, dumpFailed: false, writeFailed: false,
     closed: List(false, false), memo: List(0, 0), requestFlights: List(NO_OWNER, NO_OWNER), processFlights: List(NO_OWNER, NO_OWNER),
     localValues: List(0, 0), localExpires: List(0, 0), lru: List(List(), List()),
     remoteValues: List(0), created: List(0), expires: List(0), watermark: List(0),
     sources: List(), owners: List(), memoSlots: List(), held: List() }
-  pure val TTLS: Ttls = LAYOUT.ttls
+  // Every reply here carries the fixture's TTLs: 60 s local, fresh and retained.
+  pure val TTLS: Ttls = { localMs: 60000, freshMs: 60000, retentionMs: 60000 }
   action init = all {
     s' = INITIAL,
     input' = { name: "init", choice: -1 }

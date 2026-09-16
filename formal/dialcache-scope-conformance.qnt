@@ -42,8 +42,7 @@ module dialcache_scope_conformance {
   // two outer ones are persistent scopes; no remote layer writes a TTL; the
   // drivers probe each source for the scope it started under.
   pure val LAYOUT: Serving::Layout = {
-    keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1,
-    ttls: { localMs: 0, freshMs: 0, retentionMs: 0 }, probeSourceScope: true
+    keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, probeSourceScope: true
   }
 
   // -- State and initial environment -----------------------------------------

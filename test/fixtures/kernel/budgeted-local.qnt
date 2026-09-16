@@ -19,9 +19,10 @@ module budgeted_local {
   pure val BUDGET = 10
   pure val LOCAL_TTL_MS = 1000
   pure val START = 10000
-  pure val LAYOUT: Serving::Layout = { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, ttls: { localMs: LOCAL_TTL_MS, freshMs: 0, retentionMs: 0 }, probeSourceScope: false }
-  pure val TWO_KEYS: Serving::Layout = { keysPerInstance: 2, keysPerScope: 2, persistentContexts: 2, operationsPerEntity: 2, ttls: { localMs: LOCAL_TTL_MS, freshMs: 0, retentionMs: 0 }, probeSourceScope: false }
+  pure val LAYOUT: Serving::Layout = { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, probeSourceScope: false }
+  pure val TWO_KEYS: Serving::Layout = { keysPerInstance: 2, keysPerScope: 2, persistentContexts: 2, operationsPerEntity: 2, probeSourceScope: false }
   pure val LOCAL: Resolution = { layers: { request: false, local: true, remote: false }, coalesce: true }
+  pure val TTLS: Ttls = { localMs: LOCAL_TTL_MS, freshMs: 0, retentionMs: 0 }
 
   // Admission kinds: an enabled caller in persistent context 0 or 1, a caller
   // in a disabled context, a caller whose key failed to construct, and an
@@ -70,11 +71,11 @@ module budgeted_local {
   }
   // One reply is held at a time, so each release names the latest.
   action release = all {
-    s' = Deadlines::releaseLocal(s, LAYOUT, Gate::latest(s), LOCAL),
+    s' = Deadlines::releaseLocal(s, LAYOUT, Gate::latest(s), LOCAL, TTLS),
     input' = { name: "releasePolicy", choice: -1 }
   }
   action settle(index: int, value: int): bool = all {
-    s' = Deadlines::settleLocal(s, LAYOUT, index, value),
+    s' = Deadlines::settleLocal(s, LAYOUT, index, value, TTLS),
     input' = { name: "resolveLoader", choice: index }
   }
   action advance(ms: int): bool = all {
@@ -90,11 +91,11 @@ module budgeted_local {
     input' = { name: "beginCall", choice: kind }
   }
   action releaseTwoKeys = all {
-    s' = Deadlines::releaseLocal(s, TWO_KEYS, Gate::latest(s), LOCAL),
+    s' = Deadlines::releaseLocal(s, TWO_KEYS, Gate::latest(s), LOCAL, TTLS),
     input' = { name: "releasePolicy", choice: -1 }
   }
   action settleTwoKeys(index: int, value: int): bool = all {
-    s' = Deadlines::settleLocal(s, TWO_KEYS, index, value),
+    s' = Deadlines::settleLocal(s, TWO_KEYS, index, value, TTLS),
     input' = { name: "resolveLoader", choice: index }
   }
 
