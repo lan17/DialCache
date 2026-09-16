@@ -1,11 +1,25 @@
 module dialcache_scope_conformance {
   import conformance_observations.* from "./conformance-observations"
+  import encodings.* from "./kernel/encodings"
+  import calls.* from "./kernel/calls"
+  import layer_policy.* from "./kernel/layer-policy"
+  import serving as Serving from "./kernel/serving"
+  import diagnostics as Diag from "./kernel/diagnostics"
+  import request_memo as Memo from "./kernel/request-memo"
+  import flights as Flights from "./kernel/flights"
+  import policy_gate as Gate from "./kernel/policy-gate"
   // Request-only caching: one key and two independent request lifetimes.
   // Handles 2/3 nest enabled/disabled under 0; 4 reenables inside 3.
   // Completed handles remain usable for detached work. Only an outer close
   // ends its memo lifetime. No language-specific executor ordering is modeled.
-  // State: o/d are replay observations; memo, registration, ownership, and
-  // source records predict future effects and are never implementation inputs.
+  // Every rule is a kernel transition (formal/kernel): the request-only
+  // projection of the traversal with its diagnosed variants, since the drivers
+  // compare the diagnostics channel. This module owns the bounded state, the
+  // context decoding (which outer lifetime a nested handle memoizes into and
+  // whether a handle is enabled), the policy decoding, the input choices and
+  // the guards. State: o/d are replay observations; memo, registries,
+  // ownership and source records predict future effects and are never
+  // implementation inputs.
   // Environment: one request-only key, two outer lifetimes, one held policy
   // reply, independently settled sources; no source deadline or TTL expiry.
   // Bounds: sixteen callers, five saved contexts plus an outside context.
@@ -21,159 +35,94 @@ module dialcache_scope_conformance {
   pure val POLICY_INHERIT = 0
   pure val POLICY_NO_REQUEST = 1
   pure val POLICY_NO_COALESCING = 2
-  pure val NO_OWNER = -1
-  pure val NO_MEMO = 0
   pure val MAX_CALLERS = 16
   pure val SOURCE_VALUE_COUNT = 7
   pure val MAX_RESOLVE_CHOICE = 112
+  // One key, memo rows for the two outer lifetimes, five contexts of which the
+  // two outer ones are persistent scopes; no remote layer writes a TTL; the
+  // drivers probe each source for the scope it started under.
+  pure val LAYOUT: Serving::Layout = {
+    keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, servingTtlMs: 0, probeSourceScope: true
+  }
 
   // -- State and initial environment -----------------------------------------
 
-  type Source = {
-    slot: int,
-    shared: bool,
-    result: int,
-    metricLayer: str
-  }
   type State = {
     o: Observation,
     d: Diagnostics,
     opened: List[bool],
-    completed: List[bool],
+    closed: List[bool],
     memo: List[int],
-    registered: List[int],
-    sources: List[Source],
-    settlements: List[int],
+    requestFlights: List[int],
+    processFlights: List[int],
+    sources: List[Serving::RequestSource],
     owners: List[int],
-    policyCall: int,
-    scope: int,
-    overlay: int
+    memoSlots: List[int],
+    held: List[Gate::Held],
+    sourceLayers: List[str],
+    resolved: Resolution
   }
   var s: State
   // Explicit environment inputs also make deterministic Quint runs replayable.
   var input: { name: str, choice: int }
+
+  // Input decoding: a nested handle memoizes into its outer lifetime (the
+  // replacement request or the root); a disabled handle and a call outside
+  // every request are not enabled. Policy overlay 0 inherits request caching
+  // and sharing, 1 bypasses request caching, 2 retains memoization while
+  // disabling flight sharing.
+  pure def holder(scope: int): int = if (scope == REPLACEMENT_REQUEST) REPLACEMENT_REQUEST else ROOT_REQUEST
+  pure def call(scope: int): Call =
+    { instance: 0, key: 0, context: holder(scope), enabled: scope != NESTED_DISABLED and scope != OUTSIDE_REQUEST }
+  pure def resolutionOf(overlay: int): Resolution = {
+    layers: { request: overlay != POLICY_NO_REQUEST, local: false, remote: false },
+    coalesce: overlay != POLICY_NO_COALESCING
+  }
+
   action init = all {
     input' = { name: "init", choice: -1 },
     s' = {
       o: empty,
       d: noDiagnostics,
       opened: List(true, false, false, false, false),
-      completed: List(false, false, false, false, false),
-      memo: List(NO_MEMO, NO_MEMO),
-      registered: List(NO_OWNER, NO_OWNER),
+      closed: List(false, false, false, false, false),
+      memo: List(NO_VALUE, NO_VALUE),
+      requestFlights: List(NO_OWNER, NO_OWNER),
+      processFlights: List(NO_OWNER),
       sources: List(),
-      settlements: List(),
       owners: List(),
-      policyCall: NO_OWNER,
-      scope: ROOT_REQUEST,
-      overlay: POLICY_INHERIT
+      memoSlots: List(),
+      held: List(),
+      sourceLayers: List(),
+      resolved: resolutionOf(POLICY_INHERIT)
     }
   }
 
-  // -- Scope ownership and caller admission ----------------------------------
+  // -- Caller admission and policy release -----------------------------------
 
-  pure def holder(scope: int): int = if (scope == REPLACEMENT_REQUEST) REPLACEMENT_REQUEST else ROOT_REQUEST
-  pure def activeScope(state: State, scope: int): bool =
-    scope < OUTSIDE_REQUEST and scope != NESTED_DISABLED and not(state.completed.nth(holder(scope)))
-  pure def source(state: State, call: int, slot: int, shared: bool, active: bool, metricLayer: str): State = {
-    owners: state.owners.replaceAt(call, state.sources.length()),
-    sources: state.sources.append({
-      slot: slot,
-      shared: shared,
-      result: CALL_PENDING,
-      metricLayer: metricLayer
-    }),
-    registered: if (shared) state.registered.replaceAt(slot, state.sources.length()) else state.registered,
-    o: {
-      loaders: state.o.loaders + 1,
-      sourceScopes: state.o.sourceScopes.append(active),
-      ...state.o
-    },
-    ...state
-  }
-  pure def begin(state: State, scope: int): State = {
-    val active = activeScope(state, scope)
-    val withCaller = {
-      scope: scope,
-      owners: state.owners.append(NO_OWNER),
-      policyCall: if (active) state.o.calls.length() else NO_OWNER,
-      o: {
-        calls: state.o.calls.append(CALL_PENDING),
-        policyCalls: state.o.policyCalls + (if (active) 1 else 0),
-        ...state.o
-      },
-      ...state
-    }
-    if (active) withCaller else source(withCaller, state.o.calls.length(), NO_OWNER, false, false, "")
-  }
   action startCall(scope: int): bool = all {
-    s' = begin(s, scope),
+    s' = Diag::admitRequest(s, LAYOUT, call(scope)),
     input' = { name: "beginCall", choice: scope }
   }
   action beginCall = {
     // Context 5 is outside every request.
     nondet choice = ROOT_REQUEST.to(OUTSIDE_REQUEST).filter(id => id == OUTSIDE_REQUEST or s.opened.nth(id)).oneOf()
     all {
-      s.policyCall == NO_OWNER,
+      not(Gate::holding(s)),
       s.o.calls.length() < MAX_CALLERS,
       startCall(choice)
     }
   }
   action releasePolicy = all {
-    s.policyCall >= 0,
-    val scopeStillOpen = activeScope(s, s.scope)
-    val memoSlot = if (scopeStillOpen and s.overlay != POLICY_NO_REQUEST) holder(s.scope) else NO_OWNER
-    val canShare = memoSlot >= 0 and s.overlay != POLICY_NO_COALESCING
-    val registeredOwner = if (canShare) s.registered.nth(memoSlot) else NO_OWNER
-    val memoValue = if (memoSlot >= 0) s.memo.nth(memoSlot) else NO_MEMO
-    val afterPolicyReply = { policyCall: NO_OWNER, ...s }
-    // Admission precedes the memo read, including when an independent call
-    // has populated the memo while the registered source is still pending.
-    s' = if (registeredOwner >= 0) {
-      d: { coalesced: s.d.coalesced.append("request_local"), ...s.d },
-      owners: s.owners.replaceAt(s.policyCall, registeredOwner),
-      ...afterPolicyReply
-    }
-    else if (memoValue > 0) {
-      o: {
-        calls: s.o.calls.replaceAt(s.policyCall, memoValue),
-        ...s.o
-      },
-      ...afterPolicyReply
-    }
-    else source(afterPolicyReply, s.policyCall, memoSlot, canShare, scopeStillOpen,
-      if (not(scopeStillOpen)) "noop" else if (memoSlot >= 0) "request_local" else "local"),
+    Gate::holding(s),
+    s' = Diag::releaseRequest(s, LAYOUT, Gate::latest(s), s.resolved),
     input' = { name: "releasePolicy", choice: -1 }
   }
 
   // -- Source settlement and request publication -----------------------------
 
-  pure def settle(state: State, loader: int, result: int): State = {
-    val sourceRecord = state.sources.nth(loader)
-    val memoScopeStillOpen = sourceRecord.slot >= 0 and not(state.completed.nth(sourceRecord.slot))
-    {
-      d: {
-        fallbackErrors: if (result == SOURCE_ERROR
-          and sourceRecord.metricLayer != "") state.d.fallbackErrors.append(sourceRecord.metricLayer)
-          else state.d.fallbackErrors,
-        ...state.d
-      },
-      sources: state.sources.replaceAt(loader, { result: result, ...sourceRecord }),
-      settlements: state.settlements.append(loader),
-      memo: if (memoScopeStillOpen and result != SOURCE_ERROR) state.memo.replaceAt(sourceRecord.slot, result)
-        else state.memo,
-      registered: if (memoScopeStillOpen
-        and state.registered.nth(sourceRecord.slot) == loader) state.registered.replaceAt(sourceRecord.slot,
-        NO_OWNER) else state.registered,
-      o: {
-        calls: finishOwnedCalls(state.o.calls, state.owners, loader, result),
-        ...state.o
-      },
-      ...state
-    }
-  }
   action finishSource(loader: int, result: int): bool = all {
-    s' = settle(s, loader, result),
+    s' = Diag::settleRequest(s, LAYOUT, loader, result),
     input' = if (result == SOURCE_ERROR) { name: "rejectLoader", choice: loader }
       else { name: "resolveLoader", choice: loader * SOURCE_VALUE_COUNT
         + (if (result <= VALUE_TWO) result else result - 2) }
@@ -190,44 +139,30 @@ module dialcache_scope_conformance {
 
   // -- Environment scope and policy changes ----------------------------------
 
-  pure def open(state: State, scope: int): State = {
-    opened: state.opened.replaceAt(scope, true),
-    ...state
-  }
   action openContext(scope: int): bool = all {
-    s' = open(s, scope),
+    s' = Memo::openScope(s, scope),
     input' = { name: "openScope", choice: scope }
   }
   action openScope = {
     nondet choice = REPLACEMENT_REQUEST.to(REENABLED_REQUEST).filter(id => not(s.opened.nth(id)) and
-      (id == REPLACEMENT_REQUEST or (not(s.completed.nth(ROOT_REQUEST)) and (id != REENABLED_REQUEST
+      (id == REPLACEMENT_REQUEST or (not(s.closed.nth(ROOT_REQUEST)) and (id != REENABLED_REQUEST
         or s.opened.nth(NESTED_DISABLED))))).oneOf()
     openContext(choice)
   }
-  pure def close(state: State, scope: int): State = {
-    completed: state.completed.replaceAt(scope, true),
-    memo: state.memo.indices().fold(state.memo, (out, slot) =>
-      if (scope < NESTED_ENABLED and slot == scope) out.replaceAt(slot, NO_MEMO) else out),
-    registered: state.registered.indices().fold(state.registered, (out, slot) =>
-      if (scope < NESTED_ENABLED and slot == scope) out.replaceAt(slot, NO_OWNER) else out),
-    ...state
-  }
   action closeContext(scope: int): bool = all {
-    s' = close(s, scope),
+    s' = Serving::closeScope(s, LAYOUT, scope),
     input' = { name: "closeScope", choice: scope }
   }
   action closeScope = {
     nondet choice = ROOT_REQUEST.to(REENABLED_REQUEST).filter(id => s.opened.nth(id)
-      and not(s.completed.nth(id))).oneOf()
+      and not(s.closed.nth(id))).oneOf()
     all {
       s.o.calls.length() > 0,
       closeContext(choice)
     }
   }
-  // 0 inherits request caching/sharing; 1 bypasses request caching;
-  // 2 retains memoization while disabling flight sharing.
   action changePolicy(overlay: int): bool = all {
-    s' = { overlay: overlay, ...s },
+    s' = { resolved: resolutionOf(overlay), ...s },
     input' = { name: "policy", choice: overlay }
   }
   action policy = {
@@ -257,30 +192,63 @@ module dialcache_scope_conformance {
   }
 
   // -- Independently stated safety properties --------------------------------
+  // The memo row a source fills is the memo slot of its owners: a caller joins
+  // only the flight registered under its own row, so every owner of a source
+  // memoizes into the same row or into none.
 
+  pure def fillsRow(x: State, loader: int, slot: int): bool =
+    Flights::ownedBy(x, loader).forall(caller => x.memoSlots.nth(caller) == slot)
   val closedScopesHaveNoMemo = s.memo.indices().forall(slot =>
-    not(s.completed.nth(slot)) or (s.memo.nth(slot) == NO_MEMO and s.registered.nth(slot) == NO_OWNER))
-  val registeredSourcesArePending = s.registered.indices().forall(slot => {
-    val loader = s.registered.nth(slot)
-    loader < 0 or (s.sources.nth(loader).slot == slot and s.sources.nth(loader).shared
-      and s.sources.nth(loader).result == CALL_PENDING)
+    not(s.closed.nth(slot)) or (s.memo.nth(slot) == NO_VALUE and s.requestFlights.nth(slot) == NO_OWNER))
+  val registeredSourcesArePending = s.requestFlights.indices().forall(slot => {
+    val loader = s.requestFlights.nth(slot)
+    loader < 0 or (fillsRow(s, loader, slot) and s.sources.nth(loader).result == CALL_PENDING)
   })
   val callsKeepSourceOutcome = s.o.calls.indices().forall(i =>
     if (s.owners.nth(i) >= 0) s.o.calls.nth(i) == s.sources.nth(s.owners.nth(i)).result
-  else (s.o.calls.nth(i) == CALL_PENDING) == (i == s.policyCall))
+    else (s.o.calls.nth(i) == CALL_PENDING) == (s.held.select(held => held.caller == i).length() > 0))
   val sourceCountsMatchEffects = s.sources.length() == s.o.loaders and
     s.o.sourceScopes.length() == s.o.loaders and s.owners.length() == s.o.calls.length()
+    and s.sourceLayers.length() == s.o.loaders and s.held.length() <= 1
 
-  // Record external completion order separately from the memo transition.
-  // Source admission order and coalescing do not determine the final value.
-  val memoFollowsLatestSuccessfulSettlement = s.memo.indices().forall(slot => {
-    val latest = s.settlements.foldl(NO_MEMO, (result, loader) => {
-      val source = s.sources.nth(loader)
-      if (source.slot == slot and values.indices().exists(index => values.nth(index) == source.result))
-        source.result else result
+  // The memo row of an open scope holds a value exactly when a source that
+  // memoizes into it (one owning a caller attached to that row) has settled
+  // with a publishable value, and the value it holds is one such source
+  // settled with; the settlement that just happened left its successful value
+  // in the row of every owner memoizing into an open scope. Source admission
+  // order and coalescing do not determine the final value, and neither a
+  // failed settlement nor another scope's closure clears a row.
+  pure def publishable(value: int): bool = values.indices().exists(index => values.nth(index) == value)
+  pure def settledInto(x: State, slot: int): Set[int] = x.sources.indices().filter(loader =>
+    publishable(x.sources.nth(loader).result) and Flights::ownedBy(x, loader).exists(caller => x.memoSlots.nth(caller) == slot))
+  val justSettled = input.name == "resolveLoader" or input.name == "rejectLoader"
+  val settledSource = if (input.name == "resolveLoader") (input.choice - 1) / SOURCE_VALUE_COUNT else input.choice
+  val memoFollowsLatestSuccessfulSettlement = s.memo.indices().forall(slot => s.closed.nth(slot) or {
+      val value = s.memo.nth(slot)
+      val settled = settledInto(s, slot)
+      (value != NO_VALUE) == (settled.size() > 0)
+        and (value == NO_VALUE or settled.exists(loader => s.sources.nth(loader).result == value))
     })
-    s.completed.nth(slot) or s.memo.nth(slot) == latest
-  })
+    and (not(justSettled) or {
+      val result = s.sources.nth(settledSource).result
+      not(publishable(result)) or Flights::ownedBy(s, settledSource).forall(caller => {
+        val row = s.memoSlots.nth(caller)
+        row < 0 or s.closed.nth(row) or s.memo.nth(row) == result
+      })
+    })
+
+  // A released caller that started a source registered it under its memo row
+  // exactly when its reply coalesces. The released caller is the newest: no
+  // admission happens while a reply is held (sourceCountsMatchEffects pins one
+  // held reply), and a source just started is owned by its starter alone, which
+  // tells a started source from a joined one.
+  val releasedCaller = s.o.calls.length() - 1
+  val registrationFollowsCoalescing = input.name != "releasePolicy" or {
+    val owner = s.owners.nth(releasedCaller)
+    val row = s.memoSlots.nth(releasedCaller)
+    owner < 0 or Flights::ownedBy(s, owner) != Set(releasedCaller)
+      or ((row >= 0 and s.requestFlights.nth(row) == owner) == (row >= 0 and s.resolved.coalesce))
+  }
 
   // -- Deterministic regression schedules ------------------------------------
 
@@ -292,14 +260,14 @@ module dialcache_scope_conformance {
     .then(finishSource(0, VALUE_ONE))
     .then(startCall(REPLACEMENT_REQUEST))
     .then(releasePolicy)
-    .expect(s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.loaders == 2 and s.memo == List(NO_MEMO, NO_MEMO))
+    .expect(s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.loaders == 2 and s.memo == List(NO_VALUE, NO_VALUE))
 
   run policyReplyAfterCloseBypassesRequestTest = init
     .then(startCall(ROOT_REQUEST))
     .then(closeContext(ROOT_REQUEST))
     .then(releasePolicy)
     .then(finishSource(0, VALUE_ONE))
-    .expect(s.o.sourceScopes == List(false) and s.memo == List(NO_MEMO, NO_MEMO))
+    .expect(s.o.sourceScopes == List(false) and s.memo == List(NO_VALUE, NO_VALUE))
 
   run nestedCloseAndDisabledBypassKeepOuterMemoTest = init
     .then(openContext(NESTED_ENABLED))
@@ -367,5 +335,40 @@ module dialcache_scope_conformance {
     .then(finishSource(1, VALUE_TWO)).then(finishSource(0, VALUE_ONE))
     .then(startCall(REPLACEMENT_REQUEST)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, CALL_PENDING)
-      and s.o.loaders == 3 and s.memo == List(NO_MEMO, NO_MEMO))
+      and s.o.loaders == 3 and s.memo == List(NO_VALUE, NO_VALUE))
+
+  run rejectedIndependentSourceKeepsMemoizedValueTest = init
+    .then(changePolicy(POLICY_NO_COALESCING))
+    .then(startCall(ROOT_REQUEST)).then(releasePolicy)
+    .then(startCall(ROOT_REQUEST)).then(releasePolicy)
+    .then(finishSource(0, VALUE_ONE))
+    .then(finishSource(1, SOURCE_ERROR))
+    .then(startCall(ROOT_REQUEST)).then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_ONE, SOURCE_ERROR, VALUE_ONE) and s.o.loaders == 2
+      and s.memo == List(VALUE_ONE, NO_VALUE) and s.d.fallbackErrors == List("request_local"))
+
+  run independentSourceIsNotRegisteredForLaterSharingTest = init
+    .then(changePolicy(POLICY_NO_COALESCING))
+    .then(startCall(ROOT_REQUEST)).then(releasePolicy)
+    .then(changePolicy(POLICY_INHERIT))
+    .then(startCall(ROOT_REQUEST)).then(releasePolicy)
+    .expect(s.o.calls == List(CALL_PENDING, CALL_PENDING) and s.o.loaders == 2 and s.d.coalesced == List())
+
+  run pendingRequestFlightIsJoinedBeforeMemoReadTest = init
+    .then(startCall(ROOT_REQUEST)).then(releasePolicy)
+    .then(changePolicy(POLICY_NO_COALESCING))
+    .then(startCall(ROOT_REQUEST)).then(releasePolicy)
+    .then(finishSource(1, VALUE_TWO))
+    .then(changePolicy(POLICY_INHERIT))
+    .then(startCall(ROOT_REQUEST)).then(releasePolicy)
+    .expect(s.o.calls == List(CALL_PENDING, VALUE_TWO, CALL_PENDING) and s.o.loaders == 2
+      and s.d.coalesced == List("request_local"))
+    .then(finishSource(0, VALUE_ONE))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE) and s.memo == List(VALUE_ONE, NO_VALUE))
+
+  run bypassedRequestFailureIsAttributedToLocalTest = init
+    .then(changePolicy(POLICY_NO_REQUEST))
+    .then(startCall(ROOT_REQUEST)).then(releasePolicy)
+    .then(finishSource(0, SOURCE_ERROR))
+    .expect(s.d.fallbackErrors == List("local") and s.o.sourceScopes == List(true) and s.memo == List(NO_VALUE, NO_VALUE))
 }

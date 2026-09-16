@@ -8,13 +8,13 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "1f0ce439d35caf402af09c159bbfa8d1b57cc3c6f27690d7ff8e8fd17f2f0d40",
-    "executionSha256": "caf3bb7201d14fd3e5337ecfd3796a06551ea76f5d3d7013e0cc9f989d426cc4",
-    "sourceAuditSha256": "171a5278bec0c012ee8c789c27ef6a48498240014d2da46d83c09ed59e398566",
-    "quintCaseAuditSha256": "bf8bf7b117c7e4d24837d76cdd92a27f39168a2d630758d31efdfe60cf0f5065",
+    "semanticCasesSha256": "86e3afcf4a8abd63d55f800d5e886b1e763012afc07003b92b1fc0acf4d5bd1a",
+    "executionSha256": "57f02f4cf2394cf340a204cdf8a75a394d58bd7483c66cebb869e89e3f0727b2",
+    "sourceAuditSha256": "c775b5ce04e57c477d3f922ec3db6929379775522a8e14d2c33cafdcd4aa49e9",
+    "quintCaseAuditSha256": "deba04a19c1e76479ff46775e082e28f212f02effd5eabe639e2e44b36b28ba2",
     "featureCoverageSha256": "56eedfa865682db6ad8e73b8673c7dac1c30d301e9bce3390246d6994aba9dcb",
     "coverageWitnessesSha256": "8fc8ab123150fdec059f5b75f84172d39af80d08d7a4211fa88c63c5a3f2874b",
-    "profilesSha256": "34b1d77a25a92b0d5d6703a379902fae95f51227dca201613233592ba4f590c8"
+    "profilesSha256": "344734025c4573cd6816670863c95ec169c63e9230ae3b41db1c3319b4cb9234"
   },
   "inventory": {
     "behavioralCases": 240,
@@ -45,12 +45,12 @@
     "casesWithQuintGeneratedVectors": 22,
     "withoutModelDrivenReplay": [],
     "quintModels": 32,
-    "scheduledInvariants": 217,
-    "scheduledRegressions": 407,
+    "scheduledInvariants": 218,
+    "scheduledRegressions": 411,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
     "caseReferencedWitnesses": 285,
-    "exportedRegressionHistories": 240
+    "exportedRegressionHistories": 244
   },
   "profiles": [
     {
@@ -145,7 +145,11 @@
         "policyClosureFailureIsAttributedWithoutCachingTest",
         "absentValueIsMemoizedTest",
         "independentRequestMemoUsesLastCompletionTest",
-        "pendingSourceKeepsRequestPolicyAcrossBypassAndClosureTest"
+        "pendingSourceKeepsRequestPolicyAcrossBypassAndClosureTest",
+        "rejectedIndependentSourceKeepsMemoizedValueTest",
+        "independentSourceIsNotRegisteredForLaterSharingTest",
+        "pendingRequestFlightIsJoinedBeforeMemoReadTest",
+        "bypassedRequestFailureIsAttributedToLocalTest"
       ],
       "status": "executable-profile-schedule",
       "witnessSources": [
@@ -153,8 +157,7 @@
         "formal/replay/witnesses/index.mjs",
         "formal/replay/witnesses/trace.mjs",
         "formal/replay/witnesses/evidence.mjs",
-        "formal/replay/witnesses/scope.mjs",
-        "formal/replay/witnesses/runtime.mjs"
+        "formal/replay/witnesses/scope.mjs"
       ]
     },
     {
@@ -963,8 +966,8 @@
       },
       "quintDefinitions": [
         "formal/dialcache-scope-conformance.qnt:resolveLoader",
-        "formal/dialcache-scope-conformance.qnt:settle",
-        "formal/dialcache-scope-conformance.qnt:releasePolicy"
+        "formal/kernel/serving.qnt:finish",
+        "formal/kernel/serving.qnt:releaseRequest"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -1086,8 +1089,8 @@
       },
       "quintDefinitions": [
         "formal/dialcache-scope-conformance.qnt:resolveLoader",
-        "formal/dialcache-scope-conformance.qnt:settle",
-        "formal/dialcache-scope-conformance.qnt:releasePolicy"
+        "formal/kernel/serving.qnt:finish",
+        "formal/kernel/serving.qnt:releaseRequest"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -1211,8 +1214,8 @@
       },
       "quintDefinitions": [
         "formal/dialcache-scope-conformance.qnt:resolveLoader",
-        "formal/dialcache-scope-conformance.qnt:settle",
-        "formal/dialcache-scope-conformance.qnt:releasePolicy"
+        "formal/kernel/serving.qnt:finish",
+        "formal/kernel/serving.qnt:releaseRequest"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -1336,8 +1339,8 @@
       },
       "quintDefinitions": [
         "formal/dialcache-scope-conformance.qnt:resolveLoader",
-        "formal/dialcache-scope-conformance.qnt:settle",
-        "formal/dialcache-scope-conformance.qnt:releasePolicy"
+        "formal/kernel/serving.qnt:finish",
+        "formal/kernel/serving.qnt:releaseRequest"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -1577,9 +1580,9 @@
       },
       "quintDefinitions": [
         "formal/dialcache-scope-conformance.qnt:holder",
-        "formal/dialcache-scope-conformance.qnt:source",
-        "formal/dialcache-scope-conformance.qnt:releasePolicy",
-        "formal/dialcache-scope-conformance.qnt:settle"
+        "formal/kernel/serving.qnt:startRequestSource",
+        "formal/kernel/serving.qnt:releaseRequest",
+        "formal/kernel/serving.qnt:finish"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -1962,7 +1965,8 @@
         "formal/dialcache-effects-conformance.qnt:oneRegisteredSource",
         "formal/dialcache-flight-deadlines.qnt:oneSourcePerRegisteredFlight",
         "formal/dialcache-runtime-boundaries-conformance.qnt:runtimeLocalTtlEnablesSharingWithoutRemoteTtlTest",
-        "formal/dialcache-conformance.qnt:coalescedPairPublishesOneReusableValueTest"
+        "formal/dialcache-conformance.qnt:coalescedPairPublishesOneReusableValueTest",
+        "formal/dialcache-scope-conformance.qnt:pendingRequestFlightIsJoinedBeforeMemoReadTest"
       ],
       "requiredGenerated": [
         {
@@ -1985,7 +1989,8 @@
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
         "runtime-boundaries/runtimeLocalTtlEnablesSharingWithoutRemoteTtlTest",
-        "core/coalescedPairPublishesOneReusableValueTest"
+        "core/coalescedPairPublishesOneReusableValueTest",
+        "scope/pendingRequestFlightIsJoinedBeforeMemoReadTest"
       ],
       "generatedVectors": []
     },
@@ -2036,7 +2041,8 @@
       "group": "request-and-layers",
       "quintProperties": [
         "formal/dialcache-policy-conformance.qnt:independentLocalCallsStillReuseSettledValueTest",
-        "formal/dialcache-runtime-boundaries-conformance.qnt:disabledSharingDoesNotJoinRegisteredFlightTest"
+        "formal/dialcache-runtime-boundaries-conformance.qnt:disabledSharingDoesNotJoinRegisteredFlightTest",
+        "formal/dialcache-scope-conformance.qnt:independentSourceIsNotRegisteredForLaterSharingTest"
       ],
       "requiredGenerated": [
         {
@@ -2074,7 +2080,8 @@
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
         "policy/independentLocalCallsStillReuseSettledValueTest",
-        "runtime-boundaries/disabledSharingDoesNotJoinRegisteredFlightTest"
+        "runtime-boundaries/disabledSharingDoesNotJoinRegisteredFlightTest",
+        "scope/independentSourceIsNotRegisteredForLaterSharingTest"
       ],
       "generatedVectors": []
     },
@@ -2550,7 +2557,8 @@
       "kind": "portable-behavior",
       "group": "request-and-layers",
       "quintProperties": [
-        "formal/dialcache-runtime-boundaries-conformance.qnt:falseRequestLeafPreservesMemoForReenablementTest"
+        "formal/dialcache-runtime-boundaries-conformance.qnt:falseRequestLeafPreservesMemoForReenablementTest",
+        "formal/dialcache-scope-conformance.qnt:bypassedRequestFailureIsAttributedToLocalTest"
       ],
       "requiredGenerated": [
         {
@@ -2572,12 +2580,13 @@
         "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
       },
       "quintDefinitions": [
-        "formal/dialcache-scope-conformance.qnt:releasePolicy",
+        "formal/kernel/serving.qnt:releaseRequest",
         "formal/dialcache-scope-conformance.qnt:policy"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
-        "runtime-boundaries/falseRequestLeafPreservesMemoForReenablementTest"
+        "runtime-boundaries/falseRequestLeafPreservesMemoForReenablementTest",
+        "scope/bypassedRequestFailureIsAttributedToLocalTest"
       ],
       "generatedVectors": []
     },
@@ -10840,7 +10849,8 @@
       "kind": "portable-behavior",
       "quintProperties": [
         "formal/dialcache-scope-conformance.qnt:independentRequestMemoUsesLastCompletionTest",
-        "formal/dialcache-scope-conformance.qnt:memoFollowsLatestSuccessfulSettlement"
+        "formal/dialcache-scope-conformance.qnt:memoFollowsLatestSuccessfulSettlement",
+        "formal/dialcache-scope-conformance.qnt:rejectedIndependentSourceKeepsMemoizedValueTest"
       ],
       "requiredGenerated": [
         {
@@ -10858,7 +10868,8 @@
       "status": "executable-generated",
       "gaps": [],
       "quintReplays": [
-        "scope/independentRequestMemoUsesLastCompletionTest"
+        "scope/independentRequestMemoUsesLastCompletionTest",
+        "scope/rejectedIndependentSourceKeepsMemoizedValueTest"
       ],
       "generatedVectors": []
     },
@@ -18278,7 +18289,7 @@
   ],
   "reviewedTestAndDocumentationAudit": {
     "path": "formal/source-audit.json",
-    "sha256": "171a5278bec0c012ee8c789c27ef6a48498240014d2da46d83c09ed59e398566",
+    "sha256": "c775b5ce04e57c477d3f922ec3db6929379775522a8e14d2c33cafdcd4aa49e9",
     "sourceFiles": 44,
     "status": "reviewed-applicability-not-execution",
     "limitations": "These rows review Go applicability for the public documentation and ordinary test files in source-audit.json sources, inheriting their C/W/E/B/X classifications. They map subjects to native artifacts without claiming one Go test per TypeScript assertion or turning documentation counts into executed coverage. The same audit hash also binds reviewedGuides for formal and Go documentation; those guide reviews are freshness/scope records, not additional behavioral applicability rows. Per-case Quint and replay evidence is recorded separately.",

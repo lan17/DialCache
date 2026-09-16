@@ -30,7 +30,8 @@
     "formal/kernel/clock.qnt",
     "formal/kernel/policy-gate.qnt",
     "formal/kernel/runtime-policy.qnt",
-    "formal/kernel/serving.qnt"
+    "formal/kernel/serving.qnt",
+    "formal/kernel/diagnostics.qnt"
   ],
   "models": [
     {
@@ -617,7 +618,8 @@
         "registeredSourcesArePending",
         "callsKeepSourceOutcome",
         "sourceCountsMatchEffects",
-        "memoFollowsLatestSuccessfulSettlement"
+        "memoFollowsLatestSuccessfulSettlement",
+        "registrationFollowsCoalescing"
       ],
       "regressions": [
         "lateSourceCannotPopulateReplacementTest",
@@ -629,7 +631,11 @@
         "policyClosureFailureIsAttributedWithoutCachingTest",
         "absentValueIsMemoizedTest",
         "independentRequestMemoUsesLastCompletionTest",
-        "pendingSourceKeepsRequestPolicyAcrossBypassAndClosureTest"
+        "pendingSourceKeepsRequestPolicyAcrossBypassAndClosureTest",
+        "rejectedIndependentSourceKeepsMemoizedValueTest",
+        "independentSourceIsNotRegisteredForLaterSharingTest",
+        "pendingRequestFlightIsJoinedBeforeMemoReadTest",
+        "bypassedRequestFailureIsAttributedToLocalTest"
       ],
       "profile": "scope",
       "generate": {
@@ -648,7 +654,11 @@
         "policyClosureFailureIsAttributedWithoutCachingTest",
         "absentValueIsMemoizedTest",
         "independentRequestMemoUsesLastCompletionTest",
-        "pendingSourceKeepsRequestPolicyAcrossBypassAndClosureTest"
+        "pendingSourceKeepsRequestPolicyAcrossBypassAndClosureTest",
+        "rejectedIndependentSourceKeepsMemoizedValueTest",
+        "independentSourceIsNotRegisteredForLaterSharingTest",
+        "pendingRequestFlightIsJoinedBeforeMemoReadTest",
+        "bypassedRequestFailureIsAttributedToLocalTest"
       ]
     },
     {
@@ -1731,20 +1741,54 @@
     {
       "id": "scope-late-source-repopulates-closed-memo",
       "contract": "C03",
-      "source": "formal/dialcache-scope-conformance.qnt",
+      "source": "formal/kernel/request-memo.qnt",
       "model": "formal/dialcache-scope-conformance.qnt",
       "invariant": "closedScopesHaveNoMemo",
-      "before": "val memoScopeStillOpen = sourceRecord.slot >= 0 and not(state.completed.nth(sourceRecord.slot))",
-      "after": "val memoScopeStillOpen = sourceRecord.slot >= 0"
+      "before": "if (slot < 0 or state.closed.nth(slot / keysPerScope)) state else {",
+      "after": "if (slot < 0) state else {"
     },
     {
       "id": "scope-source-error-memoized",
       "contract": "C15",
-      "source": "formal/dialcache-scope-conformance.qnt",
+      "source": "formal/kernel/serving.qnt",
       "model": "formal/dialcache-scope-conformance.qnt",
       "invariant": "memoFollowsLatestSuccessfulSettlement",
-      "before": "memo: if (memoScopeStillOpen and result != SOURCE_ERROR) state.memo.replaceAt(sourceRecord.slot, result)",
-      "after": "memo: if (memoScopeStillOpen) state.memo.replaceAt(sourceRecord.slot, result)"
+      "before": "if (value == SOURCE_ERROR) settled else Flights::ownedBy(state, index).fold(settled, (out, call) =>",
+      "after": "Flights::ownedBy(state, index).fold(settled, (out, call) =>"
+    },
+    {
+      "id": "scope-nested-close-evicts-outer-memo",
+      "contract": "C02",
+      "source": "formal/kernel/request-memo.qnt",
+      "model": "formal/dialcache-scope-conformance.qnt",
+      "invariant": "memoFollowsLatestSuccessfulSettlement",
+      "before": "if (slot / keysPerScope == context) out.replaceAt(slot, NO_VALUE) else out),",
+      "after": "out.replaceAt(slot, NO_VALUE)),",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "nestedCloseAndDisabledBypassKeepOuterMemoTest",
+        "failure": "s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE) and s.o.loaders == 2 and s.o.sourceScopes == List(true, false)",
+        "family": "nested-close-evicts-outer-memo",
+        "profiles": [
+          "scope",
+          "layers"
+        ],
+        "exclusions": {
+          "core": "Composes no kernel module, so request_memo.closeScope is never executed.",
+          "effects": "Composes no kernel module, so request_memo.closeScope is never executed.",
+          "recovery": "Composes no kernel module, so request_memo.closeScope is never executed.",
+          "policy": "Composes no kernel module, so request_memo.closeScope is never executed.",
+          "shadow": "Composes no kernel module, so request_memo.closeScope is never executed.",
+          "admission": "Composes no kernel module, so request_memo.closeScope is never executed.",
+          "independent": "Composes no kernel module, so request_memo.closeScope is never executed.",
+          "recovery-read": "Composes no kernel module, so request_memo.closeScope is never executed.",
+          "local-failure": "Composes no kernel module, so request_memo.closeScope is never executed.",
+          "runtime-boundaries": "One persistent scope owns the only memo row, so a close that clears every row clears exactly its own.",
+          "shadow-layers": "Composes no kernel module, so request_memo.closeScope is never executed.",
+          "local-clock": "Composes no kernel module, so request_memo.closeScope is never executed.",
+          "source-budgets": "Composes no kernel module, so request_memo.closeScope is never executed."
+        }
+      }
     },
     {
       "id": "admission-duplicate-key-admitted",
@@ -1777,11 +1821,11 @@
     {
       "id": "layers-process-flight-crosses-instance",
       "contract": "C11",
-      "source": "formal/kernel/flights.qnt",
+      "source": "formal/kernel/serving.qnt",
       "model": "formal/dialcache-layers-conformance.qnt",
       "invariant": "sourceOwnershipNeverCrossesKeyOrInstance",
-      "before": "state.processFlights.nth(instance * keysPerInstance + key)",
-      "after": "state.processFlights.nth(key)"
+      "before": "pure def identity(layout: Layout, call: Call): int = call.instance * layout.keysPerInstance + call.key",
+      "after": "pure def identity(layout: Layout, call: Call): int = call.key"
     },
     {
       "id": "layers-late-memo-into-closed-scope",
@@ -1790,7 +1834,8 @@
       "model": "formal/dialcache-layers-conformance.qnt",
       "invariant": "closedScopesHaveNoMemo",
       "before": "if (slot < 0 or state.closed.nth(slot / keysPerScope)) state else {",
-      "after": "if (slot < 0) state else {"
+      "after": "if (slot < 0) state else {",
+      "measures": "The layers model measures this fault across keys and instances; scope-late-source-repopulates-closed-memo measures it where nested handles memoize into their outer lifetime's row and a replacement request opens beside a closed root."
     },
     {
       "id": "independent-fresh-frame-retained",

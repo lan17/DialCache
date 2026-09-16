@@ -13,14 +13,13 @@ const remoteTtl = s => baseOverlay(s.overlay) === 2 ? 2000 : baseOverlay(s.overl
 // later public call must expose retained values, skipped work, or independent
 // work. They neither drive implementations nor add a behavioral oracle.
 export function runtimeWitnesses(profile, histories, recorder = createWitnessRecorder()) {
-  if (!["policy", "scope", "layers"].includes(profile)) return recorder.labels();
+  if (!["policy", "layers"].includes(profile)) return recorder.labels();
   for (const { path, states, predictions } of histories) {
     recorder.enter(path);
     // Published smoke fixtures deliberately retain only public observations.
     if (states[0]?.s?.sources === undefined) continue;
     const steps = predictions.map((s, index) => ({ s, input: index === 0 ? undefined : explicitInput(states[index], `${path} step ${index}`) }));
     if (profile === "policy") policyWitnesses(steps, recorder);
-    if (profile === "scope") scopeWitnesses(steps, recorder);
     if (profile === "layers") layersWitnesses(steps, recorder);
   }
   return recorder.labels();
@@ -129,44 +128,6 @@ function policyWitnesses(steps, recorder) {
     if (action === "seed") {
       const key = Math.floor(choice / 2);
       lastWriter.delete(`remote:${key}`);
-    }
-  }
-}
-
-function scopeWitnesses(steps, recorder) {
-  const overlaps = new Set();
-  const publications = new Map();
-  const lastWriter = new Map();
-  for (let i = 1; i < steps.length; i++) {
-    recorder.step(i);
-    const step = steps[i], before = steps[i - 1].s, after = step.s;
-    const prior = before.o, current = after.o, action = step.input.name, choice = step.input.choice;
-    if (action === "releasePolicy") {
-      if (current.loaders > prior.loaders) {
-        const loader = after.sources.length - 1, admitted = after.sources[loader];
-        for (const [other, source] of before.sources.entries()) if (admitted.slot >= 0 && source.slot === admitted.slot &&
-          source.result === 0 && !source.shared && !admitted.shared) overlaps.add(`${other}:${loader}`);
-      } else if (successful(current.calls[before.policyCall]) && before.overlay === 2) {
-        recorder.credit("uncoalesced-request-settled-hit");
-        const slot = before.scope === 1 ? 1 : 0;
-        if (lastWriter.get(slot)?.value === current.calls[before.policyCall]) recorder.credit("independent-request-last-completion-probed");
-      }
-    }
-    if (action === "resolveLoader") {
-      const loader = Math.floor((choice - 1) / 7);
-      const source = before.sources[loader], value = after.sources[loader].result;
-      if (source.slot < 0 || before.completed[source.slot]) continue;
-      const preceding = publications.get(source.slot);
-      lastWriter.delete(source.slot);
-      if (!source.shared && preceding !== undefined && preceding.value !== value &&
-        overlaps.has(`${Math.min(preceding.loader, loader)}:${Math.max(preceding.loader, loader)}`)) {
-        lastWriter.set(source.slot, { loader, value, kind: "request" });
-      }
-      publications.set(source.slot, { loader, value, kind: "request" });
-    }
-    if (action === "closeScope" && choice < 2) {
-      publications.delete(choice);
-      lastWriter.delete(choice);
     }
   }
 }

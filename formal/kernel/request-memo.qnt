@@ -8,6 +8,9 @@ module request_memo {
   import encodings.* from "./encodings"
 
   type Scoped[r] = { memo: List[int], closed: List[bool] | r }
+  // Which contexts the environment has created, for a profile whose scopes are
+  // opened by an input; read only by guards and input domains.
+  type Opened[r] = { opened: List[bool] | r }
 
   pure def persistent(context: int, persistentContexts: int): bool = context < persistentContexts
   pure def scopeOpen(state: Scoped[r], context: int, persistentContexts: int): bool =
@@ -22,6 +25,8 @@ module request_memo {
       memo: state.memo.replaceAt(slot, value),
       ...state
     }
+  pure def openScope(state: Opened[r], context: int): Opened[r] =
+    { opened: state.opened.replaceAt(context, true), ...state }
   pure def closeScope(state: Scoped[r], context: int, keysPerScope: int): Scoped[r] = {
     closed: state.closed.replaceAt(context, true),
     memo: state.memo.indices().fold(state.memo, (out, slot) =>

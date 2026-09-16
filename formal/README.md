@@ -87,9 +87,9 @@ is explored. [profiles.json](./profiles.json) records profile versions, input
 encodings, smoke traces and implementation declarations.
 
 The [kernel library](./kernel/README.md) states each portable rule once as pure
-transitions; a composed profile assigns state only through them. The layers
-and runtime-boundaries profiles are composed today, each verified by the corpus
-differential; the other profiles remain authoritative and their totals are unchanged.
+transitions; a composed profile assigns state only through them. The layers,
+runtime-boundaries and scope profiles are composed today, each verified by the
+corpus differential; the other profiles remain authoritative and their totals are unchanged.
 
 ## Generating and replaying behavior
 
