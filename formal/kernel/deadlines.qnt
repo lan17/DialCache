@@ -17,7 +17,6 @@ module deadlines {
   import calls.* from "./calls"
   import layer_policy.* from "./layer-policy"
   import serving as Serving from "./serving"
-  import policy_gate as Gate from "./policy-gate"
   import clock as Clock from "./clock"
 
   pure val UNBOUNDED = -1

@@ -20,7 +20,7 @@ design and its history; this file describes what is here and how to use it.
 | `remote_frames` | Remote frames with creation stamps, per-entity watermarks and fences (`cache_rules.fenceAllows`) | `seedFrame`, `raiseWatermark`, `readableFrame`, `missFence`, `writeAllowed` |
 | `flights` | Source executions (a record of outcome and process sharing, with whatever payload the traversal that started it needs), the process and request registries that coalesce callers, and per caller its owner and memo slot; an opt-in record of the identity each caller asked for | `processOwner`, `requestOwner`, `admitCaller`, `attachCaller`, `joinRequestFlight`, `registerSource`, `settleSource`, `forgetScope`, `ownedBy`, `recordIdentity` |
 | `clock` | Elapsed time | `advance` |
-| `policy_gate` | Callers whose policy reply the environment holds, with their calls, indexed by their policy call | `hold`, `holding`, `latest`, `entry`, `release` |
+| `policy_gate` | Callers whose policy reply the environment holds, with their calls, indexed by their policy call | `hold`, `holding`, `holds`, `latest`, `entry`, `release` |
 | `serving` | Admission, traversal order (`decide`), ownership precedence, publication and refill authority, scope closure, maintenance; the layered shape and its local and request-only projections | `admit`, `release`, `begin`, `settle`, `admitLocal`, `releaseLocal`, `settleLocal`, `admitRequest`, `releaseRequest`, `settleRequest`, `closeScope`, `invalidate` |
 | `deadlines` | Source budgets: the budget a source starts with (a source started at admission is bounded only when its key failed, C27, a disabled context and an outside call run theirs unbounded, C01; a source started at release is bounded, its caller was enabled when admitted), the deadline measured from the source's own start, expiry on timer delivery or late arrival, abandoned work draining, as budgeted variants of the local lifecycle | `admitLocal`, `releaseLocal`, `settleLocal`, `advanceLocal` |
 | `diagnostics` | The diagnostics channel: the singleflight a caller coalesced into and the layer a failed source is attributed to, as diagnosed variants of the request-only traversal | `admitRequest`, `releaseRequest`, `settleRequest` |
@@ -78,8 +78,8 @@ which joins a pending flight, serves the memo, the local value, the remote
 value, or starts a source): the layered shape (`admit`, `release`, `settle`
 over `Served`, whose source record `LayeredSource` carries publication
 authority), the local projection (`admitLocal`, `releaseLocal`, `settleLocal`
-over `LocalServed`, one instance and one key without a remote layer, whose
-`LocalSource` carries only whether it may warm local storage) and the
+over `LocalServed`, without a remote layer, whose `LocalSource` carries the
+identity it serves and whether it may warm local storage) and the
 request-only projection (`admitRequest`, `releaseRequest`, `settleRequest`
 over `RequestServed`, whose `RequestSource` carries none and whose state names
 no storage or clock). A projection exists only where the layered shape cannot

@@ -13,8 +13,9 @@ module serving {
   // The traversal comes in three shapes over the same order (`decide`): the
   // layered one (`admit`, `release`, `settle`) over every layer; the local
   // projection (`admitLocal`, `releaseLocal`, `settleLocal`) for a profile
-  // without remote storage, whose source record carries only whether it may
-  // warm local storage; and the request-only projection (`admitRequest`,
+  // without remote storage, whose source record carries the identity it
+  // serves and whether it may warm local storage; and the request-only
+  // projection (`admitRequest`,
   // `releaseRequest`, `settleRequest`) for a profile whose only layer is the
   // request memo, which carries no storage, no clock and a source record
   // without publication payload. A projection exists only where the layered
@@ -42,11 +43,11 @@ module serving {
   // A source record is flights::Source over the payload the traversal needs to
   // publish: a layered source carries its publication authority (the identity
   // it serves, whether it may warm local storage, whether it read the remote
-  // layer and the fence it observed); a local source carries only whether it
-  // may warm local storage (one instance, one key); a request-only source
+  // layer and the fence it observed); a local source carries the identity it
+  // serves and whether it may warm local storage; a request-only source
   // carries none.
   type LayeredPayload = { instance: int, key: int, local: bool, remote: bool, fence: int }
-  type LocalPayload = { local: bool }
+  type LocalPayload = { instance: int, key: int, local: bool }
   type LayeredSource = Flights::Source[LayeredPayload]
   type LocalSource = Flights::Source[LocalPayload]
   type RequestSource = Flights::Source[{}]
@@ -78,8 +79,8 @@ module serving {
     created: List[int],
     watermark: List[int] | r
   }, LayeredPayload]
-  // One instance and one key: local storage, the process registry and the
-  // clock, without request memo rows to index or a remote layer.
+  // The local projection: the clock, the local capacity and local storage,
+  // without a remote layer.
   type LocalServed[r] = Traversed[{
     now: int,
     capacity: int,
@@ -173,7 +174,7 @@ module serving {
   }
   pure def startLocalSource(state: LocalServed[r], layout: Layout, caller: int, call: Call, slot: int, participating: bool, resolved: Resolution): LocalServed[r] =
     Flights::registerSource(started(state, layout, participating),
-      { local: resolved.layers.local, result: CALL_PENDING, shared: resolved.coalesce and sharedLayers(resolved.layers) },
+      { instance: call.instance, key: call.key, local: resolved.layers.local, result: CALL_PENDING, shared: resolved.coalesce and sharedLayers(resolved.layers) },
       caller, slot, resolved.coalesce, identity(layout, call))
   pure def startRequestSource(state: RequestServed[r], layout: Layout, caller: int, call: Call, slot: int, participating: bool, resolved: Resolution): RequestServed[r] =
     Flights::registerSource(started(state, layout, participating),
@@ -356,10 +357,11 @@ module serving {
       Local::putLocal(recorded, source.instance, source.key, value, layout.localTtlMs, layout.keysPerInstance) else recorded
     finish(warmed, layout, index, value)
   }
-  // A local accepted value warms local storage when the flight may.
+  // A local accepted value warms the identity's local slot when the flight may.
   pure def settleLocal(state: LocalServed[r], layout: Layout, index: int, value: int): LocalServed[r] = {
     val source = state.sources.nth(index)
-    val warmed = if (accepted(value) and source.local) Local::putLocal(state, 0, 0, value, layout.localTtlMs, layout.keysPerInstance) else state
+    val warmed = if (accepted(value) and source.local)
+      Local::putLocal(state, source.instance, source.key, value, layout.localTtlMs, layout.keysPerInstance) else state
     finish(warmed, layout, index, value)
   }
   pure def settleRequest(state: RequestServed[r], layout: Layout, index: int, value: int): RequestServed[r] =

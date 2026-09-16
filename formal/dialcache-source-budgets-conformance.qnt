@@ -245,4 +245,6 @@ module dialcache_source_budgets_conformance {
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loaders == 1)
     .then(advanced(1)).then(begin(ENABLED)).then(release(2))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, CALL_PENDING) and s.o.loaders == 2)
+    .then(resolved(1, VALUE_TWO)).then(begin(ENABLED)).then(release(3))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_TWO, VALUE_TWO) and s.o.loaders == 2)
 }
