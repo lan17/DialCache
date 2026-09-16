@@ -4,7 +4,6 @@ module flights {
   // is the source that will complete it (NO_OWNER for a caller served from a
   // layer). Settling a source clears every registry slot that named it, so a
   // finished flight never coalesces a later caller.
-  import conformance_observations.* from "../conformance-observations"
 
   import encodings.* from "./encodings"
 

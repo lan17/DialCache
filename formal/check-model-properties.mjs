@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readExecution, reproducerCheckpoint, validateExecution } from './execution.mjs';
+import { quintSources, readExecution, reproducerCheckpoint, validateExecution } from './execution.mjs';
 import { printGroup, resolveConcurrency, runPool, seconds, spawnBuffered } from './quint-pool.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -84,13 +84,7 @@ export async function measureModelProperties({ only, concurrency = resolveConcur
   const { settings, check } = manifest;
   const options = [`--backend=${settings.backend}`, `--n-threads=${settings.threads}`, `--seed=${settings.seed}`,
     `--max-samples=${check.maxSamples}`, `--max-steps=${check.maxSteps}`];
-  // Every Quint source a model can import: the scheduled models and libraries
-  // at formal/ and the kernel library at formal/kernel/.
-  const files = [
-    ...readdirSync(resolve(root, 'formal')).filter(name => name.endsWith('.qnt')).map(name => `formal/${name}`),
-    ...readdirSync(resolve(root, 'formal/kernel')).filter(name => name.endsWith('.qnt')).map(name => `formal/kernel/${name}`),
-  ].sort();
-  const sources = new Map(files.map(path => [path, readFileSync(resolve(root, path), 'utf8')]));
+  const sources = new Map(quintSources().map(path => [path, readFileSync(resolve(root, path), 'utf8')]));
   mkdirSync(output, { recursive: true });
   const report = { schemaVersion: 4, complete: false, partial: only !== undefined, mode: 'bounded-simulation', options,
     sources: Object.fromEntries([...sources].map(([path, source]) => [path, createHash('sha256').update(source).digest('hex')])),

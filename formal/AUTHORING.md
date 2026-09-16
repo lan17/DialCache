@@ -95,25 +95,32 @@ that reaches them. The composition rule walks every value a profile assigns to
 a state variable other than `input` and fails on any comparison, branch,
 arithmetic or collection operator over cache state, and on any non-library
 definition applied to cache state; library modules (`formal/kernel`, `cache_rules`)
-compute freely. Witness isolation fails on any reference to a variable matching
-the witness pattern from a cache guard or assignment, `init` or `step`, a
-`nondet` domain, the definition assigning the observation field (`o` unless
-`--observation` says otherwise) or an operator constant's body; a witness
-assignment may read its own prior state.
+compute freely, a chosen `nondet` input carries no state, and the `input`
+assignment may branch on state. Witness isolation fails on any reference to a
+variable matching the witness pattern from a cache guard or assignment, `init`
+or `step`, a `nondet` domain, the definition assigning the observation field
+(`o` unless `--observation` says otherwise) or an operator constant's body; a
+witness assignment may read its own prior state.
 [`profile-lint-baseline.json`](./profile-lint-baseline.json) records, per
 conformance profile, the definitions its public actions reach and assign state,
 the library transitions it composes and its composition-violation count: a
 composed profile reports zero and the other counts are the migration work list
-for issue #165; `node formal/lint-profiles.mjs baseline
-lane runs without Quint.
+for issue #165. `node formal/lint-profiles.mjs baseline --check` fails when a
+profile drifts from the recorded baseline and `--write` refreshes it after a
+reviewed change; the check runs in `make differential` (the pull request lane)
+and `make formal-check` (the full run), the lanes that have Quint. `make audit`
+runs without Quint and does not include it.
 
 The [kernel library](./kernel/README.md) holds the concern modules a composed
 profile assigns through; `formal/dialcache-layers-conformance.qnt` is the first.
 A rewrite lands only when `node formal/differential.mjs <profile>` replays the
-profile's whole reference corpus and exported regressions through the new text
-with step-by-step agreement. Compare the same recorded inputs before attributing
-a change in observations to the rewrite. Reusing a random seed does not preserve
-an input history when a model's choice structure changes.
+profile's whole reference corpus and exported regressions through the new text,
+and the new text's corpus through the old, with step-by-step agreement on every
+driver-asserted channel; an intended change of behavior is declared by bumping
+the model's `differential.behaviorVersion` in the manifest instead. Compare the
+same recorded inputs before attributing a change in observations to the
+rewrite. Reusing a random seed does not preserve an input history when a
+model's choice structure changes.
 
 Connection models advance the imported profile and save its preceding context
 in the same `all` action. Views such as `acquired` and `observedSources` combine

@@ -19,9 +19,7 @@
     "formal/cohort-boundaries.qnt",
     "formal/wire-text.qnt",
     "formal/cache-rules.qnt",
-    "formal/cache-contract.qnt"
-  ],
-  "kernel": [
+    "formal/cache-contract.qnt",
     "formal/kernel/encodings.qnt",
     "formal/kernel/layer-policy.qnt",
     "formal/kernel/request-memo.qnt",

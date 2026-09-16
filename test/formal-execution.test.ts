@@ -42,11 +42,11 @@ const { bindGeneratedTrace } = await import(new URL("../formal/run-models.mjs", 
 };
 // Exercise pure metadata checks directly: large catalogs must not depend on
 // synchronous stdin pipes. The CLI dry-run check below still tests the launcher.
-const validate = (value: unknown, options?: { grandfathered?: readonly string[] }) => validateExecution(value, options);
+const validate = (value: unknown, options?: { readSource?(path: string): string; grandfathered?: readonly string[] }) => validateExecution(value, options);
 
 describe("formal execution schedule", () => {
   it("accounts for all models, selected invariants, regressions, generated traces and challenges without Quint", () => {
-    expect(validate(manifest())).toEqual({ models: 32, libraries: 5, profiles: 15, invariants: 217, regressions: 406,
+    expect(validate(manifest())).toEqual({ models: 32, libraries: 13, profiles: 15, invariants: 217, regressions: 406,
       generatedTraces: 5280, exportedRegressionTraces: 239, vectorModels: 4, generatedVectors: 1631,
       challenges: 67, distinctFaults: 64, challengedModels: 32, waivedModels: 0, reproducers: 7, reproducerBacklog: 60 });
   });
@@ -64,6 +64,40 @@ describe("formal execution schedule", () => {
     const renamedTest = manifest();
     renamedTest.models[0]!.regressions[0] = "renamedWithoutSuffix";
     expect(() => validate(renamedTest)).toThrow(/Test suffix/);
+  });
+
+  it("inventories the kernel library modules as libraries and keeps them pure", () => {
+    const listed = manifest().libraries.filter(path => path.startsWith("formal/kernel/"));
+    expect(listed.length).toBeGreaterThanOrEqual(8);
+    const unlisted = manifest();
+    unlisted.libraries = unlisted.libraries.filter(path => path !== "formal/kernel/serving.qnt");
+    expect(() => validate(unlisted)).toThrow(/file inventory changed/);
+    const nested = manifest();
+    nested.libraries[nested.libraries.indexOf("formal/kernel/serving.qnt")] = "formal/kernel/deep/serving.qnt";
+    expect(() => validate(nested)).toThrow(/file inventory changed/);
+    const stateful = manifest();
+    const kernelSource = readFileSync(new URL("../formal/kernel/clock.qnt", import.meta.url), "utf8");
+    expect(() => validate(stateful, { readSource: (path: string) => path === "formal/kernel/clock.qnt" ? kernelSource.replace("type Timed[r]", "var leaked: int\n  type Timed[r]") : readFileSync(new URL(`../${path}`, import.meta.url), "utf8") }))
+      .toThrow(/formal\/kernel\/clock\.qnt: a stateful model cannot be classified as a pure helper library/);
+  });
+
+  it("validates a composed profile's differential settings", () => {
+    const layers = () => { const m = manifest(); return { m, model: m.models.find(model => model.profile === "layers")! as typeof m.models[number] & { differential?: unknown } }; };
+    const versioned = layers();
+    versioned.model.differential = { behaviorVersion: 1, maxBytesPerStateRatio: 1.3 };
+    expect(() => validate(versioned.m)).not.toThrow();
+    const zero = layers();
+    zero.model.differential = { behaviorVersion: 0 };
+    expect(() => validate(zero.m)).toThrow(/behaviorVersion must be a positive integer/);
+    const loose = layers();
+    loose.model.differential = { maxBytesPerStateRatio: 0.9 };
+    expect(() => validate(loose.m)).toThrow(/maxBytesPerStateRatio must be at least 1/);
+    const unknown = layers();
+    unknown.model.differential = { preserve: true };
+    expect(() => validate(unknown.m)).toThrow(/unsupported differential settings/);
+    const empty = layers();
+    empty.model.differential = {};
+    expect(() => validate(empty.m)).toThrow(/unsupported differential settings/);
   });
 
   it("rejects invalid exploration bounds and unsafe generation output paths", () => {

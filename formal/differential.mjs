@@ -1,59 +1,62 @@
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, dirname, resolve } from 'node:path';
+import { dirname, posix, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
-import { readExecution, root, validateExecution } from './execution.mjs';
-import { constrainAction } from './generated-fixtures.mjs';
+import { quintSources, readExecution, root, validateExecution } from './execution.mjs';
+import { parseWithSourceMap, scheduleHistories, spliceDeclarations } from './generated-fixtures.mjs';
 import { CommandFailure, printGroup, resolveConcurrency, runPool, seconds, spawnBuffered } from './quint-pool.mjs';
-import { profiles } from './replay/features.mjs';
+import { parseTrace, profiles } from './replay/features.mjs';
 import { generationArguments } from './run-models.mjs';
 
-// Corpus differential for a profile rewrite (#165).
+// Corpus differential for a composed profile (#165).
 //
-// A rewritten profile must reproduce every history its previous text produced:
-// the reference text (a git revision, normally the merge base) generates the
-// profile's sampled corpus and exports its regressions with the lane's own
-// command and seed; every history is then replayed through the working tree's
-// text as a deterministic schedule of its public inputs, and the driver-
-// asserted observation is compared at every step. Any disagreement fails.
+// A profile rewrite must reproduce every history its previous text produced,
+// and a library change must not move a composed profile's behavior by
+// accident. The reference text (the merge base with a revision, normally the
+// base branch) generates the profile's sampled corpus and exports its
+// regressions with its own manifest entry and the lane's command; the working
+// tree does the same. Every reference history is replayed through the
+// candidate text as a deterministic schedule of its public inputs and every
+// driver-asserted channel of the step is compared; every candidate history is
+// replayed through the reference text the same way, so a candidate that
+// enables inputs the reference rejected also disagrees. Trace bytes per state
+// may not grow beyond the model's bound; generation wall time is recorded.
+//
+// An intended change of observable behavior is declared, not smuggled: the
+// model's `differential.behaviorVersion` in formal/execution.json (or the
+// profile's observation schema version in formal/profiles.json) differs
+// between the two revisions, and the profile is reported as an intended
+// divergence instead of compared. A profile the reference revision does not
+// generate is reported as new.
 //
 // Replays are batched: one `quint test` process replays a chunk of histories
-// through generated runs built from constrained action clones (the same
-// constraint generated-fixtures.mjs applies to fixture recipes). Each history
-// becomes a flat scheduler action selected by a cursor and repeated with
+// through generated runs built from constrained action clones shared across
+// the chunk (generated-fixtures.mjs scheduleHistories, the same schedules
+// fixture recipes use), each history a cursor-driven step repeated with
 // `reps`, because a `.then` chain of eighty steps exceeds the evaluator's
-// recursion limit and one process holding hundreds of runs grows superlinearly.
-//
-// Cost is measured in the same job: the reference and the candidate generate
-// the corpus with identical arguments, and the report records the wall-time
-// and bytes-per-state ratios the migration criteria bound.
-export const defaultChunk = 64;
+// recursion limit. Per-run cost grows with the schedules a process holds while
+// per-process cost shrinks with fewer processes; 16 histories per process
+// measured fastest (15.5 s versus 21.9 s for 64 histories at 64 per process).
+export const defaultChunk = 16;
 export const defaultOutput = '.formal-traces/differential';
+export const defaultMaxBytesPerStateRatio = 1.2;
+export const advisoryWallRatio = 1.5;
 export const cursorVariable = 'replayCursor';
 
-export function quintSources(directory) {
-  const files = [];
-  for (const relativeDirectory of ['formal', 'formal/kernel']) {
-    const absolute = resolve(directory, relativeDirectory);
-    if (!existsSync(absolute)) continue;
-    for (const name of readdirSync(absolute)) if (name.endsWith('.qnt')) files.push(`${relativeDirectory}/${name}`);
-  }
-  return files.sort();
-}
+const gitShow = (revision, path, cwd) => execFileSync('git', ['show', `${revision}:${path}`], { cwd, encoding: 'utf8', maxBuffer: 1 << 26 });
 
-// The reference tree: every Quint source at the given revision, checked out
-// into a scratch directory so relative imports resolve as they do in the repo.
+// The reference tree: every Quint source and the manifests at the revision,
+// checked out into a scratch directory so relative imports resolve as in the repo.
 export function exportRevision(revision, directory, { cwd = root } = {}) {
   const listing = execFileSync('git', ['ls-tree', '-r', '--name-only', revision, '--', 'formal'], { cwd, encoding: 'utf8' })
-    .split('\n').filter(path => /^formal\/(kernel\/)?[\w-]+\.qnt$/.test(path));
-  if (!listing.length) throw new Error(`Revision ${revision} has no Quint sources under formal/`);
+    .split('\n').filter(path => /^formal\/(kernel\/)?[\w-]+\.qnt$/.test(path) || path === 'formal/execution.json' || path === 'formal/profiles.json');
+  if (!listing.includes('formal/execution.json')) throw new Error(`Revision ${revision} has no formal/execution.json`);
   for (const path of listing) {
-    const text = execFileSync('git', ['show', `${revision}:${path}`], { cwd, encoding: 'utf8', maxBuffer: 1 << 26 });
     mkdirSync(resolve(directory, dirname(path)), { recursive: true });
-    writeFileSync(resolve(directory, path), text);
+    writeFileSync(resolve(directory, path), gitShow(revision, path, cwd));
   }
   return listing;
 }
@@ -71,78 +74,83 @@ export function resolveMergeBase(revision, { cwd = root } = {}) {
   return execFileSync('git', ['merge-base', 'HEAD', revision], { cwd, encoding: 'utf8' }).trim();
 }
 
-// One history: the public inputs the trace recorded and the observation the
-// drivers assert after each of them.
-export function historyOf(raw, path, profile) {
-  const { parseTrace } = featureParsers;
-  const trace = parseTrace(raw, path, profile);
-  return { path, steps: trace.steps.map(step => ({ action: step.action, choice: step.choice, expected: step.expected })) };
+// The reference manifests are read as recorded at their revision and checked
+// only for the shape this tool consumes; the working tree's validator applies
+// to the working tree's inventory, not to another revision's.
+export function readManifests(directory) {
+  const execution = JSON.parse(readFileSync(resolve(directory, 'formal/execution.json'), 'utf8'));
+  const registry = JSON.parse(readFileSync(resolve(directory, 'formal/profiles.json'), 'utf8'));
+  if (!Array.isArray(execution.models) || !execution.settings || !Array.isArray(registry.profiles)) throw new Error(`${directory}: unsupported manifests`);
+  return { execution, registry };
 }
-const featureParsers = await import('./replay/features.mjs');
-
-export function parsedModule(parsed, name) {
-  const module = parsed.modules.find(candidate => candidate.name === name);
-  if (!module) throw new Error(`Parsed output has no module ${name}`);
-  return module;
+function generationModel(manifests, profileId) {
+  const model = manifests.execution.models.find(candidate => candidate.profile === profileId);
+  if (!model || !model.generate || typeof model.path !== 'string' || !Array.isArray(model.invariants)) return undefined;
+  const entry = manifests.registry.profiles.find(candidate => candidate.id === profileId);
+  return { ...model, behaviorVersion: model.differential?.behaviorVersion ?? 0, schemaVersion: entry?.version ?? null,
+    maxBytesPerStateRatio: model.differential?.maxBytesPerStateRatio ?? defaultMaxBytesPerStateRatio, settings: manifests.execution.settings };
 }
 
-// A replay module: the candidate profile text plus, before its closing brace,
-// a cursor variable, one constrained clone per distinct (action, choice) and,
-// per history, a scheduler action and a run. `initClone` replaces the model's
-// own `init` so the fixture choice is the history's.
-export function replayModule(source, declarations, sourceMap, histories, { module }) {
-  const clones = new Map();
-  const additions = [];
-  const clone = (action, choice) => {
-    const key = `${action}/${choice}`;
-    if (!clones.has(key)) {
-      const declaration = declarations.get(action);
-      if (!declaration) throw new Error(`${module} has no public action ${action}`);
-      const name = `replayAction${clones.size}`;
-      additions.push(`  action ${name} = ${constrainAction(source, declaration, sourceMap, choice)}`);
-      clones.set(key, name);
-    }
-    return clones.get(key);
-  };
-  const runs = [];
-  for (const [position, history] of histories.entries()) {
-    const calls = history.steps.map(step => clone(step.action, step.choice));
-    const scheduled = calls.slice(1).map((call, cursor) => `all { ${cursorVariable} == ${cursor}, ${call}, ${cursorVariable}' = ${cursor + 1} }`);
-    runs.push(`  action replaySchedule${position} = any { ${scheduled.join(', ')} }`);
-    runs.push(`  run replay${position} = all { ${calls[0]}, ${cursorVariable}' = 0 }.then((${calls.length - 1}).reps(_ => replaySchedule${position}))`);
+// What to do for one profile given both revisions' manifests.
+export function differentialPlan(referenceManifests, candidateManifests, profileId) {
+  const candidate = generationModel(candidateManifests, profileId);
+  if (!candidate) throw new Error(`No generation profile named ${profileId} in formal/execution.json`);
+  const descriptor = profiles[profileId];
+  if (!descriptor || !descriptor.explicitInputs) throw new Error(`Profile ${profileId} has no explicit-input feature descriptor; the differential replays explicit inputs only`);
+  const reference = generationModel(referenceManifests, profileId);
+  if (!reference) return { action: 'skip', reason: 'new profile: the reference revision does not generate it', candidate, descriptor };
+  if (reference.behaviorVersion !== candidate.behaviorVersion) {
+    return { action: 'skip', reason: `intended divergence: behaviorVersion ${reference.behaviorVersion} -> ${candidate.behaviorVersion}`, reference, candidate, descriptor };
   }
-  const end = source.lastIndexOf('}');
-  if (end === -1) throw new Error('Candidate module has no closing brace');
-  const text = `${source.slice(0, end)}\n  var ${cursorVariable}: int\n${additions.join('\n')}\n${runs.join('\n')}\n${source.slice(end)}`;
-  return { text, clones: clones.size, runs: histories.length };
+  if (reference.schemaVersion !== candidate.schemaVersion) {
+    return { action: 'skip', reason: `intended divergence: observation schema version ${reference.schemaVersion} -> ${candidate.schemaVersion}`, reference, candidate, descriptor };
+  }
+  return { action: 'compare', reference, candidate, descriptor };
 }
 
-// Step-by-step comparison; the first disagreement names the step, the input
-// and the observation fields that differ.
+// One history: the public inputs the trace recorded and every channel the
+// drivers assert after each of them (parseTrace's step minus its path).
+export function historyOf(raw, path, descriptor) {
+  return { path, steps: parseTrace(raw, path, descriptor).steps };
+}
+
+// The step-by-step comparison. Inputs are compared first; then every asserted
+// channel of the step, naming the differing channel and field.
+function differing(expected, actual, prefix = '') {
+  if (isDeepStrictEqual(expected, actual)) return [];
+  const composite = value => value !== null && typeof value === 'object';
+  if (composite(expected) && composite(actual) && Array.isArray(expected) === Array.isArray(actual)) {
+    const keys = Array.isArray(expected) ? [...Array(Math.max(expected.length, actual.length)).keys()] : Object.keys({ ...expected, ...actual }).sort();
+    return keys.flatMap(key => differing(expected[key], actual[key], `${prefix}${key}.`));
+  }
+  return [`${prefix.slice(0, -1)} ${JSON.stringify(actual)} (reference ${JSON.stringify(expected)})`];
+}
 export function compareHistory(reference, replayed) {
   const length = Math.min(reference.steps.length, replayed.steps.length);
   for (let index = 0; index < length; index++) {
-    const expected = reference.steps[index], actual = replayed.steps[index];
-    if (expected.action !== actual.action || expected.choice !== actual.choice) {
-      return { agree: false, step: index, reason: `input ${actual.action}/${actual.choice} replaces ${expected.action}/${expected.choice}` };
+    const { action, choice, ...expected } = reference.steps[index];
+    const { action: replayedAction, choice: replayedChoice, ...actual } = replayed.steps[index];
+    if (action !== replayedAction || choice !== replayedChoice) {
+      return { agree: false, step: index, reason: `input ${replayedAction}/${replayedChoice} replaces ${action}/${choice}` };
     }
-    if (!isDeepStrictEqual(expected.expected, actual.expected)) {
-      const fields = Object.keys({ ...expected.expected, ...actual.expected })
-        .filter(field => !isDeepStrictEqual(expected.expected[field], actual.expected[field])).sort();
-      return { agree: false, step: index, action: expected.action, choice: expected.choice, fields,
-        reason: `observation differs after ${expected.action}/${expected.choice} at step ${index}: ${fields.map(field =>
-          `${field} ${JSON.stringify(actual.expected[field])} (reference ${JSON.stringify(expected.expected[field])})`).join('; ')}` };
+    const fields = differing(expected, actual);
+    if (fields.length) {
+      return { agree: false, step: index, action, choice, fields: fields.map(field => field.split(' ')[0]),
+        reason: `observation differs after ${action}/${choice} at step ${index}: ${fields.join('; ')}` };
     }
   }
   if (reference.steps.length !== replayed.steps.length) {
-    return { agree: false, step: length, reason: `replay has ${replayed.steps.length} states, reference ${reference.steps.length}` };
+    const refused = reference.steps[length];
+    return { agree: false, step: length, ...(refused ? { action: refused.action, choice: refused.choice } : {}),
+      reason: refused ? `${refused.action}/${refused.choice} refused at step ${length} (replay has ${replayed.steps.length} states, reference ${reference.steps.length})`
+        : `replay has ${replayed.steps.length} states, reference ${reference.steps.length}` };
   }
   return { agree: true };
 }
 
-function sha256(text) { return createHash('sha256').update(text).digest('hex'); }
+const sha256 = text => createHash('sha256').update(text).digest('hex');
 
-// Bytes per state over a directory of traces: the generation-cost signal the
+// Bytes per state over a directory of traces: the trace-size signal the
 // migration criteria bound (a rewrite must not grow what every reader parses).
 export function bytesPerState(directory) {
   let bytes = 0, states = 0, traces = 0;
@@ -168,165 +176,243 @@ async function quint(args, { cwd, timeoutMs = 900_000 }) {
   return result;
 }
 
-export async function generateCorpus(tree, model, { seed, outputDirectory, timeoutMs }) {
-  const manifest = model.manifest;
+// Generate a tree's corpus and exported regressions with that tree's own
+// manifest entry: the lane's command, seed, invariants and bounds as recorded there.
+export async function generateCorpus(tree, model, { timeoutMs } = {}) {
+  const outputDirectory = model.generate.outputDirectory;
   const directory = resolve(tree, outputDirectory);
   rmSync(directory, { recursive: true, force: true });
   mkdirSync(directory, { recursive: true });
-  const args = generationArguments(model.path, model.generate, model.invariants, { settings: manifest.settings, seed, outputDirectory });
+  const args = generationArguments(model.path, model.generate, model.invariants, { settings: model.settings, seed: model.settings.seed, outputDirectory });
   const generation = await quint(args, { cwd: tree, timeoutMs });
   if (generation.status !== 0) throw new CommandFailure(`generation of ${model.path} failed (exit ${generation.status}):\n${generation.stderr}${generation.stdout}`, generation);
   const regressions = `${outputDirectory}-regressions`;
   let exported = { durationMs: 0 };
+  rmSync(resolve(tree, regressions), { recursive: true, force: true });
+  mkdirSync(resolve(tree, regressions), { recursive: true });
   if (model.replayRegressions?.length) {
-    rmSync(resolve(tree, regressions), { recursive: true, force: true });
-    mkdirSync(resolve(tree, regressions), { recursive: true });
-    exported = await quint(['test', model.path, `--backend=${manifest.settings.backend}`, '--max-samples=1', `--seed=${seed}`,
+    exported = await quint(['test', model.path, `--backend=${model.settings.backend}`, '--max-samples=1', `--seed=${model.settings.seed}`,
       `--match=^(${model.replayRegressions.join('|')})$`, `--out-itf=${regressions}/{test}.itf.json`], { cwd: tree, timeoutMs });
     if (exported.status !== 0) throw new CommandFailure(`regression export of ${model.path} failed (exit ${exported.status}):\n${exported.stderr}${exported.stdout}`, exported);
   }
-  const files = readdirSync(directory).filter(name => name.endsWith('.itf.json')).sort();
+  const files = readdirSync(directory).filter(name => name.endsWith('.itf.json'));
   if (files.length !== model.generate.traces) throw new Error(`${model.path} generated ${files.length} traces, expected ${model.generate.traces}`);
   return { directory, regressions: resolve(tree, regressions), generationMs: generation.durationMs, regressionMs: exported.durationMs,
     log: generation.stdout + generation.stderr };
 }
 
-export function loadHistories(directory, profile) {
+export function loadHistories(directory, descriptor) {
   if (!existsSync(directory)) return [];
   return readdirSync(directory).filter(name => name.endsWith('.itf.json')).sort()
-    .map(name => historyOf(JSON.parse(readFileSync(resolve(directory, name), 'utf8')), name, profile));
+    .map(name => historyOf(JSON.parse(readFileSync(resolve(directory, name), 'utf8')), name, descriptor));
 }
 
-// Replay every history through the candidate text in chunks; returns one
-// verdict per history in input order.
-export async function replayHistories(candidateTree, model, profile, histories, { chunk, seed, output, concurrency }) {
+// A run that stops early still writes its trace: the agreeing prefix plus one
+// trailing state that carries only #meta. Only states recording a step count.
+export function recordedStates(raw) {
+  const states = Array.isArray(raw.states) ? raw.states : [];
+  let end = states.length;
+  while (end > 0 && (states[end - 1].s === undefined || states[end - 1].input === undefined)) end--;
+  return { ...raw, states: states.slice(0, end) };
+}
+
+// The evaluator's diagnostic for one failed run in a `quint test` log:
+// `N) <run>:` followed by the error line.
+export function runDiagnostic(log, run) {
+  const match = new RegExp(`^\\s*\\d+\\)\\s+${run}:\\s*\\n([\\s\\S]*?)(?=^\\s*\\d+\\)\\s+\\w+:|$(?![\\s\\S]))`, 'm').exec(log);
+  const line = match?.[1].split('\n').map(text => text.trim()).find(text => /QNT\d+|error/i.test(text));
+  return line ?? null;
+}
+
+// Replay histories through a tree's text in chunks; one verdict per history in
+// input order. `model` is the tree's own manifest entry.
+export async function replayHistories(tree, model, descriptor, histories, { chunk, output, concurrency }) {
   if (!histories.length) return [];
   const parseDirectory = mkdtempSync(resolve(tmpdir(), 'dialcache-differential-parse-'));
   let parsed, sourceMap;
   try {
-    const parse = await quint(['parse', model.path, `--out=${parseDirectory}/parsed.json`, `--source-map=${parseDirectory}/map.json`], { cwd: candidateTree });
-    if (parse.status !== 0) throw new CommandFailure(`quint parse ${model.path} failed:\n${parse.stderr}`, parse);
-    parsed = JSON.parse(readFileSync(`${parseDirectory}/parsed.json`, 'utf8'));
-    sourceMap = JSON.parse(readFileSync(`${parseDirectory}/map.json`, 'utf8'));
+    ({ parsed, sourceMap } = await parseWithSourceMap(model.path, parseDirectory, async args => {
+      const result = await quint(args, { cwd: tree });
+      if (result.status !== 0) throw new CommandFailure(`quint parse ${model.path} failed:\n${result.stderr}`, result);
+    }));
   } finally { rmSync(parseDirectory, { recursive: true, force: true }); }
   const moduleName = parsed.modules.at(-1).name;
-  const declarations = new Map(parsedModule(parsed, moduleName).declarations.map(declaration => [declaration.name, declaration]));
-  const source = readFileSync(resolve(candidateTree, model.path), 'utf8');
-  const chunks = chunked(histories, chunk);
-  const results = await runPool(chunks.map((batch, position) => async () => {
+  const declarations = new Map(parsed.modules.find(candidate => candidate.name === moduleName).declarations.map(declaration => [declaration.name, declaration]));
+  const source = readFileSync(resolve(tree, model.path), 'utf8');
+  const results = await runPool(chunked(histories, chunk).map((batch, position) => async () => {
     const workspace = resolve(output, `replay-${position}`);
     rmSync(workspace, { recursive: true, force: true });
-    copySources(candidateTree, workspace);
-    const replay = replayModule(source, declarations, sourceMap, batch, { module: moduleName });
+    copySources(tree, workspace);
+    let schedule;
+    try {
+      schedule = scheduleHistories(source, declarations, sourceMap, batch.map(history => history.steps.map(step => [step.action, step.choice])),
+        { prefix: 'replay', cursor: cursorVariable });
+    } catch (error) {
+      // The tree lacks a public action a history took: every history of the
+      // chunk that took it disagrees; the others are replayed without it.
+      const missing = /no public action (\w+)/.exec(error.message)?.[1];
+      if (!missing) throw error;
+      const affected = batch.map(history => history.steps.some(step => step.action === missing));
+      const rest = await replayHistories(tree, model, descriptor, batch.filter((_, index) => !affected[index]), { chunk, output: resolve(workspace, 'rest'), concurrency });
+      let next = 0;
+      return batch.map((history, index) => affected[index]
+        ? { path: history.path, agree: false, step: history.steps.findIndex(step => step.action === missing), reason: `${moduleName} has no public action ${missing}` }
+        : rest[next++]);
+    }
+    const runs = schedule.schedules.flatMap((entry, index) => [
+      ...(entry.steps ? [`action replaySchedule${index} = ${entry.step}`] : []),
+      `run replay${index} = ${entry.steps ? `(${entry.init}).then((${entry.steps}).reps(_ => replaySchedule${index}))` : entry.init}`,
+    ]);
     const modelPath = resolve(workspace, model.path);
-    writeFileSync(modelPath, replay.text);
+    writeFileSync(modelPath, spliceDeclarations(source, [...schedule.declarations, ...runs]));
     const traces = resolve(workspace, 'traces');
     mkdirSync(traces);
-    const test = await quint(['test', modelPath, `--backend=${model.manifest.settings.backend}`, '--max-samples=1', `--seed=${seed}`,
+    const test = await quint(['test', modelPath, `--backend=${model.settings.backend}`, '--max-samples=1', `--seed=${model.settings.seed}`,
       '--match=^replay\\d+$', `--out-itf=${traces}/{test}.itf.json`], { cwd: workspace });
-    writeFileSync(resolve(workspace, 'quint-test.log'), test.stdout + test.stderr);
+    const log = test.stdout + test.stderr;
+    writeFileSync(resolve(workspace, 'quint-test.log'), log);
     return batch.map((history, index) => {
       const file = resolve(traces, `replay${index}.itf.json`);
-      if (!existsSync(file)) return { path: history.path, agree: false, step: 0, reason: `no replay trace (quint test exit ${test.status}); see ${workspace}/quint-test.log` };
+      const diagnostic = runDiagnostic(log, `replay${index}`);
+      if (!existsSync(file)) return { path: history.path, agree: false, step: 0, reason: `no replay trace (quint test exit ${test.status}${diagnostic ? `; ${diagnostic}` : ''}); see ${workspace}/quint-test.log` };
       let replayed;
-      try { replayed = historyOf(JSON.parse(readFileSync(file, 'utf8')), history.path, profile); }
+      try { replayed = historyOf(recordedStates(JSON.parse(readFileSync(file, 'utf8'))), history.path, descriptor); }
       catch (error) { return { path: history.path, agree: false, step: 0, reason: `replay trace unreadable: ${error.message}` }; }
-      return { path: history.path, ...compareHistory(history, replayed) };
+      const verdict = compareHistory(history, replayed);
+      return { path: history.path, ...verdict, ...(verdict.agree || !diagnostic ? {} : { reason: `${verdict.reason}; ${diagnostic}` }) };
     });
   }), { concurrency });
   return results.flat();
 }
 
 // The profiles the differential applies to: every generation profile whose
-// text imports a kernel module. The set follows the migration by itself.
+// text, directly or through a helper library, imports a kernel module.
 export function composedProfiles(manifest, { cwd = root } = {}) {
-  return manifest.models.filter(model => model.profile !== undefined &&
-    /^\s*import\s+\w+(\.\*|\s+as\s+\w+)\s+from\s+"\.\/kernel\//m.test(readFileSync(resolve(cwd, model.path), 'utf8'))).map(model => model.profile);
+  const importsKernel = (path, seen = new Set()) => {
+    if (seen.has(path) || !existsSync(resolve(cwd, path))) return false;
+    seen.add(path);
+    const text = readFileSync(resolve(cwd, path), 'utf8');
+    return [...text.matchAll(/from\s+"(\.\.?\/[^"]+)"/g)].some(([, target]) => {
+      const imported = posix.normalize(posix.join(posix.dirname(path), `${target}.qnt`));
+      return imported.startsWith('formal/kernel/') || importsKernel(imported, seen);
+    });
+  };
+  return manifest.models.filter(model => model.profile !== undefined && importsKernel(model.path)).map(model => model.profile);
+}
+export function kernelModuleCount(directory = root) {
+  const kernel = resolve(directory, 'formal/kernel');
+  return existsSync(kernel) ? readdirSync(kernel).filter(name => name.endsWith('.qnt')).length : 0;
 }
 
-export function differentialModel(manifest, profileId) {
-  const model = manifest.models.find(candidate => candidate.profile === profileId);
-  if (!model) throw new Error(`No generation profile named ${profileId} in formal/execution.json`);
-  const descriptor = profiles[profileId];
-  if (!descriptor || !descriptor.explicitInputs) throw new Error(`Profile ${profileId} has no explicit-input feature descriptor; the differential replays explicit inputs only`);
-  return { ...model, manifest, descriptor };
-}
-
-// The complete differential for one profile. `reference` is a git revision
-// whose text generates the reference corpus; the candidate is the working tree.
+// The differential for one profile. `reference` is a git revision whose merge
+// base with HEAD supplies the reference text and manifests; the candidate is
+// the working tree.
 export async function runDifferential(profileId, { reference = 'origin/main', chunk = defaultChunk, output = defaultOutput,
     concurrency = resolveConcurrency(), cwd = root, log = console.log } = {}) {
-  const manifest = readExecution();
-  validateExecution(manifest);
-  const model = differentialModel(manifest, profileId);
-  const seed = manifest.settings.seed;
+  const candidateManifests = readManifests(cwd);
+  validateExecution(candidateManifests.execution);
   const revision = resolveMergeBase(reference, { cwd });
   const outputDirectory = resolve(cwd, output, profileId);
   rmSync(outputDirectory, { recursive: true, force: true });
   mkdirSync(outputDirectory, { recursive: true });
   const referenceTree = resolve(outputDirectory, 'reference');
   const candidateTree = resolve(outputDirectory, 'candidate');
-  const referenceFiles = exportRevision(revision, referenceTree, { cwd });
-  const candidateFiles = copySources(cwd, candidateTree);
-  if (!existsSync(resolve(referenceTree, model.path))) throw new Error(`${model.path} does not exist at ${revision.slice(0, 12)}; a new profile has no reference corpus to replay`);
-  const referenceText = readFileSync(resolve(referenceTree, model.path), 'utf8');
-  const candidateText = readFileSync(resolve(cwd, model.path), 'utf8');
-  log(`Corpus differential for ${profileId}: reference ${revision.slice(0, 12)} (${referenceFiles.length} sources), candidate working tree (${candidateFiles.length} sources), seed ${seed}.`);
-  const corpusDirectory = model.generate.outputDirectory;
+  exportRevision(revision, referenceTree, { cwd });
+  copySources(cwd, candidateTree);
+  const referenceManifests = readManifests(referenceTree);
+  const plan = differentialPlan(referenceManifests, candidateManifests, profileId);
+  const base = { schemaVersion: 2, profile: profileId, reference: { revision }, candidate: { path: plan.candidate.path, sha256: sha256(readFileSync(resolve(cwd, plan.candidate.path), 'utf8')),
+    behaviorVersion: plan.candidate.behaviorVersion, schemaVersion: plan.candidate.schemaVersion } };
+  if (plan.action === 'skip') {
+    const report = { ...base, skipped: plan.reason, ...(plan.reference ? { reference: { revision, path: plan.reference.path, behaviorVersion: plan.reference.behaviorVersion, schemaVersion: plan.reference.schemaVersion } } : {}) };
+    writeFileSync(resolve(outputDirectory, 'report.json'), JSON.stringify(report, null, 2) + '\n');
+    return report;
+  }
+  const { reference: referenceModel, candidate: candidateModel, descriptor } = plan;
+  const referenceText = readFileSync(resolve(referenceTree, referenceModel.path), 'utf8');
+  log(`Corpus differential for ${profileId}: reference ${revision.slice(0, 12)} (${referenceModel.path}), candidate working tree (${candidateModel.path}).`);
   const [referenceCorpus, candidateCorpus] = await Promise.all([
-    generateCorpus(referenceTree, model, { seed, outputDirectory: corpusDirectory }),
-    generateCorpus(candidateTree, model, { seed, outputDirectory: corpusDirectory }),
+    generateCorpus(referenceTree, referenceModel),
+    generateCorpus(candidateTree, candidateModel),
   ]);
   printGroup(`Reference generation (${seconds(referenceCorpus.generationMs)})`, referenceCorpus.log);
   printGroup(`Candidate generation (${seconds(candidateCorpus.generationMs)})`, candidateCorpus.log);
-  const sampled = loadHistories(referenceCorpus.directory, model.descriptor);
-  const regressions = loadHistories(referenceCorpus.regressions, model.descriptor);
-  const histories = [...sampled, ...regressions.map(history => ({ ...history, path: `regression:${history.path}` }))];
-  log(`Replaying ${sampled.length} sampled histories and ${regressions.length} exported regressions through the candidate in chunks of ${chunk}.`);
+  const label = (histories, prefix) => histories.map(history => ({ ...history, path: `${prefix}${history.path}` }));
+  const referenceHistories = [...loadHistories(referenceCorpus.directory, descriptor), ...label(loadHistories(referenceCorpus.regressions, descriptor), 'regression:')];
+  const candidateHistories = [...loadHistories(candidateCorpus.directory, descriptor), ...label(loadHistories(candidateCorpus.regressions, descriptor), 'regression:')];
+  log(`Replaying ${referenceHistories.length} reference histories through the candidate and ${candidateHistories.length} candidate histories through the reference, ${chunk} per process.`);
   const started = performance.now();
-  const verdicts = await replayHistories(candidateTree, model, model.descriptor, histories, { chunk, seed, output: outputDirectory, concurrency });
+  const forward = await replayHistories(candidateTree, candidateModel, descriptor, referenceHistories, { chunk, output: resolve(outputDirectory, 'forward'), concurrency });
+  const reverse = await replayHistories(referenceTree, referenceModel, descriptor, candidateHistories, { chunk, output: resolve(outputDirectory, 'reverse'), concurrency });
   const replayMs = performance.now() - started;
-  const disagreements = verdicts.filter(verdict => !verdict.agree);
+  const direction = (name, verdicts, sampled, regressions) => ({ sampled, regressions, agreed: verdicts.filter(verdict => verdict.agree).length,
+    disagreed: verdicts.filter(verdict => !verdict.agree).length, disagreements: verdicts.filter(verdict => !verdict.agree).slice(0, 20).map(verdict => ({ direction: name, ...verdict })) });
   const referenceSize = bytesPerState(referenceCorpus.directory);
   const candidateSize = bytesPerState(candidateCorpus.directory);
   const report = {
-    schemaVersion: 1, profile: profileId, model: model.path, seed, reference: { revision, sha256: sha256(referenceText) },
-    candidate: { sha256: sha256(candidateText) }, identicalText: referenceText === candidateText,
-    histories: { sampled: sampled.length, regressions: regressions.length, agreed: verdicts.length - disagreements.length, disagreed: disagreements.length },
-    disagreements: disagreements.slice(0, 20),
+    ...base,
+    reference: { revision, path: referenceModel.path, sha256: sha256(referenceText), behaviorVersion: referenceModel.behaviorVersion, schemaVersion: referenceModel.schemaVersion },
+    identicalText: referenceText === readFileSync(resolve(cwd, candidateModel.path), 'utf8'),
+    forward: direction('forward', forward, referenceHistories.length - referenceHistories.filter(history => history.path.startsWith('regression:')).length, referenceHistories.filter(history => history.path.startsWith('regression:')).length),
+    reverse: direction('reverse', reverse, candidateHistories.length - candidateHistories.filter(history => history.path.startsWith('regression:')).length, candidateHistories.filter(history => history.path.startsWith('regression:')).length),
     generation: { referenceMs: Math.round(referenceCorpus.generationMs), candidateMs: Math.round(candidateCorpus.generationMs),
       wallRatio: referenceCorpus.generationMs ? candidateCorpus.generationMs / referenceCorpus.generationMs : null,
       reference: referenceSize, candidate: candidateSize,
-      bytesPerStateRatio: referenceSize.bytesPerState ? candidateSize.bytesPerState / referenceSize.bytesPerState : null },
-    replay: { chunk, chunks: Math.ceil(histories.length / chunk), wallMs: Math.round(replayMs) },
+      bytesPerStateRatio: referenceSize.bytesPerState ? candidateSize.bytesPerState / referenceSize.bytesPerState : null,
+      maxBytesPerStateRatio: candidateModel.maxBytesPerStateRatio },
+    replay: { chunk, wallMs: Math.round(replayMs) },
   };
   writeFileSync(resolve(outputDirectory, 'report.json'), JSON.stringify(report, null, 2) + '\n');
   return report;
 }
 
+// The run's verdict: any disagreement in either direction fails, as does trace
+// growth beyond the model's bound. Wall time is advisory: the two generations
+// run concurrently and hosted runners are noisy.
+export function verdict(report) {
+  const reasons = [];
+  if (report.skipped) return { failed: false, reasons: [`skipped: ${report.skipped}`] };
+  for (const name of ['forward', 'reverse']) if (report[name].disagreed) reasons.push(`${report[name].disagreed} ${name} disagreement(s)`);
+  const ratio = report.generation.bytesPerStateRatio;
+  if (ratio !== null && ratio > report.generation.maxBytesPerStateRatio) reasons.push(`bytes per state grew x${ratio.toFixed(3)}, above the bound x${report.generation.maxBytesPerStateRatio}`);
+  const advisory = report.generation.wallRatio !== null && report.generation.wallRatio > advisoryWallRatio
+    ? [`advisory: generation wall time x${report.generation.wallRatio.toFixed(2)} exceeds x${advisoryWallRatio} (concurrent generations; not gated)`] : [];
+  return { failed: reasons.length > 0, reasons: [...reasons, ...advisory] };
+}
+
 export function formatReport(report) {
+  if (report.skipped) return `${report.profile}: not compared (${report.skipped}).`;
+  const total = direction => direction.sampled + direction.regressions;
   const lines = [
-    `${report.profile}: ${report.histories.agreed} of ${report.histories.sampled + report.histories.regressions} histories agree` +
-      ` (${report.histories.sampled} sampled, ${report.histories.regressions} regressions); replay ${seconds(report.replay.wallMs)} in ${report.replay.chunks} chunk(s).`,
-    `generation wall ${seconds(report.generation.referenceMs)} -> ${seconds(report.generation.candidateMs)} (x${report.generation.wallRatio?.toFixed(2)}),` +
-      ` bytes/state ${report.generation.reference.bytesPerState.toFixed(0)} -> ${report.generation.candidate.bytesPerState.toFixed(0)} (x${report.generation.bytesPerStateRatio?.toFixed(3)})` +
-      (report.identicalText ? '; the texts are identical' : ''),
+    `${report.profile}: forward ${report.forward.agreed} of ${total(report.forward)} reference histories agree through the candidate` +
+      ` (${report.forward.sampled} sampled, ${report.forward.regressions} regressions); reverse ${report.reverse.agreed} of ${total(report.reverse)} candidate histories agree through the reference;` +
+      ` replay ${seconds(report.replay.wallMs)} at ${report.replay.chunk} per process.`,
+    `generation wall ${seconds(report.generation.referenceMs)} -> ${seconds(report.generation.candidateMs)} (x${report.generation.wallRatio?.toFixed(2)}, advisory),` +
+      ` bytes/state ${report.generation.reference.bytesPerState.toFixed(0)} -> ${report.generation.candidate.bytesPerState.toFixed(0)}` +
+      ` (x${report.generation.bytesPerStateRatio?.toFixed(3)}, bound x${report.generation.maxBytesPerStateRatio})` + (report.identicalText ? '; the texts are identical' : ''),
   ];
-  for (const disagreement of report.disagreements) lines.push(`  ${disagreement.path}: ${disagreement.reason}`);
-  if (report.histories.disagreed > report.disagreements.length) lines.push(`  ... ${report.histories.disagreed - report.disagreements.length} more`);
+  for (const name of ['forward', 'reverse']) {
+    for (const disagreement of report[name].disagreements) lines.push(`  ${name} ${disagreement.path}: ${disagreement.reason}`);
+    if (report[name].disagreed > report[name].disagreements.length) lines.push(`  ... ${report[name].disagreed - report[name].disagreements.length} more ${name}`);
+  }
+  for (const reason of verdict(report).reasons) lines.push(`  ${reason}`);
   return lines.join('\n');
 }
 
 const usage = `Usage: node formal/differential.mjs <profile> | --composed [--reference=<revision>] [--chunk=<n>] [--out=<directory>]
 
-Generates <profile>'s corpus from the merge base with <revision> (default
-origin/main) and from the working tree with the lane's command and seed, replays
-every reference history and exported regression through the working tree's
-text, and fails on any step whose driver-asserted observation differs. The
-report (report.json under --out, default ${defaultOutput}/<profile>) records the
-generation wall-time and bytes-per-state ratios. --composed runs every profile
-whose text imports a kernel module; a profile the reference revision does not
-generate yet (a new profile) is reported and skipped.`;
+Generates <profile>'s corpus and exported regressions from the merge base with
+<revision> (default origin/main) and from the working tree, each with its own
+manifest entry and the lane's command; replays every reference history through
+the working tree's text and every working-tree history through the reference
+text; fails on any step whose driver-asserted observation differs, on an input
+either text refuses, or on trace bytes per state above the model's bound
+(differential.maxBytesPerStateRatio, default ${defaultMaxBytesPerStateRatio}).
+A profile whose differential.behaviorVersion or observation schema version
+differs between the revisions is reported as an intended divergence and not
+compared; a profile the reference does not generate is reported as new.
+--composed selects every profile that imports a kernel module. Reports:
+report.json under --out (default ${defaultOutput}/<profile>).`;
 
 async function main(argv) {
   const options = {}, positional = [];
@@ -341,12 +427,16 @@ async function main(argv) {
   const settings = { ...(typeof options.reference === 'string' ? { reference: options.reference } : {}),
     chunk, ...(typeof options.out === 'string' ? { output: options.out } : {}) };
   const selected = options.composed ? composedProfiles(readExecution()) : positional;
-  if (!selected.length) { console.log('No composed profile imports a kernel module; nothing to replay.'); return 0; }
+  if (!selected.length) {
+    if (kernelModuleCount() > 0) throw new Error('formal/kernel has modules but no generation profile imports one; compose a profile or delete the modules');
+    console.log('No profile imports a kernel module; nothing to replay.');
+    return 0;
+  }
   let failed = false;
   for (const profileId of selected) {
     const report = await runDifferential(profileId, settings);
     console.log(formatReport(report));
-    if (report.histories.disagreed) failed = true;
+    if (verdict(report).failed) failed = true;
   }
   return failed ? 1 : 0;
 }

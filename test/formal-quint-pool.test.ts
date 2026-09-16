@@ -125,7 +125,7 @@ describe("Quint process pool", () => {
     expect(formatGroup("quint typecheck model", "", undefined as unknown as string)).toBe("::group::quint typecheck model\n::endgroup::");
   });
 
-  it("builds the generation lane's command once, for the lane and for the kernel pilot", () => {
+  it("builds the generation lane's command once, for the lane and for the corpus differential", () => {
     const manifest = JSON.parse(readFileSync(new URL("../formal/execution.json", import.meta.url), "utf8")) as {
       settings: { backend: string; threads: number; verbosity: number; seed: string };
       models: Array<{ path: string; invariants: string[]; generate?: { maxSamples: number; maxSteps: number; traces: number; outputDirectory: string } }>;
@@ -140,9 +140,9 @@ describe("Quint process pool", () => {
       "--max-samples=2048", "--max-steps=80", "--n-traces=512", "--out-itf=.formal-traces/features/layers/trace_{seq}.itf.json", "--verbosity=1", "--invariants",
       "sourceEffectsMatch", "capacityIsPerInstance", "closedScopesHaveNoMemo", "registeredSourcesArePending", "zeroCapacityHasNoLocalValues", "callsKeepSourceOutcome",
       "localMembershipMatchesLru", "absentRemoteHasNoAdapterEffects", "sourceOwnershipNeverCrossesKeyOrInstance"]);
-    const pilot = generationArguments("/build/layers/pilot/formal/kernel/layers-pilot.qnt", layers.generate!, ["a", "b"], { ...options, outputDirectory: "/scratch" });
+    const pilot = generationArguments("/differential/layers/candidate/formal/dialcache-layers-conformance.qnt", layers.generate!, ["a", "b"], { ...options, outputDirectory: "/scratch" });
     const shared = planned.args.slice(0, planned.args.indexOf("--invariants") + 1)
-      .map(arg => arg === layers.path ? "/build/layers/pilot/formal/kernel/layers-pilot.qnt" : arg.startsWith("--out-itf=") ? "--out-itf=/scratch/trace_{seq}.itf.json" : arg);
+      .map(arg => arg === layers.path ? "/differential/layers/candidate/formal/dialcache-layers-conformance.qnt" : arg.startsWith("--out-itf=") ? "--out-itf=/scratch/trace_{seq}.itf.json" : arg);
     expect(pilot).toEqual([...shared, "a", "b"]);
   });
 

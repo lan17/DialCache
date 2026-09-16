@@ -21,7 +21,7 @@ module remote_frames {
       state.watermark.nth(entityOf(key, operationsPerEntity)))) state.remoteValues.nth(key) else NO_VALUE
   pure def missFence(state: Frames[r], key: int, operationsPerEntity: int): int =
     if (state.tracked) state.watermark.nth(entityOf(key, operationsPerEntity)) else NO_FENCE
-  // A refill is written only while its fence still allows it, and stamps now.
+  // A refill is written only while its fence still allows it; the write is a
+  // seedFrame, stamped now.
   pure def writeAllowed(state: Frames[r], fence: int): bool = fenceAllows(state.now, fence)
-  pure def writeFrame(state: Frames[r], key: int, value: int): Frames[r] = seedFrame(state, key, value)
 }

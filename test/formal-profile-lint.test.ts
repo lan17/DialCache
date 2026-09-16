@@ -11,7 +11,7 @@ type Report = {
   main: string;
   modules: string[];
   tableSize: number;
-  composition: { kernelModules: string[]; inputField: string; actions: string[]; publicActions: string[]; reachableDefinitions: number; stateAssigningDefinitions: string[]; libraryTransitions: string[]; count: number; violations: CompositionViolation[] };
+  composition: { kernelModules: string[]; actions: string[]; publicActions: string[]; reachableDefinitions: number; stateAssigningDefinitions: string[]; libraryTransitions: string[]; count: number; violations: CompositionViolation[] };
   witnessIsolation: {
     witnessVariables: string[];
     roots: { init: string | null; step: string | null; transitions: string[]; choiceDomains: Array<{ definition: string; choice: string }>; projections: string[]; operatorConstants: Array<{ instance: string; constant: string; definitions: string[] }> };
@@ -21,7 +21,7 @@ type Report = {
 };
 type Profile = { id: string; model: string };
 type Baseline = { schemaVersion: number; quintVersion: string; kernelModules: string[]; profiles: Array<{ id: string; model: string; module: string; tableSize: number; actions: number; reachableDefinitions: number; stateAssigningDefinitions: number; stateAssigningDefinitionNames: string[]; libraryTransitions: string[]; compositionViolations: number }> };
-type LintOptions = { main?: string; kernelModules?: string[]; inputField?: string; witnessPattern?: string; observationField?: string };
+type LintOptions = { main?: string; kernelModules?: string[]; witnessPattern?: string; observationField?: string };
 const { lintModel, computeBaseline, checkBaseline, diffBaseline, formatBaseline, baselinePath, kernelModulesOf } =
   await import(new URL("../formal/lint-profiles.mjs", import.meta.url).href) as {
     lintModel(model: string, options?: LintOptions): Promise<Report>;
@@ -39,7 +39,7 @@ const fixture = (name: string) => `${fixtures}/${name}.qnt`;
 const fixtureNames = [
   "kernel", "kernel-leaky", "library", "profile-clean", "profile-thick", "profile-nested-let", "profile-lambda-assign", "profile-shadow",
   "profile-witness-choice", "profile-witness-projection", "profile-witness-guard", "profile-witness-deep", "profile-witness-domain",
-  "profile-witness-input", "profile-witness-match", "composition-clean", "composition-thick",
+  "profile-witness-input", "profile-witness-match", "composition-clean", "composition-thick", "composition-nondet-inline",
 ];
 // Quint's effect checker rejects an operator constant that reads a variable
 // (QNT201), so this route can only be shown on the parsed IR; the lint must
@@ -150,13 +150,14 @@ describe.skipIf(!quintAvailable)("profile lint over synthetic kernel instances",
       { definition: "tick", detail: "iadd over cache state in the value of s", chain: ["tick"] },
     ]);
     // The input assignment is the driver contract; branching on state there is not a violation.
-    expect(report.composition.violations.some(violation => violation.definition === "fill" && violation.detail.includes("input"))).toBe(false);
-    const renamed = await lintModel(fixture("composition-thick"), { kernelModules: ["library"], inputField: "s" });
-    expect(renamed.composition.violations).toEqual([
-      { definition: "fill", detail: "igt over cache state in the value of input", chain: ["fill"] },
-      { definition: "fill", detail: "ite over cache state in the value of input", chain: ["fill"] },
-    ]);
-  }, quintTimeout * 2);
+    expect(report.composition.violations.some(violation => violation.detail.includes("value of input"))).toBe(false);
+  }, quintTimeout);
+
+  it("treats a chosen input as wiring even when its inline nondet domain reads state", async () => {
+    const report = await lintModel(fixture("composition-nondet-inline"), { kernelModules: ["library"] });
+    expect(report.composition.libraryTransitions).toEqual(["library::bump"]);
+    expect(report.composition.violations).toEqual([]);
+  }, quintTimeout);
 
   it("discovers the kernel modules from formal/kernel and the judgment library", () => {
     const modules = kernelModulesOf();
@@ -309,7 +310,7 @@ describe.skipIf(!quintAvailable)("profile lint over synthetic kernel instances",
     const thick = cli(fixture("profile-thick"), "--kernel=kernel");
     expect(thick.status).toBe(1);
     expect((JSON.parse(thick.stdout) as Report).composition.count).toBe(3);
-    const composed = cli(fixture("composition-thick"), "--kernel=library", "--input=input");
+    const composed = cli(fixture("composition-thick"), "--kernel=library");
     expect(composed.status).toBe(1);
     expect((JSON.parse(composed.stdout) as Report).composition.count).toBe(4);
     const guard = cli(fixture("profile-witness-guard"), "--kernel=kernel", "--witness=^witnessed$");

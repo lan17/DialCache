@@ -1,5 +1,7 @@
 module dialcache_layers_conformance {
   import conformance_observations.* from "./conformance-observations"
+  import encodings.* from "./kernel/encodings"
+  import layer_policy.* from "./kernel/layer-policy"
   import serving as Serving from "./kernel/serving"
   import request_memo as Memo from "./kernel/request-memo"
   import remote_frames as Remote from "./kernel/remote-frames"
@@ -17,7 +19,8 @@ module dialcache_layers_conformance {
   // Bounds: four identities (two entities x two operations), two instances,
   // three persistent contexts, two fresh-context choices, twenty callers.
 
-  // -- Stable fixture, policy, context, and identity encodings ----------------
+  // -- Fixture, context and identity encodings (policy codes and sentinels are
+  // the library's: layer_policy and encodings) --------------------------------
 
   pure val FIXTURE_UNTRACKED = 0
   pure val FIXTURE_TRACKED = 1
@@ -25,12 +28,6 @@ module dialcache_layers_conformance {
   pure val FIXTURE_ZERO_CAPACITY_TRACKED = 3
   pure val FIXTURE_WITHOUT_REMOTE = 4
   pure val FIXTURE_TRACKED_WITHOUT_REMOTE = 5
-  pure val POLICY_ALL_LAYERS = 0
-  pure val POLICY_NO_REQUEST = 1
-  pure val POLICY_NO_LOCAL = 2
-  pure val POLICY_NO_REMOTE = 3
-  pure val POLICY_REQUEST_ONLY = 4
-  pure val POLICY_NO_LAYERS = 5
   pure val FIRST_REQUEST_CONTEXT = 0
   pure val SECOND_REQUEST_CONTEXT = 1
   pure val OTHER_INSTANCE_REQUEST_CONTEXT = 2
@@ -47,8 +44,6 @@ module dialcache_layers_conformance {
   pure val PERSISTENT_CONTEXTS = 3
   pure val DEFAULT_LOCAL_CAPACITY = 2
   pure val NO_LOCAL_CAPACITY = 0
-  pure val NO_OWNER = -1
-  pure val NO_CACHED_VALUE = 0
   pure val MAX_CALLERS = 20
   pure val MAX_CONTEXT_KEY_CHOICE = 19
   pure val MAX_RESOLVE_CHOICE = 40
@@ -89,7 +84,8 @@ module dialcache_layers_conformance {
   pure def instance(context: int): int = if (context == OTHER_INSTANCE_REQUEST_CONTEXT
     or context == FRESH_OTHER_INSTANCE_CONTEXT) OTHER_INSTANCE else FIRST_INSTANCE
   pure val LAYOUT: Serving::Layout = {
-    keys: KEYS_PER_INSTANCE,
+    keysPerInstance: KEYS_PER_INSTANCE,
+    keysPerScope: KEYS_PER_INSTANCE,
     persistentContexts: PERSISTENT_CONTEXTS,
     operationsPerEntity: OPERATIONS_PER_ENTITY,
     servingTtlMs: SERVING_TTL_MS
@@ -105,7 +101,7 @@ module dialcache_layers_conformance {
       remoteAvailable: fixture < FIXTURE_WITHOUT_REMOTE,
       capacity: if (Set(FIXTURE_ZERO_CAPACITY_UNTRACKED, FIXTURE_ZERO_CAPACITY_TRACKED).contains(fixture))
         NO_LOCAL_CAPACITY else DEFAULT_LOCAL_CAPACITY,
-      policy: POLICY_ALL_LAYERS,
+      policy: ALL_LAYERS,
       closed: List(false, false, false),
       memo: zeros(12),
       requestFlights: slots(12),
@@ -167,7 +163,7 @@ module dialcache_layers_conformance {
     input' = { name: "policy", choice: policy }
   }
   action policy = {
-    nondet choice = POLICY_ALL_LAYERS.to(POLICY_NO_LAYERS).oneOf()
+    nondet choice = ALL_LAYERS.to(NO_LAYERS).oneOf()
     changePolicy(choice)
   }
   action seedRemote(key: int, value: int): bool = all {
@@ -216,13 +212,13 @@ module dialcache_layers_conformance {
   val sourceEffectsMatch = s.sources.length() == s.o.loaders and s.owners.length() == s.o.calls.length()
   val capacityIsPerInstance = s.lru.indices().forall(i => s.lru.nth(i).length() <= s.capacity)
   val closedScopesHaveNoMemo = s.memo.indices().forall(slot => not(s.closed.nth(slot / KEYS_PER_INSTANCE))
-    or s.memo.nth(slot) == NO_CACHED_VALUE)
+    or s.memo.nth(slot) == NO_VALUE)
   val registeredSourcesArePending = s.processFlights.indices().forall(identity => {
     val source = s.processFlights.nth(identity)
     source < 0 or (s.sources.nth(source).shared and s.sources.nth(source).result == CALL_PENDING)
   })
   val zeroCapacityHasNoLocalValues = s.capacity != NO_LOCAL_CAPACITY
-    or s.localValues.select(v => v != NO_CACHED_VALUE).length() == 0
+    or s.localValues.select(v => v != NO_VALUE).length() == 0
   val callsKeepSourceOutcome = s.owners.indices().forall(call =>
     s.owners.nth(call) < 0 or s.o.calls.nth(call) == s.sources.nth(s.owners.nth(call)).result)
   val sourceOwnershipNeverCrossesKeyOrInstance = s.owners.indices().forall(call => {
@@ -255,11 +251,11 @@ module dialcache_layers_conformance {
     .then(startCall(SECOND_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .expect(s.o.loaders == 1)
     .then(finishSource(0, VALUE_ONE))
-    .then(changePolicy(POLICY_REQUEST_ONLY))
+    .then(changePolicy(REQUEST_LAYER_ONLY))
     .then(startCall(FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .then(startCall(SECOND_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_ONE, VALUE_ONE) and s.o.loaders == 1)
-  run localReadPromotesBeforeEvictionTest = untrackedFixture.then(changePolicy(POLICY_NO_REMOTE))
+  run localReadPromotesBeforeEvictionTest = untrackedFixture.then(changePolicy(NO_REMOTE_LAYER))
     .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .then(finishSource(0, VALUE_ONE))
     .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A_OTHER_OPERATION))
@@ -271,7 +267,7 @@ module dialcache_layers_conformance {
     .expect(s.o.loaders == 3)
     .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A_OTHER_OPERATION))
     .expect(s.o.loaders == 4 and s.o.calls.nth(5) == CALL_PENDING)
-  run zeroCapacityKeepsSharingWithoutStorageTest = initialize(FIXTURE_ZERO_CAPACITY_UNTRACKED).then(changePolicy(POLICY_NO_REMOTE))
+  run zeroCapacityKeepsSharingWithoutStorageTest = initialize(FIXTURE_ZERO_CAPACITY_UNTRACKED).then(changePolicy(NO_REMOTE_LAYER))
     .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .expect(s.o.loaders == 1)
@@ -294,11 +290,11 @@ module dialcache_layers_conformance {
     .then(startCall(FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A_OTHER_OPERATION))
     .expect(s.o.loaders == 0)
-    .then(changePolicy(POLICY_NO_LOCAL))
+    .then(changePolicy(NO_LOCAL_LAYER))
     .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A_OTHER_OPERATION))
     .expect(s.o.loaders == 2)
-  run requestMemoExceedsLocalCapacityTest = initialize(FIXTURE_ZERO_CAPACITY_UNTRACKED).then(changePolicy(POLICY_REQUEST_ONLY))
+  run requestMemoExceedsLocalCapacityTest = initialize(FIXTURE_ZERO_CAPACITY_UNTRACKED).then(changePolicy(REQUEST_LAYER_ONLY))
     .then(startCall(FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .then(finishSource(0, VALUE_ONE))
     .then(startCall(FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A_OTHER_OPERATION))
@@ -309,7 +305,7 @@ module dialcache_layers_conformance {
     .expect(s.o.loaders == 3 and s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_ONE, VALUE_ONE))
 
   run separateRequestRootsRetainIndependentValuesTest = untrackedFixture
-    .then(changePolicy(POLICY_REQUEST_ONLY))
+    .then(changePolicy(REQUEST_LAYER_ONLY))
     .then(startCall(FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .then(startCall(SECOND_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .expect(s.o.loaders == 2)
@@ -339,7 +335,7 @@ module dialcache_layers_conformance {
     .expect(s.o.loaders == 3)
     .then(finishSource(1, VALUE_TWO)).then(finishSource(0, VALUE_ONE))
     .then(finishSource(2, VALUE_ONE))
-    .then(changePolicy(POLICY_NO_LOCAL))
+    .then(changePolicy(NO_LOCAL_LAYER))
     .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A_OTHER_OPERATION))
     .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_B))
@@ -349,7 +345,7 @@ module dialcache_layers_conformance {
   run settledRequestMemoSurvivesSharedLayerRampDownTest = untrackedFixture
     .then(startCall(FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .then(finishSource(0, VALUE_ONE))
-    .then(changePolicy(POLICY_REQUEST_ONLY))
+    .then(changePolicy(REQUEST_LAYER_ONLY))
     .then(startCall(FIRST_REQUEST_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loaders == 1
       and s.o.reads == 1 and s.o.writes == 1)
@@ -358,7 +354,7 @@ module dialcache_layers_conformance {
 
   run untrackedReadsIgnoreGroupedInvalidationTest = untrackedFixture
     .then(seedRemote(KEY_A, VALUE_ONE)).then(seedRemote(KEY_A_OTHER_OPERATION, VALUE_TWO))
-    .then(invalidateEntity(0)).then(changePolicy(POLICY_NO_LOCAL))
+    .then(invalidateEntity(0)).then(changePolicy(NO_LOCAL_LAYER))
     .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A_OTHER_OPERATION))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO) and s.o.loaders == 0

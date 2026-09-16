@@ -49,7 +49,9 @@ where to retain behavioral, primitive-vector and mutation results.
 The [kernel library](./kernel/README.md) restates no coverage: a composed
 profile's cases, witnesses and regressions count exactly as before, and the
 corpus differential that admits a rewrite is migration evidence, adding no
-semantic completeness percentage.
+semantic completeness percentage. A case's scoped Quint definition may cite a
+library module (a kernel module or `cache_rules`) as the authority for a rule
+that moved there; the citation is still checked against that file's declarations.
 
 A model's transition helpers, independent properties and implementation replay
 answer different questions. The shared `cache-rules.qnt` judgments own age,

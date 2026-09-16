@@ -70,7 +70,7 @@
         "cache_rules::deadlinePendingAt",
         "cache_rules::fenceAllows"
       ],
-      "compositionViolations": 78
+      "compositionViolations": 58
     },
     {
       "id": "scope",
@@ -188,7 +188,7 @@
         "cache_rules::fenceAllows",
         "cache_rules::freshAgeAllowed"
       ],
-      "compositionViolations": 82
+      "compositionViolations": 80
     },
     {
       "id": "admission",
@@ -218,9 +218,9 @@
       "id": "layers",
       "model": "formal/dialcache-layers-conformance.qnt",
       "module": "dialcache_layers_conformance",
-      "tableSize": 1387,
+      "tableSize": 1373,
       "actions": 19,
-      "reachableDefinitions": 96,
+      "reachableDefinitions": 92,
       "stateAssigningDefinitions": 8,
       "stateAssigningDefinitionNames": [
         "changePolicy",

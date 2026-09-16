@@ -139,9 +139,9 @@ edit, update them with `node formal/generate-artifacts.mjs --write` first.
 `make ci` includes the separate symbolic checks after `make formal`, as well as
 the other local lanes.
 
-`make differential` regenerates each composed profile's corpus from the merge
-base with `origin/main` and replays every history through the working tree,
-comparing the driver-asserted observation at every step (see kernel/README.md).
+`make differential` checks the lint baseline, regenerates each composed
+profile's corpus from the merge base with `origin/main` and from the working
+tree, and replays each corpus through the other text (see kernel/README.md).
 
 Pinned acceptance clears inherited trace selectors and `QUINT_SEED`. Exploration
 keeps a separate source snapshot, seed, corpus and diagnostic replay evidence. See

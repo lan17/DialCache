@@ -4,7 +4,7 @@ import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, copyFileSy
 import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
-import { readExecution, root, validateExecution } from './execution.mjs';
+import { quintSources, readExecution, root, validateExecution } from './execution.mjs';
 import { resolveConcurrency, runPool, spawnBuffered } from './quint-pool.mjs';
 
 const recipePath = 'formal/fixture-recipes.json';
@@ -129,13 +129,54 @@ async function execute(args) {
   if (run.error) throw run.error;
   if (run.status !== 0) fail(`Quint ${args[0]} failed:\n${run.stdout}\n${run.stderr}`);
 }
-async function exportModel(model, requests, directory, settings) {
-  const source = read(model), name = /^module\s+(\w+)\s*\{/.exec(source)?.[1];
-  if (!name) fail('Unsupported Quint module');
+// Parse a model with its source map; the result feeds constrainAction.
+export async function parseWithSourceMap(model, directory, execute = executeQuint) {
   const parsedPath = resolve(directory, 'parsed.json'), mapPath = resolve(directory, 'source-map.json');
   await execute(['parse', model, `--out=${parsedPath}`, `--source-map=${mapPath}`]);
   const parsed = JSON.parse(readFileSync(parsedPath, 'utf8')), sourceMap = JSON.parse(readFileSync(mapPath, 'utf8'));
   if (parsed.errors.length) fail('Quint parse errors');
+  return { parsed, sourceMap };
+}
+
+// Deterministic schedules over a model's public actions. Each history is a
+// list of [action, choice] pairs; every distinct pair becomes one constrained
+// clone shared by all histories, and each history gets an init (its first
+// call) and a step (a cursor selects the next call) built from the clones. A
+// cursor avoids deeply nested .then trees for long histories; it controls
+// only which public action runs, never cache state. Callers splice the
+// returned declarations before the module's closing brace.
+export function scheduleHistories(source, declarations, sourceMap, histories, { prefix, cursor }) {
+  const clones = new Map(), additions = [`var ${cursor}: int`];
+  const clone = (action, choice) => {
+    const key = `${action}/${choice}`;
+    if (!clones.has(key)) {
+      const declaration = declarations.get(action);
+      if (!declaration) fail(`Model has no public action ${action}`);
+      const alias = `${prefix}Action${clones.size}`;
+      additions.push(`action ${alias} = ${constrainAction(source, declaration, sourceMap, choice)}`);
+      clones.set(key, alias);
+    }
+    return clones.get(key);
+  };
+  const schedules = histories.map(calls => {
+    const names = calls.map(([action, choice]) => clone(action, choice));
+    if (!names.length) fail('A schedule needs at least its initial call');
+    return { init: `all { ${names[0]}, ${cursor}' = 0 }`,
+      step: `any { ${names.slice(1).map((name, j) => `all { ${cursor} == ${j}, ${name}, ${cursor}' = ${j + 1} }`).join(', ')} }`,
+      steps: names.length - 1 };
+  });
+  return { declarations: additions, schedules, clones: clones.size };
+}
+export function spliceDeclarations(source, lines) {
+  const end = source.lastIndexOf('}');
+  if (end === -1) fail('Module has no closing brace');
+  return `${source.slice(0, end)}\n${lines.join('\n')}\n${source.slice(end)}`;
+}
+
+async function exportModel(model, requests, directory, settings) {
+  const source = read(model), name = /^module\s+(\w+)\s*\{/.exec(source)?.[1];
+  if (!name) fail('Unsupported Quint module');
+  const { parsed, sourceMap } = await parseWithSourceMap(model, directory, execute);
   const declarations = new Map(parsed.modules.find(module => module.name === name).declarations.map(d => [d.name, d]));
   const publicActions = new Set(['init']);
   const referencedActions = node => {
@@ -145,9 +186,8 @@ async function exportModel(model, requests, directory, settings) {
   };
   referencedActions(declarations.get('step')?.expr);
   // Copy source/imports to an ignored directory; all computed state stays in Quint.
-  for (const file of readdirSync(resolve(root, 'formal')).filter(file => file.endsWith('.qnt'))) copyFileSync(resolve(root, 'formal', file), resolve(directory, file))
   mkdirSync(resolve(directory, 'kernel'), { recursive: true });
-  for (const file of readdirSync(resolve(root, 'formal/kernel')).filter(file => file.endsWith('.qnt'))) copyFileSync(resolve(root, 'formal/kernel', file), resolve(directory, 'kernel', file));;
+  for (const path of quintSources()) copyFileSync(resolve(root, path), resolve(directory, path.slice('formal/'.length)));
   const input = resolve(directory, basename(model));
   const named = requests.filter(r => r.recipe.regression);
   for (const request of named) {
@@ -161,29 +201,16 @@ async function exportModel(model, requests, directory, settings) {
     `--match=^(${[...new Set(named.map(r => r.run))].join('|')})$`, `--out-itf=${directory}/{test}.itf.json`]);
   for (const [i, request] of requests.entries()) {
     if (request.recipe.regression) continue;
-    const additions = [], clones = new Map();
     const calls = request.recipe.actions.map(([action, choice]) => {
       const selectedAction = request.artifact.actionBindings?.[action] ?? action;
       if (!publicActions.has(selectedAction)) fail(`Action is not exposed by the model's step: ${selectedAction}`);
-      const key = `${action}/${choice}`;
-      if (!clones.has(key)) {
-        const alias = `fixtureAction${clones.size}`;
-        additions.push(`action ${alias} = ${constrainAction(source, declarations.get(request.artifact.actionBindings?.[action] ?? action), sourceMap, choice)}`);
-        clones.set(key, alias);
-      }
-      return clones.get(key);
+      return [selectedAction, choice];
     });
-    // A scheduler counter avoids deeply nested .then trees for long saved
-    // histories. It controls only which public action runs, never cache state.
-    additions.push('var fixtureCursor: int');
-    additions.push(`action fixtureInit = all { ${calls[0]}, fixtureCursor\' = 0 }`);
-    additions.push(`action fixtureStep = any { ${calls.slice(1).map((call, j) =>
-      `all { fixtureCursor == ${j}, ${call}, fixtureCursor\' = ${j + 1} }`).join(',')} }`);
+    const { declarations: additions, schedules: [schedule] } = scheduleHistories(source, declarations, sourceMap, [calls], { prefix: 'fixture', cursor: 'fixtureCursor' });
     request.run = `fixtureHistory${i}`;
-    const end = source.lastIndexOf('}');
-    writeFileSync(input, source.slice(0, end) + '\n' + additions.join('\n') + '\n' + source.slice(end));
+    writeFileSync(input, spliceDeclarations(source, [...additions, `action fixtureInit = ${schedule.init}`, `action fixtureStep = ${schedule.step}`]));
     await execute(['run', input, `--backend=${settings.backend}`, '--n-threads=1', '--max-samples=1',
-      `--seed=${settings.seed}`, '--init=fixtureInit', '--step=fixtureStep', `--max-steps=${calls.length - 1}`,
+      `--seed=${settings.seed}`, '--init=fixtureInit', '--step=fixtureStep', `--max-steps=${schedule.steps}`,
       '--n-traces=1', `--out-itf=${directory}/${request.run}.itf.json`]);
   }
   for (const request of requests) {
@@ -204,7 +231,7 @@ async function exportModel(model, requests, directory, settings) {
 function inputs(book) {
   const execution = readExecution();
   return Object.fromEntries([...new Set([recipePath, generator, 'formal/execution.mjs', 'formal/execution.json', 'formal/profiles.json',
-    ...execution.libraries, ...execution.kernel, ...book.artifacts.flatMap(a => a.recipes.map(r => r.model ?? a.model))])].sort().map(path => [path, hash(read(path))]));
+    ...execution.libraries, ...book.artifacts.flatMap(a => a.recipes.map(r => r.model ?? a.model))])].sort().map(path => [path, hash(read(path))]));
 }
 export function verifyFixtures(book = validateRecipes(json(recipePath))) {
   const lock = json(lockPath);

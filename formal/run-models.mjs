@@ -7,10 +7,10 @@ import { CommandFailure, printGroup, resolveConcurrency, runPool, seconds, spawn
 import { normalizeReplayInputs } from './replay-inputs.mjs';
 import { bindTrace } from './replay/bindings.mjs';
 
-// The generation lane's command for one model, also issued by the kernel pilot
-// for its views so the two cannot drift: the pilot substitutes only the model
-// path, that model's invariants and a scratch output directory, and passes the
-// manifest seed explicitly.
+// The generation lane's command for one model, also issued by the corpus
+// differential for the reference and candidate trees so the two cannot drift:
+// it substitutes only the model path, that model's invariants and an output
+// directory, and passes the manifest seed explicitly.
 export function generationArguments(path, generation, invariants, { settings, seed, outputDirectory }) {
   return ['run', path, '--mbt', `--backend=${settings.backend}`, `--n-threads=${settings.threads}`, `--seed=${seed}`,
     `--max-samples=${generation.maxSamples}`, `--max-steps=${generation.maxSteps}`, `--n-traces=${generation.traces}`,

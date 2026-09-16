@@ -27,7 +27,7 @@ export const targetDescriptions = {
   'formal-ts': 'Complete prepared TypeScript replay of the generated corpus',
   'formal-go': 'Complete prepared Go replay of the generated corpus with race detection',
   'fixtures-check': 'Recompute every committed model-derived artifact with pinned Quint',
-  differential: 'Replay every composed profile\'s reference corpus (merge base with DIFFERENTIAL_REFERENCE, default origin/main) through the working tree',
+  differential: 'Check the composition lint baseline, then replay every composed profile against its reference corpus (merge base with DIFFERENTIAL_REFERENCE, default origin/main) in both directions',
   explore: 'Explore a new recorded seed and replay both ports in an isolated source snapshot',
   'model-check': 'Symbolically verify the scheduled finite rules with pinned Quint/Apalache (Java 21)',
   mutations: 'Measure TypeScript and Go semantic mutations over the generated corpus and shared witness evidence',
@@ -109,6 +109,9 @@ export function validationPlan(target, { directory = root, environment = process
   // The language-neutral evaluator is the sole producer of the reusable witness
   // evidence; TypeScript replay only checks the same gate inside its suite.
   const witnesses = node('Evaluate shared witness evidence over the complete corpus', 'formal/witnesses.mjs', 'evaluate', '--profile', 'all');
+  // The composition rule is a gate wherever Quint is present: a composed
+  // profile must keep zero composition violations against the recorded baseline.
+  const lintBaseline = node('Check the profile lint baseline', 'formal/lint-profiles.mjs', 'baseline', '--check');
   // The complete replay outlives Go's default 10-minute test timeout on a slow
   // runner (run 34667733523 was killed at 10m0s); bound it explicitly, under
   // the go-parity job budget. The smoke run keeps the default.
@@ -128,13 +131,13 @@ export function validationPlan(target, { directory = root, environment = process
         node('Check conditional fixture regeneration scope', '--test', '.github/scripts/fixture-scope.test.mjs')),
     smoke: [tsReplay(false), nativeGo(false)],
     'fixtures-check': [node('Recompute all committed Quint artifacts', 'formal/generate-artifacts.mjs', '--check')],
-    differential: [node('Replay composed profiles against their reference corpus', 'formal/differential.mjs', '--composed', `--reference=${process.env.DIFFERENTIAL_REFERENCE ?? 'origin/main'}`)],
+    differential: [lintBaseline, node('Replay composed profiles against their reference corpus', 'formal/differential.mjs', '--composed', `--reference=${environment.DIFFERENTIAL_REFERENCE ?? 'origin/main'}`)],
     explore: [node('Explore and replay an isolated alternate-seed corpus', 'formal/explore.mjs')],
     'model-check': [node('Symbolically verify the scheduled finite rules', 'formal/check-symbolic-models.mjs')],
     // The model check is evidence about the Quint models (typechecks, bounded
     // runs, regressions and the mutation challenges). Nothing downstream reads
     // its output, so it is a sibling of generation rather than a prefix of it.
-    'formal-check': [node('Check every scheduled Quint model', 'formal/run-models.mjs', 'check')],
+    'formal-check': [node('Check every scheduled Quint model', 'formal/run-models.mjs', 'check'), lintBaseline],
     // Generation is the single shared producer: the corpus, wire artifacts and
     // witness evidence depend only on the models. Both ports' replays and both
     // mutation measurements read that output and can run in parallel off it.

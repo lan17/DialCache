@@ -45,8 +45,10 @@ jobs:
           retention-days: 14
 
   # A profile composed from the kernel library must reproduce every history its
-  # previous text generated. The reference corpus comes from the merge base
-  # with the pull request's base branch; a push to main has no reference.
+  # previous text generated, and vice versa, unless the manifest declares an
+  # intended change. The reference is the merge base with the pull request's
+  # base branch; a push to main has no reference. The step also checks the
+  # composition lint baseline.
   differential:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -71,6 +73,8 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: formal-differential
-          path: .formal-traces/differential/*/report.json
+          path: |
+            .formal-traces/differential/*/report.json
+            .formal-traces/differential/*/*/replay-*/quint-test.log
           if-no-files-found: warn
           retention-days: 14

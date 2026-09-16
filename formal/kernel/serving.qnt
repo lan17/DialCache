@@ -12,10 +12,11 @@ module serving {
   import remote_frames as Remote from "./remote-frames"
   import flights as Flights from "./flights"
 
-  // How a profile lays out its bounded identities: keys per instance and per
-  // scope row, how many contexts are persistent scopes, keys per entity, and
-  // the serving TTL written with each remote frame.
-  type Layout = { keys: int, persistentContexts: int, operationsPerEntity: int, servingTtlMs: int }
+  // How a profile lays out its bounded identities: keys per instance (local
+  // storage and process flights), keys per scope row (request memo), how many
+  // contexts are persistent scopes, keys per entity, and the serving TTL
+  // written with each remote frame.
+  type Layout = { keysPerInstance: int, keysPerScope: int, persistentContexts: int, operationsPerEntity: int, servingTtlMs: int }
   type Served[r] = {
     o: Observation,
     now: int,
@@ -44,7 +45,7 @@ module serving {
     Memo::memoize({
       o: { calls: state.o.calls.replaceAt(state.o.calls.length() - 1, value), ...state.o },
       ...state
-    }, slot, value, layout.keys)
+    }, slot, value, layout.keysPerScope)
 
   // A miss starts a source. Its publication authority is fixed here: a tracked
   // flight that read the remote layer may not warm local storage directly (a
@@ -60,7 +61,7 @@ module serving {
       fence: if (read) Remote::missFence(state, key, layout.operationsPerEntity) else NO_FENCE,
       result: CALL_PENDING,
       shared: participating and sharedLayers(layers)
-    }, slot, layout.keys)
+    }, slot, layout.keysPerInstance)
 
   // Admission and traversal. Ownership precedence: a pending request flight in
   // the caller's own scope, else (with no memoized value) the process flight
@@ -70,12 +71,12 @@ module serving {
   pure def begin(state: Served[r], layout: Layout, instance: int, key: int, context: int): Served[r] = {
     val layers = enabledLayers(state.policy, state.remoteAvailable)
     val participating = Memo::scopeOpen(state, context, layout.persistentContexts)
-    val slot = Memo::memoSlot(context, key, layout.keys,
+    val slot = Memo::memoSlot(context, key, layout.keysPerScope,
       participating and Memo::persistent(context, layout.persistentContexts) and layers.request)
     val requestOwner = Memo::requestOwner(state, slot)
     val memoValue = Memo::memoValue(state, slot)
     val sharing = participating and sharedLayers(layers)
-    val processOwner = if (sharing) Flights::processOwner(state, instance, key, layout.keys) else NO_OWNER
+    val processOwner = if (sharing) Flights::processOwner(state, instance, key, layout.keysPerInstance) else NO_OWNER
     val owner = if (requestOwner >= 0) requestOwner
       else if (memoValue == NO_VALUE) processOwner else NO_OWNER
     val admitted = Flights::admitCaller({
@@ -86,7 +87,7 @@ module serving {
       },
       ...state
     }, owner, slot, context, key)
-    val localValue = if (participating and layers.local) Local::localValue(state, instance, key, layout.keys) else NO_VALUE
+    val localValue = if (participating and layers.local) Local::localValue(state, instance, key, layout.keysPerInstance) else NO_VALUE
     val readsRemote = participating and layers.remote
     val remoteValue = if (readsRemote) Remote::readableFrame(state, key, layout.operationsPerEntity) else NO_VALUE
     val observedRead = if (readsRemote) {
@@ -101,7 +102,7 @@ module serving {
     else if (memoValue > NO_VALUE) serve(admitted, layout, slot, memoValue)
     else if (localValue > NO_VALUE) serve(Local::promote(admitted, instance, key), layout, slot, localValue)
     else if (remoteValue > NO_VALUE) serve(if (layers.local)
-      Local::putLocal(observedRead, instance, key, remoteValue, layout.keys) else observedRead, layout, slot, remoteValue)
+      Local::putLocal(observedRead, instance, key, remoteValue, layout.keysPerInstance) else observedRead, layout, slot, remoteValue)
     else startSource(observedRead, layout, instance, key, slot, participating, readsRemote, layers)
   }
 
@@ -123,11 +124,11 @@ module serving {
       },
       ...state
     }, index, value)
-    val published = if (write) Remote::writeFrame(settled, source.key, value) else settled
+    val published = if (write) Remote::seedFrame(settled, source.key, value) else settled
     val warmed = if (success and source.local)
-      Local::putLocal(published, source.instance, source.key, value, layout.keys) else published
+      Local::putLocal(published, source.instance, source.key, value, layout.keysPerInstance) else published
     if (not(success)) warmed else Flights::ownedBy(state, index).fold(warmed, (out, call) =>
-      Memo::memoize(out, state.memoSlots.nth(call), value, layout.keys))
+      Memo::memoize(out, state.memoSlots.nth(call), value, layout.keysPerScope))
   }
 
   // Maintenance: invalidating an entity raises its watermark; without remote

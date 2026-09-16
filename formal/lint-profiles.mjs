@@ -5,12 +5,15 @@
 // application to the declaration it refers to, across imports and instances.
 // The lint builds the reference graph from that table and checks two rules:
 //
-// - Thin profile: from each action of the profile module, the transitive
-//   closure of referenced definitions contains no state assignment outside the
-//   kernel modules. Reported with the chain action -> helper -> ... -> the
-//   definition holding the assignment. With no kernel module, every reachable
-//   assignment is private: that report is the profile's migration work list
-//   and the baseline in profile-lint-baseline.json.
+// - Composition: from each action of the profile module, every value assigned
+//   to a state variable other than the driver input is built from kernel
+//   library transitions, record wiring, literals, constants and input
+//   decoding. A comparison, branch, arithmetic or collection operator over
+//   cache state, or a non-library definition applied to cache state, is rule
+//   logic in the profile and is reported with the chain action -> helper ->
+//   ... -> the definition that computes it. profile-lint-baseline.json records
+//   each profile's count: a composed profile has zero and the other counts are
+//   the migration work list.
 // - Witness isolation: no definition reachable from a cache guard, a cache
 //   assignment, the profile's init or step, an input-choice domain (the
 //   expression of a `nondet ... .oneOf()`), an observation projection (the
@@ -37,7 +40,9 @@ import { CommandFailure, runPool, spawnBuffered } from './quint-pool.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
 export const baselinePath = 'formal/profile-lint-baseline.json';
 export const defaultObservationField = 'o';
-export const defaultInputField = 'input';
+// The driver input every profile records; its assignment is the replay
+// contract, not cache state, and may branch on state.
+export const inputField = 'input';
 const effectQualifiers = new Set(['action', 'run']);
 // Builtin combinators whose non-effect operands are guards when the whole
 // expression carries an effect: `all { guard, x' = e }`, `if (c) A else B`,
@@ -254,7 +259,7 @@ const structuralValueOpcodes = new Set(['Rec', 'with', 'field', 'List', 'Set', '
 // reported where it computes. Guards, choice domains, invariants and runs are
 // not assignment values and are not walked: they restrict the environment or
 // state independent properties.
-export function lintComposition(index, { kernelModules = [], inputField = defaultInputField } = {}) {
+export function lintComposition(index, { kernelModules = [] } = {}) {
   const kernel = new Set(kernelModules);
   const exposed = publicActions(index);
   const actions = [...exposed, ...topLevelDefinitions(index)
@@ -282,6 +287,8 @@ export function lintComposition(index, { kernelModules = [], inputField = defaul
         if (isState(declaration)) return true;
         if (declaration === undefined) return tainted.get(expr.name) === true;
         if (declaration.kind === 'const') return false;
+        // A chosen input is never cache state, whatever domain it was drawn from.
+        if (declaration.qualifier === 'nondet') return false;
         if (declaration.owner === node.key && !tainted.has(expr.name)) return again(declaration.expr);
         if (declaration.owner === node.key) return tainted.get(expr.name) === true;
         return isKernel(declaration) ? false : callProfile(declaration, [], { node, chain, variable });
@@ -294,6 +301,7 @@ export function lintComposition(index, { kernelModules = [], inputField = defaul
       case 'let': {
         const inner = new Map(tainted);
         inner.set(expr.opdef.name, expr.opdef.qualifier === 'nondet' ? false : again(expr.opdef.expr));
+        // (the name case answers the same for a nondet reached without this map)
         return walk(expr.expr, { node, chain, tainted: inner, variable });
       }
       case 'app': break;
@@ -348,7 +356,7 @@ export function lintComposition(index, { kernelModules = [], inputField = defaul
   }
   const sorted = [...violations.values()].sort((left, right) =>
     compareStrings(left.definition, right.definition) || compareStrings(left.detail, right.detail));
-  return { kernelModules: [...kernel].sort(compareStrings), inputField, actions: actions.map(node => node.name).sort(compareStrings),
+  return { kernelModules: [...kernel].sort(compareStrings), actions: actions.map(node => node.name).sort(compareStrings),
     publicActions: exposed.map(node => node.name), reachableDefinitions: reachable.size,
     stateAssigningDefinitions: [...assigning].sort(compareStrings), libraryTransitions: [...transitions].sort(compareStrings),
     count: sorted.length, violations: sorted };
@@ -515,10 +523,10 @@ export function kernelModulesOf(directory = root) {
   return [...new Set([...declared, 'cache_rules'])].sort(compareStrings);
 }
 
-export async function lintModel(model, { main, kernelModules, inputField = defaultInputField, witnessPattern, observationField = defaultObservationField, cwd = root } = {}) {
+export async function lintModel(model, { main, kernelModules, witnessPattern, observationField = defaultObservationField, cwd = root } = {}) {
   const parsed = await parseModel(model, { cwd });
   const index = indexModules(parsed, { main });
-  const composition = lintComposition(index, { kernelModules: kernelModules ?? kernelModulesOf(cwd), inputField });
+  const composition = lintComposition(index, { kernelModules: kernelModules ?? kernelModulesOf(cwd) });
   const witnessIsolation = lintWitnessIsolation(index, { witnessPattern, observationField });
   return { model, main: index.main, modules: index.modules, tableSize: index.tableSize, composition, witnessIsolation };
 }
@@ -591,7 +599,7 @@ export const formatBaseline = baseline => `${JSON.stringify(baseline, null, 2)}\
 // CLI
 
 const usage = `Usage:
-  node formal/lint-profiles.mjs <model.qnt> [--main=<module>] [--kernel=<module,...>] [--input=<field>] [--witness=<regex>] [--observation=<field>]
+  node formal/lint-profiles.mjs <model.qnt> [--main=<module>] [--kernel=<module,...>] [--witness=<regex>] [--observation=<field>]
   node formal/lint-profiles.mjs baseline --check | --write
 
 The first form prints a JSON report and exits 1 when either rule is violated;
@@ -640,7 +648,6 @@ async function main(argv) {
   const report = await lintModel(relativeModel, {
     ...(typeof options.main === 'string' ? { main: options.main } : {}),
     ...(typeof options.kernel === 'string' ? { kernelModules: options.kernel.split(',').filter(Boolean) } : {}),
-    ...(typeof options.input === 'string' ? { inputField: options.input } : {}),
     ...(typeof options.witness === 'string' ? { witnessPattern: options.witness } : {}),
     observationField: typeof options.observation === 'string' ? options.observation : defaultObservationField,
   });
