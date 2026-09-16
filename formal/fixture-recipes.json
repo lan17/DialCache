@@ -116,7 +116,6 @@
       "remoteValues": true,
       "skew": true,
       "sources": true,
-      "watermark": true,
       "writeFailed": true
     },
     "shadow": {

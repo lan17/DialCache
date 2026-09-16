@@ -8,10 +8,10 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "fe0ad48baa7bfe85b61a3690aedd9e4024453fd568e5dd2b6da200201919eecd",
-    "executionSha256": "765d92166e3958ea8738759f4d0313d76d4e466629282420c4436889d2916bbe",
+    "semanticCasesSha256": "d014f97a6abd46b0d2c1105c546b49736797466663f228d2c4cc8c530f515839",
+    "executionSha256": "9c472013deead386788d982fd9e373ec03ae681ce6a8f7ea9b2bfdfd51418765",
     "sourceAuditSha256": "e99ecb35404fea425f4852c099d0e025dc887fc7f77d074752e2e995d0d7a237",
-    "quintCaseAuditSha256": "9786ad312deba8e69c0f9cc13662c717f5245685d1d4314f34a44fb0f3d8ca2e",
+    "quintCaseAuditSha256": "36ac23528a586895ed53b9501ccb9eb1b33691a28b2308ffb85415bd3609f507",
     "featureCoverageSha256": "56eedfa865682db6ad8e73b8673c7dac1c30d301e9bce3390246d6994aba9dcb",
     "coverageWitnessesSha256": "8fc8ab123150fdec059f5b75f84172d39af80d08d7a4211fa88c63c5a3f2874b",
     "profilesSha256": "b8fa4f399a163bc8793bf76b6ba3503a415fcf3c8509cf98d964e4f067e6660f"
@@ -46,11 +46,11 @@
     "withoutModelDrivenReplay": [],
     "quintModels": 32,
     "scheduledInvariants": 217,
-    "scheduledRegressions": 412,
+    "scheduledRegressions": 413,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
     "caseReferencedWitnesses": 285,
-    "exportedRegressionHistories": 245
+    "exportedRegressionHistories": 246
   },
   "profiles": [
     {
@@ -237,6 +237,7 @@
         "exactRemoteFreshBoundaryStartsSourceTest",
         "increasedFreshTtlCannotResurrectExpiredStorageTest",
         "remoteHitStartsFullLocalInsertionTtlTest",
+        "remoteHitWarmsLocalForTheReplysLocalTtlTest",
         "untrackedReadFailureStillWarmsActiveLocalTest",
         "invalidRemoteTtlPreservesLocalServingTest",
         "invalidLocalTtlStillServesFreshRemoteTest",
@@ -1847,7 +1848,8 @@
       "kind": "portable-behavior",
       "group": "request-and-layers",
       "quintProperties": [
-        "formal/dialcache-policy-conformance.qnt:remoteHitStartsFullLocalInsertionTtlTest"
+        "formal/dialcache-policy-conformance.qnt:remoteHitStartsFullLocalInsertionTtlTest",
+        "formal/dialcache-policy-conformance.qnt:remoteHitWarmsLocalForTheReplysLocalTtlTest"
       ],
       "requiredGenerated": [],
       "fixedRegressions": [
@@ -1867,7 +1869,8 @@
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
-        "policy/remoteHitStartsFullLocalInsertionTtlTest"
+        "policy/remoteHitStartsFullLocalInsertionTtlTest",
+        "policy/remoteHitWarmsLocalForTheReplysLocalTtlTest"
       ],
       "generatedVectors": []
     },

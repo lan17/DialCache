@@ -1359,6 +1359,12 @@
       "scope": "nearly expired remote hit warms local for its full insertion TTL. This check covers the bounded model clause: remoteHitStartsFullLocalInsertionTtlTest. Host representations and other feature combinations retain separate fixed/native evidence."
     },
     {
+      "case": "C09.insertion-age",
+      "reference": "formal/dialcache-policy-conformance.qnt:remoteHitWarmsLocalForTheReplysLocalTtlTest",
+      "kind": "regression",
+      "scope": "A remote hit warms local storage for the reply's local TTL (2 s), not for the frame's remaining freshness (1 s): the entry still serves locally after the freshness has passed. This check covers the bounded model clause: remoteHitWarmsLocalForTheReplysLocalTtlTest."
+    },
+    {
       "case": "C13.uncoalesced-caching",
       "reference": "formal/dialcache-policy-conformance.qnt:independentLocalCallsStillReuseSettledValueTest",
       "kind": "regression",

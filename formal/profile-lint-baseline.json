@@ -67,11 +67,9 @@
         "policy_overlay::failed",
         "policy_overlay::resolve",
         "policy_overlay::ttls",
-        "receipts::record",
+        "receipts::release",
         "remote_frames::seedFrame",
         "serving::admit",
-        "serving::layeredRelease",
-        "serving::release",
         "serving::settle"
       ],
       "compositionViolations": 0

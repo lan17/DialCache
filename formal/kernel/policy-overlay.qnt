@@ -7,7 +7,9 @@ module policy_overlay {
   // invalid read budget: reported once as a config_resolution error and served
   // with every layer off). Codes are the drivers' contract; do not renumber:
   // 10..19 repeat 0..9 with coalescing disabled, 20..25 are the invalid
-  // overlays. The layers a reply enables follow from its TTLs, stated here once.
+  // overlays. The reply resolves to the fixture's configured layer set and the
+  // TTLs; which layers serve follows from the TTLs at release
+  // (`layer_policy::gated`), not from this decoder.
   import layer_policy.* from "./layer-policy"
 
   pure val INHERIT = 0
@@ -62,9 +64,8 @@ module policy_overlay {
     else baseline.retentionMs
   pure def ttls(state: Overlaid[r], baseline: Ttls): Ttls =
     { localMs: localTtl(state, baseline), freshMs: remoteTtl(state, baseline), retentionMs: retention(state, baseline) }
-  // The reply: no request layer in this shape, each shared layer on for a positive TTL.
-  pure def resolve(state: Overlaid[r], baseline: Ttls): Resolution = {
-    layers: { request: false, local: localTtl(state, baseline) > 0, remote: remoteTtl(state, baseline) > 0 },
-    coalesce: not(independent(state.policy))
-  }
+  // The reply: the fixture configures the local and remote layers and no
+  // request layer; an overlay adds whether the call coalesces.
+  pure def resolve(state: Overlaid[r], baseline: Ttls): Resolution =
+    { layers: { request: false, local: true, remote: true }, coalesce: not(independent(state.policy)) }
 }

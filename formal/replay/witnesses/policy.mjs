@@ -43,10 +43,15 @@ function effectivePolicy(overlay, providerFailed) {
 // The shadow keeps the elapsed clock (now) and the wall clock, the overlay and
 // how many times it changed (epoch), the fault switches, the pending caller
 // (its key and index in o.calls), the single local slot, one Redis frame per
-// key and every started source with the policy it captured, the overlay and
-// epoch it was started under, and its result (0 while pending).
+// key, every started source with the policy it captured, the overlay and
+// epoch it was started under, and its result (0 while pending), and the
+// receipt of the latest release: the caller, its key, which layer served it
+// (or that it started a source, or joined) and the local slot of its key as
+// the release found it. The receipt is read only by the fidelity check.
+const NOT_SERVED = 0, FROM_LOCAL = 2, FROM_REMOTE = 3, STARTED = 4;
 const initialShadow = () => ({ now: 0, wall: 100000, overlay: 0, epoch: 0, providerFailed: false, readFailed: false, dumpFailed: false, writeFailed: false,
-  key: 0, call: -1, local: { key: 0, value: 0, expires: 0 }, remote: [{ value: 0, created: 0, expires: 0 }, { value: 0, created: 0, expires: 0 }], sources: [] });
+  key: 0, call: -1, local: { key: 0, value: 0, expires: 0 }, remote: [{ value: 0, created: 0, expires: 0 }, { value: 0, created: 0, expires: 0 }], sources: [],
+  receipt: { caller: -1, key: -1, layer: NOT_SERVED, localValue: 0, localExpires: 0 } });
 
 // One frame per transition: the recorded action, the asserted observation
 // before and after it, the shadow before and after it, the effective policy
@@ -82,6 +87,8 @@ function shadowHistory(steps, path) {
           retention: policy.retention, shared: policy.shared, result: 0, overlay: before.overlay, epoch: before.epoch });
         // A remote hit warms an active local layer for a full insertion TTL.
         if (receipt.remoteHit && policy.localTtl > 0) after.local = { key, value, expires: before.now + policy.localTtl };
+        after.receipt = { caller: before.call, key, layer: receipt.localHit ? FROM_LOCAL : receipt.remoteHit ? FROM_REMOTE : starts ? STARTED : NOT_SERVED,
+          localValue: local.key === key ? local.value : 0, localExpires: local.key === key ? local.expires : 0 };
         after.call = -1;
         break;
       }
@@ -125,7 +132,8 @@ function shadowHistory(steps, path) {
 // source of each key; a source record carries the identity it serves, the
 // local TTL it warms with (0 when the local layer was off), the retention its
 // refill is written with (0 when it does not refill), and its outcome; the
-// freshness a reply was read under is not a source's to keep.
+// freshness a reply was read under is not a source's to keep. The receipt is
+// the shadow's own, in the model's layer codes.
 const KEYS = 2;
 function modelView(shadow) {
   const { local } = shadow;
@@ -136,7 +144,7 @@ function modelView(shadow) {
     held: shadow.call < 0 ? [] : [{ policyCall: shadow.call, caller: shadow.call, call: { instance: 0, key: shadow.key, context: 0, enabled: true, keyFailed: false } }],
     localValues: slot(local.value), localExpires: slot(local.expires), lru: [local.value > 0 ? [local.key] : []],
     remoteValues: shadow.remote.map(frame => frame.value), created: shadow.remote.map(frame => frame.created), expires: shadow.remote.map(frame => frame.expires),
-    processFlights: Array.from({ length: KEYS }, (_, key) => registered(key)),
+    processFlights: Array.from({ length: KEYS }, (_, key) => registered(key)), receipt: shadow.receipt,
     sources: shadow.sources.map(({ key, localTtl, remoteTtl, retention, shared, result }) =>
       ({ instance: 0, key, localMs: localTtl, fence: 0, retentionMs: remoteTtl > 0 ? retention : 0, result, shared })) };
 }

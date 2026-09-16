@@ -127,6 +127,12 @@
           },
           "layer": {
             "#bigint": "0"
+          },
+          "localExpires": {
+            "#bigint": "0"
+          },
+          "localValue": {
+            "#bigint": "0"
           }
         },
         "remoteValues": [
@@ -141,11 +147,6 @@
           "#bigint": "100000"
         },
         "sources": [],
-        "watermark": [
-          {
-            "#bigint": "0"
-          }
-        ],
         "writeFailed": false
       }
     },
@@ -295,6 +296,12 @@
           },
           "layer": {
             "#bigint": "0"
+          },
+          "localExpires": {
+            "#bigint": "0"
+          },
+          "localValue": {
+            "#bigint": "0"
           }
         },
         "remoteValues": [
@@ -309,11 +316,6 @@
           "#bigint": "100000"
         },
         "sources": [],
-        "watermark": [
-          {
-            "#bigint": "0"
-          }
-        ],
         "writeFailed": false
       }
     },
@@ -440,6 +442,12 @@
             "#bigint": "0"
           },
           "layer": {
+            "#bigint": "4"
+          },
+          "localExpires": {
+            "#bigint": "0"
+          },
+          "localValue": {
             "#bigint": "0"
           }
         },
@@ -475,11 +483,6 @@
               "#bigint": "5000"
             },
             "shared": true
-          }
-        ],
-        "watermark": [
-          {
-            "#bigint": "0"
           }
         ],
         "writeFailed": false
@@ -616,6 +619,12 @@
             "#bigint": "0"
           },
           "layer": {
+            "#bigint": "4"
+          },
+          "localExpires": {
+            "#bigint": "0"
+          },
+          "localValue": {
             "#bigint": "0"
           }
         },
@@ -651,11 +660,6 @@
               "#bigint": "5000"
             },
             "shared": true
-          }
-        ],
-        "watermark": [
-          {
-            "#bigint": "0"
           }
         ],
         "writeFailed": false
@@ -792,6 +796,12 @@
             "#bigint": "0"
           },
           "layer": {
+            "#bigint": "4"
+          },
+          "localExpires": {
+            "#bigint": "0"
+          },
+          "localValue": {
             "#bigint": "0"
           }
         },
@@ -827,11 +837,6 @@
               "#bigint": "5000"
             },
             "shared": true
-          }
-        ],
-        "watermark": [
-          {
-            "#bigint": "0"
           }
         ],
         "writeFailed": false
@@ -996,6 +1001,12 @@
             "#bigint": "0"
           },
           "layer": {
+            "#bigint": "4"
+          },
+          "localExpires": {
+            "#bigint": "0"
+          },
+          "localValue": {
             "#bigint": "0"
           }
         },
@@ -1031,11 +1042,6 @@
               "#bigint": "5000"
             },
             "shared": true
-          }
-        ],
-        "watermark": [
-          {
-            "#bigint": "0"
           }
         ],
         "writeFailed": false
@@ -1183,7 +1189,13 @@
             "#bigint": "0"
           },
           "layer": {
-            "#bigint": "0"
+            "#bigint": "4"
+          },
+          "localExpires": {
+            "#bigint": "1000"
+          },
+          "localValue": {
+            "#bigint": "1"
           }
         },
         "remoteValues": [
@@ -1239,11 +1251,6 @@
               "#bigint": "0"
             },
             "shared": false
-          }
-        ],
-        "watermark": [
-          {
-            "#bigint": "0"
           }
         ],
         "writeFailed": false
@@ -1391,7 +1398,13 @@
             "#bigint": "0"
           },
           "layer": {
-            "#bigint": "0"
+            "#bigint": "4"
+          },
+          "localExpires": {
+            "#bigint": "1000"
+          },
+          "localValue": {
+            "#bigint": "1"
           }
         },
         "remoteValues": [
@@ -1447,11 +1460,6 @@
               "#bigint": "0"
             },
             "shared": false
-          }
-        ],
-        "watermark": [
-          {
-            "#bigint": "0"
           }
         ],
         "writeFailed": false
@@ -1599,7 +1607,13 @@
             "#bigint": "0"
           },
           "layer": {
-            "#bigint": "0"
+            "#bigint": "4"
+          },
+          "localExpires": {
+            "#bigint": "1000"
+          },
+          "localValue": {
+            "#bigint": "1"
           }
         },
         "remoteValues": [
@@ -1655,11 +1669,6 @@
               "#bigint": "0"
             },
             "shared": false
-          }
-        ],
-        "watermark": [
-          {
-            "#bigint": "0"
           }
         ],
         "writeFailed": false
@@ -1835,7 +1844,13 @@
             "#bigint": "0"
           },
           "layer": {
-            "#bigint": "0"
+            "#bigint": "4"
+          },
+          "localExpires": {
+            "#bigint": "1000"
+          },
+          "localValue": {
+            "#bigint": "1"
           }
         },
         "remoteValues": [
@@ -1891,11 +1906,6 @@
               "#bigint": "0"
             },
             "shared": false
-          }
-        ],
-        "watermark": [
-          {
-            "#bigint": "0"
           }
         ],
         "writeFailed": false
@@ -2050,6 +2060,12 @@
           },
           "layer": {
             "#bigint": "2"
+          },
+          "localExpires": {
+            "#bigint": "1000"
+          },
+          "localValue": {
+            "#bigint": "1"
           }
         },
         "remoteValues": [
@@ -2105,11 +2121,6 @@
               "#bigint": "0"
             },
             "shared": false
-          }
-        ],
-        "watermark": [
-          {
-            "#bigint": "0"
           }
         ],
         "writeFailed": false

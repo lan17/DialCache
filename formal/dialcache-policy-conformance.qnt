@@ -8,7 +8,6 @@ module dialcache_policy_conformance {
   import receipts as Receipts from "./kernel/receipts"
   import serving as Serving from "./kernel/serving"
   import remote_frames as Remote from "./kernel/remote-frames"
-  import flights as Flights from "./kernel/flights"
   import clock as Clock from "./kernel/clock"
   import policy_gate as Gate from "./kernel/policy-gate"
   // Two logical keys, one process-local slot, untracked Redis. At most one
@@ -20,11 +19,12 @@ module dialcache_policy_conformance {
   // Environment: untracked Redis, separate wall/elapsed clocks, held policy
   // replies and sources, injectable provider/read/dump/write failures.
   // Bounds: two keys, one local slot, twelve callers; no source deadline.
-  // Every rule is a kernel transition (formal/kernel): the layered traversal,
-  // whose sources carry the TTLs of the reply that started them, the overlay
-  // decoder (policy_overlay), the config error record and the receipt of the
-  // latest release. This module owns the bounded state, the input choices,
-  // the guards, the properties and the regressions.
+  // Every rule is a kernel transition (formal/kernel): the receipted layered
+  // release (sources carry the TTLs of the reply that started them; the
+  // receipt of the latest release is read by the one-step properties), the
+  // overlay decoder (policy_overlay) and the config error record. This module
+  // owns the bounded state, the input choices, the guards, the properties and
+  // the regressions.
 
   // -- Stable overlay, outcome, and duration encodings ------------------------
   // The overlay codes are the library's (policy_overlay), named here as the
@@ -154,14 +154,12 @@ module dialcache_policy_conformance {
     }
   }
   // The held reply resolves against the overlay in force: the traversal runs
-  // with the decoded layers and TTLs, the receipt records the layer that
-  // served, and a failed reply is reported once on the policy-error channel.
+  // with the fixture's layers gated by the decoded TTLs and leaves its
+  // receipt, and a failed reply is reported once on the policy-error channel.
   action releasePolicy = all {
     Gate::holding(s),
     s' = ConfigErrors::recordConfigError(
-      Receipts::record(
-        Serving::release(s, LAYOUT, Gate::latest(s), Overlay::resolve(s, BASELINE), Overlay::ttls(s, BASELINE)),
-        Serving::layeredRelease(s, LAYOUT, Gate::latest(s), Overlay::resolve(s, BASELINE), Overlay::ttls(s, BASELINE))),
+      Receipts::release(s, LAYOUT, Gate::latest(s), Overlay::resolve(s, BASELINE), Overlay::ttls(s, BASELINE)),
       Overlay::failed(s)),
     input' = { name: "releasePolicy", choice: -1 }
   }
@@ -279,30 +277,30 @@ module dialcache_policy_conformance {
   }
 
   // -- Independently stated safety properties --------------------------------
-  // The read properties are stated about the release that just happened: one
-  // reply is held at a time (beginCall waits for the release), so the caller a
-  // release served is the last admitted one, and the receipt names its key and
-  // the layer that served it. The frames and clocks do not move during a
-  // release, so the entry or frame the caller read is the post-state's, and
-  // the reply's TTLs decode from the unchanged overlay. The boundaries are
-  // restated here, not read from the rules.
+  // The read properties are stated about the release that just happened, from
+  // its receipt: the caller, its key, the layer that served it (or that it
+  // started a source or joined a flight) and the local slot of its key as the
+  // release found it. The frames and the clocks do not move during a release,
+  // so the frame the caller read is the post-state's, and the reply's TTLs
+  // decode from the unchanged overlay. The boundaries are restated here, not
+  // read from the rules.
 
   val justReleased = input.name == "releasePolicy"
-  val releasedCaller = s.o.calls.length() - 1
+  val releasedCaller = s.receipt.caller
   val releasedValue = s.o.calls.nth(releasedCaller)
-  // The released caller started a source of its own (its only owner) rather
-  // than joining one or being served.
-  val startedSource = s.owners.nth(releasedCaller) >= 0
-    and Flights::ownedBy(s, s.owners.nth(releasedCaller)) == Set(releasedCaller)
+  val startedSource = s.receipt.layer == Receipts::STARTED
+  val joinedFlight = s.receipt.layer == Receipts::NOT_SERVED
 
-  // A local hit serves the live entry holding the caller's value and leaves
-  // its insertion expiry alone; a miss that started a source while the local
-  // layer was on found no live entry.
-  val localHitsRespectInsertionExpiry = not(justReleased) or {
+  // A local hit serves the entry that was live at the read, holding the
+  // caller's value, and leaves its insertion expiry alone; every other
+  // release that reached the layers while the local layer was on (a remote
+  // hit, a started source) found no live entry.
+  val localHitsRespectInsertionExpiry = not(justReleased) or joinedFlight or {
     val key = s.receipt.key
-    val live = s.localValues.nth(key) > NO_VALUE and s.now < s.localExpires.nth(key)
-    if (s.receipt.layer == Receipts::FROM_LOCAL) live and s.localValues.nth(key) == releasedValue
-    else not(startedSource and Overlay::localTtl(s, BASELINE) > 0 and live)
+    val live = s.receipt.localValue > NO_VALUE and s.now < s.receipt.localExpires
+    if (s.receipt.layer == Receipts::FROM_LOCAL)
+      live and s.receipt.localValue == releasedValue and s.localExpires.nth(key) == s.receipt.localExpires
+    else not(Overlay::localTtl(s, BASELINE) > 0 and live)
   }
   // A remote hit serves a retained frame holding the caller's value, stamped
   // at or before the acquired wall time and younger than the reply's fresh
@@ -336,8 +334,9 @@ module dialcache_policy_conformance {
   // layer errors retain their independent layer-policy cases. The replay maps
   // the public error label (not the source error object) into errorType. That
   // each failed reply reports exactly one error is pinned by
-  // providerFailureReportsStablePolicyCategoryTest and by the drivers, which
-  // compare the policyErrors channel on every history.
+  // providerFailureReportsStablePolicyCategoryTest (the provider fault),
+  // invalidReadBudgetBypassesAllCachingTest (the invalid read budget) and by
+  // the drivers, which compare the policyErrors channel on every history.
   val policyResolutionErrorsHaveStableClassification = s.policyErrors.indices().forall(index => {
     val error = s.policyErrors.nth(index)
     error.layer == "noop" and error.errorType == "config_resolution"
@@ -351,6 +350,7 @@ module dialcache_policy_conformance {
     .then(startCall(0))
     .then(releasePolicy)
     .expect(s.o.loaders == 2 and s.o.reads == 0)
+    .expect(s.policyErrors == List(ConfigErrors::CONFIG_RESOLUTION, ConfigErrors::CONFIG_RESOLUTION))
     .then(finishSource(0, VALUE_ONE))
     .expect(s.localValues == List(NO_VALUE, NO_VALUE) and s.o.writes == 0)
   run invalidLocalRampPreservesRemoteTest = init.then(changePolicy(POLICY_INVALID_LOCAL_RAMP))
@@ -559,6 +559,17 @@ module dialcache_policy_conformance {
     .then(startCall(0)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_ONE)
       and s.o.loaders == 1 and s.o.reads == 2 and s.o.loads == 1)
+
+  // A remote hit warms local storage for the reply's local TTL, not for the
+  // frame's remaining freshness: a 2 s local TTL keeps serving locally after
+  // the 1 s remote freshness has passed.
+  run remoteHitWarmsLocalForTheReplysLocalTtlTest = init.then(seedRemote(0, VALUE_ONE))
+    .then(changePolicy(POLICY_LOCAL_TTL_TWO_SECONDS))
+    .then(startCall(0)).then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_ONE) and s.o.loads == 1 and s.localExpires.nth(0) == TWO_SECONDS_MS)
+    .then(elapse(ONE_SECOND_MS)).then(elapse(HALF_SECOND_MS))
+    .then(startCall(0)).then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE) and s.o.loaders == 0 and s.o.reads == 1)
 
   run untrackedReadFailureStillWarmsActiveLocalTest = init
     .then(setFault("readFault", true))

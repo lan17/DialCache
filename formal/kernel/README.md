@@ -24,9 +24,9 @@ design and its history; this file describes what is here and how to use it.
 | `serving` | Admission, traversal order (`decide`), ownership precedence, publication and refill authority with the TTLs each source captured from the reply that started it, the remote adapter's read, dump and write faults along a refill, scope closure, maintenance; the layered shape and its local and request-only projections; the layered release judged once (`layeredRelease`) for the transition and the records composed around it | `admit`, `release`, `begin`, `settle`, `admitLocal`, `releaseLocal`, `settleLocal`, `admitRequest`, `releaseRequest`, `settleRequest`, `closeScope`, `invalidate` |
 | `deadlines` | Source budgets: the budget a source starts with (a source started at admission is bounded only when its key failed, C27, a disabled context and an outside call run theirs unbounded, C01; a source started at release is bounded, its caller was enabled when admitted), the deadline measured from the source's own start, expiry on timer delivery or late arrival, abandoned work draining, as budgeted variants of the local lifecycle | `admitLocal`, `releaseLocal`, `settleLocal`, `advanceLocal` |
 | `diagnostics` | The diagnostics channel: the singleflight a caller coalesced into and the layer a failed source is attributed to, as diagnosed variants of the request-only traversal | `admitRequest`, `releaseRequest`, `settleRequest` |
-| `policy_overlay` | How a runtime policy overlay (the policy drivers' codes 0 to 25) resolves against a fixture's baseline TTLs: each layer's TTL, the retention a refill is written with, coalescing (codes 10 to 19 disable it), and whether the reply failed (a provider fault or an invalid read budget); the layers a reply enables follow from its TTLs | `failed`, `localTtl`, `remoteTtl`, `retention`, `ttls`, `resolve` |
+| `policy_overlay` | How a runtime policy overlay (the policy drivers' codes 0 to 25) resolves against a fixture's baseline TTLs: each layer's TTL, the retention a refill is written with, coalescing (codes 10 to 19 disable it), and whether the reply failed (a provider fault or an invalid read budget); the reply's layer set is the fixture's, gated by the TTLs at release (`layer_policy::gated`) | `failed`, `localTtl`, `remoteTtl`, `retention`, `ttls`, `resolve` |
 | `config_errors` | The policy-error channel: a reply that fails to resolve is reported once, against no layer, as a `config_resolution` error; an opt-in record composed around the release whose reply failed | `recordConfigError` |
-| `receipts` | The receipt of the latest release (the caller, its key, the layer that served it or none), for one-step expiry and freshness properties; an opt-in record composed after `serving::release` from `serving::layeredRelease` | `record` |
+| `receipts` | The receipt of the latest release (the caller, its key, the layer that served it, that it started a source or joined a flight, and the local slot of its key as the release found it), for one-step expiry and freshness properties, as a receipted variant of the layered release judged once (`serving::layeredRelease`) | `release` |
 
 `cache_rules` (age, expiry, deadline and fence judgments) stays the layer under
 these modules and is imported, never restated.
@@ -98,8 +98,9 @@ Per-concern entry points a profile would sequence are not offered: the order is
 the rule, and the lint reports a branch between library transitions. A profile
 composes an opt-in record after a transition when one of its own properties or
 its drivers' channels needs it (`Flights::recordIdentity(Serving::begin(...), call)`,
-`Receipts::record(Serving::release(...), Serving::layeredRelease(...))`,
-`ConfigErrors::recordConfigError(..., Overlay::failed(s))`); records the
+`ConfigErrors::recordConfigError(..., Overlay::failed(s))`), or a variant that
+records beside the transition from the release judged once
+(`Receipts::release`, like `Diagnostics::releaseRequest`); records the
 traversal itself does not read are never mandatory fields.
 
 The traversal has three shapes over one statement of the order (`decide`,
@@ -147,8 +148,8 @@ policy replies and a runtime policy resolution; `formal/dialcache-scope-conforma
 the third, over the request-only projection with diagnostics;
 `formal/dialcache-source-budgets-conformance.qnt` the fourth, over the budgeted
 local projection; `formal/dialcache-policy-conformance.qnt` the fifth, with held
-replies decoded by `policy_overlay` over the layered shape, the config error
-record and the receipt of the latest release). It keeps
+replies decoded by `policy_overlay` over the receipted layered release and the
+config error record). It keeps
 its constants, its flat `State`, `var s` and `var input`, its `nondet` input
 choices, its guards, its invariants and its regressions. Each wrapper action
 assigns `s'` to one library transition and `input'` to the driver record:
