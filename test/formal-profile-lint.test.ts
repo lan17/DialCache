@@ -20,14 +20,16 @@ type Report = {
   };
 };
 type Profile = { id: string; model: string };
-type Baseline = { schemaVersion: number; quintVersion: string; kernelModules: string[]; profiles: Array<{ id: string; model: string; module: string; tableSize: number; actions: number; reachableDefinitions: number; stateAssigningDefinitions: number; stateAssigningDefinitionNames: string[]; libraryTransitions: string[]; compositionViolations: number }> };
+type Baseline = { schemaVersion: number; quintVersion: string; kernelModules: string[]; profiles: Array<{ id: string; model: string; module: string; libraryTransitions: string[]; compositionViolations: number }> };
 type LintOptions = { main?: string; kernelModules?: string[]; witnessPattern?: string; observationField?: string };
-const { lintModel, computeBaseline, checkBaseline, diffBaseline, formatBaseline, baselinePath, kernelModulesOf } =
+const { lintModel, computeBaseline, checkBaseline, diffBaseline, ratchetDifferences, composedViolations, formatBaseline, baselinePath, kernelModulesOf } =
   await import(new URL("../formal/lint-profiles.mjs", import.meta.url).href) as {
     lintModel(model: string, options?: LintOptions): Promise<Report>;
     computeBaseline(options?: { profiles?: Profile[]; concurrency?: number }): Promise<Baseline>;
     checkBaseline(options?: { cwd?: string; path?: string; profiles?: Profile[]; concurrency?: number }): Promise<{ expected: Baseline; actual: Baseline; differences: string[] }>;
     diffBaseline(expected: unknown, actual: unknown): string[];
+    ratchetDifferences(expected: Baseline, actual: Baseline): string[];
+    composedViolations(baseline: Baseline): string[];
     formatBaseline(baseline: Baseline): string;
     baselinePath: string;
     kernelModulesOf(directory?: string): string[];
@@ -53,36 +55,47 @@ const quintTimeout = 60_000;
 const cli = (...args: string[]) => spawnSync(process.execPath, ["formal/lint-profiles.mjs", ...args], { cwd: root, encoding: "utf8" });
 
 describe("profile lint baseline diff", () => {
-  const baseline: Baseline = { schemaVersion: 2, quintVersion: "0.32.0", kernelModules: ["cache_rules", "serving"], profiles: [
-    { id: "a", model: "formal/a.qnt", module: "a", tableSize: 10, actions: 2, reachableDefinitions: 3, stateAssigningDefinitions: 1, stateAssigningDefinitionNames: ["init"],
-      libraryTransitions: ["serving::begin"], compositionViolations: 0 },
+  const baseline: Baseline = { schemaVersion: 3, quintVersion: "0.32.0", kernelModules: ["serving"], profiles: [
+    { id: "a", model: "formal/a.qnt", module: "a", libraryTransitions: ["serving::begin"], compositionViolations: 0 },
+    { id: "b", model: "formal/b.qnt", module: "b", libraryTransitions: [], compositionViolations: 12 },
   ] };
   const clone = () => JSON.parse(JSON.stringify(baseline)) as Baseline;
 
-  it("reports nothing for an identical recomputation", () => {
+  it("reports nothing for an identical recomputation or a count that fell", () => {
+    expect(ratchetDifferences(baseline, clone())).toEqual([]);
+    const improved = clone();
+    improved.profiles[1]!.compositionViolations = 7;
+    expect(ratchetDifferences(baseline, improved)).toEqual([]);
+  });
+
+  it("fails when a count rises, a composed profile has any violation, or the library transitions move", () => {
+    const rose = clone();
+    rose.profiles[1]!.compositionViolations = 13;
+    expect(ratchetDifferences(baseline, rose)).toEqual(["baseline.profiles[1].compositionViolations: b rose from 12 to 13"]);
+    const composedWithViolation = clone();
+    composedWithViolation.profiles[0]!.compositionViolations = 0;
+    // The record itself may say 2; the composed profile still may not have any.
+    const recordedWithViolation = clone();
+    recordedWithViolation.profiles[0]!.compositionViolations = 2;
+    const actualWithViolation = clone();
+    actualWithViolation.profiles[0]!.compositionViolations = 2;
+    expect(ratchetDifferences(recordedWithViolation, actualWithViolation)).toEqual(["a: 2 composition violation(s) in a profile that composes serving::begin"]);
+    expect(composedViolations(actualWithViolation)).toEqual(["a: 2 composition violation(s) in a profile that composes serving::begin"]);
+    expect(composedViolations(baseline)).toEqual([]);
+    const moved = clone();
+    moved.profiles[0]!.libraryTransitions = ["serving::begin", "serving::settle"];
+    expect(ratchetDifferences(baseline, moved)).toEqual(['baseline.profiles[0].libraryTransitions[1]: unexpected "serving::settle"']);
+  });
+
+  it("reports missing and unexpected profiles and kernel modules", () => {
+    const actual = clone();
+    actual.profiles.push({ id: "c", model: "formal/c.qnt", module: "c", libraryTransitions: [], compositionViolations: 1 });
+    actual.kernelModules = ["serving", "clock"];
+    const differences = ratchetDifferences(baseline, actual);
+    expect(differences).toContain('baseline.kernelModules[1]: unexpected "clock"');
+    expect(differences.some(line => line.startsWith("baseline.profiles[2]: unexpected "))).toBe(true);
+    expect(ratchetDifferences(baseline, { ...clone(), profiles: [baseline.profiles[0]!] })).toEqual([`baseline.profiles: missing ${JSON.stringify(baseline.profiles[1])}`]);
     expect(diffBaseline(baseline, clone())).toEqual([]);
-  });
-
-  it("names the path of every changed leaf", () => {
-    const actual = clone();
-    actual.profiles[0]!.actions = 3;
-    actual.profiles[0]!.stateAssigningDefinitionNames = ["init", "call"];
-    expect(diffBaseline(baseline, actual)).toEqual([
-      "baseline.profiles[0].actions: expected 2, got 3",
-      'baseline.profiles[0].stateAssigningDefinitionNames[1]: unexpected "call"',
-    ]);
-  });
-
-  it("reports missing and unexpected profiles and keys", () => {
-    const actual = clone();
-    actual.profiles.push({ ...actual.profiles[0]!, id: "b" });
-    delete (actual as Partial<Baseline>).kernelModules;
-    (actual as Baseline & { extra?: number }).extra = 1;
-    const differences = diffBaseline(baseline, actual);
-    expect(differences).toContain('baseline.kernelModules: missing ["cache_rules","serving"]');
-    expect(differences).toContain("baseline.extra: unexpected 1");
-    expect(differences.some(line => line.startsWith("baseline.profiles[1]: unexpected "))).toBe(true);
-    expect(diffBaseline(baseline, { ...clone(), profiles: [] })).toEqual([`baseline.profiles[0]: missing ${JSON.stringify(baseline.profiles[0])}`]);
   });
 });
 
@@ -161,10 +174,11 @@ describe.skipIf(!quintAvailable)("profile lint over synthetic kernel instances",
     expect(report.composition.violations).toEqual([]);
   }, quintTimeout);
 
-  it("discovers the kernel modules from formal/kernel and the judgment library", () => {
+  it("discovers the kernel modules from formal/kernel only", () => {
     const modules = kernelModulesOf();
     expect(modules).toContain("serving");
-    expect(modules).toContain("cache_rules");
+    expect(modules).toContain("callers");
+    expect(modules).not.toContain("cache_rules");
     expect([...modules].sort()).toEqual(modules);
   });
 
@@ -344,11 +358,7 @@ describe.skipIf(!quintAvailable)("profile lint baseline", () => {
     // A composed profile has no composition violation; every other count is
     // that profile's migration work list.
     for (const profile of actual.profiles) {
-      expect(profile.stateAssigningDefinitionNames.length, profile.id).toBe(profile.stateAssigningDefinitions);
-      expect(profile.stateAssigningDefinitions, profile.id).toBeGreaterThan(0);
-      expect(profile.reachableDefinitions, profile.id).toBeGreaterThanOrEqual(profile.actions);
-      const composed = profile.libraryTransitions.some(transition => !transition.startsWith("cache_rules::"));
-      if (composed) expect(profile.compositionViolations, profile.id).toBe(0);
+      if (profile.libraryTransitions.length) expect(profile.compositionViolations, profile.id).toBe(0);
       else expect(profile.compositionViolations, profile.id).toBeGreaterThan(0);
     }
     expect(actual.profiles.find(profile => profile.id === "layers")!.libraryTransitions).toContain("serving::begin");
@@ -357,24 +367,19 @@ describe.skipIf(!quintAvailable)("profile lint baseline", () => {
   it("reports drift against a stale baseline with the changed paths", async () => {
     const profiles = [{ id: "clean", model: fixture("profile-clean") }, { id: "thick", model: fixture("profile-thick") }];
     const fresh = await computeBaseline({ profiles, concurrency: 1 });
-    expect(fresh.profiles.map(profile => [profile.id, profile.module, profile.actions, profile.stateAssigningDefinitionNames, profile.compositionViolations])).toEqual([
-      ["clean", "profile_clean", 4, ["kernel::bump", "kernel::init", "kernel::reset"], 8],
-      ["thick", "profile_thick", 4, ["decide", "init", "kernel::init"], 3],
+    expect(fresh.schemaVersion).toBe(3);
+    expect(fresh.profiles.map(profile => [profile.id, profile.module, profile.libraryTransitions, profile.compositionViolations])).toEqual([
+      ["clean", "profile_clean", [], 8],
+      ["thick", "profile_thick", [], 3],
     ]);
+    // A stale record with lower counts fails as a rise; a higher recorded count passes as a fall.
     const stale = JSON.parse(JSON.stringify(fresh)) as Baseline;
-    stale.profiles[1]!.stateAssigningDefinitionNames = ["init", "kernel::init"];
-    stale.profiles[1]!.stateAssigningDefinitions = 2;
-    stale.profiles[0]!.tableSize += 1;
+    stale.profiles[0]!.compositionViolations = 6;
+    stale.profiles[1]!.compositionViolations = 5;
     const path = join(temporary, "baseline.json");
     writeFileSync(path, formatBaseline(stale));
     const { differences } = await checkBaseline({ path, profiles, concurrency: 1 });
-    expect(differences).toEqual([
-      `baseline.profiles[0].tableSize: expected ${stale.profiles[0]!.tableSize}, got ${fresh.profiles[0]!.tableSize}`,
-      "baseline.profiles[1].stateAssigningDefinitions: expected 2, got 3",
-      'baseline.profiles[1].stateAssigningDefinitionNames[0]: expected "init", got "decide"',
-      'baseline.profiles[1].stateAssigningDefinitionNames[1]: expected "kernel::init", got "init"',
-      'baseline.profiles[1].stateAssigningDefinitionNames[2]: unexpected "kernel::init"',
-    ]);
+    expect(differences).toEqual(["baseline.profiles[0].compositionViolations: clean rose from 6 to 8"]);
     writeFileSync(path, formatBaseline(fresh));
     expect((await checkBaseline({ path, profiles, concurrency: 1 })).differences).toEqual([]);
   }, 120_000);

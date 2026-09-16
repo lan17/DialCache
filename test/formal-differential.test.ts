@@ -12,13 +12,12 @@ type Manifests = { execution: { settings: Record<string, unknown>; models: Array
 type Model = { path: string; generate: { outputDirectory: string; traces: number }; invariants: string[]; replayRegressions?: string[]; settings: { backend: string; seed: string };
   behaviorVersion: number; schemaVersion: number | null; maxBytesPerStateRatio: number };
 type Plan = { action: "skip" | "compare"; reason?: string; reference?: Model; candidate: Model; descriptor: unknown };
-type Report = { profile: string; skipped?: string; removed?: string; forward: { disagreed: number }; reverse: { disagreed: number };
+type Report = { profile: string; skipped?: string; forward: { disagreed: number }; reverse: { disagreed: number };
   generation: { bytesPerStateRatio: number | null; maxBytesPerStateRatio: number; wallRatio: number | null } };
 const differential = await import(new URL("../formal/differential.mjs", import.meta.url).href) as {
   compareHistory(reference: History, replayed: History): { agree: boolean; step?: number; action?: string; choice?: number; reason?: string; fields?: string[] };
   chunked<T>(items: T[], size: number): T[][];
   bytesPerState(directory: string): { traces: number; states: number; bytes: number; bytesPerState: number };
-  historyOf(raw: unknown, path: string, descriptor: unknown): History;
   recordedStates(raw: { states: unknown[] }): { states: unknown[] };
   runDiagnostic(log: string, run: string): string | null;
   replayedHistory(raw: { states: unknown[] }, reference: History, descriptor: unknown): History;
@@ -39,9 +38,11 @@ const fixtures = await import(new URL("../formal/generated-fixtures.mjs", import
   scheduleHistories(source: string, declarations: Map<string, unknown>, sourceMap: unknown, histories: Array<Array<[string, number]>>, options: { prefix: string; cursor: string }):
     { declarations: string[]; schedules: Array<{ init: string; step: string; steps: number }>; clones: number };
 };
-const { readExecution, quintSources, importClosure } = await import(new URL("../formal/execution.mjs", import.meta.url).href) as {
+const { readExecution, quintSources, importClosure, copySources } = await import(new URL("../formal/execution.mjs", import.meta.url).href) as {
   readExecution(): { models: Array<{ path: string; profile?: string }> }; quintSources(directory?: string): string[]; importClosure(path: string, directory?: string): string[];
+  copySources(from: string, to: string): string[];
 };
+const { parseTrace } = await import(new URL("../formal/replay/features.mjs", import.meta.url).href) as { parseTrace(raw: unknown, path: string, descriptor: unknown): History };
 const root = fileURLToPath(new URL("../", import.meta.url));
 const quintAvailable = spawnSync("quint", ["--version"], { encoding: "utf8" }).status === 0;
 
@@ -129,7 +130,14 @@ describe("corpus differential comparison", () => {
       .toMatchObject({ action: "skip", reason: "intended divergence: observation schema version 2 -> 3" });
     expect(differential.differentialPlan(manifests([layersModel()]), manifests([layersModel({ differential: { maxBytesPerStateRatio: 1.5 } })]), "layers"))
       .toMatchObject({ action: "compare", candidate: { maxBytesPerStateRatio: 1.5 } });
-    expect(() => differential.differentialPlan(manifests([]), manifests([]), "layers")).toThrow(/No generation profile named layers/);
+    // A profile the candidate no longer generates is a visible removal, reported rather than compared; a profile neither revision generates is a misuse.
+    expect(differential.differentialPlan(manifests([layersModel()]), manifests([]), "layers")).toMatchObject({ action: "skip", reason: /profile removed/ });
+    expect(() => differential.differentialPlan(manifests([]), manifests([]), "layers")).toThrow(/No generation profile named layers in either revision/);
+    // A generated profile without an explicit-input driver descriptor is refused by name, not misreported.
+    const effects = (extra: Record<string, unknown> = {}) => ({ path: "formal/dialcache-effects-conformance.qnt", profile: "effects", invariants: ["a"], regressions: [],
+      generate: { maxSamples: 4, maxSteps: 4, traces: 2, outputDirectory: ".formal-traces/effects" }, ...extra });
+    const effectsManifests = (models: Array<Record<string, unknown>>): Manifests => ({ execution: { settings: { backend: "rust", threads: 1, seed: "0xd1a1ca", verbosity: 1 }, models }, registry: { profiles: [{ id: "effects", version: 1 }] } });
+    expect(() => differential.differentialPlan(effectsManifests([effects()]), effectsManifests([effects()]), "effects")).toThrow(/effects has no explicit-input feature descriptor/);
   });
 
   it("fails the run on a disagreement in either direction or trace growth beyond the bound; wall time is advisory", () => {
@@ -145,10 +153,6 @@ describe("corpus differential comparison", () => {
     expect(differential.verdict(report({ generation: { wallRatio: 2 } }))).toEqual({ failed: false, reasons: [expect.stringMatching(/^advisory: generation wall time x2\.00/)] });
     expect(differential.verdict({ profile: "layers", skipped: "new profile" } as unknown as Report)).toEqual({ failed: false, reasons: ["skipped: new profile"] });
     expect(differential.formatReport({ profile: "layers", skipped: "intended divergence: behaviorVersion 0 -> 1" } as unknown as Report)).toBe("layers: not compared (intended divergence: behaviorVersion 0 -> 1).");
-    // A composed profile the candidate no longer generates is a failure, not a skip.
-    const removed = { profile: "layers", removed: "composed at bf3c7e8dac1c but the candidate does not generate it" } as unknown as Report;
-    expect(differential.verdict(removed)).toEqual({ failed: true, reasons: ["removed: composed at bf3c7e8dac1c but the candidate does not generate it"] });
-    expect(differential.formatReport(removed)).toBe("layers: composed at bf3c7e8dac1c but the candidate does not generate it.");
     expect(differential.formatReport({ profile: "layers", skipped: "identical import closure and generation settings" } as unknown as Report)).toContain("not compared (identical import closure");
   });
 
@@ -211,14 +215,8 @@ describe.skipIf(!quintAvailable)("corpus differential replay through a tree", ()
     const plan = differential.differentialPlan(differential.readManifests(root), differential.readManifests(root), "layers");
     return { model: plan.candidate, descriptor: plan.descriptor };
   };
-  const smokeHistory = (descriptor: unknown) => differential.historyOf(JSON.parse(readFileSync(resolve(root, "formal/layers-smoke.itf.json"), "utf8")), "layers-smoke", descriptor);
-  const copyTree = (into: string) => {
-    for (const path of quintSources(root)) {
-      mkdirSync(join(into, path, ".."), { recursive: true });
-      writeFileSync(join(into, path), readFileSync(resolve(root, path)));
-    }
-    return into;
-  };
+  const smokeHistory = (descriptor: unknown) => parseTrace(JSON.parse(readFileSync(resolve(root, "formal/layers-smoke.itf.json"), "utf8")), "layers-smoke", descriptor);
+  const copyTree = (into: string) => { copySources(root, into); return into; };
 
   it("shares one constrained clone per input pair across the histories of a chunk", async () => {
     const { model } = layers();
@@ -246,7 +244,7 @@ describe.skipIf(!quintAvailable)("corpus differential replay through a tree", ()
     const exported = spawnSync("quint", ["test", model.path, "--backend=rust", "--max-samples=1", `--seed=${model.settings.seed}`,
       "--match=^untrackedSourcePublicationIsProbedInAllThreeLayersTest$", `--out-itf=${regressions}/{test}.itf.json`], { cwd: root, encoding: "utf8" });
     expect(exported.status, exported.stderr + exported.stdout).toBe(0);
-    const regression = differential.historyOf(JSON.parse(readFileSync(join(regressions, "untrackedSourcePublicationIsProbedInAllThreeLayersTest.itf.json"), "utf8")), "regression", descriptor);
+    const regression = parseTrace(JSON.parse(readFileSync(join(regressions, "untrackedSourcePublicationIsProbedInAllThreeLayersTest.itf.json"), "utf8")), "regression", descriptor);
     const verdicts = await differential.replayHistories(root, model, descriptor, [smoke, regression], { chunk: 1, output: join(output, "agree"), concurrency: 2 });
     expect(verdicts).toEqual([{ path: "layers-smoke", agree: true }, { path: "regression", agree: true }]);
     const generated = readFileSync(join(output, "agree", "replay-0", model.path), "utf8");

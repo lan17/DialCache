@@ -1005,7 +1005,7 @@
   "reviewedGuides": [
     {
       "path": "formal/AUTHORING.md",
-      "sha256": "7c1aa987c40e782815f5138f5962e6364945c73829466c59ec8f512ba52c2f7b",
+      "sha256": "e567b941bc291b388bb6fc2142ebc944f1851d33d76a4611f5752e343614c236",
       "entries": [
         {"line":1,"title":"Reading and extending the DialCache models"},
         {"line":16,"title":"Reading a model"},

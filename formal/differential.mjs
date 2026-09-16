@@ -50,9 +50,10 @@ const gitShow = (revision, path, cwd) => execFileSync('git', ['show', `${revisio
 
 // The reference tree: every Quint source and the manifests at the revision,
 // checked out into a scratch directory so relative imports resolve as in the repo.
+const manifestPaths = ['formal/execution.json', 'formal/profiles.json'];
 export function exportRevision(revision, directory, { cwd = root } = {}) {
   const listing = execFileSync('git', ['ls-tree', '-r', '--name-only', revision, '--', 'formal'], { cwd, encoding: 'utf8' })
-    .split('\n').filter(path => /^formal\/(kernel\/)?[\w-]+\.qnt$/.test(path) || path === 'formal/execution.json' || path === 'formal/profiles.json');
+    .split('\n').filter(path => manifestPaths.includes(path) || (path.endsWith('.qnt') && (dirname(path) === 'formal' || isKernelSource(path))));
   if (!listing.includes('formal/execution.json')) throw new Error(`Revision ${revision} has no formal/execution.json`);
   for (const path of listing) {
     mkdirSync(resolve(directory, dirname(path)), { recursive: true });
@@ -82,13 +83,17 @@ function generationModel(manifests, profileId) {
     maxBytesPerStateRatio: model.differential?.maxBytesPerStateRatio ?? defaultMaxBytesPerStateRatio, settings: manifests.execution.settings };
 }
 
-// What to do for one profile given both revisions' manifests.
+// What to do for one profile given both revisions' manifests. A profile the
+// candidate no longer generates is a visible removal with no behavior left to
+// protect (the manifest validator forbids registering a profile without
+// generating it), so it is reported, not compared.
 export function differentialPlan(referenceManifests, candidateManifests, profileId) {
   const candidate = generationModel(candidateManifests, profileId);
-  if (!candidate) throw new Error(`No generation profile named ${profileId} in formal/execution.json`);
-  const descriptor = profiles[profileId];
-  if (!descriptor || !descriptor.explicitInputs) throw new Error(`Profile ${profileId} has no explicit-input feature descriptor; the differential replays explicit inputs only`);
   const reference = generationModel(referenceManifests, profileId);
+  if (!candidate && !reference) throw new Error(`No generation profile named ${profileId} in either revision's formal/execution.json`);
+  if (!candidate) return { action: 'skip', reason: 'profile removed: the candidate does not generate it', reference };
+  const descriptor = profiles[profileId];
+  if (!descriptor || !descriptor.explicitInputs) throw new Error(`Profile ${profileId} has no explicit-input feature descriptor in formal/replay/features.mjs; the differential replays explicit inputs only`);
   if (!reference) return { action: 'skip', reason: 'new profile: the reference revision does not generate it', candidate, descriptor };
   if (reference.behaviorVersion !== candidate.behaviorVersion) {
     return { action: 'skip', reason: `intended divergence: behaviorVersion ${reference.behaviorVersion} -> ${candidate.behaviorVersion}`, reference, candidate, descriptor };
@@ -97,12 +102,6 @@ export function differentialPlan(referenceManifests, candidateManifests, profile
     return { action: 'skip', reason: `intended divergence: observation schema version ${reference.schemaVersion} -> ${candidate.schemaVersion}`, reference, candidate, descriptor };
   }
   return { action: 'compare', reference, candidate, descriptor };
-}
-
-// One history: the public inputs the trace recorded and every channel the
-// drivers assert after each of them (parseTrace's step minus its path).
-export function historyOf(raw, path, descriptor) {
-  return { path, steps: parseTrace(raw, path, descriptor).steps };
 }
 
 // The step-by-step comparison. Inputs are compared first; then every asserted
@@ -195,7 +194,7 @@ export async function generateCorpus(tree, model, { timeoutMs } = {}) {
 export function loadHistories(directory, descriptor) {
   if (!existsSync(directory)) return [];
   return readdirSync(directory).filter(name => name.endsWith('.itf.json')).sort()
-    .map(name => historyOf(JSON.parse(readFileSync(resolve(directory, name), 'utf8')), name, descriptor));
+    .map(name => parseTrace(JSON.parse(readFileSync(resolve(directory, name), 'utf8')), name, descriptor));
 }
 
 // A run that stops early still writes its trace: the agreeing prefix plus one
@@ -284,7 +283,7 @@ export async function prepareReplay(tree, model, descriptor, histories, { chunk,
 // is the initialization the reference also took, none is a refused init.
 export function replayedHistory(raw, reference, descriptor) {
   const recorded = recordedStates(raw);
-  if (recorded.states.length >= 2) return historyOf(recorded, reference.path, descriptor);
+  if (recorded.states.length >= 2) return parseTrace(recorded, reference.path, descriptor);
   return { path: reference.path, steps: recorded.states.length === 1 ? reference.steps.slice(0, 1) : [] };
 }
 
@@ -307,8 +306,9 @@ export function kernelModuleCount(directory = root) {
 // manifests exported once for every profile of a run.
 export function prepareReference(reference, { cwd = root, output = defaultOutput } = {}) {
   const revision = resolveMergeBase(reference, { cwd });
+  // One reference per run; an earlier merge base's export and corpus go.
+  rmSync(resolve(cwd, output, 'reference'), { recursive: true, force: true });
   const tree = resolve(cwd, output, 'reference', revision.slice(0, 12));
-  rmSync(tree, { recursive: true, force: true });
   exportRevision(revision, tree, { cwd });
   return { revision, tree, manifests: readManifests(tree) };
 }
@@ -329,37 +329,22 @@ export function closureSkip(referenceModel, candidateModel, referenceSources, ca
     ? 'identical import closure and generation settings' : null;
 }
 
-// The differential for one profile. `reference` is a git revision whose merge
-// base with HEAD supplies the reference text and manifests (or a prepared
-// reference); the candidate is the working tree.
-export async function runDifferential(profileId, { reference = 'origin/main', prepared, chunk = defaultChunk, output = defaultOutput,
+// The differential for one profile against a prepared reference (the merge
+// base's text and manifests); the candidate is the working tree.
+export async function runDifferential(profileId, prepared, { chunk = defaultChunk, output = defaultOutput,
     concurrency = resolveConcurrency(), cwd = root, log = console.log } = {}) {
   const candidateManifests = readManifests(cwd);
   validateExecution(candidateManifests.execution);
-  const { revision, tree: referenceTree, manifests: referenceManifests } = prepared ?? prepareReference(reference, { cwd, output });
+  const { revision, tree: referenceTree, manifests: referenceManifests } = prepared;
   const outputDirectory = resolve(cwd, output, profileId);
   rmSync(outputDirectory, { recursive: true, force: true });
   mkdirSync(outputDirectory, { recursive: true });
   const candidateTree = resolve(outputDirectory, 'candidate');
   copySources(cwd, candidateTree);
   const write = report => { writeFileSync(resolve(outputDirectory, 'report.json'), JSON.stringify(report, null, 2) + '\n'); return report; };
-  const referenceEntry = model => model ? { revision, path: model.path, behaviorVersion: model.behaviorVersion, schemaVersion: model.schemaVersion } : { revision };
-  let plan;
-  try { plan = differentialPlan(referenceManifests, candidateManifests, profileId); }
-  catch (error) {
-    const atReference = generationModel(referenceManifests, profileId);
-    if (!atReference) throw error;
-    // A profile deleted from both candidate manifests is a visible removal
-    // with no behavior left to protect; one still registered but no longer
-    // generated is the smuggling case.
-    const registered = candidateManifests.execution.models.some(model => model.profile === profileId) || candidateManifests.registry.profiles.some(entry => entry.id === profileId);
-    const report = { schemaVersion: 2, profile: profileId, reference: referenceEntry(atReference) };
-    return write(registered
-      ? { ...report, removed: `composed at ${revision.slice(0, 12)} but the candidate still registers the profile without generating it; a profile that stays has a corpus to replay` }
-      : { ...report, skipped: `profile removed: absent from the candidate's formal/execution.json and formal/profiles.json` });
-  }
-  const base = { schemaVersion: 2, profile: profileId, reference: referenceEntry(plan.reference), candidate: { path: plan.candidate.path,
-    behaviorVersion: plan.candidate.behaviorVersion, schemaVersion: plan.candidate.schemaVersion } };
+  const entry = model => model ? { path: model.path, behaviorVersion: model.behaviorVersion, schemaVersion: model.schemaVersion } : {};
+  const plan = differentialPlan(referenceManifests, candidateManifests, profileId);
+  const base = { schemaVersion: 2, profile: profileId, reference: { revision, ...entry(plan.reference) }, candidate: entry(plan.candidate) };
   if (plan.action === 'skip') return write({ ...base, skipped: plan.reason });
   const { reference: referenceModel, candidate: candidateModel, descriptor } = plan;
   const referenceSources = closureDigests(referenceModel.path, { cwd: referenceTree });
@@ -407,7 +392,6 @@ export async function runDifferential(profileId, { reference = 'origin/main', pr
 // run concurrently and hosted runners are noisy.
 export function verdict(report) {
   const reasons = [];
-  if (report.removed) return { failed: true, reasons: [`removed: ${report.removed}`] };
   if (report.skipped) return { failed: false, reasons: [`skipped: ${report.skipped}`] };
   for (const name of ['forward', 'reverse']) if (report[name].disagreed) reasons.push(`${report[name].disagreed} ${name} disagreement(s)`);
   const ratio = report.generation.bytesPerStateRatio;
@@ -419,7 +403,6 @@ export function verdict(report) {
 
 const ratio = (value, digits) => value === null || value === undefined ? 'ratio unavailable' : `x${value.toFixed(digits)}`;
 export function formatReport(report) {
-  if (report.removed) return `${report.profile}: ${report.removed}.`;
   if (report.skipped) return `${report.profile}: not compared (${report.skipped}).`;
   const total = direction => direction.sampled + direction.regressions;
   const lines = [
@@ -453,8 +436,9 @@ compared; a profile the reference does not generate is reported as new.
 A profile whose import closure and generation settings are byte-identical in
 both revisions is reported as unchanged and not regenerated. --composed selects
 every profile that imports a kernel module in either revision; one the working
-tree removed from both manifests is reported as removed, one it still registers
-without generating fails. Reports:
+tree no longer generates is reported as removed. Only profiles with an
+explicit-input driver descriptor (formal/replay/features.mjs) can be replayed.
+Reports:
 report.json under --out (default ${defaultOutput}/<profile>).`;
 
 async function main(argv) {
@@ -467,9 +451,8 @@ async function main(argv) {
   if (options.help || (positional.length !== 1 && !options.composed) || (positional.length && options.composed)) { console.log(usage); return 2; }
   const chunk = options.chunk === undefined ? defaultChunk : Number(options.chunk);
   if (!Number.isSafeInteger(chunk) || chunk < 1) throw new Error('--chunk must be a positive integer');
-  const settings = { ...(typeof options.reference === 'string' ? { reference: options.reference } : {}),
-    chunk, ...(typeof options.out === 'string' ? { output: options.out } : {}) };
-  const prepared = prepareReference(settings.reference ?? 'origin/main', { output: settings.output ?? defaultOutput });
+  const settings = { chunk, ...(typeof options.out === 'string' ? { output: options.out } : {}) };
+  const prepared = prepareReference(typeof options.reference === 'string' ? options.reference : 'origin/main', { output: settings.output ?? defaultOutput });
   const selected = options.composed ? selectProfiles(prepared.manifests, prepared.tree, readManifests(root)) : positional;
   if (!selected.length) {
     if (kernelModuleCount() > 0) throw new Error(`${kernelDirectory} has modules but no generation profile imports one in either revision; compose a profile or delete the modules`);
@@ -479,7 +462,7 @@ async function main(argv) {
   console.log(`Reference ${prepared.revision.slice(0, 12)}; profiles: ${selected.join(', ')}.`);
   let failed = false;
   for (const profileId of selected) {
-    const report = await runDifferential(profileId, { ...settings, prepared });
+    const report = await runDifferential(profileId, prepared, settings);
     console.log(formatReport(report));
     if (verdict(report).failed) failed = true;
   }

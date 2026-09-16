@@ -515,15 +515,14 @@ export function lintWitnessIsolation(index, { witnessPattern, observationField =
 // ---------------------------------------------------------------------------
 // Reports and baseline
 
-// The kernel library's module names: every module declared under formal/kernel
-// plus the judgment library the modules build on. A profile may assign only
-// values these modules compute.
+// The kernel library's module names: every module declared under formal/kernel.
+// A profile may assign only values these modules compute; cache_rules is the
+// judgment layer the modules consume, not one a profile assigns through.
 export function kernelModulesOf(directory = root) {
-  const declared = quintSources(directory).filter(isKernelSource).flatMap(path => {
+  return quintSources(directory).filter(isKernelSource).flatMap(path => {
     const match = /^module\s+([A-Za-z_]\w*)\s*\{/m.exec(readFileSync(resolve(directory, path), 'utf8'));
     return match ? [match[1]] : [];
-  });
-  return [...new Set([...declared, 'cache_rules'])].sort(compareStrings);
+  }).sort(compareStrings);
 }
 
 export async function lintModel(model, { main, kernelModules, witnessPattern, observationField = defaultObservationField, cwd = root } = {}) {
@@ -539,10 +538,11 @@ export function loadProfiles(directory = root) {
   return manifest.profiles.map(profile => ({ id: profile.id, model: profile.model }));
 }
 
-// One entry per profile: the definitions that assign state, the library
-// transitions the profile composes, and how many of its assigned values still
-// compute over cache state. A composed profile has no composition violations;
-// the counts of the others are the migration work list.
+// One entry per profile: the library transitions it composes and how many of
+// its assigned values still compute over cache state. A composed profile has
+// no composition violations; the counts of the others are the migration work
+// list. Nothing else is recorded: the lock pins the texts, and parser metrics
+// would fail the check on edits that say nothing about composition.
 export async function computeBaseline({ profiles, cwd = root, concurrency } = {}) {
   const selected = profiles ?? loadProfiles(cwd);
   const version = await quintVersion({ cwd });
@@ -551,12 +551,9 @@ export async function computeBaseline({ profiles, cwd = root, concurrency } = {}
     const parsed = await parseModel(profile.model, { cwd });
     const index = indexModules(parsed);
     const composition = lintComposition(index, { kernelModules });
-    return { id: profile.id, model: profile.model, module: index.main, tableSize: index.tableSize, actions: composition.actions.length,
-      reachableDefinitions: composition.reachableDefinitions, stateAssigningDefinitions: composition.stateAssigningDefinitions.length,
-      stateAssigningDefinitionNames: composition.stateAssigningDefinitions, libraryTransitions: composition.libraryTransitions,
-      compositionViolations: composition.count };
+    return { id: profile.id, model: profile.model, module: index.main, libraryTransitions: composition.libraryTransitions, compositionViolations: composition.count };
   }), concurrency === undefined ? {} : { concurrency });
-  return { schemaVersion: 2, quintVersion: version, kernelModules, profiles: entries };
+  return { schemaVersion: 3, quintVersion: version, kernelModules, profiles: entries };
 }
 
 // Leaf-by-leaf comparison; each difference names the JSON path.
@@ -590,19 +587,38 @@ export function readBaseline(directory = root, path = baselinePath) {
   return JSON.parse(readFileSync(file, 'utf8'));
 }
 
-// A profile that composes a kernel module must have no composition violation,
-// whatever count the baseline recorded: rewriting the baseline cannot admit
-// rule logic into a composed profile.
+// The check is a ratchet over what the rule protects. Every profile keeps the
+// library transitions it recorded; its violation count may fall but not rise;
+// and a profile that composes a kernel module has no violation whatever the
+// record says, so rewriting the baseline cannot admit rule logic into one.
 export function composedViolations(baseline) {
-  return baseline.profiles.filter(profile => profile.compositionViolations > 0 &&
-    profile.libraryTransitions.some(transition => !transition.startsWith('cache_rules::')))
-    .map(profile => `${profile.id}: ${profile.compositionViolations} composition violation(s) in a profile that composes ${profile.libraryTransitions.filter(t => !t.startsWith('cache_rules::')).join(', ')}`);
+  return baseline.profiles.filter(profile => profile.compositionViolations > 0 && profile.libraryTransitions.length > 0)
+    .map(profile => `${profile.id}: ${profile.compositionViolations} composition violation(s) in a profile that composes ${profile.libraryTransitions.join(', ')}`);
+}
+export function ratchetDifferences(expected, actual) {
+  const differences = [];
+  if (expected.schemaVersion !== actual.schemaVersion) differences.push(`baseline.schemaVersion: expected ${JSON.stringify(expected.schemaVersion)}, got ${JSON.stringify(actual.schemaVersion)}`);
+  if (expected.quintVersion !== actual.quintVersion) differences.push(`baseline.quintVersion: expected ${JSON.stringify(expected.quintVersion)}, got ${JSON.stringify(actual.quintVersion)}`);
+  differences.push(...diffBaseline(expected.kernelModules, actual.kernelModules, 'baseline.kernelModules'));
+  const recorded = new Map((expected.profiles ?? []).map(profile => [profile.id, profile]));
+  for (const [position, profile] of actual.profiles.entries()) {
+    const entry = recorded.get(profile.id);
+    if (!entry) { differences.push(`baseline.profiles[${position}]: unexpected ${JSON.stringify(profile)}`); continue; }
+    recorded.delete(profile.id);
+    differences.push(...diffBaseline({ model: entry.model, module: entry.module, libraryTransitions: entry.libraryTransitions },
+      { model: profile.model, module: profile.module, libraryTransitions: profile.libraryTransitions }, `baseline.profiles[${position}]`));
+    if (profile.compositionViolations > entry.compositionViolations) {
+      differences.push(`baseline.profiles[${position}].compositionViolations: ${profile.id} rose from ${entry.compositionViolations} to ${profile.compositionViolations}`);
+    }
+  }
+  for (const entry of recorded.values()) differences.push(`baseline.profiles: missing ${JSON.stringify(entry)}`);
+  return [...differences, ...composedViolations(actual)];
 }
 
 export async function checkBaseline({ cwd = root, path = baselinePath, profiles, concurrency } = {}) {
   const expected = readBaseline(cwd, path);
   const actual = await computeBaseline({ profiles, cwd, concurrency });
-  return { expected, actual, differences: [...diffBaseline(expected, actual), ...composedViolations(actual)] };
+  return { expected, actual, differences: ratchetDifferences(expected, actual) };
 }
 
 export const formatBaseline = baseline => `${JSON.stringify(baseline, null, 2)}\n`;
@@ -615,9 +631,10 @@ const usage = `Usage:
   node formal/lint-profiles.mjs baseline --check | --write
 
 The first form prints a JSON report and exits 1 when either rule is violated;
---kernel defaults to the modules under formal/kernel plus cache_rules. The
-second recomputes ${baselinePath} over every profile in formal/profiles.json
-and either diffs it against the committed file (--check, exit 1 on drift) or
+--kernel defaults to the modules under formal/kernel. The second recomputes
+${baselinePath} over every profile in formal/profiles.json and either checks
+it against the committed file (--check: library transitions unchanged, no
+violation count rising, none in a composed profile; exit 1 otherwise) or
 rewrites it (--write).`;
 
 function parseArguments(argv) {

@@ -73,16 +73,18 @@ walks every value assigned to a state variable other than `input` from the
 public wrappers and reports any comparison, branch, arithmetic or collection
 operator whose operand carries cache state, and any non-library definition
 applied to cache state, following profile helpers with the taint of their
-arguments. Library modules are those declared under `formal/kernel` plus
-`cache_rules`; a chosen `nondet` input and lambda parameters carry no state; a
+arguments. Library modules are those declared under `formal/kernel`
+(`cache_rules` is the judgment layer they consume, not one a profile assigns
+through); a chosen `nondet` input and lambda parameters carry no state; a
 record literal may set a field over a library result (that is wiring the
 reviewer sees, not a rule). `formal/profile-lint-baseline.json` records each
-profile's count; a composed profile reports zero and the other counts are the
-migration list. `node formal/lint-profiles.mjs baseline --check` is a step of
-`make differential` (the pull request lane) and of `make formal-check` (the
-weekly full run); it fails on drift from the recorded counts and, whatever the
-record says, on any composition violation in a profile that composes a kernel
-module. The lint sees the shape of assignments, not their meaning: a record
+profile's library transitions and violation count; a composed profile reports
+zero and the other counts are the migration list. `node formal/lint-profiles.mjs
+baseline --check` is a step of `make differential` (the pull request lane) and
+of `make formal-check` (the weekly full run); it is a ratchet: a profile's
+library transitions must match the record, its count may fall but not rise,
+and a profile that composes a kernel module may have none, whatever the record
+says. The lint sees the shape of assignments, not their meaning: a record
 literal that overrides a library result, or a let-bound lambda, passes it; the
 corpus differential is the behavioral check.
 
@@ -119,10 +121,15 @@ same change (or the profile's observation schema `version` in
 `formal/profiles.json` when the driver-asserted channels change), and the
 differential reports the profile as an intended divergence instead of
 comparing it. A profile the reference revision does not generate is reported
-as new. `make differential` runs the lint baseline check and then the
-differential for every profile that imports a kernel module (directly or
-through a helper library); the pull request lane runs that against the base
-branch whenever a Quint input changes and preserves the reports and replay logs.
+as new, and one the working tree no longer generates as removed (the manifest
+validator already forbids registering a profile without generating it). The
+differential replays only profiles with an explicit-input driver descriptor in
+`formal/replay/features.mjs`, whose recorded `input.choice` is the wrapper's
+`nondet` choice; a composed profile without one fails the run by name. `make
+differential` runs the lint baseline check and then the differential for every
+profile that imports a kernel module in either revision (directly or through a
+helper library); the pull request lane runs that against the base branch
+whenever a Quint input changes and preserves the reports and replay logs.
 
 Fault challenges for rules that moved into the library anchor on the module
 source (`formal/execution.json` lists `formal/kernel/*.qnt` among its
@@ -138,7 +145,7 @@ Measured on 2026-09-16 against `main` at bf3c7e8 with the manifest seed:
 | --- | --- | --- |
 | Sampled histories agreeing step for step, both directions | | 512 of 512 |
 | Exported regressions agreeing, both directions | | 15 of 15 |
-| Generation wall time (512 traces, 80 steps) | 14.0 s | 14.0 s |
+| Generation wall time (512 traces, 80 steps, concurrent) | 15.7 s | 17.1 s |
 | Bytes per state | 4226 | 4226 |
 | Profile lines | 549 | 385 |
 | Composition-lint violations (rule logic in the profile) | 73 | 0 |
