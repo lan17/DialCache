@@ -13,6 +13,10 @@ module layer_policy {
   // What a policy reply resolves to for one call: its layers and whether it
   // coalesces with other callers (C13; `coalesce: false` skips both registries).
   type Resolution = { layers: Layers, coalesce: bool }
+  // The TTLs a reply resolves to, passed beside the resolution to the layered
+  // traversal: the local insertion TTL, the remote frame's logical freshness
+  // and the physical retention written with each remote frame.
+  type Ttls = { localMs: int, freshMs: int, retentionMs: int }
   // The reply of a call that uses no layer and neither registry: a caller in a
   // closed scope (C01) or, in a profile with runtime replies, an invalid leaf.
   pure val BYPASS: Resolution = { layers: { request: false, local: false, remote: false }, coalesce: false }

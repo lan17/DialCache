@@ -48,9 +48,13 @@ module dialcache_runtime_boundaries_conformance {
   type State = {
     o: Observation,
     now: int,
+    wall: int,
     tracked: bool,
     remoteAvailable: bool,
     capacity: int,
+    readFailed: bool,
+    dumpFailed: bool,
+    writeFailed: bool,
     policy: int,
     baseline: Baseline,
     layout: Serving::Layout,
@@ -63,6 +67,7 @@ module dialcache_runtime_boundaries_conformance {
     lru: List[List[int]],
     remoteValues: List[int],
     created: List[int],
+    expires: List[int],
     watermark: List[int],
     sources: List[Serving::LayeredSource],
     owners: List[int],
@@ -92,10 +97,14 @@ module dialcache_runtime_boundaries_conformance {
     s' = {
       o: empty,
       now: INITIAL_TIME_MS,
+      wall: INITIAL_TIME_MS,
       tracked: false,
       remoteAvailable: (fixture < NO_LOCAL_TTL_FIXTURE and fixture % DEFAULT_SHARING_FIXTURE_OFFSET == REMOTE_LAYER)
         or fixture == NO_REMOTE_TTL_FIXTURE or fixture == ALL_FEATURES_FIXTURE,
       capacity: 1,
+      readFailed: false,
+      dumpFailed: false,
+      writeFailed: false,
       policy: DEFAULT_POLICY,
       baseline: baselineOf(fixture),
       layout: layoutFor(if (fixture == ALL_FEATURES_FIXTURE) EXTENDED_RETENTION_MS else TTL_MS),
@@ -108,6 +117,7 @@ module dialcache_runtime_boundaries_conformance {
       lru: List(List()),
       remoteValues: List(NO_VALUE),
       created: List(0),
+      expires: List(0),
       watermark: List(0),
       sources: List(),
       owners: List(),
@@ -129,7 +139,7 @@ module dialcache_runtime_boundaries_conformance {
   }
   action releasePolicy = all {
     Gate::holding(s),
-    s' = Serving::release(s, s.layout, Gate::latest(s), resolve(s, SAMPLES)),
+    s' = Serving::release(s, s.layout, Gate::latest(s), resolve(s, SAMPLES), Serving::ttlsOf(s.layout)),
     input' = { name: "releasePolicy", choice: -1 }
   }
   action changePolicy(policy: int): bool = all {

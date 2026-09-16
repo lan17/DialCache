@@ -78,14 +78,15 @@
       "model": "formal/dialcache-layers-conformance.qnt",
       "module": "dialcache_layers_conformance",
       "libraryTransitions": [
-        "clock::advance",
+        "clock::elapse",
         "flights::recordIdentity",
         "layer_policy::resolution",
         "remote_frames::seedFrame",
         "serving::begin",
         "serving::closeScope",
         "serving::invalidate",
-        "serving::settle"
+        "serving::settle",
+        "serving::ttlsOf"
       ],
       "compositionViolations": 0
     },
@@ -120,7 +121,8 @@
         "serving::admit",
         "serving::closeScope",
         "serving::release",
-        "serving::settle"
+        "serving::settle",
+        "serving::ttlsOf"
       ],
       "compositionViolations": 0
     },

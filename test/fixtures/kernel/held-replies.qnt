@@ -22,18 +22,23 @@ module held_replies {
   pure val UNCOALESCED_REQUEST_ONLY: Resolution = { layers: { request: true, local: false, remote: false }, coalesce: false }
 
   type State = {
-    o: Observation, now: int, remoteAvailable: bool, tracked: bool, capacity: int,
+    o: Observation, now: int, wall: int, remoteAvailable: bool, tracked: bool, capacity: int,
+    readFailed: bool, dumpFailed: bool, writeFailed: bool,
     closed: List[bool], memo: List[int], requestFlights: List[int], processFlights: List[int],
-    localValues: List[int], localExpires: List[int], lru: List[List[int]], remoteValues: List[int], created: List[int], watermark: List[int],
+    localValues: List[int], localExpires: List[int], lru: List[List[int]],
+    remoteValues: List[int], created: List[int], expires: List[int], watermark: List[int],
     sources: List[Serving::LayeredSource], owners: List[int], memoSlots: List[int], held: List[Gate::Held]
   }
   var s: State
   var input: { name: str, choice: int }
 
-  pure val INITIAL: State = { o: empty, now: 10000, remoteAvailable: true, tracked: false, capacity: 1,
+  pure val INITIAL: State = { o: empty, now: 10000, wall: 10000, remoteAvailable: true, tracked: false, capacity: 1,
+    readFailed: false, dumpFailed: false, writeFailed: false,
     closed: List(false, false), memo: List(0, 0), requestFlights: List(NO_OWNER, NO_OWNER), processFlights: List(NO_OWNER, NO_OWNER),
-    localValues: List(0, 0), localExpires: List(0, 0), lru: List(List(), List()), remoteValues: List(0), created: List(0), watermark: List(0),
+    localValues: List(0, 0), localExpires: List(0, 0), lru: List(List(), List()),
+    remoteValues: List(0), created: List(0), expires: List(0), watermark: List(0),
     sources: List(), owners: List(), memoSlots: List(), held: List() }
+  pure val TTLS: Ttls = Serving::ttlsOf(LAYOUT)
   action init = all {
     s' = INITIAL,
     input' = { name: "init", choice: -1 }
@@ -48,11 +53,11 @@ module held_replies {
   // The drivers release a held reply by its policy call index; a profile that
   // holds one reply at a time releases the latest.
   action release(policyCall: int, resolved: Resolution): bool = all {
-    s' = Serving::release(s, LAYOUT, policyCall, resolved),
+    s' = Serving::release(s, LAYOUT, policyCall, resolved, TTLS),
     input' = { name: "releasePolicy", choice: policyCall }
   }
   action releaseLatest(resolved: Resolution): bool = all {
-    s' = Serving::release(s, LAYOUT, Gate::latest(s), resolved),
+    s' = Serving::release(s, LAYOUT, Gate::latest(s), resolved, TTLS),
     input' = { name: "releasePolicy", choice: -1 }
   }
   action settle(index: int, value: int): bool = all {
@@ -64,7 +69,7 @@ module held_replies {
     input' = { name: "closeScope", choice: context }
   }
   action seed(value: int): bool = all {
-    s' = Remote::seedFrame(s, 0, value),
+    s' = Remote::seedFrame(s, 0, value, LAYOUT.servingTtlMs),
     input' = { name: "seed", choice: value }
   }
 
@@ -151,9 +156,9 @@ module held_replies {
     .expect(s.o.reads == 1 and s.o.loads == 1 and s.o.calls == List(CALL_PENDING, VALUE_TWO) and s.localValues == List(VALUE_TWO, 0))
 
   // The facade is admission followed by an immediate release with the
-  // resolution the profile supplies: the same state, field for field.
+  // resolution and TTLs the profile supplies: the same state, field for field.
   run beginIsAdmitThenReleaseTest = init
-    .then(all { s' = Serving::begin(s, LAYOUT, call(0), ALL), input' = { name: "beginCall", choice: 0 } })
-    .expect(s == Serving::release(Serving::admit(INITIAL, LAYOUT, call(0)), LAYOUT, 0, ALL)
+    .then(all { s' = Serving::begin(s, LAYOUT, call(0), ALL, TTLS), input' = { name: "beginCall", choice: 0 } })
+    .expect(s == Serving::release(Serving::admit(INITIAL, LAYOUT, call(0)), LAYOUT, 0, ALL, TTLS)
       and s.o.policyCalls == 1 and s.o.loaders == 1 and s.o.reads == 1 and s.held == List())
 }
