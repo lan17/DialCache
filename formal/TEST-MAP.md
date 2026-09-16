@@ -22,12 +22,12 @@ public inputs that both implementations replay. Their current versions, bounds,
 sampled trace counts and exported regressions live in
 [profiles.json](./profiles.json) and [execution.json](./execution.json).
 
-The supplemental [kernel pilot](./kernel/README.md#executable-comparison) maps
-nine fixed histories to existing C05/C11/C12/C15/C25/C26/C33/C34 obligations and runs
-them through both original profiles, the shared kernel and both native drivers.
-Its five independent properties and three deliberate faults are additional
-migration evidence. They do not expand the reviewed-case denominator or replace
-any existing profile evidence.
+The [kernel library](./kernel/README.md) does not change what a profile tests:
+a composed profile keeps its public inputs, invariants and exported
+regressions, and the corpus differential shows that the rewritten text yields
+the same observation at every step of the previous corpus. Library modules
+add no reviewed cases of their own; fault challenges anchored on them are
+measured through the composing profile's scheduled invariants.
 
 | Behavior | Model/profile starting points | Implementation provenance and observations | Finite boundary |
 | --- | --- | --- | --- |

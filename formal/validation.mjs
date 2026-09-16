@@ -9,7 +9,7 @@ const replayTests = ['test/formal-conformance.test.ts', 'test/formal-effects.tes
   'test/formal-local-clock.test.ts', 'test/formal-behavior.test.ts', 'test/formal-protocol-vectors.test.ts'];
 const aggregateTargets = {
   check: ['check-ts', 'check-go', 'docs', 'audit'],
-  formal: ['formal-check', 'formal-generate', 'formal-ts', 'formal-go', 'kernel-pilot'],
+  formal: ['formal-check', 'formal-generate', 'formal-ts', 'formal-go'],
   mutations: ['mutations-ts', 'mutations-go'],
   integration: ['integration-ts', 'integration-go'],
   ci: ['check', 'package-floor', 'formal', 'model-check', 'integration', 'mutations'],
@@ -26,8 +26,8 @@ export const targetDescriptions = {
   'formal-generate': 'Generate/recompute artifacts and evaluate shared witness evidence over the complete corpus',
   'formal-ts': 'Complete prepared TypeScript replay of the generated corpus',
   'formal-go': 'Complete prepared Go replay of the generated corpus with race detection',
-  'kernel-pilot': 'Check the supplemental shared lifecycle pilot against original histories, both ports and deliberate model faults',
   'fixtures-check': 'Recompute every committed model-derived artifact with pinned Quint',
+  differential: 'Check the composition lint baseline, then replay every composed profile against its reference corpus (merge base with DIFFERENTIAL_REFERENCE, default origin/main) in both directions',
   explore: 'Explore a new recorded seed and replay both ports in an isolated source snapshot',
   'model-check': 'Symbolically verify the scheduled finite rules with pinned Quint/Apalache (Java 21)',
   mutations: 'Measure TypeScript and Go semantic mutations over the generated corpus and shared witness evidence',
@@ -109,6 +109,9 @@ export function validationPlan(target, { directory = root, environment = process
   // The language-neutral evaluator is the sole producer of the reusable witness
   // evidence; TypeScript replay only checks the same gate inside its suite.
   const witnesses = node('Evaluate shared witness evidence over the complete corpus', 'formal/witnesses.mjs', 'evaluate', '--profile', 'all');
+  // The composition rule is a gate wherever Quint is present: a composed
+  // profile must keep zero composition violations against the recorded baseline.
+  const lintBaseline = node('Check the profile lint baseline', 'formal/lint-profiles.mjs', 'baseline', '--check');
   // The complete replay outlives Go's default 10-minute test timeout on a slow
   // runner (run 34667733523 was killed at 10m0s); bound it explicitly, under
   // the go-parity job budget. The smoke run keeps the default.
@@ -128,13 +131,13 @@ export function validationPlan(target, { directory = root, environment = process
         node('Check conditional fixture regeneration scope', '--test', '.github/scripts/fixture-scope.test.mjs')),
     smoke: [tsReplay(false), nativeGo(false)],
     'fixtures-check': [node('Recompute all committed Quint artifacts', 'formal/generate-artifacts.mjs', '--check')],
+    differential: [lintBaseline, node('Replay composed profiles against their reference corpus', 'formal/differential.mjs', '--composed', `--reference=${environment.DIFFERENTIAL_REFERENCE ?? 'origin/main'}`)],
     explore: [node('Explore and replay an isolated alternate-seed corpus', 'formal/explore.mjs')],
-    'kernel-pilot': [node('Check the shared lifecycle pilot', 'formal/kernel-pilot.mjs', 'check')],
     'model-check': [node('Symbolically verify the scheduled finite rules', 'formal/check-symbolic-models.mjs')],
     // The model check is evidence about the Quint models (typechecks, bounded
     // runs, regressions and the mutation challenges). Nothing downstream reads
     // its output, so it is a sibling of generation rather than a prefix of it.
-    'formal-check': [node('Check every scheduled Quint model', 'formal/run-models.mjs', 'check')],
+    'formal-check': [node('Check every scheduled Quint model', 'formal/run-models.mjs', 'check'), lintBaseline],
     // Generation is the single shared producer: the corpus, wire artifacts and
     // witness evidence depend only on the models. Both ports' replays and both
     // mutation measurements read that output and can run in parallel off it.
@@ -176,11 +179,11 @@ export function checkPrerequisites(target, { directory = root, environment = pro
   const requiredPnpm = JSON.parse(readFileSync(resolve(directory, 'package.json'), 'utf8')).packageManager?.replace(/^pnpm@/, '');
   const pnpm = probe('corepack', ['pnpm', '--version'], { directory, environment });
   if (!requiredPnpm || pnpm !== requiredPnpm) throw new Error(`Expected pinned pnpm ${requiredPnpm}; found ${pnpm}. Use corepack pnpm and install the frozen lockfile.`);
-  if (targets.some(name => ['check-go', 'smoke', 'formal-go', 'mutations-go', 'integration-go', 'explore', 'kernel-pilot'].includes(name))) {
+  if (targets.some(name => ['check-go', 'smoke', 'formal-go', 'mutations-go', 'integration-go', 'explore'].includes(name))) {
     const version = probe('go', ['version'], { directory, environment });
     if (!/^go version go1\.27\.1\s/.test(version)) throw new Error(`Validation requires Go 1.27.1; found ${version}. Put the pinned Go toolchain on PATH.`);
   }
-  if (targets.some(name => ['formal-check', 'formal-generate', 'fixtures-check', 'explore', 'model-check', 'kernel-pilot'].includes(name))) {
+  if (targets.some(name => ['formal-check', 'formal-generate', 'fixtures-check', 'explore', 'model-check', 'differential'].includes(name))) {
     const requiredQuint = JSON.parse(readFileSync(resolve(directory, 'formal/generated-fixtures.lock.json'), 'utf8')).quintVersion;
     const version = probe('quint', ['--version'], { directory, environment });
     if (version !== requiredQuint) throw new Error(`Expected Quint ${requiredQuint}; found ${version}. Install the pinned Quint CLI before recomputing artifacts.`);

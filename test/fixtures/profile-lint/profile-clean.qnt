@@ -1,6 +1,8 @@
-// A clean kernel instance: wrappers own the nondet choice and call one kernel
+// A kernel instance: wrappers own the nondet choice and call one kernel
 // action each; the projection is an operator constant. The lint reports no
-// thin-profile violation and no witness feedback for this module.
+// witness feedback for this module; the instantiated kernel's own assignments
+// are rule logic under the composition rule, because a library may not hold
+// state (the manifest keeps libraries pure).
 module profile_clean {
   pure def project(n: int): int = n * 2
   import kernel(CAPACITY = 3, PROJECT = project) as K from "./kernel"

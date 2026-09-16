@@ -15,6 +15,7 @@ test('models, recipes, exporters, artifacts, execution and tool pins require rec
     'formal/new-model.qnt', 'formal/fixture-recipes.json', 'formal/generate-frame-vectors.mjs',
     'formal/execution.json', 'formal/execution.mjs', 'formal/profiles.json',
     'formal/generated-fixtures.lock.json', 'formal/quint-frame-vectors.json',
+    'formal/profile-lint-baseline.json',
     'formal/conformance-smoke.itf.json', 'test/fixtures/new-witnesses.json',
     'package.json', 'pnpm-lock.yaml', 'go/go.mod', 'go/go.sum',
     '.github/actions/setup-quint/action.yml', '.github/workflows/formal.yaml',

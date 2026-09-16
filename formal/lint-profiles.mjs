@@ -5,12 +5,15 @@
 // application to the declaration it refers to, across imports and instances.
 // The lint builds the reference graph from that table and checks two rules:
 //
-// - Thin profile: from each action of the profile module, the transitive
-//   closure of referenced definitions contains no state assignment outside the
-//   kernel modules. Reported with the chain action -> helper -> ... -> the
-//   definition holding the assignment. With no kernel module, every reachable
-//   assignment is private: that report is the profile's migration work list
-//   and the baseline in profile-lint-baseline.json.
+// - Composition: from each action of the profile module, every value assigned
+//   to a state variable other than the driver input is built from kernel
+//   library transitions, record wiring, literals, constants and input
+//   decoding. A comparison, branch, arithmetic or collection operator over
+//   cache state, or a non-library definition applied to cache state, is rule
+//   logic in the profile and is reported with the chain action -> helper ->
+//   ... -> the definition that computes it. profile-lint-baseline.json records
+//   each profile's count: a composed profile has zero and the other counts are
+//   the migration work list.
 // - Witness isolation: no definition reachable from a cache guard, a cache
 //   assignment, the profile's init or step, an input-choice domain (the
 //   expression of a `nondet ... .oneOf()`), an observation projection (the
@@ -32,11 +35,15 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isKernelSource, quintSources } from './execution.mjs';
 import { CommandFailure, runPool, spawnBuffered } from './quint-pool.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 export const baselinePath = 'formal/profile-lint-baseline.json';
 export const defaultObservationField = 'o';
+// The driver input every profile records; its assignment is the replay
+// contract, not cache state, and may branch on state.
+export const inputField = 'input';
 const effectQualifiers = new Set(['action', 'run']);
 // Builtin combinators whose non-effect operands are guards when the whole
 // expression carries an effect: `all { guard, x' = e }`, `if (c) A else B`,
@@ -212,7 +219,7 @@ const compareStrings = (left, right) => (left < right ? -1 : left > right ? 1 : 
 const topLevelDefinitions = index => [...index.nodes.values()].filter(node => node.kind === 'definition');
 
 // ---------------------------------------------------------------------------
-// Thin-profile rule
+// Composition rule
 
 // The profile's public actions are `init` and every action of the profile
 // module that `step` refers to (the same rule generated-fixtures.mjs applies
@@ -236,7 +243,24 @@ export function publicActions(index) {
   return ordered;
 }
 
-export function lintThinProfile(index, { kernelModules = [] } = {}) {
+// Operators that only assemble or take apart values: a record built from
+// library results and inputs, a field read, a list or set literal. Everything
+// else (comparison, arithmetic, branching, iteration, membership) computes,
+// and computing over cache state inside a profile is rule logic.
+const structuralValueOpcodes = new Set(['Rec', 'with', 'field', 'List', 'Set', 'Tup', 'Map', 'item', 'variant', 'fieldNames']);
+
+// A composed profile assigns its own state, but every assigned value must come
+// from the kernel library: the value of each assignment to a state variable
+// other than the driver input is built from library transitions, record
+// wiring, literals, constants and input decoding. A comparison, branch,
+// arithmetic or collection operator whose operand carries cache state, or a
+// non-library definition applied to cache state, is reported with the chain
+// from the public wrapper. Profile definitions are followed with the taint of
+// their arguments, so a helper that restates a rule over a state parameter is
+// reported where it computes. Guards, choice domains, invariants and runs are
+// not assignment values and are not walked: they restrict the environment or
+// state independent properties.
+export function lintComposition(index, { kernelModules = [] } = {}) {
   const kernel = new Set(kernelModules);
   const exposed = publicActions(index);
   const actions = [...exposed, ...topLevelDefinitions(index)
@@ -245,20 +269,120 @@ export function lintThinProfile(index, { kernelModules = [] } = {}) {
   const violations = new Map();
   const reachable = new Set();
   const assigning = new Set();
+  const transitions = new Set();
+  const isState = declaration => declaration?.kind === 'var';
+  const isKernel = declaration => (declaration?.kind === 'def' || declaration?.kind === 'const') && kernel.has(declaration.module);
+  const isProfile = declaration => declaration?.kind === 'def' && declaration.module === index.main;
+  const report = (node, chain, detail) => {
+    const key = `${node.key}|${detail}`;
+    if (!violations.has(key)) violations.set(key, { definition: node.label, detail, chain });
+  };
+  // Walks one expression; returns whether its value carries cache state.
+  // `tainted` maps parameter and let names of the walked body to state taint.
+  const walk = (expr, { node, chain, tainted, variable }) => {
+    const again = child => walk(child, { node, chain, tainted, variable });
+    switch (expr.kind) {
+      case 'int': case 'str': case 'bool': return false;
+      case 'name': {
+        const declaration = resolveTarget(index, expr);
+        if (isState(declaration)) return true;
+        if (declaration === undefined) return tainted.get(expr.name) === true;
+        if (declaration.kind === 'const') return false;
+        // A chosen input is never cache state, whatever domain it was drawn from.
+        if (declaration.qualifier === 'nondet') return false;
+        if (declaration.owner === node.key && !tainted.has(expr.name)) return again(declaration.expr);
+        if (declaration.owner === node.key) return tainted.get(expr.name) === true;
+        return isKernel(declaration) ? false : callProfile(declaration, [], { node, chain, variable });
+      }
+      case 'lambda': {
+        const inner = new Map(tainted);
+        for (const parameter of expr.params) inner.set(parameter.name, false);
+        return walk(expr.expr, { node, chain, tainted: inner, variable });
+      }
+      case 'let': {
+        const inner = new Map(tainted);
+        inner.set(expr.opdef.name, expr.opdef.qualifier === 'nondet' ? false : again(expr.opdef.expr));
+        // (the name case answers the same for a nondet reached without this map)
+        return walk(expr.expr, { node, chain, tainted: inner, variable });
+      }
+      case 'app': break;
+      default: return false;
+    }
+    const declaration = resolveTarget(index, expr);
+    const stateful = expr.args.map(again);
+    if (declaration) {
+      if (isKernel(declaration)) {
+        if (declaration.kind === 'def') transitions.add(index.labelOf(declaration.module, declaration.name));
+        return true;
+      }
+      // A definition bound inside this body: its lambda parameters take the
+      // arguments' taint like a top-level helper's do.
+      if (declaration.owner === node.key) return applyBody(declaration.expr, stateful, { node, chain, variable, tainted });
+      if (isProfile(declaration)) return callProfile(declaration, stateful, { node, chain, variable });
+      if (stateful.some(Boolean)) report(node, chain, `${index.labelOf(declaration.module, declaration.name)} applied to cache state in the value of ${variable}`);
+      return stateful.some(Boolean);
+    }
+    if (structuralValueOpcodes.has(expr.opcode)) return stateful.some(Boolean);
+    if (stateful.some(Boolean)) report(node, chain, `${expr.opcode} over cache state in the value of ${variable}`);
+    return stateful.some(Boolean);
+  };
+  // A body applied to arguments: its lambda parameters take the arguments'
+  // taint; a parameterless body is a value walked as it stands.
+  const applyBody = (body, stateful, { node, chain, variable, tainted }) => {
+    const parameters = body.kind === 'lambda' ? body.params : [];
+    const inner = new Map(tainted ?? []);
+    parameters.forEach((parameter, position) => inner.set(parameter.name, stateful[position] === true));
+    return walk(body.kind === 'lambda' ? body.expr : body, { node, chain, tainted: inner, variable });
+  };
+  // A profile definition applied to arguments: its body is walked with each
+  // parameter tainted by its argument. A parameterless definition is a value.
+  const callProfile = (declaration, stateful, { node, chain, variable }) => {
+    const target = index.nodes.get(declaration.owner);
+    if (!target) return stateful.some(Boolean);
+    reachable.add(target.key);
+    return applyBody(target.expr, stateful, { node: target, chain: [...chain, target.label], variable });
+  };
+  // A wrapper that applies a parametrized action decides what that action
+  // assigns: each argument is walked where it is written (rule logic in an
+  // argument is the wrapper's), and the taint it carries reaches the callee's
+  // parameter at every call site before the callee's assignments are judged.
+  const parameterTaint = new Map();
+  const definitions = topLevelDefinitions(index).filter(node => node.module === index.main);
+  for (const caller of definitions) {
+    const own = caller.expr?.kind === 'lambda' ? new Map(caller.expr.params.map(parameter => [parameter.name, false])) : new Map();
+    for (const expr of nodes(caller.expr)) {
+      if (expr.kind !== 'app') continue;
+      const declaration = resolveTarget(index, expr);
+      if (declaration?.kind !== 'def' || declaration.qualifier !== 'action' || declaration.module !== index.main) continue;
+      const callee = index.nodes.get(declaration.owner);
+      if (!callee || callee.expr?.kind !== 'lambda') continue;
+      const taints = parameterTaint.get(callee.key) ?? new Array(callee.expr.params.length).fill(false);
+      expr.args.forEach((argument, position) => {
+        // An argument that itself assigns state is a transition fragment the
+        // caller's own assignments cover; a value argument is walked here.
+        if (hasEffects(index, argument)) return;
+        if (walk(argument, { node: caller, chain: [caller.label], tainted: own, variable: `the argument ${callee.expr.params[position]?.name} of ${callee.label}` })) taints[position] = true;
+      });
+      parameterTaint.set(callee.key, taints);
+    }
+  }
   for (const action of actions) {
     const parent = new Map([[action.key, undefined]]);
     const queue = [action];
     while (queue.length) {
       const node = queue.shift();
       if (node.kind === 'definition') reachable.add(node.key);
+      const chain = [];
+      for (let key = node.key; key !== undefined; key = parent.get(key)) chain.unshift(index.nodes.get(key).label);
       const assignments = assignmentsOf(index, node);
       if (assignments.length) assigning.add(node.label);
-      for (const { variable } of assignments) {
-        const key = `${node.key}|${variable.id}`;
-        if (violations.has(key) || (kernel.has(variable.module) && kernel.has(node.module))) continue;
-        const chain = [];
-        for (let key = node.key; key !== undefined; key = parent.get(key)) chain.unshift(index.nodes.get(key).label);
-        violations.set(key, { definition: node.label, variable: variableLabel(index, variable), chain });
+      for (const { variable, value } of assignments) {
+        // A library module has no state to assign (the manifest keeps libraries
+        // pure), so every assignment reached here is the profile's.
+        if (variable.name === inputField) continue;
+        const taints = parameterTaint.get(node.key) ?? [];
+        const parameters = node.expr?.kind === 'lambda' ? node.expr.params.map((parameter, position) => [parameter.name, taints[position] === true]) : [];
+        walk(value, { node, chain, tainted: new Map(parameters), variable: variableLabel(index, variable) });
       }
       for (const next of referencesOf(index, node)) {
         if (!parent.has(next.key)) { parent.set(next.key, node.key); queue.push(next); }
@@ -266,10 +390,11 @@ export function lintThinProfile(index, { kernelModules = [] } = {}) {
     }
   }
   const sorted = [...violations.values()].sort((left, right) =>
-    compareStrings(left.definition, right.definition) || compareStrings(left.variable, right.variable));
-  return { kernelModules: [...kernel].sort(), actions: actions.map(node => node.name).sort(compareStrings),
+    compareStrings(left.definition, right.definition) || compareStrings(left.detail, right.detail));
+  return { kernelModules: [...kernel].sort(compareStrings), actions: actions.map(node => node.name).sort(compareStrings),
     publicActions: exposed.map(node => node.name), reachableDefinitions: reachable.size,
-    stateAssigningDefinitions: [...assigning].sort(compareStrings), count: sorted.length, violations: sorted };
+    stateAssigningDefinitions: [...assigning].sort(compareStrings), libraryTransitions: [...transitions].sort(compareStrings),
+    count: sorted.length, violations: sorted };
 }
 
 // ---------------------------------------------------------------------------
@@ -421,12 +546,22 @@ export function lintWitnessIsolation(index, { witnessPattern, observationField =
 // ---------------------------------------------------------------------------
 // Reports and baseline
 
-export async function lintModel(model, { main, kernelModules = [], witnessPattern, observationField = defaultObservationField, cwd = root } = {}) {
+// The kernel library's module names: every module declared under formal/kernel.
+// A profile may assign only values these modules compute; cache_rules is the
+// judgment layer the modules consume, not one a profile assigns through.
+export function kernelModulesOf(directory = root) {
+  return quintSources(directory).filter(isKernelSource).flatMap(path => {
+    const match = /^module\s+([A-Za-z_]\w*)\s*\{/m.exec(readFileSync(resolve(directory, path), 'utf8'));
+    return match ? [match[1]] : [];
+  }).sort(compareStrings);
+}
+
+export async function lintModel(model, { main, kernelModules, witnessPattern, observationField = defaultObservationField, cwd = root } = {}) {
   const parsed = await parseModel(model, { cwd });
   const index = indexModules(parsed, { main });
-  const thinProfile = lintThinProfile(index, { kernelModules });
+  const composition = lintComposition(index, { kernelModules: kernelModules ?? kernelModulesOf(cwd) });
   const witnessIsolation = lintWitnessIsolation(index, { witnessPattern, observationField });
-  return { model, main: index.main, modules: index.modules, tableSize: index.tableSize, thinProfile, witnessIsolation };
+  return { model, main: index.main, modules: index.modules, tableSize: index.tableSize, composition, witnessIsolation };
 }
 
 export function loadProfiles(directory = root) {
@@ -434,20 +569,22 @@ export function loadProfiles(directory = root) {
   return manifest.profiles.map(profile => ({ id: profile.id, model: profile.model }));
 }
 
-// One entry per profile with no kernel module: every reachable assignment is
-// private, so the listed definitions are the profile's migration work list.
+// One entry per profile: the library transitions it composes and how many of
+// its assigned values still compute over cache state. A composed profile has
+// no composition violations; the counts of the others are the migration work
+// list. Nothing else is recorded: the lock pins the texts, and parser metrics
+// would fail the check on edits that say nothing about composition.
 export async function computeBaseline({ profiles, cwd = root, concurrency } = {}) {
   const selected = profiles ?? loadProfiles(cwd);
   const version = await quintVersion({ cwd });
+  const kernelModules = kernelModulesOf(cwd);
   const entries = await runPool(selected.map(profile => async () => {
     const parsed = await parseModel(profile.model, { cwd });
     const index = indexModules(parsed);
-    const thin = lintThinProfile(index, { kernelModules: [] });
-    return { id: profile.id, model: profile.model, module: index.main, tableSize: index.tableSize, actions: thin.actions.length,
-      reachableDefinitions: thin.reachableDefinitions, stateAssigningDefinitions: thin.stateAssigningDefinitions.length,
-      stateAssigningDefinitionNames: thin.stateAssigningDefinitions };
+    const composition = lintComposition(index, { kernelModules });
+    return { id: profile.id, model: profile.model, module: index.main, libraryTransitions: composition.libraryTransitions, compositionViolations: composition.count };
   }), concurrency === undefined ? {} : { concurrency });
-  return { schemaVersion: 1, quintVersion: version, kernelModules: [], profiles: entries };
+  return { schemaVersion: 3, quintVersion: version, kernelModules, profiles: entries };
 }
 
 // Leaf-by-leaf comparison; each difference names the JSON path.
@@ -481,10 +618,41 @@ export function readBaseline(directory = root, path = baselinePath) {
   return JSON.parse(readFileSync(file, 'utf8'));
 }
 
+// The check is a ratchet over what the rule protects. Every profile keeps the
+// library transitions it recorded; its violation count must match the record
+// (a fall is refreshed with --write so the record never sits above reality, a
+// rise fails); and a profile that composes a kernel module has no violation
+// whatever the record says, so rewriting the baseline cannot admit rule logic
+// into one.
+export function composedViolations(baseline) {
+  return baseline.profiles.filter(profile => profile.compositionViolations > 0 && profile.libraryTransitions.length > 0)
+    .map(profile => `${profile.id}: ${profile.compositionViolations} composition violation(s) in a profile that composes ${profile.libraryTransitions.join(', ')}`);
+}
+export function ratchetDifferences(expected, actual) {
+  const differences = [];
+  if (expected.schemaVersion !== actual.schemaVersion) differences.push(`baseline.schemaVersion: expected ${JSON.stringify(expected.schemaVersion)}, got ${JSON.stringify(actual.schemaVersion)}`);
+  if (expected.quintVersion !== actual.quintVersion) differences.push(`baseline.quintVersion: expected ${JSON.stringify(expected.quintVersion)}, got ${JSON.stringify(actual.quintVersion)}`);
+  differences.push(...diffBaseline(expected.kernelModules, actual.kernelModules, 'baseline.kernelModules'));
+  const recorded = new Map((expected.profiles ?? []).map(profile => [profile.id, profile]));
+  for (const [position, profile] of actual.profiles.entries()) {
+    const entry = recorded.get(profile.id);
+    if (!entry) { differences.push(`baseline.profiles[${position}]: unexpected ${JSON.stringify(profile)}`); continue; }
+    recorded.delete(profile.id);
+    differences.push(...diffBaseline({ model: entry.model, module: entry.module, libraryTransitions: entry.libraryTransitions },
+      { model: profile.model, module: profile.module, libraryTransitions: profile.libraryTransitions }, `baseline.profiles[${position}]`));
+    if (profile.compositionViolations !== entry.compositionViolations) {
+      const moved = profile.compositionViolations > entry.compositionViolations ? 'rose' : 'fell';
+      differences.push(`baseline.profiles[${position}].compositionViolations: ${profile.id} ${moved} from ${entry.compositionViolations} to ${profile.compositionViolations}${moved === 'fell' ? ' (refresh the record with --write)' : ''}`);
+    }
+  }
+  for (const entry of recorded.values()) differences.push(`baseline.profiles: missing ${JSON.stringify(entry)}`);
+  return [...differences, ...composedViolations(actual)];
+}
+
 export async function checkBaseline({ cwd = root, path = baselinePath, profiles, concurrency } = {}) {
   const expected = readBaseline(cwd, path);
   const actual = await computeBaseline({ profiles, cwd, concurrency });
-  return { expected, actual, differences: diffBaseline(expected, actual) };
+  return { expected, actual, differences: ratchetDifferences(expected, actual) };
 }
 
 export const formatBaseline = baseline => `${JSON.stringify(baseline, null, 2)}\n`;
@@ -496,10 +664,12 @@ const usage = `Usage:
   node formal/lint-profiles.mjs <model.qnt> [--main=<module>] [--kernel=<module,...>] [--witness=<regex>] [--observation=<field>]
   node formal/lint-profiles.mjs baseline --check | --write
 
-The first form prints a JSON report and exits 1 when either rule is violated.
-The second recomputes ${baselinePath} over every profile in formal/profiles.json
-with no kernel module and either diffs it against the committed file (--check,
-exit 1 on drift) or rewrites it (--write).`;
+The first form prints a JSON report and exits 1 when either rule is violated;
+--kernel defaults to the modules under formal/kernel. The second recomputes
+${baselinePath} over every profile in formal/profiles.json and either checks
+it against the committed file (--check: library transitions and violation
+counts as recorded, none in a composed profile; exit 1 otherwise) or rewrites
+it (--write).`;
 
 function parseArguments(argv) {
   const options = {}, positional = [];
@@ -540,12 +710,12 @@ async function main(argv) {
   const relativeModel = relative(root, resolve(root, model)) || model;
   const report = await lintModel(relativeModel, {
     ...(typeof options.main === 'string' ? { main: options.main } : {}),
-    kernelModules: typeof options.kernel === 'string' ? options.kernel.split(',').filter(Boolean) : [],
+    ...(typeof options.kernel === 'string' ? { kernelModules: options.kernel.split(',').filter(Boolean) } : {}),
     ...(typeof options.witness === 'string' ? { witnessPattern: options.witness } : {}),
     observationField: typeof options.observation === 'string' ? options.observation : defaultObservationField,
   });
   console.log(JSON.stringify(report, null, 2));
-  return report.thinProfile.count || report.witnessIsolation.count ? 1 : 0;
+  return report.composition.count || report.witnessIsolation.count ? 1 : 0;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

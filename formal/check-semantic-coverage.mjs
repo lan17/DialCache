@@ -51,7 +51,9 @@ export function checkQuintCaseAudit(audit = parse('formal/quint-case-audit.json'
     ...model.invariants.map(name => [`${model.path}:${name}`, 'invariant']),
     ...model.regressions.map(name => [`${model.path}:${name}`, 'regression']),
   ]));
-  const models = new Set(manifest.models.map(model => model.path));
+  // A case cites the definition that owns its rule: a scheduled model's, or a
+  // library's (a kernel module's once the rule has moved there).
+  const models = new Set([...manifest.models.map(model => model.path), ...manifest.libraries]);
   const checked = new Set(), defined = new Set(), declarations = new Map();
   for (const [entries, seen, isCheck] of [[audit.checks, checked, true], [audit.definitions, defined, false]]) {
     for (const entry of entries) {

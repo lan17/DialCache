@@ -118,10 +118,10 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     expect(plan.filter(step => step.args?.[0] === "formal/witnesses.mjs")).toHaveLength(1);
     expect(plan.some(step => step.args?.[0] === "formal/generate-artifacts.mjs")).toBe(false);
     expect(plan[0]!.args).toEqual(["formal/run-models.mjs", "check"]);
-    expect(plan[1]!.remove).toEqual([".formal-traces/ts-completion.json", ".formal-traces/go-completion.json"]);
+    expect(plan.find(step => step.remove)!.remove).toEqual([".formal-traces/ts-completion.json", ".formal-traces/go-completion.json"]);
     // The aggregate is exactly these lanes in order, so a CI job running
     // one lane executes the same steps as the local sequential run.
-    expect(plan).toEqual(["formal-check", "formal-generate", "formal-ts", "formal-go", "kernel-pilot"].flatMap(target => validationPlan(target, { directory })));
+    expect(plan).toEqual(["formal-check", "formal-generate", "formal-ts", "formal-go"].flatMap(target => validationPlan(target, { directory })));
   });
 
   it("keeps the model check as its own lane that produces nothing the port lanes consume", () => {
@@ -129,6 +129,7 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     // evidence about Quint; generation is the only producer downstream reads.
     expect(validationPlan("formal-check", { directory })).toEqual([
       { label: "Check every scheduled Quint model", command: process.execPath, args: ["formal/run-models.mjs", "check"] },
+      { label: "Check the profile lint baseline", command: process.execPath, args: ["formal/lint-profiles.mjs", "baseline", "--check"] },
     ]);
     const generate = validationPlan("formal-generate", { directory });
     expect(generate.some(step => step.args?.[0] === "formal/run-models.mjs" && step.args[1] === "check")).toBe(false);
@@ -140,6 +141,14 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     expect(validationPlan("ci", { directory }).filter(step => step.args?.[0] === "formal/run-models.mjs" && step.args[1] === "check")).toHaveLength(1);
   });
 
+
+  it("gates composition in the differential lane: the lint baseline, then both-direction replay against the configured reference", () => {
+    expect(validationPlan("differential", { directory, environment: { ...environment, DIFFERENTIAL_REFERENCE: "origin/release" } })).toEqual([
+      { label: "Check the profile lint baseline", command: process.execPath, args: ["formal/lint-profiles.mjs", "baseline", "--check"] },
+      { label: "Replay composed profiles against their reference corpus", command: process.execPath, args: ["formal/differential.mjs", "--composed", "--reference=origin/release"] },
+    ]);
+    expect(validationPlan("differential", { directory, environment }).at(-1)!.args).toEqual(["formal/differential.mjs", "--composed", "--reference=origin/main"]);
+  });
   it("ends generation with the shared witness evaluation and starts each replay lane from a prepared context", () => {
     const generate = validationPlan("formal-generate", { directory });
     expect(generate.at(-1)!.args).toEqual(["formal/witnesses.mjs", "evaluate", "--profile", "all"]);
@@ -211,7 +220,7 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
 
   it("requires Quint only for generation and recomputation, not for replay or mutation lanes", () => {
     fakeTool("quint", 'console.error("quint: not installed"); process.exit(1)');
-    for (const target of ["formal-check", "formal-generate", "formal", "fixtures-check", "explore", "kernel-pilot", "ci"]) {
+    for (const target of ["formal-check", "formal-generate", "formal", "fixtures-check", "explore", "differential", "ci"]) {
       expect(() => checkPrerequisites(target, { directory, environment, nodeVersion: "v24.20.0" })).toThrow(/Cannot run quint/);
     }
     for (const target of ["formal-ts", "formal-go", "mutations-ts", "mutations-go", "mutations", "mutations-merge-ts", "mutations-merge-go"]) {
@@ -221,7 +230,7 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     for (const target of ["formal-ts", "mutations-ts", "mutations-merge-ts", "mutations-merge-go"]) {
       expect(() => checkPrerequisites(target, { directory, environment, nodeVersion: "v24.20.0" })).not.toThrow();
     }
-    for (const target of ["formal-go", "mutations-go", "kernel-pilot"]) {
+    for (const target of ["formal-go", "mutations-go"]) {
       expect(() => checkPrerequisites(target, { directory, environment, nodeVersion: "v24.20.0" })).toThrow(/Cannot run go/);
     }
   });
@@ -375,19 +384,20 @@ describe("full formal workflow shape", () => {
     expect(summary.path).toContain("formal-summary/model-check/model-properties/report.json");
   });
 
-  it("requires the supplemental kernel pilot without substituting it for full profile replay", () => {
-    const pilot = jobs["kernel-pilot"]!;
-    expect(needsOf(pilot)).toEqual([]);
-    expect(pilot.steps.map(step => step.run).filter(Boolean)).toEqual(["make kernel-pilot"]);
-    expect(pilot.steps.find(step => step.uses === "./.github/actions/setup-validation")!.with)
-      .toEqual({ quint: "true", go: "true" });
-    expect(validationPlan("kernel-pilot")[0]!.args).toEqual(["formal/kernel-pilot.mjs", "check"]);
-    const aggregate = jobs["formal-full"]!;
-    expect(needsOf(aggregate)).toEqual(expect.arrayContaining(["kernel-pilot", "typescript-parity", "go-parity"]));
-    const gate = aggregate.steps.find(step => step.run?.includes("_RESULT"))!;
-    expect(gate.env).toMatchObject({ KERNEL_PILOT_RESULT: "${{ needs.kernel-pilot.result }}" });
-    expect(gate.run).toMatch(/test "\$KERNEL_PILOT_RESULT" = success/);
-    expect(aggregate.steps.find(step => step.uses?.startsWith("actions/upload-artifact"))!.with!.path)
-      .toContain("formal-summary/kernel-pilot/report.json");
+  it("runs the differential on pull requests only, against the base branch, with the replay logs preserved", async () => {
+    const yamlPath = createRequire(createRequire(import.meta.url).resolve("vitest/package.json")).resolve("yaml");
+    const { parse } = await import(pathToFileURL(yamlPath).href) as { parse(text: string): { jobs: Record<string, Job> } };
+    const jobs = parse(readFileSync(new URL("../.github/workflows/formal.yaml", import.meta.url), "utf8")).jobs;
+    const job = jobs.differential!;
+    expect(job.if).toBe("github.event_name == 'pull_request'");
+    expect(job["timeout-minutes"]).toBe(30);
+    expect(job.steps.find(step => step.uses?.startsWith("actions/checkout"))!.with).toEqual({ "fetch-depth": 0 });
+    expect(job.steps.some(step => step.uses === "./.github/actions/setup-quint")).toBe(true);
+    const run = job.steps.find(step => step.run === "make differential")!;
+    expect(run.env).toEqual({ DIFFERENTIAL_REFERENCE: "origin/$" + "{{ github.base_ref }}" });
+    expect(run.if).toBe("steps.fixture-scope.outputs.recompute == 'true'");
+    const upload = job.steps.find(step => step.uses?.startsWith("actions/upload-artifact"))!;
+    expect(upload.with!.name).toBe("formal-differential");
+    expect(String(upload.with!.path)).toContain("**/replay-*/quint-test.log");
   });
 });

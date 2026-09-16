@@ -1,7 +1,51 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
+import { dirname, posix, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const root = fileURLToPath(new URL('../', import.meta.url));
+// The kernel library's concern modules live in one directory; every tool that
+// needs to know that asks here.
+export const kernelDirectory = 'formal/kernel';
+export const isKernelSource = path => path.startsWith(`${kernelDirectory}/`);
+// Where a Quint source may live: formal/ for models and helper libraries,
+// formal/kernel/ for the kernel library's modules, no deeper.
+export const isQuintSourcePath = path => /^formal\/(kernel\/)?[\w-]+\.qnt$/.test(path);
+// Every Quint source a model may import: the scheduled models and helper
+// libraries at formal/ and the kernel library modules at formal/kernel/.
+export function quintSources(directory = root) {
+  const files = [];
+  for (const relative of ['formal', kernelDirectory]) {
+    const absolute = resolve(directory, relative);
+    if (!existsSync(absolute)) continue;
+    for (const name of readdirSync(absolute)) if (name.endsWith('.qnt')) files.push(`${relative}/${name}`);
+  }
+  return files.sort();
+}
+// A model's import closure: its own text and every Quint source it reaches
+// through relative imports, in dependency order. What a model's behavior
+// depends on, so tools that hash, compare or classify a model walk it here.
+export function importClosure(path, directory = root) {
+  const closure = [];
+  const visit = source => {
+    if (closure.includes(source) || !existsSync(resolve(directory, source))) return;
+    closure.push(source);
+    for (const [, target] of readFileSync(resolve(directory, source), 'utf8').matchAll(/from\s+"(\.\.?\/[^"]+)"/g)) {
+      visit(posix.normalize(posix.join(posix.dirname(source), `${target}.qnt`)));
+    }
+  };
+  visit(path);
+  return closure;
+}
+// Copy every Quint source of one tree into another, keeping the formal/ layout
+// so relative imports resolve there as they do in the repository.
+export function copySources(from, to) {
+  const files = quintSources(from);
+  for (const path of files) {
+    mkdirSync(resolve(to, dirname(path)), { recursive: true });
+    copyFileSync(resolve(from, path), resolve(to, path));
+  }
+  return files;
+}
 const read = path => readFileSync(root + path, 'utf8');
 export const readExecution = () => JSON.parse(read('formal/execution.json'));
 
@@ -170,9 +214,9 @@ export const contractIds = text => [...text.matchAll(/^\| ([CWEB]\d{2}) \|/gm)].
 // A deterministic reproducer pins one challenge to a named run that passes on
 // the clean model and fails, at one declared expectation, under the fault. An
 // exported-regression cites a public-only run both ports replay, so the fault
-// is portable behavior; for a fault in a shared library the run may live in a
-// profile model other than the challenged one, since every importer executes
-// the mutated text. A model-run cites a run that only the model executes and
+// is portable behavior; for a fault in a shared library (a helper library or a
+// kernel module) the run may live in a profile model other than the challenged
+// one, since every importer executes the mutated text. A model-run cites a run that only the model executes and
 // must say why the fault has no native counterpart. `failure` is the expect
 // condition the fault breaks. `profiles` names where the fault is observable:
 // the challenged model's own profile, or its path for a model without one,
@@ -364,7 +408,7 @@ function validateChallenges(manifest, { readSource, contracts, sources, profileI
 export function validateExecution(manifest = readExecution(), {
   readSource = read,
   grandfathered = grandfatheredReproducerBacklog,
-  files = readdirSync(root + 'formal').filter(name => name.endsWith('.qnt')).map(name => 'formal/' + name),
+  files = quintSources(),
   profiles = JSON.parse(read('formal/profiles.json')).profiles,
   contracts = contractIds(read('formal/CONTRACTS.md')),
 } = {}) {
@@ -381,8 +425,13 @@ export function validateExecution(manifest = readExecution(), {
   positiveInteger(test?.maxSamples, 'test.maxSamples');
   if (check.outputDirectory !== '.formal-traces/verification') throw new Error('Unsupported verification output directory');
 
+  // Scheduled models live at formal/; helper libraries live there or, for the
+  // kernel library's concern modules, at formal/kernel/. Kernel modules are
+  // never scheduled on their own: a composed profile executes them, and a
+  // fault in one is measured through the profiles that compose it.
   const paths = [...manifest.models.map(model => model.path), ...manifest.libraries];
-  if (paths.some(path => typeof path !== 'string' || !/^formal\/[\w-]+\.qnt$/.test(path)) ||
+  if (manifest.models.some(model => typeof model.path !== 'string' || !/^formal\/[\w-]+\.qnt$/.test(model.path)) ||
+      manifest.libraries.some(path => typeof path !== 'string' || !isQuintSourcePath(path)) ||
       new Set(paths).size !== paths.length || !sameMembers(paths, files)) throw new Error('Model/library file inventory changed; review the execution schedule');
   const profileIds = [], outputDirectories = new Set([check.outputDirectory]), publicOnly = new Map();
   let invariants = 0, regressions = 0, generatedTraces = 0;
@@ -411,6 +460,15 @@ export function validateExecution(manifest = readExecution(), {
     invariants += model.invariants.length;
     regressions += model.regressions.length;
     if (model.propertyChallenge !== undefined) throw new Error(`${model.path}: property challenges live in the manifest challenges catalog`);
+    // A composed profile's declared behavior: bumping behaviorVersion says its
+    // observable behavior changed on purpose, so the corpus differential
+    // reports that profile instead of comparing it against the reference.
+    if (model.differential !== undefined) {
+      if (!model.differential || typeof model.differential !== 'object' || Array.isArray(model.differential) || model.generate === undefined ||
+          Object.keys(model.differential).join() !== 'behaviorVersion') throw new Error(`${model.path}: unsupported differential settings`);
+      const { behaviorVersion } = model.differential;
+      if (!Number.isSafeInteger(behaviorVersion) || behaviorVersion < 1) throw new Error(`${model.path}: differential.behaviorVersion must be a positive integer`);
+    }
     if (model.profile !== undefined || model.generate !== undefined) {
       const profile = profiles.find(profile => profile.id === model.profile);
       if (!profile || profile.model !== model.path || !model.generate) throw new Error(`${model.path}: generation profile differs from claim registry`);
@@ -465,6 +523,11 @@ export function validateExecution(manifest = readExecution(), {
     const declarations = scanDeclarations(readSource(path));
     if ([...declarations.values()].some(kind => ['action', 'run', 'var'].includes(kind))) throw new Error(`${path}: a stateful model cannot be classified as a pure helper library`);
   }
+  // A kernel module exists to be composed: one no scheduled model reaches is
+  // never typechecked or executed by any lane, so it may not stay listed.
+  const reached = new Set(manifest.models.flatMap(model => importClosure(model.path)));
+  const orphans = manifest.libraries.filter(path => isKernelSource(path) && !reached.has(path));
+  if (orphans.length) throw new Error(`Kernel modules no scheduled model imports: ${orphans.join(', ')}; compose them or delete them`);
   if (!sameMembers(profileIds, profiles.map(profile => profile.id))) throw new Error('Generated profile inventory differs from claim registry');
   const challenges = validateChallenges(manifest, { readSource, contracts, sources: new Set(paths), profileIds: new Set(profileIds), publicOnly, grandfathered });
   return { models: manifest.models.length, libraries: manifest.libraries.length, profiles: profileIds.length, invariants, regressions, generatedTraces, exportedRegressionTraces, vectorModels, generatedVectors, ...challenges };

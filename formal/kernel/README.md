@@ -1,241 +1,161 @@
-# Shared lifecycle pilot
+# Kernel library
 
-This is the first bounded implementation slice of
-[issue #165](https://github.com/lan17/DialCache/issues/165). It tests whether the
-layers and effects views can share ownership, source acceptance, publication
-and caller completion without changing their public replay protocol.
-The existing 15 conformance profiles remain the acceptance specification.
-This pilot does not migrate either full profile or close the issue.
+The kernel library states every portable DialCache rule once, as pure
+transitions over the part of the state each rule touches. A conformance profile
+composes these transitions over its own bounded state: it declares the state its
+fixtures exercise, owns the choice of inputs and the environment restrictions,
+and assigns state only through library transitions. Issue #165 records the
+design and its history; this file describes what is here and how to use it.
 
-## One lifecycle, two settlement views
+## Modules
 
-[`cache-kernel.qnt`](./cache-kernel.qnt) owns the calls, registered executions,
-raw sources, cache entries and transitions. [`kernel-types.qnt`](./kernel-types.qnt)
-distinguishes pending results, errors, timeouts, execution phases, and raw work
-that remains abandoned after its callers finish.
-
-| View | Environment and projection |
-| --- | --- |
-| [`layers-pilot.qnt`](./layers-pilot.qnt) | Existing layers inputs, fixtures 0–5, two instances, four keys, request/local/remote traversal; read/decode/dump/write effects complete within the action |
-| [`effects-pilot.qnt`](./effects-pilot.qnt) | Existing effects inputs, tracked/untracked fixtures 2 and 5, one identity, 10 ms read and source budgets; read/decode/dump/write completions are separate actions |
-
-Profiles choose inputs, normalize fixtures and project the shared state into
-the existing transport records. Their actions cannot assign cache state.
-The kernel's `SETTLE` constant specifies which external completions are already
-available; it does not change source acceptance or ownership rules. Monotonic
-elapsed time controls deadlines and the independent wall clock stamps frames.
-
-An execution completes only its owned callers. Rejection or timeout releases
-its registration; a timed-out raw source may still run while another execution
-starts. A timely accepted source retains its execution through serialization
-and writing, even after the original source deadline passes. Publication uses
-the acquired fence, and closing a scope prevents later memo publication.
-
-[`lifecycle-witnesses.qnt`](./lifecycle-witnesses.qnt) observes public inputs
-and result/effect observations. It cannot influence transitions or projections.
-The kernel records one monitor value per step, computed from the previous
-monitor value and the current step alone; no input history is retained or
-refolded, so witness bookkeeping no longer grows with the length of a history.
-It still scales with the number of calls the view admits, which the fixture
-bounds, and it is the largest remaining cost of the kernel views (below). The
-kernel hands the monitor the public input, the public view, and two fixture
-constants: whether effects are held and the source budget. The monitor carries
-the credited label set. Four boundaries are scripted prefixes:
-a fixed public input order, for one view, with the observation fields that
-establish each consequence, written as data so each input sits next to what it
-must produce and one rule covers all four: a history that departs from a
-script's prefix can never earn its label, and no script applies to the other
-view. The pilot does not measure the scripts' share of the monitor's cost
-separately; the frozen-monitor record below bounds the monitor as a whole. The
-form was chosen for readability, not speed. Every credited label is retained
-because each step's labels accumulate from the previous step's. The monitor's
-positive and negative tests are checks of evidence classification, not
-additional native behavioral coverage.
-
-The witness-isolation lint enforces one direction: nothing reachable from a
-transition, guard, choice domain or projection may read the monitor. The other
-direction, that the monitor reads only public data, rests on the monitor module
-importing nothing from the kernel and on the kernel handing it only the public
-input, the public view and the two fixture constants named above.
-
-## Executable comparison
-
-Run `make kernel-pilot` with the same Node, Go and Quint prerequisites as
-`make formal`. The target is included in `make formal` and the full formal
-workflow, independently of the unchanged full-profile replay lanes. Its
-generation-lane measurement deliberately runs each of the two kernel views
-once until Node's default heap is exhausted, a few gigabytes each time.
-
-[`pilot.json`](./pilot.json) records twelve input-only histories. The runner
-executes each exact sequence in both the original profile and the shared
-kernel view. It compares public observations at every step, then replays the
-kernel-generated history through the existing TypeScript and Go drivers.
-The drivers still control real external gates and observe the real libraries;
-they receive no kernel state or expected result as an implementation input.
-
-| History boundary | Views | Existing obligations |
+| Module | Concern | Transitions and judgments |
 | --- | --- | --- |
-| Coalesced success and subsequent cache reuse | Layers and effects | C05, C11, C12 |
-| Overlapping instances with distinct results in the success/reuse history | Layers | C11 |
-| Shared failure followed by a fresh successful attempt | Layers and effects | C11, C15 |
-| Invalidation before acquisition suppresses source publication | Layers | C33, C34 |
-| Invalidation after acquisition permits publication but fences a later read | Layers | C33, C34, C36 |
-| Tracked source fills Redis; the next read warms local, then local serves; the history continues one call past that boundary | Layers | C05, C31 |
-| Timed-out raw source settles during its replacement | Effects | C25 |
-| Accepted serialization and write finish after the source deadline | Effects | C26 |
-| Fulfillment or rejection at the exact deadline before timer delivery | Effects | C25 |
-| Future but unfenced frame rejected after wall rollback, followed by source refill | Effects | C33, C34 |
+| `encodings` | Sentinels shared by the modules: 0 for an absent value, -1 for an unowned slot, 0 for no fence | constants only |
+| `layer_policy` | Which layers a call may use, from the drivers' policy code and remote availability | `enabledLayers`, `sharedLayers` |
+| `request_memo` | Request-scoped memo rows and scope closure | `scopeOpen`, `memoSlot`, `memoValue`, `memoize`, `closeScope` |
+| `local_storage` | Per-instance local storage with LRU eviction and a hit that renews recency, not insertion | `localValue`, `promote`, `putLocal` |
+| `remote_frames` | Remote frames with creation stamps, per-entity watermarks and fences (`cache_rules.fenceAllows`) | `seedFrame`, `raiseWatermark`, `readableFrame`, `missFence`, `writeAllowed` |
+| `flights` | Source executions, the process and request registries that coalesce callers, and per caller its owner, memo slot and identity | `processOwner`, `requestOwner`, `admitCaller`, `joinRequestFlight`, `registerSource`, `settleSource`, `forgetScope`, `ownedBy` |
+| `clock` | Elapsed time | `advance` |
+| `serving` | Admission, traversal order, ownership precedence, publication and refill authority, scope closure, maintenance | `begin`, `settle`, `closeScope`, `invalidate` |
 
-The check also requires:
+`cache_rules` (age, expiry, deadline and fence judgments) stays the layer under
+these modules and is imported, never restated.
 
-- The existing parsed-IR lint to find no state assignment outside the kernel
-  and no witness dependency in cache behavior or observation projection.
-- Five properties over 2,000 sampled histories of up to 40 steps per view,
-  using the pinned evaluator and seed in `execution.json`. Applicability is
-  described below and recorded in the report.
-- Six compiling single-site kernel faults, with nine named property checks
-  at exact input checkpoints; each unmodified history must first pass. Every
-  property except the closed-scope memo rule has a fault it detects at its
-  declared step; whether the other properties would also detect it is not
-  checked.
-- A successful native assertion report from each language for every history.
-  Skips, missing results and evaluator failures cannot count as passes.
-- A sampling-cost bound: in the same job, the original profile and the kernel
-  view each sample the original's generation bounds from `execution.json` (its
-  sample count and step bound, one thread, the pinned seed, no trace output)
-  with their own invariants, twice each, alternating with the frozen-monitor
-  copy below. The kernel view's fastest wall time may be at most
-  `exploration.maxRatio` in `pilot.json`
-  (2.5) times the original's fastest wall time. The first hosted measurements
-  were 1.1 to 1.2 for layers and 1.6 to 1.8 for effects; the bound leaves room
-  for runner variance and still fails on the 4 to 7 times of the refolding
-  monitor. A violation is raised only after the histories, replays and faults
-  below have been recorded. The pairing compares unequal property sets: the
-  originals' nine invariants each against the kernel's five, and the originals
-  pay about 1.7 times as much for their properties (layers 4.8 s against
-  2.9 s, effects 4.2 s against 2.4 s in the recorded check below), so the gated
-  ratio
-  understates a kernel view that carried the originals' properties. The report
-  records each side's property cost; the without-invariants ratio (1.9 for
-  layers, 3.5 for effects) is the transition-and-monitor ratio. Carrying the
-  originals' properties is a #165 work item next to monitor cost and exported
-  state size, and which pairing the #165 budget eventually gates (this one, or
-  the plain or frozen pairing once monitor cost is addressed) is an open
-  decision recorded there.
-- Records, not gates, that locate the remaining cost: the same pairing without
-  invariants; the kernel view with its monitor assignment replaced by
-  `monitor' = monitor`, which skips the kernel's witness observation
-  (`publicView`) and `Witness::advance` at every step after initialization and
-  nothing else, so its difference to the full view is that cost; and the fixed
-  cost of a one-sample, one-step run
-  of each model. The cost measurements run after the histories, replays and
-  faults, so a job killed mid-measurement still carries the correctness record.
-- The generation lane's own command for both models, built by the same
-  function the lane uses (`generationArguments` in `run-models.mjs`): `--mbt`,
-  the original's trace count, ITF output to a scratch directory that is removed
-  after counting. The bounds are the pilot's own; the lane has no per-command
-  ceiling, only its job timeout. The original's attempt gets 600 s; the kernel
-  view's timeout is four times the original's wall time, at least 150 s so the
-  observed heap-exhaustion abort stays visible in the record, and at most
-  600 s. The report records each model's outcome (completed, violation,
-  aborted, failed, or not attempted when the original failed), exit status,
-  signal, timeout, wall time, traces and bytes, and `generationParity`: the
-  kernel view completed under the lane's own Node heap within
-  `generation.maxRatio` in `pilot.json` (2.5) times the original in both wall
-  time and trace bytes. Trace size is part of parity on purpose: raw trace
-  bytes are the proxy for generation memory and time (the replay lanes read
-  projected traces, which drop the kernel state); the only completed kernel
-  generation on record, with a 12 GB heap, was 2.3 times the original's time
-  and 2.75 times its bytes. Peak memory is not measured; completion under the
-  default heap stands in for it, and the record notes the Node version, heap
-  limit and options that the attempts ran under, probed from the same `node`
-  the quint shim resolves, so a flip can be told apart from a runner or Node
-  change. This is the generation-runtime budget of
-  #165 and it is currently unmet: under the default heap both kernel views run
-  out of memory before writing a trace (see below). A property violation on
-  either side, or an original that cannot complete its own command, fails the
-  check after the correctness evidence; any other failure of these cost
-  measurements is recorded the same way and raised at the end.
+Every transition has the shape `pure def f(state: T[r], inputs...): T[r]` where
+`T[r]` is a record type that names only the fields the module reads or writes
+and leaves the rest of the profile's record open (`{ memo: List[int], closed:
+List[bool] | r }`). A profile's state is therefore one flat record with exactly
+the fields its fixtures need, and a transition applied to it returns the same
+record type. Trace shape, the fixture projections and the trace readers are
+unchanged by composition; a profile adds a field only when a module it composes
+requires one.
 
-The publication property checks retained source-acceptance records after
-completion and requires one record per serialization effect. This includes
-layers actions that finish serialization and writing before the next recorded
-state. A fault that ignores an acquired fence must fail at that completed
-layers state; entering publication without source acceptance must also fail.
-Source ownership and fence eligibility apply in both views;
-the source deadline inequality is exercised only in effects because layers
-has an unbounded source budget. The closed-scope memo property is consequential
-only in layers; effects has request memoization disabled.
+Encodings are the drivers': caller outcomes are `conformance_observations`
+codes, layer policy codes are `layer_policy`'s, storage slots hold the value or
+0 and registries a source index or -1 (`encodings`). Layouts (keys per instance
+and per scope row, persistent contexts, operations per entity, the serving TTL)
+are passed as a `serving::Layout` record, so a profile with a different bound
+composes the same transitions.
 
-The publication property checks eligibility against the recorded acquired
-fence. It does not independently establish that fence capture itself is
-correct. The two invalidation orderings additionally compare public effects
-with the original model and both implementations; independent capture
-challenges remain migration work.
+## Composing a profile
 
-The twelve fixed histories are compared and replayed; the sampled histories
-provide model-only invariant evidence. Neither establishes exhaustive
-equivalence between the full models. The deliberate faults measure these
-properties' sensitivity to those particular changes, not all possible defects.
+`formal/dialcache-layers-conformance.qnt` is the first composed profile. It keeps
+its constants, its flat `State`, `var s` and `var input`, its `nondet` input
+choices, its guards, its invariants and its regressions. Each wrapper action
+assigns `s'` to one library transition and `input'` to the driver record:
 
-## Evidence and next decision
+```quint
+action startCall(choice: int): bool = all {
+  s.o.calls.length() < MAX_CALLERS,
+  s' = Serving::begin(s, LAYOUT, instance(choice / KEYS_PER_INSTANCE), choice % KEYS_PER_INSTANCE,
+    choice / KEYS_PER_INSTANCE),
+  input' = { name: "beginCall", choice: choice }
+}
+```
 
-`.formal-traces/kernel-pilot/report.json` records source hashes, bounds,
-per-history comparison and witness checkpoints, native reports, model faults,
-original/kernel generation times and raw trace sizes, the sampling pairings
-with every run's wall time, the fixed CLI cost and the ratios with and without
-it, the frozen-monitor record, and the generation-lane measurement. Wall times
-include CLI startup, about one second per run locally. One recorded local
-check, at the generation bounds, taking the faster of two runs: layers took
-7.5 s in the original with its nine invariants against 7.9 s in the kernel view
-with its five, and 2.7 s against 5.0 s without invariants; effects took 6.6 s
-against 10.7 s with invariants and 2.4 s against 8.3 s without. In the same
-check the kernel views with the monitor assignment frozen took 5.8 s (layers)
-and 7.1 s (effects) against those originals with their nine invariants, so the
-witness observation and monitor advance cost 2.1 s and 3.6 s of the gated runs,
-about 13 to 15 microseconds per step. The frozen layers view is below its
-original; the frozen effects view is about 8 percent above its original. With
-the monitor's share removed from the plain runs, the kernel's transitions alone
-take about 2.9 s (layers) against the original's 2.7 s, within the noise of two
-runs, and about 4.7 s (effects) against 2.4 s, roughly double; the gated pairing
-masks the effects gap because the originals carry nine properties. With the
-refolding monitor, at 2,000 samples of 40 steps, the kernel views had taken 4
-to 7 times the originals with invariants and 9 to 13 times without. Making the
-monitor cheaper is the next parity work item for sampling cost; the effects
-view's transitions are the one after it.
+Each state field has one owning module: the request flight registry and the
+per-caller record (owner, memo slot, instance, key) belong to `flights`, which
+the scope closure in `serving` asks to forget a closed scope's slots, and the
+profile's ownership invariant reads that record rather than keeping its own.
+Composing `serving` adopts the layers encoding of every field it names; a
+profile with a different private layout re-encodes when it composes, and the
+witness classifiers that read its private fields move with it.
 
-The generation lane writes 512 traces per profile with `--mbt`. The originals
-complete that command in 11 s (effects, 108 MB of traces) and 14 s (layers,
-168 MB) with a peak of about 3 GB of memory. Both kernel views exhaust Node's
-default heap before writing a trace; given a 12 GB heap the effects kernel view
-completes in 25 s with 297 MB of traces and a 7 GB peak, 2.3 times the
-original's wall time and its memory. The exported state is the
-cause: per state the kernel's `s` is 61 to 83 percent of the bytes, the
-effects view's projection up to 29 percent and the monitor about 10 percent.
-Until that state shrinks or the lane's configuration for kernel-based profiles
-changes, the kernel cannot generate the corpus as configured, and no migration
-under #165 should proceed on the sampling bound alone. The directory retains
-copied Quint sources and failing histories. A failure identifies its history,
-step, action and expected/actual public observations, or the exact failing
-report.
+The rules a profile may keep are wiring: record literals for the initial state,
+record updates with inputs (`{ policy: policy, ...s }`), and input decoding
+that reads no state (`instance(context)`). Guards and `nondet` domains restrict
+the environment and may read state; invariants and runs are independent
+statements and may read anything; the `input` assignment is the driver
+contract and may branch on state.
 
-`node formal/kernel-pilot.mjs generate` performs only deterministic generation,
-comparison and witness checks. Its report remains incomplete. A full `check`
-can become complete only if all pilot checks pass and its source inputs remain
-unchanged. Every pilot report has `acceptance: false`: it cannot substitute for
-the existing full conformance completion reports. Per-history ratios and
-trace sizes concern short deterministic histories and are informational. The
-gated ratio bounds sampling cost at the original's generation bounds; it
-detects a regression in the kernel's evaluation cost and is not the generation
-budget, which the recorded generation-lane measurement carries.
+`node formal/lint-profiles.mjs <profile.qnt>` checks this. Its composition rule
+walks every value assigned to a state variable other than `input` from the
+public wrappers and reports any comparison, branch, arithmetic or collection
+operator whose operand carries cache state, and any non-library definition
+applied to cache state, following profile helpers with the taint of their
+arguments. Library modules are those declared under `formal/kernel`
+(`cache_rules` is the judgment layer they consume, not one a profile assigns
+through); a chosen `nondet` input and lambda parameters carry no state; a
+record literal may set a field over a library result (that is wiring the
+reviewer sees, not a rule). `formal/profile-lint-baseline.json` records each
+profile's library transitions and violation count; a composed profile reports
+zero and the other counts are the migration list. `node formal/lint-profiles.mjs
+baseline --check` is a step of `make differential` (the pull request lane) and
+of `make formal-check` (the weekly full run); it is a ratchet: a profile's
+library transitions and violation count must match the record (a count that
+fell is refreshed with `--write`, one that rose fails), and a profile that
+composes a kernel module may have none, whatever the record says. Arguments a
+wrapper hands to a parametrized action are walked where they are written and
+taint the callee's parameters. The lint sees the shape of assignments, not
+their meaning: a record literal that overrides a library result passes it; the
+corpus differential is the behavioral check.
 
-The effects slice excludes adapter classification overrides, live read-budget
-changes and observer failures. Recovery, shadow work, admission, independent
-calls, local expiry/faults, runtime boundary profiles and wire contracts retain
-their existing models and evidence. The pilot adds no new coverage percentage.
+## Migrating a profile
 
-The next decision is whether to migrate additional layers/effects histories
-through this kernel. Require exact-input comparison, consequential witnesses,
-both native replays and independent property challenges before deleting an
-original transition. A passing pilot alone does not justify replacing either
-complete profile.
+A rewrite lands when the corpus differential agrees on every history:
+
+```bash
+node formal/differential.mjs layers --reference=origin/main
+```
+
+The tool generates the profile's corpus and exports its regressions from the
+merge base with the reference revision and from the working tree, each with
+its own manifest entry (invariants, bounds, seed) and the generation lane's
+command. It then replays every reference history through the working tree's
+text as a deterministic schedule of its public inputs, and every working-tree
+history through the reference text, comparing every channel the drivers
+assert at every step; a candidate that enables inputs the reference refused
+disagrees in the reverse direction. Replays run as batched `quint test`
+processes (16 histories each, the measured optimum) built from constrained
+action clones shared across the batch, the same schedules fixture recipes use.
+The run fails on any disagreement and when trace bytes per state grow beyond
+1.2 times the reference's; generation wall time is recorded and reported as
+advisory above 1.5, because the two generations run concurrently and hosted
+runners are noisy. What is compared is what the drivers assert (the
+observation and the profile's side channels); private state is protected by
+the generation-time invariants and the witness lanes, not by this tool.
+
+The report records the import closure of both texts (the profile and every
+Quint source it reaches) with per-file digests, so a red run on a kernel-only
+change names the module that changed.
+
+An intended change of observable behavior is declared in the manifest: bump
+the model's `differential.behaviorVersion` in `formal/execution.json` in the
+same change (or the profile's observation schema `version` in
+`formal/profiles.json` when the driver-asserted channels change), and the
+differential reports the profile as an intended divergence instead of
+comparing it. A profile the reference revision does not generate is reported
+as new, and one the working tree no longer generates as removed (the manifest
+validator already forbids registering a profile without generating it). The
+differential replays only profiles with an explicit-input driver descriptor in
+`formal/replay/features.mjs`, whose recorded `input.choice` is the wrapper's
+`nondet` choice; a composed profile without one fails the run by name. `make
+differential` runs the lint baseline check and then the differential for every
+profile that imports a kernel module in either revision (directly or through a
+helper library); the pull request lane runs that against the base branch
+whenever a Quint input changes and preserves the reports and replay logs.
+
+Fault challenges for rules that moved into the library anchor on the module
+source (`formal/execution.json` lists `formal/kernel/*.qnt` among its
+`libraries`, which also puts them under the purity check, the witness evidence
+inputs and the fixture lock) and are measured through the composing profile's
+scheduled invariant, as before.
+
+## Record of the layers rewrite
+
+Measured on 2026-09-16 against `main` at bf3c7e8 with the manifest seed:
+
+| | Reference | Composed |
+| --- | --- | --- |
+| Sampled histories agreeing step for step, both directions | | 512 of 512 |
+| Exported regressions agreeing, both directions | | 15 of 15 |
+| Generation wall time (512 traces, 80 steps, concurrent) | 15.7 s | 17.1 s |
+| Bytes per state | 4226 | 4226 |
+| Profile lines | 549 | 385 |
+| Composition-lint violations (rule logic in the profile) | 73 | 0 |
+
+The pilot that preceded the library (#171, #172) instantiated one kernel state
+machine per profile and measured its cost; its conclusions and measurements are
+recorded in issue #165.

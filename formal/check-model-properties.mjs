@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readExecution, reproducerCheckpoint, validateExecution } from './execution.mjs';
+import { copySources, quintSources, readExecution, reproducerCheckpoint, validateExecution } from './execution.mjs';
 import { printGroup, resolveConcurrency, runPool, seconds, spawnBuffered } from './quint-pool.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -84,8 +84,7 @@ export async function measureModelProperties({ only, concurrency = resolveConcur
   const { settings, check } = manifest;
   const options = [`--backend=${settings.backend}`, `--n-threads=${settings.threads}`, `--seed=${settings.seed}`,
     `--max-samples=${check.maxSamples}`, `--max-steps=${check.maxSteps}`];
-  const files = readdirSync(resolve(root, 'formal')).filter(name => name.endsWith('.qnt')).sort();
-  const sources = new Map(files.map(name => [`formal/${name}`, readFileSync(resolve(root, 'formal', name), 'utf8')]));
+  const sources = new Map(quintSources().map(path => [path, readFileSync(resolve(root, path), 'utf8')]));
   mkdirSync(output, { recursive: true });
   const report = { schemaVersion: 4, complete: false, partial: only !== undefined, mode: 'bounded-simulation', options,
     sources: Object.fromEntries([...sources].map(([path, source]) => [path, createHash('sha256').update(source).digest('hex')])),
@@ -113,8 +112,7 @@ export async function measureModelProperties({ only, concurrency = resolveConcur
     let detail = '';
     try {
       for (const label of ['baseline', 'mutant']) {
-        mkdirSync(resolve(workspace, 'formal'), { recursive: true });
-        for (const [path, text] of sources) writeFileSync(resolve(workspace, path), text);
+        copySources(root, workspace);
         if (label === 'mutant') writeFileSync(resolve(workspace, challenge.source), source.replace(challenge.before, challenge.after));
         const model = resolve(workspace, challenge.model);
         const prefix = resolve(output, `${challenge.id}-${label}`);
