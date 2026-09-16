@@ -8,10 +8,10 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "1f0ce439d35caf402af09c159bbfa8d1b57cc3c6f27690d7ff8e8fd17f2f0d40",
-    "executionSha256": "412a979c57acd0f702e1c54b5fbc71b011b6b6db62f6ac753e992144de475aa5",
+    "semanticCasesSha256": "cc049ae27b91c2ccedaeae4e31163ad3a2ef4a173cb35f6e2ec83582f3c9b74c",
+    "executionSha256": "f3b449c7b89e14e66a86d4efdf1acd43e2b380441dfc9a3330f6a1a25bd10ede",
     "sourceAuditSha256": "c775b5ce04e57c477d3f922ec3db6929379775522a8e14d2c33cafdcd4aa49e9",
-    "quintCaseAuditSha256": "df41821eef49f85cff83f95f4431979bc629c43642c11ee3820887408ac59894",
+    "quintCaseAuditSha256": "cb483b66984aa0d93f73bde17ee7193b5484e53bcca75638721856aeee63c319",
     "featureCoverageSha256": "56eedfa865682db6ad8e73b8673c7dac1c30d301e9bce3390246d6994aba9dcb",
     "coverageWitnessesSha256": "8fc8ab123150fdec059f5b75f84172d39af80d08d7a4211fa88c63c5a3f2874b",
     "profilesSha256": "34b1d77a25a92b0d5d6703a379902fae95f51227dca201613233592ba4f590c8"
@@ -45,12 +45,12 @@
     "casesWithQuintGeneratedVectors": 22,
     "withoutModelDrivenReplay": [],
     "quintModels": 32,
-    "scheduledInvariants": 217,
-    "scheduledRegressions": 407,
+    "scheduledInvariants": 218,
+    "scheduledRegressions": 410,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
     "caseReferencedWitnesses": 285,
-    "exportedRegressionHistories": 240
+    "exportedRegressionHistories": 243
   },
   "profiles": [
     {
@@ -145,7 +145,10 @@
         "policyClosureFailureIsAttributedWithoutCachingTest",
         "absentValueIsMemoizedTest",
         "independentRequestMemoUsesLastCompletionTest",
-        "pendingSourceKeepsRequestPolicyAcrossBypassAndClosureTest"
+        "pendingSourceKeepsRequestPolicyAcrossBypassAndClosureTest",
+        "rejectedIndependentSourceKeepsMemoizedValueTest",
+        "independentSourceIsNotRegisteredForLaterSharingTest",
+        "pendingRequestFlightIsJoinedBeforeMemoReadTest"
       ],
       "status": "executable-profile-schedule",
       "witnessSources": [
@@ -2036,7 +2039,8 @@
       "group": "request-and-layers",
       "quintProperties": [
         "formal/dialcache-policy-conformance.qnt:independentLocalCallsStillReuseSettledValueTest",
-        "formal/dialcache-runtime-boundaries-conformance.qnt:disabledSharingDoesNotJoinRegisteredFlightTest"
+        "formal/dialcache-runtime-boundaries-conformance.qnt:disabledSharingDoesNotJoinRegisteredFlightTest",
+        "formal/dialcache-scope-conformance.qnt:independentSourceIsNotRegisteredForLaterSharingTest"
       ],
       "requiredGenerated": [
         {
@@ -2074,7 +2078,8 @@
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
         "policy/independentLocalCallsStillReuseSettledValueTest",
-        "runtime-boundaries/disabledSharingDoesNotJoinRegisteredFlightTest"
+        "runtime-boundaries/disabledSharingDoesNotJoinRegisteredFlightTest",
+        "scope/independentSourceIsNotRegisteredForLaterSharingTest"
       ],
       "generatedVectors": []
     },
@@ -10840,7 +10845,8 @@
       "kind": "portable-behavior",
       "quintProperties": [
         "formal/dialcache-scope-conformance.qnt:independentRequestMemoUsesLastCompletionTest",
-        "formal/dialcache-scope-conformance.qnt:memoFollowsLatestSuccessfulSettlement"
+        "formal/dialcache-scope-conformance.qnt:memoFollowsLatestSuccessfulSettlement",
+        "formal/dialcache-scope-conformance.qnt:rejectedIndependentSourceKeepsMemoizedValueTest"
       ],
       "requiredGenerated": [
         {
@@ -10858,7 +10864,8 @@
       "status": "executable-generated",
       "gaps": [],
       "quintReplays": [
-        "scope/independentRequestMemoUsesLastCompletionTest"
+        "scope/independentRequestMemoUsesLastCompletionTest",
+        "scope/rejectedIndependentSourceKeepsMemoizedValueTest"
       ],
       "generatedVectors": []
     },

@@ -211,17 +211,24 @@ module dialcache_scope_conformance {
     s.o.sourceScopes.length() == s.o.loaders and s.owners.length() == s.o.calls.length()
     and s.sourceLayers.length() == s.o.loaders and s.held.length() <= 1
 
-  // A memo row holds nothing or a value a source memoizing into it settled
-  // with, and the settlement that just happened left its successful value in
-  // the row of every owner memoizing into an open scope: source admission
-  // order and coalescing do not determine the final value.
+  // The memo row of an open scope holds a value exactly when a source that
+  // memoizes into it (one owning a caller attached to that row) has settled
+  // with a publishable value, and the value it holds is one such source
+  // settled with; the settlement that just happened left its successful value
+  // in the row of every owner memoizing into an open scope. Source admission
+  // order and coalescing do not determine the final value, and neither a
+  // failed settlement nor another scope's closure clears a row.
   pure def publishable(value: int): bool = values.indices().exists(index => values.nth(index) == value)
+  pure def settledInto(x: State, slot: int): Set[int] = x.sources.indices().filter(loader =>
+    publishable(x.sources.nth(loader).result) and Flights::ownedBy(x, loader).exists(caller => x.memoSlots.nth(caller) == slot))
   val justSettled = input.name == "resolveLoader" or input.name == "rejectLoader"
   val settledSource = if (input.name == "resolveLoader") (input.choice - 1) / SOURCE_VALUE_COUNT else input.choice
-  val memoFollowsLatestSuccessfulSettlement = s.memo.indices().forall(slot =>
-      s.memo.nth(slot) == NO_VALUE or s.sources.indices().exists(loader =>
-        s.sources.nth(loader).result == s.memo.nth(slot) and publishable(s.memo.nth(slot))
-          and Flights::ownedBy(s, loader).exists(caller => s.memoSlots.nth(caller) == slot)))
+  val memoFollowsLatestSuccessfulSettlement = s.memo.indices().forall(slot => s.closed.nth(slot) or {
+      val value = s.memo.nth(slot)
+      val settled = settledInto(s, slot)
+      (value != NO_VALUE) == (settled.size() > 0)
+        and (value == NO_VALUE or settled.exists(loader => s.sources.nth(loader).result == value))
+    })
     and (not(justSettled) or {
       val result = s.sources.nth(settledSource).result
       not(publishable(result)) or Flights::ownedBy(s, settledSource).forall(caller => {
@@ -229,6 +236,19 @@ module dialcache_scope_conformance {
         row < 0 or s.closed.nth(row) or s.memo.nth(row) == result
       })
     })
+
+  // A released caller that started a source registered it under its memo row
+  // exactly when its reply coalesces. The released caller is the newest: no
+  // admission happens while a reply is held (sourceCountsMatchEffects pins one
+  // held reply), and a source just started is owned by its starter alone, which
+  // tells a started source from a joined one.
+  val releasedCaller = s.o.calls.length() - 1
+  val registrationFollowsCoalescing = input.name != "releasePolicy" or {
+    val owner = s.owners.nth(releasedCaller)
+    val row = s.memoSlots.nth(releasedCaller)
+    owner < 0 or Flights::ownedBy(s, owner) != Set(releasedCaller)
+      or ((row >= 0 and s.requestFlights.nth(row) == owner) == (row >= 0 and s.resolved.coalesce))
+  }
 
   // -- Deterministic regression schedules ------------------------------------
 
@@ -316,4 +336,33 @@ module dialcache_scope_conformance {
     .then(startCall(REPLACEMENT_REQUEST)).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, CALL_PENDING)
       and s.o.loaders == 3 and s.memo == List(NO_VALUE, NO_VALUE))
+
+  run rejectedIndependentSourceKeepsMemoizedValueTest = init
+    .then(changePolicy(POLICY_NO_COALESCING))
+    .then(startCall(ROOT_REQUEST)).then(releasePolicy)
+    .then(startCall(ROOT_REQUEST)).then(releasePolicy)
+    .then(finishSource(0, VALUE_ONE))
+    .then(finishSource(1, SOURCE_ERROR))
+    .then(startCall(ROOT_REQUEST)).then(releasePolicy)
+    .expect(s.o.calls == List(VALUE_ONE, SOURCE_ERROR, VALUE_ONE) and s.o.loaders == 2
+      and s.memo == List(VALUE_ONE, NO_VALUE) and s.d.fallbackErrors == List("request_local"))
+
+  run independentSourceIsNotRegisteredForLaterSharingTest = init
+    .then(changePolicy(POLICY_NO_COALESCING))
+    .then(startCall(ROOT_REQUEST)).then(releasePolicy)
+    .then(changePolicy(POLICY_INHERIT))
+    .then(startCall(ROOT_REQUEST)).then(releasePolicy)
+    .expect(s.o.calls == List(CALL_PENDING, CALL_PENDING) and s.o.loaders == 2 and s.d.coalesced == List())
+
+  run pendingRequestFlightIsJoinedBeforeMemoReadTest = init
+    .then(startCall(ROOT_REQUEST)).then(releasePolicy)
+    .then(changePolicy(POLICY_NO_COALESCING))
+    .then(startCall(ROOT_REQUEST)).then(releasePolicy)
+    .then(finishSource(1, VALUE_TWO))
+    .then(changePolicy(POLICY_INHERIT))
+    .then(startCall(ROOT_REQUEST)).then(releasePolicy)
+    .expect(s.o.calls == List(CALL_PENDING, VALUE_TWO, CALL_PENDING) and s.o.loaders == 2
+      and s.d.coalesced == List("request_local"))
+    .then(finishSource(0, VALUE_ONE))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE) and s.memo == List(VALUE_ONE, NO_VALUE))
 }

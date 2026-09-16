@@ -126,7 +126,10 @@ module serving {
   pure def ownerOf(outcome: Outcome): int = match outcome {
     | JoinsRequest(owner) => owner
     | JoinsProcess(owner) => owner
-    | _ => NO_OWNER
+    | ServesMemo(_) => NO_OWNER
+    | ServesLocal(_) => NO_OWNER
+    | ServesRemote(_) => NO_OWNER
+    | Starts => NO_OWNER
   }
 
   // A caller returns a layer value; an attached request memoizes it.
@@ -135,10 +138,6 @@ module serving {
       o: { calls: state.o.calls.replaceAt(caller, value), ...state.o },
       ...state
     }, slot, value, layout.keysPerScope)
-  // A joined caller is completed by the flight it joined; a memoizing caller
-  // also registers that flight under its own scope.
-  pure def join(state: Traversed[r, p], caller: int, slot: int, owner: int): Traversed[r, p] =
-    Flights::joinRequestFlight(Flights::attachCaller(state, caller, owner, slot), slot, owner)
   // A source counts against the profile; the drivers may probe whether the
   // cache participated when it started.
   pure def started(state: Traversed[r, p], layout: Layout, participating: bool): Traversed[r, p] = {
@@ -203,8 +202,10 @@ module serving {
   // the policy call must be held (a wrapper guards on the gate), an unheld
   // release is a modeling error that fails when the caller is attached. The
   // scope may have closed since admission: a released caller of a closed scope
-  // resolves to the bypass reply. The remote read is observed only when the
-  // traversal reaches it.
+  // resolves to the bypass reply. Each caller is attached once, to the flight
+  // that completes it or to none; a join happens before any layer is read, so
+  // the join arms count no remote read. The remote read is observed only when
+  // the traversal reaches it.
   pure def release(state: Served[r], layout: Layout, policyCall: int, resolved: Resolution): Served[r] = {
     val held = Gate::entry(state, policyCall)
     val caller = held.caller
@@ -217,7 +218,7 @@ module serving {
     val remoteValue = if (layers.remote) Remote::readableFrame(released, call.key, layout.operationsPerEntity) else NO_VALUE
     val decision = decide(released, layout, call, effective, localValue, remoteValue)
     val slot = decision.slot
-    val attached = Flights::attachCaller(released, caller, NO_OWNER, slot)
+    val attached = Flights::attachCaller(released, caller, ownerOf(decision.outcome), slot)
     val observed = if (layers.remote) {
       o: {
         reads: attached.o.reads + 1,
@@ -227,8 +228,8 @@ module serving {
       ...attached
     } else attached
     match decision.outcome {
-      | JoinsRequest(owner) => join(released, caller, slot, owner)
-      | JoinsProcess(owner) => join(released, caller, slot, owner)
+      | JoinsRequest(owner) => Flights::joinRequestFlight(attached, slot, owner)
+      | JoinsProcess(owner) => Flights::joinRequestFlight(attached, slot, owner)
       | ServesMemo(value) => serve(attached, layout, caller, slot, value)
       | ServesLocal(value) => serve(Local::promote(attached, call.instance, call.key), layout, caller, slot, value)
       | ServesRemote(value) => serve(if (layers.local)
@@ -236,23 +237,41 @@ module serving {
       | Starts => startSource(observed, layout, caller, call, slot, open, effective)
     }
   }
-  pure def releaseRequest(state: RequestServed[r], layout: Layout, policyCall: int, resolved: Resolution): RequestServed[r] = {
+
+  // The request-only release, judged once for the traversal and for the
+  // diagnostics recorded around it: the held caller and its call, whether its
+  // scope is still open, the resolution in effect (the request-only projection
+  // of the reply, or the bypass reply once the scope closed) and the decision.
+  // It is judged on the state before Gate::release, which edits only the held
+  // list, a field decide never reads.
+  type RequestRelease = { caller: int, call: Call, open: bool, effective: Resolution, decision: Decision }
+  pure def requestRelease(state: RequestServed[r], layout: Layout, policyCall: int, resolved: Resolution): RequestRelease = {
     val held = Gate::entry(state, policyCall)
-    val caller = held.caller
-    val call = held.call
-    val released = Gate::release(state, policyCall)
-    val open = participating(released, layout, call)
+    val open = participating(state, layout, held.call)
     val effective = if (open) requestOnly(resolved) else BYPASS
-    val decision = decide(released, layout, call, effective, NO_VALUE, NO_VALUE)
-    val slot = decision.slot
-    val attached = Flights::attachCaller(released, caller, NO_OWNER, slot)
-    match decision.outcome {
-      | JoinsRequest(owner) => join(released, caller, slot, owner)
-      | JoinsProcess(owner) => join(released, caller, slot, owner)
-      | ServesMemo(value) => serve(attached, layout, caller, slot, value)
-      | Starts => startRequestSource(attached, layout, caller, call, slot, open, effective)
+    {
+      caller: held.caller,
+      call: held.call,
+      open: open,
+      effective: effective,
+      decision: decide(state, layout, held.call, effective, NO_VALUE, NO_VALUE)
+    }
+  }
+  pure def releaseRequest(state: RequestServed[r], layout: Layout, policyCall: int, resolved: Resolution): RequestServed[r] = {
+    val judged = requestRelease(state, layout, policyCall, resolved)
+    val released = Gate::release(state, policyCall)
+    val slot = judged.decision.slot
+    val attached = Flights::attachCaller(released, judged.caller, ownerOf(judged.decision.outcome), slot)
+    match judged.decision.outcome {
+      | JoinsRequest(owner) => Flights::joinRequestFlight(attached, slot, owner)
+      // No shared layer participates in this shape, so the process registry is
+      // never consulted; the arm is the layered one.
+      | JoinsProcess(owner) => Flights::joinRequestFlight(attached, slot, owner)
+      | ServesMemo(value) => serve(attached, layout, judged.caller, slot, value)
       // No layer value is passed, so no layer serves.
-      | _ => attached
+      | ServesLocal(_) => attached
+      | ServesRemote(_) => attached
+      | Starts => startRequestSource(attached, layout, judged.caller, judged.call, slot, judged.open, judged.effective)
     }
   }
 

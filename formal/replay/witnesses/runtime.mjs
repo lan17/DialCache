@@ -135,8 +135,9 @@ function policyWitnesses(steps, recorder) {
 
 // Scope witnesses read only the inputs and the public observation: the memo
 // row a source fills is the outer lifetime of the context its caller began in
-// (the input choice), a held reply is a beginCall that counted a policy call,
-// the policy overlay is the last policy input, closure is the closeScope input.
+// (the input choice), a held reply is the last beginCall that counted a policy
+// call (a bypass admission in between holds nothing), the policy overlay is
+// the last policy input, closure is the closeScope input.
 const scopeHolder = scope => scope === 1 ? 1 : 0;
 const scopeSourceValues = [1, 2, 5, 6, 7, 8, 9];
 function scopeWitnesses(steps, recorder) {
@@ -154,7 +155,7 @@ function scopeWitnesses(steps, recorder) {
     if (action === "policy") overlay = choice;
     if (action === "beginCall") {
       callerScope.push(choice);
-      pending = current.policyCalls > prior.policyCalls ? prior.calls.length : -1;
+      if (current.policyCalls > prior.policyCalls) pending = prior.calls.length;
       if (current.loaders > prior.loaders) sources.push({ slot: -1, shared: false, pending: true });
     }
     if (action === "releasePolicy") {

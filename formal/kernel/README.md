@@ -15,7 +15,7 @@ design and its history; this file describes what is here and how to use it.
 | `calls` | What a caller asks for: instance, key, request context and whether it is enabled (a disabled context or a call outside every request is not) | the `Call` type only |
 | `layer_policy` | Which layers a call may use, from the drivers' layer policy code and remote availability; the immediate reply `resolution` and the `BYPASS` reply | `enabledLayers`, `sharedLayers`, `resolution` |
 | `runtime_policy` | How a runtime policy reply (the runtime-boundaries drivers' codes 0 to 21) resolves against an instance's configured baseline: serving cohorts, omitted, null and invalid leaves, runtime TTLs, the kill switch | `resolve` |
-| `request_memo` | Request-scoped memo rows, scope creation and closure | `scopeOpen`, `memoSlot`, `memoValue`, `memoize`, `openScope`, `closeScope` |
+| `request_memo` | Request-scoped memo rows and their closure; `openScope` and `Opened` are environment bookkeeping (which contexts an input has created) that no memo rule reads, kept beside the memo rows because the composition lint has no environment allowance yet | `scopeOpen`, `memoSlot`, `memoValue`, `memoize`, `openScope`, `closeScope` |
 | `local_storage` | Per-instance local storage with LRU eviction and a hit that renews recency, not insertion | `localValue`, `promote`, `putLocal` |
 | `remote_frames` | Remote frames with creation stamps, per-entity watermarks and fences (`cache_rules.fenceAllows`) | `seedFrame`, `raiseWatermark`, `readableFrame`, `missFence`, `writeAllowed` |
 | `flights` | Source executions (a record of outcome and process sharing, with whatever payload the traversal that started it needs), the process and request registries that coalesce callers, and per caller its owner and memo slot; an opt-in record of the identity each caller asked for | `processOwner`, `requestOwner`, `admitCaller`, `attachCaller`, `joinRequestFlight`, `registerSource`, `settleSource`, `forgetScope`, `ownedBy`, `recordIdentity` |
@@ -78,10 +78,12 @@ and the request-only projection (`admitRequest`, `releaseRequest`,
 whose state names no storage or clock). A projection exists only where the
 layered shape cannot meet a profile's bytes-per-state bound (scope measured
 x1.37 layered against x0.9 projected); it passes no layer values to `decide`
-and states no rule of its own. A profile whose drivers compare the
-diagnostics channel composes the `diagnostics` variants, which record the
-coalesced scope and each source's layer around the same transitions; a
-profile whose drivers do not carries no `d`.
+and states no rule of its own. The projection carries the registry fields of
+`Traversed`, `processFlights` among them although that shape never writes it,
+as the accepted cost of one `decide` over both shapes. A profile whose
+drivers compare the diagnostics channel composes the `diagnostics` variants,
+which record the coalesced scope and each source's layer around the same
+transitions; a profile whose drivers do not carries no `d`.
 
 A composed profile's clock must start above zero: `cache_rules.fenceAllows` is
 strict and an untracked flight's fence is 0, so a profile that initializes

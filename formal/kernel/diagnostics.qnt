@@ -1,11 +1,13 @@
 module diagnostics {
-  // The diagnostics channel (`d`): which singleflight a caller coalesced into
-  // and the layer a failed source is attributed to. The labels are the metric
-  // labels of the implementations (coalesced scope "request_local" or
-  // "process"; fallback errors by the layer the call was serving: the request
-  // memo, the shared layers' fallback "local", "noop" once the scope closed).
-  // A profile whose drivers compare `d` composes the diagnosed variants of the
-  // traversal below; the traversal itself never reads `d`.
+  // The diagnostics channel (`d`) of the request-only traversal: which
+  // singleflight a caller coalesced into and the layer a failed source is
+  // attributed to. The labels are the metric labels of the implementations:
+  // the coalesced scope is "request_local", the only registry this shape
+  // consults; fallback errors name the layer the call was serving (the
+  // request memo "request_local" when it memoizes, the shared layers'
+  // fallback "local" when it does not, "noop" once the scope closed). A
+  // profile whose drivers compare `d` composes the diagnosed variants below;
+  // the traversal itself never reads `d`.
   import conformance_observations.* from "../conformance-observations"
   import encodings.* from "./encodings"
   import calls.* from "./calls"
@@ -16,7 +18,6 @@ module diagnostics {
   pure val REQUEST_LOCAL_LAYER = "request_local"
   pure val LOCAL_LAYER = "local"
   pure val NO_CACHE_LAYER = "noop"
-  pure val PROCESS_SCOPE = "process"
   // A source started outside the cache (a disabled or outside caller) has no
   // layer and records no fallback error.
   pure val NO_LAYER = ""
@@ -51,21 +52,25 @@ module diagnostics {
 
   // -- Diagnosed variants of the request-only traversal ------------------------
 
+  // A caller that does not participate starts a bypass source at admission.
   pure def admitRequest(state: DiagnosedRequest[r], layout: Serving::Layout, call: Call): DiagnosedRequest[r] = {
     val admitted = Serving::admitRequest(state, layout, call)
-    if (admitted.sources.length() > state.sources.length()) recordSourceLayer(admitted, NO_LAYER) else admitted
+    if (Serving::participating(state, layout, call)) admitted else recordSourceLayer(admitted, NO_LAYER)
   }
+  // The release judged once (Serving::requestRelease) labels what the same
+  // release did to the state.
   pure def releaseRequest(state: DiagnosedRequest[r], layout: Serving::Layout, policyCall: int, resolved: Resolution): DiagnosedRequest[r] = {
-    val call = Gate::entry(state, policyCall).call
-    val open = Serving::participating(state, layout, call)
-    val effective = if (open) Serving::requestOnly(resolved) else BYPASS
-    val decision = Serving::decide(state, layout, call, effective, NO_VALUE, NO_VALUE)
+    val judged = Serving::requestRelease(state, layout, policyCall, resolved)
     val released = Serving::releaseRequest(state, layout, policyCall, resolved)
-    match decision.outcome {
+    match judged.decision.outcome {
       | JoinsRequest(_) => recordCoalesced(released, REQUEST_LOCAL_LAYER)
-      | JoinsProcess(_) => recordCoalesced(released, PROCESS_SCOPE)
-      | Starts => recordSourceLayer(released, sourceLayer(open, decision.slot))
-      | _ => released
+      | Starts => recordSourceLayer(released, sourceLayer(judged.open, judged.decision.slot))
+      // A served caller records nothing; the request-only shape reaches
+      // neither the process registry nor a layer value.
+      | JoinsProcess(_) => released
+      | ServesMemo(_) => released
+      | ServesLocal(_) => released
+      | ServesRemote(_) => released
     }
   }
   pure def settleRequest(state: DiagnosedRequest[r], layout: Serving::Layout, index: int, value: int): DiagnosedRequest[r] =

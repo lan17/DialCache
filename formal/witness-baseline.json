@@ -342,7 +342,7 @@
     },
     "runtime-boundaries": {
       "sampledHistories": 256,
-      "corpusSha256": "b68c0380263a2aa7ee184f3a026af779c3802f90fedc9048e6022112deb6ac2b",
+      "corpusSha256": "36aa2bc931af2816d798311028b72aa247e21ebc72e43e32a7d7d09aa83ec856",
       "labels": {
         "runtime-enables-sharing": 1,
         "inherited-false-request-last-writer": 0,
@@ -370,7 +370,7 @@
     },
     "scope": {
       "sampledHistories": 256,
-      "corpusSha256": "7420506432a4d405121d306134eaa988146d9408115023d2f48a22c4345a614b",
+      "corpusSha256": "60e47bafcc540e1148f5b2636444ba396beb68fccaae995413325c90f3cf2997",
       "labels": {
         "failure-layer:request_local": 146,
         "failure-layer:local": 114,
