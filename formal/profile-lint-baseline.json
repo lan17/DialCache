@@ -11,6 +11,7 @@
     "policy_gate",
     "remote_frames",
     "request_memo",
+    "runtime_policy",
     "serving"
   ],
   "profiles": [
@@ -103,8 +104,16 @@
       "id": "runtime-boundaries",
       "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
       "module": "dialcache_runtime_boundaries_conformance",
-      "libraryTransitions": [],
-      "compositionViolations": 58
+      "libraryTransitions": [
+        "flights::recordSettlement",
+        "policy_gate::latest",
+        "runtime_policy::resolve",
+        "serving::admit",
+        "serving::closeScope",
+        "serving::release",
+        "serving::settle"
+      ],
+      "compositionViolations": 0
     },
     {
       "id": "shadow-layers",

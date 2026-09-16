@@ -8,10 +8,10 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "6f57159edeb9ec1a54e22953562cb38ed4bafe067432fc20426173ca2d4173aa",
-    "executionSha256": "759f944df4280caa776a65691aad9caf59cc25ad1dea58b8f3ad0a3c9b688b28",
-    "sourceAuditSha256": "e0511156dc4c6e81eac732a5a5bf33b35c3b612d059a6b61467b97592cc2db84",
-    "quintCaseAuditSha256": "e0b5119fcfdded17805af45f9825714f89d093c1ddbdf1dbda0eb05cb1b423a1",
+    "semanticCasesSha256": "1f0ce439d35caf402af09c159bbfa8d1b57cc3c6f27690d7ff8e8fd17f2f0d40",
+    "executionSha256": "caf3bb7201d14fd3e5337ecfd3796a06551ea76f5d3d7013e0cc9f989d426cc4",
+    "sourceAuditSha256": "171a5278bec0c012ee8c789c27ef6a48498240014d2da46d83c09ed59e398566",
+    "quintCaseAuditSha256": "bf8bf7b117c7e4d24837d76cdd92a27f39168a2d630758d31efdfe60cf0f5065",
     "featureCoverageSha256": "56eedfa865682db6ad8e73b8673c7dac1c30d301e9bce3390246d6994aba9dcb",
     "coverageWitnessesSha256": "8fc8ab123150fdec059f5b75f84172d39af80d08d7a4211fa88c63c5a3f2874b",
     "profilesSha256": "34b1d77a25a92b0d5d6703a379902fae95f51227dca201613233592ba4f590c8"
@@ -46,11 +46,11 @@
     "withoutModelDrivenReplay": [],
     "quintModels": 32,
     "scheduledInvariants": 217,
-    "scheduledRegressions": 406,
+    "scheduledRegressions": 407,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
     "caseReferencedWitnesses": 285,
-    "exportedRegressionHistories": 239
+    "exportedRegressionHistories": 240
   },
   "profiles": [
     {
@@ -462,7 +462,8 @@
         "fullFeatureKillSwitchKeepsOmittedSharingAndRetainedMemoTest",
         "runtimeLocalTtlAddsEarlierLayerToRemoteFixtureTest",
         "runtimeLocalTtlEnablesSharingWithoutRemoteTtlTest",
-        "remoteHitPromotesIntoNewlyEnabledLocalLayerTest"
+        "remoteHitPromotesIntoNewlyEnabledLocalLayerTest",
+        "disabledSharingDoesNotJoinRegisteredFlightTest"
       ],
       "status": "executable-profile-schedule",
       "witnessSources": [
@@ -2034,7 +2035,8 @@
       "kind": "portable-behavior",
       "group": "request-and-layers",
       "quintProperties": [
-        "formal/dialcache-policy-conformance.qnt:independentLocalCallsStillReuseSettledValueTest"
+        "formal/dialcache-policy-conformance.qnt:independentLocalCallsStillReuseSettledValueTest",
+        "formal/dialcache-runtime-boundaries-conformance.qnt:disabledSharingDoesNotJoinRegisteredFlightTest"
       ],
       "requiredGenerated": [
         {
@@ -2071,7 +2073,8 @@
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
-        "policy/independentLocalCallsStillReuseSettledValueTest"
+        "policy/independentLocalCallsStillReuseSettledValueTest",
+        "runtime-boundaries/disabledSharingDoesNotJoinRegisteredFlightTest"
       ],
       "generatedVectors": []
     },
@@ -2143,7 +2146,7 @@
       "quintDefinitions": [
         "formal/dialcache-policy-conformance.qnt:releasePolicy",
         "formal/dialcache-policy-conformance.qnt:settle",
-        "formal/dialcache-runtime-boundaries-conformance.qnt:finishSource"
+        "formal/kernel/serving.qnt:settle"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -2334,8 +2337,8 @@
         "scope": "Only the linked finite scenarios, witnesses, scoped checks and explicit native boundaries; not universal case proof."
       },
       "quintDefinitions": [
-        "formal/dialcache-runtime-boundaries-conformance.qnt:extraLocalParticipates",
-        "formal/dialcache-runtime-boundaries-conformance.qnt:releasePolicy"
+        "formal/kernel/runtime-policy.qnt:resolve",
+        "formal/kernel/serving.qnt:release"
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
@@ -12197,7 +12200,6 @@
         "formal/dialcache-core.qnt:firstHitStopsLowerTraversal",
         "formal/dialcache-core.qnt:localHitWarmsRequestAndSkipsRemoteTest",
         "formal/dialcache-runtime-boundaries-conformance.qnt:runtimeLocalTtlAddsEarlierLayerToRemoteFixtureTest",
-        "formal/dialcache-runtime-boundaries-conformance.qnt:earlierLocalHitStopsRemoteTraversal",
         "formal/dialcache-conformance.qnt:localValueSurvivesSourceChangeTest",
         "formal/dialcache-conformance.qnt:servedLayerValueMatchesCache"
       ],
@@ -18276,7 +18278,7 @@
   ],
   "reviewedTestAndDocumentationAudit": {
     "path": "formal/source-audit.json",
-    "sha256": "e0511156dc4c6e81eac732a5a5bf33b35c3b612d059a6b61467b97592cc2db84",
+    "sha256": "171a5278bec0c012ee8c789c27ef6a48498240014d2da46d83c09ed59e398566",
     "sourceFiles": 44,
     "status": "reviewed-applicability-not-execution",
     "limitations": "These rows review Go applicability for the public documentation and ordinary test files in source-audit.json sources, inheriting their C/W/E/B/X classifications. They map subjects to native artifacts without claiming one Go test per TypeScript assertion or turning documentation counts into executed coverage. The same audit hash also binds reviewedGuides for formal and Go documentation; those guide reviews are freshness/scope records, not additional behavioral applicability rows. Per-case Quint and replay evidence is recorded separately.",

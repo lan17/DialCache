@@ -1359,6 +1359,12 @@
       "scope": "coalescing off keeps settled caching. This check covers the bounded model clause: independentLocalCallsStillReuseSettledValueTest. Host representations and other feature combinations retain separate fixed/native evidence."
     },
     {
+      "case": "C13.uncoalesced-caching",
+      "reference": "formal/dialcache-runtime-boundaries-conformance.qnt:disabledSharingDoesNotJoinRegisteredFlightTest",
+      "kind": "regression",
+      "scope": "Once a runtime reply disables sharing, a caller does not join the request flight an earlier shared caller registered under the same memo slot; its independent source memoizes, and the memo keeps the last settled value."
+    },
+    {
       "case": "C13.local-last-writer",
       "reference": "formal/dialcache-policy-conformance.qnt:independentLocalPublicationUsesLastCompletionTest",
       "kind": "regression",
@@ -3285,12 +3291,6 @@
       "scope": "A remote hit warms the newly enabled local layer; another already-running remote-only source then replaces Redis while the captured local value remains unchanged, distinguished by later local-enabled and remote-only reads."
     },
     {
-      "case": "C05.local-hit-stops-traversal",
-      "reference": "formal/dialcache-runtime-boundaries-conformance.qnt:earlierLocalHitStopsRemoteTraversal",
-      "kind": "invariant",
-      "scope": "Each admission recorded as an earlier local hit has zero remote reads, no flight join, and a cache result."
-    },
-    {
       "case": "C01.no-cache-plumbing",
       "reference": "formal/dialcache-conformance.qnt:disabledAndRequestCallsKeepTheirOwnLifetimesTest",
       "kind": "regression",
@@ -5052,21 +5052,21 @@
     },
     {
       "case": "C16.ttl-implies-ramp",
-      "reference": "formal/dialcache-runtime-boundaries-conformance.qnt:extraLocalParticipates",
+      "reference": "formal/kernel/runtime-policy.qnt:resolve",
       "kind": "helper",
-      "scope": "Local TTL overlays18/20 enable an earlier process-local layer in remote fixtures; remote TTL cannot create an absent Redis client."
+      "scope": "A runtime local TTL (code 18, or the ramp-up code 20 over a disabled baseline) configures the local layer at the default full ramp for any baseline, and a runtime remote TTL (code 19) configures the remote layer only where a Redis client exists; a disabled baseline stays disabled until code 20."
     },
     {
       "case": "C16.ttl-implies-ramp",
-      "reference": "formal/dialcache-runtime-boundaries-conformance.qnt:releasePolicy",
-      "kind": "transition",
-      "scope": "Sharing precedes active local/remote traversal; remote hits promote only into the local layer active for this invocation."
+      "reference": "formal/kernel/serving.qnt:release",
+      "kind": "helper",
+      "scope": "Sharing (a request or process flight) precedes the local and remote reads; a remote hit warms only a local layer the resolution enables for this release."
     },
     {
       "case": "C13.remote-last-writer",
-      "reference": "formal/dialcache-runtime-boundaries-conformance.qnt:finishSource",
-      "kind": "transition",
-      "scope": "Source acceptance publishes independently to the primary and added local layers using admission-time permissions."
+      "reference": "formal/kernel/serving.qnt:settle",
+      "kind": "helper",
+      "scope": "Settlement publishes independently to the remote layer (when the flight read it and its fence still allows) and to local storage (when the flight may warm it), with the permissions fixed when the source started."
     }
   ],
   "limitations": [

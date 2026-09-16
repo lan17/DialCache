@@ -29,6 +29,7 @@
     "formal/kernel/flights.qnt",
     "formal/kernel/clock.qnt",
     "formal/kernel/policy-gate.qnt",
+    "formal/kernel/runtime-policy.qnt",
     "formal/kernel/serving.qnt"
   ],
   "models": [
@@ -888,10 +889,10 @@
       "invariants": [
         "equalAndLowerCohortsNeverTraverse",
         "inheritedDisabledSharingNeverJoins",
+        "invalidBooleanLeavesBypassAllCaching",
         "callersKeepTheirSourceValue",
         "retainedValueFollowsSettlementOrder",
-        "invalidBooleanLeavesBypassAllCaching",
-        "earlierLocalHitStopsRemoteTraversal"
+        "sourceEffectsMatch"
       ],
       "regressions": [
         "runtimeTrueEnablesSharingOverFalseDefaultTest",
@@ -918,7 +919,8 @@
         "fullFeatureKillSwitchKeepsOmittedSharingAndRetainedMemoTest",
         "runtimeLocalTtlAddsEarlierLayerToRemoteFixtureTest",
         "runtimeLocalTtlEnablesSharingWithoutRemoteTtlTest",
-        "remoteHitPromotesIntoNewlyEnabledLocalLayerTest"
+        "remoteHitPromotesIntoNewlyEnabledLocalLayerTest",
+        "disabledSharingDoesNotJoinRegisteredFlightTest"
       ],
       "replayRegressions": [
         "runtimeTrueEnablesSharingOverFalseDefaultTest",
@@ -945,7 +947,8 @@
         "fullFeatureKillSwitchKeepsOmittedSharingAndRetainedMemoTest",
         "runtimeLocalTtlAddsEarlierLayerToRemoteFixtureTest",
         "runtimeLocalTtlEnablesSharingWithoutRemoteTtlTest",
-        "remoteHitPromotesIntoNewlyEnabledLocalLayerTest"
+        "remoteHitPromotesIntoNewlyEnabledLocalLayerTest",
+        "disabledSharingDoesNotJoinRegisteredFlightTest"
       ],
       "generate": {
         "maxSamples": 1024,
@@ -1846,20 +1849,20 @@
     {
       "id": "runtime-boundaries-inclusive-cohort",
       "contract": "W03",
-      "source": "formal/dialcache-runtime-boundaries-conformance.qnt",
+      "source": "formal/kernel/runtime-policy.qnt",
       "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
       "invariant": "equalAndLowerCohortsNeverTraverse",
-      "before": "else cohortAdmits(sample(state.layer), cohortThreshold(state.layer, state.policy)))",
-      "after": "else sample(state.layer) <= cohortThreshold(state.layer, state.policy))"
+      "before": "or cohortAdmits(sample, thresholdForRelation(sample, cohortRelation(policy)))",
+      "after": "or sample <= thresholdForRelation(sample, cohortRelation(policy))"
     },
     {
       "id": "runtime-boundaries-inherited-sharing-ignores-default",
       "contract": "C16",
-      "source": "formal/dialcache-runtime-boundaries-conformance.qnt",
+      "source": "formal/kernel/runtime-policy.qnt",
       "model": "formal/dialcache-runtime-boundaries-conformance.qnt",
       "invariant": "inheritedDisabledSharingNeverJoins",
-      "before": "or (sharingMode(state.policy) == INHERIT_SHARING and state.defaultSharing)",
-      "after": "or sharingMode(state.policy) == INHERIT_SHARING"
+      "before": "or (sharingMode(policy) == INHERIT_SHARING and baseline.coalesce)",
+      "after": "or sharingMode(policy) == INHERIT_SHARING"
     },
     {
       "id": "shadow-layers-inclusive-c0-freshness",
