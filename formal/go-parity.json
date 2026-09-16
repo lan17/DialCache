@@ -8,13 +8,13 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "cc049ae27b91c2ccedaeae4e31163ad3a2ef4a173cb35f6e2ec83582f3c9b74c",
-    "executionSha256": "f3b449c7b89e14e66a86d4efdf1acd43e2b380441dfc9a3330f6a1a25bd10ede",
+    "semanticCasesSha256": "86e3afcf4a8abd63d55f800d5e886b1e763012afc07003b92b1fc0acf4d5bd1a",
+    "executionSha256": "57f02f4cf2394cf340a204cdf8a75a394d58bd7483c66cebb869e89e3f0727b2",
     "sourceAuditSha256": "c775b5ce04e57c477d3f922ec3db6929379775522a8e14d2c33cafdcd4aa49e9",
-    "quintCaseAuditSha256": "cb483b66984aa0d93f73bde17ee7193b5484e53bcca75638721856aeee63c319",
+    "quintCaseAuditSha256": "deba04a19c1e76479ff46775e082e28f212f02effd5eabe639e2e44b36b28ba2",
     "featureCoverageSha256": "56eedfa865682db6ad8e73b8673c7dac1c30d301e9bce3390246d6994aba9dcb",
     "coverageWitnessesSha256": "8fc8ab123150fdec059f5b75f84172d39af80d08d7a4211fa88c63c5a3f2874b",
-    "profilesSha256": "34b1d77a25a92b0d5d6703a379902fae95f51227dca201613233592ba4f590c8"
+    "profilesSha256": "344734025c4573cd6816670863c95ec169c63e9230ae3b41db1c3319b4cb9234"
   },
   "inventory": {
     "behavioralCases": 240,
@@ -46,11 +46,11 @@
     "withoutModelDrivenReplay": [],
     "quintModels": 32,
     "scheduledInvariants": 218,
-    "scheduledRegressions": 410,
+    "scheduledRegressions": 411,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
     "caseReferencedWitnesses": 285,
-    "exportedRegressionHistories": 243
+    "exportedRegressionHistories": 244
   },
   "profiles": [
     {
@@ -148,7 +148,8 @@
         "pendingSourceKeepsRequestPolicyAcrossBypassAndClosureTest",
         "rejectedIndependentSourceKeepsMemoizedValueTest",
         "independentSourceIsNotRegisteredForLaterSharingTest",
-        "pendingRequestFlightIsJoinedBeforeMemoReadTest"
+        "pendingRequestFlightIsJoinedBeforeMemoReadTest",
+        "bypassedRequestFailureIsAttributedToLocalTest"
       ],
       "status": "executable-profile-schedule",
       "witnessSources": [
@@ -156,8 +157,7 @@
         "formal/replay/witnesses/index.mjs",
         "formal/replay/witnesses/trace.mjs",
         "formal/replay/witnesses/evidence.mjs",
-        "formal/replay/witnesses/scope.mjs",
-        "formal/replay/witnesses/runtime.mjs"
+        "formal/replay/witnesses/scope.mjs"
       ]
     },
     {
@@ -1965,7 +1965,8 @@
         "formal/dialcache-effects-conformance.qnt:oneRegisteredSource",
         "formal/dialcache-flight-deadlines.qnt:oneSourcePerRegisteredFlight",
         "formal/dialcache-runtime-boundaries-conformance.qnt:runtimeLocalTtlEnablesSharingWithoutRemoteTtlTest",
-        "formal/dialcache-conformance.qnt:coalescedPairPublishesOneReusableValueTest"
+        "formal/dialcache-conformance.qnt:coalescedPairPublishesOneReusableValueTest",
+        "formal/dialcache-scope-conformance.qnt:pendingRequestFlightIsJoinedBeforeMemoReadTest"
       ],
       "requiredGenerated": [
         {
@@ -1988,7 +1989,8 @@
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
         "runtime-boundaries/runtimeLocalTtlEnablesSharingWithoutRemoteTtlTest",
-        "core/coalescedPairPublishesOneReusableValueTest"
+        "core/coalescedPairPublishesOneReusableValueTest",
+        "scope/pendingRequestFlightIsJoinedBeforeMemoReadTest"
       ],
       "generatedVectors": []
     },
@@ -2555,7 +2557,8 @@
       "kind": "portable-behavior",
       "group": "request-and-layers",
       "quintProperties": [
-        "formal/dialcache-runtime-boundaries-conformance.qnt:falseRequestLeafPreservesMemoForReenablementTest"
+        "formal/dialcache-runtime-boundaries-conformance.qnt:falseRequestLeafPreservesMemoForReenablementTest",
+        "formal/dialcache-scope-conformance.qnt:bypassedRequestFailureIsAttributedToLocalTest"
       ],
       "requiredGenerated": [
         {
@@ -2582,7 +2585,8 @@
       ],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
-        "runtime-boundaries/falseRequestLeafPreservesMemoForReenablementTest"
+        "runtime-boundaries/falseRequestLeafPreservesMemoForReenablementTest",
+        "scope/bypassedRequestFailureIsAttributedToLocalTest"
       ],
       "generatedVectors": []
     },

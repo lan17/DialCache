@@ -61,7 +61,7 @@ export function evaluateCorpus(profile, corpus, recorder = createWitnessRecorder
     case "effects": effectsWitnesses(corpus, recorder); effectsAuthorityWitnesses(corpus, recorder); break;
     case "local-clock": localClockWitnesses(corpus, recorder); break;
     case "policy": policyWitnesses(corpus, recorder); runtimeWitnesses(profile, corpus, recorder); break;
-    case "scope": scopeWitnesses(corpus, recorder); runtimeWitnesses(profile, corpus, recorder); break;
+    case "scope": scopeWitnesses(corpus, recorder); break;
     case "layers": layersWitnesses(corpus, recorder); runtimeWitnesses(profile, corpus, recorder); break;
     case "admission": admissionWitnesses(corpus, recorder); break;
     case "independent": independentWitnesses(corpus, recorder); break;

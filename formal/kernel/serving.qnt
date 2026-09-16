@@ -36,11 +36,13 @@ module serving {
     keysPerInstance: int, keysPerScope: int, persistentContexts: int, operationsPerEntity: int,
     servingTtlMs: int, probeSourceScope: bool
   }
-  // A layered source carries its publication authority: the identity it
-  // serves, whether it may warm local storage, whether it read the remote
-  // layer and the fence it observed. A request-only source carries none.
-  type LayeredSource = { instance: int, key: int, local: bool, remote: bool, fence: int, result: int, shared: bool }
-  type RequestSource = { result: int, shared: bool }
+  // A source record is flights::Source over the payload the traversal needs to
+  // publish: a layered source carries its publication authority (the identity
+  // it serves, whether it may warm local storage, whether it read the remote
+  // layer and the fence it observed); a request-only source carries none.
+  type LayeredPayload = { instance: int, key: int, local: bool, remote: bool, fence: int }
+  type LayeredSource = Flights::Source[LayeredPayload]
+  type RequestSource = Flights::Source[{}]
   // The fields the traversal order reads and writes, for either source payload.
   type Traversed[r, p] = {
     o: Observation,
@@ -53,37 +55,21 @@ module serving {
     memoSlots: List[int],
     held: List[Gate::Held] | r
   }
-  type Served[r] = {
-    o: Observation,
+  // The layered shape adds the clock, the environment's remote availability
+  // and tracking, the local capacity and the local and remote storage; the
+  // request-only projection adds nothing.
+  type Served[r] = Traversed[{
     now: int,
     remoteAvailable: bool,
     tracked: bool,
     capacity: int,
-    closed: List[bool],
-    memo: List[int],
-    requestFlights: List[int],
-    processFlights: List[int],
     localValues: List[int],
     lru: List[List[int]],
     remoteValues: List[int],
     created: List[int],
-    watermark: List[int],
-    sources: List[LayeredSource],
-    owners: List[int],
-    memoSlots: List[int],
-    held: List[Gate::Held] | r
-  }
-  type RequestServed[r] = {
-    o: Observation,
-    closed: List[bool],
-    memo: List[int],
-    requestFlights: List[int],
-    processFlights: List[int],
-    sources: List[RequestSource],
-    owners: List[int],
-    memoSlots: List[int],
-    held: List[Gate::Held] | r
-  }
+    watermark: List[int] | r
+  }, LayeredPayload]
+  type RequestServed[r] = Traversed[r, {}]
 
   // A caller participates when its call is enabled and its scope is open.
   pure def participating(state: Traversed[r, p], layout: Layout, call: Call): bool =
@@ -228,7 +214,10 @@ module serving {
       ...attached
     } else attached
     match decision.outcome {
-      | JoinsRequest(owner) => Flights::joinRequestFlight(attached, slot, owner)
+      // A request-flight join is the attachment alone: the owner came from the
+      // caller's own row. A process-flight join also registers that flight under
+      // the row when the caller memoizes.
+      | JoinsRequest(_) => attached
       | JoinsProcess(owner) => Flights::joinRequestFlight(attached, slot, owner)
       | ServesMemo(value) => serve(attached, layout, caller, slot, value)
       | ServesLocal(value) => serve(Local::promote(attached, call.instance, call.key), layout, caller, slot, value)
@@ -263,7 +252,7 @@ module serving {
     val slot = judged.decision.slot
     val attached = Flights::attachCaller(released, judged.caller, ownerOf(judged.decision.outcome), slot)
     match judged.decision.outcome {
-      | JoinsRequest(owner) => Flights::joinRequestFlight(attached, slot, owner)
+      | JoinsRequest(_) => attached
       // No shared layer participates in this shape, so the process registry is
       // never consulted; the arm is the layered one.
       | JoinsProcess(owner) => Flights::joinRequestFlight(attached, slot, owner)

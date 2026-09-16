@@ -13,14 +13,13 @@ const remoteTtl = s => baseOverlay(s.overlay) === 2 ? 2000 : baseOverlay(s.overl
 // later public call must expose retained values, skipped work, or independent
 // work. They neither drive implementations nor add a behavioral oracle.
 export function runtimeWitnesses(profile, histories, recorder = createWitnessRecorder()) {
-  if (!["policy", "scope", "layers"].includes(profile)) return recorder.labels();
+  if (!["policy", "layers"].includes(profile)) return recorder.labels();
   for (const { path, states, predictions } of histories) {
     recorder.enter(path);
     // Published smoke fixtures deliberately retain only public observations.
     if (states[0]?.s?.sources === undefined) continue;
     const steps = predictions.map((s, index) => ({ s, input: index === 0 ? undefined : explicitInput(states[index], `${path} step ${index}`) }));
     if (profile === "policy") policyWitnesses(steps, recorder);
-    if (profile === "scope") scopeWitnesses(steps, recorder);
     if (profile === "layers") layersWitnesses(steps, recorder);
   }
   return recorder.labels();
@@ -129,66 +128,6 @@ function policyWitnesses(steps, recorder) {
     if (action === "seed") {
       const key = Math.floor(choice / 2);
       lastWriter.delete(`remote:${key}`);
-    }
-  }
-}
-
-// Scope witnesses read only the inputs and the public observation: the memo
-// row a source fills is the outer lifetime of the context its caller began in
-// (the input choice), a held reply is the last beginCall that counted a policy
-// call (a bypass admission in between holds nothing), the policy overlay is
-// the last policy input, closure is the closeScope input.
-const scopeHolder = scope => scope === 1 ? 1 : 0;
-const scopeSourceValues = [1, 2, 5, 6, 7, 8, 9];
-function scopeWitnesses(steps, recorder) {
-  const overlaps = new Set();
-  const publications = new Map();
-  const lastWriter = new Map();
-  const callerScope = [];
-  const sources = [];
-  const closed = [false, false];
-  let overlay = 0;
-  let pending = -1;
-  for (let i = 1; i < steps.length; i++) {
-    recorder.step(i);
-    const step = steps[i], prior = steps[i - 1].s.o, current = step.s.o, action = step.input.name, choice = step.input.choice;
-    if (action === "policy") overlay = choice;
-    if (action === "beginCall") {
-      callerScope.push(choice);
-      if (current.policyCalls > prior.policyCalls) pending = prior.calls.length;
-      if (current.loaders > prior.loaders) sources.push({ slot: -1, shared: false, pending: true });
-    }
-    if (action === "releasePolicy") {
-      const holder = scopeHolder(callerScope[pending]);
-      const slot = overlay !== 1 && !closed[holder] ? holder : -1;
-      if (current.loaders > prior.loaders) {
-        const loader = sources.length, shared = slot >= 0 && overlay !== 2;
-        for (const [other, source] of sources.entries()) if (slot >= 0 && source.slot === slot &&
-          source.pending && !source.shared && !shared) overlaps.add(`${other}:${loader}`);
-        sources.push({ slot, shared, pending: true });
-      } else if (successful(current.calls[pending]) && overlay === 2) {
-        recorder.credit("uncoalesced-request-settled-hit");
-        if (lastWriter.get(holder)?.value === current.calls[pending]) recorder.credit("independent-request-last-completion-probed");
-      }
-    }
-    if (action === "rejectLoader") sources[choice].pending = false;
-    if (action === "resolveLoader") {
-      const loader = Math.floor((choice - 1) / 7), value = scopeSourceValues[(choice - 1) % 7];
-      const source = sources[loader];
-      source.pending = false;
-      if (source.slot < 0 || closed[source.slot]) continue;
-      const preceding = publications.get(source.slot);
-      lastWriter.delete(source.slot);
-      if (!source.shared && preceding !== undefined && preceding.value !== value &&
-        overlaps.has(`${Math.min(preceding.loader, loader)}:${Math.max(preceding.loader, loader)}`)) {
-        lastWriter.set(source.slot, { loader, value, kind: "request" });
-      }
-      publications.set(source.slot, { loader, value, kind: "request" });
-    }
-    if (action === "closeScope" && choice < 2) {
-      closed[choice] = true;
-      publications.delete(choice);
-      lastWriter.delete(choice);
     }
   }
 }

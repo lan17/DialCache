@@ -634,7 +634,8 @@
         "pendingSourceKeepsRequestPolicyAcrossBypassAndClosureTest",
         "rejectedIndependentSourceKeepsMemoizedValueTest",
         "independentSourceIsNotRegisteredForLaterSharingTest",
-        "pendingRequestFlightIsJoinedBeforeMemoReadTest"
+        "pendingRequestFlightIsJoinedBeforeMemoReadTest",
+        "bypassedRequestFailureIsAttributedToLocalTest"
       ],
       "profile": "scope",
       "generate": {
@@ -656,7 +657,8 @@
         "pendingSourceKeepsRequestPolicyAcrossBypassAndClosureTest",
         "rejectedIndependentSourceKeepsMemoizedValueTest",
         "independentSourceIsNotRegisteredForLaterSharingTest",
-        "pendingRequestFlightIsJoinedBeforeMemoReadTest"
+        "pendingRequestFlightIsJoinedBeforeMemoReadTest",
+        "bypassedRequestFailureIsAttributedToLocalTest"
       ]
     },
     {

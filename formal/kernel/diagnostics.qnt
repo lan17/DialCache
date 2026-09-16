@@ -24,19 +24,7 @@ module diagnostics {
 
   // Per source, parallel to the source records: the layer it is attributed to.
   type Diagnosed[r] = { d: Diagnostics, sourceLayers: List[str] | r }
-  type DiagnosedRequest[r] = {
-    d: Diagnostics,
-    sourceLayers: List[str],
-    o: Observation,
-    closed: List[bool],
-    memo: List[int],
-    requestFlights: List[int],
-    processFlights: List[int],
-    sources: List[Serving::RequestSource],
-    owners: List[int],
-    memoSlots: List[int],
-    held: List[Gate::Held] | r
-  }
+  type DiagnosedRequest[r] = Serving::RequestServed[Diagnosed[r]]
 
   pure def recordCoalesced(state: Diagnosed[r], scope: str): Diagnosed[r] =
     { d: { coalesced: state.d.coalesced.append(scope), ...state.d }, ...state }

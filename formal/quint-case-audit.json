@@ -2565,6 +2565,12 @@
       "scope": "request policy bypass retains memo for later reenabling. The deterministic regression checks the public result and subsequent reuse for this bounded fixture."
     },
     {
+      "case": "C19.memo-bypass",
+      "reference": "formal/dialcache-scope-conformance.qnt:bypassedRequestFailureIsAttributedToLocalTest",
+      "kind": "regression",
+      "scope": "A call whose reply disables the request layer starts its source inside the cache (its scope is open) but memoizes nothing: its failure is attributed to the shared layers' fallback and both memo rows stay untouched."
+    },
+    {
       "case": "C21.invalid-layer",
       "reference": "formal/dialcache-policy-conformance.qnt:invalidLocalTtlStillServesFreshRemoteTest",
       "kind": "regression",
@@ -3319,6 +3325,12 @@
       "reference": "formal/dialcache-conformance.qnt:servedLayerValueMatchesCache",
       "kind": "invariant",
       "scope": "After each public local, coalesced or remote call in the introductory profile, the served layer holds exactly the returned value and a semantic miss leaves that layer readable. The receipt reads the input record, not the transition helpers; it makes no claim about request-memo warming or remote read counts."
+    },
+    {
+      "case": "C11.one-registered-flight",
+      "reference": "formal/dialcache-scope-conformance.qnt:pendingRequestFlightIsJoinedBeforeMemoReadTest",
+      "kind": "regression",
+      "scope": "A coalescing caller joins the request flight registered under its row before the memo is read, although an independent source has since memoized a value into that row; the joined caller completes with the flight's value."
     },
     {
       "case": "C11.one-registered-flight",

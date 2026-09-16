@@ -2,7 +2,11 @@ import { successValues } from "../features.mjs";
 import { createWitnessRecorder } from "./recorder.mjs";
 
 // Request-scope witnesses over declared inputs, public observations and the
-// fallback diagnostics. No private memo or scope state is consulted.
+// fallback diagnostics. No private memo or scope state is consulted: the row a
+// source fills is the outer lifetime of the context its caller began in (the
+// input choice), a held reply is the last beginCall that counted a policy
+// call, the policy overlay is the last policy input, closure is the closeScope
+// input, and a source is pending until its resolve or reject input.
 export function scopeWitnesses(histories, recorder = createWitnessRecorder()) {
   for (const { path, steps } of histories) {
     recorder.enter(path);
@@ -11,6 +15,8 @@ export function scopeWitnesses(histories, recorder = createWitnessRecorder()) {
     const published = new Map();
     const bypassed = new Map();
     const sources = new Map();
+    const overlaps = new Set();
+    const lastWriter = new Map();
     const scopes = [];
     let lateOuterSource = false;
     let valueBeforeNestedClose;
@@ -34,7 +40,7 @@ export function scopeWitnesses(histories, recorder = createWitnessRecorder()) {
       if (step.action === "closeScope") {
         closed.add(step.choice);
         if (step.choice === 2) valueBeforeNestedClose = published.get(0)?.value;
-        if (step.choice < 2) { published.delete(step.choice); bypassed.delete(step.choice); }
+        if (step.choice < 2) { published.delete(step.choice); bypassed.delete(step.choice); lastWriter.delete(step.choice); }
       }
       if (step.action === "beginCall") {
         const scope = step.choice;
@@ -52,18 +58,23 @@ export function scopeWitnesses(histories, recorder = createWitnessRecorder()) {
         if (o.loaders > previous.loaders) {
           const active = o.sourceScopes.at(-1);
           const memoizing = active && overlay !== 1;
+          const shared = memoizing && overlay === 0;
+          const loader = o.loaders - 1;
           if (!active) recorder.credit("policy-reply-after-close");
           if (memoizing) {
             if (overlay === 0 && rejected.has(lifetime)) recorder.credit("rejected-flight-retry");
             if (scope === 1 && lateOuterSource) recorder.credit("replacement-miss-after-late-source");
-            for (const source of sources.values()) {
+            for (const [other, source] of sources) {
               if (!source.memoizing || closed.has(holder(source.scope))) continue;
               if (holder(source.scope) !== lifetime) recorder.credit("independent-scope-overlap");
               else if (overlay === 2) recorder.credit("uncoalesced-scope-overlap");
+              // Two independent sources pending in one row: whichever settles
+              // last writes the row, so a later probe can tell the order.
+              if (holder(source.scope) === lifetime && !source.shared && !shared) overlaps.add(`${other}:${loader}`);
             }
           }
           if (active && overlay === 1 && published.has(lifetime)) bypassed.set(lifetime, published.get(lifetime).value);
-          sources.set(o.loaders - 1, { scope, memoizing, shared: memoizing && overlay === 0 });
+          sources.set(loader, { scope, memoizing, shared });
         } else if (o.calls[policyCall] !== 0) {
           recorder.credit("memo-hit");
           recorder.credit(`memo-value:${o.calls[policyCall]}`);
@@ -73,6 +84,10 @@ export function scopeWitnesses(histories, recorder = createWitnessRecorder()) {
           }
           if (lifetime === 0 && valueBeforeNestedClose === o.calls[policyCall]) recorder.credit("memo-after-nested-close");
           if (bypassed.get(lifetime) === o.calls[policyCall]) recorder.credit("memo-after-policy-bypass");
+          if (overlay === 2) {
+            recorder.credit("uncoalesced-request-settled-hit");
+            if (lastWriter.get(lifetime) === o.calls[policyCall]) recorder.credit("independent-request-last-completion-probed");
+          }
         }
         policyCall = -1;
       }
@@ -90,7 +105,11 @@ export function scopeWitnesses(histories, recorder = createWitnessRecorder()) {
             recorder.credit("source-settles-after-close");
             if (lifetime === 0) lateOuterSource = true;
           } else {
-            published.set(lifetime, { value: completed[0], scope: source.scope });
+            const value = completed[0], preceding = published.get(lifetime);
+            lastWriter.delete(lifetime);
+            if (!source.shared && preceding !== undefined && preceding.value !== value
+              && overlaps.has(`${Math.min(preceding.loader, loader)}:${Math.max(preceding.loader, loader)}`)) lastWriter.set(lifetime, value);
+            published.set(lifetime, { value, scope: source.scope, loader });
             if (lifetime === 0) valueBeforeNestedClose = undefined;
             bypassed.delete(lifetime);
           }

@@ -365,4 +365,10 @@ module dialcache_scope_conformance {
       and s.d.coalesced == List("request_local"))
     .then(finishSource(0, VALUE_ONE))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO, VALUE_ONE) and s.memo == List(VALUE_ONE, NO_VALUE))
+
+  run bypassedRequestFailureIsAttributedToLocalTest = init
+    .then(changePolicy(POLICY_NO_REQUEST))
+    .then(startCall(ROOT_REQUEST)).then(releasePolicy)
+    .then(finishSource(0, SOURCE_ERROR))
+    .expect(s.d.fallbackErrors == List("local") and s.o.sourceScopes == List(true) and s.memo == List(NO_VALUE, NO_VALUE))
 }
