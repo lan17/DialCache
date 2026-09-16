@@ -33,7 +33,7 @@ module dialcache_source_budgets_conformance {
   // no remote layer; every reply enables the local layer with sharing.
   pure val LAYOUT: Serving::Layout = {
     keysPerInstance: 1, keysPerScope: 1, persistentContexts: 0, operationsPerEntity: 1,
-    servingTtlMs: 0, localTtlMs: LOCAL_TTL_MS, probeSourceScope: false
+    ttls: { localMs: LOCAL_TTL_MS, freshMs: 0, retentionMs: 0 }, probeSourceScope: false
   }
   pure val LOCAL: Resolution = { layers: { request: false, local: true, remote: false }, coalesce: true }
 

@@ -15,7 +15,11 @@ module layer_policy {
   type Resolution = { layers: Layers, coalesce: bool }
   // The TTLs a reply resolves to, passed beside the resolution to the layered
   // traversal: the local insertion TTL, the remote frame's logical freshness
-  // and the physical retention written with each remote frame.
+  // and the physical retention written with each remote frame. The traversal
+  // relies on a precondition it does not check: a decoder derives the layers
+  // from the TTLs, so `layers.local` follows from `localMs > 0` and
+  // `layers.remote` from `freshMs > 0`. `layers.remote` with `freshMs` 0 is a
+  // defined never-fresh miss that still counts the read and refills.
   type Ttls = { localMs: int, freshMs: int, retentionMs: int }
   // The reply of a call that uses no layer and neither registry: a caller in a
   // closed scope (C01) or, in a profile with runtime replies, an invalid leaf.

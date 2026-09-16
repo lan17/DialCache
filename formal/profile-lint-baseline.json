@@ -85,8 +85,7 @@
         "serving::begin",
         "serving::closeScope",
         "serving::invalidate",
-        "serving::settle",
-        "serving::ttlsOf"
+        "serving::settle"
       ],
       "compositionViolations": 0
     },
@@ -121,8 +120,7 @@
         "serving::admit",
         "serving::closeScope",
         "serving::release",
-        "serving::settle",
-        "serving::ttlsOf"
+        "serving::settle"
       ],
       "compositionViolations": 0
     },

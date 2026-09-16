@@ -101,8 +101,7 @@ module dialcache_layers_conformance {
     keysPerScope: KEYS_PER_INSTANCE,
     persistentContexts: PERSISTENT_CONTEXTS,
     operationsPerEntity: OPERATIONS_PER_ENTITY,
-    servingTtlMs: SERVING_TTL_MS,
-    localTtlMs: SERVING_TTL_MS,
+    ttls: { localMs: SERVING_TTL_MS, freshMs: SERVING_TTL_MS, retentionMs: SERVING_TTL_MS },
     probeSourceScope: false
   }
 
@@ -147,7 +146,7 @@ module dialcache_layers_conformance {
   }
   action startCall(choice: int): bool = all {
     s.o.calls.length() < MAX_CALLERS,
-    s' = Flights::recordIdentity(Serving::begin(s, LAYOUT, call(choice), resolution(s.policy, s.remoteAvailable), Serving::ttlsOf(LAYOUT)), call(choice)),
+    s' = Flights::recordIdentity(Serving::begin(s, LAYOUT, call(choice), resolution(s.policy, s.remoteAvailable), LAYOUT.ttls), call(choice)),
     input' = { name: "beginCall", choice: choice }
   }
   action beginCall = {
@@ -155,7 +154,7 @@ module dialcache_layers_conformance {
     startCall(choice)
   }
   action finishSource(loader: int, value: int): bool = all {
-    s' = Serving::settle(s, LAYOUT, loader, value),
+    s' = Serving::settle(s, LAYOUT, loader, value, LAYOUT.ttls),
     input' = if (value == SOURCE_ERROR) { name: "rejectLoader", choice: loader }
       else { name: "resolveLoader", choice: loader * SOURCE_VALUE_COUNT + value }
   }

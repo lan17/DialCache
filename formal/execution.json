@@ -2002,11 +2002,11 @@
           "effects": "Uses only deadlinePendingAt and fenceAllows from cache-rules; no age judgment is evaluated.",
           "scope": "Evaluates no age judgment from cache-rules, so ageBeforeCeiling is unreachable.",
           "admission": "Uses only deadlinePendingAt from cache-rules; no age judgment is evaluated.",
-          "layers": "Uses only fenceAllows from cache-rules; no age judgment is evaluated.",
+          "layers": "Frames are stamped from a wall clock that only moves with the monotonic clock (no rollback input), so no history observes a future stamp.",
           "independent": "Seeds stamp frames at the wall minus a non-negative age and the clock only advances, so no history observes a future stamp.",
           "recovery-read": "Seeds stamp frames at the wall minus a non-negative age and the wall only advances; the unsafe-timestamp seed is rejected as an unsupported frame before any age judgment, so no history observes a future stamp.",
           "local-failure": "Evaluates no age judgment from cache-rules, so ageBeforeCeiling is unreachable.",
-          "runtime-boundaries": "Evaluates no age judgment from cache-rules, so ageBeforeCeiling is unreachable.",
+          "runtime-boundaries": "Frames are stamped from a wall clock that only moves with the monotonic clock (no rollback input), so no history observes a future stamp.",
           "shadow-layers": "Remote frames are stamped from the monotonic job clock at write time or seeded at a non-negative age, so no history observes a future stamp.",
           "local-clock": "Uses only localEntryLiveOnGrid from cache-rules; no age judgment is evaluated.",
           "source-budgets": "Uses only localEntryLiveAt and sourceAcceptsAt from cache-rules; no age judgment is evaluated."

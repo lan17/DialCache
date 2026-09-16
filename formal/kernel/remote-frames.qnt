@@ -6,7 +6,10 @@ module remote_frames {
   // reply resolved to (`cache_rules.freshAgeAllowed` on the wall clock, which
   // rejects a stamp from after a rollback) and, for a tracked reader, when its
   // stamp clears the entity's watermark (`cache_rules.fenceAllows`); an
-  // untracked reader ignores watermarks. A tracked miss carries the watermark
+  // untracked reader ignores watermarks. A watermark never lowers: an
+  // invalidation raises it to the wall clock only when the wall clock is
+  // ahead, as the implementation's invalidation script keeps the larger of the
+  // current and the proposed watermark. A tracked miss carries the watermark
   // it observed as its refill fence.
   import cache_rules.* from "../cache-rules"
   import encodings.* from "./encodings"
@@ -23,8 +26,10 @@ module remote_frames {
     expires: state.expires.replaceAt(key, state.now + retentionMs),
     ...state
   }
-  pure def raiseWatermark(state: Frames[r], entity: int): Frames[r] =
-    { watermark: state.watermark.replaceAt(entity, state.wall), ...state }
+  pure def raiseWatermark(state: Frames[r], entity: int): Frames[r] = {
+    val current = state.watermark.nth(entity)
+    { watermark: state.watermark.replaceAt(entity, if (state.wall > current) state.wall else current), ...state }
+  }
   pure def retained(state: Frames[r], key: int): bool = deadlinePendingAt(state.now, state.expires.nth(key))
   pure def fresh(state: Frames[r], key: int, freshMs: int): bool = freshAgeAllowed(state.created.nth(key), state.wall, freshMs)
   pure def readableFrame(state: Frames[r], key: int, operationsPerEntity: int, freshMs: int): int =
@@ -32,7 +37,8 @@ module remote_frames {
       and retained(state, key) and fresh(state, key, freshMs)) state.remoteValues.nth(key) else NO_VALUE
   pure def missFence(state: Frames[r], key: int, operationsPerEntity: int): int =
     if (state.tracked) state.watermark.nth(entityOf(key, operationsPerEntity)) else NO_FENCE
-  // A refill is written only while its fence still allows it: the frame it
-  // would stamp now must clear the watermark the miss observed.
-  pure def writeAllowed(state: Frames[r], fence: int): bool = fenceAllows(state.wall, fence)
+  // An unfenced refill (an untracked miss) is always written; a fenced one is
+  // written only while its fence still allows it: the frame it would stamp now
+  // must clear the watermark the miss observed.
+  pure def writeAllowed(state: Frames[r], fence: int): bool = fence == NO_FENCE or fenceAllows(state.wall, fence)
 }

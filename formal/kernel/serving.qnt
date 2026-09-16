@@ -33,14 +33,14 @@ module serving {
 
   // How a profile lays out its bounded identities: keys per instance (local
   // storage and process flights), keys per scope row (request memo), how many
-  // contexts are persistent scopes, keys per entity, the serving TTL (the
-  // remote frame's freshness and the retention written with it), the local
-  // layer's insertion TTL, and whether the drivers probe each source for the
-  // scope it started under (o.sourceScopes). `ttlsOf` is the layout's TTLs for
-  // a profile whose replies carry none of their own.
+  // contexts are persistent scopes, keys per entity, the fixture's configured
+  // TTLs (the local insertion TTL, the remote frame's freshness and the
+  // retention a refill is written with; a profile whose replies carry no TTLs
+  // of their own passes `layout.ttls` to the traversal), and whether the
+  // drivers probe each source for the scope it started under (o.sourceScopes).
   type Layout = {
     keysPerInstance: int, keysPerScope: int, persistentContexts: int, operationsPerEntity: int,
-    servingTtlMs: int, localTtlMs: int, probeSourceScope: bool
+    ttls: Ttls, probeSourceScope: bool
   }
   // A source record is flights::Source over the payload the traversal needs to
   // publish: a layered source carries its publication authority (the identity
@@ -110,8 +110,6 @@ module serving {
     { layers: { request: resolved.layers.request, local: resolved.layers.local, remote: false }, coalesce: resolved.coalesce }
   pure def requestOnly(resolved: Resolution): Resolution =
     { layers: { request: resolved.layers.request, local: false, remote: false }, coalesce: resolved.coalesce }
-  pure def ttlsOf(layout: Layout): Ttls =
-    { localMs: layout.localTtlMs, freshMs: layout.servingTtlMs, retentionMs: layout.servingTtlMs }
 
   // -- Traversal order ---------------------------------------------------------
 
@@ -336,7 +334,7 @@ module serving {
 
   // An immediate policy reply: admission and traversal in one step with the
   // resolution and TTLs the profile supplies (`layer_policy::resolution` for
-  // the drivers' layer policy codes, `ttlsOf` for the layout's TTLs).
+  // the drivers' layer policy codes, `layout.ttls` for a fixture's TTLs).
   pure def begin(state: Served[r], layout: Layout, call: Call, resolved: Resolution, ttls: Ttls): Served[r] = {
     val admitted = admit(state, layout, call)
     if (participating(state, layout, call)) release(admitted, layout, state.o.policyCalls, resolved, ttls) else admitted
@@ -357,11 +355,12 @@ module serving {
   }
   // A layered accepted value also refills the remote layer when the flight
   // read it and its fence still allows the write, and warms local storage
-  // when the flight may, each for the TTLs the source's reply resolved to. A
-  // refill serializes (a dump), then dispatches the write, then stores the
-  // frame: a dump fault stops the dispatch and a write fault the storage; the
+  // when the flight may, each for the TTLs the source's reply resolved to (a
+  // profile whose replies carry none passes `layout.ttls`). A refill
+  // serializes (a dump), then dispatches the write, then stores the frame: a
+  // dump fault stops the dispatch and a write fault the storage; the
   // dispatched write carries the retention.
-  pure def settleWith(state: Served[r], layout: Layout, index: int, value: int, ttls: Ttls): Served[r] = {
+  pure def settle(state: Served[r], layout: Layout, index: int, value: int, ttls: Ttls): Served[r] = {
     val source = state.sources.nth(index)
     val success = accepted(value)
     val serializes = success and source.remote and Remote::writeAllowed(state, source.fence)
@@ -381,14 +380,11 @@ module serving {
       Local::putLocal(recorded, source.instance, source.key, value, ttls.localMs, layout.keysPerInstance) else recorded
     finish(warmed, layout, index, value)
   }
-  // Settlement for a profile whose replies carry no TTLs of their own.
-  pure def settle(state: Served[r], layout: Layout, index: int, value: int): Served[r] =
-    settleWith(state, layout, index, value, ttlsOf(layout))
   // A local accepted value warms the identity's local slot when the flight may.
   pure def settleLocal(state: LocalServed[r], layout: Layout, index: int, value: int): LocalServed[r] = {
     val source = state.sources.nth(index)
     val warmed = if (accepted(value) and source.local)
-      Local::putLocal(state, source.instance, source.key, value, layout.localTtlMs, layout.keysPerInstance) else state
+      Local::putLocal(state, source.instance, source.key, value, layout.ttls.localMs, layout.keysPerInstance) else state
     finish(warmed, layout, index, value)
   }
   pure def settleRequest(state: RequestServed[r], layout: Layout, index: int, value: int): RequestServed[r] =

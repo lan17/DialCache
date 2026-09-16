@@ -15,7 +15,10 @@ module held_replies {
   import flights as Flights from "../../../formal/kernel/flights"
   import policy_gate as Gate from "../../../formal/kernel/policy-gate"
 
-  pure val LAYOUT: Serving::Layout = { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, servingTtlMs: 60000, localTtlMs: 60000, probeSourceScope: false }
+  pure val LAYOUT: Serving::Layout = {
+    keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1,
+    ttls: { localMs: 60000, freshMs: 60000, retentionMs: 60000 }, probeSourceScope: false
+  }
   pure val ALL: Resolution = { layers: { request: true, local: true, remote: true }, coalesce: true }
   pure val UNCOALESCED: Resolution = { layers: { request: true, local: true, remote: true }, coalesce: false }
   pure val REQUEST_ONLY: Resolution = { layers: { request: true, local: false, remote: false }, coalesce: true }
@@ -38,7 +41,7 @@ module held_replies {
     localValues: List(0, 0), localExpires: List(0, 0), lru: List(List(), List()),
     remoteValues: List(0), created: List(0), expires: List(0), watermark: List(0),
     sources: List(), owners: List(), memoSlots: List(), held: List() }
-  pure val TTLS: Ttls = Serving::ttlsOf(LAYOUT)
+  pure val TTLS: Ttls = LAYOUT.ttls
   action init = all {
     s' = INITIAL,
     input' = { name: "init", choice: -1 }
@@ -61,7 +64,7 @@ module held_replies {
     input' = { name: "releasePolicy", choice: -1 }
   }
   action settle(index: int, value: int): bool = all {
-    s' = Serving::settle(s, LAYOUT, index, value),
+    s' = Serving::settle(s, LAYOUT, index, value, TTLS),
     input' = { name: "resolveLoader", choice: index }
   }
   action close(context: int): bool = all {
@@ -69,7 +72,7 @@ module held_replies {
     input' = { name: "closeScope", choice: context }
   }
   action seed(value: int): bool = all {
-    s' = Remote::seedFrame(s, 0, value, LAYOUT.servingTtlMs),
+    s' = Remote::seedFrame(s, 0, value, TTLS.retentionMs),
     input' = { name: "seed", choice: value }
   }
 

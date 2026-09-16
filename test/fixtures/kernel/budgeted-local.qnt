@@ -19,8 +19,8 @@ module budgeted_local {
   pure val BUDGET = 10
   pure val LOCAL_TTL_MS = 1000
   pure val START = 10000
-  pure val LAYOUT: Serving::Layout = { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, servingTtlMs: 0, localTtlMs: LOCAL_TTL_MS, probeSourceScope: false }
-  pure val TWO_KEYS: Serving::Layout = { keysPerInstance: 2, keysPerScope: 2, persistentContexts: 2, operationsPerEntity: 2, servingTtlMs: 0, localTtlMs: LOCAL_TTL_MS, probeSourceScope: false }
+  pure val LAYOUT: Serving::Layout = { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 2, operationsPerEntity: 1, ttls: { localMs: LOCAL_TTL_MS, freshMs: 0, retentionMs: 0 }, probeSourceScope: false }
+  pure val TWO_KEYS: Serving::Layout = { keysPerInstance: 2, keysPerScope: 2, persistentContexts: 2, operationsPerEntity: 2, ttls: { localMs: LOCAL_TTL_MS, freshMs: 0, retentionMs: 0 }, probeSourceScope: false }
   pure val LOCAL: Resolution = { layers: { request: false, local: true, remote: false }, coalesce: true }
 
   // Admission kinds: an enabled caller in persistent context 0 or 1, a caller

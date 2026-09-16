@@ -42,8 +42,13 @@ module dialcache_runtime_boundaries_conformance {
   pure val INITIAL_TIME_MS = 10000
   pure val SAMPLES: Samples = { local: 4292886220, remote: 1018911151 }
   pure val CALL: Call = { instance: 0, key: 0, context: 0, enabled: true, keyFailed: false }
-  pure def layoutFor(ttlMs: int): Serving::Layout =
-    { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 1, operationsPerEntity: 1, servingTtlMs: ttlMs, localTtlMs: TTL_MS, probeSourceScope: false }
+  // The drivers' fixtures configure 60 s local and remote TTLs; the all-features
+  // fixture also configures a 120 s stale-on-error maximum, the retention its
+  // refills are written with (formal/replay/profiles/runtime-boundaries.mjs).
+  pure def layoutFor(retentionMs: int): Serving::Layout = {
+    keysPerInstance: 1, keysPerScope: 1, persistentContexts: 1, operationsPerEntity: 1,
+    ttls: { localMs: TTL_MS, freshMs: TTL_MS, retentionMs: retentionMs }, probeSourceScope: false
+  }
 
   type State = {
     o: Observation,
@@ -139,7 +144,7 @@ module dialcache_runtime_boundaries_conformance {
   }
   action releasePolicy = all {
     Gate::holding(s),
-    s' = Serving::release(s, s.layout, Gate::latest(s), resolve(s, SAMPLES), Serving::ttlsOf(s.layout)),
+    s' = Serving::release(s, s.layout, Gate::latest(s), resolve(s, SAMPLES), s.layout.ttls),
     input' = { name: "releasePolicy", choice: -1 }
   }
   action changePolicy(policy: int): bool = all {
@@ -159,7 +164,7 @@ module dialcache_runtime_boundaries_conformance {
     input' = { name: "closeScope", choice: -1 }
   }
   action finishSource(loader: int, valueIndex: int): bool = all {
-    s' = Serving::settle(s, s.layout, loader, SOURCE_VALUES.nth(valueIndex)),
+    s' = Serving::settle(s, s.layout, loader, SOURCE_VALUES.nth(valueIndex), s.layout.ttls),
     input' = { name: "resolveLoader", choice: loader * SOURCE_VALUES.length() + valueIndex }
   }
   action resolveLoader = {
