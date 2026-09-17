@@ -4,6 +4,7 @@
   "kernelModules": [
     "calls",
     "clock",
+    "config_errors",
     "deadlines",
     "diagnostics",
     "encodings",
@@ -11,6 +12,8 @@
     "layer_policy",
     "local_storage",
     "policy_gate",
+    "policy_overlay",
+    "receipts",
     "remote_frames",
     "request_memo",
     "runtime_policy",
@@ -56,8 +59,20 @@
       "id": "policy",
       "model": "formal/dialcache-policy-conformance.qnt",
       "module": "dialcache_policy_conformance",
-      "libraryTransitions": [],
-      "compositionViolations": 47
+      "libraryTransitions": [
+        "clock::advance",
+        "clock::shiftWall",
+        "config_errors::recordConfigError",
+        "policy_gate::latest",
+        "policy_overlay::failed",
+        "policy_overlay::resolve",
+        "policy_overlay::ttls",
+        "receipts::release",
+        "remote_frames::seedFrame",
+        "serving::admit",
+        "serving::settle"
+      ],
+      "compositionViolations": 0
     },
     {
       "id": "shadow",

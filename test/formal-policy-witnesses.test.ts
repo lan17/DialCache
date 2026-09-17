@@ -205,8 +205,8 @@ describe("shadow fidelity against the model's private predictions", () => {
   });
 
   it("names a seed the model stamped at another wall time", () => {
-    expect(() => policyWitnesses([walk(states => { (states[1]!.s.remoteCreated as Integer[])[0] = { "#bigint": "1" }; })]))
-      .toThrow(/step 1: shadow remoteCreated \[100000,0\] differs from the model's \[1,0\]/);
+    expect(() => policyWitnesses([walk(states => { (states[1]!.s.created as Integer[])[0] = { "#bigint": "1" }; })]))
+      .toThrow(/step 1: shadow created \[100000,0\] differs from the model's \[1,0\]/);
   });
 
   it("has nothing to compare in a history projected to its public channels", () => {
@@ -217,16 +217,18 @@ describe("shadow fidelity against the model's private predictions", () => {
 
   it.each([
     ["sources", /step 0: shadow sources \[\] differs from the model's undefined/],
-    ["localExpires", /step 0: shadow localExpires 0 differs from the model's undefined/],
+    ["localExpires", /step 0: shadow localExpires \[0,0\] differs from the model's undefined/],
   ])("requires every shadowed field of a private layout: %s", (field, message) => {
     expect(() => policyWitnesses([predicted(states => { for (const state of states) delete state.s[field]; })])).toThrow(message);
   });
 
   it.each([
-    ["localValue", 3, (s: Record<string, unknown>) => { s.localValue = { "#bigint": "2" }; }, /step 3: shadow localValue 1 differs from the model's 2/],
-    ["wall", 0, (s: Record<string, unknown>) => { s.wall = { "#bigint": "1" }; }, /step 0: shadow wall 100000 differs from the model's 1/],
-    ["sources", 3, (s: Record<string, unknown>) => { (s.sources as Array<Record<string, unknown>>)[0]!.retention = { "#bigint": "1000" }; }, /step 3: shadow sources .* differs from the model's/],
+    ["localValues", 3, (s: Record<string, unknown>) => { (s.localValues as Integer[])[0] = { "#bigint": "2" }; }, /step 3: shadow localValues \[1,0\] differs from the model's \[2,0\]/],
+    ["skew", 0, (s: Record<string, unknown>) => { s.skew = { "#bigint": "1" }; }, /step 0: shadow skew 100000 differs from the model's 1/],
+    ["sources", 3, (s: Record<string, unknown>) => { (s.sources as Array<Record<string, unknown>>)[0]!.retentionMs = { "#bigint": "1000" }; }, /step 3: shadow sources .* differs from the model's/],
     ["dumpFailed", 4, (s: Record<string, unknown>) => { s.dumpFailed = true; }, /step 4: shadow dumpFailed false differs from the model's true/],
+    ["receipt", 2, (s: Record<string, unknown>) => { (s.receipt as Record<string, unknown>).layer = { "#bigint": "2" }; }, /step 2: shadow receipt .*"layer":4.* differs from the model's .*"layer":2/],
+    ["owners", 2, (s: Record<string, unknown>) => { (s.owners as Integer[])[0] = { "#bigint": "-1" }; }, /step 2: shadow owners \[0\] differs from the model's \[-1\]/],
   ])("names the first field the model predicts differently: %s", (_field, step, mutate, message) => {
     expect(() => policyWitnesses([predicted(states => mutate(states[step]!.s))])).toThrow(message);
   });

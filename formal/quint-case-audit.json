@@ -1359,6 +1359,12 @@
       "scope": "nearly expired remote hit warms local for its full insertion TTL. This check covers the bounded model clause: remoteHitStartsFullLocalInsertionTtlTest. Host representations and other feature combinations retain separate fixed/native evidence."
     },
     {
+      "case": "C09.insertion-age",
+      "reference": "formal/dialcache-policy-conformance.qnt:remoteHitWarmsLocalForTheReplysLocalTtlTest",
+      "kind": "regression",
+      "scope": "A remote hit warms local storage for the reply's local TTL (2 s), not for the frame's remaining freshness (1 s): the entry still serves locally after the freshness has passed. This check covers the bounded model clause: remoteHitWarmsLocalForTheReplysLocalTtlTest."
+    },
+    {
       "case": "C13.uncoalesced-caching",
       "reference": "formal/dialcache-policy-conformance.qnt:independentLocalCallsStillReuseSettledValueTest",
       "kind": "regression",
@@ -3601,6 +3607,18 @@
       "reference": "formal/dialcache-independent-conformance.qnt:independentRecoveriesServeDistinctAcquiredSnapshotsTest",
       "kind": "regression",
       "scope": "Two uncoalesced callers acquire different stale frames before their sources fail; after invalidation each recovery serves the bytes its own read retained, with two reads, two sources, two decodes and no writes."
+    },
+    {
+      "case": "C11.one-registered-flight",
+      "reference": "formal/dialcache-layers-conformance.qnt:coalescingCallerJoinsPendingFlightBeforeSeededFrameTest",
+      "kind": "regression",
+      "scope": "A coalescing caller joins the flight registered for its identity before reading the remote layer; a frame seeded while the flight is pending does not serve it. This check covers the bounded model clause: coalescingCallerJoinsPendingFlightBeforeSeededFrameTest."
+    },
+    {
+      "case": "C13.uncoalesced-caching",
+      "reference": "formal/dialcache-runtime-boundaries-conformance.qnt:defaultSharingJoinsRegisteredLeaderOverWarmedLocalTest",
+      "kind": "regression",
+      "scope": "A reply that disables sharing starts its own source beside the registered leader; once its value has warmed local storage, a reply that shares again joins the leader rather than hitting the entry. This check covers the bounded model clause: defaultSharingJoinsRegisteredLeaderOverWarmedLocalTest."
     }
   ],
   "definitions": [
@@ -3630,7 +3648,7 @@
     },
     {
       "case": "C06.null-local",
-      "reference": "formal/dialcache-policy-conformance.qnt:settle",
+      "reference": "formal/kernel/serving.qnt:settle",
       "kind": "helper",
       "scope": "The source value code is stored without a truthiness test on the native value; later local lookup returns the same code."
     },
@@ -3648,7 +3666,7 @@
     },
     {
       "case": "C06.null-remote",
-      "reference": "formal/dialcache-policy-conformance.qnt:settle",
+      "reference": "formal/kernel/serving.qnt:settle",
       "kind": "helper",
       "scope": "The source value code is stored remotely; remote lookup uses the sentinel/presence distinction and returns the code after local eviction or bypass."
     },
@@ -3684,7 +3702,7 @@
     },
     {
       "case": "C06.false-local",
-      "reference": "formal/dialcache-policy-conformance.qnt:settle",
+      "reference": "formal/kernel/serving.qnt:settle",
       "kind": "helper",
       "scope": "The source value code is stored without a truthiness test on the native value; later local lookup returns the same code."
     },
@@ -3702,7 +3720,7 @@
     },
     {
       "case": "C06.false-remote",
-      "reference": "formal/dialcache-policy-conformance.qnt:settle",
+      "reference": "formal/kernel/serving.qnt:settle",
       "kind": "helper",
       "scope": "The source value code is stored remotely; remote lookup uses the sentinel/presence distinction and returns the code after local eviction or bypass."
     },
@@ -3738,7 +3756,7 @@
     },
     {
       "case": "C06.zero-local",
-      "reference": "formal/dialcache-policy-conformance.qnt:settle",
+      "reference": "formal/kernel/serving.qnt:settle",
       "kind": "helper",
       "scope": "The source value code is stored without a truthiness test on the native value; later local lookup returns the same code."
     },
@@ -3756,7 +3774,7 @@
     },
     {
       "case": "C06.zero-remote",
-      "reference": "formal/dialcache-policy-conformance.qnt:settle",
+      "reference": "formal/kernel/serving.qnt:settle",
       "kind": "helper",
       "scope": "The source value code is stored remotely; remote lookup uses the sentinel/presence distinction and returns the code after local eviction or bypass."
     },
@@ -3792,7 +3810,7 @@
     },
     {
       "case": "C06.empty-string-local",
-      "reference": "formal/dialcache-policy-conformance.qnt:settle",
+      "reference": "formal/kernel/serving.qnt:settle",
       "kind": "helper",
       "scope": "The source value code is stored without a truthiness test on the native value; later local lookup returns the same code."
     },
@@ -3810,7 +3828,7 @@
     },
     {
       "case": "C06.empty-string-remote",
-      "reference": "formal/dialcache-policy-conformance.qnt:settle",
+      "reference": "formal/kernel/serving.qnt:settle",
       "kind": "helper",
       "scope": "The source value code is stored remotely; remote lookup uses the sentinel/presence distinction and returns the code after local eviction or bypass."
     },
@@ -3828,7 +3846,7 @@
     },
     {
       "case": "C06.absent-remote",
-      "reference": "formal/dialcache-policy-conformance.qnt:settle",
+      "reference": "formal/kernel/serving.qnt:settle",
       "kind": "helper",
       "scope": "Explicit absent code remains present in remote storage and reusable; the existing absent regression only probes local reuse."
     },
@@ -3894,7 +3912,7 @@
     },
     {
       "case": "C11.distinct-keys",
-      "reference": "formal/dialcache-policy-conformance.qnt:settle",
+      "reference": "formal/kernel/serving.qnt:settle",
       "kind": "helper",
       "scope": "Registration is indexed by key; settlement removes only the matching source ownership and publishes to that source key."
     },
@@ -3912,8 +3930,8 @@
     },
     {
       "case": "C21.invalid-recovery",
-      "reference": "formal/dialcache-policy-conformance.qnt:retention",
-      "kind": "predicate",
+      "reference": "formal/kernel/policy-overlay.qnt:retention",
+      "kind": "helper",
       "scope": "Invalid optional recovery selects ordinary retention but leaves normal remote TTL/hit traversal active. The existing retention regression does not itself probe a later fresh hit."
     },
     {
@@ -4122,7 +4140,7 @@
     },
     {
       "case": "C13.uncoalesced-caching",
-      "reference": "formal/dialcache-policy-conformance.qnt:settle",
+      "reference": "formal/kernel/serving.qnt:settle",
       "kind": "helper",
       "scope": "Independent-policy fixture disables registration but still captures publication TTLs and replaces local/remote values on accepted source completion. No independent property asserts general last-writer behavior."
     },
@@ -4134,7 +4152,7 @@
     },
     {
       "case": "C13.local-last-writer",
-      "reference": "formal/dialcache-policy-conformance.qnt:settle",
+      "reference": "formal/kernel/serving.qnt:settle",
       "kind": "helper",
       "scope": "Independent-policy fixture disables registration but still captures publication TTLs and replaces local/remote values on accepted source completion. No independent property asserts general last-writer behavior."
     },
@@ -4146,9 +4164,9 @@
     },
     {
       "case": "C13.remote-last-writer",
-      "reference": "formal/dialcache-policy-conformance.qnt:settle",
+      "reference": "formal/kernel/serving.qnt:settle",
       "kind": "helper",
-      "scope": "Independent-policy fixture disables registration but still captures publication TTLs and replaces local/remote values on accepted source completion. No independent property asserts general last-writer behavior."
+      "scope": "Settlement publishes independently to the remote layer (when the flight read it and its fence still allows) and to local storage (when the flight may warm it), with the permissions fixed when the source started."
     },
     {
       "case": "C17.disable-keeps-entry",
@@ -4170,14 +4188,14 @@
     },
     {
       "case": "C20.provider-failure",
-      "reference": "formal/dialcache-policy-conformance.qnt:localTtl",
-      "kind": "predicate",
+      "reference": "formal/kernel/policy-overlay.qnt:localTtl",
+      "kind": "helper",
       "scope": "Provider failure makes both serving TTLs zero and prevents shared registration/publication. It does not model every provider failure representation."
     },
     {
       "case": "C20.provider-failure",
-      "reference": "formal/dialcache-policy-conformance.qnt:remoteTtl",
-      "kind": "predicate",
+      "reference": "formal/kernel/policy-overlay.qnt:remoteTtl",
+      "kind": "helper",
       "scope": "Provider failure makes both serving TTLs zero and prevents shared registration/publication. It does not model every provider failure representation."
     },
     {
@@ -4188,14 +4206,14 @@
     },
     {
       "case": "C21.invalid-layer",
-      "reference": "formal/dialcache-policy-conformance.qnt:localTtl",
-      "kind": "predicate",
+      "reference": "formal/kernel/policy-overlay.qnt:localTtl",
+      "kind": "helper",
       "scope": "An invalid local TTL selects zero only for the local layer, preserving valid remote traversal."
     },
     {
       "case": "C21.invalid-layer",
-      "reference": "formal/dialcache-policy-conformance.qnt:remoteTtl",
-      "kind": "predicate",
+      "reference": "formal/kernel/policy-overlay.qnt:remoteTtl",
+      "kind": "helper",
       "scope": "An invalid local TTL selects zero only for the local layer, preserving valid remote traversal."
     },
     {
@@ -4218,7 +4236,7 @@
     },
     {
       "case": "C22.physical-vs-logical",
-      "reference": "formal/dialcache-policy-conformance.qnt:settle",
+      "reference": "formal/kernel/serving.qnt:settle",
       "kind": "helper",
       "scope": "Invocation captures publication TTL/retention; later calls evaluate current logical freshness without rewriting existing physical expiry."
     },
@@ -5091,12 +5109,6 @@
       "reference": "formal/kernel/serving.qnt:release",
       "kind": "helper",
       "scope": "Sharing (a request or process flight) precedes the local and remote reads; a remote hit warms only a local layer the resolution enables for this release."
-    },
-    {
-      "case": "C13.remote-last-writer",
-      "reference": "formal/kernel/serving.qnt:settle",
-      "kind": "helper",
-      "scope": "Settlement publishes independently to the remote layer (when the flight read it and its fence still allows) and to local storage (when the flight may warm it), with the permissions fixed when the source started."
     }
   ],
   "limitations": [

@@ -459,4 +459,15 @@ module dialcache_runtime_boundaries_conformance {
     .then(finishSource(1, 1)).then(finishSource(0, 0))
     .then(beginCall).then(releasePolicy)
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_TWO, VALUE_ONE) and s.o.loaders == 2)
+
+  // A reply that disables sharing starts its own source beside the registered
+  // leader; once its value has warmed local storage, a reply that shares
+  // again joins the leader rather than hitting the entry.
+  run defaultSharingJoinsRegisteredLeaderOverWarmedLocalTest = initialize(DEFAULT_SHARING_FIXTURE_OFFSET + LOCAL_LAYER)
+    .then(changePolicy(FULL_COHORT * 3 + ENABLE_SHARING)).then(beginCall).then(releasePolicy)
+    .then(changePolicy(FULL_COHORT * 3 + DISABLE_SHARING)).then(beginCall).then(releasePolicy)
+    .expect(s.o.loaders == 2)
+    .then(finishSource(1, 0))
+    .then(changePolicy(DEFAULT_POLICY)).then(beginCall).then(releasePolicy)
+    .expect(s.o.calls == List(CALL_PENDING, VALUE_ONE, CALL_PENDING) and s.o.loaders == 2)
 }

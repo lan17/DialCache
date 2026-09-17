@@ -31,6 +31,9 @@
     "formal/kernel/policy-gate.qnt",
     "formal/kernel/runtime-policy.qnt",
     "formal/kernel/serving.qnt",
+    "formal/kernel/policy-overlay.qnt",
+    "formal/kernel/config-errors.qnt",
+    "formal/kernel/receipts.qnt",
     "formal/kernel/diagnostics.qnt",
     "formal/kernel/deadlines.qnt"
   ],
@@ -467,9 +470,10 @@
         "registeredSourcesArePending",
         "sharedSourcesKeepRegistration",
         "policyResolutionErrorsHaveStableClassification",
-        "eachFailedPolicyReplyHasOneDiagnostic",
         "localHitsRespectInsertionExpiry",
-        "remoteHitsRespectAcquiredFreshness"
+        "remoteHitsRespectAcquiredFreshness",
+        "remoteHitsWarmLocalForTheReplysLocalTtl",
+        "joinsOnlyJoinableFlights"
       ],
       "regressions": [
         "invalidReadBudgetBypassesAllCachingTest",
@@ -493,6 +497,7 @@
         "exactRemoteFreshBoundaryStartsSourceTest",
         "increasedFreshTtlCannotResurrectExpiredStorageTest",
         "remoteHitStartsFullLocalInsertionTtlTest",
+        "remoteHitWarmsLocalForTheReplysLocalTtlTest",
         "untrackedReadFailureStillWarmsActiveLocalTest",
         "invalidRemoteTtlPreservesLocalServingTest",
         "invalidLocalTtlStillServesFreshRemoteTest",
@@ -531,6 +536,7 @@
         "exactRemoteFreshBoundaryStartsSourceTest",
         "increasedFreshTtlCannotResurrectExpiredStorageTest",
         "remoteHitStartsFullLocalInsertionTtlTest",
+        "remoteHitWarmsLocalForTheReplysLocalTtlTest",
         "untrackedReadFailureStillWarmsActiveLocalTest",
         "invalidRemoteTtlPreservesLocalServingTest",
         "invalidLocalTtlStillServesFreshRemoteTest",
@@ -724,7 +730,8 @@
         "settledRequestMemoSurvivesSharedLayerRampDownTest",
         "untrackedReadsIgnoreGroupedInvalidationTest",
         "trackedWithoutRemotePublishesReusableLocalTest",
-        "untrackedSourcePublicationIsProbedInAllThreeLayersTest"
+        "untrackedSourcePublicationIsProbedInAllThreeLayersTest",
+        "coalescingCallerJoinsPendingFlightBeforeSeededFrameTest"
       ],
       "profile": "layers",
       "generate": {
@@ -748,7 +755,8 @@
         "settledRequestMemoSurvivesSharedLayerRampDownTest",
         "untrackedReadsIgnoreGroupedInvalidationTest",
         "trackedWithoutRemotePublishesReusableLocalTest",
-        "untrackedSourcePublicationIsProbedInAllThreeLayersTest"
+        "untrackedSourcePublicationIsProbedInAllThreeLayersTest",
+        "coalescingCallerJoinsPendingFlightBeforeSeededFrameTest"
       ]
     },
     {
@@ -931,7 +939,8 @@
         "runtimeLocalTtlAddsEarlierLayerToRemoteFixtureTest",
         "runtimeLocalTtlEnablesSharingWithoutRemoteTtlTest",
         "remoteHitPromotesIntoNewlyEnabledLocalLayerTest",
-        "disabledSharingDoesNotJoinRegisteredFlightTest"
+        "disabledSharingDoesNotJoinRegisteredFlightTest",
+        "defaultSharingJoinsRegisteredLeaderOverWarmedLocalTest"
       ],
       "replayRegressions": [
         "runtimeTrueEnablesSharingOverFalseDefaultTest",
@@ -959,7 +968,8 @@
         "runtimeLocalTtlAddsEarlierLayerToRemoteFixtureTest",
         "runtimeLocalTtlEnablesSharingWithoutRemoteTtlTest",
         "remoteHitPromotesIntoNewlyEnabledLocalLayerTest",
-        "disabledSharingDoesNotJoinRegisteredFlightTest"
+        "disabledSharingDoesNotJoinRegisteredFlightTest",
+        "defaultSharingJoinsRegisteredLeaderOverWarmedLocalTest"
       ],
       "generate": {
         "maxSamples": 1024,
@@ -1363,20 +1373,35 @@
     {
       "id": "policy-inclusive-local-expiry",
       "contract": "C09",
-      "source": "formal/dialcache-policy-conformance.qnt",
+      "source": "formal/kernel/local-storage.qnt",
       "model": "formal/dialcache-policy-conformance.qnt",
       "invariant": "localHitsRespectInsertionExpiry",
-      "before": "val localHit = localEligible and localEntryLiveAt(s.now, s.localExpires)",
-      "after": "val localHit = localEligible and s.now <= s.localExpires",
+      "before": "if (localEntryLiveAt(state.now, state.localExpires.nth(slot))) state.localValues.nth(slot) else NO_VALUE",
+      "after": "if (state.now <= state.localExpires.nth(slot)) state.localValues.nth(slot) else NO_VALUE",
       "reproducer": {
         "kind": "exported-regression",
         "run": "localHitDoesNotRenewInsertionTtlTest",
         "failure": "s.o.calls == List(VALUE_ONE, VALUE_ONE, CALL_PENDING) and s.o.loaders == 2",
         "family": "inclusive-expiry-boundary",
         "profiles": [
-          "policy"
+          "policy",
+          "source-budgets"
         ],
-        "exclusions": {}
+        "exclusions": {
+          "core": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
+          "effects": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
+          "recovery": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
+          "shadow": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
+          "admission": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
+          "independent": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
+          "recovery-read": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
+          "local-failure": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
+          "shadow-layers": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
+          "local-clock": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
+          "scope": "Composes the request-only projection, which never reads local storage.",
+          "layers": "Composes local storage, but its 60 s entries never reach their insertion expiry within the bound of 1 ms ticks.",
+          "runtime-boundaries": "Composes local storage, but no input advances the clock, so no entry reaches its expiry."
+        }
       }
     },
     {
@@ -1527,11 +1552,36 @@
     {
       "id": "policy-inclusive-remote-freshness",
       "contract": "C22",
-      "source": "formal/dialcache-policy-conformance.qnt",
+      "source": "formal/kernel/remote-frames.qnt",
       "model": "formal/dialcache-policy-conformance.qnt",
       "invariant": "remoteHitsRespectAcquiredFreshness",
-      "before": "remoteEligible and freshAgeAllowed(s.remoteCreated.nth(s.key), s.wall, remoteTtl)",
-      "after": "remoteEligible and s.remoteCreated.nth(s.key) <= s.wall and s.wall - s.remoteCreated.nth(s.key) <= remoteTtl"
+      "before": "freshAgeAllowed(state.created.nth(key), Clock::wallOf(state), freshMs)",
+      "after": "state.created.nth(key) <= Clock::wallOf(state) and Clock::wallOf(state) - state.created.nth(key) <= freshMs",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "exactRemoteFreshBoundaryStartsSourceTest",
+        "failure": "s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.loaders == 2 and s.o.loads == 0 and s.expires.nth(0) == DEFAULT_RETENTION_MS",
+        "family": "inclusive-freshness-boundary",
+        "profiles": [
+          "policy"
+        ],
+        "exclusions": {
+          "core": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
+          "effects": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
+          "recovery": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
+          "shadow": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
+          "admission": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
+          "independent": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
+          "recovery-read": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
+          "local-failure": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
+          "shadow-layers": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
+          "local-clock": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
+          "scope": "Composes the request-only projection, which never reads a remote frame.",
+          "source-budgets": "Composes the local projection, which never reads a remote frame.",
+          "layers": "Composes remote frames, but its 60 s freshness is never reached within the bound of 1 ms ticks.",
+          "runtime-boundaries": "Composes remote frames, but no input advances the clock, so no frame ages to its freshness boundary."
+        }
+      }
     },
     {
       "id": "shadow-inclusive-c0-freshness",
@@ -1780,7 +1830,7 @@
           "core": "Composes no kernel module, so request_memo.closeScope is never executed.",
           "effects": "Composes no kernel module, so request_memo.closeScope is never executed.",
           "recovery": "Composes no kernel module, so request_memo.closeScope is never executed.",
-          "policy": "Composes no kernel module, so request_memo.closeScope is never executed.",
+          "policy": "Has no request scopes (persistentContexts 0 and no closeScope input), so the memo fold the fault mutates is never executed.",
           "shadow": "Composes no kernel module, so request_memo.closeScope is never executed.",
           "admission": "Composes no kernel module, so request_memo.closeScope is never executed.",
           "independent": "Composes no kernel module, so request_memo.closeScope is never executed.",
@@ -2066,6 +2116,74 @@
           "local-clock": "does not compose the deadlines module: its sources have no budget"
         }
       }
+    },
+    {
+      "id": "policy-hit-before-join",
+      "contract": "C13",
+      "source": "formal/kernel/serving.qnt",
+      "model": "formal/dialcache-policy-conformance.qnt",
+      "invariant": "remoteHitsRespectAcquiredFreshness",
+      "before": "else if (processOwner >= 0) JoinsProcess(processOwner)\n        else if (memoValue > NO_VALUE) ServesMemo(memoValue)\n        else if (localValue > NO_VALUE) ServesLocal(localValue)\n        else if (remoteValue > NO_VALUE) ServesRemote(remoteValue)",
+      "after": "else if (memoValue > NO_VALUE) ServesMemo(memoValue)\n        else if (localValue > NO_VALUE) ServesLocal(localValue)\n        else if (remoteValue > NO_VALUE) ServesRemote(remoteValue)\n        else if (processOwner >= 0) JoinsProcess(processOwner)",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "independentCompletionKeepsRegisteredLeaderTest",
+        "failure": "s.o.calls == List(CALL_PENDING, VALUE_TWO, CALL_PENDING) and s.o.loaders == 2 and s.o.reads == 2",
+        "family": "hit-before-join",
+        "profiles": [
+          "policy",
+          "runtime-boundaries",
+          "layers"
+        ],
+        "exclusions": {
+          "core": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
+          "effects": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
+          "recovery": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
+          "shadow": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
+          "admission": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
+          "independent": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
+          "recovery-read": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
+          "local-failure": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
+          "shadow-layers": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
+          "local-clock": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
+          "scope": "Composes the request-only projection, which passes no layer values to the decision, so no layer hit can precede a join.",
+          "source-budgets": "Its replies always coalesce and its bypass sources warm nothing, so a live entry and a pending registered flight never coexist."
+        }
+      }
+    },
+    {
+      "id": "policy-join-ignores-coalesce",
+      "contract": "C13",
+      "source": "formal/kernel/serving.qnt",
+      "model": "formal/dialcache-policy-conformance.qnt",
+      "invariant": "joinsOnlyJoinableFlights",
+      "before": "if (resolved.coalesce and sharedLayers(layers) and memoValue == NO_VALUE)",
+      "after": "if (sharedLayers(layers) and memoValue == NO_VALUE)",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "independentCompletionKeepsRegisteredLeaderTest",
+        "failure": "s.o.calls == List(CALL_PENDING, CALL_PENDING) and s.o.loaders == 2 and s.o.reads == 2",
+        "family": "join-ignores-coalesce",
+        "profiles": [
+          "policy",
+          "runtime-boundaries"
+        ],
+        "exclusions": {
+          "core": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
+          "effects": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
+          "recovery": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
+          "shadow": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
+          "admission": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
+          "independent": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
+          "recovery-read": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
+          "local-failure": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
+          "shadow-layers": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
+          "local-clock": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
+          "layers": "Its replies always coalesce, so the conjunct the fault removes is always true and no history observes it.",
+          "scope": "Composes the request-only projection, whose process join requires a shared layer this shape never has.",
+          "source-budgets": "Its replies always coalesce, so the conjunct the fault removes is always true and no history observes it."
+        }
+      }
     }
   ],
   "reproducerBacklog": [
@@ -2089,7 +2207,6 @@
     "independent-source-wrong-clock",
     "independent-source-wrong-owner",
     "tracked-read-inclusive-fence",
-    "policy-inclusive-remote-freshness",
     "core-unhealthy-local-read-hits",
     "core-tracked-fallback-warms-local",
     "runtime-policy-coalesce-defaults-off",

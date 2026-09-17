@@ -202,7 +202,7 @@
     },
     "policy": {
       "sampledHistories": 512,
-      "corpusSha256": "66f651d27a7966768e47e34f48dab9b6898d466d1ac242db8294efa40434c321",
+      "corpusSha256": "23eba1754ef2e23c7f06d168e9867d6cc4fc6261deec68ce6cbc4bfa7c210c9c",
       "labels": {
         "local-hit-preserves-insertion-expiry": 1,
         "invalid-read-budget-bypasses-caching": 33,

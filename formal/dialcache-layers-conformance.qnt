@@ -404,4 +404,13 @@ module dialcache_layers_conformance {
     .then(startCall(FRESH_OTHER_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
     .expect(s.o.calls == List(VALUE_ONE, VALUE_ONE, VALUE_ONE, VALUE_ONE) and s.o.loaders == 1
       and s.o.reads == 2 and s.o.loads == 1 and s.o.dumps == 1 and s.o.writes == 1)
+
+  // A coalescing caller joins the pending flight registered for its identity
+  // before reading the remote layer: a frame seeded while the flight is
+  // pending does not serve it.
+  run coalescingCallerJoinsPendingFlightBeforeSeededFrameTest = untrackedFixture
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .then(seedRemote(KEY_A, VALUE_ONE))
+    .then(startCall(FRESH_FIRST_INSTANCE_CONTEXT * KEYS_PER_INSTANCE + KEY_A))
+    .expect(s.o.calls == List(CALL_PENDING, CALL_PENDING) and s.o.loaders == 1 and s.o.loads == 0)
 }
