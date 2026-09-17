@@ -1362,7 +1362,7 @@
     },
     {
       "path": "formal/SEMANTIC-COVERAGE.md",
-      "sha256": "af7674a13a4f7bf3d365b03ab0a5cfb54d4795d35b451026b766491b1a893d5a",
+      "sha256": "36dfebb6bfe76998f42ae0880ba5f9a984e6c5cd4376c2aef55b189cf12cdc65",
       "entries": [
         {"line":1,"title":"Measuring semantic coverage"},
         {"line":5,"title":"Evidence inventory"},
@@ -1501,7 +1501,7 @@
     },
     {
       "path": "formal/VALIDATION.md",
-      "sha256": "8361b514e466860c1108b99b8adbae75cf14e67b67954a36ea8c57f913e9a201",
+      "sha256": "79d61df9534e7a1db8a1b4819076e7cc7a4e7aff43281756e9135d95f86e1308",
       "entries": [
         {"line":1,"title":"Validation and evidence"},
         {"line":7,"title":"Choosing a run"},

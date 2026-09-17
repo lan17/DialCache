@@ -76,7 +76,7 @@ fault. Count challenges and distinct faults separately: a challenge is one
 (fault, model, invariant) measurement, while a distinct fault is one
 `(source, before, after)` mutation. The same shared-rule fault may be measured
 against several models when each entry carries a `measures` note, so the
-catalog currently reports 67 challenges over 64 distinct faults. Every scheduled
+catalog currently reports 72 challenges over 68 distinct faults. Every scheduled
 model owns at least one challenge; a `challengeWaiver` on a model entry is a
 documented gap, not coverage. A detected challenge shows that the named
 invariant rejects that one deliberate change under the manifest bounds. Model
