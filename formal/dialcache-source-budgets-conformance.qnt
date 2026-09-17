@@ -32,10 +32,10 @@ module dialcache_source_budgets_conformance {
   // One key on one instance, no persistent request scope, a 1 s local TTL and
   // no remote layer; every reply enables the local layer with sharing.
   pure val LAYOUT: Serving::Layout = {
-    keysPerInstance: 1, keysPerScope: 1, persistentContexts: 0, operationsPerEntity: 1,
-    servingTtlMs: 0, localTtlMs: LOCAL_TTL_MS, probeSourceScope: false
+    keysPerInstance: 1, keysPerScope: 1, persistentContexts: 0, operationsPerEntity: 1, probeSourceScope: false
   }
   pure val LOCAL: Resolution = { layers: { request: false, local: true, remote: false }, coalesce: true }
+  pure val TTLS: Ttls = { localMs: LOCAL_TTL_MS, freshMs: 0, retentionMs: 0 }
 
   // All times are monotonic milliseconds. A budget of -1 is unbounded. A
   // source's external work can remain undelivered after its deadline completed
@@ -121,7 +121,7 @@ module dialcache_source_budgets_conformance {
   action release(id: int): bool = all {
     Gate::holds(s, id),
     input' = { name: "releasePolicy", choice: id },
-    s' = Deadlines::releaseLocal(s, LAYOUT, id, LOCAL)
+    s' = Deadlines::releaseLocal(s, LAYOUT, id, LOCAL, TTLS)
   }
   action releasePolicy = { nondet choice = 0.to(MAX_CALLS - 1).oneOf(); release(choice) }
 
@@ -163,7 +163,7 @@ module dialcache_source_budgets_conformance {
   val outsideSourcesHaveNoDeadline = s.budgets.indices().forall(i =>
       s.budgets.nth(i) >= 0 or s.sources.nth(i).result != DEADLINE_ERROR)
     and (not(outsideAdmission) or (s.budgets.nth(newestSource) == Deadlines::UNBOUNDED
-      and not(s.sources.nth(newestSource).local) and not(s.sources.nth(newestSource).shared)))
+      and s.sources.nth(newestSource).localMs == 0 and not(s.sources.nth(newestSource).shared)))
   val acceptedSourceRespectsItsOwnStart = s.sources.indices().forall(i =>
     not(accepted(s.sources.nth(i).result))
       or (s.settledAt.nth(i) >= s.started.nth(i) and
@@ -171,7 +171,7 @@ module dialcache_source_budgets_conformance {
   val registeredWorkIsNotAbandoned = s.processFlights.nth(0) < 0
     or s.sources.nth(s.processFlights.nth(0)).result == CALL_PENDING
   val localPublicationRequiresAcceptedSource = s.localValues.nth(0) == NO_VALUE or s.sources.indices().exists(i =>
-    s.sources.nth(i).local and accepted(s.sources.nth(i).result) and s.sources.nth(i).result == s.localValues.nth(0))
+    s.sources.nth(i).localMs > 0 and accepted(s.sources.nth(i).result) and s.sources.nth(i).result == s.localValues.nth(0))
   val followersKeepTheirOwnersOutcome = s.owners.indices().forall(call => {
     val owner = s.owners.nth(call)
     owner < 0 or s.o.calls.nth(call) == s.sources.nth(owner).result

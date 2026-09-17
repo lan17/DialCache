@@ -3,6 +3,7 @@ module dialcache_runtime_boundaries_conformance {
   import cohort_boundaries.* from "./cohort-boundaries"
   import encodings.* from "./kernel/encodings"
   import calls.* from "./kernel/calls"
+  import layer_policy.* from "./kernel/layer-policy"
   import runtime_policy.* from "./kernel/runtime-policy"
   import serving as Serving from "./kernel/serving"
   import flights as Flights from "./kernel/flights"
@@ -42,18 +43,27 @@ module dialcache_runtime_boundaries_conformance {
   pure val INITIAL_TIME_MS = 10000
   pure val SAMPLES: Samples = { local: 4292886220, remote: 1018911151 }
   pure val CALL: Call = { instance: 0, key: 0, context: 0, enabled: true, keyFailed: false }
-  pure def layoutFor(ttlMs: int): Serving::Layout =
-    { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 1, operationsPerEntity: 1, servingTtlMs: ttlMs, localTtlMs: TTL_MS, probeSourceScope: false }
+  pure val LAYOUT: Serving::Layout =
+    { keysPerInstance: 1, keysPerScope: 1, persistentContexts: 1, operationsPerEntity: 1, probeSourceScope: false }
+  // The drivers' fixtures configure 60 s local and remote TTLs; the all-features
+  // fixture also configures a 120 s stale-on-error maximum, the retention its
+  // refills are written with (formal/replay/profiles/runtime-boundaries.mjs).
+  pure def ttlsFor(fixture: int): Ttls =
+    { localMs: TTL_MS, freshMs: TTL_MS, retentionMs: if (fixture == ALL_FEATURES_FIXTURE) EXTENDED_RETENTION_MS else TTL_MS }
 
   type State = {
     o: Observation,
     now: int,
+    skew: int,
     tracked: bool,
     remoteAvailable: bool,
     capacity: int,
+    readFailed: bool,
+    dumpFailed: bool,
+    writeFailed: bool,
     policy: int,
     baseline: Baseline,
-    layout: Serving::Layout,
+    ttls: Ttls,
     closed: List[bool],
     memo: List[int],
     requestFlights: List[int],
@@ -63,6 +73,7 @@ module dialcache_runtime_boundaries_conformance {
     lru: List[List[int]],
     remoteValues: List[int],
     created: List[int],
+    expires: List[int],
     watermark: List[int],
     sources: List[Serving::LayeredSource],
     owners: List[int],
@@ -92,13 +103,17 @@ module dialcache_runtime_boundaries_conformance {
     s' = {
       o: empty,
       now: INITIAL_TIME_MS,
+      skew: 0,
       tracked: false,
       remoteAvailable: (fixture < NO_LOCAL_TTL_FIXTURE and fixture % DEFAULT_SHARING_FIXTURE_OFFSET == REMOTE_LAYER)
         or fixture == NO_REMOTE_TTL_FIXTURE or fixture == ALL_FEATURES_FIXTURE,
       capacity: 1,
+      readFailed: false,
+      dumpFailed: false,
+      writeFailed: false,
       policy: DEFAULT_POLICY,
       baseline: baselineOf(fixture),
-      layout: layoutFor(if (fixture == ALL_FEATURES_FIXTURE) EXTENDED_RETENTION_MS else TTL_MS),
+      ttls: ttlsFor(fixture),
       closed: List(false),
       memo: List(NO_VALUE),
       requestFlights: List(NO_OWNER),
@@ -108,6 +123,7 @@ module dialcache_runtime_boundaries_conformance {
       lru: List(List()),
       remoteValues: List(NO_VALUE),
       created: List(0),
+      expires: List(0),
       watermark: List(0),
       sources: List(),
       owners: List(),
@@ -124,12 +140,12 @@ module dialcache_runtime_boundaries_conformance {
   action beginCall = all {
     not(Gate::holding(s)),
     s.o.calls.length() < MAX_CALLERS,
-    s' = Serving::admit(s, s.layout, CALL),
+    s' = Serving::admit(s, LAYOUT, CALL),
     input' = { name: "beginCall", choice: -1 }
   }
   action releasePolicy = all {
     Gate::holding(s),
-    s' = Serving::release(s, s.layout, Gate::latest(s), resolve(s, SAMPLES)),
+    s' = Serving::release(s, LAYOUT, Gate::latest(s), resolve(s, SAMPLES), s.ttls),
     input' = { name: "releasePolicy", choice: -1 }
   }
   action changePolicy(policy: int): bool = all {
@@ -145,11 +161,11 @@ module dialcache_runtime_boundaries_conformance {
     s.baseline.request,
     not(allFeatures),
     not(s.closed.nth(0)),
-    s' = Serving::closeScope(s, s.layout, 0),
+    s' = Serving::closeScope(s, LAYOUT, 0),
     input' = { name: "closeScope", choice: -1 }
   }
   action finishSource(loader: int, valueIndex: int): bool = all {
-    s' = Serving::settle(s, s.layout, loader, SOURCE_VALUES.nth(valueIndex)),
+    s' = Serving::settle(s, LAYOUT, loader, SOURCE_VALUES.nth(valueIndex)),
     input' = { name: "resolveLoader", choice: loader * SOURCE_VALUES.length() + valueIndex }
   }
   action resolveLoader = {
@@ -175,7 +191,7 @@ module dialcache_runtime_boundaries_conformance {
   pure def bypassed(x: State, caller: int): bool = x.owners.nth(caller) >= 0
     and Flights::ownedBy(x, x.owners.nth(caller)) == Set(caller) and {
       val source = x.sources.nth(x.owners.nth(caller))
-      not(source.local) and not(source.remote) and not(source.shared)
+      source.localMs == 0 and source.retentionMs == 0 and not(source.shared)
     }
   val equalAndLowerCohortsNeverTraverse = not(justReleased) or s.baseline.request
     or s.policy >= NULL_PROVIDER or s.policy / 3 > AT_SAMPLE or bypassed(s, releasedCaller)
@@ -200,14 +216,14 @@ module dialcache_runtime_boundaries_conformance {
     value == NO_VALUE or x.sources.indices().exists(loader => publishes(loader) and x.sources.nth(loader).result == value)
   val justSettled = input.name == "resolveLoader"
   val settledSource = input.choice / SOURCE_VALUES.length()
-  val retainedValueFollowsSettlementOrder = publishedBy(s, s.remoteValues.nth(0), loader => s.sources.nth(loader).remote)
-    and publishedBy(s, s.localValues.nth(0), loader => s.sources.nth(loader).local or s.sources.nth(loader).remote)
+  val retainedValueFollowsSettlementOrder = publishedBy(s, s.remoteValues.nth(0), loader => s.sources.nth(loader).retentionMs > 0)
+    and publishedBy(s, s.localValues.nth(0), loader => s.sources.nth(loader).localMs > 0 or s.sources.nth(loader).retentionMs > 0)
     and publishedBy(s, s.memo.nth(0), loader =>
-      s.sources.nth(loader).local or s.sources.nth(loader).remote or memoizes(s, loader))
+      s.sources.nth(loader).localMs > 0 or s.sources.nth(loader).retentionMs > 0 or memoizes(s, loader))
     and (not(justSettled) or {
       val source = s.sources.nth(settledSource)
-      (not(source.remote) or s.remoteValues.nth(0) == source.result)
-        and (not(source.local) or s.localValues.nth(0) == source.result)
+      (source.retentionMs == 0 or s.remoteValues.nth(0) == source.result)
+        and (source.localMs == 0 or s.localValues.nth(0) == source.result)
         and (s.closed.nth(0) or Flights::ownedBy(s, settledSource).forall(caller =>
           s.memoSlots.nth(caller) < 0 or s.memo.nth(0) == source.result))
     })

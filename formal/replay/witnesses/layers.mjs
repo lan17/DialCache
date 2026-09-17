@@ -78,7 +78,7 @@ export function layersWitnesses(histories, recorder = createWitnessRecorder()) {
       if (step.action === "resolveLoader") {
         const source = before.sources[Math.floor((step.choice - 1) / 2)];
         const key = source.instance * 4 + source.key;
-        if (source.local === true) { survivingOther.delete(key); promoted.delete(key); preserved.delete(key); validated.delete(key); }
+        if (source.localMs > 0) { survivingOther.delete(key); promoted.delete(key); preserved.delete(key); validated.delete(key); }
         for (const pending of published) if (Math.floor(pending / 4) === source.instance) published.delete(pending);
       }
       if (step.action === "resolveLoader" && mode % 2 === 1 && o.writes > previous.writes) {

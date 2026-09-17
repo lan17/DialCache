@@ -13,15 +13,15 @@ design and its history; this file describes what is here and how to use it.
 | --- | --- | --- |
 | `encodings` | Sentinels shared by the modules: 0 for an absent value, -1 for an unowned slot, 0 for no fence; the `accepted` judgment over outcome codes | `accepted` |
 | `calls` | What a caller asks for: instance, key, request context, whether it is enabled (a disabled context, a failed key or a call outside every request is not) and whether its key failed to construct, the one bypass whose source keeps the configured deadline (C27) | the `Call` type only |
-| `layer_policy` | Which layers a call may use, from the drivers' layer policy code and remote availability; the immediate reply `resolution` and the `BYPASS` reply | `enabledLayers`, `sharedLayers`, `resolution` |
+| `layer_policy` | Which layers a call may use, from the drivers' layer policy code and remote availability; the immediate reply `resolution` and the `BYPASS` reply; the `Ttls` a reply resolves to (local insertion TTL, remote freshness, remote retention), passed beside the resolution, and the `gated` layers a reply uses with them (a layer whose TTL is 0 is off) | `enabledLayers`, `sharedLayers`, `resolution`, `gated` |
 | `runtime_policy` | How a runtime policy reply (the runtime-boundaries drivers' codes 0 to 21) resolves against an instance's configured baseline: serving cohorts, omitted, null and invalid leaves, runtime TTLs, the kill switch | `resolve` |
 | `request_memo` | Request-scoped memo rows and their closure; `openScope` and `Opened` are environment bookkeeping (which contexts an input has created) that no memo rule reads, kept beside the memo rows because the composition lint has no environment allowance yet | `scopeOpen`, `memoSlot`, `memoValue`, `memoize`, `openScope`, `closeScope` |
 | `local_storage` | Per-instance local storage with LRU eviction, insertion expiry (`cache_rules.localEntryLiveAt`) and a hit that renews recency, not insertion | `localValue`, `promote`, `putLocal` |
-| `remote_frames` | Remote frames with creation stamps, per-entity watermarks and fences (`cache_rules.fenceAllows`) | `seedFrame`, `raiseWatermark`, `readableFrame`, `missFence`, `writeAllowed` |
+| `remote_frames` | Remote frames stamped on the wall clock and retained until an instant on the monotonic clock (`cache_rules.deadlinePendingAt`), served while retained and fresh for the reply's freshness (`cache_rules.freshAgeAllowed`, which rejects a stamp from after a wall rollback); per-entity watermarks and fences on the wall clock (`cache_rules.fenceAllows`); a watermark never lowers | `seedFrame`, `raiseWatermark`, `readableFrame`, `missFence`, `writeAllowed`, `retained`, `fresh` |
 | `flights` | Source executions (a record of outcome and process sharing, with whatever payload the traversal that started it needs), the process and request registries that coalesce callers, and per caller its owner and memo slot; an opt-in record of the identity each caller asked for | `processOwner`, `requestOwner`, `admitCaller`, `attachCaller`, `joinRequestFlight`, `registerSource`, `settleSource`, `forgetScope`, `ownedBy`, `recordIdentity` |
-| `clock` | Elapsed time | `advance` |
+| `clock` | Elapsed time on the monotonic clock; the wall clock is that clock plus a skew (`wallOf`), so one transition moves both and only the skew shifts on a rollback | `advance`, `wallOf`, `shiftWall` |
 | `policy_gate` | Callers whose policy reply the environment holds, with their calls, indexed by their policy call | `hold`, `holding`, `holds`, `latest`, `entry`, `release` |
-| `serving` | Admission, traversal order (`decide`), ownership precedence, publication and refill authority, scope closure, maintenance; the layered shape and its local and request-only projections | `admit`, `release`, `begin`, `settle`, `admitLocal`, `releaseLocal`, `settleLocal`, `admitRequest`, `releaseRequest`, `settleRequest`, `closeScope`, `invalidate` |
+| `serving` | Admission, traversal order (`decide`), ownership precedence, publication and refill authority with the TTLs each source captured from the reply that started it, the remote adapter's read, dump and write faults along a refill, scope closure, maintenance; the layered shape and its local and request-only projections | `admit`, `release`, `begin`, `settle`, `admitLocal`, `releaseLocal`, `settleLocal`, `admitRequest`, `releaseRequest`, `settleRequest`, `closeScope`, `invalidate` |
 | `deadlines` | Source budgets: the budget a source starts with (a source started at admission is bounded only when its key failed, C27, a disabled context and an outside call run theirs unbounded, C01; a source started at release is bounded, its caller was enabled when admitted), the deadline measured from the source's own start, expiry on timer delivery or late arrival, abandoned work draining, as budgeted variants of the local lifecycle | `admitLocal`, `releaseLocal`, `settleLocal`, `advanceLocal` |
 | `diagnostics` | The diagnostics channel: the singleflight a caller coalesced into and the layer a failed source is attributed to, as diagnosed variants of the request-only traversal | `admitRequest`, `releaseRequest`, `settleRequest` |
 
@@ -40,21 +40,45 @@ requires one.
 Encodings are the drivers': caller outcomes are `conformance_observations`
 codes, layer policy codes are `layer_policy`'s, storage slots hold the value or
 0 and registries a source index or -1 (`encodings`). Layouts (keys per instance
-and per scope row, persistent contexts, operations per entity, the serving TTL)
-are passed as a `serving::Layout` record, so a profile with a different bound
-composes the same transitions. A call is a `calls::Call` (instance, key,
-context) and a policy reply resolves to a `layer_policy::Resolution` (the
-enabled layers and whether the call coalesces). The serving transitions never
-decode a profile's policy field: `layer_policy::resolution(policy, remote)` is the
+and per scope row, persistent contexts, operations per entity, whether the
+drivers probe each source's scope) are passed as a `serving::Layout` record, so
+a profile with a different bound composes the same transitions. A call is a
+`calls::Call` (instance, key, context) and a policy reply resolves to a
+`layer_policy::Resolution` (the enabled layers and whether the call coalesces)
+with the `layer_policy::Ttls` the reply carries (the local insertion TTL, the
+remote frame's freshness and the retention a refill is written with), which
+every release and settlement takes beside the resolution; a profile whose
+replies carry none passes its fixture's constant. A layer whose TTL is 0 is
+off: the traversal uses local storage only for a positive local TTL and the
+remote layer only for a positive freshness (`layer_policy::gated`), whatever
+the reply's layer flags say. The TTLs settlement publishes with travel in the
+source record, captured from the reply that started it
+(`LayeredPayload.localMs` and `retentionMs`, `LocalPayload.localMs`), so each
+source publishes with its own reply's TTLs and no settlement can disagree with
+them; freshness is read only at release and travels beside the reply. The two
+captured integers measured about x1.13 bytes per state on the layers profile
+against the slice 8 base, inside the x1.2 differential bound; an earlier
+three-integer payload that also carried the freshness settlement never reads
+measured about x1.17 to x1.26 and was rejected. The serving transitions never decode a
+profile's policy field: `layer_policy::resolution(policy, remote)` is the
 immediate reply from the drivers' layer policy codes 0 to 5, which the layers
-wrapper passes to `begin`; `runtime_policy::resolve(state, samples)` resolves
-the runtime-boundaries drivers' codes 0 to 21 against the instance's
-configured `Baseline`, which its wrapper passes to `release`; `BYPASS` is the
-reply of a call that uses no layer and neither registry. Each profile owns its
-policy field with one meaning. A resolution already reflects remote
-availability: the traversal reads the remote layer whenever the resolution
-enables it, so a profile without remote storage resolves `remote` to false (as
-`resolution` and `runtime_policy::resolve` do).
+wrapper passes to `begin` with its TTLs; `runtime_policy::resolve(state,
+samples)` resolves the runtime-boundaries drivers' codes 0 to 21 against the
+instance's configured `Baseline`, which its wrapper passes to `release` the
+same way; `BYPASS` is the reply of a call that uses no layer and neither
+registry. Each profile owns its policy field with one meaning. A resolution
+already reflects remote availability: the traversal reads the remote layer
+whenever the resolution enables it, so a profile without remote storage
+resolves `remote` to false (as `resolution` and `runtime_policy::resolve` do).
+
+The layered shape also carries the remote adapter's fault switches
+(`readFailed`, `dumpFailed`, `writeFailed`): a failed read is counted and
+observes nothing, and the source it starts never refills; a refill serializes
+(a dump), then dispatches the write, then stores the frame, a dump fault
+stopping the dispatch and a write fault the storage. A profile whose drivers
+inject no faults holds them false. `settle` settles a source with the TTLs its
+own reply resolved to (the fixture's constant in a profile whose replies carry
+none).
 
 The traversal is one statement of the fall-through order (request memo, local,
 remote, source) and of publication authority, split in time rather than by
@@ -94,9 +118,10 @@ scope and each source's layer, the `deadlines` variants stamp each source's
 start and budget and complete expired sources; a profile whose drivers do not
 compare or bound them carries nothing.
 
-A composed profile's clock must start above zero: `cache_rules.fenceAllows` is
-strict and an untracked flight's fence is 0, so a profile that initializes
-`now` to 0 refuses every remote refill without any other symptom.
+The wall clock is the monotonic clock plus a skew (`Clock::wallOf`): a profile
+without wall-clock divergence holds `skew` at 0, one with rollbacks shifts it
+(`Clock::shiftWall`), and `Clock::advance` is the one time transition, so a
+frame's stamp can never fall behind a clock a profile forgot to move.
 
 ## Kernel fixtures
 
@@ -122,7 +147,7 @@ assigns `s'` to one library transition and `input'` to the driver record:
 ```quint
 action startCall(choice: int): bool = all {
   s.o.calls.length() < MAX_CALLERS,
-  s' = Flights::recordIdentity(Serving::begin(s, LAYOUT, call(choice), resolution(s.policy, s.remoteAvailable)), call(choice)),
+  s' = Flights::recordIdentity(Serving::begin(s, LAYOUT, call(choice), resolution(s.policy, s.remoteAvailable), TTLS), call(choice)),
   input' = { name: "beginCall", choice: choice }
 }
 ```
@@ -132,7 +157,11 @@ per-caller record (owner, memo slot) belong to `flights`, which the scope
 closure in `serving` asks to forget a closed scope's slots; the held callers
 belong to `policy_gate` (empty in a profile with immediate replies); the caller
 identity the ownership invariant reads is the opt-in record the wrapper
-composes around `begin`. Composing `serving`
+composes around `begin`; the clock and its wall skew belong to `clock`, the
+frames with their stamps, retention and watermarks to `remote_frames`, and the
+fault switches are environment inputs the wrapper sets by record update and the
+traversal reads.
+Composing `serving`
 adopts the layers encoding of every field it names; a profile with a different
 private layout re-encodes when it composes.
 

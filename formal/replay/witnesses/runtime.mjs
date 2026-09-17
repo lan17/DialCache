@@ -60,15 +60,16 @@ function layersWitnesses(steps, recorder) {
         const slot = before.memoSlots[call];
         if (owner === loader && slot >= 0 && !before.closed[Math.floor(slot / 4)]) request.add(slot);
       });
-      sourcePublications.set(loader, { value, request, local: source.local, remote: current.writes > prior.writes });
+      const warmsLocal = source.localMs > 0;
+      sourcePublications.set(loader, { value, request, local: warmsLocal, remote: current.writes > prior.writes });
       for (const slot of request) {
         memoOwners.set(slot, loader);
         memoBeforeInvalidation.delete(slot);
       }
-      if (source.local) localOwners.set(source.instance * 4 + source.key, loader);
+      if (warmsLocal) localOwners.set(source.instance * 4 + source.key, loader);
       if (current.writes > prior.writes) remoteOwners.set(source.key, loader);
-      if (before.tracked && source.local && !source.remote) trackedLocalOnly.set(source.instance * 4 + source.key, value);
-      else if (source.local) trackedLocalOnly.delete(source.instance * 4 + source.key);
+      if (before.tracked && warmsLocal && source.retentionMs === 0) trackedLocalOnly.set(source.instance * 4 + source.key, value);
+      else if (warmsLocal) trackedLocalOnly.delete(source.instance * 4 + source.key);
     }
     if (action !== "beginCall") continue;
     const context = Math.floor(choice / 4), key = choice % 4;

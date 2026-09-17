@@ -58,9 +58,13 @@ module dialcache_layers_conformance {
   type State = {
     o: Observation,
     now: int,
+    skew: int,
     tracked: bool,
     remoteAvailable: bool,
     capacity: int,
+    readFailed: bool,
+    dumpFailed: bool,
+    writeFailed: bool,
     policy: int,
     closed: List[bool],
     memo: List[int],
@@ -71,6 +75,7 @@ module dialcache_layers_conformance {
     lru: List[List[int]],
     remoteValues: List[int],
     created: List[int],
+    expires: List[int],
     watermark: List[int],
     sources: List[Serving::LayeredSource],
     owners: List[int],
@@ -96,10 +101,10 @@ module dialcache_layers_conformance {
     keysPerScope: KEYS_PER_INSTANCE,
     persistentContexts: PERSISTENT_CONTEXTS,
     operationsPerEntity: OPERATIONS_PER_ENTITY,
-    servingTtlMs: SERVING_TTL_MS,
-    localTtlMs: SERVING_TTL_MS,
     probeSourceScope: false
   }
+  // Every reply here carries the fixture's TTLs: 60 s local, fresh and retained.
+  pure val TTLS: Ttls = { localMs: SERVING_TTL_MS, freshMs: SERVING_TTL_MS, retentionMs: SERVING_TTL_MS }
 
   // -- Public fixture inputs and external effects ----------------------------
 
@@ -107,10 +112,14 @@ module dialcache_layers_conformance {
     s' = {
       o: empty,
       now: INITIAL_TIME_MS,
+      skew: 0,
       tracked: fixture % 2 == FIXTURE_TRACKED,
       remoteAvailable: fixture < FIXTURE_WITHOUT_REMOTE,
       capacity: if (Set(FIXTURE_ZERO_CAPACITY_UNTRACKED, FIXTURE_ZERO_CAPACITY_TRACKED).contains(fixture))
         NO_LOCAL_CAPACITY else DEFAULT_LOCAL_CAPACITY,
+      readFailed: false,
+      dumpFailed: false,
+      writeFailed: false,
       policy: ALL_LAYERS,
       closed: List(false, false, false),
       memo: zeros(12),
@@ -121,6 +130,7 @@ module dialcache_layers_conformance {
       lru: List(List(), List()),
       remoteValues: zeros(4),
       created: zeros(4),
+      expires: zeros(4),
       watermark: zeros(2),
       sources: List(),
       owners: List(),
@@ -137,7 +147,7 @@ module dialcache_layers_conformance {
   }
   action startCall(choice: int): bool = all {
     s.o.calls.length() < MAX_CALLERS,
-    s' = Flights::recordIdentity(Serving::begin(s, LAYOUT, call(choice), resolution(s.policy, s.remoteAvailable)), call(choice)),
+    s' = Flights::recordIdentity(Serving::begin(s, LAYOUT, call(choice), resolution(s.policy, s.remoteAvailable), TTLS), call(choice)),
     input' = { name: "beginCall", choice: choice }
   }
   action beginCall = {
@@ -178,7 +188,7 @@ module dialcache_layers_conformance {
     changePolicy(choice)
   }
   action seedRemote(key: int, value: int): bool = all {
-    s' = Remote::seedFrame(s, key, value),
+    s' = Remote::seedFrame(s, key, value, SERVING_TTL_MS),
     input' = { name: "seed", choice: key * SOURCE_VALUE_COUNT + value - 1 }
   }
   action seed = {
