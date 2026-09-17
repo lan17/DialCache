@@ -1389,6 +1389,18 @@
       "scope": "independent local publication is last writer wins. This check covers the bounded model clause: independentLocalPublicationUsesLastCompletionTest. Host representations and other feature combinations retain separate fixed/native evidence."
     },
     {
+      "case": "C13.local-last-writer",
+      "reference": "formal/dialcache-source-budgets-conformance.qnt:rejectedSourceLeavesPublishedLocalEntryTest",
+      "kind": "regression",
+      "scope": "In the composed source-budgets profile a source that settles with the source error completes its caller with that error and leaves the local entry an earlier accepted source published: the next enabled call is served locally without a third source. The rejected source is a bypass (outside) one, since a source that may warm local starts only while no live entry exists; no remote or memo claim."
+    },
+    {
+      "case": "C13.local-last-writer",
+      "reference": "formal/dialcache-source-budgets-conformance.qnt:republishedEqualValueRestampsLocalExpiryTest",
+      "kind": "regression",
+      "scope": "In the composed source-budgets profile the source started at the exact 1000ms expiry of a local entry republishes the same value and stamps a new insertion expiry: an enabled call one millisecond before the second boundary is served locally without a third source. Distinguishes a publication that skips an equal value from one that replaces it; no remote or memo claim."
+    },
+    {
       "case": "C13.remote-last-writer",
       "reference": "formal/dialcache-policy-conformance.qnt:independentRemotePublicationUsesLastCompletionTest",
       "kind": "regression",
