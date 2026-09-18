@@ -96,8 +96,8 @@ missing witness, crash or timeout is a failed measurement. The selected fault
 catalogs and per-run reports define the denominator; do not infer a percentage
 of all possible defects from their scores.
 
-The model catalog in `execution.json` covers every scheduled model: currently 67
-challenges over 64 distinct faults, with no waivers. Its report distinguishes
+The model catalog in `execution.json` covers every scheduled model: currently 72
+challenges over 68 distinct faults, with no waivers. Its report distinguishes
 those two counts and marks a filtered `--only` run as partial; only the complete
 run is evidence. A challenge with a deterministic reproducer is additionally
 replayed on the clean and mutated model and must fail only under the fault, at
