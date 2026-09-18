@@ -133,7 +133,7 @@ export function mergeMutationReports(name, { directory = root, shardsDirectory, 
     throw error;
   }
   save(merged);
-  writeFileSync(resolve(output, 'report.md'), language.markdown(merged));
+  writeFileSync(resolve(output, 'report.md'), language.markdown(merged, directory));
   return merged;
 }
 

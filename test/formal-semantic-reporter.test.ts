@@ -8,7 +8,7 @@ import { expect, it } from "vitest";
 const moduleUrl = new URL("../formal/semantic-reporter.mjs", import.meta.url).href;
 const { evaluateSemanticTestReport } = await import(moduleUrl) as {
   evaluateSemanticTestReport(data: unknown, execution: unknown, exitCode: number | null): {
-    state: string; passed: number; failed: number; failingTests: string[];
+    state: string; passed: number; failed: number; failingTests: string[]; unhandledErrors?: string[];
   };
 };
 
@@ -54,6 +54,19 @@ it("requires executed assertions and distinguishes detection from infrastructure
     expect(infrastructure.execution.collectionErrors).toContain("collection probe");
     expect(infrastructure.execution.unhandledErrors).toContain("unhandled probe");
     expect(infrastructure.evaluate).toThrow(/infrastructure\/import error, not evidence of detection/);
+
+    // An unhandled rejection beside a failed assertion is a consequence of the
+    // fault under measurement and is recorded; on its own it is infrastructure.
+    const unhandledWork = 'it("unhandled work", async () => { setTimeout(() => { throw new Error("unhandled probe"); }, 0); await new Promise(resolve => setTimeout(resolve, 30)); });';
+    const collateral = run(`import { it, expect } from "vitest"; it("wrong value", () => expect(1).toBe(2)); ${unhandledWork}`);
+    expect(collateral.status).toBe(1);
+    expect(collateral.execution.unhandledErrors).toEqual(["unhandled probe"]);
+    expect(collateral.evaluate()).toEqual({ state: "detected", passed: 1, failed: 1, failingTests: ["wrong value"], unhandledErrors: ["unhandled probe"] });
+    const alone = run(`import { it } from "vitest"; ${unhandledWork}`);
+    // Vitest exits nonzero on an unhandled error while reporting the run itself as passed.
+    expect(alone.status).toBe(1);
+    expect(alone.execution).toEqual({ reason: "passed", collectionErrors: [], unhandledErrors: ["unhandled probe"] });
+    expect(alone.evaluate).toThrow(/infrastructure\/import error, not evidence of detection/);
 
     for (const empty of [run(passingSource, "^no-matching-test$"),
       run('import { it } from "vitest"; it.skip("skipped assertion", () => { throw new Error("must remain skipped"); });')]) {

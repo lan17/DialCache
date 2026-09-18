@@ -2,11 +2,12 @@ import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { challengesByMutant } from './execution.mjs';
 
 // Shared by measure-semantics.mjs, measure-go-semantics.mjs and
-// merge-mutation-reports.mjs: the shard partition, the input fingerprint, the
-// detection summary and the required-detection gate. One implementation keeps
-// a merged report exactly as strict as a single-process one.
+// merge-mutation-reports.mjs: the catalog selection, the input fingerprint,
+// the detection summary and the required-detection gate. One implementation
+// keeps a merged report exactly as strict as a single-process one.
 const root = fileURLToPath(new URL('../', import.meta.url));
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 
@@ -19,13 +20,27 @@ export function parseShard(value) {
   return { index: Number(match[1]), count: Number(match[2]) };
 }
 
-export function shardFromArguments(argv) {
-  let value;
+// --only=<id>,<id> names distinct catalog mutants for a partial measurement.
+export function parseOnly(value) {
+  if (value === undefined) return undefined;
+  const ids = value.split(',');
+  if (ids.some(id => !/^M\d+$/.test(id)) || new Set(ids).size !== ids.length) throw new Error(`Expected <id>,<id> naming distinct mutant ids; got ${JSON.stringify(value)}`);
+  return ids;
+}
+
+// A measurement selects the whole catalog, one shard of it, or the named
+// mutants. A shard is evidence once every shard is merged; a partial run of
+// named mutants is a local iteration aid and never complete evidence, so the
+// two exclude each other.
+export function selectionFromArguments(argv) {
+  let shard, only;
   for (const argument of argv) {
-    if (!argument.startsWith('--shard=') || value !== undefined) throw new Error(`Usage: --shard=<index>/<count>; unexpected argument ${argument}`);
-    value = argument.slice('--shard='.length);
+    if (argument.startsWith('--shard=') && shard === undefined) shard = argument.slice('--shard='.length);
+    else if (argument.startsWith('--only=') && only === undefined) only = argument.slice('--only='.length);
+    else throw new Error(`Usage: --shard=<index>/<count> or --only=<id>,<id>; unexpected argument ${argument}`);
   }
-  return parseShard(value);
+  if (shard !== undefined && only !== undefined) throw new Error('--shard and --only exclude each other: a partial run is never merged');
+  return { shard: parseShard(shard), only: parseOnly(only) };
 }
 
 // A contiguous slice of the catalog in catalog order; the first
@@ -37,9 +52,19 @@ export function partitionMutations(mutations, { index, count }) {
   return mutations.slice(start, start + base + (index <= extra ? 1 : 0));
 }
 
-// Shards from separate jobs land in one tree without colliding; the single
-// run keeps today's location.
-export function shardDirectory(output, shard) {
+// The catalog entries one measurement runs, in catalog order.
+export function selectMutations(mutations, { shard, only }) {
+  if (only === undefined) return partitionMutations(mutations, shard);
+  const unknown = only.filter(id => !mutations.some(mutation => mutation.id === id));
+  if (unknown.length) throw new Error(`Unknown mutation ids: ${unknown.join(', ')}`);
+  return mutations.filter(mutation => only.includes(mutation.id));
+}
+
+// Shards from separate jobs land in one tree without colliding, a partial run
+// lands beside them without touching the complete report, and the single run
+// keeps today's location.
+export function selectionDirectory(output, { shard, only }) {
+  if (only !== undefined) return resolve(output, 'partial');
   return shard.count === 1 ? output : resolve(output, 'shards', `${shard.index}-of-${shard.count}`);
 }
 
@@ -83,14 +108,29 @@ export function typescriptDetection(mutations, cases) {
   return { all: score(mutations), behavioral: score(mutations.filter(m => !protocol(m))), protocol: score(mutations.filter(protocol)) };
 }
 
+// A skipped cohort (declared in the Go catalog with a reason) is outside the
+// measured total and listed apart from survivors.
 export function goDetection(mutations) {
-  return Object.fromEntries(['ordinary', 'generated', 'fixed', 'portable'].map(cohort => [cohort, {
-    detected: mutations.filter(m => m.cohorts[cohort].state === 'detected').length, total: mutations.length,
-    survivors: mutations.filter(m => m.cohorts[cohort].state === 'survived').map(m => m.id),
-  }]));
+  return Object.fromEntries(['ordinary', 'generated', 'fixed', 'portable'].map(cohort => {
+    const measured = mutations.filter(m => m.cohorts[cohort].state !== 'skipped');
+    const skipped = mutations.filter(m => m.cohorts[cohort].state === 'skipped').map(m => m.id);
+    return [cohort, {
+      detected: measured.filter(m => m.cohorts[cohort].state === 'detected').length, total: measured.length,
+      survivors: measured.filter(m => m.cohorts[cohort].state === 'survived').map(m => m.id),
+      ...(skipped.length ? { skipped } : {}),
+    }];
+  }));
 }
 
-function typescriptMarkdown(report) {
+// The model challenges each mutant is the native twin of, from the execution
+// manifest of the checkout the report describes.
+function challengesColumn(directory) {
+  const index = challengesByMutant(JSON.parse(readFileSync(resolve(directory, 'formal/execution.json'), 'utf8')));
+  return id => (index.get(id) ?? []).join(', ') || 'none';
+}
+
+function typescriptMarkdown(report, directory = root) {
+  const challenges = challengesColumn(directory);
   return ['# Semantic coverage measurement', '',
     `Completed in ${report.elapsedSeconds}s. Inventory and mutation counts describe named cases, not universal semantic completeness.`, '',
     ...shardsMarkdown(report),
@@ -98,17 +138,18 @@ function typescriptMarkdown(report) {
     '| --- | ---: | ---: | ---: |',
     ...['cases', 'behavioral', 'protocol'].map(scope => { const c = report.declaredCoverage[scope]; return `| ${scope} | ${c.total} | ${c.portable} | ${c.generated} |`; }), '',
     'Protocol references include invalidation vectors exercised separately by integration CI. Model references are a conservative named-property subset, not total model coverage.', '',
-    '| Mutation | Case | Ordinary | Generated | Full portable |', '| --- | --- | --- | --- | --- |',
-    ...report.mutations.map(m => `| ${m.id} | ${m.case} | ${m.cohorts.ordinary.state} | ${m.cohorts.generated.state} | ${m.cohorts.portable.state} |`), '',
-    'Full JSON includes exact input/corpus hashes, cohort counts, reached witnesses, behavioral/protocol scores, and failing test names. Adjacent JSON/log files retain assertion diagnostics and trace paths.', ''].join('\n');
+    '| Mutation | Case | Challenges | Ordinary | Generated | Full portable |', '| --- | --- | --- | --- | --- | --- |',
+    ...report.mutations.map(m => `| ${m.id} | ${m.case} | ${challenges(m.id)} | ${m.cohorts.ordinary.state} | ${m.cohorts.generated.state} | ${m.cohorts.portable.state} |`), '',
+    'Challenges are the model property challenges whose fault the mutant injects natively (nativeMutants in formal/execution.json). Full JSON includes exact input/corpus hashes, cohort counts, reached witnesses, behavioral/protocol scores, and failing test names. Adjacent JSON/log files retain assertion diagnostics and trace paths.', ''].join('\n');
 }
 
-function goMarkdown(report) {
+function goMarkdown(report, directory = root) {
+  const challenges = challengesColumn(directory);
   return ['# Go semantic mutation measurement', '', `Completed in ${report.elapsedSeconds}s. Counts measure this named fault catalog and exact corpus, not universal equivalence.`, '',
     ...shardsMarkdown(report),
-    '| Mutation | Contract case | Ordinary | Quint generated | Fixed supplement | Full portable |', '| --- | --- | --- | --- | --- | --- |',
-    ...report.mutations.map(m => `| ${m.id} | ${m.case} | ${m.cohorts.ordinary.state} | ${m.cohorts.generated.state} | ${m.cohorts.fixed.state} | ${m.cohorts.portable.state} |`), '',
-    'Full JSON records snapshot/corpus/witness fingerprints, selected tests, actual passing/failing leaf counts, and assertion diagnostics. Compilation errors, crashes, timeouts, missing witnesses, and skipped executions cannot count as detections.', ''].join('\n');
+    '| Mutation | Contract case | Challenges | Ordinary | Quint generated | Fixed supplement | Full portable |', '| --- | --- | --- | --- | --- | --- | --- |',
+    ...report.mutations.map(m => `| ${m.id} | ${m.case} | ${challenges(m.id)} | ${m.cohorts.ordinary.state} | ${m.cohorts.generated.state} | ${m.cohorts.fixed.state} | ${m.cohorts.portable.state} |`), '',
+    'Challenges are the model property challenges whose fault the mutant injects natively (nativeMutants in formal/execution.json). Full JSON records snapshot/corpus/witness fingerprints, selected tests, actual passing/failing leaf counts, and assertion diagnostics. Compilation errors, crashes, timeouts, missing witnesses, and skipped executions cannot count as detections.', ''].join('\n');
 }
 
 // Only a merged report carries `shards`; the single run's markdown is unchanged.

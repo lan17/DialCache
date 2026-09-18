@@ -1390,6 +1390,12 @@
     },
     {
       "case": "C13.local-last-writer",
+      "reference": "formal/dialcache-policy-conformance.qnt:independentFailureKeepsSettledLocalValueTest",
+      "kind": "regression",
+      "scope": "In the policy profile with coalescing off and no remote layer, two callers on one key start their own sources; the first completes and publishes locally, the second settles with the source error and is not a local writer: the third call is served the entry the earlier completed source published, without a third source. No remote or memo claim."
+    },
+    {
+      "case": "C13.local-last-writer",
       "reference": "formal/dialcache-source-budgets-conformance.qnt:rejectedSourceLeavesPublishedLocalEntryTest",
       "kind": "regression",
       "scope": "In the composed source-budgets profile a source that settles with the source error completes its caller with that error and leaves the local entry an earlier accepted source published: the next enabled call is served locally without a third source. The rejected source is a bypass (outside) one, since a source that may warm local starts only while no live entry exists; no remote or memo claim."
@@ -2125,6 +2131,12 @@
       "reference": "formal/dialcache-local-failure-conformance.qnt:sourceFailureKeepsPreviouslyAcceptedStorageTest",
       "kind": "regression",
       "scope": "Real local storage remains behind a native exception/clock-failure injection seam. Distinct request and transient public probes check the old local value, accepted caller result and request-only memo; read failure remains publication-ineligible after the injected fault is cleared. No elapsed-time or concurrent-source claim."
+    },
+    {
+      "case": "C27.source-error-no-publication",
+      "reference": "formal/dialcache-local-failure-conformance.qnt:rejectedSourceDoesNotSeedLocalTest",
+      "kind": "regression",
+      "scope": "A source rejected on an empty local store seeds nothing: the transient call that follows misses locally, reads remote again and starts its own source, so the rejected result never becomes a local publication. Healthy storage throughout; no memo, elapsed-time or concurrent-source claim."
     },
     {
       "case": "C44.retained-expiry",

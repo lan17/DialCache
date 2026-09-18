@@ -162,13 +162,21 @@ For each new rule or interaction:
    plausible wrong implementation of the rule; require an invariant violation,
    not merely a compiler error or failed bookkeeping check. Use symbolic checking
    for tractable finite modules and sample larger compositions. Schedule every
-   property and regression in `execution.json`.
+   property and regression in `execution.json`. Give the challenge a
+   `nativeMutants` entry that maps it to a TypeScript mutant and a Go mutant
+   injecting the same wrong behavior into `src/` and `go/`, or an enumerated
+   explanation of why no native line embodies the rule (see
+   [Mapping every challenge to native mutants](#mapping-every-challenge-to-native-mutants)).
 4. **Exercise both implementations.** Require a generated witness or exported
    Quint regression that exposes the rule's consequence, and replay the same
    history in TypeScript and Go. Fixed scenarios preserve narrow regressions;
    protocol vectors and native
    tests cover wire and language boundaries. The driver supplies only external inputs and asserts actual public
    results/effects. Expected model state must never drive the implementation.
+   The generated cohort of each mutation lane must detect both native mutants:
+   list `generated` in their `requiredDetections`. A mutant the corpus does not
+   detect is a coverage gap; close it with an exported regression or a witness
+   before the challenge counts as mapped.
 5. **Account for the evidence.** Link the case, property, scenario, and required
    witness in the existing catalogs. Preserve explicit gaps and update profile
    claims only after the corresponding language driver passes.
@@ -385,6 +393,76 @@ only shrinks: the ids that may appear in it are frozen in
 `grandfatheredReproducerBacklog` in `formal/execution.mjs`, so a new challenge
 cannot opt out by listing itself. Adding to that constant is a reviewed code
 change; removing an id once its challenge has a reproducer is the normal path.
+The native-mutant backlog below follows the same rule.
+
+### Mapping every challenge to native mutants
+
+A model challenge shows that a named property rejects one deliberate change to
+the specification. It says nothing about the ports until the same wrong
+behavior is injected into `src/` and `go/` and the generated corpus, replayed
+through each port, fails. Each challenge therefore carries a `nativeMutants`
+entry in `execution.json`:
+
+```json
+"nativeMutants": {
+  "kind": "mapped",
+  "mutants": ["M18"],
+  "text": "The local expiry check in src/internal/local-cache.ts ... is local_storage.localEntryLiveAt ...",
+  "crossContract": { "M40": "why a mutant on another contract's case is the same fault" }
+}
+```
+
+`kind` is one of:
+
+- `mapped`: `mutants` names entries present in both `semantic-mutations.json`
+  and `go-mutations.json`, and every one lists `generated` in its
+  `requiredDetections` in both catalogs, so the weekly mutation lanes fail if
+  the corpus stops detecting it in either port.
+- `unobservable`: the mutants exist in both catalogs but no public history can
+  distinguish them, because the port checks the same condition again at a
+  later point the model does not have; `text` states the second check, and the
+  mutants require no detection. They stay in the catalogs as the weekly record
+  that the second check still protects the port.
+- `model-only`: the fault changes model bookkeeping that no implementation
+  line embodies (a connection monitor reconstructing owners or clocks, an
+  invariant helper). `text` names the model construct and the port code that
+  makes the fault inexpressible.
+- `environment`: the fault changes an assumption the drivers control, not the
+  cache.
+
+Search both ports for the line before writing an explanation; an explanation
+where a native line exists is a review failure. `text` is one or two sentences
+naming the port lines and the model definition so a reader can see they are
+the same fault. A mutant maps to a challenge when it produces the same wrong
+behavior at the same boundary, not when it edits similar text; one mutant may
+serve several challenges (the four inclusive-fence challenges share one), and
+a challenge may need two edits when the port implements the rule at two sites.
+`crossContract` is required, and allowed only, for a mapped mutant whose
+semantic case does not list the challenge's contract.
+
+`node formal/execution.mjs` checks the table: the mutant ids exist in both
+catalogs and the catalogs are paired one to one (same `case`, the Go entry's
+`typescriptMutation` names its twin, the Go entry's
+`typescriptRequiredDetections` equals the TypeScript list); the kind is one of
+the four; `text` is non-empty; `mutants` is present exactly for `mapped` and
+`unobservable`; `crossContract` keys are exactly the mapped mutants whose case
+lacks the contract; two challenges that repeat one `(source, before, after)`
+fault map it the same way; and every challenge is either mapped or listed in
+the top-level `nativeMutantBacklog`, never both. The backlog is frozen in
+`grandfatheredNativeMutantBacklog` in `formal/execution.mjs` and only shrinks.
+It also reports catalog mutants no challenge cites.
+
+Both catalogs share one edit shape: `edits: [{ path, before, after }]`, each
+`before` matching exactly once in the file, applied in order. A Go entry may
+declare `skipCohorts: { ordinary: "<reason>" }` when the port's own suite
+cannot measure the fault (a synctest bubble panics on a goroutine the fault
+leaves blocked); only the ordinary cohort may be skipped, never a required
+one, and the report lists the mutant as skipped there. To measure one
+mutant while authoring it, run `MUTATION_ONLY=M18 make mutations-ts` and
+`MUTATION_ONLY=M18 make mutations-go`; the partial report under
+`.formal-traces/semantic/partial/` (and `go-semantic/partial/`) is never
+complete evidence. Then run the full lanes, or let the weekly workflow run
+them, and set `requiredDetections` from what was actually detected.
 
 ### Exported runs are exactly the public-only runs
 

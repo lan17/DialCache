@@ -8,10 +8,10 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "7054107347f57a452e17de99f74310553b7af4350363c674e70ff8184d0610be",
-    "executionSha256": "feee09a3487deb2694f8784b7e8d2d0ee28050dae03ac43ac2613608ce5ab1c6",
-    "sourceAuditSha256": "4bd6d53038723b133a52e17303342c5a7f46c395f250073d2e1c55fd1d87ea33",
-    "quintCaseAuditSha256": "dcb576948a68a066e43259d4bee2b3cdadbe82e657ae9af99e4b21ed7b95dbb3",
+    "semanticCasesSha256": "49a67a7eaafb4691cf1d0c2091e64157ebaf1c41ece467f8cf738d3b5f69706d",
+    "executionSha256": "aa40714e6f2127542474a8beeebb57648e7dd44df8a98a2b03116d9aee05959d",
+    "sourceAuditSha256": "7441f9a5251798144fa8c06ad6dc434ca7f37eb5bb764a96638fce6034691469",
+    "quintCaseAuditSha256": "82e2f0c2ca1858dda843d448c724535a5e7bf4d72067e48459244583ae053255",
     "featureCoverageSha256": "56eedfa865682db6ad8e73b8673c7dac1c30d301e9bce3390246d6994aba9dcb",
     "coverageWitnessesSha256": "8fc8ab123150fdec059f5b75f84172d39af80d08d7a4211fa88c63c5a3f2874b",
     "profilesSha256": "b8fa4f399a163bc8793bf76b6ba3503a415fcf3c8509cf98d964e4f067e6660f"
@@ -46,11 +46,11 @@
     "withoutModelDrivenReplay": [],
     "quintModels": 32,
     "scheduledInvariants": 219,
-    "scheduledRegressions": 417,
+    "scheduledRegressions": 419,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
     "caseReferencedWitnesses": 285,
-    "exportedRegressionHistories": 250
+    "exportedRegressionHistories": 252
   },
   "profiles": [
     {
@@ -230,6 +230,7 @@
         "absentValueIsStoredAndReusedTest",
         "independentLocalCallsStillReuseSettledValueTest",
         "independentLocalPublicationUsesLastCompletionTest",
+        "independentFailureKeepsSettledLocalValueTest",
         "independentRemotePublicationUsesLastCompletionTest",
         "providerFailureBypassesAndPreservesExistingLocalTest",
         "disablingServingKeepsExistingLocalForReenablementTest",
@@ -422,7 +423,8 @@
         "localReadFailureFallsThroughAndPreservesOldLocalTest",
         "localReadFailureSkipsSourcePublicationButMemoizesTest",
         "localWriteFailureKeepsSourceAndRequestMemoTest",
-        "sourceFailureKeepsPreviouslyAcceptedStorageTest"
+        "sourceFailureKeepsPreviouslyAcceptedStorageTest",
+        "rejectedSourceDoesNotSeedLocalTest"
       ],
       "status": "executable-profile-schedule",
       "witnessSources": [
@@ -2108,6 +2110,7 @@
       "group": "request-and-layers",
       "quintProperties": [
         "formal/dialcache-policy-conformance.qnt:independentLocalPublicationUsesLastCompletionTest",
+        "formal/dialcache-policy-conformance.qnt:independentFailureKeepsSettledLocalValueTest",
         "formal/dialcache-source-budgets-conformance.qnt:rejectedSourceLeavesPublishedLocalEntryTest",
         "formal/dialcache-source-budgets-conformance.qnt:republishedEqualValueRestampsLocalExpiryTest"
       ],
@@ -2137,6 +2140,7 @@
       "scopeAudit": "formal/quint-case-audit.json",
       "quintReplays": [
         "policy/independentLocalPublicationUsesLastCompletionTest",
+        "policy/independentFailureKeepsSettledLocalValueTest",
         "source-budgets/rejectedSourceLeavesPublishedLocalEntryTest",
         "source-budgets/republishedEqualValueRestampsLocalExpiryTest"
       ],
@@ -12441,7 +12445,8 @@
         "formal/dialcache-core.qnt:sourceFailureNeverPublishes",
         "formal/dialcache-core.qnt:rejectedSourceNeverPublishesTest",
         "formal/dialcache-local-failure-conformance.qnt:sourceErrorsNeverReplaceLocalValue",
-        "formal/dialcache-local-failure-conformance.qnt:sourceFailureKeepsPreviouslyAcceptedStorageTest"
+        "formal/dialcache-local-failure-conformance.qnt:sourceFailureKeepsPreviouslyAcceptedStorageTest",
+        "formal/dialcache-local-failure-conformance.qnt:rejectedSourceDoesNotSeedLocalTest"
       ],
       "requiredGenerated": [
         {
@@ -12461,7 +12466,8 @@
       "status": "executable-generated",
       "gaps": [],
       "quintReplays": [
-        "local-failure/sourceFailureKeepsPreviouslyAcceptedStorageTest"
+        "local-failure/sourceFailureKeepsPreviouslyAcceptedStorageTest",
+        "local-failure/rejectedSourceDoesNotSeedLocalTest"
       ],
       "generatedVectors": []
     },
@@ -18305,7 +18311,7 @@
   ],
   "reviewedTestAndDocumentationAudit": {
     "path": "formal/source-audit.json",
-    "sha256": "4bd6d53038723b133a52e17303342c5a7f46c395f250073d2e1c55fd1d87ea33",
+    "sha256": "7441f9a5251798144fa8c06ad6dc434ca7f37eb5bb764a96638fce6034691469",
     "sourceFiles": 44,
     "status": "reviewed-applicability-not-execution",
     "limitations": "These rows review Go applicability for the public documentation and ordinary test files in source-audit.json sources, inheriting their C/W/E/B/X classifications. They map subjects to native artifacts without claiming one Go test per TypeScript assertion or turning documentation counts into executed coverage. The same audit hash also binds reviewedGuides for formal and Go documentation; those guide reviews are freshness/scope records, not additional behavioral applicability rows. Per-case Quint and replay evidence is recorded separately.",

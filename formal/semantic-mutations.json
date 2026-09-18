@@ -5,9 +5,13 @@
       "id": "M01",
       "case": "C45.maximum-age-exclusive",
       "description": "Accept a retained candidate at the exact maximum age after decoding",
-      "path": "src/internal/redis-cache.ts",
-      "before": "servingAge.ageMs >= maximumAgeMs",
-      "after": "servingAge.ageMs > maximumAgeMs",
+      "edits": [
+        {
+          "path": "src/internal/redis-cache.ts",
+          "before": "servingAge.ageMs >= maximumAgeMs",
+          "after": "servingAge.ageMs > maximumAgeMs"
+        }
+      ],
       "requiredDetections": [
         "ordinary",
         "generated",
@@ -18,9 +22,13 @@
       "id": "M02",
       "case": "C45.recheck-after-decode",
       "description": "Reuse the pre-decode age instead of observing age after asynchronous decoding",
-      "path": "src/internal/redis-cache.ts",
-      "before": "const servingAge = this.frameAge(key, frame, CacheLayer.REMOTE);",
-      "after": "const servingAge = initialAge;",
+      "edits": [
+        {
+          "path": "src/internal/redis-cache.ts",
+          "before": "const servingAge = this.frameAge(key, frame, CacheLayer.REMOTE);",
+          "after": "const servingAge = initialAge;"
+        }
+      ],
       "requiredDetections": [
         "ordinary",
         "generated",
@@ -31,9 +39,13 @@
       "id": "M03",
       "case": "C25.late-source-rejected",
       "description": "Accept an externally settled result after its elapsed deadline when the timer has not run",
-      "path": "src/internal/deadline.ts",
-      "before": "if (elapsedMs() >= timeoutMs) {",
-      "after": "if (false) {",
+      "edits": [
+        {
+          "path": "src/internal/deadline.ts",
+          "before": "if (elapsedMs() >= timeoutMs) {",
+          "after": "if (false) {"
+        }
+      ],
       "requiredDetections": [
         "ordinary",
         "generated",
@@ -44,9 +56,13 @@
       "id": "M04",
       "case": "C34.second-fence",
       "description": "Skip the tracked fence recheck after serialization",
-      "path": "src/internal/redis-cache.ts",
-      "before": "if (createdAtMs <= observedWatermarkMs) {",
-      "after": "if (false) {",
+      "edits": [
+        {
+          "path": "src/internal/redis-cache.ts",
+          "before": "if (createdAtMs <= observedWatermarkMs) {",
+          "after": "if (false) {"
+        }
+      ],
       "requiredDetections": [
         "ordinary",
         "generated",
@@ -57,9 +73,13 @@
       "id": "M05",
       "case": "C03.detached-bypass",
       "description": "Treat a detached context whose outer scope closed as still enabled",
-      "path": "src/context.ts",
-      "before": "return store?.enabled === true && store.holder?.closed === false;",
-      "after": "return store?.enabled === true;",
+      "edits": [
+        {
+          "path": "src/context.ts",
+          "before": "return store?.enabled === true && store.holder?.closed === false;",
+          "after": "return store?.enabled === true;"
+        }
+      ],
       "requiredDetections": [
         "ordinary",
         "generated",
@@ -70,9 +90,13 @@
       "id": "M06",
       "case": "W04.strict-fence",
       "description": "Accept a tracked frame timestamp equal to its watermark",
-      "path": "src/internal/redis-payload.ts",
-      "before": "observedWatermarkMs !== undefined && createdAtMs <= observedWatermarkMs",
-      "after": "observedWatermarkMs !== undefined && createdAtMs < observedWatermarkMs",
+      "edits": [
+        {
+          "path": "src/internal/redis-payload.ts",
+          "before": "observedWatermarkMs !== undefined && createdAtMs <= observedWatermarkMs",
+          "after": "observedWatermarkMs !== undefined && createdAtMs < observedWatermarkMs"
+        }
+      ],
       "requiredDetections": [
         "ordinary",
         "generated",
@@ -83,9 +107,13 @@
       "id": "M07",
       "case": "C51.changed-confirmation",
       "description": "Confirm an unequal shadow result even when C1 contains different payload bytes",
-      "path": "src/dialcache.ts",
-      "before": "confirmationFrame === null || !redisPayloadsEqual(originalFrame.payload, confirmationFrame.payload)",
-      "after": "confirmationFrame === null",
+      "edits": [
+        {
+          "path": "src/dialcache.ts",
+          "before": "confirmationFrame === null || !redisPayloadsEqual(originalFrame.payload, confirmationFrame.payload)",
+          "after": "confirmationFrame === null"
+        }
+      ],
       "requiredDetections": [
         "ordinary",
         "generated",
@@ -96,9 +124,13 @@
       "id": "M08",
       "case": "C60.invalid-logging-policy",
       "description": "Enable mismatch logging after a malformed runtime logging flag",
-      "path": "src/dialcache.ts",
-      "before": "this.recordError(key, CacheLayer.REMOTE, \"config_resolution\");\n      return false;\n    }\n    return configuredLogMismatches;",
-      "after": "this.recordError(key, CacheLayer.REMOTE, \"config_resolution\");\n      return true;\n    }\n    return configuredLogMismatches;",
+      "edits": [
+        {
+          "path": "src/dialcache.ts",
+          "before": "this.recordError(key, CacheLayer.REMOTE, \"config_resolution\");\n      return false;\n    }\n    return configuredLogMismatches;",
+          "after": "this.recordError(key, CacheLayer.REMOTE, \"config_resolution\");\n      return true;\n    }\n    return configuredLogMismatches;"
+        }
+      ],
       "requiredDetections": [
         "ordinary",
         "generated",
@@ -109,9 +141,13 @@
       "id": "M09",
       "case": "C60.logging-default-off",
       "description": "Enable mismatch logging when its flag is omitted",
-      "path": "src/dialcache.ts",
-      "before": "if (configuredLogMismatches === undefined) {\n      return false;",
-      "after": "if (configuredLogMismatches === undefined) {\n      return true;",
+      "edits": [
+        {
+          "path": "src/dialcache.ts",
+          "before": "if (configuredLogMismatches === undefined) {\n      return false;",
+          "after": "if (configuredLogMismatches === undefined) {\n      return true;"
+        }
+      ],
       "requiredDetections": [
         "ordinary",
         "generated",
@@ -122,9 +158,13 @@
       "id": "M10",
       "case": "C31.tracked-no-local-fill",
       "description": "Publish an unvalidated tracked source value directly into local storage",
-      "path": "src/dialcache.ts",
-      "before": "const suppressLocalWrite = (remote.status === \"disabled\" && remote.skipCacheWrite === true)\n      || (remoteWriteConfig !== undefined && key.trackForInvalidation);",
-      "after": "const suppressLocalWrite = remote.status === \"disabled\" && remote.skipCacheWrite === true;",
+      "edits": [
+        {
+          "path": "src/dialcache.ts",
+          "before": "const suppressLocalWrite = (remote.status === \"disabled\" && remote.skipCacheWrite === true)\n      || (remoteWriteConfig !== undefined && key.trackForInvalidation);",
+          "after": "const suppressLocalWrite = remote.status === \"disabled\" && remote.skipCacheWrite === true;"
+        }
+      ],
       "requiredDetections": [
         "ordinary",
         "generated",
@@ -135,9 +175,13 @@
       "id": "M11",
       "case": "C09.fixed-local-ttl",
       "description": "Renew the local insertion TTL on every cache hit",
-      "path": "src/internal/local-cache.ts",
-      "before": "ttlResolution: 0,",
-      "after": "ttlResolution: 0,\n            updateAgeOnGet: true,",
+      "edits": [
+        {
+          "path": "src/internal/local-cache.ts",
+          "before": "ttlResolution: 0,",
+          "after": "ttlResolution: 0,\n            updateAgeOnGet: true,"
+        }
+      ],
       "requiredDetections": [
         "ordinary",
         "generated",
@@ -148,9 +192,13 @@
       "id": "M12",
       "case": "W02.sorted-arguments",
       "description": "Reverse the prescribed argument-name ordering",
-      "path": "src/key.ts",
-      "before": ".sort(([left], [right]) => compareCodePoints(left, right));",
-      "after": ".sort(([left], [right]) => -compareCodePoints(left, right));",
+      "edits": [
+        {
+          "path": "src/key.ts",
+          "before": ".sort(([left], [right]) => compareCodePoints(left, right));",
+          "after": ".sort(([left], [right]) => -compareCodePoints(left, right));"
+        }
+      ],
       "requiredDetections": [
         "generated",
         "portable"
@@ -160,11 +208,731 @@
       "id": "M13",
       "case": "C54.expired-before-start",
       "description": "Dispatch dark shadow reads after the job deadline already elapsed before deferred work starts",
-      "path": "src/dialcache.ts",
-      "before": "        try {\n          if (abandonIfExpired()) {\n            return \"timeout\";\n          }\n\n          let shadowFillConfig:",
-      "after": "        try {\n          let shadowFillConfig:",
+      "edits": [
+        {
+          "path": "src/dialcache.ts",
+          "before": "        try {\n          if (abandonIfExpired()) {\n            return \"timeout\";\n          }\n\n          let shadowFillConfig:",
+          "after": "        try {\n          let shadowFillConfig:"
+        }
+      ],
       "requiredDetections": [
         "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M14",
+      "case": "C01.no-deadline",
+      "description": "Bound a disabled or outside call's source with the configured fallback deadline",
+      "edits": [
+        {
+          "path": "src/dialcache.ts",
+          "before": "      return await rawFallback();",
+          "after": "      return await withFallbackTimeout(rawFallback, options.useCase, fallbackTimeoutMs, () => undefined);"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M15",
+      "case": "C02.reenabled-memo",
+      "description": "Evict the enclosing request's memo when a nested enable() completes",
+      "edits": [
+        {
+          "path": "src/context.ts",
+          "before": "      return this.run({ enabled: true, holder: currentHolder }, fn);",
+          "after": "      return this.run({ enabled: true, holder: currentHolder }, fn).finally(() => {\n        delete currentHolder.requestLocalCache;\n      });"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M16",
+      "case": "C03.late-publication",
+      "description": "Memoize a late settlement into a closed request scope (unobservable: the closed-scope read path and admission re-check hide it from every public history)",
+      "edits": [
+        {
+          "path": "src/context.ts",
+          "before": "    if (!this.closed) {\n      this.values.set(key, value);\n    }",
+          "after": "    this.values.set(key, value);"
+        }
+      ],
+      "requiredDetections": []
+    },
+    {
+      "id": "M17",
+      "case": "C05.local-hit-stops-traversal",
+      "description": "Serve a local hit with a value the layer never stored while still skipping the loader",
+      "edits": [
+        {
+          "path": "src/internal/local-cache.ts",
+          "before": "      return { status: \"hit\", value: hit.value };",
+          "after": "      return { status: \"hit\", value: undefined as unknown as T };"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M18",
+      "case": "C09.fixed-local-ttl",
+      "description": "Serve a local entry at its exact insertion expiry",
+      "edits": [
+        {
+          "path": "src/internal/local-cache.ts",
+          "before": "    const ttlMs = cacheTtlSecToMs(config.ttlSec) - 1;",
+          "after": "    const ttlMs = cacheTtlSecToMs(config.ttlSec);"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M19",
+      "case": "C09.fractional-clock-grid",
+      "description": "Compute local insertion and expiry on the precise clock instead of the whole-millisecond grid",
+      "edits": [
+        {
+          "path": "src/internal/local-cache.ts",
+          "before": "            perf: { now: () => Math.floor(performance.now()) + 1 },",
+          "after": "            perf: { now: () => performance.now() + 1 },"
+        },
+        {
+          "path": "src/internal/local-cache.ts",
+          "before": "    const ttlMs = cacheTtlSecToMs(config.ttlSec) - 1;",
+          "after": "    const ttlMs = cacheTtlSecToMs(config.ttlSec) - 1e-6;"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M20",
+      "case": "C11.distinct-keys",
+      "description": "Register process flights in one process-wide registry so a flight on one instance is joined from another (detection rests on sampled layers histories and the different-instances-own-distinct-flights witness, not on the case's exported replay)",
+      "edits": [
+        {
+          "path": "src/dialcache.ts",
+          "before": "  private readonly processFlights = new Map<string, ProcessFlight>();",
+          "after": "  private static readonly sharedProcessFlights = new Map<string, ProcessFlight>();\n  private readonly processFlights = DialCache.sharedProcessFlights;"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M21",
+      "case": "C13.uncoalesced-caching",
+      "description": "Serve a live local entry before joining the pending process flight",
+      "edits": [
+        {
+          "path": "src/dialcache.ts",
+          "before": "      return coalesce ? await this.singleFlightProcess(key, run) : await run();",
+          "after": "      let early: CacheGetResult<T> | null = null;\n      try {\n        early = this.localCache.getWithResolvedConfig<T>(key, localLayer.config);\n      } catch {\n        early = null;\n      }\n      if (early?.status === \"hit\") {\n        return await run();\n      }\n      return coalesce ? await this.singleFlightProcess(key, run) : await run();"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M22",
+      "case": "C13.uncoalesced-caching",
+      "description": "Join a pending process flight from a non-coalescing caller while registration still respects coalesce",
+      "edits": [
+        {
+          "path": "src/dialcache.ts",
+          "before": "      return coalesce ? await this.singleFlightProcess(key, run) : await run();",
+          "after": "      return coalesce || this.processFlights.has(key.urn) ? await this.singleFlightProcess(key, run) : await run();"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M23",
+      "case": "C13.local-last-writer",
+      "description": "Never let a local publication replace an entry already occupying the slot, even an expired one",
+      "edits": [
+        {
+          "path": "src/internal/local-cache.ts",
+          "before": "    this.cache?.set(key.urn, { value }, { size: 1, ttl: ttlMs });",
+          "after": "    if (this.cache?.peek(key.urn, { allowStale: true }) === undefined) {\n      this.cache?.set(key.urn, { value }, { size: 1, ttl: ttlMs });\n    }"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M24",
+      "case": "C13.local-last-writer",
+      "description": "Clear the key's local entry when a source settlement fails",
+      "edits": [
+        {
+          "path": "src/dialcache.ts",
+          "before": "      throw fallbackError;",
+          "after": "      (this.localCache as unknown as { cache: { delete(key: string): boolean } | null }).cache?.delete(key.urn);\n      throw fallbackError;"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M25",
+      "case": "C15.shared-error-retry",
+      "description": "Keep a rejected request-local flight registered so a later same-scope caller receives the rejection instead of retrying",
+      "edits": [
+        {
+          "path": "src/dialcache.ts",
+          "before": "inFlight.delete(key.urn);\n      }\n    };\n    void promise.then(clear, clear);",
+          "after": "inFlight.delete(key.urn);\n      }\n    };\n    void promise.then(clear, () => undefined);"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M26",
+      "case": "C15.shared-error-retry",
+      "description": "Never remove a settled process flight from the registry so later same-key callers join finished work",
+      "edits": [
+        {
+          "path": "src/dialcache.ts",
+          "before": "      if (this.processFlights.get(key.urn) === flight) {\n        this.activeProcessFollowers -= flight.followers;",
+          "after": "      if (this.processFlights.get(key.urn) !== flight) {\n        this.activeProcessFollowers -= flight.followers;"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M27",
+      "case": "C16.runtime-enables-coalescing",
+      "description": "Capture the operation's coalesce default as true so an omitted runtime leaf or null provider inherits sharing over a configured false",
+      "edits": [
+        {
+          "path": "src/dialcache.ts",
+          "before": "...(coalesce === undefined ? {} : { coalesce }),",
+          "after": "...(coalesce === undefined ? {} : { coalesce: true }),"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M28",
+      "case": "C17.library-defaults",
+      "description": "Default coalescing off when the coalesce leaf is omitted while an explicit true still shares",
+      "edits": [
+        {
+          "path": "src/dialcache.ts",
+          "before": "const coalesce = keyConfig?.coalesce !== false;",
+          "after": "const coalesce = keyConfig?.coalesce === true;"
+        },
+        {
+          "path": "src/dialcache.ts",
+          "before": "if (keyConfig.coalesce === false) {",
+          "after": "if (keyConfig.coalesce !== true) {"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M29",
+      "case": "C18.captured-shadow-fill",
+      "description": "Re-resolve the runtime policy at fill time and write the dark fill with the retention then in force",
+      "edits": [
+        {
+          "path": "src/dialcache.ts",
+          "before": "                shadowFillConfig,",
+          "after": "                await fetchKeyConfig(this.configProvider, key).then((current) => {\n                  const resolved = resolveRemoteLayerConfigResult({ config: current, key });\n                  return \"config\" in resolved ? resolved.config : shadowFillConfig!;\n                }),"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M30",
+      "case": "C22.freshness-boundary",
+      "description": "Serve a remote frame whose age equals the fresh TTL as a hit",
+      "edits": [
+        {
+          "path": "src/internal/redis-cache.ts",
+          "before": "frameAge.ageMs >= freshAgeMs",
+          "after": "frameAge.ageMs > freshAgeMs"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M31",
+      "case": "C22.freshness-boundary",
+      "description": "Acquire a dark C0 frame whose age equals the fresh TTL instead of treating it as expired",
+      "edits": [
+        {
+          "path": "src/internal/redis-cache.ts",
+          "before": "age.ageMs < maxAgeMs ? result",
+          "after": "age.ageMs <= maxAgeMs ? result"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M32",
+      "case": "C22.physical-vs-logical",
+      "description": "Write every remote frame with the fresh TTL, ignoring stale-on-error retention",
+      "edits": [
+        {
+          "path": "src/internal/redis-cache.ts",
+          "before": "return config.staleOnErrorMaxAgeSec ?? config.ttlSec;",
+          "after": "return config.ttlSec;"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M33",
+      "case": "C23.policy-does-not-spend-source-budget",
+      "description": "Judge a source settlement against a deadline anchored at the clock origin instead of the source start; the timer still fires at the source's own deadline",
+      "edits": [
+        {
+          "path": "src/internal/deadline.ts",
+          "before": "      if (elapsedMs() >= timeoutMs) {",
+          "after": "      if (performance.now() >= timeoutMs) {"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M34",
+      "case": "C24.follower-source",
+      "description": "Complete followers of a joined flight with an undefined or zero value instead of the leader's accepted value while errors still propagate",
+      "edits": [
+        {
+          "path": "src/dialcache.ts",
+          "before": "return existing.promise as Promise<T>;",
+          "after": "return existing.promise.then(() => undefined as unknown as T);"
+        },
+        {
+          "path": "src/dialcache.ts",
+          "before": "return existing as Promise<T>;",
+          "after": "return (existing as Promise<T>).then(() => undefined as unknown as T);"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M35",
+      "case": "C25.late-source-rejected",
+      "description": "Accept a settlement observed at exactly the elapsed deadline",
+      "edits": [
+        {
+          "path": "src/internal/deadline.ts",
+          "before": "if (elapsedMs() >= timeoutMs) {",
+          "after": "if (elapsedMs() > timeoutMs) {"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M36",
+      "case": "C25.late-source-rejected",
+      "description": "Stamp the serialization-start receipt one millisecond late so the dump duration is measured short",
+      "edits": [
+        {
+          "path": "src/internal/redis-cache.ts",
+          "before": "const start = performance.now();\n    let serialized: string | Buffer;",
+          "after": "const start = performance.now() + 1;\n    let serialized: string | Buffer;"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M37",
+      "case": "C27.source-error-no-publication",
+      "description": "Publish a rejected source's result into process-local storage before rethrowing",
+      "edits": [
+        {
+          "path": "src/dialcache.ts",
+          "before": "throw fallbackError;",
+          "after": "if (local.status === \"miss\") {\n        await this.putLocalFailOpen(key, fallbackError, local.config);\n      }\n      throw fallbackError;"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M38",
+      "case": "C28.no-refill-after-read-failure",
+      "description": "Skip the Redis publication after a semantic miss, including a decode failure, so only retained-candidate misses refill",
+      "edits": [
+        {
+          "path": "src/dialcache.ts",
+          "before": "if (remoteWriteConfig !== undefined) {",
+          "after": "if (remoteWriteConfig !== undefined && retainedFrame !== null) {"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M39",
+      "case": "C34.first-fence",
+      "description": "Drop the pre-serialization fence check so a source accepted behind an observed fence is serialized while the post-serialization recheck still blocks the write",
+      "edits": [
+        {
+          "path": "src/internal/redis-cache.ts",
+          "before": "&& this.sampleWriteTimestamp(key, metricLayer) <= observedWatermarkMs",
+          "after": "&& false"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M40",
+      "case": "C40.future-rejected",
+      "description": "Classify a frame dated after the reader clock as a valid frame of age zero instead of rejecting it as future",
+      "edits": [
+        {
+          "path": "src/internal/redis-cache.ts",
+          "before": "return { status: \"future\" };",
+          "after": "return { status: \"valid\", ageMs: 0 };"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M41",
+      "case": "C43.independent-values",
+      "description": "Decode the retained candidate but serve an undefined or zero value instead of it from stale recovery",
+      "edits": [
+        {
+          "path": "src/internal/redis-cache.ts",
+          "before": "return { status: \"hit\", value };",
+          "after": "return { status: \"hit\", value: undefined as unknown as T };"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M42",
+      "case": "C43.request-memo",
+      "description": "Publish a recovered stale value into process-local storage",
+      "edits": [
+        {
+          "path": "src/dialcache.ts",
+          "before": "          if (recovered.status === \"hit\") {\n            return recovered.value;\n          }",
+          "after": "          if (recovered.status === \"hit\") {\n            if (local.status === \"miss\") {\n              await this.putLocalFailOpen(key, recovered.value, local.config);\n            }\n            return recovered.value;\n          }"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M43",
+      "case": "C44.retained-invalidation",
+      "description": "Retain the stale candidate with a creation timestamp one millisecond after the acquired frame",
+      "edits": [
+        {
+          "path": "src/internal/redis-cache.ts",
+          "before": "return { status: \"retained\", config: layerConfig, frame: result };",
+          "after": "return { status: \"retained\", config: layerConfig, frame: { ...result, createdAtMs: result.createdAtMs + 1 } };"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M44",
+      "case": "C44.retained-invalidation",
+      "description": "Stamp the retained candidate with the read time instead of its frame timestamp",
+      "edits": [
+        {
+          "path": "src/internal/redis-cache.ts",
+          "before": "return { status: \"retained\", config: layerConfig, frame: result };",
+          "after": "return { status: \"retained\", config: layerConfig, frame: { ...result, createdAtMs: Date.now() } };"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M45",
+      "case": "C45.captured-policy",
+      "description": "Admit calls with a recovery maximum one second larger than the configured policy",
+      "edits": [
+        {
+          "path": "src/internal/runtime-config.ts",
+          "before": "config: { ...resolution.config, staleOnErrorMaxAgeSec: configuredMaxAge },",
+          "after": "config: { ...resolution.config, staleOnErrorMaxAgeSec: configuredMaxAge + 1 },"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M46",
+      "case": "C45.captured-policy",
+      "description": "Capture the static default recovery maximum at admission, ignoring the runtime overlay (in the policy profile this also hides overlay configuration errors)",
+      "edits": [
+        {
+          "path": "src/internal/runtime-config.ts",
+          "before": "const staleOnErrorMaxAgeSec = overlay?.staleOnErrorMaxAgeSec !== undefined\n    ? overlay.staleOnErrorMaxAgeSec\n    : defaultConfig?.staleOnErrorMaxAgeSec;",
+          "after": "const staleOnErrorMaxAgeSec = defaultConfig?.staleOnErrorMaxAgeSec;"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M47",
+      "case": "C49.dark-source-reuse",
+      "description": "Continue dark shadow work without waiting for the caller source",
+      "edits": [
+        {
+          "path": "src/dialcache.ts",
+          "before": "start.source.then((value) => ({ kind: \"value\" as const, value })),",
+          "after": "Promise.resolve({ kind: \"value\" as const, value: undefined as unknown as T }),"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M48",
+      "case": "C54.deduplication",
+      "description": "Admit a shadow job for an identity that already has a live job",
+      "edits": [
+        {
+          "path": "src/dialcache.ts",
+          "before": "if (this.shadowFlights.has(key.urn) || this.shadowFlights.size >= this.shadowMaxInFlight) {",
+          "after": "if (this.shadowFlights.size >= this.shadowMaxInFlight) {"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M49",
+      "case": "C54.instance-isolation",
+      "description": "Admit one shadow job beyond the per-instance capacity",
+      "edits": [
+        {
+          "path": "src/dialcache.ts",
+          "before": "this.shadowFlights.size >= this.shadowMaxInFlight",
+          "after": "this.shadowFlights.size > this.shadowMaxInFlight"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M50",
+      "case": "W01.key-identity",
+      "description": "Reject braces in keyType and id for untracked keys as well",
+      "edits": [
+        {
+          "path": "src/key.ts",
+          "before": "const rawPrefix = joinUrnComponents(this.namespace, this.keyType, this.id);",
+          "after": "const rawPrefix = invalidationPrefix(this.namespace, this.keyType, this.id);"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M51",
+      "case": "W03.cohort-assignment",
+      "description": "Admit a key whose cohort sample equals the configured ramp",
+      "edits": [
+        {
+          "path": "src/internal/runtime-config.ts",
+          "before": "return sample < ramp",
+          "after": "return sample <= ramp"
+        }
+      ],
+      "requiredDetections": [
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M52",
+      "case": "W04.untracked-decoder",
+      "description": "Read and apply the entity watermark fence on untracked keys",
+      "edits": [
+        {
+          "path": "src/internal/redis-cache.ts",
+          "before": "...(key.trackForInvalidation ? { watermarkKey: this.redisWatermarkKeyFromKey(key) } : {}),",
+          "after": "watermarkKey: this.redisWatermarkKeyFromKey(key),"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M53",
+      "case": "W06.envelope-markers",
+      "description": "Leave the escape prefix in place before an escaped binary-zstd marker",
+      "edits": [
+        {
+          "path": "src/internal/compression.ts",
+          "before": "return next !== undefined && next <= MARKER_ZSTD_BINARY",
+          "after": "return next !== undefined && next <= MARKER_ZSTD_UTF8"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M54",
+      "case": "W06.envelope-markers",
+      "description": "Strip a leading zero byte even when the next byte is not an envelope marker",
+      "edits": [
+        {
+          "path": "src/internal/compression.ts",
+          "before": "return next !== undefined && next <= MARKER_ZSTD_BINARY",
+          "after": "return next !== undefined"
+        }
+      ],
+      "requiredDetections": [
+        "ordinary",
+        "generated",
+        "portable"
+      ]
+    },
+    {
+      "id": "M55",
+      "case": "W07.compression-selection",
+      "description": "Store a compressed payload whose marked size ties the escaped raw size",
+      "edits": [
+        {
+          "path": "src/internal/compression.ts",
+          "before": "if (markedBytes >= raw.storedBytes) {",
+          "after": "if (markedBytes > raw.storedBytes) {"
+        }
+      ],
+      "requiredDetections": [
         "generated",
         "portable"
       ]

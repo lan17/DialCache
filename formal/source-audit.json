@@ -1005,19 +1005,20 @@
   "reviewedGuides": [
     {
       "path": "formal/AUTHORING.md",
-      "sha256": "35f00c622fc42ab636fd915b15e61dbb5bd8bfdc89715e1c85fa359bbec4e1d1",
+      "sha256": "d33b96e3a85e708cf001625ff66bf91800001d112274211f49278fc1e8ac4baa",
       "entries": [
         {"line":1,"title":"Reading and extending the DialCache models"},
         {"line":16,"title":"Reading a model"},
         {"line":56,"title":"Writing conventions"},
         {"line":150,"title":"Codifying the next behavior"},
-        {"line":183,"title":"Give reviewers focused context"},
-        {"line":198,"title":"Exporting a deterministic regression"},
-        {"line":234,"title":"Maintaining case and witness evidence"},
-        {"line":282,"title":"Reproducible committed fixtures"},
-        {"line":292,"title":"Refactoring and execution"},
-        {"line":317,"title":"Challenging every model"},
-        {"line":389,"title":"Exported runs are exactly the public-only runs"}
+        {"line":191,"title":"Give reviewers focused context"},
+        {"line":206,"title":"Exporting a deterministic regression"},
+        {"line":242,"title":"Maintaining case and witness evidence"},
+        {"line":290,"title":"Reproducible committed fixtures"},
+        {"line":300,"title":"Refactoring and execution"},
+        {"line":325,"title":"Challenging every model"},
+        {"line":398,"title":"Mapping every challenge to native mutants"},
+        {"line":467,"title":"Exported runs are exactly the public-only runs"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1362,16 +1363,16 @@
     },
     {
       "path": "formal/SEMANTIC-COVERAGE.md",
-      "sha256": "36dfebb6bfe76998f42ae0880ba5f9a984e6c5cd4376c2aef55b189cf12cdc65",
+      "sha256": "8812dff16b9b2a4cddfa967955d0550828885fee0d6934be52510a06d9f40b11",
       "entries": [
         {"line":1,"title":"Measuring semantic coverage"},
         {"line":5,"title":"Evidence inventory"},
         {"line":47,"title":"Model assurance"},
-        {"line":102,"title":"Generated boundary evidence"},
-        {"line":110,"title":"Behavioral mutation comparison"},
-        {"line":124,"title":"Recorded measurements"},
-        {"line":130,"title":"Reproduction and CI"},
-        {"line":172,"title":"Model properties and cross-language execution"}
+        {"line":110,"title":"Generated boundary evidence"},
+        {"line":118,"title":"Behavioral mutation comparison"},
+        {"line":132,"title":"Recorded measurements"},
+        {"line":138,"title":"Reproduction and CI"},
+        {"line":180,"title":"Model properties and cross-language execution"}
       ],
       "review": {
         "kind": "coverage-guide",
@@ -1501,15 +1502,15 @@
     },
     {
       "path": "formal/VALIDATION.md",
-      "sha256": "79d61df9534e7a1db8a1b4819076e7cc7a4e7aff43281756e9135d95f86e1308",
+      "sha256": "5cfe9e746d80d2d4c9a01db5ec6ec91b4c6d1395d87bbdc250b10a62fc2b5843",
       "entries": [
         {"line":1,"title":"Validation and evidence"},
         {"line":7,"title":"Choosing a run"},
         {"line":67,"title":"Reading a completion report"},
         {"line":85,"title":"Mutation evidence"},
-        {"line":146,"title":"Exploratory runs"},
-        {"line":194,"title":"A retained sampling regression"},
-        {"line":231,"title":"Historical results"}
+        {"line":162,"title":"Exploratory runs"},
+        {"line":210,"title":"A retained sampling regression"},
+        {"line":247,"title":"Historical results"}
       ],
       "review": {
         "kind": "tooling-guide",

@@ -4,7 +4,8 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writ
 import { resolve, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { fingerprintFiles, gateDetections, languages, partitionMutations, shardDirectory, shardFromArguments } from './mutation-reports.mjs';
+import { readMutantCatalogs } from './execution.mjs';
+import { fingerprintFiles, gateDetections, languages, requiredDetectionRegressions, selectMutations, selectionDirectory, selectionFromArguments } from './mutation-reports.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -88,6 +89,10 @@ export function evaluateGoTestEvents(lines, exitCode) {
     if (/^Test(?:Core|Effects|Feature|Behavior|LocalClock)Conformance(?:\/|$)/.test(name)) {
       if (/expected:[\s\S]*actual:/.test(output)) assertionKinds[name] = 'observation-mismatch';
       else if (causalPropertyAssertion(output)) assertionKinds[name] = 'causal-property';
+      // The core replay asserts that a coalesced pair returns one value before
+      // it records the pair's observation; the assertion carries no
+      // expected/actual pair, so it is recognized by its exact text.
+      else if (/core_replay_test\.go:\d+: pair returned different values/.test(output)) assertionKinds[name] = 'pair-value-mismatch';
       else throw new Error(`replay failure lacks observation or validated causal property evidence: ${name}`);
     } else {
       assertionKinds[name] = 'native-assertion';
@@ -106,25 +111,33 @@ function union(generated, fixed) {
 }
 
 // --shard=<index>/<count> measures a contiguous slice of the catalog after the
-// compile check and the full baselines; the default is the complete
-// single-process measurement.
-export function measureGoSemantics({ shard = { index: 1, count: 1 } } = {}) {
+// compile check and the full baselines; --only=<id>,<id> measures the named
+// mutants into a partial report that is never complete evidence; the default
+// is the complete single-process measurement.
+export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}) {
   const language = languages.go;
   const reportRoot = resolve(root, language.output);
-  const output = shardDirectory(reportRoot, shard);
+  const output = selectionDirectory(reportRoot, { shard, only });
   const started = Date.now();
   mkdirSync(reportRoot, { recursive: true });
-  // Invalidate old completion before loading catalog, dependencies, or evidence.
-  // A shard also invalidates the merged report above it, which is evidence only
-  // while every shard beneath it is current.
-  const report = { schemaVersion: 1, complete: false, ...(shard.count > 1 ? { shard: { index: shard.index, count: shard.count } } : {}), startedAt: new Date(started).toISOString(), baselines: {}, mutations: [] };
+  const report = { schemaVersion: 1, complete: false, ...(only ? { partial: true, only } : shard.count > 1 ? { shard: { index: shard.index, count: shard.count } } : {}), startedAt: new Date(started).toISOString(), baselines: {}, mutations: [] };
   const save = () => { report.elapsedSeconds = Math.round((Date.now() - started) / 1000); writeFileSync(resolve(output, 'report.json'), JSON.stringify(report, null, 2) + '\n'); };
-  if (output !== reportRoot) {
-    writeFileSync(resolve(reportRoot, 'report.json'), JSON.stringify({ schemaVersion: 1, complete: false, startedAt: report.startedAt }, null, 2) + '\n');
+  if (only) {
+    // A partial run leaves the complete report and the shards alone.
     rmSync(output, { recursive: true, force: true });
     mkdirSync(output, { recursive: true });
+    save();
+  } else {
+    // Invalidate old completion before loading catalog, dependencies, or evidence.
+    // A shard also invalidates the merged report above it, which is evidence only
+    // while every shard beneath it is current.
+    if (output !== reportRoot) {
+      writeFileSync(resolve(reportRoot, 'report.json'), JSON.stringify({ schemaVersion: 1, complete: false, startedAt: report.startedAt }, null, 2) + '\n');
+      rmSync(output, { recursive: true, force: true });
+      mkdirSync(output, { recursive: true });
+    }
+    save(); rmSync(resolve(reportRoot, 'report.md'), { force: true });
   }
-  save(); rmSync(resolve(reportRoot, 'report.md'), { force: true });
   const workspace = mkdtempSync(resolve(tmpdir(), 'dialcache-go-semantic-'));
   const go = process.env.GO_BIN ?? 'go';
   // Bounds a hung mutant, not a slow runner: hosted runners vary by about
@@ -139,26 +152,22 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 } } = {}) {
     for (const path of ['formal', 'go', 'test', 'src']) cpSync(resolve(root, path), resolve(workspace, path), { recursive: true });
     const moduleDirectory = resolve(workspace, 'go');
     const catalogPath = resolve(workspace, 'formal/go-mutations.json');
+    // The catalogs are paired in the workspace copy by the one implementation
+    // execution.mjs uses; only the Go edits are checked here.
+    readMutantCatalogs(path => readFileSync(resolve(workspace, path), 'utf8'));
     const catalog = json(catalogPath);
-    const typescript = json(resolve(workspace, 'formal/semantic-mutations.json'));
-    if (catalog.schemaVersion !== 1 || !Array.isArray(catalog.mutations) || catalog.mutations.length < 13) throw new Error('expected versioned Go fault catalog with all 13 TypeScript counterparts');
-    const originals = new Map(), ids = new Set();
+    const originals = new Map();
     for (const mutation of catalog.mutations) {
-      if (!/^M\d+$/.test(mutation.id) || ids.has(mutation.id)) throw new Error('invalid/duplicate mutation ID');
-      ids.add(mutation.id);
-      const counterpart = typescript.mutations.find(item => item.id === mutation.typescriptMutation);
-      if (!counterpart || counterpart.case !== mutation.case) throw new Error(`invalid TypeScript counterpart ${mutation.id}`);
-      if (!Array.isArray(mutation.edits) || !mutation.edits.length || !mutation.requiredDetections?.every(name => ['ordinary', 'generated', 'fixed', 'portable'].includes(name))) throw new Error(`invalid mutation ${mutation.id}`);
+      if (!Array.isArray(mutation.edits) || !mutation.edits.length || !mutation.requiredDetections.every(name => ['ordinary', 'generated', 'fixed', 'portable'].includes(name))) throw new Error(`invalid mutation ${mutation.id}`);
       for (const edit of mutation.edits) {
-        if (!/^go\/[\w-]+\.go$/.test(edit.path) || edit.path.endsWith('_test.go') || !edit.before || edit.before === edit.after) throw new Error(`invalid production edit ${mutation.id}`);
+        if (!/^go\/[\w-]+\.go$/.test(edit.path) || edit.path.endsWith('_test.go') || !edit.before || typeof edit.after !== 'string' || edit.before === edit.after) throw new Error(`invalid production edit ${mutation.id}`);
         const original = readFileSync(resolve(workspace, edit.path), 'utf8');
         if (original.split(edit.before).length !== 2) throw new Error(`${mutation.id}: anchor must occur exactly once; review source drift in ${edit.path}`);
         originals.set(edit.path, original);
       }
     }
-    for (const counterpart of typescript.mutations) if (!catalog.mutations.some(m => m.typescriptMutation === counterpart.id)) throw new Error(`missing TypeScript counterpart ${counterpart.id}`);
-    const selected = partitionMutations(catalog.mutations, shard);
-    if (shard.count > 1) report.shard = { index: shard.index, count: shard.count, mutationIds: selected.map(m => m.id) };
+    const selected = selectMutations(catalog.mutations, { shard, only });
+    if (!only && shard.count > 1) report.shard = { index: shard.index, count: shard.count, mutationIds: selected.map(m => m.id) };
     const ordinaryFiles = readdirSync(moduleDirectory).filter(file => file.endsWith('_test.go') && !infrastructureTestFile.test(file)).sort();
     const ordinary = ordinaryFiles.flatMap(file => [...readFileSync(resolve(moduleDirectory, file), 'utf8').matchAll(/^func (Test\w+)\(t \*testing\.T\)/gm)].map(match => match[1]));
     if (!ordinary.length || new Set(ordinary).size !== ordinary.length) throw new Error('invalid ordinary Go test selection');
@@ -214,18 +223,33 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 } } = {}) {
     for (const mutation of selected) {
       const editedPaths = new Set();
       try {
+        // The replacement is a function so a `$` in the edit text is literal.
         for (const edit of mutation.edits) {
           const path = resolve(workspace, edit.path), current = readFileSync(path, 'utf8');
-          if (current.split(edit.before).length !== 2) throw new Error(`${mutation.id}: overlapping edits`);
-          writeFileSync(path, current.replace(edit.before, edit.after)); editedPaths.add(edit.path);
+          if (current.split(edit.before).length !== 2) throw new Error(`${mutation.id}: overlapping edits in ${edit.path}`);
+          writeFileSync(path, current.replace(edit.before, () => edit.after)); editedPaths.add(edit.path);
         }
         compile(mutation.id);
         const result = { id: mutation.id, case: mutation.case, description: mutation.description, cohorts: {} };
-        for (const cohort of Object.keys(cohorts)) result.cohorts[cohort] = run(mutation.id, cohort, false);
+        // A declared skip (readMutantCatalogs checked it names only the
+        // ordinary cohort with a reason) is reported, never measured.
+        for (const cohort of Object.keys(cohorts)) {
+          const reason = mutation.skipCohorts?.[cohort];
+          result.cohorts[cohort] = reason === undefined ? run(mutation.id, cohort, false) : { state: 'skipped', reason, passed: 0, failed: 0, failingTests: [] };
+        }
         result.cohorts.portable = union(result.cohorts.generated, result.cohorts.fixed);
         report.mutations.push(result);
         console.log(`${mutation.id}: ${Object.entries(result.cohorts).map(([name, value]) => `${name}=${value.state}(${value.failed})`).join(', ')}`); save();
       } finally { for (const path of editedPaths) writeFileSync(resolve(workspace, path), originals.get(path)); }
+    }
+    if (only) {
+      // A partial run reports its lost required detections and stops: it is
+      // not gated and never completes, so the complete report is untouched.
+      const lost = requiredDetectionRegressions(selected, report.mutations);
+      save();
+      console.log(lost.length ? `Lost required detections (a partial run is not gated): ${lost.join(', ')}` : 'Every required detection of the selected mutants held');
+      console.log(`Partial measurement of ${selected.map(m => m.id).join(', ')}: ${relative(root, output)}/report.json; measure the complete catalog for evidence`);
+      return report;
     }
     if (shard.count > 1) {
       // A shard gates its own slice and stays incomplete; the merge recomputes
@@ -243,5 +267,5 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 } } = {}) {
   finally { rmSync(workspace, { recursive: true, force: true }); }
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  try { measureGoSemantics({ shard: shardFromArguments(process.argv.slice(2)) }); } catch (error) { console.error(error); process.exitCode = 1; }
+  try { measureGoSemantics(selectionFromArguments(process.argv.slice(2))); } catch (error) { console.error(error); process.exitCode = 1; }
 }

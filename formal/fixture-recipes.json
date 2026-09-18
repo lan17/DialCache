@@ -2160,6 +2160,11 @@
           "id": "sourceFailureKeepsPreviouslyAcceptedStorageTest",
           "regression": "sourceFailureKeepsPreviouslyAcceptedStorageTest",
           "projection": "observations"
+        },
+        {
+          "id": "rejectedSourceDoesNotSeedLocalTest",
+          "regression": "rejectedSourceDoesNotSeedLocalTest",
+          "projection": "observations"
         }
       ]
     },
@@ -2561,6 +2566,11 @@
         {
           "id": "independentLocalPublicationUsesLastCompletionTest",
           "regression": "independentLocalPublicationUsesLastCompletionTest",
+          "projection": "policy-observations"
+        },
+        {
+          "id": "independentFailureKeepsSettledLocalValueTest",
+          "regression": "independentFailureKeepsSettledLocalValueTest",
           "projection": "policy-observations"
         },
         {

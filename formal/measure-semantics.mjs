@@ -6,28 +6,36 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { checkSemanticCoverage } from './check-semantic-coverage.mjs';
 import { evaluateSemanticTestReport } from './semantic-reporter.mjs';
-import { fingerprintFiles, gateDetections, languages, partitionMutations, shardDirectory, shardFromArguments } from './mutation-reports.mjs';
+import { fingerprintFiles, gateDetections, languages, requiredDetectionRegressions, selectMutations, selectionDirectory, selectionFromArguments } from './mutation-reports.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const language = languages.ts;
 // --shard=<index>/<count> measures a contiguous slice of the catalog after the
-// full baselines; the default is the complete single-process measurement.
-const shard = shardFromArguments(process.argv.slice(2));
+// full baselines; --only=<id>,<id> measures the named mutants into a partial
+// report that is never complete evidence; the default is the complete
+// single-process measurement.
+const { shard, only } = selectionFromArguments(process.argv.slice(2));
 const reportRoot = resolve(root, language.output);
-const output = shardDirectory(reportRoot, shard);
+const output = selectionDirectory(reportRoot, { shard, only });
 const read = path => readFileSync(resolve(root, path), 'utf8');
 const started = Date.now();
-// Invalidate any previous completed report even if preflight fails before an
-// isolated workspace can be created (for example, a stale mutation anchor).
-// A shard also invalidates the merged report above it, which is evidence only
-// while every shard beneath it is current.
 mkdirSync(reportRoot, { recursive: true });
-writeFileSync(resolve(reportRoot, 'report.json'), JSON.stringify({ schemaVersion: 1, complete: false, startedAt: new Date(started).toISOString() }) + '\n');
-rmSync(resolve(reportRoot, 'report.md'), { force: true });
-if (output !== reportRoot) {
+if (only) {
+  // A partial run leaves the complete report and the shards alone.
   rmSync(output, { recursive: true, force: true });
   mkdirSync(output, { recursive: true });
-  writeFileSync(resolve(output, 'report.json'), JSON.stringify({ schemaVersion: 1, complete: false, shard: { index: shard.index, count: shard.count }, startedAt: new Date(started).toISOString() }) + '\n');
+} else {
+  // Invalidate any previous completed report even if preflight fails before an
+  // isolated workspace can be created (for example, a stale mutation anchor).
+  // A shard also invalidates the merged report above it, which is evidence only
+  // while every shard beneath it is current.
+  writeFileSync(resolve(reportRoot, 'report.json'), JSON.stringify({ schemaVersion: 1, complete: false, startedAt: new Date(started).toISOString() }) + '\n');
+  rmSync(resolve(reportRoot, 'report.md'), { force: true });
+  if (output !== reportRoot) {
+    rmSync(output, { recursive: true, force: true });
+    mkdirSync(output, { recursive: true });
+    writeFileSync(resolve(output, 'report.json'), JSON.stringify({ schemaVersion: 1, complete: false, shard: { index: shard.index, count: shard.count }, startedAt: new Date(started).toISOString() }) + '\n');
+  }
 }
 const declaredCoverage = checkSemanticCoverage();
 const catalog = JSON.parse(read(language.catalog));
@@ -55,24 +63,28 @@ function portableResult({ generated, fixed }) {
 const sourceText = new Map();
 const ids = new Set();
 // Every shard validates the whole catalog: a stale anchor anywhere fails each
-// shard the same way it fails the single run.
+// shard the same way it fails the single run. A mutant is a short list of
+// exact-anchor edits to src/; every anchor must match its file exactly once.
 for (const mutation of catalog.mutations) {
   if (!/^M\d+$/.test(mutation.id) || ids.has(mutation.id)) throw new Error('Invalid/duplicate mutation ID');
   ids.add(mutation.id);
-  if (!/^src\/[\w/-]+\.ts$/.test(mutation.path) || mutation.before === mutation.after || !mutation.before) throw new Error(`Invalid edit: ${mutation.id}`);
-  const original = read(mutation.path);
-  if (original.split(mutation.before).length !== 2) throw new Error(`${mutation.id}: mutation anchor must match exactly once; review source drift`);
+  if (!Array.isArray(mutation.edits) || !mutation.edits.length) throw new Error(`Invalid edits: ${mutation.id}`);
+  for (const edit of mutation.edits) {
+    if (!/^src\/[\w/-]+\.ts$/.test(edit.path) || !edit.before || typeof edit.after !== 'string' || edit.before === edit.after) throw new Error(`Invalid edit: ${mutation.id}`);
+    const original = sourceText.get(edit.path) ?? read(edit.path);
+    if (original.split(edit.before).length !== 2) throw new Error(`${mutation.id}: mutation anchor must match exactly once in ${edit.path}; review source drift`);
+    sourceText.set(edit.path, original);
+  }
   if (!mutation.requiredDetections.every(c => comparisons.includes(c))) throw new Error(`Unknown cohort: ${mutation.id}`);
-  sourceText.set(mutation.path, original);
 }
-const selected = partitionMutations(catalog.mutations, shard);
+const selected = selectMutations(catalog.mutations, { shard, only });
 // A hard CI cancellation may bypass finally. Keep temporary dependency links
 // outside the artifact tree even when that happens.
 const workspace = mkdtempSync(resolve(tmpdir(), 'dialcache-semantic-'));
 const report = {
   schemaVersion: 1,
   complete: false,
-  ...(shard.count > 1 ? { shard: { index: shard.index, count: shard.count, mutationIds: selected.map(m => m.id) } } : {}),
+  ...(only ? { partial: true, only } : shard.count > 1 ? { shard: { index: shard.index, count: shard.count, mutationIds: selected.map(m => m.id) } } : {}),
   startedAt: new Date(started).toISOString(),
   revision: spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout.trim(),
   node: process.version,
@@ -148,9 +160,17 @@ try {
     report.reachedWitnesses[profile] = { required: required.length, reached: required.filter(w => evidence.seen.includes(w)).length, traces: evidence.traces };
   }
   for (const mutation of selected) {
-    const path = resolve(workspace, mutation.path), original = sourceText.get(mutation.path);
+    const touched = new Set();
     try {
-      writeFileSync(path, original.replace(mutation.before, mutation.after));
+      // Edits apply in order, each against the text the previous one left, and
+      // each anchor must still match exactly once there. The replacement is a
+      // function so a `$` in the edit text is literal.
+      for (const edit of mutation.edits) {
+        const path = resolve(workspace, edit.path), current = readFileSync(path, 'utf8');
+        if (current.split(edit.before).length !== 2) throw new Error(`${mutation.id}: overlapping edits in ${edit.path}`);
+        writeFileSync(path, current.replace(edit.before, () => edit.after));
+        touched.add(edit.path);
+      }
       const compile = spawnSync(process.execPath, [resolve(root, 'node_modules/typescript/bin/tsc'), '--noEmit'], { cwd: workspace, encoding: 'utf8', timeout: 60_000 });
       if (compile.status !== 0 || compile.error) throw new Error(`${mutation.id}: invalid/noncompiling mutant\n${compile.stdout ?? ''}${compile.stderr ?? ''}`);
       const result = { id: mutation.id, case: mutation.case, description: mutation.description, cohorts: {} };
@@ -159,9 +179,16 @@ try {
       report.mutations.push(result);
       console.log(`${mutation.id}: ${Object.entries(result.cohorts).map(([name, run]) => `${name}=${run.state}`).join(', ')}`);
       save();
-    } finally { writeFileSync(path, original); }
+    } finally { for (const path of touched) writeFileSync(resolve(workspace, path), sourceText.get(path)); }
   }
-  if (shard.count > 1) {
+  if (only) {
+    // A partial run reports its lost required detections and stops: it is not
+    // gated and never completes, so the complete report is untouched.
+    const lost = requiredDetectionRegressions(selected, report.mutations);
+    save();
+    console.log(lost.length ? `Lost required detections (a partial run is not gated): ${lost.join(', ')}` : 'Every required detection of the selected mutants held');
+    console.log(`Partial measurement of ${selected.map(m => m.id).join(', ')}: ${relative(root, output)}/report.json; measure the complete catalog for evidence`);
+  } else if (shard.count > 1) {
     // A shard gates its own slice and stays incomplete; the merge recomputes the
     // gate and the detection summary over the whole catalog.
     gateDetections(language, report, selected, { directory: root, summarize: false });

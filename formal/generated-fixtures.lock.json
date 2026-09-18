@@ -12,8 +12,8 @@
     "formal/dialcache-independent-conformance.qnt": "996035f7725ea655f46e95dedeb67eb50e42c6a9ed363a51ca0b19bf130f2327",
     "formal/dialcache-layers-conformance.qnt": "31fab0e6e27b6b023b84b9377f3d7c17a3335772182fe817d5e8651a66ca3a87",
     "formal/dialcache-local-clock-conformance.qnt": "82dd9fa04eeb73f039c088e403eb5dfb79e67a5fc283de4763be037989047666",
-    "formal/dialcache-local-failure-conformance.qnt": "d17bc0d4c6ca5b3c63fe9eefde415d7c49d8c151a320e49b19a82d1be5a61faf",
-    "formal/dialcache-policy-conformance.qnt": "51b3caf6944a07538a25ee17edb32fac7e750ac5728637ba7f49a213661b1a70",
+    "formal/dialcache-local-failure-conformance.qnt": "f84e8c1b10318ee74fa8aa0f6d21b49e64383dee4ef2f70c2e5c876ede600519",
+    "formal/dialcache-policy-conformance.qnt": "f83b609ad9a9afd9a744e39b988e6adc6a8896b2116d74160b11f7ded6ebaed3",
     "formal/dialcache-recovery-conformance.qnt": "538b7a4fd0a82ecd4fa31daa03baf4e03ec78e6ef571f67dc9b7f80926864284",
     "formal/dialcache-recovery-read-conformance.qnt": "d0c44bb21c10ccdb854902af2db07e3bbb19cdf9a395b7cc7fef839970ab1a72",
     "formal/dialcache-runtime-boundaries-conformance.qnt": "3f6bef23aa1acc6753338ba58b91b0147c3efd80dded429a18367cb33bc1bdf6",
@@ -21,9 +21,9 @@
     "formal/dialcache-shadow-conformance.qnt": "d0d95566594189a89401fe498f7b341c2864c3d62ea240e09aa427a7d8340425",
     "formal/dialcache-shadow-layers-conformance.qnt": "ab17225b4650ce706da5926ddc7dd49bc4255b00ee826a785168b72d051b9d8b",
     "formal/dialcache-source-budgets-conformance.qnt": "bee0b564a12de2b5c857a9f377df5c693c83e19252e88fe92cae5624cf8b91f8",
-    "formal/execution.json": "feee09a3487deb2694f8784b7e8d2d0ee28050dae03ac43ac2613608ce5ab1c6",
-    "formal/execution.mjs": "ed67921ac19e3412b12a4f086a3cd834ede58d9413eafb7c9830423edcfe51ad",
-    "formal/fixture-recipes.json": "8d071d16a8e375fe7194aec2d529b1dd883d92c12995612afe3713b484998f4d",
+    "formal/execution.json": "aa40714e6f2127542474a8beeebb57648e7dd44df8a98a2b03116d9aee05959d",
+    "formal/execution.mjs": "b1b52301928034b43eb3f0182a1748796cc0b3d75276f2b795170d0af5076e87",
+    "formal/fixture-recipes.json": "8b9a5f7b8dd877ed73267ddc43e3779ca8e5c99a60c38379adac27de73fb0c3f",
     "formal/generated-fixtures.mjs": "fcef898e1125686589a69c8065d8f883ac5aeb2a469ba7e260e95c6a9a9a78ed",
     "formal/kernel/calls.qnt": "856c2d7249ea053aaf3a18bb5d235350b5d35e1100f4b4421efa20aceba9767f",
     "formal/kernel/clock.qnt": "e46ce9026e6e5ab1b358b0287e8ba5b5904a064e78355c0abbd1554562bb47a4",
@@ -66,12 +66,12 @@
     "test/fixtures/formal-runtime-witness-boundaries.json": "b626d42f5547ff0dfad6ac6a4e5a64dfea5c1ed9cae247bd7b29345825115c7f",
     "test/fixtures/formal-witness-attribution.json": "93c09590bbb033f3cf91ad82600a996b140ac22b421fa1a859348ed97b4b0143",
     "test/fixtures/formal-witness-boundaries.json": "675e6f3a6e1c5ee929cf2a124285f145da4cf1aff5b7d7a0633007961e5b20e0",
-    "test/fixtures/local-failure-witnesses.json": "a910e088add94f8294f2d984678d5e2ebe1fc7199132ea8351dd34f70e467250",
+    "test/fixtures/local-failure-witnesses.json": "94d6634515f4d091b3bd8e2050e3b1eb4290f741027c50b7c8aee19a795c91e2",
     "test/fixtures/recovery-admission-witnesses.json": "8538b8a82b409295ba01ff9f429b21e61cca21eef6ad3b08cb1e4f1408f8ea83",
     "test/fixtures/recovery-read-witnesses.json": "5925594aae6a3d54c495b8d94173484594bb75479dcaa1c5e3e19e5c645a572f",
     "test/fixtures/shadow-diagnostics-witnesses.json": "a5c0fd8aba474d75b325e8c229e394792153d125f6ebd514767a4b1b63fecdf9",
     "test/fixtures/shadow-layers-witnesses.json": "ce5b362357fd3dd1ba7dbc08099ab0cb4b97042a8362e096cb84c73d088d8612",
     "test/fixtures/source-budgets-witnesses.json": "d1a9a0156102d805da4f11f6ec3d1c81950aac73681c34cc0eee15a4174a8df1",
-    "test/fixtures/policy-witnesses.json": "53f9602f51c3e27164c4fdf6d6d54d0a0e707327fd76938e22ed7eadbeba0e04"
+    "test/fixtures/policy-witnesses.json": "c95fe80fa5897ee5bbdac9d9c99f64d4c5f8945fc78341bb1ff5a3ecb41541c2"
   }
 }

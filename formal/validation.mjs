@@ -2,7 +2,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync } from 'node:fs';
 import { delimiter, dirname, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseShard } from './mutation-reports.mjs';
+import { parseOnly, parseShard } from './mutation-reports.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const replayTests = ['test/formal-conformance.test.ts', 'test/formal-effects.test.ts', 'test/formal-features.test.ts',
@@ -32,8 +32,8 @@ export const targetDescriptions = {
   explore: 'Explore a new recorded seed and replay both ports in an isolated source snapshot',
   'model-check': 'Symbolically verify the scheduled finite rules with pinned Quint/Apalache (Java 21)',
   mutations: 'Measure TypeScript and Go semantic mutations over the generated corpus and shared witness evidence',
-  'mutations-ts': 'Measure TypeScript semantic mutations over the generated corpus (MUTATION_SHARD=<index>/<count> measures one shard)',
-  'mutations-go': 'Measure Go semantic mutations over the generated corpus and shared witness evidence (MUTATION_SHARD=<index>/<count> measures one shard)',
+  'mutations-ts': 'Measure TypeScript semantic mutations over the generated corpus (MUTATION_SHARD=<index>/<count> measures one shard; MUTATION_ONLY=<id>,<id> measures the named mutants into a partial report)',
+  'mutations-go': 'Measure Go semantic mutations over the generated corpus and shared witness evidence (MUTATION_SHARD=<index>/<count> measures one shard; MUTATION_ONLY=<id>,<id> measures the named mutants into a partial report)',
   'mutations-merge-ts': 'Merge TypeScript mutation shards into the complete report; refuses inconsistent or missing shards',
   'mutations-merge-go': 'Merge Go mutation shards into the complete report; refuses inconsistent or missing shards',
   integration: 'Run real TypeScript and Go Redis/Valkey/Cluster integration checks',
@@ -49,21 +49,30 @@ export function expandTargets(target) {
 }
 
 // MUTATION_SHARD=<index>/<count> narrows one measurement lane to a shard of
-// its catalog; the merge target later assembles the complete report. Only the
-// two leaf lanes accept it: an aggregate that silently ignored it would run the
-// complete measurement the caller did not ask for.
+// its catalog; the merge target later assembles the complete report.
+// MUTATION_ONLY=<id>,<id> measures only the named mutants into a partial
+// report that is never evidence. Only the two leaf lanes accept them: an
+// aggregate that silently ignored them would run the complete measurement the
+// caller did not ask for.
 const shardedTargets = ['mutations-ts', 'mutations-go'];
-export function mutationShardArguments(target, environment = process.env) {
-  const value = environment.MUTATION_SHARD;
-  if (value === undefined) return [];
+export function mutationSelectionArguments(target, environment = process.env) {
+  const set = [['MUTATION_SHARD', environment.MUTATION_SHARD], ['MUTATION_ONLY', environment.MUTATION_ONLY]].filter(([, value]) => value !== undefined);
+  if (!set.length) return [];
+  const stated = set.map(([name, value]) => `${name}=${value}`).join(' ');
   if (!shardedTargets.includes(target)) {
-    if (expandTargets(target).some(name => shardedTargets.includes(name))) throw new Error(`MUTATION_SHARD=${value} applies only to make mutations-ts and make mutations-go; unset it to run the complete measurement with make ${target}.`);
+    if (expandTargets(target).some(name => shardedTargets.includes(name))) throw new Error(`${stated} applies only to make mutations-ts and make mutations-go; unset it to run the complete measurement with make ${target}.`);
     return [];
   }
-  // The measurement scripts parse the same value; one implementation decides
-  // what is well-formed, so the runner cannot accept a shard the script rejects.
-  try { parseShard(value); } catch { throw new Error(`MUTATION_SHARD must be <index>/<count> with 1 <= index <= count (for example 2/3); got ${JSON.stringify(value)}.`); }
-  return [`--shard=${value}`];
+  if (set.length > 1) throw new Error(`${stated}: MUTATION_SHARD and MUTATION_ONLY exclude each other; a partial run is never merged.`);
+  const [[name, value]] = set;
+  // The measurement scripts parse the same values; one implementation decides
+  // what is well-formed, so the runner cannot accept a value the script rejects.
+  if (name === 'MUTATION_SHARD') {
+    try { parseShard(value); } catch { throw new Error(`MUTATION_SHARD must be <index>/<count> with 1 <= index <= count (for example 2/3); got ${JSON.stringify(value)}.`); }
+    return [`--shard=${value}`];
+  }
+  try { parseOnly(value); } catch { throw new Error(`MUTATION_ONLY must be <id>,<id> naming distinct mutant ids (for example M14,M15); got ${JSON.stringify(value)}.`); }
+  return [`--only=${value}`];
 }
 
 // Local shells may retain a one-file replay, protocol subset or alternate
@@ -123,7 +132,7 @@ export function validationPlan(target, { directory = root, environment = process
     'test', '-race', '-count=1', ...(full ? ['-json', '-timeout=35m'] : []), './...'),
     ...(full ? { env: { ...replayEnv, DIALCACHE_WITNESS_EVIDENCE_DIR: witnessDirectory }, stdoutFile: '.formal-traces/go-replay.jsonl' } : {}) });
   const node22 = floorExecutable(environment, runnerNode, nodeVersion) ?? '<NODE22_BIN>';
-  const shard = mutationShardArguments(target, environment);
+  const selection = mutationSelectionArguments(target, environment);
   const plans = {
     'check-ts': [pnpm('Typecheck TypeScript', 'typecheck'), pnpm('Run TypeScript unit tests with coverage', 'test'),
       pnpm('Build package', 'build'), pnpm('Check packed package on Node 24', 'test:package')],
@@ -156,8 +165,8 @@ export function validationPlan(target, { directory = root, environment = process
       node('Prepare Go execution context', 'formal/conformance.mjs', 'prepare', 'go', reportPath('go', 'context')), nativeGo(true),
       { ...node('Check complete Go native report', 'formal/check-go-replay.mjs'), stdoutFile: '.formal-traces/go-replay-summary.json' },
       { ...node('Adapt Go native assertion report', 'formal/conformance-adapters.mjs', 'go', '.formal-traces/go-replay.jsonl', reportPath('go', 'context')), stdoutFile: reportPath('go', 'completion') }, completion('go')],
-    'mutations-ts': [node('Measure TypeScript semantic mutations', 'formal/measure-semantics.mjs', ...shard)],
-    'mutations-go': [node('Measure Go semantic mutations', 'formal/measure-go-semantics.mjs', ...shard)],
+    'mutations-ts': [node('Measure TypeScript semantic mutations', 'formal/measure-semantics.mjs', ...selection)],
+    'mutations-go': [node('Measure Go semantic mutations', 'formal/measure-go-semantics.mjs', ...selection)],
     // The merge needs neither Quint nor Go: it reads shard reports, checks
     // them against each other and this checkout, and writes the complete report.
     'mutations-merge-ts': [node('Merge TypeScript mutation shards', 'formal/merge-mutation-reports.mjs', 'ts')],
@@ -351,7 +360,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.log(Object.entries(targetDescriptions).map(([name, description]) => `make ${name.padEnd(width)} ${description}`).join('\n'));
     console.log('\nPrerequisites: frozen pnpm install; Node 24, pinned pnpm; Go 1.27.1 / Docker where required; Quint 0.32.0 for formal-check, formal-generate, fixtures-check, explore and model-check; Java 21 and tar for model-check and ci.');
     console.log('formal-check is the Quint evidence lane (models, regressions, challenges); the port and mutation lanes read only the formal-generate output and do not wait for it.');
-    console.log('Sharded mutation runs: MUTATION_SHARD=1/3 make mutations-ts (then 2/3, 3/3, on any machines with the same corpus), then make mutations-merge-ts; the merged report is the only complete evidence.');
+    console.log('Sharded mutation runs: MUTATION_SHARD=<index>/<count> make mutations-ts for every index, matching the workflow matrix, on any machines with the same corpus, then make mutations-merge-ts; the merged report is the only complete evidence.');
+    console.log('One mutant locally: MUTATION_ONLY=M14,M15 make mutations-ts (or mutations-go) writes a partial report under partial/ and leaves the complete report alone.');
     console.log('Full local CI: make ci NODE22_BIN=/absolute/path/to/node22/bin/node (exact 22.15.0).');
   } else {
     try { await runTarget(target); }

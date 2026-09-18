@@ -75,8 +75,8 @@ model checks and records an independent baseline and counterexample for each
 fault. Count challenges and distinct faults separately: a challenge is one
 (fault, model, invariant) measurement, while a distinct fault is one
 `(source, before, after)` mutation. The same shared-rule fault may be measured
-against several models when each entry carries a `measures` note, so the
-catalog currently reports 72 challenges over 68 distinct faults. Every scheduled
+against several models when each entry carries a `measures` note;
+`node formal/execution.mjs` reports both counts. Every scheduled
 model owns at least one challenge; a `challengeWaiver` on a model entry is a
 documented gap, not coverage. A detected challenge shows that the named
 invariant rejects that one deliberate change under the manifest bounds. Model
@@ -88,6 +88,14 @@ run; challenges not yet backfilled are listed in the manifest's
 `reproducerBacklog`, whose size `node formal/execution.mjs` reports beside the
 challenge counts. See the
 [authoring rules](./AUTHORING.md#challenging-every-model).
+Each challenge also carries a `nativeMutants` entry naming the TypeScript and
+Go mutants that inject the same wrong behavior into the ports, or an
+enumerated explanation of why no native line exists; the mutation lanes must
+detect every mapped mutant in their generated cohort. A mapped challenge
+establishes that the corpus would catch the mistake in a port; an explained
+one establishes only that the model rejects it. Unmapped challenges are listed
+in `nativeMutantBacklog`, which only shrinks. See
+[mapping every challenge to native mutants](./AUTHORING.md#mapping-every-challenge-to-native-mutants).
 Boundary properties can challenge an eligibility helper by stating the
 inequality directly. Connection and composition properties may reuse that
 helper while checking independently captured inputs, ownership and history;
@@ -109,7 +117,7 @@ Witness classification lives in the language-neutral modules under [`formal/repl
 
 ## Behavioral mutation comparison
 
-[`semantic-mutations.json`](./semantic-mutations.json) defines 13 reviewed, single-site faults. `node formal/measure-semantics.mjs` applies each in an isolated copy, verifies that it compiles, and runs three cohorts against it:
+[`semantic-mutations.json`](./semantic-mutations.json) defines the reviewed fault catalog: each fault is a short list of exact-anchor edits to `src/`, paired one to one with [`go-mutations.json`](./go-mutations.json) and checked by `node formal/execution.mjs`. `node formal/measure-semantics.mjs` applies each in an isolated copy, verifies that it compiles, and runs three cohorts against it:
 
 1. **Ordinary:** existing unit tests, excluding all formal tests.
 2. **Generated:** sampled and exported-regression replays, reachability gates, and Quint-derived primitive vectors.
@@ -145,7 +153,7 @@ measurement programs remain `measure-semantics.mjs` and
 `measure-go-semantics.mjs`; the Make targets supply the pinned prerequisite
 checks used by hosted full validation.
 
-Hosted runs shard each lane three ways with `MUTATION_SHARD=<index>/<count>`.
+Hosted runs shard each lane with `MUTATION_SHARD=<index>/<count>`: six TypeScript shards and ten Go shards.
 A shard reruns the compile check, every unmodified baseline and the witness
 evaluation before its contiguous slice of the catalog, and writes an incomplete
 report under `shards/<index>-of-<count>/`. `make mutations-merge-ts` and
@@ -167,7 +175,7 @@ The runner clears inherited trace selectors, uses the complete generated directo
 
 Each catalog entry's `requiredDetections` is a regression gate. The local mutation target and full workflow fail if a required fault survives. Newly detected faults remain visible as improvements; update the required set after inspecting the result. Source edits must match exactly once, so implementation drift requires reviewing the mutation rather than silently skipping it.
 
-To expand assurance, add a test/doc-derived case and precise executable evidence, require a generated witness where appropriate, then add a representative fault for a previously unchallenged rule. Preserve gaps until execution closes them. Keep code coverage, source accounting, case evidence, and mutation detection as separate measurements. The current Go suite requires every shared profile, exported regression, fixed scenario and protocol case registered by the manifests, with an equivalent fault catalog in `go-mutations.json`. Broader interaction histories and larger domains remain separate assurance work.
+To expand assurance, add a test/doc-derived case and precise executable evidence, require a generated witness where appropriate, then add a representative fault for a previously unchallenged rule. Preserve gaps until execution closes them. Keep code coverage, source accounting, case evidence, and mutation detection as separate measurements. The current Go suite requires every shared profile, exported regression, fixed scenario and protocol case registered by the manifests, with the paired fault catalog in `go-mutations.json`. A Go mutant whose fault leaves a goroutine blocked makes the port's own synctest suite panic instead of failing an assertion; such an entry declares `skipCohorts.ordinary` with the reason, the report shows that cohort as skipped, and the generated cohort remains its required detection. Broader interaction histories and larger domains remain separate assurance work.
 
 ## Model properties and cross-language execution
 

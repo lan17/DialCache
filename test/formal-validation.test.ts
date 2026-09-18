@@ -203,6 +203,28 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     expect(cleanEnvironment({ MUTATION_SHARD: "2/3", DIALCACHE_PROTOCOL_CORPUS: "fixed", QUINT_SEED: "1" })).toEqual({ MUTATION_SHARD: "2/3" });
   });
 
+  it("measures named mutants only through MUTATION_ONLY on its own target, never together with a shard", () => {
+    const partial = { ...environment, MUTATION_ONLY: "M14,M15" };
+    expect(validationPlan("mutations-ts", { directory, environment: partial })).toEqual([
+      { label: "Measure TypeScript semantic mutations", command: process.execPath, args: ["formal/measure-semantics.mjs", "--only=M14,M15"] },
+    ]);
+    expect(validationPlan("mutations-go", { directory, environment: partial }).map(step => step.args)).toEqual([["formal/measure-go-semantics.mjs", "--only=M14,M15"]]);
+    for (const value of ["", "M14,", "M14,M14", "m14", "14", "M14 M15"]) {
+      expect(() => validationPlan("mutations-ts", { directory, environment: { ...environment, MUTATION_ONLY: value } }), value).toThrow(/MUTATION_ONLY must be <id>,<id> naming distinct mutant ids/);
+    }
+    // A partial run is never merged, so it cannot also be a shard.
+    expect(() => validationPlan("mutations-ts", { directory, environment: { ...partial, MUTATION_SHARD: "2/3" } })).toThrow(/MUTATION_SHARD and MUTATION_ONLY exclude each other/);
+    // The aggregates refuse to ignore it silently; unrelated targets ignore it.
+    for (const target of ["mutations", "ci"]) {
+      expect(() => validationPlan(target, { directory, environment: partial }), target).toThrow(/MUTATION_ONLY=M14,M15 applies only to make mutations-ts and make mutations-go/);
+    }
+    for (const target of ["check", "formal", "formal-ts", "mutations-merge-ts", "mutations-merge-go"]) {
+      expect(validationPlan(target, { directory, environment: partial }), target).toEqual(validationPlan(target, { directory, environment }));
+    }
+    expect(cleanEnvironment({ MUTATION_ONLY: "M14", DIALCACHE_PROTOCOL_CORPUS: "fixed" })).toEqual({ MUTATION_ONLY: "M14" });
+    for (const target of ["mutations-ts", "mutations-go"]) expect(targetDescriptions[target]).toMatch(/MUTATION_ONLY=<id>,<id>/);
+  });
+
   it("merges each language's shards with a plain Node step that needs neither Quint nor Go", () => {
     expect(validationPlan("mutations-merge-ts", { directory })).toEqual([
       { label: "Merge TypeScript mutation shards", command: process.execPath, args: ["formal/merge-mutation-reports.mjs", "ts"] },
@@ -326,18 +348,20 @@ describe("full formal workflow shape", () => {
     for (const lane of lanes) expect(needsOf(jobs[lane]!), lane).toEqual(["generate"]);
   });
 
-  it("shards both mutation lanes over three runners and gates the aggregate on their merges", () => {
+  it("shards the TypeScript lane six ways and the Go lane ten ways, and gates the aggregate on their merges", () => {
     const uploadOf = (job: Job) => job.steps.find(step => step.uses?.startsWith("actions/upload-artifact"))!;
     const downloadsOf = (job: Job) => job.steps.filter(step => step.uses?.startsWith("actions/download-artifact")).map(step => step.with);
     const matrixShard = "$" + "{{ matrix.shard }}";
+    // At most 10 TypeScript and 6 Go mutants per shard of the 55-mutant catalog; the shard count
+    // in the matrix and in MUTATION_SHARD must agree or the merge refuses the shards.
     const table = [
-      { lane: "typescript-mutations", language: "ts", output: ".formal-traces/semantic", artifact: "typescript-semantic", timeout: 30, go: undefined },
-      { lane: "go-mutations", language: "go", output: ".formal-traces/go-semantic", artifact: "go-semantic", timeout: 40, go: { go: "true" } },
+      { lane: "typescript-mutations", language: "ts", output: ".formal-traces/semantic", artifact: "typescript-semantic", timeout: 30, shards: 6, go: undefined },
+      { lane: "go-mutations", language: "go", output: ".formal-traces/go-semantic", artifact: "go-semantic", timeout: 40, shards: 10, go: { go: "true" } },
     ];
-    for (const { lane, language, output, artifact, timeout, go } of table) {
+    for (const { lane, language, output, artifact, timeout, shards, go } of table) {
       const job = jobs[lane]!;
-      expect(job.strategy, lane).toEqual({ "fail-fast": false, matrix: { shard: [1, 2, 3] } });
-      expect(job.env, lane).toEqual({ MUTATION_SHARD: matrixShard + "/3" });
+      expect(job.strategy, lane).toEqual({ "fail-fast": false, matrix: { shard: Array.from({ length: shards }, (_, position) => position + 1) } });
+      expect(job.env, lane).toEqual({ MUTATION_SHARD: matrixShard + "/" + shards });
       expect(job["timeout-minutes"], lane).toBe(timeout);
       expect(job.steps.map(step => step.run).filter(Boolean), lane).toEqual(["make mutations-" + language]);
       expect(job.steps.find(step => step.uses === "./.github/actions/setup-validation")!.with, lane).toEqual(go);
