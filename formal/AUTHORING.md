@@ -407,15 +407,21 @@ entry in `execution.json`:
 "nativeMutants": {
   "kind": "mapped",
   "mutant": "M18",
-  "text": "M18 serves a local entry at its exact insertion expiry (src/internal/local-cache.ts ...; go/cache.go ...), the native twin of local_storage.localEntryLiveAt ..."
+  "text": "M18 is the native twin of local_storage.localEntryLiveAt losing its strict bound: a local entry is served at its exact insertion expiry in both ports."
 }
 ```
 
+The text says why the mutant is the same fault as the model's and stays under
+500 characters; the port-side account (which lines change, what the wrong
+behavior is, any asymmetry between the ports) lives once on the catalog entry
+as its `rationale`, beside the anchors it describes, so a port refactor
+updates one place and the challenges never quote code.
+
 `kind` is one of:
 
-- `mapped`: `mutant` names an entry present in both `semantic-mutations.json`
-  and `go-mutations.json` that lists `generated` in its `requiredDetections`
-  in both catalogs, so the weekly mutation lanes fail if the corpus stops
+- `mapped`: `mutant` names an entry of `formal/mutations.json` whose
+  TypeScript and Go sections both list `generated` in their
+  `requiredDetections`, so the weekly mutation lanes fail if the corpus stops
   detecting it in either port. `text` names the mutant and the model
   definition. `crossContract` is a sentence, required and allowed only when
   the mutant's semantic case does not list the challenge's contract, saying
@@ -431,21 +437,25 @@ entry in `execution.json`:
 
 Search both ports for the line before writing an explanation; an explanation
 where a native line exists is a review failure, and an explanation must name
-the port file it examined. `text` is one or two sentences naming the port
-lines and the model definition so a reader can see they are the same fault. A
-mutant maps to a challenge when it produces the same wrong behavior at the
-same boundary, not when it edits similar text; one mutant may serve several
-challenges (the four inclusive-fence challenges share one), and a mutant may
-need two edits when the port implements the rule at two sites.
+the port file it examined. A mutant maps to a challenge when it produces the
+same wrong behavior at the same boundary, not when it edits similar text;
+several challenges may share one mutant, and a port section may need two
+edits when the port implements the rule at two sites.
 
-`node formal/execution.mjs` checks the table on every pull request: both
-catalogs parse, every entry has a description, a known case, known cohorts
-and a non-empty list of edits inside its port (`src/` or `go/`, never a Go
-test file), every `before` matches the current port text exactly once when
-the edits are applied in order (so a refactor that moves an anchored line
-fails here, not in the weekly lane), the catalogs pair one to one by id and
-case; the challenge's kind is one of the three, `text` is non-empty and names
-the mutant or a port file, `mutant` is present exactly for `mapped`,
+The catalog is one file, `formal/mutations.json`: each entry has an `id`,
+its semantic `case`, a one-sentence `description`, the `rationale`, and a
+`typescript` and a `go` section, each with `edits: [{ path, before, after }]`
+(applied in order, every `before` matching the port text exactly once) and
+`requiredDetections`. Every validation of the manifest checks the catalog's
+schema: every entry has a description, a rationale, a known case, and in each
+section known cohorts and a non-empty list of edits inside its port (`src/` or
+`go/`, never a Go test file). The anchors themselves are checked by
+`node formal/execution.mjs`, `make audit`, the test suite and both mutation
+runners (`checkMutantAnchors`), so a refactor that moves an anchored line
+fails the pull request rather than the weekly lane, while the Quint
+generation lanes never read port text. The challenge rules: the kind is one
+of the three, `text` is non-empty, within its length ceiling and names the
+mutant or a port file, `mutant` is present exactly for `mapped`,
 `crossContract` exactly when the case lacks the contract; two challenges that
 repeat one `(source, before, after)` fault map it the same way; and every
 challenge has a `nativeMutants` entry or is listed in the top-level
@@ -453,18 +463,21 @@ challenge has a `nativeMutants` entry or is listed in the top-level
 `grandfatheredNativeMutantBacklog` in `formal/execution.mjs` and only shrinks.
 The summary also counts catalog mutants no challenge cites.
 
-Both catalogs share one edit shape: `edits: [{ path, before, after }]`, each
-`before` matching exactly once in the file, applied in order. Go's own unit
-suite is informational for a mutant: when a fault leaves a goroutine blocked
-or a pointer nil, a synctest bubble panics instead of failing an assertion,
-and the Go runner records that cohort as `crashed` (neither detected nor
-survived) and measures the replay cohorts as usual. To measure one mutant
-while authoring it, run `MUTATION_ONLY=M18 make mutations-ts` and
+Each port's own unit suite is informational for a mutant: when a fault
+leaves a goroutine blocked or a pointer nil, a synctest bubble panics instead
+of failing an assertion, and when a fault settles a promise the TypeScript
+suite was not awaiting with no assertion failing, the runner records that
+`ordinary` cohort as `crashed` (neither detected nor survived) and measures
+the replay cohorts as usual; a mutant that does not compile is recorded with
+every cohort crashed, so the gate names it while the rest of the shard is
+measured. New mutants therefore require `generated` and `portable`; require
+`ordinary` only where a unit test pins the fault on purpose. To measure one
+mutant while authoring it, run `MUTATION_ONLY=M18 make mutations-ts` and
 `MUTATION_ONLY=M18 make mutations-go`, one partial run per port at a time
 (they share `partial/`); the partial report under
 `.formal-traces/semantic/partial/` (and `go-semantic/partial/`) is never
 complete evidence. Then run the full lanes, or let the weekly workflow run
-them, and set `requiredDetections` from what was actually detected.
+them.
 
 ### Exported runs are exactly the public-only runs
 

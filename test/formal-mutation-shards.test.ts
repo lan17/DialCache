@@ -26,6 +26,9 @@ const shared = await import(new URL("../formal/mutation-reports.mjs", import.met
   requiredDetectionRegressions(entries: CatalogEntry[], results: Mutation[]): string[];
   goDetection(mutations: Mutation[]): Record<string, unknown>;
   typescriptDetection(mutations: Mutation[], cases: { id: string; vectors: unknown[] }[]): Record<string, unknown>;
+  classifyCohort<T>(selection: { baseline: boolean; cohort: string }, evaluate: () => T): T | Cohort;
+  crashedCohort(reason: string): Cohort;
+  noncompilingResult(mutation: CatalogEntry, cohorts: string[], reason: string): Mutation;
   gateDetections(language: Language, report: Report, entries: CatalogEntry[], options?: { directory?: string; summarize?: boolean }): void;
   languages: { ts: Language; go: Language };
 };
@@ -36,16 +39,20 @@ const merge = await import(new URL("../formal/merge-mutation-reports.mjs", impor
   mergeMutationReports(name: string, options?: { directory?: string; shardsDirectory?: string; outputDirectory?: string }): Report;
 };
 const { challengesByMutant } = await import(new URL("../formal/execution.mjs", import.meta.url).href) as {
-  challengesByMutant(manifest: { challenges: Array<{ id: string; nativeMutants?: { mutants?: string[] } }> }): Map<string, string[]>;
+  challengesByMutant(manifest: { challenges: Array<{ id: string; nativeMutants?: { mutant?: string } }> }): Map<string, string[]>;
 };
-const { parseShard, parseOnly, selectionFromArguments, partitionMutations, selectMutations, selectionDirectory, fingerprintFiles, requiredDetectionRegressions, goDetection, gateDetections, languages } = shared;
+const { parseShard, parseOnly, selectionFromArguments, partitionMutations, selectMutations, selectionDirectory, fingerprintFiles, requiredDetectionRegressions, goDetection, typescriptDetection, gateDetections, languages, classifyCohort, crashedCohort, noncompilingResult } = shared;
 const { canonical, mergeShardReports, readShardReports, mergeMutationReports } = merge;
 
 const repo = new URL("../", import.meta.url);
 const readRepo = (path: string) => readFileSync(new URL(path, repo));
 const sha256 = (bytes: Buffer | string) => createHash("sha256").update(bytes).digest("hex");
-const goCatalog = JSON.parse(readRepo("formal/go-mutations.json").toString()) as Catalog;
-const tsCatalog = JSON.parse(readRepo("formal/semantic-mutations.json").toString()) as Catalog;
+type UnifiedEntry = { id: string; case: string; description: string; typescript: { requiredDetections: string[] }; go: { requiredDetections: string[] } };
+const unified = JSON.parse(readRepo("formal/mutations.json").toString()) as { mutations: UnifiedEntry[] };
+// One catalog, two port views: each measurer applies and gates its own section.
+const portView = (port: "typescript" | "go"): Catalog => ({ mutations: unified.mutations.map(mutation => ({ id: mutation.id, case: mutation.case, description: mutation.description, requiredDetections: mutation[port].requiredDetections })) });
+const goCatalog = portView("go");
+const tsCatalog = portView("typescript");
 const ids = goCatalog.mutations.map(mutation => mutation.id);
 // The fixtures below derive every count and slice from the catalogs, so they
 // hold as the catalogs grow. A TypeScript mutant counts as a protocol mutant
@@ -224,7 +231,7 @@ describe("mutation shard partition", () => {
 });
 
 describe("mutation shard merge", () => {
-  const catalogSha256 = sha256(readRepo("formal/go-mutations.json"));
+  const catalogSha256 = sha256(readRepo("formal/mutations.json"));
   const inputs = { files: 367, sha256: "56af679ac31469b1f608e8d13fa7771b762d19ccbb648987438a6d8b8f732b2e" };
   const context = { catalog: goCatalog, catalogSha256, inputs };
   const single = goSingleReport(catalogSha256, inputs);
@@ -278,6 +285,30 @@ describe("mutation shard merge", () => {
     expect(detection.fixed).toEqual({ detected: 0, total: 2, survivors: ["M01", "M02"] });
     // A crashed cohort can never satisfy a required detection.
     expect(requiredDetectionRegressions([{ id: "M02", case: "c", description: "d", requiredDetections: ["ordinary", "generated"] }], [skipping])).toEqual(["M02/ordinary"]);
+    // The TypeScript summary excludes it the same way.
+    const tsDetected: Cohort = { state: "detected", passed: 1, failed: 1, failingTests: ["t"] };
+    const tsSurvived: Cohort = { state: "survived", passed: 2, failed: 0, failingTests: [] };
+    const tsMeasured: Mutation = { id: "M01", case: "C45.maximum-age-exclusive", description: "d", cohorts: { ordinary: tsDetected, generated: tsDetected, fixed: tsSurvived, portable: tsDetected } };
+    const tsCrashed: Mutation = { id: "M02", case: "C45.maximum-age-exclusive", description: "d", cohorts: { ordinary: crashedCohort("unhandled rejection with no failed assertion"), generated: tsDetected, fixed: tsSurvived, portable: tsDetected } };
+    const ts = typescriptDetection([tsMeasured, tsCrashed], [{ id: "C45.maximum-age-exclusive", vectors: [] }]) as Record<string, Record<string, { detected: number; total: number; survivors: string[]; crashed?: string[] }>>;
+    expect(ts.all!.ordinary).toEqual({ detected: 1, total: 1, ordinaryParity: { detected: 1, total: 1 }, survivors: [], crashed: ["M02"] });
+    expect(ts.all!.generated).toEqual({ detected: 2, total: 2, ordinaryParity: { detected: 1, total: 1 }, survivors: [] });
+  });
+
+  it("records a crashed unit cohort for a mutant and rethrows for baselines and replay cohorts", () => {
+    const evaluate = () => { throw new Error("crash, timeout, race, or build error is not mutation detection"); };
+    expect(classifyCohort({ baseline: false, cohort: "ordinary" }, evaluate)).toEqual({ state: "crashed", reason: "crash, timeout, race, or build error is not mutation detection", passed: 0, failed: 0, failingTests: [] });
+    expect(() => classifyCohort({ baseline: true, cohort: "ordinary" }, evaluate)).toThrow(/crash, timeout, race, or build error/);
+    for (const cohort of ["generated", "fixed"]) expect(() => classifyCohort({ baseline: false, cohort }, evaluate), cohort).toThrow(/crash, timeout, race, or build error/);
+    const measured = { state: "survived", passed: 3, failed: 0, failingTests: [] };
+    expect(classifyCohort({ baseline: false, cohort: "ordinary" }, () => measured)).toBe(measured);
+    // A noncompiling mutant is recorded with every cohort crashed, so the gate names it.
+    const entry: CatalogEntry = { id: "M03", case: "c", description: "d", requiredDetections: ["generated", "portable"] };
+    const result = noncompilingResult(entry, ["ordinary", "generated", "fixed", "portable"], "M03: noncompiling mutant");
+    expect(Object.keys(result.cohorts)).toEqual(["ordinary", "generated", "fixed", "portable"]);
+    expect(result.cohorts.generated).toEqual(crashedCohort("M03: noncompiling mutant"));
+    expect(requiredDetectionRegressions([entry], [result])).toEqual(["M03/generated", "M03/portable"]);
+    expect((goDetection([result]) as Record<string, { total: number; crashed?: string[] }>).generated).toEqual({ detected: 0, total: 0, survivors: [], crashed: ["M03"] });
   });
 
   it("refuses a missing, duplicated or miscounted shard", () => {
@@ -328,7 +359,7 @@ describe("mutation shard merge", () => {
     const extraField = shards();
     extraField[1]!.unexpected = true;
     refuse(extraField, /unexpected differs between shards 1 and 2/);
-    refuse(shards(), /catalogSha256 .* was measured, but this checkout's formal\/go-mutations.json hashes to/, { catalogSha256: sha256("edited catalog") });
+    refuse(shards(), /catalogSha256 .* was measured, but this checkout's formal\/mutations.json hashes to/, { catalogSha256: sha256("edited catalog") });
     refuse(shards(), /inputs fingerprint .* was measured, but this checkout's formal\/go\/test\/src hash to/, { inputs: { files: 367, sha256: "different" } });
     // Without a checkout fingerprint the shards need only agree with each other.
     expect(merged(shards(), { inputs: undefined }).complete).toBe(true);
@@ -382,7 +413,7 @@ describe("mutation shard merge over a shard directory", () => {
   beforeEach(() => {
     directory = mkdtempSync(join(tmpdir(), "dialcache-mutation-shards-"));
     for (const path of ["formal", "src", "test", "go", "shards"]) mkdirSync(join(directory, path), { recursive: true });
-    for (const path of ["formal/go-mutations.json", "formal/semantic-mutations.json", "formal/semantic-cases.json", "formal/execution.json"]) copyFileSync(new URL(path, repo), join(directory, path));
+    for (const path of ["formal/mutations.json", "formal/semantic-cases.json", "formal/execution.json"]) copyFileSync(new URL(path, repo), join(directory, path));
     writeFileSync(join(directory, "src/index.ts"), "export {};\n");
     writeFileSync(join(directory, "test/index.test.ts"), "export {};\n");
     writeFileSync(join(directory, "go/cache.go"), "package dialcache\n");
@@ -398,7 +429,7 @@ describe("mutation shard merge over a shard directory", () => {
   const readReport = (path: string) => JSON.parse(readFileSync(join(directory, path), "utf8")) as Report;
 
   it("reads <index>-of-<count>/report.json entries and rejects misplaced or unreadable ones", () => {
-    const catalogSha256 = sha256(readRepo("formal/go-mutations.json"));
+    const catalogSha256 = sha256(readRepo("formal/mutations.json"));
     const reports = goShardReports(goSingleReport(catalogSha256, fingerprintFiles(directory, languages.go.inputs)), 3);
     writeShards(reports);
     writeFileSync(join(directory, "shards/.DS_Store"), "");
@@ -416,7 +447,7 @@ describe("mutation shard merge over a shard directory", () => {
   });
 
   it("writes the complete Go report and markdown where the single run writes them", () => {
-    const catalogSha256 = sha256(readRepo("formal/go-mutations.json"));
+    const catalogSha256 = sha256(readRepo("formal/mutations.json"));
     const single = goSingleReport(catalogSha256, fingerprintFiles(directory, languages.go.inputs));
     writeShards(goShardReports(single, 3), join(directory, ".formal-traces/go-semantic/shards"));
     const report = mergeMutationReports("go", { directory });
@@ -433,7 +464,7 @@ describe("mutation shard merge over a shard directory", () => {
   });
 
   it("writes the complete TypeScript report with the behavioral/protocol split the single run computes", () => {
-    const catalogSha256 = sha256(readRepo("formal/semantic-mutations.json"));
+    const catalogSha256 = sha256(readRepo("formal/mutations.json"));
     const inputs = fingerprintFiles(directory, languages.ts.inputs);
     writeShards(tsShardReports(catalogSha256, inputs, 3), join(directory, ".formal-traces/semantic/shards"));
     const report = mergeMutationReports("ts", { directory });
@@ -456,7 +487,7 @@ describe("mutation shard merge over a shard directory", () => {
   });
 
   it("leaves an incomplete report naming the refusal and exits nonzero from the command line", async () => {
-    const catalogSha256 = sha256(readRepo("formal/go-mutations.json"));
+    const catalogSha256 = sha256(readRepo("formal/mutations.json"));
     const single = goSingleReport(catalogSha256, fingerprintFiles(directory, languages.go.inputs));
     writeShards(goShardReports(single, 3).slice(0, 2), join(directory, ".formal-traces/go-semantic/shards"));
     mkdirSync(join(directory, ".formal-traces/go-semantic"), { recursive: true });

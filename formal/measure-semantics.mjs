@@ -6,8 +6,8 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { checkSemanticCoverage } from './check-semantic-coverage.mjs';
 import { evaluateSemanticTestReport } from './semantic-reporter.mjs';
-import { readMutantCatalogs } from './execution.mjs';
-import { fingerprintFiles, finishPartial, gateDetections, languages, selectMutations, selectionDirectory, selectionFromArguments } from './mutation-reports.mjs';
+import { checkMutantAnchors, mutantsForPort, readMutantCatalog } from './execution.mjs';
+import { classifyCohort, fingerprintFiles, finishPartial, gateDetections, languages, noncompilingResult, selectMutations, selectionDirectory, selectionFromArguments } from './mutation-reports.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const language = languages.ts;
@@ -39,8 +39,8 @@ if (only) {
   }
 }
 const declaredCoverage = checkSemanticCoverage();
-const catalog = JSON.parse(read(language.catalog));
-if (catalog.schemaVersion !== 1 || catalog.mutations.length === 0) throw new Error('Expected semantic mutation catalog');
+const mutantCatalog = readMutantCatalog();
+const catalog = { mutations: mutantsForPort(mutantCatalog, language.port) };
 const formalTests = ['test/formal-conformance.test.ts', 'test/formal-effects.test.ts', 'test/formal-features.test.ts', 'test/formal-local-clock.test.ts', 'test/formal-protocol-vectors.test.ts'];
 const portableTests = ['test/formal-behavior.test.ts', 'test/formal-protocol-vectors.test.ts'];
 const generatedPattern = 'replays |reaches every action|covers every action|reaches fractional expiry and shared instance grid|formal protocol conformance vectors (?!keeps |requires )';
@@ -52,7 +52,6 @@ const cohorts = {
   generated: [...formalTests, `--testNamePattern=${generatedPattern}`],
   fixed: [...portableTests, `--testNamePattern=${portablePattern}`],
 };
-const comparisons = ['ordinary', 'generated', 'portable'];
 // Generated and fixed cohorts select disjoint protocol rows. Their union
 // measures the full portable suite without replaying any history or vector
 // twice. Keep both component reports, including every failing assertion.
@@ -61,12 +60,10 @@ function portableResult({ generated, fixed }) {
     passed: generated.passed + fixed.passed, failed: generated.failed + fixed.failed,
     failingTests: [...generated.failingTests, ...fixed.failingTests], components: ['generated', 'fixed'] };
 }
-// Every shard validates the whole catalog the way every pull request does
-// (readMutantCatalogs: pairing, edit shape, anchors matching exactly once), so
-// a stale anchor anywhere fails each shard the same way it fails the single run.
-readMutantCatalogs();
-const sourceText = new Map();
-for (const mutation of catalog.mutations) for (const edit of mutation.edits) if (!sourceText.has(edit.path)) sourceText.set(edit.path, read(edit.path));
+// Every shard anchors the whole catalog in the port text before measuring, so
+// a stale anchor anywhere fails each shard the same way it fails the single
+// run; the originals restore the workspace after each mutant.
+const sourceText = checkMutantAnchors(mutantCatalog);
 const selected = selectMutations(catalog.mutations, { shard, only });
 // A hard CI cancellation may bypass finally. Keep temporary dependency links
 // outside the artifact tree even when that happens.
@@ -107,10 +104,13 @@ function run(label, cohort, baseline) {
   });
   writeFileSync(resolve(output, `${label}-${cohort}.log`), (result.stdout ?? '') + (result.stderr ?? ''));
   if (result.error || result.signal) throw new Error(`${label}/${cohort}: runner failed: ${result.error ?? result.signal}`);
-  let data, execution;
-  try { data = JSON.parse(readFileSync(json, 'utf8')); execution = JSON.parse(readFileSync(meta, 'utf8')); } catch { throw new Error(`${label}/${cohort}: missing test report`); }
-  const evaluated = evaluateSemanticTestReport(data, execution, result.status, `${label}/${cohort}`);
+  const evaluated = classifyCohort({ baseline, cohort }, () => {
+    let data, execution;
+    try { data = JSON.parse(readFileSync(json, 'utf8')); execution = JSON.parse(readFileSync(meta, 'utf8')); } catch { throw new Error(`${label}/${cohort}: missing test report`); }
+    return evaluateSemanticTestReport(data, execution, result.status, `${label}/${cohort}`);
+  });
   const { state, passed } = evaluated;
+  if (state === 'crashed') return evaluated;
   if (baseline && state !== 'survived') throw new Error(`${cohort}: unmodified baseline must pass`);
   if (!baseline && state === 'survived' && passed !== report.baselines[cohort].passed) throw new Error(`${label}/${cohort}: incomplete surviving run`);
   return evaluated;
@@ -162,7 +162,15 @@ try {
         touched.add(edit.path);
       }
       const compile = spawnSync(process.execPath, [resolve(root, 'node_modules/typescript/bin/tsc'), '--noEmit'], { cwd: workspace, encoding: 'utf8', timeout: 60_000 });
-      if (compile.status !== 0 || compile.error) throw new Error(`${mutation.id}: invalid/noncompiling mutant\n${compile.stdout ?? ''}${compile.stderr ?? ''}`);
+      if (compile.status !== 0 || compile.error) {
+        // Recorded, never measured: the gate names the mutant while the rest of
+        // the shard is still measured.
+        writeFileSync(resolve(output, `${mutation.id}-compile.log`), (compile.stdout ?? '') + (compile.stderr ?? ''));
+        report.mutations.push(noncompilingResult(mutation, [...Object.keys(cohorts), 'portable'], `${mutation.id}: noncompiling mutant; see ${mutation.id}-compile.log`));
+        console.log(`${mutation.id}: noncompiling`);
+        save();
+        continue;
+      }
       const result = { id: mutation.id, case: mutation.case, description: mutation.description, cohorts: {} };
       for (const cohort of Object.keys(cohorts)) result.cohorts[cohort] = run(mutation.id, cohort, false);
       result.cohorts.portable = portableResult(result.cohorts);
@@ -172,7 +180,7 @@ try {
     } finally { for (const path of touched) writeFileSync(resolve(workspace, path), sourceText.get(path)); }
   }
   if (only) {
-    finishPartial(report, selected, { output: relative(root, output), language, save });
+    finishPartial(report, selected, { output: relative(root, output), save });
   } else if (shard.count > 1) {
     // A shard gates its own slice and stays incomplete; the merge recomputes the
     // gate and the detection summary over the whole catalog.

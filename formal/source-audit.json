@@ -1005,7 +1005,7 @@
   "reviewedGuides": [
     {
       "path": "formal/AUTHORING.md",
-      "sha256": "e155974a99730ba29ecc835f54d100eab75bb34ddcc84b6206e3661fca1f16e9",
+      "sha256": "acd65b3df2ac8a4848870dcdb84de56da9a2edeb93fc1c32b87770cb67a641b4",
       "entries": [
         {"line":1,"title":"Reading and extending the DialCache models"},
         {"line":16,"title":"Reading a model"},
@@ -1018,7 +1018,7 @@
         {"line":300,"title":"Refactoring and execution"},
         {"line":325,"title":"Challenging every model"},
         {"line":398,"title":"Mapping every challenge to native mutants"},
-        {"line":469,"title":"Exported runs are exactly the public-only runs"}
+        {"line":482,"title":"Exported runs are exactly the public-only runs"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1363,7 +1363,7 @@
     },
     {
       "path": "formal/SEMANTIC-COVERAGE.md",
-      "sha256": "a4d3a45ab44555416b521ac17fd464e411e7a3f4894317c65daa2e4c56a3e2ae",
+      "sha256": "fe100e28fd9c3037387e5cdad3af5a33913cf27209cdfee66ffdf1cfe11a6740",
       "entries": [
         {"line":1,"title":"Measuring semantic coverage"},
         {"line":5,"title":"Evidence inventory"},
@@ -1502,15 +1502,15 @@
     },
     {
       "path": "formal/VALIDATION.md",
-      "sha256": "7eff2f35529bb21099399397e825b723c22182340a2c5812d51ec13d95603bb8",
+      "sha256": "111212b262ce4651edbfc39b49f927792270f6ce1f5d640a8447d6a51c652dff",
       "entries": [
         {"line":1,"title":"Validation and evidence"},
         {"line":7,"title":"Choosing a run"},
         {"line":67,"title":"Reading a completion report"},
         {"line":85,"title":"Mutation evidence"},
-        {"line":165,"title":"Exploratory runs"},
-        {"line":213,"title":"A retained sampling regression"},
-        {"line":250,"title":"Historical results"}
+        {"line":166,"title":"Exploratory runs"},
+        {"line":214,"title":"A retained sampling regression"},
+        {"line":251,"title":"Historical results"}
       ],
       "review": {
         "kind": "tooling-guide",

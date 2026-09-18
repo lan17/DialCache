@@ -123,8 +123,10 @@ export function mergeMutationReports(name, { directory = root, shardsDirectory, 
   try {
     const catalogText = readFileSync(resolve(directory, language.catalog));
     const catalog = JSON.parse(catalogText);
+    // The gate reads this port's section of each catalog entry.
+    const entries = catalog.mutations.map(mutation => ({ id: mutation.id, case: mutation.case, description: mutation.description, ...mutation[language.port] }));
     merged = mergeShardReports(language, readShardReports(shards), { catalog, catalogSha256: sha256(catalogText), inputs: fingerprintFiles(directory, language.inputs) });
-    gateDetections(language, merged, catalog.mutations, { directory });
+    gateDetections(language, merged, entries, { directory });
   } catch (error) {
     const failed = merged ?? { schemaVersion: 1, complete: false, startedAt };
     failed.complete = false;

@@ -4,8 +4,8 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writ
 import { resolve, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { readMutantCatalogs } from './execution.mjs';
-import { fingerprintFiles, finishPartial, gateDetections, languages, selectMutations, selectionDirectory, selectionFromArguments } from './mutation-reports.mjs';
+import { checkMutantAnchors, mutantsForPort, readMutantCatalog } from './execution.mjs';
+import { classifyCohort, fingerprintFiles, finishPartial, gateDetections, languages, noncompilingResult, selectMutations, selectionDirectory, selectionFromArguments } from './mutation-reports.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -152,13 +152,14 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}
     // touch the user's implementation or trace corpus.
     for (const path of ['formal', 'go', 'test', 'src']) cpSync(resolve(root, path), resolve(workspace, path), { recursive: true });
     const moduleDirectory = resolve(workspace, 'go');
-    const catalogPath = resolve(workspace, 'formal/go-mutations.json');
-    // The catalogs are paired and every anchor checked in the workspace copy by
-    // the one implementation execution.mjs uses on every pull request.
-    readMutantCatalogs(path => readFileSync(resolve(workspace, path), 'utf8'));
-    const catalog = json(catalogPath);
-    const originals = new Map();
-    for (const mutation of catalog.mutations) for (const edit of mutation.edits) if (!originals.has(edit.path)) originals.set(edit.path, readFileSync(resolve(workspace, edit.path), 'utf8'));
+    const catalogPath = resolve(workspace, language.catalog);
+    // The catalog is validated and every anchor checked in the workspace copy by
+    // the one implementation the audit uses; the originals restore the
+    // workspace after each mutant.
+    const readWorkspace = path => readFileSync(resolve(workspace, path), 'utf8');
+    const mutantCatalog = readMutantCatalog(readWorkspace);
+    const originals = checkMutantAnchors(mutantCatalog, readWorkspace);
+    const catalog = { mutations: mutantsForPort(mutantCatalog, language.port) };
     const selected = selectMutations(catalog.mutations, { shard, only });
     if (!only && shard.count > 1) report.shard = { index: shard.index, count: shard.count, mutationIds: selected.map(m => m.id) };
     const ordinaryFiles = readdirSync(moduleDirectory).filter(file => file.endsWith('_test.go') && !infrastructureTestFile.test(file)).sort();
@@ -181,7 +182,7 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}
     report.inputs = fingerprintFiles(workspace, language.inputs);
     report.corpus = fingerprintFiles(root, ['.formal-traces/conformance', '.formal-traces/effects', '.formal-traces/features', '.formal-traces/regressions']);
     report.witnesses = fingerprintFiles(witnessDirectory, ['.']);
-    report.sourceSha256 = Object.fromEntries([...originals].map(([path, text]) => [path, hash(text)]));
+    report.sourceSha256 = Object.fromEntries([...originals].filter(([path]) => path.startsWith('go/')).map(([path, text]) => [path, hash(text)]));
     report.selections = cohorts;
     report.ordinaryFiles = ordinaryFiles;
     const compile = label => {
@@ -196,17 +197,13 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}
       writeFileSync(resolve(output, `${label}-${cohort}.jsonl`), result.stdout ?? '');
       writeFileSync(resolve(output, `${label}-${cohort}.stderr.log`), result.stderr ?? '');
       if (result.error || result.signal) throw new Error(`${label}/${cohort}: runner infrastructure failed: ${result.error ?? result.signal}`);
-      let parsed;
-      try { parsed = evaluateGoTestEvents(result.stdout, result.status); } catch (error) {
-        // The port's own suite is informational for a mutant: a fault that
-        // leaves a goroutine blocked or a pointer nil makes a synctest bubble
-        // panic instead of failing an assertion. That is recorded as crashed,
-        // never as detection or survival; the baseline and the replay cohorts
-        // keep the strict rule.
-        if (baseline || cohort !== 'ordinary') throw error;
-        const crashed = { state: 'crashed', reason: error.message, passed: 0, failed: 0, failingTests: [] };
-        writeFileSync(resolve(output, `${label}-${cohort}.json`), JSON.stringify(crashed, null, 2) + '\n');
-        return crashed;
+      const parsed = classifyCohort({ baseline, cohort }, () => evaluateGoTestEvents(result.stdout, result.status));
+      if (parsed.state === 'crashed') {
+        // Name the panic or the failing test so the report stands on its own.
+        const cause = /panic: [^"\\]+|fatal error: [^"\\]+|--- FAIL: \S+/.exec(result.stdout ?? '')?.[0];
+        if (cause) parsed.reason = `${parsed.reason} (${cause.trim()})`;
+        writeFileSync(resolve(output, `${label}-${cohort}.json`), JSON.stringify(parsed, null, 2) + '\n');
+        return parsed;
       }
       if (baseline && parsed.failed) throw new Error(`${cohort}: unmodified baseline must pass; see baseline event log`);
       const currentTop = new Set(parsed.executedTests.map(name => name.split('/')[0]));
@@ -233,7 +230,13 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}
           if (current.split(edit.before).length !== 2) throw new Error(`${mutation.id}: overlapping edits in ${edit.path}`);
           writeFileSync(path, current.replace(edit.before, () => edit.after)); editedPaths.add(edit.path);
         }
-        compile(mutation.id);
+        try { compile(mutation.id); } catch (error) {
+          // Recorded, never measured: the gate names the mutant while the rest
+          // of the shard is still measured.
+          report.mutations.push(noncompilingResult(mutation, [...Object.keys(cohorts), 'portable'], error.message));
+          console.log(`${mutation.id}: noncompiling`); save();
+          continue;
+        }
         const result = { id: mutation.id, case: mutation.case, description: mutation.description, cohorts: {} };
         for (const cohort of Object.keys(cohorts)) result.cohorts[cohort] = run(mutation.id, cohort, false);
         result.cohorts.portable = union(result.cohorts.generated, result.cohorts.fixed);
@@ -241,7 +244,7 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}
         console.log(`${mutation.id}: ${Object.entries(result.cohorts).map(([name, value]) => `${name}=${value.state}(${value.failed})`).join(', ')}`); save();
       } finally { for (const path of editedPaths) writeFileSync(resolve(workspace, path), originals.get(path)); }
     }
-    if (only) return finishPartial(report, selected, { output: relative(root, output), language, save });
+    if (only) return finishPartial(report, selected, { output: relative(root, output), save });
     if (shard.count > 1) {
       // A shard gates its own slice and stays incomplete; the merge recomputes
       // the gate and the detection summary over the whole catalog.

@@ -108,11 +108,12 @@ the expectation the manifest declares; the report records that outcome per
 challenge, and `node formal/execution.mjs` reports how many challenges still
 wait in `reproducerBacklog`.
 
-Each challenge also maps to the native mutants that inject the same wrong
+Each challenge also maps to the native mutant that injects the same wrong
 behavior into both ports through its `nativeMutants` entry, or explains why no
 native line exists; `node formal/execution.mjs` checks the mapping against
-both mutant catalogs and reports the challenges still waiting in
-`nativeMutantBacklog`. The mutation lanes must detect every mapped mutant in
+the mutant catalog (`formal/mutations.json`, one entry per fault with a
+TypeScript and a Go section), anchors every catalog edit in the port text, and
+reports the challenges still waiting in `nativeMutantBacklog`. The mutation lanes must detect every mapped mutant in
 their generated cohort, so a mapped challenge is evidence that the corpus
 would catch that mistake in a port, not only that the model would. See the
 [authoring rules](./AUTHORING.md#mapping-every-challenge-to-native-mutants).

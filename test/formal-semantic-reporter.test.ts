@@ -62,6 +62,11 @@ it("requires executed assertions and distinguishes detection from infrastructure
     expect(collateral.status).toBe(1);
     expect(collateral.execution.unhandledErrors).toEqual(["unhandled probe"]);
     expect(collateral.evaluate()).toEqual({ state: "detected", passed: 1, failed: 1, failingTests: ["wrong value"], unhandledErrors: ["unhandled probe"] });
+    // The rule is checked directly too, so it does not lean on vitest's exit code encoding unhandled errors.
+    const passing = { testResults: [{ assertionResults: [{ status: "passed", fullName: "ok", failureMessages: [] }] }] };
+    const failing = { testResults: [{ assertionResults: [{ status: "passed", fullName: "ok", failureMessages: [] }, { status: "failed", fullName: "wrong value", failureMessages: ["expected 2"] }] }] };
+    expect(() => evaluateSemanticTestReport(passing, { reason: "passed", collectionErrors: [], unhandledErrors: ["x"] }, 0)).toThrow(/infrastructure\/import error, not evidence of detection/);
+    expect(evaluateSemanticTestReport(failing, { reason: "failed", collectionErrors: [], unhandledErrors: ["x"] }, 1)).toEqual({ state: "detected", passed: 1, failed: 1, failingTests: ["wrong value"], unhandledErrors: ["x"] });
     const alone = run(`import { it } from "vitest"; ${unhandledWork}`);
     // Vitest exits nonzero on an unhandled error while reporting the run itself as passed.
     expect(alone.status).toBe(1);
