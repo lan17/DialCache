@@ -33,10 +33,13 @@ describe("Go local-clock mutation assertion attribution", () => {
     // The same text from another file is not the core replay's assertion.
     expect(() => evaluateGoTestEvents(replayFailure("TestCoreConformance", "feature_replay_test.go", "pair returned different values"), 1)).toThrow(/replay failure lacks observation/);
   });
-  it("stops on a settlement violation instead of crediting or discounting it", () => {
+  it("refuses a settlement violation as evidence and names the violating line", () => {
     const violation = replayFailure("TestFeatureConformance", "feature_replay_test.go",
       "control.itf.json step 3 action beginCall: Settlement violation: 1 runnable task(s) at observation");
     expect(() => evaluateGoTestEvents(violation, 1)).toThrow(/settlement violation under mutation is not comparison evidence/);
+    // The violating line travels with the error, so a mutant's cohort can be recorded against it by name.
+    const thrown = (() => { try { evaluateGoTestEvents(violation, 1); } catch (error) { return error as Error & { settlementViolation?: string }; } return undefined; })();
+    expect(thrown?.settlementViolation).toBe("feature_replay_test.go:84: control.itf.json step 3 action beginCall: Settlement violation: 1 runnable task(s) at observation");
   });
   it.each(["unknown trace input", "call before instance construction", "default clock started with negative elapsed time"])(
     "does not credit infrastructure failure: %s", message => {

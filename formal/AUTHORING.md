@@ -176,7 +176,12 @@ For each new rule or interaction:
    The generated cohort of each mutation lane must detect both native mutants:
    list `generated` in their `requiredDetections`. A mutant the corpus does not
    detect is a coverage gap; close it with an exported regression or a witness
-   before the challenge counts as mapped.
+   before the challenge counts as mapped. A new profile or held effect kind
+   stays inside the settlement receipt ([PORTING.md](./PORTING.md)) by
+   extending the ledger's kinds and gate names in
+   [replay/settlement.mjs](./replay/settlement.mjs), the `held` members of
+   `$defs/settlementReceipt`, both drivers' held computation and the receipt
+   table; a hold fault must precede every effect-starting command of its step.
 5. **Account for the evidence.** Link the case, property, scenario, and required
    witness in the existing catalogs. Preserve explicit gaps and update profile
    claims only after the corresponding language driver passes.
@@ -470,7 +475,9 @@ suite was not awaiting with no assertion failing, the runner records that
 `ordinary` cohort as `crashed` (neither detected nor survived) and measures
 the replay cohorts as usual; a mutant that does not compile is recorded with
 every cohort crashed, so the gate names it while the rest of the shard is
-measured. New mutants therefore require `generated` and `portable`; require
+measured; a settlement violation under a mutant ([PORTING.md](./PORTING.md))
+is recorded the same way, naming the first violating history and rule. New
+mutants therefore require `generated` and `portable`; require
 `ordinary` only where a unit test pins the fault on purpose. To measure one
 mutant while authoring it, run `MUTATION_ONLY=M18 make mutations-ts` and
 `MUTATION_ONLY=M18 make mutations-go`, one partial run per port at a time

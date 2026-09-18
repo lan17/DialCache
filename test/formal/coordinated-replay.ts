@@ -6,7 +6,6 @@ import { vi } from "vitest";
 
 import { ReplayCoordinator, settlement } from "../../formal/replay/coordinator.mjs";
 import type { CoreCommand } from "../../formal/replay/core.mjs";
-import { schemaViolation } from "../../formal/replay/schema.mjs";
 import { wallEpochMs } from "../../formal/replay/settlement.mjs";
 import { parseJSON } from "../../formal/replay/validation.mjs";
 import { DialCache, DialCacheKeyConfig } from "../../src/index.js";
@@ -37,9 +36,7 @@ interface CoordinatedDriver {
 // only; conformance replays never pass it.
 export interface ReplayOptions { settle?: boolean }
 
-type Prepared = {
-  session: string; fixture: Record<string, unknown>; setup: Array<Record<string, unknown>>; steps: number; receipt: string | null;
-};
+type Prepared = { session: string; fixture: Record<string, unknown>; setup: Array<Record<string, unknown>>; steps: number };
 type Observed = { complete: false; index: number; inputs: Array<Record<string, unknown>> } | { complete: true; steps: number };
 
 // Replays one trace end to end through the shared coordinator with the real
@@ -61,7 +58,9 @@ export async function replayThroughCoordinator(profile: string, path: string, co
       const result = request<Observed>({
         op: "observe", session: prepared.session, index, settlement,
         observed: parseJSON(JSON.stringify(driver.observe())), environment: { wallMs: driver.wallMs() },
-        ...receiptFields(prepared.receipt, driver.receipt()),
+        // A driver without a receipt reports undefined, which the JSON round
+        // trip drops; the coordinator alone decides whether one was required.
+        receipt: driver.receipt(),
       });
       if (result.complete) {
         complete = true;
@@ -75,21 +74,6 @@ export async function replayThroughCoordinator(profile: string, path: string, co
     if (!complete) { try { request({ op: "discard", session: prepared.session }); } catch { /* Already released. */ } }
     await driver.dispose();
   }
-}
-
-// A receipt crosses the wire exactly when the session names its definition,
-// validated locally against that definition first, as a native transport does
-// with its observations: a shape defect is the driver's, reported without a
-// round trip and without the receipt's values.
-function receiptFields(definition: string | null, receipt: SettlementReceipt | undefined): { receipt: SettlementReceipt } | Record<string, never> {
-  if (definition === null) {
-    if (receipt !== undefined) throw new Error("Driver reports a settlement receipt the session does not name");
-    return {};
-  }
-  if (receipt === undefined) throw new Error(`Replay session requires a ${definition} receipt the driver does not report`);
-  const path = schemaViolation(receipt, definition, "receipt");
-  if (path !== undefined) throw new Error(`Driver produced a malformed ${definition} at ${path}`);
-  return { receipt };
 }
 
 function driverFor(profile: string, fixture: Fixture, options: ReplayOptions): CoordinatedDriver {

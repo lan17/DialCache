@@ -1005,20 +1005,20 @@
   "reviewedGuides": [
     {
       "path": "formal/AUTHORING.md",
-      "sha256": "acd65b3df2ac8a4848870dcdb84de56da9a2edeb93fc1c32b87770cb67a641b4",
+      "sha256": "888d45dd13b1e4f6233c6b25e33d0c68c1702570b3c3c382a165b102b973673d",
       "entries": [
         {"line":1,"title":"Reading and extending the DialCache models"},
         {"line":16,"title":"Reading a model"},
         {"line":56,"title":"Writing conventions"},
         {"line":150,"title":"Codifying the next behavior"},
-        {"line":191,"title":"Give reviewers focused context"},
-        {"line":206,"title":"Exporting a deterministic regression"},
-        {"line":242,"title":"Maintaining case and witness evidence"},
-        {"line":290,"title":"Reproducible committed fixtures"},
-        {"line":300,"title":"Refactoring and execution"},
-        {"line":325,"title":"Challenging every model"},
-        {"line":398,"title":"Mapping every challenge to native mutants"},
-        {"line":482,"title":"Exported runs are exactly the public-only runs"}
+        {"line":196,"title":"Give reviewers focused context"},
+        {"line":211,"title":"Exporting a deterministic regression"},
+        {"line":247,"title":"Maintaining case and witness evidence"},
+        {"line":295,"title":"Reproducible committed fixtures"},
+        {"line":305,"title":"Refactoring and execution"},
+        {"line":330,"title":"Challenging every model"},
+        {"line":403,"title":"Mapping every challenge to native mutants"},
+        {"line":489,"title":"Exported runs are exactly the public-only runs"}
       ],
       "review": {
         "kind": "tooling-guide",
@@ -1288,18 +1288,18 @@
     },
     {
       "path": "formal/PORTING.md",
-      "sha256": "63462c55262a457ee162a920f310e364469612258b0020a9b873c0a358ebf27f",
+      "sha256": "42c22a7356108b8ed0d8890a482e33a46185d797e9e0d2a0df2a173b8ba323ba",
       "entries": [
         {"line":1,"title":"Implementing another DialCache port"},
         {"line":14,"title":"What a port supplies"},
         {"line":45,"title":"Shared coordinator protocol"},
         {"line":84,"title":"Trace and observation contract"},
-        {"line":180,"title":"Observation contract"},
-        {"line":278,"title":"Generated fixtures and fast local tests"},
-        {"line":313,"title":"Complete corpus and reusable acceptance checks"},
-        {"line":421,"title":"Witness evidence"},
-        {"line":511,"title":"Current limitations for a third port"},
-        {"line":530,"title":"New-port acceptance"}
+        {"line":185,"title":"Observation contract"},
+        {"line":283,"title":"Generated fixtures and fast local tests"},
+        {"line":318,"title":"Complete corpus and reusable acceptance checks"},
+        {"line":426,"title":"Witness evidence"},
+        {"line":516,"title":"Current limitations for a third port"},
+        {"line":535,"title":"New-port acceptance"}
       ],
       "review": {
         "kind": "tooling-guide",

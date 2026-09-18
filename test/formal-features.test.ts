@@ -19,6 +19,9 @@ async function replay(profile: Profile, trace: Trace, harness: { settle?: boolea
   const ledger = new SettlementLedger(fixture, profile.setup);
   try {
     for (const input of profile.setup) await driver.apply(input);
+    // One snapshot per step: the inputs of the next step are derived from the
+    // observation the previous step was asserted against.
+    let observed = driver.snapshot();
     for (const [i, step] of trace.steps.entries()) {
       const { action, choice } = step;
       const context = `${trace.path} step ${i} action ${action} choice ${choice}`;
@@ -27,16 +30,17 @@ async function replay(profile: Profile, trace: Trace, harness: { settle?: boolea
       try {
         // Only named actions/choices and actual effect IDs enter the driver.
         // The model observation and its private state cannot control execution.
-        if (action !== "init") inputs = [featureInput(profile, action, choice, driver.snapshot(), { wallMs: Date.now() })];
+        if (action !== "init") inputs = [featureInput(profile, action, choice, observed, { wallMs: Date.now() })];
         for (const input of inputs) await driver.apply(input);
       } catch (cause) { throw mismatch(cause); }
       ledger.issue(inputs);
+      observed = driver.snapshot();
       // Settlement is checked first and outside the comparison wrapper: a
       // violation is the driver's own infrastructure failure and must never
       // carry the expected/actual markers the mutation lanes credit.
-      try { ledger.assert(driver.receipt(), driver.snapshot(), { wallMs: Date.now() }); }
+      try { ledger.assert(driver.receipt(), observed, { wallMs: Date.now() }); }
       catch (cause) { throw new Error(`${context}: ${(cause as Error).message}`, { cause }); }
-      try { assertFeatureObservation(profile, step, driver.snapshot()); } catch (cause) { throw mismatch(cause); }
+      try { assertFeatureObservation(profile, step, observed); } catch (cause) { throw mismatch(cause); }
     }
   } finally { await driver.dispose(); }
 }

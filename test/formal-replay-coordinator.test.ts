@@ -323,8 +323,26 @@ describe("settlement receipt contract", () => {
     const observed = { ...emptyObservation(), loaders: 2, reads: 3, loads: 1, comparisons: 1 };
     expect(ledger.expected(observed)).toEqual({ elapsedMs: 10 + 2 * 7 + 3, runnable: 0, held: { ...zero.held, loaders: 2, reads: 3, scopes: 1 } });
     expect(ledger.wallMs(observed)).toBe(wallEpochMs + 10 - 1000 + 2 * 7 + 3);
-    ledger.issue([{ op: "release", effect: "read", index: 0 }, { op: "resolve", loader: 1 }, { op: "faults", value: { holdReads: false } }, { op: "closeScope", id: "0" }]);
+    // A hold change leads its interval, so the reads started after it are not held.
+    ledger.issue([{ op: "faults", value: { holdReads: false } }, { op: "release", effect: "read", index: 0 }, { op: "resolve", loader: 1 }, { op: "closeScope", id: "0" }]);
     expect(ledger.expected({ ...observed, reads: 5 }).held).toEqual({ ...zero.held, loaders: 1, reads: 2 });
+  });
+
+  it("refuses a schedule whose hold change follows an effect-starting command in one interval", () => {
+    // Holding is attributed per observation interval; both drivers decide it at
+    // effect start, so a hold change must lead its interval.
+    const seeded = [{ op: "seed", value: 1, ageMs: 0 }, { op: "openScope", id: "0", instance: "0" }, { op: "faults", value: { holdReads: true } }];
+    expect(() => new SettlementLedger({}, seeded)).not.toThrow();
+    expect(() => new SettlementLedger({}, [{ op: "begin" }, { op: "faults", value: { failReads: true } }])).not.toThrow();
+    expect(() => new SettlementLedger({}, [{ op: "begin" }, { op: "faults", value: { holdReads: false } }])).not.toThrow();
+    const late = () => new SettlementLedger({}, [{ op: "begin" }, { op: "faults", value: { holdReads: true } }]);
+    expect(late).toThrow(/^Settlement ledger cannot attribute held gates: holdReads changes after an effect-starting command in one observation interval$/);
+    expect(late).not.toThrow(/Settlement violation/);
+    // An observation closes the interval.
+    const ledger = new SettlementLedger({}, [{ op: "begin" }]);
+    ledger.expected(emptyObservation());
+    expect(() => ledger.issue([{ op: "faults", value: { holdReads: true } }, { op: "begin" }])).not.toThrow();
+    expect(() => ledger.issue([{ op: "faults", value: { holdWrites: true } }])).toThrow(/holdWrites changes after an effect-starting command/);
   });
 
   it("rejects a behavior observe without a receipt as infrastructure", () => {

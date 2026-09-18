@@ -1,7 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { profileActions } from "../formal/replay/bindings.mjs";
 import { ReplayCoordinator } from "../formal/replay/coordinator.mjs";
+import { profiles } from "../formal/replay/features.mjs";
+import { wallEpochMs } from "../formal/replay/settlement.mjs";
+import { FallbackTimeoutError } from "../src/errors.js";
+import { BehaviorDriver, type Fixture, type Input } from "./formal/behavior-driver.js";
 import { replayThroughCoordinator, smokeTracePath } from "./formal/coordinated-replay.js";
 
 // Harness control for the causally-ready-v1 settlement contract (PORTING.md).
@@ -14,7 +18,7 @@ import { replayThroughCoordinator, smokeTracePath } from "./formal/coordinated-r
 // pass without ever settling; if it failed only by mismatch, an unsettled
 // driver could earn mutation credit. The core and local-clock profiles use
 // other drivers and carry no receipt.
-const profiles = Object.keys(profileActions()).filter(name => name !== "core" && name !== "local-clock");
+const behaviorProfiles = Object.keys(profileActions()).filter(name => name !== "core" && name !== "local-clock");
 
 // Measured 2026-09-18 at commit 76ba3ef: the unsettled driver first reports
 // runnable work at step 2 of source-budgets, 3 of runtime-boundaries, 2 of
@@ -26,9 +30,31 @@ const profiles = Object.keys(profileActions()).filter(name => name !== "core" &&
 // asynchronous), and never all of them.
 describe("harness control: causally-ready-v1 settlement", () => {
   it("covers every behavior-driver profile the coordinator serves", () => {
-    expect(profiles.length).toBeGreaterThan(0);
+    expect(behaviorProfiles.length).toBeGreaterThan(0);
   });
-  for (const name of profiles) {
+  // The verification drain compares one encoding of the observation with
+  // itself. A value the library hands back is recorded by reference, and an
+  // Error instance is exactly what a fault can put there (mutant M37 publishes
+  // a rejected source's error into local storage); nothing ran after the
+  // snapshot, so the receipt must say so.
+  it("reports nothing runnable when a call value is a live object the library hands back", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(wallEpochMs));
+    const layers = profiles.layers!;
+    const fixture = (layers.fixture as (choice: number) => Fixture)(5);
+    const driver = new BehaviorDriver(fixture, {}, {});
+    try {
+      for (const input of layers.setup) await driver.apply(input as Input);
+      await driver.apply({ op: "begin" });
+      await driver.apply({ op: "resolve", loader: 0, value: new FallbackTimeoutError("Behavior", 10) } as unknown as Input);
+      expect(driver.receipt().runnable).toBe(0);
+      expect(driver.snapshot().calls[0]).toEqual({ status: "value", value: { name: "FallbackTimeoutError", useCase: "Behavior", timeoutMs: 10 } });
+    } finally {
+      await driver.dispose();
+      vi.useRealTimers();
+    }
+  });
+  for (const name of behaviorProfiles) {
     it(`${name} smoke history passes with the settling driver`, async () => {
       await replayThroughCoordinator(name, smokeTracePath(name));
     });

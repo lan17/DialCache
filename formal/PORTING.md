@@ -64,9 +64,9 @@ timeouts fail the test. The coordinator performs no cache operations.
 After `prepare`, create the native fixture, execute setup and report observation
 index zero. Execute the returned `inputs`, settle authorized work and report the
 next index. Validate each observation and receipt locally against the `$defs`
-definitions that `prepare` named before sending them, as both transports do; a
-shape defect is then attributed to the driver without a coordinator round trip,
-and the coordinator's own check remains the last line. The environment carries the driver's actual `wallMs` clock in epoch
+definitions that `prepare` named before sending them, as the Go transport does;
+a shape defect is then attributed to the driver without a coordinator round
+trip, and the coordinator's own check remains the last line. The environment carries the driver's actual `wallMs` clock in epoch
 milliseconds; behavior, effects and core drivers start it at
 `2026-09-08T12:00:00.000Z` (`1788868800000` ms) and move it only through clock
 commands, as the [observation contract](#observation-contract) describes.
@@ -154,12 +154,17 @@ driver's settlement receipt, in this order, before comparing the observation:
 - R5 held gates. `held` equals the gates the schedule leaves open: loaders
   begun minus loaders resolved or rejected; for each effect kind, operations
   started while its hold fault was on minus those released by name; scopes
-  opened minus closed, setup included.
+  opened minus closed, setup included. Hold faults are attributed per
+  observation interval: a command that turns a hold on or off must precede
+  every effect-starting command of its interval, setup included, and the
+  ledger refuses any other schedule as an infrastructure error, not as a
+  violation.
 
 A violated rule fails as `Settlement violation: <rule>`, an infrastructure
 error without comparison markers, so an unsettled driver never earns mutation
-credit: both mutation runners fail the lane on one instead of counting it as a
-detection. The rules read only the commands the coordinator issued and the
+credit: both mutation runners record one under a mutant as a crashed cohort
+naming the history and rule, so the gate fails by mutant id while the rest of
+the shard is measured. The rules read only the commands the coordinator issued and the
 driver's public counters, so a library fault that starts an extra source moves
 the counters, the ledger and the driver's clock together, passes here, and
 fails the observation comparison where the mutation lanes credit it. Timer
@@ -268,7 +273,7 @@ lock, waits for every goroutine in the `synctest` bubble to block, and reports
 the deferred functions found plus 1 if the observation changed. Gates the
 library abandons, such as a read aborted by its deadline, stay registered until
 their release command. Validate the receipt locally against the definition
-`prepare` named, as both transports do, before sending it.
+`prepare` named, as the Go transport does, before sending it.
 
 [coordinated-replay.ts](../test/formal/coordinated-replay.ts) replays any
 profile's history through the coordinator with the TypeScript drivers exactly as

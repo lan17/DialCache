@@ -302,6 +302,11 @@ describe("mutation shard merge", () => {
     for (const cohort of ["generated", "fixed"]) expect(() => classifyCohort({ baseline: false, cohort }, evaluate), cohort).toThrow(/crash, timeout, race, or build error/);
     const measured = { state: "survived", passed: 3, failed: 0, failingTests: [] };
     expect(classifyCohort({ baseline: false, cohort: "ordinary" }, () => measured)).toBe(measured);
+    // A settlement violation under a mutant is recorded against it in any cohort, naming the history and rule; the baseline keeps the strict rule.
+    const violation = "trace_11.itf.json step 25 action beginCall choice 0: Settlement violation: 1 runnable task(s) at observation";
+    const violated = () => { throw Object.assign(new Error("M37/generated: infrastructure/import error"), { settlementViolation: violation }); };
+    for (const cohort of ["ordinary", "generated", "fixed"]) expect(classifyCohort({ baseline: false, cohort }, violated), cohort).toEqual(crashedCohort(`settlement violation: ${violation}`));
+    expect(() => classifyCohort({ baseline: true, cohort: "generated" }, violated)).toThrow(/infrastructure\/import error/);
     // A noncompiling mutant is recorded with every cohort crashed, so the gate names it.
     const entry: CatalogEntry = { id: "M03", case: "c", description: "d", requiredDetections: ["generated", "portable"] };
     const result = noncompilingResult(entry, ["ordinary", "generated", "fixed", "portable"], "M03: noncompiling mutant");

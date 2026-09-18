@@ -88,10 +88,16 @@ export function evaluateGoTestEvents(lines, exitCode) {
     if (!/\b[\w-]+_test\.go:\d+:/.test(output)) throw new Error(`failure has no assertion location: ${name}`);
     if (/^Test(?:Core|Effects|Feature|Behavior|LocalClock)Conformance(?:\/|$)/.test(name)) {
       // A settlement violation is the coordinator's verdict on the driver's
-      // receipt, never comparison evidence about the cache: a mutant that
-      // provokes one is a finding about that mutant's scheduling, so the lane
-      // stops instead of crediting or discounting it.
-      if (/Settlement violation/.test(output)) throw new Error(`settlement violation under mutation is not comparison evidence: ${name}`);
+      // receipt, never comparison evidence about the cache. The violating line
+      // travels with the error so the runner records a mutant's cohort against
+      // it by name (mutation-reports.mjs classifyCohort) instead of crediting
+      // or discounting it.
+      const violation = /[^\n]*Settlement violation[^\n]*/.exec(output);
+      if (violation !== null) {
+        const error = new Error(`settlement violation under mutation is not comparison evidence: ${name}`);
+        error.settlementViolation = violation[0].trim();
+        throw error;
+      }
       if (/expected:[\s\S]*actual:/.test(output)) assertionKinds[name] = 'observation-mismatch';
       else if (causalPropertyAssertion(output)) assertionKinds[name] = 'causal-property';
       // The core replay asserts that a coalesced pair (or a request pair)

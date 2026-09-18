@@ -132,12 +132,17 @@ export const crashedCohort = reason => ({ state: 'crashed', reason, passed: 0, f
 // One rule for both ports: the port's own unit suite is informational for a
 // mutant, so when its evaluation throws (a synctest bubble panicking on a
 // goroutine the fault leaves blocked, an unhandled rejection with no failed
-// assertion) the cohort is recorded as crashed and the run continues. The
-// baseline and the replay cohorts keep the strict rule: their throw fails the
-// measurement.
+// assertion) the cohort is recorded as crashed and the run continues. A
+// settlement violation under a mutant is the driver failing its own contract,
+// never comparison evidence; it is recorded as a crashed cohort naming the
+// first violating history and rule, so the gate fails by mutant id while the
+// rest of the shard is measured. The baseline and every other replay-cohort
+// failure keep the strict rule: their throw fails the measurement.
 export function classifyCohort({ baseline, cohort }, evaluate) {
   try { return evaluate(); } catch (error) {
-    if (baseline || cohort !== 'ordinary') throw error;
+    if (baseline) throw error;
+    if (error.settlementViolation !== undefined) return crashedCohort(`settlement violation: ${error.settlementViolation}`);
+    if (cohort !== 'ordinary') throw error;
     return crashedCohort(error.message);
   }
 }

@@ -84,6 +84,12 @@ it("requires executed assertions and distinguishes detection from infrastructure
       { status: "failed", fullName: "wrong value", failureMessages: ["Observation mismatch\nexpected: 1\nactual: 2"] },
       { status: "failed", fullName: "unsettled", failureMessages: ["Error: step 1 action beginCall: Settlement violation: read gates held 0, schedule requires 1\n    at replay"] }] }] };
     expect(() => evaluateSemanticTestReport(violated, { reason: "failed", collectionErrors: [], unhandledErrors: [] }, 1)).toThrow(/infrastructure\/import error, not evidence of detection/);
+    // The first violated rule travels with the error, so a mutant's cohort can be recorded against it by name.
+    const thrown = (() => { try { evaluateSemanticTestReport(violated, { reason: "failed", collectionErrors: [], unhandledErrors: [] }, 1); } catch (error) { return error as Error & { settlementViolation?: string }; } return undefined; })();
+    expect(thrown?.settlementViolation).toBe("step 1 action beginCall: Settlement violation: read gates held 0, schedule requires 1");
+    const timedOut = { testResults: [{ assertionResults: [{ status: "failed", fullName: "slow", failureMessages: ["Error: Test timed out in 5000ms."] }] }] };
+    const slow = (() => { try { evaluateSemanticTestReport(timedOut, { reason: "failed", collectionErrors: [], unhandledErrors: [] }, 1); } catch (error) { return error as Error & { settlementViolation?: string }; } return undefined; })();
+    expect(slow?.settlementViolation).toBeUndefined();
 
     for (const empty of [run(passingSource, "^no-matching-test$"),
       run('import { it } from "vitest"; it.skip("skipped assertion", () => { throw new Error("must remain skipped"); });')]) {

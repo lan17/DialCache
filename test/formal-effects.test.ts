@@ -54,6 +54,9 @@ async function replay(trace: Trace, harness: { settle?: boolean } = {}) {
   try {
     for (const input of setup) await driver.apply(input);
     const expectations = expectedObservations(trace);
+    // One snapshot per step: the inputs of the next step are derived from the
+    // observation the previous step was asserted against.
+    let observed = driver.snapshot();
     for (const [index, step] of trace.steps.entries()) {
       const context = `${trace.path} step ${index} action ${step.action}`;
       const expected = expectations[index];
@@ -61,20 +64,21 @@ async function replay(trace: Trace, harness: { settle?: boolean } = {}) {
       let inputs: Input[] = [];
       try {
         // Only the action/choice and independently observed effect index enter execution.
-        inputs = inputsFor({ action: step.action, ...(step.choice === undefined ? {} : { choice: step.choice }) }, driver.snapshot(), { wallMs: Date.now() });
+        inputs = inputsFor({ action: step.action, ...(step.choice === undefined ? {} : { choice: step.choice }) }, observed, { wallMs: Date.now() });
         for (const input of inputs) await driver.apply(input);
       } catch (cause) { throw mismatch(cause); }
       ledger.issue(inputs);
+      observed = driver.snapshot();
       // Settlement is checked first and outside the comparison wrapper: a
       // violation is the driver's own infrastructure failure and must never
       // carry the expected/actual markers the mutation lanes credit.
-      try { ledger.assert(driver.receipt(), driver.snapshot(), { wallMs: Date.now() }); }
+      try { ledger.assert(driver.receipt(), observed, { wallMs: Date.now() }); }
       catch (cause) { throw new Error(`${context}: ${(cause as Error).message}`, { cause }); }
       try {
         // Check C23/C25/C26 directly on observed history, independently of
         // expected Quint phases, timestamps, and outcome predictions.
         assertEffectsHistory(driver.contractHistory());
-        expect(project(driver.snapshot()), context).toEqual(expected);
+        expect(project(observed), context).toEqual(expected);
       } catch (cause) { throw mismatch(cause); }
     }
   } finally { await driver.dispose(); }

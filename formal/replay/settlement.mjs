@@ -41,6 +41,8 @@ export class SettlementLedger {
   #advanceMs = 0;
   #shiftWallMs = 0;
   #openScopes = 0;
+  // Commands issued since the previous observation that can start an effect.
+  #effectsSinceObservation = 0;
 
   constructor(fixture, setup = []) {
     this.#fixture = fixture;
@@ -50,12 +52,25 @@ export class SettlementLedger {
   // Record the commands issued since the previous observation.
   issue(commands) {
     for (const command of commands) {
-      switch (command.op) {
-        case "faults":
-          for (const [kind, { hold }] of Object.entries(kinds)) {
-            if (Object.hasOwn(command.value, hold)) this.#hold[kind] = command.value[hold];
+      if (command.op === "faults") {
+        for (const [kind, { hold }] of Object.entries(kinds)) {
+          if (!Object.hasOwn(command.value, hold) || command.value[hold] === this.#hold[kind]) continue;
+          // R5 attributes every effect started since the previous observation
+          // by the hold flags in force at that observation, while both drivers
+          // decide holding when the effect starts. The two agree only while a
+          // hold change precedes every effect-starting command of its interval,
+          // so any other schedule is refused as the ledger's own limit, not as
+          // a violation by the driver.
+          if (this.#effectsSinceObservation > 0) {
+            throw new Error(`Settlement ledger cannot attribute held gates: ${hold} changes after an effect-starting command in one observation interval`);
           }
-          break;
+          this.#hold[kind] = command.value[hold];
+        }
+        continue;
+      }
+      // Seeding the remote and opening a scope start no gated effect.
+      if (command.op !== "seed" && command.op !== "openScope") this.#effectsSinceObservation++;
+      switch (command.op) {
         case "release": this.#released[command.effect]++; break;
         case "resolve": case "reject": this.#settled++; break;
         case "advance": this.#advanceMs += command.ms; break;
@@ -81,6 +96,7 @@ export class SettlementLedger {
       this.#previous[counter] = observed[counter];
       held[member] = this.#heldStarted[kind] - this.#released[kind];
     }
+    this.#effectsSinceObservation = 0;
     return { elapsedMs: this.#advanceMs + this.#workMs(observed), runnable: 0, held };
   }
 

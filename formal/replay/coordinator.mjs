@@ -32,6 +32,9 @@ export class ReplayCoordinator {
     if (request.op === "prepare") {
       const raw = Object.hasOwn(request, "raw") ? request.raw : readFileSync(request.path, "utf8");
       const binding = bindTrace(request.profile, parseJSON(raw), request.path);
+      // A receipt is checked against a ledger, and a ledger exists only for a
+      // controlled wall clock; a binding cannot promise one without the other.
+      if (binding.receipt !== null && binding.wallClock !== "controlled") throw new Error("A session that carries a settlement receipt must control its wall clock");
       const { trace } = binding;
       const session = String(++this.#nextSession);
       // A session with a controlled wall clock keeps a settlement ledger of the

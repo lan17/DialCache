@@ -61,6 +61,44 @@ describe("layers witnesses from inputs and public observations", () => {
     expect(witnesses("probe", states).labels.has(label)).toBe(false);
   });
 
+  // One negative per discriminating clause of the rule, each on the recorded
+  // reuse schedule: the reuse must come from a fresh context, start no source,
+  // find the local layer on, return the published value, and address the
+  // published identity.
+  it("does not credit a reuse in a persistent context", () => {
+    const states = history(reuse);
+    rechoose(states[3]!, 0);
+    expect(witnesses("probe", states).labels.has(label)).toBe(false);
+  });
+
+  it("does not credit a reuse that starts its own source", () => {
+    const states = history(reuse);
+    states[3]!.s.o.loaders = { "#bigint": "2" };
+    expect(witnesses("probe", states).labels.has(label)).toBe(false);
+  });
+
+  it("does not credit a reuse while the local layer is off", () => {
+    const states = history(reuse);
+    const off = structuredClone(states[2]!);
+    off.input = { name: "policy", choice: { "#bigint": "2" } };
+    off["mbt::actionTaken"] = "policy";
+    rechoose(off, 2);
+    states.splice(3, 0, off);
+    expect(witnesses("probe", states).labels.has(label)).toBe(false);
+  });
+
+  it("does not credit a reuse that returns a value the source did not publish", () => {
+    const states = history(reuse);
+    rechoose(states[2]!, 2);
+    expect(witnesses("probe", states).labels.has(label)).toBe(false);
+  });
+
+  it("does not credit a reuse of another key", () => {
+    const states = history(reuse);
+    rechoose(states[3]!, 13);
+    expect(witnesses("probe", states).labels.has(label)).toBe(false);
+  });
+
   it("refuses adapter effects in the fixture without a remote adapter", () => {
     const states = history(reuse);
     states.at(-1)!.s.o.reads = { "#bigint": "1" };

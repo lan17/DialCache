@@ -9,18 +9,23 @@ import { writeFileSync } from 'node:fs';
 // moment: a deadline that fired early, a joined flight that failed); it is
 // recorded with the result and never counts as a detection on its own. A
 // settlement violation is the driver failing its own contract, not the library
-// failing a comparison, so it is infrastructure too, as in the Go evaluator.
+// failing a comparison, so it is infrastructure too, as in the Go evaluator;
+// the first violated rule travels with the error so the runner can record a
+// mutant's cohort against it by name (mutation-reports.mjs classifyCohort).
 export function evaluateSemanticTestReport(data, execution, exitCode, label = 'cohort') {
   const assertions = data.testResults.flatMap(file => file.assertionResults);
   const failed = assertions.filter(test => test.status === 'failed');
   const passed = assertions.filter(test => test.status === 'passed').length;
-  const infrastructure = failed.some(test => test.failureMessages.some(message =>
-    /(?:Test|Hook) timed out in/.test(message) || /Settlement violation/.test(message)));
+  const violation = failed.flatMap(test => test.failureMessages).find(message => /Settlement violation/.test(message));
+  const infrastructure = violation !== undefined
+    || failed.some(test => test.failureMessages.some(message => /(?:Test|Hook) timed out in/.test(message)));
   const { unhandledErrors } = execution;
   if (execution.reason !== (failed.length ? 'failed' : 'passed') || execution.collectionErrors.length || (unhandledErrors.length && !failed.length) ||
       passed + failed.length === 0 || infrastructure ||
       (exitCode !== 0 && failed.length === 0) || (exitCode === 0 && failed.length > 0)) {
-    throw new Error(`${label}: infrastructure/import error, not evidence of detection (exit=${exitCode}, passed=${passed}, failed=${failed.length})`);
+    const error = new Error(`${label}: infrastructure/import error, not evidence of detection (exit=${exitCode}, passed=${passed}, failed=${failed.length})`);
+    if (violation !== undefined) error.settlementViolation = violation.split('\n')[0].replace(/^Error: /, '');
+    throw error;
   }
   return { state: failed.length ? 'detected' : 'survived', passed, failed: failed.length,
     failingTests: failed.map(test => test.fullName), ...(unhandledErrors.length ? { unhandledErrors } : {}) };

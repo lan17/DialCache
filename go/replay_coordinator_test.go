@@ -835,7 +835,7 @@ func TestReplayCoordinatorMutationEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, mode := range []string{"baseline", "observation", "malformed", "missing-file", "unknown-action", "settlement"} {
+	for _, mode := range []string{"baseline", "observation", "malformed", "missing-file", "unknown-action"} {
 		t.Run(mode, func(t *testing.T) {
 			var trace obj
 			if err := json.Unmarshal(original, &trace); err != nil {
@@ -867,18 +867,11 @@ func TestReplayCoordinatorMutationEvidence(t *testing.T) {
 			command := exec.CommandContext(ctx, "go", "tool", "test2json", "-t", "-p", "github.com/lan17/DialCache/go", executable,
 				"-test.v=test2json", "-test.run=^TestCoreConformance$", "-test.count=1")
 			for _, value := range os.Environ() {
-				if !strings.HasPrefix(value, "DIALCACHE_") && !(mode == "settlement" && strings.HasPrefix(value, "PATH=")) {
+				if !strings.HasPrefix(value, "DIALCACHE_") {
 					command.Env = append(command.Env, value)
 				}
 			}
 			command.Env = append(command.Env, "DIALCACHE_MBT_TRACE_FILE="+path)
-			if mode == "settlement" {
-				// The native replay resolves node through PATH and uses it for
-				// the coordinator alone, so a wrapper first on PATH can stand in
-				// for the coordinator's replies while the replay, transport and
-				// driver stay the real ones.
-				command.Env = append(command.Env, "PATH="+settlementViolationNode(t)+string(os.PathListSeparator)+os.Getenv("PATH"))
-			}
 			var stderr bytes.Buffer
 			command.Stderr = &stderr
 			events, runError := command.Output()
@@ -918,18 +911,6 @@ catch(error) { console.log(JSON.stringify({valid:false, error:error.message})); 
 				if result["valid"] != true || measurement["state"] != "detected" || kind != "observation-mismatch" {
 					t.Fatalf("real replay mismatch was not credited: %s\n%s", output, events)
 				}
-			case "settlement":
-				// A settlement violation is the coordinator's verdict on the
-				// driver's receipt, never comparison evidence about the cache.
-				if !bytes.Contains(events, []byte("Settlement violation")) {
-					t.Fatalf("control did not fail through a settlement violation: %s", events)
-				}
-				if result["valid"] != false || !regexp.MustCompile(`replay failure lacks observation|[Ss]ettlement violation`).MatchString(bs(result["error"])) {
-					t.Fatalf("settlement violation was credited: %s\n%s", output, events)
-				}
-				if matched, _ := regexp.Match(`expected:[\s\S]*actual:`, events); matched {
-					t.Fatalf("settlement violation acquired comparison markers: %s", events)
-				}
 			default:
 				if result["valid"] != false || !strings.Contains(bs(result["error"]), "replay failure lacks observation") {
 					t.Fatalf("infrastructure failure was credited: %s\n%s", output, events)
@@ -940,42 +921,4 @@ catch(error) { console.log(JSON.stringify({valid:false, error:error.message})); 
 			}
 		})
 	}
-}
-
-// settlementViolationNode writes a directory whose `node` runs the shared
-// coordinator behind a proxy that turns every observe acknowledgement into the
-// settlement violation the coordinator raises for a receipt that fails a rule,
-// and runs any other program unchanged. Only the wire replies change.
-func settlementViolationNode(t *testing.T) string {
-	t.Helper()
-	node, err := exec.LookPath("node")
-	if err != nil {
-		t.Fatal(err)
-	}
-	directory := t.TempDir()
-	proxy := filepath.Join(directory, "settlement-violation-proxy.mjs")
-	program := `import { spawn } from "node:child_process";
-import { createInterface } from "node:readline";
-const coordinator = spawn(process.execPath, [process.argv[2]], { stdio: ["pipe", "pipe", "inherit"] });
-const operations = new Map();
-createInterface({ input: process.stdin })
-  .on("line", line => { const request = JSON.parse(line); operations.set(request.id, request.op); coordinator.stdin.write(line + "\n"); })
-  .on("close", () => coordinator.stdin.end());
-createInterface({ input: coordinator.stdout }).on("line", line => {
-  const response = JSON.parse(line);
-  if (operations.get(response.id) === "observe") {
-    delete response.result;
-    Object.assign(response, { ok: false, error: "control.itf.json step 0 action init: Settlement violation: 1 runnable task(s) at observation" });
-  }
-  process.stdout.write(JSON.stringify(response) + "\n");
-});
-`
-	if err := os.WriteFile(proxy, []byte(program), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	wrapper := "#!/bin/sh\ncase \"$1\" in\n*/coordinator.mjs) exec \"" + node + "\" \"" + proxy + "\" \"$1\" ;;\n*) exec \"" + node + "\" \"$@\" ;;\nesac\n"
-	if err := os.WriteFile(filepath.Join(directory, "node"), []byte(wrapper), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	return directory
 }
