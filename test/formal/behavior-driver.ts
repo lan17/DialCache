@@ -428,8 +428,13 @@ export class BehaviorDriver {
     // held. No guessed number of Promise turns and no advancing deadline time.
     if (this.harness.settle !== false) await vi.advanceTimersByTimeAsync(0);
     // Report this instant: the observation, the controlled monotonic clock and
-    // the gates still held, all from the driver's own bookkeeping.
-    this.reported = structuredClone(this.observed);
+    // the gates still held, all from the driver's own bookkeeping. The snapshot
+    // is the JSON encoding that crosses the wire: a value the library hands
+    // back is recorded by reference, and a structured clone of an Error keeps
+    // fewer members than JSON does, so comparing the two encodings would report
+    // a change no task made.
+    const reported = JSON.stringify(this.observed);
+    this.reported = JSON.parse(reported) as Observation;
     const elapsedMs = performance.now();
     const held = {
       loaders: this.loaders.filter(gate => !gate.settled).length,
@@ -442,7 +447,7 @@ export class BehaviorDriver {
     // work the settle step left behind and the receipt reports it.
     const timers = vi.getTimerCount();
     await vi.advanceTimersByTimeAsync(0);
-    const changed = JSON.stringify(this.observed) === JSON.stringify(this.reported) ? 0 : 1;
+    const changed = JSON.stringify(this.observed) === reported ? 0 : 1;
     this.settlement = { elapsedMs, runnable: changed + Math.abs(vi.getTimerCount() - timers), held };
     assertPublicationCausality(this.causalHistory);
   }

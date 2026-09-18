@@ -258,9 +258,11 @@ receipt, `$defs/settlementReceipt`, describing the same instant as `observed`:
 | `held` | seven nonnegative integers | `loaders` not yet resolved or rejected; `reads`, `writes`, `dumps`, `loads`, `policies` held by a fault and not yet released by name; `scopes` opened and not closed, setup included |
 
 The TypeScript driver ([behavior-driver.ts](../test/formal/behavior-driver.ts))
-takes its snapshot after the settle drain, drains the fake-timer queue once
-more at zero time, and reports 1 if the observation changed plus the change in
-the pending fake-timer count. The Go driver
+takes its snapshot after the settle drain as the JSON encoding that crosses the
+wire (a value the library hands back is recorded by reference, so the encoding
+fixes what this instant reported), drains the fake-timer queue once more at
+zero time, and reports 1 if that encoding changed plus the change in the
+pending fake-timer count. The Go driver
 ([behavior_driver_test.go](../go/behavior_driver_test.go)) snapshots under its
 lock, waits for every goroutine in the `synctest` bubble to block, and reports
 the deferred functions found plus 1 if the observation changed. Gates the
