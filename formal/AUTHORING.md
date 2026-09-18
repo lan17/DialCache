@@ -406,60 +406,62 @@ entry in `execution.json`:
 ```json
 "nativeMutants": {
   "kind": "mapped",
-  "mutants": ["M18"],
-  "text": "The local expiry check in src/internal/local-cache.ts ... is local_storage.localEntryLiveAt ...",
-  "crossContract": { "M40": "why a mutant on another contract's case is the same fault" }
+  "mutant": "M18",
+  "text": "M18 serves a local entry at its exact insertion expiry (src/internal/local-cache.ts ...; go/cache.go ...), the native twin of local_storage.localEntryLiveAt ..."
 }
 ```
 
 `kind` is one of:
 
-- `mapped`: `mutants` names entries present in both `semantic-mutations.json`
-  and `go-mutations.json`, and every one lists `generated` in its
-  `requiredDetections` in both catalogs, so the weekly mutation lanes fail if
-  the corpus stops detecting it in either port.
-- `unobservable`: the mutants exist in both catalogs but no public history can
-  distinguish them, because the port checks the same condition again at a
-  later point the model does not have; `text` states the second check, and the
-  mutants require no detection. They stay in the catalogs as the weekly record
-  that the second check still protects the port.
+- `mapped`: `mutant` names an entry present in both `semantic-mutations.json`
+  and `go-mutations.json` that lists `generated` in its `requiredDetections`
+  in both catalogs, so the weekly mutation lanes fail if the corpus stops
+  detecting it in either port. `text` names the mutant and the model
+  definition. `crossContract` is a sentence, required and allowed only when
+  the mutant's semantic case does not list the challenge's contract, saying
+  why it is the same fault.
+- `unobservable`: a port line exists, but the port checks the same condition
+  again at a later point the model does not have, so no public history can
+  distinguish the fault. `text` names the line and the later check; no
+  catalog entry is kept for it.
 - `model-only`: the fault changes model bookkeeping that no implementation
   line embodies (a connection monitor reconstructing owners or clocks, an
   invariant helper). `text` names the model construct and the port code that
   makes the fault inexpressible.
-- `environment`: the fault changes an assumption the drivers control, not the
-  cache.
 
 Search both ports for the line before writing an explanation; an explanation
-where a native line exists is a review failure. `text` is one or two sentences
-naming the port lines and the model definition so a reader can see they are
-the same fault. A mutant maps to a challenge when it produces the same wrong
-behavior at the same boundary, not when it edits similar text; one mutant may
-serve several challenges (the four inclusive-fence challenges share one), and
-a challenge may need two edits when the port implements the rule at two sites.
-`crossContract` is required, and allowed only, for a mapped mutant whose
-semantic case does not list the challenge's contract.
+where a native line exists is a review failure, and an explanation must name
+the port file it examined. `text` is one or two sentences naming the port
+lines and the model definition so a reader can see they are the same fault. A
+mutant maps to a challenge when it produces the same wrong behavior at the
+same boundary, not when it edits similar text; one mutant may serve several
+challenges (the four inclusive-fence challenges share one), and a mutant may
+need two edits when the port implements the rule at two sites.
 
-`node formal/execution.mjs` checks the table: the mutant ids exist in both
-catalogs and the catalogs are paired one to one (same `case`, the Go entry's
-`typescriptMutation` names its twin, the Go entry's
-`typescriptRequiredDetections` equals the TypeScript list); the kind is one of
-the four; `text` is non-empty; `mutants` is present exactly for `mapped` and
-`unobservable`; `crossContract` keys are exactly the mapped mutants whose case
-lacks the contract; two challenges that repeat one `(source, before, after)`
-fault map it the same way; and every challenge is either mapped or listed in
-the top-level `nativeMutantBacklog`, never both. The backlog is frozen in
+`node formal/execution.mjs` checks the table on every pull request: both
+catalogs parse, every entry has a description, a known case, known cohorts
+and a non-empty list of edits inside its port (`src/` or `go/`, never a Go
+test file), every `before` matches the current port text exactly once when
+the edits are applied in order (so a refactor that moves an anchored line
+fails here, not in the weekly lane), the catalogs pair one to one by id and
+case; the challenge's kind is one of the three, `text` is non-empty and names
+the mutant or a port file, `mutant` is present exactly for `mapped`,
+`crossContract` exactly when the case lacks the contract; two challenges that
+repeat one `(source, before, after)` fault map it the same way; and every
+challenge has a `nativeMutants` entry or is listed in the top-level
+`nativeMutantBacklog`, never both. The backlog is frozen in
 `grandfatheredNativeMutantBacklog` in `formal/execution.mjs` and only shrinks.
-It also reports catalog mutants no challenge cites.
+The summary also counts catalog mutants no challenge cites.
 
 Both catalogs share one edit shape: `edits: [{ path, before, after }]`, each
-`before` matching exactly once in the file, applied in order. A Go entry may
-declare `skipCohorts: { ordinary: "<reason>" }` when the port's own suite
-cannot measure the fault (a synctest bubble panics on a goroutine the fault
-leaves blocked); only the ordinary cohort may be skipped, never a required
-one, and the report lists the mutant as skipped there. To measure one
-mutant while authoring it, run `MUTATION_ONLY=M18 make mutations-ts` and
-`MUTATION_ONLY=M18 make mutations-go`; the partial report under
+`before` matching exactly once in the file, applied in order. Go's own unit
+suite is informational for a mutant: when a fault leaves a goroutine blocked
+or a pointer nil, a synctest bubble panics instead of failing an assertion,
+and the Go runner records that cohort as `crashed` (neither detected nor
+survived) and measures the replay cohorts as usual. To measure one mutant
+while authoring it, run `MUTATION_ONLY=M18 make mutations-ts` and
+`MUTATION_ONLY=M18 make mutations-go`, one partial run per port at a time
+(they share `partial/`); the partial report under
 `.formal-traces/semantic/partial/` (and `go-semantic/partial/`) is never
 complete evidence. Then run the full lanes, or let the weekly workflow run
 them, and set `requiredDetections` from what was actually detected.

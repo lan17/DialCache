@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 type Shard = { index: number; count: number };
 type Selection = { shard: Shard; only?: string[] | undefined };
-type Cohort = { state: "detected" | "survived" | "skipped"; passed: number; failed: number; failingTests: string[]; [key: string]: unknown };
+type Cohort = { state: "detected" | "survived" | "crashed"; passed: number; failed: number; failingTests: string[]; [key: string]: unknown };
 type Mutation = { id: string; case: string; description: string; cohorts: Record<string, Cohort> };
 type Report = Record<string, unknown> & { shard?: Shard & { mutationIds: string[] }; baselines: Record<string, Cohort>; mutations: Mutation[] };
 type CatalogEntry = { id: string; case: string; description: string; requiredDetections: string[] };
@@ -266,17 +266,17 @@ describe("mutation shard merge", () => {
     expect((report.shards as unknown[]).length).toBe(ids.length + 1);
   });
 
-  it("keeps a skipped Go cohort out of the detection total and lists it apart from survivors", () => {
+  it("keeps a crashed Go cohort out of the detection total and lists it apart from survivors", () => {
     const generated = goCohort(goTests.generated, [goTests.generated[0]!]);
     const fixed = goCohort(goTests.fixed);
     const measured: Mutation = { id: "M01", case: "c", description: "d", cohorts: { ordinary: goCohort(goTests.ordinary, [goTests.ordinary[0]!]), generated, fixed, portable: union(generated, fixed) } };
     const skipping: Mutation = { id: "M02", case: "c", description: "d",
-      cohorts: { ordinary: { state: "skipped", reason: "the bubble panics on a blocked goroutine", passed: 0, failed: 0, failingTests: [] }, generated, fixed, portable: union(generated, fixed) } };
-    const detection = goDetection([measured, skipping]) as Record<string, { detected: number; total: number; survivors: string[]; skipped?: string[] }>;
-    expect(detection.ordinary).toEqual({ detected: 1, total: 1, survivors: [], skipped: ["M02"] });
+      cohorts: { ordinary: { state: "crashed", reason: "crash, timeout, race, or build error is not mutation detection", passed: 0, failed: 0, failingTests: [] }, generated, fixed, portable: union(generated, fixed) } };
+    const detection = goDetection([measured, skipping]) as Record<string, { detected: number; total: number; survivors: string[]; crashed?: string[] }>;
+    expect(detection.ordinary).toEqual({ detected: 1, total: 1, survivors: [], crashed: ["M02"] });
     expect(detection.generated).toEqual({ detected: 2, total: 2, survivors: [] });
     expect(detection.fixed).toEqual({ detected: 0, total: 2, survivors: ["M01", "M02"] });
-    // A skipped cohort can never satisfy a required detection.
+    // A crashed cohort can never satisfy a required detection.
     expect(requiredDetectionRegressions([{ id: "M02", case: "c", description: "d", requiredDetections: ["ordinary", "generated"] }], [skipping])).toEqual(["M02/ordinary"]);
   });
 

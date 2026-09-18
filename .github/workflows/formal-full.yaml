@@ -152,10 +152,12 @@ jobs:
   # measures a contiguous slice of the catalog; the merge job refuses shards
   # whose fingerprints or baselines disagree, so the merged report is exactly
   # as strict as one sequential run. The lane is bounded by sequential
-  # mutants: the 55-mutant catalog costs about 1 minute per TypeScript mutant
-  # on a fast runner and about 2 on the slow class (13 mutants took 17 minutes
-  # unsharded in run 34669546872). Six shards hold at most 10 mutants each:
-  # the baselines (2-4 minutes) plus 10 mutants stay under 30 on the slow class.
+  # mutants: about 1 minute per TypeScript mutant on a fast runner and about 2
+  # on the slow class (13 mutants took 17 minutes unsharded in run
+  # 34669546872). test/formal-validation.test.ts pins the mutants a shard may
+  # hold so that the baselines (2-4 minutes), the slow-class mutant cost and
+  # one hung cohort's 9-minute bound fit the timeout; growing the catalog past
+  # that fails the pull request until the matrix grows.
   typescript-mutations:
     needs: generate
     runs-on: ubuntu-latest
@@ -165,7 +167,7 @@ jobs:
         shard: [1, 2, 3, 4, 5, 6]
     env:
       MUTATION_SHARD: ${{ matrix.shard }}/6
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup-validation
@@ -251,10 +253,12 @@ jobs:
   # The Go lane bounds the whole workflow: every mutant replays the generated
   # cohort, about 1.6 minutes per mutant on a fast runner and about 3 on the
   # slow class (13 mutants took 25 minutes in run 34660598461 and 47-48 in
-  # runs 34669546872 and 34670045249), strictly in sequence. Ten shards hold
-  # at most 6 of the 55 mutants each: a shard compiles, runs the baselines
-  # (2-4 minutes) and its mutants under 40 on the slow class, and one hung
+  # runs 34669546872 and 34670045249), strictly in sequence. A shard compiles,
+  # runs the baselines (2-4 minutes) and its slice of the catalog; one hung
   # cohort adds its 8-minute test bound before the shard fails.
+  # test/formal-validation.test.ts pins the mutants a shard may hold within
+  # the timeout, so catalog growth fails the pull request until the matrix
+  # grows.
   go-mutations:
     needs: generate
     runs-on: ubuntu-latest

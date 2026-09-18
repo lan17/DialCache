@@ -348,18 +348,26 @@ describe("full formal workflow shape", () => {
     for (const lane of lanes) expect(needsOf(jobs[lane]!), lane).toEqual(["generate"]);
   });
 
-  it("shards the TypeScript lane six ways and the Go lane ten ways, and gates the aggregate on their merges", () => {
+  it("shards both mutation lanes so every shard fits its timeout on the slow runner class, and gates the aggregate on their merges", () => {
     const uploadOf = (job: Job) => job.steps.find(step => step.uses?.startsWith("actions/upload-artifact"))!;
     const downloadsOf = (job: Job) => job.steps.filter(step => step.uses?.startsWith("actions/download-artifact")).map(step => step.with);
     const matrixShard = "$" + "{{ matrix.shard }}";
-    // At most 10 TypeScript and 6 Go mutants per shard of the 55-mutant catalog; the shard count
-    // in the matrix and in MUTATION_SHARD must agree or the merge refuses the shards.
+    // A shard runs the baselines, then its slice of the catalog strictly in sequence; on the slow
+    // runner class a TypeScript mutant costs about 2 minutes and a Go mutant about 3, and one hung
+    // cohort adds its own bound (the 540 s vitest spawn timeout, the 480 s go test timeout) before
+    // the shard fails. The matrix must keep every shard inside the job timeout, so growing the
+    // catalog fails here until the matrix grows. The shard count in the matrix and in MUTATION_SHARD
+    // must agree or the merge refuses the shards.
+    const catalogSize = (JSON.parse(readFileSync(new URL("../formal/semantic-mutations.json", import.meta.url), "utf8")) as { mutations: unknown[] }).mutations.length;
+    const baselineMinutes = 4;
     const table = [
-      { lane: "typescript-mutations", language: "ts", output: ".formal-traces/semantic", artifact: "typescript-semantic", timeout: 30, shards: 6, go: undefined },
-      { lane: "go-mutations", language: "go", output: ".formal-traces/go-semantic", artifact: "go-semantic", timeout: 40, shards: 10, go: { go: "true" } },
+      { lane: "typescript-mutations", language: "ts", output: ".formal-traces/semantic", artifact: "typescript-semantic", timeout: 40, shards: 6, slowMinutesPerMutant: 2, hungCohortMinutes: 9, go: undefined },
+      { lane: "go-mutations", language: "go", output: ".formal-traces/go-semantic", artifact: "go-semantic", timeout: 40, shards: 10, slowMinutesPerMutant: 3, hungCohortMinutes: 8, go: { go: "true" } },
     ];
-    for (const { lane, language, output, artifact, timeout, shards, go } of table) {
+    for (const { lane, language, output, artifact, timeout, shards, slowMinutesPerMutant, hungCohortMinutes, go } of table) {
       const job = jobs[lane]!;
+      const perShard = Math.ceil(catalogSize / shards);
+      expect(baselineMinutes + perShard * slowMinutesPerMutant + hungCohortMinutes, `${lane}: ${perShard} mutants per shard`).toBeLessThanOrEqual(timeout);
       expect(job.strategy, lane).toEqual({ "fail-fast": false, matrix: { shard: Array.from({ length: shards }, (_, position) => position + 1) } });
       expect(job.env, lane).toEqual({ MUTATION_SHARD: matrixShard + "/" + shards });
       expect(job["timeout-minutes"], lane).toBe(timeout);

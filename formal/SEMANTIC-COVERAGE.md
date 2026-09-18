@@ -117,7 +117,7 @@ Witness classification lives in the language-neutral modules under [`formal/repl
 
 ## Behavioral mutation comparison
 
-[`semantic-mutations.json`](./semantic-mutations.json) defines the reviewed fault catalog: each fault is a short list of exact-anchor edits to `src/`, paired one to one with [`go-mutations.json`](./go-mutations.json) and checked by `node formal/execution.mjs`. `node formal/measure-semantics.mjs` applies each in an isolated copy, verifies that it compiles, and runs three cohorts against it:
+[`semantic-mutations.json`](./semantic-mutations.json) defines the reviewed fault catalog: each fault is a short list of exact-anchor edits to `src/`, paired one to one with [`go-mutations.json`](./go-mutations.json); `node formal/execution.mjs` checks both catalogs on every pull request, including that every anchor still matches the port text exactly once. `node formal/measure-semantics.mjs` applies each in an isolated copy, verifies that it compiles, and runs three cohorts against it:
 
 1. **Ordinary:** existing unit tests, excluding all formal tests.
 2. **Generated:** sampled and exported-regression replays, reachability gates, and Quint-derived primitive vectors.
@@ -153,7 +153,7 @@ measurement programs remain `measure-semantics.mjs` and
 `measure-go-semantics.mjs`; the Make targets supply the pinned prerequisite
 checks used by hosted full validation.
 
-Hosted runs shard each lane with `MUTATION_SHARD=<index>/<count>`: six TypeScript shards and ten Go shards.
+Hosted runs shard each lane with `MUTATION_SHARD=<index>/<count>`, matching the workflow matrix; `test/formal-validation.test.ts` pins how many mutants a shard may hold within its timeout, so catalog growth fails the pull request until the matrix grows.
 A shard reruns the compile check, every unmodified baseline and the witness
 evaluation before its contiguous slice of the catalog, and writes an incomplete
 report under `shards/<index>-of-<count>/`. `make mutations-merge-ts` and
@@ -175,7 +175,7 @@ The runner clears inherited trace selectors, uses the complete generated directo
 
 Each catalog entry's `requiredDetections` is a regression gate. The local mutation target and full workflow fail if a required fault survives. Newly detected faults remain visible as improvements; update the required set after inspecting the result. Source edits must match exactly once, so implementation drift requires reviewing the mutation rather than silently skipping it.
 
-To expand assurance, add a test/doc-derived case and precise executable evidence, require a generated witness where appropriate, then add a representative fault for a previously unchallenged rule. Preserve gaps until execution closes them. Keep code coverage, source accounting, case evidence, and mutation detection as separate measurements. The current Go suite requires every shared profile, exported regression, fixed scenario and protocol case registered by the manifests, with the paired fault catalog in `go-mutations.json`. A Go mutant whose fault leaves a goroutine blocked makes the port's own synctest suite panic instead of failing an assertion; such an entry declares `skipCohorts.ordinary` with the reason, the report shows that cohort as skipped, and the generated cohort remains its required detection. Broader interaction histories and larger domains remain separate assurance work.
+To expand assurance, add a test/doc-derived case and precise executable evidence, require a generated witness where appropriate, then add a representative fault for a previously unchallenged rule. Preserve gaps until execution closes them. Keep code coverage, source accounting, case evidence, and mutation detection as separate measurements. The current Go suite requires every shared profile, exported regression, fixed scenario and protocol case registered by the manifests, with the paired fault catalog in `go-mutations.json`. A Go mutant whose fault leaves a goroutine blocked or a pointer nil makes the port's own synctest suite panic instead of failing an assertion; the runner records that ordinary cohort as `crashed`, outside the detected and survived totals, and the generated cohort remains the required detection. Broader interaction histories and larger domains remain separate assurance work.
 
 ## Model properties and cross-language execution
 

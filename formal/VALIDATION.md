@@ -117,8 +117,10 @@ their generated cohort, so a mapped challenge is evidence that the corpus
 would catch that mistake in a port, not only that the model would. See the
 [authoring rules](./AUTHORING.md#mapping-every-challenge-to-native-mutants).
 
-The weekly full workflow shards each mutation lane: six TypeScript shards and
-ten Go shards, matching the workflow matrix. The Go lane bounded the whole run
+The weekly full workflow shards each mutation lane over the workflow matrix;
+`test/formal-validation.test.ts` pins how many mutants a shard may hold within
+its timeout, so catalog growth fails the pull request until the matrix grows.
+The Go lane bounded the whole run
 when it had 13 mutants on three shards (25 minutes on a fast runner, 47 to 48
 minutes on the slow class, runs 34669546872 and 34670045249; the TypeScript lane
 took 17), and its cost grows with the catalog: about 1.6 minutes per Go mutant
@@ -129,14 +131,15 @@ job per language reads the shard reports and writes the complete report. It
 refuses a missing, duplicated or failed shard, shards whose source, catalog,
 corpus or witness fingerprints or baseline results differ, and coverage that is
 not the catalog exactly once in order. Only the merged report is complete
-evidence; a shard report is never `complete`. Shard budgets are 30 minutes
-(TypeScript) and 40 (Go): the baselines plus at most ten TypeScript or six Go
-mutants, doubled for a slow runner. The Go mutation runner still bounds each
-`go test` invocation at 8 minutes to catch a hung mutant, not to pace a slow
-runner. Locally, `MUTATION_SHARD=1/6 make mutations-ts` (then the other
-shards) reproduces one shard under `.formal-traces/semantic/shards/1-of-6/`,
-and `make mutations-merge-ts` assembles the report that an unsharded
-`make mutations-ts` writes; the Go targets mirror this with ten shards.
+evidence; a shard report is never `complete`. Each shard's budget is 40
+minutes: the baselines plus its slice of the catalog at the slow runner's
+per-mutant cost, plus one hung cohort's bound. The Go mutation runner still
+bounds each `go test` invocation at 8 minutes to catch a hung mutant, not to
+pace a slow runner. Locally, `MUTATION_SHARD=<index>/<count> make mutations-ts`
+for every index of the workflow matrix reproduces the shards under
+`.formal-traces/semantic/shards/<index>-of-<count>/`, and
+`make mutations-merge-ts` assembles the report that an unsharded
+`make mutations-ts` writes; the Go targets mirror this.
 `MUTATION_ONLY=M18 make mutations-ts` measures one mutant into a partial
 report for authoring; it is never complete evidence.
 

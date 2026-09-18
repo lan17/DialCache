@@ -176,14 +176,8 @@ export function checkSemanticCoverage(catalog = parse('formal/semantic-cases.jso
   }
   const applicability = checkQuintCaseAudit(undefined, catalog, manifest);
   const featureCoverage = checkFeatureCoverage(undefined, catalog);
+  // The mutant catalogs are validated and paired by validateExecution above.
   const mutations = parse('formal/semantic-mutations.json');
-  if (mutations.schemaVersion !== 1 || !Array.isArray(mutations.mutations) || !mutations.mutations.length) throw new Error('Invalid mutation catalog');
-  const mutationIds = new Set();
-  for (const m of mutations.mutations) {
-    if (!/^M\d+$/.test(m.id) || mutationIds.has(m.id) || !ids.has(m.case)) throw new Error(`Invalid mutation case/ID: ${m.id}`);
-    mutationIds.add(m.id);
-    if (!Array.isArray(m.requiredDetections) || m.requiredDetections.some(c => !['ordinary', 'generated', 'portable'].includes(c))) throw new Error(`${m.id}: unknown mutation cohort`);
-  }
   const behavioral = catalog.cases.filter(c => !c.vectors.length);
   const portable = c => c.scenarios.length || c.generated.length || c.vectors.length || c.quintReplays?.length || c.generatedVectors?.length;
   const count = cases => ({ total: cases.length, model: cases.filter(c => c.models.length).length,

@@ -256,19 +256,6 @@
       ]
     },
     {
-      "id": "M16",
-      "case": "C03.late-publication",
-      "description": "Memoize a late settlement into a closed request scope (unobservable: the closed-scope read path and admission re-check hide it from every public history)",
-      "edits": [
-        {
-          "path": "src/context.ts",
-          "before": "    if (!this.closed) {\n      this.values.set(key, value);\n    }",
-          "after": "    this.values.set(key, value);"
-        }
-      ],
-      "requiredDetections": []
-    },
-    {
       "id": "M17",
       "case": "C05.local-hit-stops-traversal",
       "description": "Serve a local hit with a value the layer never stored while still skipping the loader",
@@ -459,7 +446,7 @@
     {
       "id": "M28",
       "case": "C17.library-defaults",
-      "description": "Default coalescing off when the coalesce leaf is omitted while an explicit true still shares",
+      "description": "Default coalescing off when the static coalesce leaf is omitted while an explicit true still shares",
       "edits": [
         {
           "path": "src/dialcache.ts",

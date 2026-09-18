@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { challengesByMutant } from './execution.mjs';
+import { challengesByMutant, mutantIdPattern } from './execution.mjs';
 
 // Shared by measure-semantics.mjs, measure-go-semantics.mjs and
 // merge-mutation-reports.mjs: the catalog selection, the input fingerprint,
@@ -24,7 +24,7 @@ export function parseShard(value) {
 export function parseOnly(value) {
   if (value === undefined) return undefined;
   const ids = value.split(',');
-  if (ids.some(id => !/^M\d+$/.test(id)) || new Set(ids).size !== ids.length) throw new Error(`Expected <id>,<id> naming distinct mutant ids; got ${JSON.stringify(value)}`);
+  if (ids.some(id => !mutantIdPattern.test(id)) || new Set(ids).size !== ids.length) throw new Error(`Expected <id>,<id> naming distinct mutant ids; got ${JSON.stringify(value)}`);
   return ids;
 }
 
@@ -108,18 +108,29 @@ export function typescriptDetection(mutations, cases) {
   return { all: score(mutations), behavioral: score(mutations.filter(m => !protocol(m))), protocol: score(mutations.filter(protocol)) };
 }
 
-// A skipped cohort (declared in the Go catalog with a reason) is outside the
-// measured total and listed apart from survivors.
+// A cohort the port's own suite could not measure (its synctest bubble
+// crashed under the mutant) is outside the measured total and listed apart
+// from survivors; it is never a detection.
 export function goDetection(mutations) {
   return Object.fromEntries(['ordinary', 'generated', 'fixed', 'portable'].map(cohort => {
-    const measured = mutations.filter(m => m.cohorts[cohort].state !== 'skipped');
-    const skipped = mutations.filter(m => m.cohorts[cohort].state === 'skipped').map(m => m.id);
+    const measured = mutations.filter(m => m.cohorts[cohort].state !== 'crashed');
+    const crashed = mutations.filter(m => m.cohorts[cohort].state === 'crashed').map(m => m.id);
     return [cohort, {
       detected: measured.filter(m => m.cohorts[cohort].state === 'detected').length, total: measured.length,
       survivors: measured.filter(m => m.cohorts[cohort].state === 'survived').map(m => m.id),
-      ...(skipped.length ? { skipped } : {}),
+      ...(crashed.length ? { crashed } : {}),
     }];
   }));
+}
+
+// A partial (--only) run reports its lost required detections and stops: it
+// is not gated and never completes, so the complete report is untouched.
+export function finishPartial(report, selected, { output, language, save }) {
+  const lost = requiredDetectionRegressions(selected, report.mutations);
+  save();
+  console.log(lost.length ? `Lost required detections (a partial run is not gated): ${lost.join(', ')}` : 'Every required detection of the selected mutants held');
+  console.log(`Partial measurement of ${selected.map(m => m.id).join(', ')}: ${output}/report.json; measure the complete catalog for evidence`);
+  return report;
 }
 
 // The model challenges each mutant is the native twin of, from the execution

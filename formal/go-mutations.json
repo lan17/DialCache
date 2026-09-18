@@ -5,7 +5,6 @@
       "id": "M01",
       "case": "C45.maximum-age-exclusive",
       "description": "Accept a retained candidate at the exact maximum age after decoding",
-      "typescriptMutation": "M01",
       "edits": [
         {
           "path": "go/engine.go",
@@ -16,18 +15,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M02",
       "case": "C45.recheck-after-decode",
       "description": "Reuse the pre-decode age instead of observing age after asynchronous decoding",
-      "typescriptMutation": "M02",
       "edits": [
         {
           "path": "go/engine.go",
@@ -38,18 +31,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M03",
       "case": "C25.late-source-rejected",
       "description": "Accept an externally settled result after its elapsed deadline when the timer has not run",
-      "typescriptMutation": "M03",
       "edits": [
         {
           "path": "go/deadline.go",
@@ -60,18 +47,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M04",
       "case": "C34.second-fence",
       "description": "Skip the tracked fence recheck after serialization",
-      "typescriptMutation": "M04",
       "edits": [
         {
           "path": "go/engine.go",
@@ -82,18 +63,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M05",
       "case": "C03.detached-bypass",
       "description": "Treat a detached context whose outer scope closed as still enabled",
-      "typescriptMutation": "M05",
       "edits": [
         {
           "path": "go/cache.go",
@@ -104,18 +79,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M06",
       "case": "W04.strict-fence",
       "description": "Accept a tracked frame timestamp equal to its watermark",
-      "typescriptMutation": "M06",
       "edits": [
         {
           "path": "go/protocol.go",
@@ -126,18 +95,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M07",
       "case": "C51.changed-confirmation",
       "description": "Confirm an unequal shadow result even when C1 contains different payload bytes",
-      "typescriptMutation": "M07",
       "edits": [
         {
           "path": "go/shadow.go",
@@ -148,18 +111,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M08",
       "case": "C60.invalid-logging-policy",
       "description": "Enable mismatch logging after a malformed runtime logging flag",
-      "typescriptMutation": "M08",
       "edits": [
         {
           "path": "go/policy.go",
@@ -170,18 +127,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M09",
       "case": "C60.logging-default-off",
       "description": "Enable mismatch logging when its flag is omitted",
-      "typescriptMutation": "M09",
       "edits": [
         {
           "path": "go/policy.go",
@@ -192,18 +143,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M10",
       "case": "C31.tracked-no-local-fill",
       "description": "Publish an unvalidated tracked source value directly into local storage",
-      "typescriptMutation": "M10",
       "edits": [
         {
           "path": "go/engine.go",
@@ -214,18 +159,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M11",
       "case": "C09.fixed-local-ttl",
       "description": "Renew the local insertion TTL on every cache hit",
-      "typescriptMutation": "M11",
       "edits": [
         {
           "path": "go/cache.go",
@@ -236,18 +175,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M12",
       "case": "W02.sorted-arguments",
       "description": "Reverse the prescribed argument-name ordering",
-      "typescriptMutation": "M12",
       "edits": [
         {
           "path": "go/protocol.go",
@@ -258,17 +191,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M13",
       "case": "C54.expired-before-start",
       "description": "Dispatch dark shadow reads after the job deadline already elapsed before deferred work starts",
-      "typescriptMutation": "M13",
       "edits": [
         {
           "path": "go/shadow.go",
@@ -279,18 +207,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M14",
       "case": "C01.no-deadline",
       "description": "Bound a disabled or outside call's source with the configured fallback deadline",
-      "typescriptMutation": "M14",
       "edits": [
         {
           "path": "go/engine.go",
@@ -301,18 +223,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M15",
       "case": "C02.reenabled-memo",
       "description": "Evict the enclosing request's memo when a nested enable() completes",
-      "typescriptMutation": "M15",
       "edits": [
         {
           "path": "go/cache.go",
@@ -323,33 +239,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
-    },
-    {
-      "id": "M16",
-      "case": "C03.late-publication",
-      "description": "Memoize a late settlement into a closed request scope (unobservable: the closed-scope read path and admission re-check hide it from every public history)",
-      "typescriptMutation": "M16",
-      "edits": [
-        {
-          "path": "go/engine.go",
-          "before": "\t\t\tif state.owner.live {\n\t\t\t\tstate.owner.memo[key] = v\n\t\t\t}",
-          "after": "\t\t\tstate.owner.memo[key] = v"
-        }
-      ],
-      "requiredDetections": [],
-      "typescriptRequiredDetections": []
     },
     {
       "id": "M17",
       "case": "C05.local-hit-stops-traversal",
       "description": "Serve a local hit with a value the layer never stored while still skipping the loader",
-      "typescriptMutation": "M17",
       "edits": [
         {
           "path": "go/cache.go",
@@ -357,15 +252,7 @@
           "after": "\treturn zero, true"
         }
       ],
-      "skipCohorts": {
-        "ordinary": "TestBorrowedReferencesSurviveFollowersAndCacheHits compares the pointer identity of a served hit; a zero-valued hit makes the test dereference a nil pointer and panic inside its synctest bubble, a crash rather than a failed assertion."
-      },
       "requiredDetections": [
-        "generated",
-        "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
         "generated",
         "portable"
       ]
@@ -374,7 +261,6 @@
       "id": "M18",
       "case": "C09.fixed-local-ttl",
       "description": "Serve a local entry at its exact insertion expiry",
-      "typescriptMutation": "M18",
       "edits": [
         {
           "path": "go/cache.go",
@@ -385,18 +271,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M19",
       "case": "C09.fractional-clock-grid",
       "description": "Compute local insertion and expiry on the precise clock instead of the whole-millisecond grid",
-      "typescriptMutation": "M19",
       "edits": [
         {
           "path": "go/cache.go",
@@ -412,17 +292,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M20",
       "case": "C11.distinct-keys",
       "description": "Register process flights in one process-wide registry so a flight on one instance is joined from another (detection rests on sampled layers histories and the different-instances-own-distinct-flights witness, not on the case's exported replay)",
-      "typescriptMutation": "M20",
       "edits": [
         {
           "path": "go/cache.go",
@@ -438,18 +313,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M21",
       "case": "C13.uncoalesced-caching",
       "description": "Serve a live local entry before joining the pending process flight",
-      "typescriptMutation": "M21",
       "edits": [
         {
           "path": "go/engine.go",
@@ -460,18 +329,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M22",
       "case": "C13.uncoalesced-caching",
       "description": "Join a pending process flight from a non-coalescing caller while registration still respects coalesce",
-      "typescriptMutation": "M22",
       "edits": [
         {
           "path": "go/engine.go",
@@ -482,17 +345,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M23",
       "case": "C13.local-last-writer",
       "description": "Never let a local publication replace an entry already occupying the slot, even an expired one",
-      "typescriptMutation": "M23",
       "edits": [
         {
           "path": "go/cache.go",
@@ -503,17 +361,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M24",
       "case": "C13.local-last-writer",
       "description": "Clear the key's local entry when a source settlement fails",
-      "typescriptMutation": "M24",
       "edits": [
         {
           "path": "go/engine.go",
@@ -534,17 +387,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M25",
       "case": "C15.shared-error-retry",
       "description": "Keep a rejected request-local flight registered so a later same-scope caller receives the rejection instead of retrying",
-      "typescriptMutation": "M25",
       "edits": [
         {
           "path": "go/engine.go",
@@ -555,18 +403,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M26",
       "case": "C15.shared-error-retry",
       "description": "Never remove a settled process flight from the registry so later same-key callers join finished work",
-      "typescriptMutation": "M26",
       "edits": [
         {
           "path": "go/engine.go",
@@ -577,18 +419,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M27",
       "case": "C16.runtime-enables-coalescing",
       "description": "Capture the operation's coalesce default as true so an omitted runtime leaf or null provider inherits sharing over a configured false",
-      "typescriptMutation": "M27",
       "edits": [
         {
           "path": "go/policy.go",
@@ -599,34 +435,20 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M28",
       "case": "C17.library-defaults",
-      "description": "Default coalescing off when the coalesce leaf is omitted (this also disables an explicit static true, which no corpus fixture uses)",
-      "typescriptMutation": "M28",
+      "description": "Default coalescing off when the static coalesce leaf is omitted while an explicit true still shares",
       "edits": [
         {
           "path": "go/policy.go",
-          "before": "\"coalesce\": !p.DisableCoalescing}",
-          "after": "\"coalesce\": false}"
+          "before": "\t\tv, present := optionalLeaf(m, field)\n\t\tif !present {\n\t\t\tcontinue\n\t\t}",
+          "after": "\t\tv, present := optionalLeaf(m, field)\n\t\tif !present {\n\t\t\tif field == \"coalesce\" {\n\t\t\t\tp.DisableCoalescing = true\n\t\t\t}\n\t\t\tcontinue\n\t\t}"
         }
       ],
-      "skipCohorts": {
-        "ordinary": "TestProcessCoalescingInspectionTracksLiveOwnership releases its loader gate once; with coalescing off the second caller's own load blocks forever and the synctest bubble panics on exit, a hang rather than a failed assertion."
-      },
       "requiredDetections": [
-        "generated",
-        "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
         "generated",
         "portable"
       ]
@@ -635,7 +457,6 @@
       "id": "M29",
       "case": "C18.captured-shadow-fill",
       "description": "Re-resolve the runtime policy at fill time and write the dark fill with the retention then in force",
-      "typescriptMutation": "M29",
       "edits": [
         {
           "path": "go/shadow.go",
@@ -646,18 +467,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M30",
       "case": "C22.freshness-boundary",
       "description": "Serve a remote frame whose age equals the fresh TTL as a hit",
-      "typescriptMutation": "M30",
       "edits": [
         {
           "path": "go/engine.go",
@@ -668,18 +483,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M31",
       "case": "C22.freshness-boundary",
       "description": "Acquire a dark C0 frame whose age equals the fresh TTL instead of treating it as expired",
-      "typescriptMutation": "M31",
       "edits": [
         {
           "path": "go/shadow.go",
@@ -690,18 +499,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M32",
       "case": "C22.physical-vs-logical",
       "description": "Write every remote frame with the fresh TTL, ignoring stale-on-error retention",
-      "typescriptMutation": "M32",
       "edits": [
         {
           "path": "go/engine.go",
@@ -712,18 +515,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M33",
       "case": "C23.policy-does-not-spend-source-budget",
       "description": "Judge a source settlement against a deadline anchored at the clock origin instead of the source start; the timer still fires at the source's own deadline",
-      "typescriptMutation": "M33",
       "edits": [
         {
           "path": "go/deadline.go",
@@ -734,18 +531,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M34",
       "case": "C24.follower-source",
       "description": "Complete followers of a joined flight with an undefined or zero value instead of the leader's accepted value while errors still propagate",
-      "typescriptMutation": "M34",
       "edits": [
         {
           "path": "go/engine.go",
@@ -753,15 +544,7 @@
           "after": "<-f.done\n\t\tvar zero T\n\t\treturn zero, f.err"
         }
       ],
-      "skipCohorts": {
-        "ordinary": "TestBorrowedReferencesSurviveFollowersAndCacheHits compares the pointer identity of the value a follower receives; a zero-valued follower result makes the test dereference a nil pointer and panic inside its synctest bubble, a crash rather than a failed assertion."
-      },
       "requiredDetections": [
-        "generated",
-        "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
         "generated",
         "portable"
       ]
@@ -770,7 +553,6 @@
       "id": "M35",
       "case": "C25.late-source-rejected",
       "description": "Accept a settlement observed at exactly the elapsed deadline",
-      "typescriptMutation": "M35",
       "edits": [
         {
           "path": "go/deadline.go",
@@ -781,18 +563,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M36",
       "case": "C25.late-source-rejected",
       "description": "Stamp the serialization-start receipt one millisecond late so the dump duration is measured short",
-      "typescriptMutation": "M36",
       "edits": [
         {
           "path": "go/engine.go",
@@ -803,17 +579,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M37",
       "case": "C27.source-error-no-publication",
       "description": "Publish a rejected source's result into process-local storage before rethrowing",
-      "typescriptMutation": "M37",
       "edits": [
         {
           "path": "go/engine.go",
@@ -824,17 +595,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M38",
       "case": "C28.no-refill-after-read-failure",
       "description": "Skip the Redis publication after a semantic miss, including a decode failure, so only retained-candidate misses refill",
-      "typescriptMutation": "M38",
       "edits": [
         {
           "path": "go/engine.go",
@@ -845,18 +611,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M39",
       "case": "C34.first-fence",
       "description": "Drop the pre-serialization fence check so a source accepted behind an observed fence is serialized while the post-serialization recheck still blocks the write",
-      "typescriptMutation": "M39",
       "edits": [
         {
           "path": "go/engine.go",
@@ -867,18 +627,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M40",
       "case": "C40.future-rejected",
       "description": "Classify a frame dated after the reader clock as a valid frame of age zero instead of rejecting it as future",
-      "typescriptMutation": "M40",
       "edits": [
         {
           "path": "go/engine.go",
@@ -889,18 +643,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M41",
       "case": "C43.independent-values",
       "description": "Decode the retained candidate but serve an undefined or zero value instead of it from stale recovery",
-      "typescriptMutation": "M41",
       "edits": [
         {
           "path": "go/engine.go",
@@ -911,18 +659,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M42",
       "case": "C43.request-memo",
       "description": "Publish a recovered stale value into process-local storage",
-      "typescriptMutation": "M42",
       "edits": [
         {
           "path": "go/engine.go",
@@ -933,18 +675,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M43",
       "case": "C44.retained-invalidation",
       "description": "Retain the stale candidate with a creation timestamp one millisecond after the acquired frame",
-      "typescriptMutation": "M43",
       "edits": [
         {
           "path": "go/engine.go",
@@ -955,18 +691,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M44",
       "case": "C44.retained-invalidation",
       "description": "Stamp the retained candidate with the read time instead of its frame timestamp",
-      "typescriptMutation": "M44",
       "edits": [
         {
           "path": "go/engine.go",
@@ -977,18 +707,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M45",
       "case": "C45.captured-policy",
       "description": "Admit calls with a recovery maximum one second larger than the configured policy",
-      "typescriptMutation": "M45",
       "edits": [
         {
           "path": "go/policy.go",
@@ -999,18 +723,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M46",
       "case": "C45.captured-policy",
       "description": "Capture the static default recovery maximum at admission, ignoring the runtime overlay (in the policy profile this also hides overlay configuration errors)",
-      "typescriptMutation": "M46",
       "edits": [
         {
           "path": "go/policy.go",
@@ -1021,18 +739,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M47",
       "case": "C49.dark-source-reuse",
       "description": "Continue dark shadow work without waiting for the caller source",
-      "typescriptMutation": "M47",
       "edits": [
         {
           "path": "go/shadow.go",
@@ -1043,18 +755,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M48",
       "case": "C54.deduplication",
       "description": "Admit a shadow job for an identity that already has a live job",
-      "typescriptMutation": "M48",
       "edits": [
         {
           "path": "go/shadow.go",
@@ -1065,18 +771,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M49",
       "case": "C54.instance-isolation",
       "description": "Admit one shadow job beyond the per-instance capacity",
-      "typescriptMutation": "M49",
       "edits": [
         {
           "path": "go/shadow.go",
@@ -1087,18 +787,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M50",
       "case": "W01.key-identity",
       "description": "Reject braces in keyType and id for untracked keys as well",
-      "typescriptMutation": "M50",
       "edits": [
         {
           "path": "go/protocol.go",
@@ -1109,17 +803,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M51",
       "case": "W03.cohort-assignment",
       "description": "Admit a key whose cohort sample equals the configured ramp",
-      "typescriptMutation": "M51",
       "edits": [
         {
           "path": "go/policy.go",
@@ -1130,17 +819,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M52",
       "case": "W04.untracked-decoder",
       "description": "Read and apply the entity watermark fence on untracked keys",
-      "typescriptMutation": "M52",
       "edits": [
         {
           "path": "go/protocol.go",
@@ -1151,18 +835,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M53",
       "case": "W06.envelope-markers",
       "description": "Leave the escape prefix in place before an escaped binary-zstd marker",
-      "typescriptMutation": "M53",
       "edits": [
         {
           "path": "go/codec.go",
@@ -1173,18 +851,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M54",
       "case": "W06.envelope-markers",
       "description": "Strip a leading zero byte even when the next byte is not an envelope marker",
-      "typescriptMutation": "M54",
       "edits": [
         {
           "path": "go/codec.go",
@@ -1195,18 +867,12 @@
       "requiredDetections": [
         "generated",
         "portable"
-      ],
-      "typescriptRequiredDetections": [
-        "ordinary",
-        "generated",
-        "portable"
       ]
     },
     {
       "id": "M55",
       "case": "W07.compression-selection",
       "description": "Store a compressed payload whose marked size ties the escaped raw size",
-      "typescriptMutation": "M55",
       "edits": [
         {
           "path": "go/codec.go",
@@ -1215,10 +881,6 @@
         }
       ],
       "requiredDetections": [
-        "generated",
-        "portable"
-      ],
-      "typescriptRequiredDetections": [
         "generated",
         "portable"
       ]

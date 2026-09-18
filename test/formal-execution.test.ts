@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 type Reproducer = { kind: string; run: string; model?: string; failure: string; family: string; profiles: string[]; exclusions: Record<string, string>; scope?: string };
-type NativeMutants = { kind: string; text: string; mutants?: string[]; crossContract?: Record<string, string> };
+type NativeMutants = { kind: string; text: string; mutant?: string; crossContract?: string };
 type Challenge = { id: string; contract: string; source: string; model: string; invariant: string; before: string; after: string; measures?: string; reproducer?: Reproducer; nativeMutants?: NativeMutants };
 type Manifest = {
   check: { maxSamples: number; maxSteps: number; outputDirectory: string };
@@ -27,9 +27,9 @@ type Command = { command: string; args: string[]; outputDirectory?: string; expe
 const manifest = () => JSON.parse(readFileSync(new URL("../formal/execution.json", import.meta.url), "utf8")) as Manifest;
 const moduleUrl = new URL("../formal/execution.mjs", import.meta.url).href;
 const runner = fileURLToPath(new URL("../formal/run-models.mjs", import.meta.url));
-type MutantEntry = { id: string; case: string; requiredDetections: string[]; edits?: unknown[]; typescriptRequiredDetections?: string[]; skipCohorts?: Record<string, string> };
+type MutantEntry = { id: string; case: string; description?: string; requiredDetections: string[]; edits?: unknown[] };
 type Catalogs = { typescript: Map<string, MutantEntry>; go: Map<string, MutantEntry>; caseContracts: Map<string, string[]> };
-type Summary = { [key: string]: unknown; nativeMutants: { mapped: number; unobservable: number; explained: number; backlog: number }; unmappedMutants: number };
+type Summary = { [key: string]: unknown; nativeMutants: { mapped: number; unobservable: number; modelOnly: number; backlog: number }; unmappedMutants: number };
 type Options = { readSource?(path: string): string; grandfathered?: readonly string[]; grandfatheredNative?: readonly string[]; catalogs?: Catalogs; files?: string[] };
 const { root, scanDeclarations, scanDeclarationBodies, classifyRuns, reproducerCheckpoint, validateExecution, readMutantCatalogs, challengesByMutant, nativeMutantKinds, grandfatheredReproducerBacklog, grandfatheredNativeMutantBacklog, quintSources } = await import(moduleUrl) as {
   root: string;
@@ -60,7 +60,7 @@ describe("formal execution schedule", () => {
     expect(validate(manifest())).toEqual({ models: 32, libraries: 21, profiles: 15, invariants: 219, regressions: 419,
       generatedTraces: 5280, exportedRegressionTraces: 252, vectorModels: 4, generatedVectors: 1631,
       challenges: 72, distinctFaults: 68, challengedModels: 32, waivedModels: 0, reproducers: 13, reproducerBacklog: 59,
-      nativeMutants: { mapped: 62, unobservable: 2, explained: 6, backlog: 2 }, unmappedMutants: 7 });
+      nativeMutants: { mapped: 62, unobservable: 2, modelOnly: 6, backlog: 2 }, unmappedMutants: 7 });
   });
 
   it("rejects omitted models and dropped or renamed regressions", () => {
@@ -304,22 +304,21 @@ describe("formal execution schedule", () => {
     expect(() => validate(missing)).toThrow(/reproducer backlog is missing/);
   });
 
-  it("maps every challenge to native mutants in both catalogs or an enumerated explanation, and freezes the backlog", () => {
+  it("maps every challenge to a native mutant in both catalogs or an enumerated explanation, and freezes the backlog", () => {
     // A small paired catalog fixture: M01 and M11 require generated detection in
-    // both ports, M16 in neither, M40 sits on a C40 case, M50 exists only in
-    // TypeScript and M20 requires generated detection only in TypeScript.
+    // both ports, M40 sits on a C40 case, M50 exists only in TypeScript and M20
+    // requires generated detection only in TypeScript.
     const entry = (id: string, kase: string, requiredDetections: string[]): MutantEntry => ({ id, case: kase, requiredDetections });
     const catalogs = (): Catalogs => {
       const typescript = new Map([
         ["M01", entry("M01", "C45.maximum-age-exclusive", ["ordinary", "generated", "portable"])],
         ["M11", entry("M11", "C09.fixed-local-ttl", ["generated", "portable"])],
-        ["M16", entry("M16", "C03.late-publication", [])],
         ["M20", entry("M20", "C11.distinct-keys", ["generated", "portable"])],
         ["M40", entry("M40", "C40.future-rejected", ["generated", "portable"])],
         ["M50", entry("M50", "W01.key-identity", ["generated", "portable"])],
       ]);
-      const go = new Map([...typescript].filter(([id]) => id !== "M50").map(([id, item]) => [id, entry(id, item.case, id === "M20" || !item.requiredDetections.includes("generated") ? [] : ["generated", "portable"])]));
-      const caseContracts = new Map([["C45.maximum-age-exclusive", ["C45"]], ["C09.fixed-local-ttl", ["C09"]], ["C03.late-publication", ["C03"]], ["C11.distinct-keys", ["C11"]], ["C40.future-rejected", ["C40"]], ["W01.key-identity", ["W01"]]]);
+      const go = new Map([...typescript].filter(([id]) => id !== "M50").map(([id, item]) => [id, entry(id, item.case, id === "M20" ? [] : ["generated", "portable"])]));
+      const caseContracts = new Map([["C45.maximum-age-exclusive", ["C45"]], ["C09.fixed-local-ttl", ["C09"]], ["C11.distinct-keys", ["C11"]], ["C40.future-rejected", ["C40"]], ["W01.key-identity", ["W01"]]]);
       return { typescript, go, caseContracts };
     };
     // The rules are exercised against the fixture catalog, not the live mapping:
@@ -330,7 +329,7 @@ describe("formal execution schedule", () => {
       m.nativeMutantBacklog = [...grandfatheredNativeMutantBacklog];
       for (const challenge of m.challenges) {
         if (m.nativeMutantBacklog.includes(challenge.id)) delete challenge.nativeMutants;
-        else challenge.nativeMutants = { kind: "model-only", text: "Fixture: no port line carries this bookkeeping." };
+        else challenge.nativeMutants = { kind: "model-only", text: "Fixture: no line in src/dialcache.ts carries this bookkeeping." };
       }
       return m;
     };
@@ -341,70 +340,65 @@ describe("formal execution schedule", () => {
       edit(m);
       return () => validate(m, { catalogs: catalogs() });
     };
-    const mapped = (mutants: string[], crossContract?: Record<string, string>) => ({ kind: "mapped", text: "Fixture mapping.", mutants, ...(crossContract ? { crossContract } : {}) });
-    expect(nativeMutantKinds).toEqual(["mapped", "unobservable", "model-only", "environment"]);
+    const mapped = (mutant: string, crossContract?: string): NativeMutants => ({ kind: "mapped", text: `Fixture mapping of ${mutant}.`, mutant, ...(crossContract === undefined ? {} : { crossContract }) });
+    expect(nativeMutantKinds).toEqual(["mapped", "unobservable", "model-only"]);
     expect(grandfatheredNativeMutantBacklog).toEqual(["invalidation-transition-cutoff-moves-backwards", "invalidation-transition-inclusive-buffer-limit"]);
-    // R1: every listed mutant sits in both catalogs.
-    expect(withNative("policy-inclusive-local-expiry", mapped(["M99"]))).toThrow(/policy-inclusive-local-expiry: M99 is not in both mutant catalogs/);
-    expect(withNative("policy-inclusive-local-expiry", mapped(["M50"]))).toThrow(/policy-inclusive-local-expiry: M50 is not in both mutant catalogs/);
-    // R3: a mapped mutant's case lists the challenge's contract, or a crossContract reason says why not; the key set is exact.
-    expect(withNative("policy-inclusive-local-expiry", mapped(["M11"]))().nativeMutants).toMatchObject({ mapped: 1 });
-    expect(withNative("policy-inclusive-local-expiry", mapped(["M01"]))).toThrow(/policy-inclusive-local-expiry: M01 is on case C45.maximum-age-exclusive which does not list C09; add a crossContract reason/);
-    expect(withNative("policy-inclusive-local-expiry", mapped(["M01"], { M01: "  " }))).toThrow(/M01 is on case C45.maximum-age-exclusive which does not list C09/);
-    expect(withNative("policy-inclusive-local-expiry", mapped(["M01", "M11"], { M01: "The shared rule reaches the local layer too." }))().nativeMutants).toMatchObject({ mapped: 1 });
-    expect(withNative("policy-inclusive-local-expiry", mapped(["M11"], { M11: "not needed" }))).toThrow(/policy-inclusive-local-expiry: crossContract note for in-contract mutant M11/);
-    expect(withNative("policy-inclusive-local-expiry", mapped(["M11"], { M40: "never listed" }))).toThrow(/policy-inclusive-local-expiry: crossContract names an unlisted mutant M40/);
-    expect(withNative("policy-inclusive-local-expiry", { ...mapped(["M11"]), crossContract: [] as unknown as Record<string, string> })).toThrow(/crossContract must map mutant ids to reasons/);
-    // R4: kinds, text, and which kinds list mutants.
-    expect(withNative("policy-inclusive-local-expiry", { kind: "native", text: "x", mutants: ["M11"] })).toThrow(/nativeMutants kind must be one of mapped, unobservable, model-only, environment/);
-    expect(withNative("policy-inclusive-local-expiry", { kind: "mapped", text: "  ", mutants: ["M11"] })).toThrow(/nativeMutants text must name the port lines or explain why none exists/);
-    expect(withNative("policy-inclusive-local-expiry", { kind: "model-only", text: "x", mutants: ["M11"] })).toThrow(/model-only nativeMutants cannot list mutants/);
-    expect(withNative("policy-inclusive-local-expiry", { kind: "environment", text: "x", mutants: [] })).toThrow(/environment nativeMutants cannot list mutants/);
-    expect(withNative("policy-inclusive-local-expiry", { kind: "mapped", text: "x", mutants: [] })).toThrow(/mapped nativeMutants need a non-empty list of distinct mutant ids/);
-    expect(withNative("policy-inclusive-local-expiry", { kind: "mapped", text: "x", mutants: ["M11", "M11"] })).toThrow(/mapped nativeMutants need a non-empty list of distinct mutant ids/);
-    expect(withNative("policy-inclusive-local-expiry", { kind: "unobservable", text: "x" })).toThrow(/unobservable nativeMutants need a non-empty list of distinct mutant ids/);
-    expect(withNative("policy-inclusive-local-expiry", { kind: "unobservable", text: "x", mutants: ["M16"], crossContract: {} })).toThrow(/crossContract belongs only to mapped nativeMutants/);
-    expect(withNative("policy-inclusive-local-expiry", { ...mapped(["M11"]), note: "extra" } as NativeMutants)).toThrow(/policy-inclusive-local-expiry: unsupported nativeMutants field note/);
+    // The mutant sits in both catalogs.
+    expect(withNative("policy-inclusive-local-expiry", mapped("M99"))).toThrow(/policy-inclusive-local-expiry: M99 is not in both mutant catalogs/);
+    expect(withNative("policy-inclusive-local-expiry", mapped("M50"))).toThrow(/policy-inclusive-local-expiry: M50 is not in both mutant catalogs/);
+    expect(withNative("policy-inclusive-local-expiry", { kind: "mapped", text: "x" })).toThrow(/policy-inclusive-local-expiry: mapped nativeMutants need a mutant id/);
+    // The mutant's case lists the challenge's contract, or exactly one crossContract sentence says why not.
+    expect(withNative("policy-inclusive-local-expiry", mapped("M11"))().nativeMutants).toMatchObject({ mapped: 1 });
+    expect(withNative("policy-inclusive-local-expiry", mapped("M01"))).toThrow(/policy-inclusive-local-expiry: M01 is on case C45.maximum-age-exclusive which does not list C09; add a crossContract reason/);
+    expect(withNative("policy-inclusive-local-expiry", mapped("M01", "  "))).toThrow(/M01 is on case C45.maximum-age-exclusive which does not list C09/);
+    expect(withNative("policy-inclusive-local-expiry", mapped("M01", "The shared rule reaches the local layer too."))().nativeMutants).toMatchObject({ mapped: 1 });
+    expect(withNative("policy-inclusive-local-expiry", mapped("M11", "not needed"))).toThrow(/policy-inclusive-local-expiry: crossContract note for in-contract mutant M11/);
+    // Kinds, text, and which kinds name a mutant.
+    expect(withNative("policy-inclusive-local-expiry", { kind: "native", text: "x", mutant: "M11" })).toThrow(/nativeMutants kind must be one of mapped, unobservable, model-only/);
+    expect(withNative("policy-inclusive-local-expiry", { kind: "mapped", text: "  ", mutant: "M11" })).toThrow(/nativeMutants text must name the port lines or explain why none exists/);
+    expect(withNative("policy-inclusive-local-expiry", { kind: "mapped", text: "Names no mutant.", mutant: "M11" })).toThrow(/policy-inclusive-local-expiry: nativeMutants text must name M11/);
+    expect(withNative("policy-inclusive-local-expiry", { kind: "model-only", text: "x", mutant: "M11" })).toThrow(/model-only nativeMutants name no mutant/);
+    expect(withNative("policy-inclusive-local-expiry", { kind: "unobservable", text: "x", crossContract: "y" })).toThrow(/unobservable nativeMutants name no mutant/);
+    expect(withNative("policy-inclusive-local-expiry", { kind: "model-only", text: "No file named." })).toThrow(/model-only nativeMutants text must name the port file it examined/);
+    expect(withNative("policy-inclusive-local-expiry", { kind: "unobservable", text: "The read in src/context.ts checks closure again." })().nativeMutants).toMatchObject({ unobservable: 1 });
+    expect(withNative("policy-inclusive-local-expiry", { ...mapped("M11"), note: "extra" } as NativeMutants)).toThrow(/policy-inclusive-local-expiry: unsupported nativeMutants field note/);
     expect(withNative("policy-inclusive-local-expiry", [] as unknown as NativeMutants)).toThrow(/policy-inclusive-local-expiry: invalid nativeMutants/);
-    expect(withNative("policy-inclusive-local-expiry", { kind: "environment", text: "The driver's clock, not the cache." })().nativeMutants).toMatchObject({ mapped: 0, explained: 70 });
-    // R5: mapped mutants require generated detection in both catalogs; unobservable ones in neither.
-    expect(withNative("policy-inclusive-local-expiry", mapped(["M16"]))).toThrow(/policy-inclusive-local-expiry: M16 must require generated detection in both catalogs/);
-    expect(withNative("layers-late-memo-into-closed-scope", mapped(["M20"]))).toThrow(/layers-late-memo-into-closed-scope: M20 must require generated detection in both catalogs/);
-    expect(withNative("policy-inclusive-local-expiry", { kind: "unobservable", text: "x", mutants: ["M11"] })).toThrow(/policy-inclusive-local-expiry: M11 is unobservable yet requires generated detection/);
-    // R6: a repeated fault maps the same way; text and crossContract may differ.
-    const unobservable = (text: string): NativeMutants => ({ kind: "unobservable", text, mutants: ["M16"] });
+    // A mapped mutant requires generated detection in both catalogs.
+    expect(withNative("layers-late-memo-into-closed-scope", mapped("M20"))).toThrow(/layers-late-memo-into-closed-scope: M20 must require generated detection in both catalogs/);
+    // A repeated fault maps the same way; the texts may differ.
     const twins = ["scope-late-source-repopulates-closed-memo", "layers-late-memo-into-closed-scope"];
+    const unobservable = (text: string): NativeMutants => ({ kind: "unobservable", text: `${text} The read in src/context.ts checks closure again.` });
     const agreeing = withNative(twins[0]!, unobservable("Scope wording."), m => { m.challenges.find(challenge => challenge.id === twins[1])!.nativeMutants = unobservable("Layers wording."); });
     expect(agreeing().nativeMutants).toMatchObject({ unobservable: 2 });
     expect(withNative(twins[0]!, unobservable("x"))).toThrow(/layers-late-memo-into-closed-scope: maps the fault of scope-late-source-repopulates-closed-memo differently/);
-    const crossOnly = withNative("recovery-inclusive-maximum", mapped(["M40"], { M40: "Recovery reaches the shared rule." }), m => {
-      m.challenges.find(challenge => challenge.id === "legacy-recovery-inclusive-maximum")!.nativeMutants = mapped(["M40"], { M40: "The legacy path reaches it too." });
+    const crossOnly = withNative("recovery-inclusive-maximum", mapped("M40", "Recovery reaches the shared rule."), m => {
+      m.challenges.find(challenge => challenge.id === "legacy-recovery-inclusive-maximum")!.nativeMutants = mapped("M40", "The legacy path reaches it too.");
     });
     expect(crossOnly().nativeMutants).toMatchObject({ mapped: 2 });
-    // R7: the backlog is the exact set of unmapped, unexplained challenges, and only the grandfathered ones may sit in it.
+    // The backlog is the exact set of challenges without an entry, and only the grandfathered ones may sit in it.
     expect(withNative("policy-inclusive-local-expiry", undefined)).toThrow(/policy-inclusive-local-expiry: has no nativeMutants and is not listed in nativeMutantBacklog/);
     expect(withNative("policy-inclusive-local-expiry", undefined, m => { m.nativeMutantBacklog.push("policy-inclusive-local-expiry"); }))
-      .toThrow(/policy-inclusive-local-expiry: new challenges must map to native mutants in both ports or explain why none exists; nativeMutantBacklog only grandfathers the challenges that predate the requirement/);
+      .toThrow(/policy-inclusive-local-expiry: new challenges must map to a native mutant in both ports or explain why none exists; nativeMutantBacklog only grandfathers the challenges that predate the requirement/);
     // A test-only grandfather list admits it: production keeps the frozen constant.
     const optedIn = explained();
     delete optedIn.challenges.find(challenge => challenge.id === "policy-inclusive-local-expiry")!.nativeMutants;
     optedIn.nativeMutantBacklog.push("policy-inclusive-local-expiry");
     expect(validate(optedIn, { catalogs: catalogs(), grandfatheredNative: [...grandfatheredNativeMutantBacklog, "policy-inclusive-local-expiry"] }).nativeMutants).toMatchObject({ backlog: 3 });
-    expect(withNative("policy-inclusive-local-expiry", mapped(["M11"]), m => { m.nativeMutantBacklog.push("policy-inclusive-local-expiry"); })).toThrow(/policy-inclusive-local-expiry: has nativeMutants and is listed in nativeMutantBacklog/);
-    expect(withNative("policy-inclusive-local-expiry", mapped(["M11"]), m => { m.nativeMutantBacklog.push("invented-fault"); })).toThrow(/nativeMutantBacklog names an unknown challenge: invented-fault/);
-    expect(withNative("policy-inclusive-local-expiry", mapped(["M11"]), m => { m.nativeMutantBacklog.push(m.nativeMutantBacklog[0]!); })).toThrow(/Duplicate challenge ids in nativeMutantBacklog/);
-    expect(withNative("policy-inclusive-local-expiry", mapped(["M11"]), m => { delete (m as Partial<Manifest>).nativeMutantBacklog; })).toThrow(/Challenge native-mutant backlog is missing/);
-    expect(withNative("invalidation-transition-cutoff-moves-backwards", { kind: "environment", text: "x" })).toThrow(/invalidation-transition-cutoff-moves-backwards: has nativeMutants and is listed in nativeMutantBacklog/);
+    expect(withNative("policy-inclusive-local-expiry", mapped("M11"), m => { m.nativeMutantBacklog.push("policy-inclusive-local-expiry"); })).toThrow(/policy-inclusive-local-expiry: has nativeMutants and is listed in nativeMutantBacklog/);
+    expect(withNative("policy-inclusive-local-expiry", mapped("M11"), m => { m.nativeMutantBacklog.push("invented-fault"); })).toThrow(/nativeMutantBacklog names an unknown challenge: invented-fault/);
+    expect(withNative("policy-inclusive-local-expiry", mapped("M11"), m => { m.nativeMutantBacklog.push(m.nativeMutantBacklog[0]!); })).toThrow(/Duplicate challenge ids in nativeMutantBacklog/);
+    expect(withNative("policy-inclusive-local-expiry", mapped("M11"), m => { delete (m as Partial<Manifest>).nativeMutantBacklog; })).toThrow(/Challenge native-mutant backlog is missing/);
+    expect(withNative("invalidation-transition-cutoff-moves-backwards", { kind: "model-only", text: "Only src/internal/redis-scripts.ts carries it." })).toThrow(/invalidation-transition-cutoff-moves-backwards: has nativeMutants and is listed in nativeMutantBacklog/);
     // The summary counts every kind, the backlog and the catalog mutants no challenge cites.
-    const summary = withNative("policy-inclusive-local-expiry", mapped(["M11", "M01"], { M01: "Shared rule." }), m => {
+    const summary = withNative("policy-inclusive-local-expiry", mapped("M11"), m => {
       m.challenges.find(challenge => challenge.id === twins[0])!.nativeMutants = unobservable("Scope.");
       m.challenges.find(challenge => challenge.id === twins[1])!.nativeMutants = unobservable("Layers.");
     })();
-    expect(summary.nativeMutants).toEqual({ mapped: 1, unobservable: 2, explained: 67, backlog: 2 });
-    expect(summary.unmappedMutants).toBe(3);
+    expect(summary.nativeMutants).toEqual({ mapped: 1, unobservable: 2, modelOnly: 67, backlog: 2 });
+    expect(summary.unmappedMutants).toBe(4);
     const fixture = explained();
-    expect(challengesByMutant({ ...fixture, challenges: [{ ...fixture.challenges[0]!, nativeMutants: mapped(["M11"]) }, { ...fixture.challenges[1]!, nativeMutants: mapped(["M11", "M01"]) }, fixture.challenges[2]!] }))
-      .toEqual(new Map([["M11", [fixture.challenges[0]!.id, fixture.challenges[1]!.id]], ["M01", [fixture.challenges[1]!.id]]]));
+    expect(challengesByMutant({ ...fixture, challenges: [{ ...fixture.challenges[0]!, nativeMutants: mapped("M11") }, { ...fixture.challenges[1]!, nativeMutants: mapped("M11") }, { ...fixture.challenges[2]!, nativeMutants: mapped("M01") }, fixture.challenges[3]!] }))
+      .toEqual(new Map([["M11", [fixture.challenges[0]!.id, fixture.challenges[1]!.id]], ["M01", [fixture.challenges[2]!.id]]]));
   });
 
   it("maps every live challenge outside the frozen native-mutant backlog, and cites only catalog mutants", () => {
@@ -414,52 +408,63 @@ describe("formal execution schedule", () => {
     const catalogs = readMutantCatalogs();
     for (const [mutant, ids] of challengesByMutant(live)) {
       expect(catalogs.typescript.has(mutant) && catalogs.go.has(mutant), mutant).toBe(true);
-      for (const id of ids) expect(live.challenges.find(challenge => challenge.id === id)!.nativeMutants!.mutants, mutant).toContain(mutant);
+      for (const id of ids) expect(live.challenges.find(challenge => challenge.id === id)!.nativeMutants!.mutant, mutant).toBe(mutant);
     }
     // The catalog mutants no challenge cites are reported, not gated.
     expect([...catalogs.typescript.keys()].filter(id => !challengesByMutant(live).has(id))).toEqual(["M02", "M05", "M07", "M08", "M09", "M12", "M13"]);
   });
 
-  it("pairs the TypeScript and Go mutant catalogs", () => {
+  it("pairs the TypeScript and Go mutant catalogs and anchors every edit in the port text", () => {
     const live = readMutantCatalogs();
     expect([...live.typescript.keys()]).toEqual([...live.go.keys()]);
     expect(live.typescript.size).toBeGreaterThanOrEqual(13);
     for (const [id, mutation] of live.typescript) {
       // Every TypeScript mutant is a list of exact-anchor edits, like its Go twin.
       expect(Array.isArray(mutation.edits) && mutation.edits.length > 0, id).toBe(true);
-      expect(live.go.get(id)!.typescriptRequiredDetections, id).toEqual(mutation.requiredDetections);
       expect(live.go.get(id)!.case, id).toBe(mutation.case);
     }
     expect(live.caseContracts.get("C45.maximum-age-exclusive")).toEqual(["C45"]);
     const cases = JSON.stringify({ cases: [{ id: "C45.maximum-age-exclusive", contracts: ["C45"] }, { id: "C25.late-source-rejected", contracts: ["C25"] }] });
     const ts = (mutations: unknown[]) => JSON.stringify({ schemaVersion: 1, mutations });
     const go = (mutations: unknown[]) => JSON.stringify({ schemaVersion: 1, mutations });
-    const tsEntry = (id: string, kase = "C45.maximum-age-exclusive", requiredDetections = ["generated", "portable"]) => ({ id, case: kase, description: "d", edits: [{ path: "src/a.ts", before: "a", after: "b" }], requiredDetections });
-    const goEntry = (id: string, kase = "C45.maximum-age-exclusive", typescriptRequiredDetections = ["generated", "portable"], typescriptMutation = id) =>
-      ({ id, case: kase, description: "d", typescriptMutation, edits: [{ path: "go/a.go", before: "a", after: "b" }], requiredDetections: ["generated", "portable"], typescriptRequiredDetections });
-    const read = (typescript: string, golang: string) => (path: string) => ({ "formal/semantic-mutations.json": typescript, "formal/go-mutations.json": golang, "formal/semantic-cases.json": cases })[path]!;
+    type Edit = { path: string; before: string; after: string };
+    const tsEntry = (id: string, kase = "C45.maximum-age-exclusive", requiredDetections = ["generated", "portable"], edits: Edit[] = [{ path: "src/a.ts", before: "alpha", after: "beta" }]) =>
+      ({ id, case: kase, description: "d", edits, requiredDetections });
+    const goEntry = (id: string, kase = "C45.maximum-age-exclusive", requiredDetections = ["generated", "portable"], edits: Edit[] = [{ path: "go/a.go", before: "alpha", after: "beta" }]) =>
+      ({ id, case: kase, description: "d", edits, requiredDetections });
+    const files: Record<string, string> = { "src/a.ts": "export const alpha = 1;\n", "go/a.go": "package dialcache\n\nvar alpha = 1\n", "src/twice.ts": "alpha alpha\n" };
+    const read = (typescript: string, golang: string) => (path: string) => {
+      const text = ({ "formal/semantic-mutations.json": typescript, "formal/go-mutations.json": golang, "formal/semantic-cases.json": cases, ...files })[path];
+      if (text === undefined) throw new Error(`no such file ${path}`);
+      return text;
+    };
     const paired = readMutantCatalogs(read(ts([tsEntry("M01"), tsEntry("M02", "C25.late-source-rejected")]), go([goEntry("M01"), goEntry("M02", "C25.late-source-rejected")])));
     expect([...paired.typescript.keys()]).toEqual(["M01", "M02"]);
     expect(paired.caseContracts.get("C25.late-source-rejected")).toEqual(["C25"]);
+    // Edits apply in order: the second anchor matches the text the first produced.
+    const sequential = tsEntry("M01", undefined, undefined, [{ path: "src/a.ts", before: "alpha", after: "gamma" }, { path: "src/a.ts", before: "gamma = 1", after: "gamma = 2" }]);
+    expect([...readMutantCatalogs(read(ts([sequential]), go([goEntry("M01")]))).typescript.keys()]).toEqual(["M01"]);
     const refuse = (typescript: string, golang: string, pattern: RegExp) => expect(() => readMutantCatalogs(read(typescript, golang))).toThrow(pattern);
     refuse(ts([tsEntry("M01"), tsEntry("M02", "C25.late-source-rejected")]), go([goEntry("M01")]), /Mutant catalogs are not paired: TypeScript mutant M02 has no Go twin/);
     refuse(ts([tsEntry("M01")]), go([goEntry("M01"), goEntry("M03")]), /Mutant catalogs are not paired: Go mutant M03 has no TypeScript twin/);
     refuse(ts([tsEntry("M01")]), go([goEntry("M01", "C25.late-source-rejected")]), /M01 is on case C25.late-source-rejected in Go and C45.maximum-age-exclusive in TypeScript/);
-    refuse(ts([tsEntry("M01", undefined, ["ordinary", "generated", "portable"])]), go([goEntry("M01")]), /M01 restates the TypeScript requiredDetections as \["generated","portable"\], but the TypeScript catalog says \["ordinary","generated","portable"\]/);
-    refuse(ts([tsEntry("M01"), tsEntry("M02")]), go([goEntry("M01"), goEntry("M02", undefined, undefined, "M01")]), /M02 names typescriptMutation M01/);
     refuse(ts([tsEntry("M01"), tsEntry("M01")]), go([goEntry("M01")]), /invalid or duplicate TypeScript mutant id M01/);
     refuse(ts([tsEntry("M1")]), go([goEntry("M1")]), /invalid or duplicate TypeScript mutant id M1/);
-    refuse(ts([tsEntry("M01", "C99.invented")]), go([goEntry("M01", "C99.invented")]), /M01 cites unknown case C99.invented/);
     refuse(ts([tsEntry("M01")]), go([goEntry("M01"), goEntry("M01")]), /invalid or duplicate Go mutant id M01/);
+    refuse(ts([tsEntry("M01", "C99.invented")]), go([goEntry("M01", "C99.invented")]), /M01 cites unknown case C99.invented/);
+    refuse(ts([{ ...tsEntry("M01"), description: " " }]), go([goEntry("M01")]), /M01 has no description/);
+    refuse(ts([tsEntry("M01", undefined, ["generated", "fixed"])]), go([goEntry("M01")]), /M01 requires an unknown TypeScript cohort/);
+    refuse(ts([tsEntry("M01", undefined, ["generated", "portable"], [])]), go([goEntry("M01")]), /M01 has no edits/);
+    // Edits stay inside the port and never touch a Go test file.
+    refuse(ts([tsEntry("M01", undefined, undefined, [{ path: "test/a.ts", before: "alpha", after: "beta" }])]), go([goEntry("M01")]), /M01 edits test\/a.ts outside the TypeScript port/);
+    refuse(ts([tsEntry("M01")]), go([goEntry("M01", undefined, undefined, [{ path: "go/a_test.go", before: "alpha", after: "beta" }])]), /M01 edits go\/a_test.go outside the Go port/);
+    refuse(ts([tsEntry("M01", undefined, undefined, [{ path: "src/a.ts", before: "alpha", after: "alpha" }])]), go([goEntry("M01")]), /M01 has an empty or unchanged edit in src\/a.ts/);
+    // Every anchor matches the current port text exactly once, so drift fails the pull request.
+    refuse(ts([tsEntry("M01", undefined, undefined, [{ path: "src/a.ts", before: "omega", after: "beta" }])]), go([goEntry("M01")]), /M01: anchor must match exactly once in src\/a.ts; review source drift/);
+    refuse(ts([tsEntry("M01", undefined, undefined, [{ path: "src/twice.ts", before: "alpha", after: "beta" }])]), go([goEntry("M01")]), /M01: anchor must match exactly once in src\/twice.ts/);
+    refuse(ts([tsEntry("M01")]), go([goEntry("M01", undefined, undefined, [{ path: "go/a.go", before: "omega", after: "beta" }])]), /M01: anchor must match exactly once in go\/a.go/);
     refuse(JSON.stringify({ schemaVersion: 2, mutations: [tsEntry("M01")] }), go([goEntry("M01")]), /expected the versioned TypeScript catalog formal\/semantic-mutations.json/);
     refuse(ts([tsEntry("M01")]), JSON.stringify({ schemaVersion: 1, mutations: [] }), /expected the versioned Go catalog formal\/go-mutations.json/);
-    // A Go entry may skip only the ordinary cohort, with a reason, and never a required cohort.
-    const skipping = (skipCohorts: unknown, requiredDetections = ["generated", "portable"]) => go([{ ...goEntry("M01"), requiredDetections, skipCohorts }]);
-    expect(readMutantCatalogs(read(ts([tsEntry("M01")]), skipping({ ordinary: "the bubble panics on a blocked goroutine" }))).go.get("M01")!.skipCohorts).toEqual({ ordinary: "the bubble panics on a blocked goroutine" });
-    refuse(ts([tsEntry("M01")]), skipping({ generated: "no" }), /M01 may skip only the ordinary cohort, not generated/);
-    refuse(ts([tsEntry("M01")]), skipping({ ordinary: " " }), /M01 skips ordinary without a reason/);
-    refuse(ts([tsEntry("M01")]), skipping({ ordinary: "reason" }, ["ordinary", "generated", "portable"]), /M01 skips ordinary yet requires its detection/);
-    refuse(ts([tsEntry("M01")]), skipping(["ordinary"]), /M01 skipCohorts must map cohort names to reasons/);
     // The pairing runs for every validation of the manifest; a broken pairing fails it.
     expect(() => validate(manifest(), { catalogs: readMutantCatalogs(read(ts([tsEntry("M01")]), go([]))) })).toThrow(/Mutant catalogs are not paired/);
   });

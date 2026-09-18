@@ -6,7 +6,8 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { checkSemanticCoverage } from './check-semantic-coverage.mjs';
 import { evaluateSemanticTestReport } from './semantic-reporter.mjs';
-import { fingerprintFiles, gateDetections, languages, requiredDetectionRegressions, selectMutations, selectionDirectory, selectionFromArguments } from './mutation-reports.mjs';
+import { readMutantCatalogs } from './execution.mjs';
+import { fingerprintFiles, finishPartial, gateDetections, languages, selectMutations, selectionDirectory, selectionFromArguments } from './mutation-reports.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const language = languages.ts;
@@ -60,23 +61,12 @@ function portableResult({ generated, fixed }) {
     passed: generated.passed + fixed.passed, failed: generated.failed + fixed.failed,
     failingTests: [...generated.failingTests, ...fixed.failingTests], components: ['generated', 'fixed'] };
 }
+// Every shard validates the whole catalog the way every pull request does
+// (readMutantCatalogs: pairing, edit shape, anchors matching exactly once), so
+// a stale anchor anywhere fails each shard the same way it fails the single run.
+readMutantCatalogs();
 const sourceText = new Map();
-const ids = new Set();
-// Every shard validates the whole catalog: a stale anchor anywhere fails each
-// shard the same way it fails the single run. A mutant is a short list of
-// exact-anchor edits to src/; every anchor must match its file exactly once.
-for (const mutation of catalog.mutations) {
-  if (!/^M\d+$/.test(mutation.id) || ids.has(mutation.id)) throw new Error('Invalid/duplicate mutation ID');
-  ids.add(mutation.id);
-  if (!Array.isArray(mutation.edits) || !mutation.edits.length) throw new Error(`Invalid edits: ${mutation.id}`);
-  for (const edit of mutation.edits) {
-    if (!/^src\/[\w/-]+\.ts$/.test(edit.path) || !edit.before || typeof edit.after !== 'string' || edit.before === edit.after) throw new Error(`Invalid edit: ${mutation.id}`);
-    const original = sourceText.get(edit.path) ?? read(edit.path);
-    if (original.split(edit.before).length !== 2) throw new Error(`${mutation.id}: mutation anchor must match exactly once in ${edit.path}; review source drift`);
-    sourceText.set(edit.path, original);
-  }
-  if (!mutation.requiredDetections.every(c => comparisons.includes(c))) throw new Error(`Unknown cohort: ${mutation.id}`);
-}
+for (const mutation of catalog.mutations) for (const edit of mutation.edits) if (!sourceText.has(edit.path)) sourceText.set(edit.path, read(edit.path));
 const selected = selectMutations(catalog.mutations, { shard, only });
 // A hard CI cancellation may bypass finally. Keep temporary dependency links
 // outside the artifact tree even when that happens.
@@ -182,12 +172,7 @@ try {
     } finally { for (const path of touched) writeFileSync(resolve(workspace, path), sourceText.get(path)); }
   }
   if (only) {
-    // A partial run reports its lost required detections and stops: it is not
-    // gated and never completes, so the complete report is untouched.
-    const lost = requiredDetectionRegressions(selected, report.mutations);
-    save();
-    console.log(lost.length ? `Lost required detections (a partial run is not gated): ${lost.join(', ')}` : 'Every required detection of the selected mutants held');
-    console.log(`Partial measurement of ${selected.map(m => m.id).join(', ')}: ${relative(root, output)}/report.json; measure the complete catalog for evidence`);
+    finishPartial(report, selected, { output: relative(root, output), language, save });
   } else if (shard.count > 1) {
     // A shard gates its own slice and stays incomplete; the merge recomputes the
     // gate and the detection summary over the whole catalog.

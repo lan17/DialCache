@@ -5,7 +5,7 @@ import { resolve, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { readMutantCatalogs } from './execution.mjs';
-import { fingerprintFiles, gateDetections, languages, requiredDetectionRegressions, selectMutations, selectionDirectory, selectionFromArguments } from './mutation-reports.mjs';
+import { fingerprintFiles, finishPartial, gateDetections, languages, selectMutations, selectionDirectory, selectionFromArguments } from './mutation-reports.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -89,10 +89,11 @@ export function evaluateGoTestEvents(lines, exitCode) {
     if (/^Test(?:Core|Effects|Feature|Behavior|LocalClock)Conformance(?:\/|$)/.test(name)) {
       if (/expected:[\s\S]*actual:/.test(output)) assertionKinds[name] = 'observation-mismatch';
       else if (causalPropertyAssertion(output)) assertionKinds[name] = 'causal-property';
-      // The core replay asserts that a coalesced pair returns one value before
-      // it records the pair's observation; the assertion carries no
-      // expected/actual pair, so it is recognized by its exact text.
-      else if (/core_replay_test\.go:\d+: pair returned different values/.test(output)) assertionKinds[name] = 'pair-value-mismatch';
+      // The core replay asserts that a coalesced pair (or a request pair)
+      // returns one value before it records the pair's observation; those two
+      // assertions carry no expected/actual pair, so they are recognized by
+      // their exact text.
+      else if (/core_replay_test\.go:\d+: (?:pair returned different values|request pair differs)/.test(output)) assertionKinds[name] = 'pair-value-mismatch';
       else throw new Error(`replay failure lacks observation or validated causal property evidence: ${name}`);
     } else {
       assertionKinds[name] = 'native-assertion';
@@ -152,20 +153,12 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}
     for (const path of ['formal', 'go', 'test', 'src']) cpSync(resolve(root, path), resolve(workspace, path), { recursive: true });
     const moduleDirectory = resolve(workspace, 'go');
     const catalogPath = resolve(workspace, 'formal/go-mutations.json');
-    // The catalogs are paired in the workspace copy by the one implementation
-    // execution.mjs uses; only the Go edits are checked here.
+    // The catalogs are paired and every anchor checked in the workspace copy by
+    // the one implementation execution.mjs uses on every pull request.
     readMutantCatalogs(path => readFileSync(resolve(workspace, path), 'utf8'));
     const catalog = json(catalogPath);
     const originals = new Map();
-    for (const mutation of catalog.mutations) {
-      if (!Array.isArray(mutation.edits) || !mutation.edits.length || !mutation.requiredDetections.every(name => ['ordinary', 'generated', 'fixed', 'portable'].includes(name))) throw new Error(`invalid mutation ${mutation.id}`);
-      for (const edit of mutation.edits) {
-        if (!/^go\/[\w-]+\.go$/.test(edit.path) || edit.path.endsWith('_test.go') || !edit.before || typeof edit.after !== 'string' || edit.before === edit.after) throw new Error(`invalid production edit ${mutation.id}`);
-        const original = readFileSync(resolve(workspace, edit.path), 'utf8');
-        if (original.split(edit.before).length !== 2) throw new Error(`${mutation.id}: anchor must occur exactly once; review source drift in ${edit.path}`);
-        originals.set(edit.path, original);
-      }
-    }
+    for (const mutation of catalog.mutations) for (const edit of mutation.edits) if (!originals.has(edit.path)) originals.set(edit.path, readFileSync(resolve(workspace, edit.path), 'utf8'));
     const selected = selectMutations(catalog.mutations, { shard, only });
     if (!only && shard.count > 1) report.shard = { index: shard.index, count: shard.count, mutationIds: selected.map(m => m.id) };
     const ordinaryFiles = readdirSync(moduleDirectory).filter(file => file.endsWith('_test.go') && !infrastructureTestFile.test(file)).sort();
@@ -203,7 +196,18 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}
       writeFileSync(resolve(output, `${label}-${cohort}.jsonl`), result.stdout ?? '');
       writeFileSync(resolve(output, `${label}-${cohort}.stderr.log`), result.stderr ?? '');
       if (result.error || result.signal) throw new Error(`${label}/${cohort}: runner infrastructure failed: ${result.error ?? result.signal}`);
-      const parsed = evaluateGoTestEvents(result.stdout, result.status);
+      let parsed;
+      try { parsed = evaluateGoTestEvents(result.stdout, result.status); } catch (error) {
+        // The port's own suite is informational for a mutant: a fault that
+        // leaves a goroutine blocked or a pointer nil makes a synctest bubble
+        // panic instead of failing an assertion. That is recorded as crashed,
+        // never as detection or survival; the baseline and the replay cohorts
+        // keep the strict rule.
+        if (baseline || cohort !== 'ordinary') throw error;
+        const crashed = { state: 'crashed', reason: error.message, passed: 0, failed: 0, failingTests: [] };
+        writeFileSync(resolve(output, `${label}-${cohort}.json`), JSON.stringify(crashed, null, 2) + '\n');
+        return crashed;
+      }
       if (baseline && parsed.failed) throw new Error(`${cohort}: unmodified baseline must pass; see baseline event log`);
       const currentTop = new Set(parsed.executedTests.map(name => name.split('/')[0]));
       if (cohorts[cohort].some(name => !currentTop.has(name))) throw new Error(`${label}/${cohort}: missing selected test`);
@@ -231,26 +235,13 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}
         }
         compile(mutation.id);
         const result = { id: mutation.id, case: mutation.case, description: mutation.description, cohorts: {} };
-        // A declared skip (readMutantCatalogs checked it names only the
-        // ordinary cohort with a reason) is reported, never measured.
-        for (const cohort of Object.keys(cohorts)) {
-          const reason = mutation.skipCohorts?.[cohort];
-          result.cohorts[cohort] = reason === undefined ? run(mutation.id, cohort, false) : { state: 'skipped', reason, passed: 0, failed: 0, failingTests: [] };
-        }
+        for (const cohort of Object.keys(cohorts)) result.cohorts[cohort] = run(mutation.id, cohort, false);
         result.cohorts.portable = union(result.cohorts.generated, result.cohorts.fixed);
         report.mutations.push(result);
         console.log(`${mutation.id}: ${Object.entries(result.cohorts).map(([name, value]) => `${name}=${value.state}(${value.failed})`).join(', ')}`); save();
       } finally { for (const path of editedPaths) writeFileSync(resolve(workspace, path), originals.get(path)); }
     }
-    if (only) {
-      // A partial run reports its lost required detections and stops: it is
-      // not gated and never completes, so the complete report is untouched.
-      const lost = requiredDetectionRegressions(selected, report.mutations);
-      save();
-      console.log(lost.length ? `Lost required detections (a partial run is not gated): ${lost.join(', ')}` : 'Every required detection of the selected mutants held');
-      console.log(`Partial measurement of ${selected.map(m => m.id).join(', ')}: ${relative(root, output)}/report.json; measure the complete catalog for evidence`);
-      return report;
-    }
+    if (only) return finishPartial(report, selected, { output: relative(root, output), language, save });
     if (shard.count > 1) {
       // A shard gates its own slice and stays incomplete; the merge recomputes
       // the gate and the detection summary over the whole catalog.

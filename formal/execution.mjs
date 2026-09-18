@@ -271,123 +271,144 @@ function validateReproducer(challenge, model, { models, libraries, profileIds, p
   }
 }
 
-// Every challenge names the native mutants that inject its fault into both
-// ports, or explains why none exists. `mapped`: the mutants sit in both
-// catalogs and the generated cohort must detect them in both ports.
-// `unobservable`: the mutants exist, but no public history distinguishes
-// them, so neither catalog may require generated detection. `model-only`: the
-// fault rewrites model bookkeeping no port line carries. `environment`: the
-// fault lives in the driver's environment, not in the cache. `crossContract`
-// gives one reason per mapped mutant whose case does not list the challenge's
-// contract, and nothing else.
-export const nativeMutantKinds = ['mapped', 'unobservable', 'model-only', 'environment'];
-const nativeMutantFields = ['kind', 'text', 'mutants', 'crossContract'];
+// Every challenge names the native mutant that injects its fault into both
+// ports, or explains why none exists. `mapped`: the mutant sits in both
+// catalogs and the generated cohort must detect it in both ports.
+// `unobservable`: a port line exists, but the port checks the same condition
+// again at a later point, so no public history distinguishes the fault; the
+// text names the line and the later check. `model-only`: the fault rewrites
+// model bookkeeping no port line carries; the text names the port code it
+// examined. `crossContract` is the one reason a mapped mutant may sit on a
+// semantic case that does not list the challenge's contract.
+export const nativeMutantKinds = ['mapped', 'unobservable', 'model-only'];
+const nativeMutantFields = ['kind', 'text', 'mutant', 'crossContract'];
 
-// The two mutant catalogs paired one-to-one: every TypeScript mutant has a Go
-// twin under the same id and case that restates its required detections, and
-// every case exists. `readText` reads a repository-relative path, so a
-// measurement can pair the catalogs in its workspace copy.
+// One id grammar for the catalogs, the measurers and --only.
+export const mutantIdPattern = /^M\d{2,}$/;
+// The catalog entry shape per port: where its edits may point and which
+// cohorts its detections may require.
+const mutantLanguages = {
+  typescript: { path: 'formal/semantic-mutations.json', label: 'TypeScript', edit: /^src\/[\w/-]+\.ts$/, cohorts: ['ordinary', 'generated', 'portable'] },
+  go: { path: 'formal/go-mutations.json', label: 'Go', edit: /^go\/[\w-]+\.go$/, cohorts: ['ordinary', 'generated', 'fixed', 'portable'] },
+};
+
+// The two mutant catalogs paired one-to-one by id and case. Every entry is a
+// short list of exact-anchor edits to its port, applied in order, and every
+// anchor must still match the port text exactly once, so a refactor that
+// moves an anchored line fails the validation that runs on every pull request
+// rather than the weekly lane. `readText` reads a repository-relative path,
+// so a measurement pairs the catalogs in its workspace copy.
 export function readMutantCatalogs(readText = read) {
   const refuse = detail => { throw new Error(`Mutant catalogs are not paired: ${detail}`); };
-  const catalog = (path, label) => {
+  const caseContracts = new Map(JSON.parse(readText('formal/semantic-cases.json')).cases.map(entry => [entry.id, entry.contracts]));
+  const sources = new Map();
+  const source = path => { if (!sources.has(path)) sources.set(path, readText(path)); return sources.get(path); };
+  const catalog = language => {
+    const { path, label, edit: editPath, cohorts } = mutantLanguages[language];
     const parsed = JSON.parse(readText(path));
     if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.mutations) || !parsed.mutations.length) refuse(`expected the versioned ${label} catalog ${path}`);
-    return parsed.mutations;
-  };
-  const caseContracts = new Map(JSON.parse(readText('formal/semantic-cases.json')).cases.map(entry => [entry.id, entry.contracts]));
-  const typescript = new Map(), go = new Map();
-  for (const mutation of catalog('formal/semantic-mutations.json', 'TypeScript')) {
-    if (typeof mutation.id !== 'string' || !/^M\d{2,}$/.test(mutation.id) || typescript.has(mutation.id)) refuse(`invalid or duplicate TypeScript mutant id ${mutation.id}`);
-    if (!caseContracts.has(mutation.case)) refuse(`${mutation.id} cites unknown case ${mutation.case}`);
-    if (!Array.isArray(mutation.requiredDetections)) refuse(`${mutation.id} has no requiredDetections`);
-    typescript.set(mutation.id, mutation);
-  }
-  for (const mutation of catalog('formal/go-mutations.json', 'Go')) {
-    if (typeof mutation.id !== 'string' || go.has(mutation.id)) refuse(`invalid or duplicate Go mutant id ${mutation.id}`);
-    const twin = typescript.get(mutation.id);
-    if (!twin) refuse(`Go mutant ${mutation.id} has no TypeScript twin`);
-    if (mutation.typescriptMutation !== mutation.id) refuse(`${mutation.id} names typescriptMutation ${mutation.typescriptMutation}`);
-    if (mutation.case !== twin.case) refuse(`${mutation.id} is on case ${mutation.case} in Go and ${twin.case} in TypeScript`);
-    if (!Array.isArray(mutation.requiredDetections)) refuse(`${mutation.id} has no requiredDetections`);
-    if (JSON.stringify(mutation.typescriptRequiredDetections) !== JSON.stringify(twin.requiredDetections)) {
-      refuse(`${mutation.id} restates the TypeScript requiredDetections as ${JSON.stringify(mutation.typescriptRequiredDetections)}, but the TypeScript catalog says ${JSON.stringify(twin.requiredDetections)}`);
-    }
-    // A Go mutant may declare that the port's own suite cannot measure it (a
-    // synctest bubble panics on a goroutine the fault leaves blocked instead
-    // of failing an assertion). Only the ordinary cohort may be skipped, with
-    // a reason, and never a cohort the mutant requires.
-    if (mutation.skipCohorts !== undefined) {
-      if (!mutation.skipCohorts || typeof mutation.skipCohorts !== 'object' || Array.isArray(mutation.skipCohorts)) refuse(`${mutation.id} skipCohorts must map cohort names to reasons`);
-      for (const [cohort, reason] of Object.entries(mutation.skipCohorts)) {
-        if (cohort !== 'ordinary') refuse(`${mutation.id} may skip only the ordinary cohort, not ${cohort}`);
-        if (!nonEmptyText(reason)) refuse(`${mutation.id} skips ${cohort} without a reason`);
-        if (mutation.requiredDetections.includes(cohort)) refuse(`${mutation.id} skips ${cohort} yet requires its detection`);
+    const entries = new Map();
+    for (const mutation of parsed.mutations) {
+      const { id } = mutation;
+      if (typeof id !== 'string' || !mutantIdPattern.test(id) || entries.has(id)) refuse(`invalid or duplicate ${label} mutant id ${id}`);
+      if (!caseContracts.has(mutation.case)) refuse(`${id} cites unknown case ${mutation.case}`);
+      if (!nonEmptyText(mutation.description)) refuse(`${id} has no description`);
+      if (!Array.isArray(mutation.requiredDetections) || mutation.requiredDetections.some(cohort => !cohorts.includes(cohort))) refuse(`${id} requires an unknown ${label} cohort`);
+      if (!Array.isArray(mutation.edits) || !mutation.edits.length) refuse(`${id} has no edits`);
+      const texts = new Map();
+      for (const edit of mutation.edits) {
+        if (typeof edit?.path !== 'string' || !editPath.test(edit.path) || edit.path.endsWith('_test.go')) refuse(`${id} edits ${edit?.path} outside the ${label} port`);
+        if (!nonEmptyText(edit.before) || typeof edit.after !== 'string' || edit.before === edit.after) refuse(`${id} has an empty or unchanged edit in ${edit.path}`);
+        const current = texts.get(edit.path) ?? source(edit.path);
+        if (current.split(edit.before).length !== 2) refuse(`${id}: anchor must match exactly once in ${edit.path}; review source drift`);
+        texts.set(edit.path, current.replace(edit.before, () => edit.after));
       }
+      entries.set(id, mutation);
     }
-    go.set(mutation.id, mutation);
+    return entries;
+  };
+  const typescript = catalog('typescript'), go = catalog('go');
+  for (const [id, mutation] of go) {
+    const twin = typescript.get(id);
+    if (!twin) refuse(`Go mutant ${id} has no TypeScript twin`);
+    if (mutation.case !== twin.case) refuse(`${id} is on case ${mutation.case} in Go and ${twin.case} in TypeScript`);
   }
   for (const id of typescript.keys()) if (!go.has(id)) refuse(`TypeScript mutant ${id} has no Go twin`);
   return { typescript, go, caseContracts };
 }
 
+const portPath = /\b(?:src|go)\/[\w./-]+/;
 function validateNativeMutants(challenge, { catalogs }) {
   const { id, nativeMutants: native } = challenge;
   if (!native || typeof native !== 'object' || Array.isArray(native)) throw new Error(`${id}: invalid nativeMutants`);
   const unknown = Object.keys(native).filter(key => !nativeMutantFields.includes(key));
   if (unknown.length) throw new Error(`${id}: unsupported nativeMutants field ${unknown.join(', ')}`);
-  const { kind, text, mutants, crossContract } = native;
+  const { kind, text, mutant, crossContract } = native;
   if (!nativeMutantKinds.includes(kind)) throw new Error(`${id}: nativeMutants kind must be one of ${nativeMutantKinds.join(', ')}`);
   if (!nonEmptyText(text)) throw new Error(`${id}: nativeMutants text must name the port lines or explain why none exists`);
-  const listed = kind === 'mapped' || kind === 'unobservable';
-  if (listed) {
-    if (!Array.isArray(mutants) || !mutants.length || mutants.some(mutant => typeof mutant !== 'string') || new Set(mutants).size !== mutants.length) {
-      throw new Error(`${id}: ${kind} nativeMutants need a non-empty list of distinct mutant ids`);
-    }
-  } else if (mutants !== undefined) throw new Error(`${id}: ${kind} nativeMutants cannot list mutants`);
-  if (crossContract !== undefined && kind !== 'mapped') throw new Error(`${id}: crossContract belongs only to mapped nativeMutants`);
-  for (const mutant of mutants ?? []) {
-    const typescript = catalogs.typescript.get(mutant), go = catalogs.go.get(mutant);
-    if (!typescript || !go) throw new Error(`${id}: ${mutant} is not in both mutant catalogs`);
-    const generated = [typescript, go].map(entry => entry.requiredDetections.includes('generated'));
-    if (kind === 'mapped' && !generated.every(Boolean)) throw new Error(`${id}: ${mutant} must require generated detection in both catalogs`);
-    if (kind === 'unobservable' && generated.some(Boolean)) throw new Error(`${id}: ${mutant} is unobservable yet requires generated detection`);
+  if (kind !== 'mapped') {
+    if (mutant !== undefined || crossContract !== undefined) throw new Error(`${id}: ${kind} nativeMutants name no mutant`);
+    // An explanation names the port code it examined, so a reader can check it.
+    if (!portPath.test(text)) throw new Error(`${id}: ${kind} nativeMutants text must name the port file it examined`);
+    return;
   }
-  if (kind !== 'mapped') return;
-  if (crossContract !== undefined && (!crossContract || typeof crossContract !== 'object' || Array.isArray(crossContract))) throw new Error(`${id}: crossContract must map mutant ids to reasons`);
-  const reasons = crossContract ?? {};
-  const caseOf = mutant => catalogs.typescript.get(mutant).case;
-  const outside = mutants.filter(mutant => !catalogs.caseContracts.get(caseOf(mutant)).includes(challenge.contract));
-  for (const mutant of outside) {
-    if (!nonEmptyText(reasons[mutant])) throw new Error(`${id}: ${mutant} is on case ${caseOf(mutant)} which does not list ${challenge.contract}; add a crossContract reason`);
-  }
-  for (const mutant of Object.keys(reasons)) {
-    if (!mutants.includes(mutant)) throw new Error(`${id}: crossContract names an unlisted mutant ${mutant}`);
-    if (!outside.includes(mutant)) throw new Error(`${id}: crossContract note for in-contract mutant ${mutant}`);
-  }
+  if (typeof mutant !== 'string') throw new Error(`${id}: mapped nativeMutants need a mutant id`);
+  const typescript = catalogs.typescript.get(mutant), go = catalogs.go.get(mutant);
+  if (!typescript || !go) throw new Error(`${id}: ${mutant} is not in both mutant catalogs`);
+  if (!text.includes(mutant)) throw new Error(`${id}: nativeMutants text must name ${mutant}`);
+  if (![typescript, go].every(entry => entry.requiredDetections.includes('generated'))) throw new Error(`${id}: ${mutant} must require generated detection in both catalogs`);
+  const outside = !catalogs.caseContracts.get(typescript.case).includes(challenge.contract);
+  if (outside && !nonEmptyText(crossContract)) throw new Error(`${id}: ${mutant} is on case ${typescript.case} which does not list ${challenge.contract}; add a crossContract reason`);
+  if (!outside && crossContract !== undefined) throw new Error(`${id}: crossContract note for in-contract mutant ${mutant}`);
 }
 
-// Challenges that predate the native-mutant requirement. Both faults exist
-// natively only in the Lua invalidation script, which no in-process cohort
-// executes; the backlog closes when the measurement gains an integration
-// cohort against real Redis. It may only shrink: a new challenge maps to
-// native mutants or explains why none exists, and listing it here instead is a
-// reviewed change to this constant, never a manifest edit.
+// Challenges that predate the native-mutant requirement. The cutoff fault
+// lives only in the Lua invalidation script (src/internal/redis-scripts.ts,
+// go/redis_adapter.go), which no in-process cohort executes. The buffer-limit
+// fault has client-side lines in both ports (src/internal/duration.ts
+// assertSupportedFutureBufferMs, go/cache.go Invalidate), but no generated
+// history invalidates with the maximum buffer, so a mapped mutant would lack
+// its required detection; it closes when a profile exposes the buffer as an
+// input and an exported regression reaches the bound. The list may only
+// shrink: a new challenge maps to a native mutant or explains why none exists,
+// and listing it here instead is a reviewed change to this constant, never a
+// manifest edit.
 export const grandfatheredNativeMutantBacklog = Object.freeze([
   'invalidation-transition-cutoff-moves-backwards',
   'invalidation-transition-inclusive-buffer-limit',
 ]);
 
-// Which challenges cite each mutant, in catalog order of citation. The
-// mutation reports print it beside every measured mutant.
+// Which challenges cite each mutant, in manifest order. The mutation reports
+// print it beside every measured mutant.
 export function challengesByMutant(manifest) {
   const index = new Map();
   for (const challenge of manifest.challenges) {
-    for (const mutant of challenge.nativeMutants?.mutants ?? []) {
-      if (!index.has(mutant)) index.set(mutant, []);
-      index.get(mutant).push(challenge.id);
-    }
+    const mutant = challenge.nativeMutants?.mutant;
+    if (mutant === undefined) continue;
+    if (!index.has(mutant)) index.set(mutant, []);
+    index.get(mutant).push(challenge.id);
   }
   return index;
+}
+
+// A backlog is the exact set of challenges lacking one field, reported and
+// frozen: it cannot hide a challenge that has the field or never existed, and
+// only the grandfathered ids may sit in it, so it only shrinks.
+function validateBacklog(challenges, ids, { name, listed, present, grandfathered, missing, has, lacks, requirement }) {
+  if (!Array.isArray(listed)) throw new Error(missing);
+  const backlog = new Set(listed);
+  if (backlog.size !== listed.length) throw new Error(`Duplicate challenge ids in ${name}`);
+  for (const id of backlog) {
+    if (!ids.has(id)) throw new Error(`${name} names an unknown challenge: ${id}`);
+  }
+  const frozen = new Set(grandfathered);
+  for (const challenge of challenges) {
+    const inBacklog = backlog.has(challenge.id);
+    if (present(challenge) && inBacklog) throw new Error(`${challenge.id}: ${has} and is listed in ${name}`);
+    if (!present(challenge) && !inBacklog) throw new Error(`${challenge.id}: ${lacks} and is not listed in ${name}`);
+    if (inBacklog && !frozen.has(challenge.id)) throw new Error(`${challenge.id}: ${requirement}; ${name} only grandfathers the challenges that predate the requirement`);
+  }
+  return backlog.size;
 }
 
 // Challenges that predate the reproducer requirement. The backlog may only
@@ -463,12 +484,11 @@ function validateChallenges(manifest, { readSource, contracts, sources, profileI
   grandfathered = grandfatheredReproducerBacklog, grandfatheredNative = grandfatheredNativeMutantBacklog }) {
   const { challenges, reproducerBacklog, nativeMutantBacklog } = manifest;
   if (!Array.isArray(challenges) || !challenges.length) throw new Error('Model property challenge catalog is missing');
-  if (!Array.isArray(reproducerBacklog)) throw new Error('Challenge reproducer backlog is missing');
   const models = new Map(manifest.models.map(model => [model.path, model]));
   const fields = ['id', 'contract', 'source', 'model', 'invariant', 'before', 'after'];
   const optional = ['measures', 'reproducer', 'nativeMutants'];
   const ids = new Set(), faults = new Map(), challengedModels = new Set(), cited = new Set();
-  const kinds = { mapped: 0, unobservable: 0, 'model-only': 0, environment: 0 };
+  const kinds = { mapped: 0, unobservable: 0, 'model-only': 0 };
   let reproducers = 0;
   for (const challenge of challenges) {
     if (!challenge || typeof challenge !== 'object' || fields.some(key => typeof challenge[key] !== 'string' || !challenge[key])) {
@@ -500,47 +520,21 @@ function validateChallenges(manifest, { readSource, contracts, sources, profileI
     if (challenge.nativeMutants !== undefined) {
       validateNativeMutants(challenge, { catalogs });
       kinds[challenge.nativeMutants.kind]++;
-      for (const mutant of challenge.nativeMutants.mutants ?? []) cited.add(mutant);
+      if (challenge.nativeMutants.mutant !== undefined) cited.add(challenge.nativeMutants.mutant);
     }
     // One fault, one native mapping: a repeated fault measured against another
-    // invariant names the same kind and mutants. The text and any crossContract
-    // reasons speak for the challenge's own contract and may differ.
+    // invariant names the same kind and mutant. The text and any crossContract
+    // reason speak for the challenge's own contract and may differ.
     const native = challenge.nativeMutants === undefined ? null
-      : JSON.stringify([challenge.nativeMutants.kind, [...challenge.nativeMutants.mutants ?? []].sort()]);
+      : JSON.stringify([challenge.nativeMutants.kind, challenge.nativeMutants.mutant ?? null]);
     if (faults.has(fault) && faults.get(fault).native !== native) throw new Error(`${challenge.id}: maps the fault of ${faults.get(fault).id} differently`);
     if (!faults.has(fault)) faults.set(fault, { id: challenge.id, native });
   }
-  // The backlog is the exact set of challenges without a reproducer: it can be
-  // reported, and it cannot hide a challenge that has one or never existed.
-  const backlog = new Set(reproducerBacklog);
-  if (backlog.size !== reproducerBacklog.length) throw new Error('Duplicate challenge ids in reproducerBacklog');
-  for (const id of backlog) {
-    if (!ids.has(id)) throw new Error(`reproducerBacklog names an unknown challenge: ${id}`);
-  }
-  const grandfatheredIds = new Set(grandfathered);
-  for (const challenge of challenges) {
-    const listed = backlog.has(challenge.id);
-    if (challenge.reproducer !== undefined && listed) throw new Error(`${challenge.id}: has a reproducer and is listed in reproducerBacklog`);
-    if (challenge.reproducer === undefined && !listed) throw new Error(`${challenge.id}: has no reproducer and is not listed in reproducerBacklog`);
-    if (listed && !grandfatheredIds.has(challenge.id)) throw new Error(`${challenge.id}: new challenges must carry a reproducer; reproducerBacklog only grandfathers the challenges that predate the requirement`);
-  }
-  // The native-mutant backlog is likewise the exact set of challenges without
-  // a nativeMutants entry, and only the grandfathered challenges may sit in it.
-  if (!Array.isArray(nativeMutantBacklog)) throw new Error('Challenge native-mutant backlog is missing');
-  const nativeBacklog = new Set(nativeMutantBacklog);
-  if (nativeBacklog.size !== nativeMutantBacklog.length) throw new Error('Duplicate challenge ids in nativeMutantBacklog');
-  for (const id of nativeBacklog) {
-    if (!ids.has(id)) throw new Error(`nativeMutantBacklog names an unknown challenge: ${id}`);
-  }
-  const grandfatheredNativeIds = new Set(grandfatheredNative);
-  for (const challenge of challenges) {
-    const listed = nativeBacklog.has(challenge.id);
-    if (challenge.nativeMutants !== undefined && listed) throw new Error(`${challenge.id}: has nativeMutants and is listed in nativeMutantBacklog`);
-    if (challenge.nativeMutants === undefined && !listed) throw new Error(`${challenge.id}: has no nativeMutants and is not listed in nativeMutantBacklog`);
-    if (listed && !grandfatheredNativeIds.has(challenge.id)) {
-      throw new Error(`${challenge.id}: new challenges must map to native mutants in both ports or explain why none exists; nativeMutantBacklog only grandfathers the challenges that predate the requirement`);
-    }
-  }
+  const reproducerBacklogSize = validateBacklog(challenges, ids, { name: 'reproducerBacklog', listed: reproducerBacklog, present: challenge => challenge.reproducer !== undefined,
+    grandfathered, missing: 'Challenge reproducer backlog is missing', has: 'has a reproducer', lacks: 'has no reproducer', requirement: 'new challenges must carry a reproducer' });
+  const nativeBacklogSize = validateBacklog(challenges, ids, { name: 'nativeMutantBacklog', listed: nativeMutantBacklog, present: challenge => challenge.nativeMutants !== undefined,
+    grandfathered: grandfatheredNative, missing: 'Challenge native-mutant backlog is missing', has: 'has nativeMutants', lacks: 'has no nativeMutants',
+    requirement: 'new challenges must map to a native mutant in both ports or explain why none exists' });
   const waived = [];
   for (const model of manifest.models) {
     if (model.challengeWaiver !== undefined) {
@@ -554,8 +548,8 @@ function validateChallenges(manifest, { readSource, contracts, sources, profileI
   // may carry faults for rules the models do not challenge.
   const unmappedMutants = [...catalogs.typescript.keys()].filter(id => !cited.has(id)).length;
   return { challenges: challenges.length, distinctFaults: faults.size, challengedModels: challengedModels.size, waivedModels: waived.length,
-    reproducers, reproducerBacklog: backlog.size,
-    nativeMutants: { mapped: kinds.mapped, unobservable: kinds.unobservable, explained: kinds['model-only'] + kinds.environment, backlog: nativeBacklog.size },
+    reproducers, reproducerBacklog: reproducerBacklogSize,
+    nativeMutants: { mapped: kinds.mapped, unobservable: kinds.unobservable, modelOnly: kinds['model-only'], backlog: nativeBacklogSize },
     unmappedMutants };
 }
 

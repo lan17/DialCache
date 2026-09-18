@@ -28,6 +28,8 @@ describe("Go local-clock mutation assertion attribution", () => {
   it("credits the core replay's coalesced-pair assertion, which carries no expected/actual pair", () => {
     const pair = replayFailure("TestCoreConformance", "core_replay_test.go", "pair returned different values");
     expect(evaluateGoTestEvents(pair, 1)).toMatchObject({ state: "detected", assertionKinds: { "TestCoreConformance/trace.itf.json": "pair-value-mismatch" } });
+    const requestPair = replayFailure("TestCoreConformance", "core_replay_test.go", "request pair differs");
+    expect(evaluateGoTestEvents(requestPair, 1)).toMatchObject({ state: "detected", assertionKinds: { "TestCoreConformance/trace.itf.json": "pair-value-mismatch" } });
     // The same text from another file is not the core replay's assertion.
     expect(() => evaluateGoTestEvents(replayFailure("TestCoreConformance", "feature_replay_test.go", "pair returned different values"), 1)).toThrow(/replay failure lacks observation/);
   });
