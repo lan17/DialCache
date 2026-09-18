@@ -603,7 +603,7 @@
       "id": "M20",
       "case": "C11.distinct-keys",
       "description": "Register process flights in one process-wide registry so a flight on one instance is joined from another (detection rests on sampled layers histories and the different-instances-own-distinct-flights witness, not on the case's exported replay)",
-      "rationale": "TypeScript src/dialcache.ts makes the DialCache processFlights field an alias of one static Map shared by every instance, and Go go/cache.go New takes its flights map from a package-level holder. A pending flight on one instance is therefore joined from another instance with the same key. The shared Go map is safe only because no conformance test runs in parallel and synctest sequences every step; a concurrent-map fault would be a runner error, not detection. The C11 quintReplay survives, so detection rests on sampled layers histories and the witness layers:different-instances-own-distinct-flights.",
+      "rationale": "TypeScript src/dialcache.ts makes the DialCache processFlights field an alias of one static Map shared by every instance, and Go go/cache.go New takes its flights map from a package-level holder. A pending flight on one instance is therefore joined from another instance with the same key. In Go the process flights of every instance run under one package-level lock (singleFlight locks it instead of the instance mutex when the scope owner is nil), so the shared registry is race-free even when two instances' goroutines run in one synctest bubble; the first encoding shared only the map and crashed a hosted shard with a concurrent map write. The C11 quintReplay survives, so detection rests on sampled layers histories and the witness layers:different-instances-own-distinct-flights.",
       "typescript": {
         "edits": [
           {
@@ -622,12 +622,17 @@
           {
             "path": "go/cache.go",
             "before": "type scopeState[T any] struct {\n\tenabled bool\n\towner   *scope[T]\n}",
-            "after": "type scopeState[T any] struct {\n\tenabled bool\n\towner   *scope[T]\n}\n\n// Fault injection: one process-wide flight registry shared by every instance.\n// Safe only because no conformance test runs in parallel and synctest\n// sequences every step; a concurrent-map fault would be a runner error, not detection.\nvar sharedProcessFlights any\n\nfunc sharedProcessFlightsFor[T any]() map[string]*flight[T] {\n\tif flights, ok := sharedProcessFlights.(map[string]*flight[T]); ok {\n\t\treturn flights\n\t}\n\tflights := make(map[string]*flight[T])\n\tsharedProcessFlights = flights\n\treturn flights\n}"
+            "after": "type scopeState[T any] struct {\n\tenabled bool\n\towner   *scope[T]\n}\n\n// Fault injection: one process-wide flight registry shared by every instance,\n// guarded by one lock in singleFlight so the shared map stays race-free.\nvar sharedProcessFlights any\nvar sharedProcessFlightsMu sync.Mutex\n\nfunc sharedProcessFlightsFor[T any]() map[string]*flight[T] {\n\tif flights, ok := sharedProcessFlights.(map[string]*flight[T]); ok {\n\t\treturn flights\n\t}\n\tflights := make(map[string]*flight[T])\n\tsharedProcessFlights = flights\n\treturn flights\n}"
           },
           {
             "path": "go/cache.go",
             "before": "c := &Cache[T]{options: options, flights: make(map[string]*flight[T]), shadows:",
             "after": "c := &Cache[T]{options: options, flights: sharedProcessFlightsFor[T](), shadows:"
+          },
+          {
+            "path": "go/engine.go",
+            "before": "\tstarted := elapsedNow(c.options.Clock)\n\tc.mu.Lock()\n\tif owner != nil && !owner.live {\n\t\tc.mu.Unlock()\n\t\treturn run()\n\t}\n\tif f := flights[x.key]; f != nil {\n\t\tf.followers++\n\t\tc.mu.Unlock()\n\t\tx.event(\"coalesced\", \"\", map[string]any{\"scope\": label})\n\t\t<-f.done\n\t\treturn f.value, f.err\n\t}\n\tf := &flight[T]{done: make(chan struct{}), started: started}\n\tflights[x.key] = f\n\tc.mu.Unlock()\n\tf.value, f.err = callSafely(run)\n\tc.mu.Lock()\n\tif flights[x.key] == f {\n\t\tdelete(flights, x.key)\n\t}\n\tclose(f.done)\n\tc.mu.Unlock()\n\treturn f.value, f.err\n}",
+            "after": "\tstarted := elapsedNow(c.options.Clock)\n\t// Fault injection: process flights live in one registry shared by every\n\t// instance, guarded by one lock so the shared map itself stays race-free.\n\tmu := &c.mu\n\tif owner == nil {\n\t\tmu = &sharedProcessFlightsMu\n\t}\n\tmu.Lock()\n\tif owner != nil && !owner.live {\n\t\tmu.Unlock()\n\t\treturn run()\n\t}\n\tif f := flights[x.key]; f != nil {\n\t\tf.followers++\n\t\tmu.Unlock()\n\t\tx.event(\"coalesced\", \"\", map[string]any{\"scope\": label})\n\t\t<-f.done\n\t\treturn f.value, f.err\n\t}\n\tf := &flight[T]{done: make(chan struct{}), started: started}\n\tflights[x.key] = f\n\tmu.Unlock()\n\tf.value, f.err = callSafely(run)\n\tmu.Lock()\n\tif flights[x.key] == f {\n\t\tdelete(flights, x.key)\n\t}\n\tclose(f.done)\n\tmu.Unlock()\n\treturn f.value, f.err\n}"
           }
         ],
         "requiredDetections": [

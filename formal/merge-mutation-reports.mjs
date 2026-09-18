@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { mutantsForPort, readMutantCatalog } from './execution.mjs';
 import { fingerprintFiles, gateDetections, languages, sha256 } from './mutation-reports.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -123,8 +124,8 @@ export function mergeMutationReports(name, { directory = root, shardsDirectory, 
   try {
     const catalogText = readFileSync(resolve(directory, language.catalog));
     const catalog = JSON.parse(catalogText);
-    // The gate reads this port's section of each catalog entry.
-    const entries = catalog.mutations.map(mutation => ({ id: mutation.id, case: mutation.case, description: mutation.description, ...mutation[language.port] }));
+    // The gate reads this port's section of each catalog entry through the one catalog reader.
+    const entries = mutantsForPort(readMutantCatalog(path => readFileSync(resolve(directory, path), 'utf8')), language.port);
     merged = mergeShardReports(language, readShardReports(shards), { catalog, catalogSha256: sha256(catalogText), inputs: fingerprintFiles(directory, language.inputs) });
     gateDetections(language, merged, entries, { directory });
   } catch (error) {

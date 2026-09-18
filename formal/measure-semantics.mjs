@@ -76,7 +76,8 @@ const report = {
   revision: spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout.trim(),
   node: process.version,
   catalogSha256: createHash('sha256').update(read(language.catalog)).digest('hex'),
-  sourceSha256: Object.fromEntries([...sourceText].map(([path, text]) => [path, createHash('sha256').update(text).digest('hex')])),
+  // The anchors span both ports; this report fingerprints only the files this port's edits touch.
+  sourceSha256: Object.fromEntries([...sourceText].filter(([path]) => path.startsWith('src/')).map(([path, text]) => [path, createHash('sha256').update(text).digest('hex')])),
   declaredCoverage,
   baselines: {}, mutations: [],
 };
@@ -162,7 +163,9 @@ try {
         touched.add(edit.path);
       }
       const compile = spawnSync(process.execPath, [resolve(root, 'node_modules/typescript/bin/tsc'), '--noEmit'], { cwd: workspace, encoding: 'utf8', timeout: 60_000 });
-      if (compile.status !== 0 || compile.error) {
+      // A compiler that could not run is infrastructure; a compiler that rejected the edit is a noncompiling mutant.
+      if (compile.error || compile.signal) throw new Error(`${mutation.id}: compile step failed to run: ${compile.error ?? compile.signal}`);
+      if (compile.status !== 0) {
         // Recorded, never measured: the gate names the mutant while the rest of
         // the shard is still measured.
         writeFileSync(resolve(output, `${mutation.id}-compile.log`), (compile.stdout ?? '') + (compile.stderr ?? ''));

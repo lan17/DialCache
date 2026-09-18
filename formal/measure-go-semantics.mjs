@@ -188,7 +188,9 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}
     const compile = label => {
       const result = spawnSync(go, ['test', '-run', '^$', '-count=1', '.'], { cwd: moduleDirectory, env, encoding: 'utf8', timeout, maxBuffer: 32 * 1024 * 1024 });
       writeFileSync(resolve(output, `${label}-compile.log`), (result.stdout ?? '') + (result.stderr ?? ''));
-      if (result.error || result.signal || result.status !== 0) throw new Error(`${label}: noncompiling mutant/baseline, not detection; see compile log`);
+      // A compiler that could not run is infrastructure; one that rejected the edit is a noncompiling mutant.
+      if (result.error || result.signal) throw new Error(`${label}: compile step failed to run: ${result.error ?? result.signal}`);
+      if (result.status !== 0) throw new Error(`${label}: noncompiling mutant/baseline, not detection; see compile log`);
     };
     const run = (label, cohort, baseline) => {
       const result = spawnSync(go, ['test', '-json', '-count=1', '-timeout=480s', '-run', `^(${cohorts[cohort].join('|')})$`, '.'], {
@@ -197,6 +199,9 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}
       writeFileSync(resolve(output, `${label}-${cohort}.jsonl`), result.stdout ?? '');
       writeFileSync(resolve(output, `${label}-${cohort}.stderr.log`), result.stderr ?? '');
       if (result.error || result.signal) throw new Error(`${label}/${cohort}: runner infrastructure failed: ${result.error ?? result.signal}`);
+      // A hung cohort is a measurement bound, not a crash the fault explains: it
+      // ends the shard, which is what the shard budget assumes.
+      if (/panic: test timed out/.test(result.stdout ?? '')) throw new Error(`${label}/${cohort}: go test hit its timeout; a hung cohort is not measured`);
       const parsed = classifyCohort({ baseline, cohort }, () => evaluateGoTestEvents(result.stdout, result.status));
       if (parsed.state === 'crashed') {
         // Name the panic or the failing test so the report stands on its own.

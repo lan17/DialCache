@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { challengesByMutant, mutantCatalogPath, mutantIdPattern } from './execution.mjs';
+import { challengesByMutant, mutantCatalogPath, mutantIdPattern, mutantPorts } from './execution.mjs';
 
 // Shared by measure-semantics.mjs, measure-go-semantics.mjs and
 // merge-mutation-reports.mjs: the catalog selection, the input fingerprint,
@@ -100,7 +100,7 @@ export function requiredDetectionRegressions(entries, results) {
 // from survivors; it is never a detection.
 const unmeasured = (mutations, cohort) => mutations.filter(m => m.cohorts[cohort].state === 'crashed').map(m => m.id);
 export function typescriptDetection(mutations, cases) {
-  const comparisons = ['ordinary', 'generated', 'portable'];
+  const comparisons = mutantPorts.typescript.cohorts;
   const score = selected => Object.fromEntries(comparisons.map(cohort => {
     const measured = selected.filter(m => m.cohorts[cohort].state !== 'crashed');
     const detected = measured.filter(m => m.cohorts[cohort].state === 'detected');
@@ -115,7 +115,7 @@ export function typescriptDetection(mutations, cases) {
 }
 
 export function goDetection(mutations) {
-  return Object.fromEntries(['ordinary', 'generated', 'fixed', 'portable'].map(cohort => {
+  return Object.fromEntries(mutantPorts.go.cohorts.map(cohort => {
     const measured = mutations.filter(m => m.cohorts[cohort].state !== 'crashed');
     const crashed = unmeasured(mutations, cohort);
     return [cohort, {
@@ -155,6 +155,8 @@ export function finishPartial(report, selected, { output, save }) {
   save();
   console.log(lost.length ? `Lost required detections (a partial run is not gated): ${lost.join(', ')}` : 'Every required detection of the selected mutants held');
   console.log(`Partial measurement of ${selected.map(m => m.id).join(', ')}: ${output}/report.json; measure the complete catalog for evidence`);
+  // An authoring loop should notice a lost detection without reading the log.
+  if (lost.length) process.exitCode = 1;
   return report;
 }
 
