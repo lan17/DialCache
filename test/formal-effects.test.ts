@@ -1,4 +1,5 @@
 import { parseTrace, fixtureFor, inputsFor, project, expectedObservations, type Trace } from "../formal/replay/effects.mjs";
+import { SettlementLedger } from "../formal/replay/settlement.mjs";
 import { checkCorpus, loadCorpus } from "../formal/replay/witnesses/index.mjs";
 
 import { readFileSync, readdirSync } from "node:fs";
@@ -6,7 +7,7 @@ import { resolve } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { BehaviorDriver } from "./formal/behavior-driver.js";
+import { BehaviorDriver, type Input } from "./formal/behavior-driver.js";
 import { assertEffectsHistory } from "./formal/effects-contract.js";
 
 const singleFile = process.env.DIALCACHE_EFFECTS_TRACE_FILE;
@@ -40,26 +41,41 @@ beforeEach(() => {
 });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
-async function replay(trace: Trace) {
+// `settle: false` is the harness control of the negative below only;
+// conformance replays never pass it.
+async function replay(trace: Trace, harness: { settle?: boolean } = {}) {
   // Configuration is an explicit initial input, independent of expected state.
-  const driver = new BehaviorDriver(fixtureFor(trace.steps[0]!.choice!));
+  const fixture = fixtureFor(trace.steps[0]!.choice!);
+  const driver = new BehaviorDriver(fixture, {}, harness);
+  const setup: Input[] = [{ op: "faults", value: { holdReads: true, holdLoads: true, holdDumps: true, holdWrites: true } }];
+  // The ledger the coordinator keeps for a session: every command issued here,
+  // checked against the driver's receipt before each observation is compared.
+  const ledger = new SettlementLedger(fixture, setup);
   try {
-    await driver.apply({ op: "faults", value: { holdReads: true, holdLoads: true, holdDumps: true, holdWrites: true } });
+    for (const input of setup) await driver.apply(input);
     const expectations = expectedObservations(trace);
     for (const [index, step] of trace.steps.entries()) {
       const context = `${trace.path} step ${index} action ${step.action}`;
       const expected = expectations[index];
+      const mismatch = (cause: unknown) => new Error(`${context}\nexpected: ${JSON.stringify(expected)}\nactual: ${JSON.stringify(driver.snapshot())}\nreceipt: ${JSON.stringify(driver.receipt())}\nreplay: DIALCACHE_EFFECTS_TRACE_FILE=${JSON.stringify(trace.path)} corepack pnpm exec vitest run test/formal-effects.test.ts`, { cause });
+      let inputs: Input[] = [];
       try {
         // Only the action/choice and independently observed effect index enter execution.
-        const inputs = inputsFor({ action: step.action, ...(step.choice === undefined ? {} : { choice: step.choice }) }, driver.snapshot(), { wallMs: Date.now() });
+        inputs = inputsFor({ action: step.action, ...(step.choice === undefined ? {} : { choice: step.choice }) }, driver.snapshot(), { wallMs: Date.now() });
         for (const input of inputs) await driver.apply(input);
+      } catch (cause) { throw mismatch(cause); }
+      ledger.issue(inputs);
+      // Settlement is checked first and outside the comparison wrapper: a
+      // violation is the driver's own infrastructure failure and must never
+      // carry the expected/actual markers the mutation lanes credit.
+      try { ledger.assert(driver.receipt(), driver.snapshot(), { wallMs: Date.now() }); }
+      catch (cause) { throw new Error(`${context}: ${(cause as Error).message}`, { cause }); }
+      try {
         // Check C23/C25/C26 directly on observed history, independently of
         // expected Quint phases, timestamps, and outcome predictions.
         assertEffectsHistory(driver.contractHistory());
         expect(project(driver.snapshot()), context).toEqual(expected);
-      } catch (cause) {
-        throw new Error(`${context}\nexpected: ${JSON.stringify(expected)}\nactual: ${JSON.stringify(driver.snapshot())}\nreplay: DIALCACHE_EFFECTS_TRACE_FILE=${JSON.stringify(trace.path)} corepack pnpm exec vitest run test/formal-effects.test.ts`, { cause });
-      }
+      } catch (cause) { throw mismatch(cause); }
     }
   } finally { await driver.dispose(); }
 }
@@ -80,6 +96,13 @@ describe("generated pending-effect conformance", () => {
     const trace = structuredClone(traces[0]!);
     trace.steps[1]!.state.events.push({ event: "miss", location: "remote", detail: "value_absent", amount: 0 });
     await expect(replay(trace)).rejects.toThrow(/step 1 action.*\nexpected:.*\nactual:/s);
+  });
+
+  it("fails a driver that skips settlement by settlement violation, never by mismatch", async () => {
+    const path = resolve("formal/effects-smoke.itf.json");
+    const error = await replay(parseTrace(JSON.parse(readFileSync(path, "utf8")), path), { settle: false }).then(() => "passed", (cause: unknown) => String(cause));
+    expect(error).toMatch(/Settlement violation: \d+ runnable task\(s\) at observation/);
+    expect(error).not.toMatch(/expected:[\s\S]*actual:/);
   });
 
   it("rejects missing choices and precision loss", () => {

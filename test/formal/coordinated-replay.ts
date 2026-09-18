@@ -6,30 +6,40 @@ import { vi } from "vitest";
 
 import { ReplayCoordinator, settlement } from "../../formal/replay/coordinator.mjs";
 import type { CoreCommand } from "../../formal/replay/core.mjs";
+import { schemaViolation } from "../../formal/replay/schema.mjs";
+import { wallEpochMs } from "../../formal/replay/settlement.mjs";
 import { parseJSON } from "../../formal/replay/validation.mjs";
 import { DialCache, DialCacheKeyConfig } from "../../src/index.js";
 import { FakeRedis } from "../fake-redis.js";
-import { BehaviorDriver, emptyObservation, type Fixture, type Input, type Observation } from "./behavior-driver.js";
+import { BehaviorDriver, emptyObservation, type Fixture, type Input, type Observation, type SettlementReceipt } from "./behavior-driver.js";
 
-// Every controlled driver starts its wall clock here. Frame timestamps, marker
-// cutoffs and adapter replies are computed relative to this epoch.
-export const wallEpochMs = Date.parse("2026-09-08T12:00:00.000Z");
+// Every controlled driver starts its wall clock at the shared epoch. Frame
+// timestamps, marker cutoffs and adapter replies are computed relative to it.
+export { wallEpochMs };
 
 export function smokeTracePath(profile: string): string {
   return resolve(`formal/${profile === "core" ? "conformance" : profile}-smoke.itf.json`);
 }
 
 // A native driver as the coordinator sees it: it applies fixture-independent
-// commands, reports its own observation and clock, and never receives
-// expected model state.
+// commands, reports its own observation, clock and settlement receipt, and
+// never receives expected model state. Only behavior drivers have a controlled
+// executor to report on; core and local-clock return no receipt.
 interface CoordinatedDriver {
   apply(command: Record<string, unknown>): Promise<void>;
   observe(): unknown;
+  receipt(): SettlementReceipt | undefined;
   wallMs(): number;
   dispose(): Promise<void>;
 }
 
-type Prepared = { session: string; fixture: Record<string, unknown>; setup: Array<Record<string, unknown>>; steps: number };
+// `settle: false` is the harness control of test/formal-settlement-control.test.ts
+// only; conformance replays never pass it.
+export interface ReplayOptions { settle?: boolean }
+
+type Prepared = {
+  session: string; fixture: Record<string, unknown>; setup: Array<Record<string, unknown>>; steps: number; receipt: string | null;
+};
 type Observed = { complete: false; index: number; inputs: Array<Record<string, unknown>> } | { complete: true; steps: number };
 
 // Replays one trace end to end through the shared coordinator with the real
@@ -37,12 +47,13 @@ type Observed = { complete: false; index: number; inputs: Array<Record<string, u
 // prepare, apply setup, then observe/apply until the coordinator acknowledges
 // completion. Observations cross a JSON roundtrip so undefined members vanish
 // the way they do on the wire.
-export async function replayThroughCoordinator(profile: string, path: string, coordinator = new ReplayCoordinator()): Promise<{ steps: number }> {
+export async function replayThroughCoordinator(profile: string, path: string, coordinator = new ReplayCoordinator(),
+  options: ReplayOptions = {}): Promise<{ steps: number }> {
   let id = 0;
   const request = <T>(fields: Record<string, unknown>): T =>
     coordinator.dispatch(parseJSON(JSON.stringify({ version: 1, id: ++id, ...fields }))) as T;
   const prepared = request<Prepared>({ op: "prepare", profile, path });
-  const driver = driverFor(profile, prepared.fixture as unknown as Fixture);
+  const driver = driverFor(profile, prepared.fixture as unknown as Fixture, options);
   let complete = false;
   try {
     for (const command of prepared.setup) await driver.apply(command);
@@ -50,6 +61,7 @@ export async function replayThroughCoordinator(profile: string, path: string, co
       const result = request<Observed>({
         op: "observe", session: prepared.session, index, settlement,
         observed: parseJSON(JSON.stringify(driver.observe())), environment: { wallMs: driver.wallMs() },
+        ...receiptFields(prepared.receipt, driver.receipt()),
       });
       if (result.complete) {
         complete = true;
@@ -65,24 +77,41 @@ export async function replayThroughCoordinator(profile: string, path: string, co
   }
 }
 
-function driverFor(profile: string, fixture: Fixture): CoordinatedDriver {
+// A receipt crosses the wire exactly when the session names its definition,
+// validated locally against that definition first, as a native transport does
+// with its observations: a shape defect is the driver's, reported without a
+// round trip and without the receipt's values.
+function receiptFields(definition: string | null, receipt: SettlementReceipt | undefined): { receipt: SettlementReceipt } | Record<string, never> {
+  if (definition === null) {
+    if (receipt !== undefined) throw new Error("Driver reports a settlement receipt the session does not name");
+    return {};
+  }
+  if (receipt === undefined) throw new Error(`Replay session requires a ${definition} receipt the driver does not report`);
+  const path = schemaViolation(receipt, definition, "receipt");
+  if (path !== undefined) throw new Error(`Driver produced a malformed ${definition} at ${path}`);
+  return { receipt };
+}
+
+function driverFor(profile: string, fixture: Fixture, options: ReplayOptions): CoordinatedDriver {
   if (profile === "core") return new CoordinatedCoreDriver();
   if (profile === "local-clock") return new CoordinatedLocalClockDriver();
-  return new CoordinatedBehaviorDriver(fixture);
+  return new CoordinatedBehaviorDriver(fixture, options);
 }
 
 // Feature profiles and effects: the shared BehaviorDriver under fake timers
 // pinned to the wall epoch, as in test/formal-features.test.ts and
-// test/formal-effects.test.ts. The driver drains causally ready work itself.
+// test/formal-effects.test.ts. The driver drains causally ready work itself
+// and attests it through its receipt.
 class CoordinatedBehaviorDriver implements CoordinatedDriver {
   private readonly driver: BehaviorDriver;
-  constructor(fixture: Fixture) {
+  constructor(fixture: Fixture, options: ReplayOptions) {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(wallEpochMs));
-    this.driver = new BehaviorDriver(fixture);
+    this.driver = new BehaviorDriver(fixture, {}, options);
   }
   apply(command: Record<string, unknown>): Promise<void> { return this.driver.apply(command as Input); }
   observe(): Observation { return this.driver.snapshot(); }
+  receipt(): SettlementReceipt { return this.driver.receipt(); }
   wallMs(): number { return Date.now(); }
   async dispose(): Promise<void> {
     try { await this.driver.dispose(); } finally { vi.useRealTimers(); vi.restoreAllMocks(); }
@@ -159,6 +188,7 @@ class CoordinatedCoreDriver implements CoordinatedDriver {
       redisReads: this.redis.getCalls + this.redis.mGetCalls, redisWrites: this.redis.setCalls,
     };
   }
+  receipt(): undefined { return undefined; }
   wallMs(): number { return this.wallClockMs; }
   async dispose(): Promise<void> { vi.useRealTimers(); vi.restoreAllMocks(); }
 }
@@ -189,6 +219,7 @@ class CoordinatedLocalClockDriver implements CoordinatedDriver {
     } else throw new Error(`Unknown local-clock command ${input.op}`);
   }
   observe(): unknown { return this.actual; }
+  receipt(): undefined { return undefined; }
   wallMs(): number { return Date.now(); }
   async dispose(): Promise<void> { this.now.mockRestore(); }
 }

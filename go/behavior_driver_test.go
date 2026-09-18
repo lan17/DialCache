@@ -339,7 +339,10 @@ type behaviorDriver struct {
 	fallbackFailed                      bool
 	discardWrites, discardInvalidations bool
 	skipSettle                          bool
-	unsettled                           obj
+	// reported is the observation the driver attests to; settlementReceipt is
+	// its receipt. Both are taken together at the end of every apply.
+	reported          obj
+	settlementReceipt obj
 }
 
 func emptyBehaviorObservation(fixture obj) obj {
@@ -362,15 +365,19 @@ func newBehaviorDriver(t *testing.T, fixture obj) *behaviorDriver {
 		d.effects[key] = map[int]*behaviorGate{}
 	}
 	d.instance("default")
+	// A fresh driver attests its own quiescence like every later apply does, so
+	// a session whose setup is empty still observes a measured receipt.
+	d.settle()
 	return d
 }
 
 // newUnsettledBehaviorDriver is a harness control only: the returned driver
-// reports the observation it held before the end-of-apply drain that
-// implements the causally-ready-v1 settlement contract, so a control test can
-// prove the replays depend on it. It still drains after that snapshot, so
-// every command starts from a settled driver and the control measures early
-// observation alone. Conformance replays must never use it.
+// skips the settle drain that implements the causally-ready-v1 settlement
+// contract and so reports the observation it held before it, which is what an
+// unsettled port would report. Its receipt still comes from the verification
+// drain, which finds the skipped work and settles the driver, so every command
+// starts settled and the coordinator can only reject the replay through the
+// receipt. Conformance replays must never use it.
 func newUnsettledBehaviorDriver(t *testing.T, fixture obj) *behaviorDriver {
 	d := newBehaviorDriver(t, fixture)
 	d.skipSettle = true
@@ -500,13 +507,83 @@ func (d *behaviorDriver) hold(effect string, index int) error {
 	<-gate.done
 	return gate.err
 }
+
+// observation is the record the driver reports: the snapshot its receipt
+// attests to, not the live counters, so the observation and the receipt
+// describe one instant and the coordinator's next commands derive from it.
 func (d *behaviorDriver) observation() obj {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if d.skipSettle && d.unsettled != nil {
-		return bm(bclone(d.unsettled))
+	return bm(bclone(d.reported))
+}
+
+// receipt is the settlement receipt of the reported observation, computed by
+// the driver alone from its executor, gate and clock state and sent with every
+// behavior observe (PORTING.md, causally-ready-v1).
+func (d *behaviorDriver) receipt() obj {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return bm(bclone(d.settlementReceipt))
+}
+
+// settle is the causally-ready-v1 settlement step followed by its attestation.
+// The settle drain runs the executor work a command made ready while external
+// gates stay held; the harness control skips only that drain. The driver then
+// snapshots the observation it will report together with its held gates and
+// monotonic clock, and verifies quiescence with one more zero-time drain: the
+// deferred functions pending once every goroutine is blocked, plus one if the
+// observation changed, are the runnable count the coordinator requires to be
+// zero. That drain also settles a control driver, so its next command starts
+// settled and skipped settlement can only surface through the receipt.
+func (d *behaviorDriver) settle() {
+	if !d.skipSettle {
+		d.clock.drain()
 	}
-	return bm(bclone(d.observed))
+	// The base clock: the local-fault wrapper is the library's view and panics
+	// under the localStorage fault.
+	elapsed := d.clock.ElapsedMS()
+	d.mu.Lock()
+	reported := bm(bclone(d.observed))
+	held := d.heldLocked()
+	d.mu.Unlock()
+	synctest.Wait()
+	d.clock.mu.Lock()
+	runnable := int64(len(d.clock.deferred))
+	d.clock.mu.Unlock()
+	d.clock.drain()
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	// Compare two clones so the check reads wire values on both sides.
+	if !bequal(reported, bclone(d.observed)) {
+		runnable++
+	}
+	d.reported = reported
+	d.settlementReceipt = obj{"elapsedMs": elapsed, "runnable": runnable, "held": held}
+}
+
+// heldLocked counts the controlled gates still unsettled: loader gates settle
+// only through resolve and reject, effect gates leave the map only through
+// their release (a gate the library abandons, such as a deadline-aborted read,
+// stays registered until then), and a closed scope stays in the map with a
+// settled gate.
+func (d *behaviorDriver) heldLocked() obj {
+	held := obj{}
+	for effect, field := range map[string]string{"read": "reads", "write": "writes", "dump": "dumps", "load": "loads", "policy": "policies"} {
+		held[field] = int64(len(d.effects[effect]))
+	}
+	loaders, scopes := int64(0), int64(0)
+	for _, gate := range d.loaders {
+		if !gate.settled {
+			loaders++
+		}
+	}
+	for _, scope := range d.scopes {
+		if !scope.gate.settled {
+			scopes++
+		}
+	}
+	held["loaders"], held["scopes"] = loaders, scopes
+	return held
 }
 func (d *behaviorDriver) observedEffectCount(effect string) int {
 	keys := map[string]string{"read": "reads", "write": "writes", "dump": "dumps", "load": "loads", "policy": "policyCalls", "loader": "loaders"}
@@ -818,17 +895,7 @@ func (d *behaviorDriver) apply(input obj) error {
 	default:
 		return fmt.Errorf("unknown behavior input %s", bjson(input))
 	}
-	// The no-settle harness control records what an unsettled port would
-	// report: the observation before the drain. It drains afterwards so the
-	// next command finds its gates registered and no failure is a harness error.
-	if d.skipSettle {
-		d.mu.Lock()
-		d.unsettled = bm(bclone(d.observed))
-		d.mu.Unlock()
-	}
-	// Drain ready executor work while unresolved external gates remain held:
-	// the causally-ready-v1 settlement step.
-	d.clock.drain()
+	d.settle()
 	return d.assertPublicationCausality()
 }
 func (d *behaviorDriver) close() {

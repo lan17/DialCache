@@ -41,7 +41,7 @@
     "formal/kernel/request-memo.qnt": "e7897bfe9949a4d31b8138b35c32a7df0939e81e1f9c13739340a794a3d5073f",
     "formal/kernel/runtime-policy.qnt": "41ebb180f8b8b561d0db43b237abbee04e69613521436f6c624241cfece536ae",
     "formal/kernel/serving.qnt": "f3e669099d0cff1b6d243c8822ea07e66b90ec283475646c9a5bac094c173f00",
-    "formal/profiles.json": "b8fa4f399a163bc8793bf76b6ba3503a415fcf3c8509cf98d964e4f067e6660f",
+    "formal/profiles.json": "65a6b982a426fe74f39a6deb951fde65c7578ae270461c744c5142aeb0555d2d",
     "formal/wire-text.qnt": "c78f8c674f4e1470b0d2b605b209d82e3aab0e35fb4e0efae813247bf093eb27"
   },
   "artifacts": {

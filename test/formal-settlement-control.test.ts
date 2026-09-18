@@ -1,66 +1,43 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { describe, expect, it } from "vitest";
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-import { bindTrace } from "../formal/replay/bindings.mjs";
-import { BehaviorDriver, type Fixture, type Input } from "./formal/behavior-driver.js";
+import { profileActions } from "../formal/replay/bindings.mjs";
+import { ReplayCoordinator } from "../formal/replay/coordinator.mjs";
+import { replayThroughCoordinator, smokeTracePath } from "./formal/coordinated-replay.js";
 
 // Harness control for the causally-ready-v1 settlement contract (PORTING.md).
-// The replays below use the shared bindings and the committed smoke history of
-// every BehaviorDriver-backed profile. A driver that skips its end-of-apply
-// drain must be caught by the observation assertions; if it were not, the
-// contract would be unenforced and a port could pass without ever settling.
-// The core and local-clock profiles use other drivers and are not covered here.
-const profiles = ["independent", "layers", "admission", "scope", "recovery", "policy", "shadow", "effects"] as const;
+// Every BehaviorDriver-backed profile replays its committed smoke history
+// through the shared coordinator twice: with the settling driver, which must
+// pass, and with a driver that skips its end-of-apply drain, which the
+// coordinator must reject through the settlement receipt (runnable work found
+// by the verification drain), never through an observation mismatch. If the
+// skipped drain could pass, the contract would be unenforced and a port could
+// pass without ever settling; if it failed only by mismatch, an unsettled
+// driver could earn mutation credit. The core and local-clock profiles use
+// other drivers and carry no receipt.
+const profiles = Object.keys(profileActions()).filter(name => name !== "core" && name !== "local-clock");
 
-// Measured 2026-09-11 at commit 74efe65: without the drain, all eight smoke
-// histories fail an observation comparison within their first five steps
-// (six at a `beginCall`, whose getOrLoad has not reached its source or Redis
-// read when the snapshot is taken; `scope` at `rejectLoader`; `policy` at
-// `releasePolicy`), so the floor is the full set. Lower it only with a written
+// Measured 2026-09-18 at commit 76ba3ef: the unsettled driver first reports
+// runnable work at step 2 of source-budgets, 3 of runtime-boundaries, 2 of
+// shadow-layers, 1 of local-failure, 5 of recovery-read, 4 of independent, 1
+// of layers, 1 of admission, 4 of scope, 1 of recovery, 2 of policy, 1 of
+// shadow and 5 of effects, at or before the step where its observation would
+// first mismatch. Every profile must detect; exempt one only with a written
 // reason (for example a regenerated smoke history that observes nothing
-// asynchronous); it must stay at least one so the control keeps its teeth.
-const minimumDetectingProfiles = 8;
-
-async function replay(name: string, settle: boolean): Promise<void> {
-  const path = resolve(`formal/${name}-smoke.itf.json`);
-  const bound = bindTrace(name, JSON.parse(readFileSync(path, "utf8")), path);
-  // The language-neutral bindings type fixtures loosely; the driver owns the shape.
-  const driver = new BehaviorDriver(bound.fixture as unknown as Fixture, {}, { settle });
-  try {
-    for (const input of bound.setup as Input[]) await driver.apply(input);
-    for (let index = 0; index < bound.trace.steps.length; index++) {
-      for (const input of bound.commands(index, driver.snapshot(), { wallMs: Date.now() }) as Input[]) await driver.apply(input);
-      bound.assert(index, driver.snapshot());
-    }
-  } finally { await driver.dispose(); }
-}
-
-// Each replay owns fresh fake timers and spies, exactly like the acceptance suites.
-beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date("2026-09-08T12:00:00Z")); });
-afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
-
+// asynchronous), and never all of them.
 describe("harness control: causally-ready-v1 settlement", () => {
-  const detected: string[] = [];
-  const undetected: string[] = [];
+  it("covers every behavior-driver profile the coordinator serves", () => {
+    expect(profiles.length).toBeGreaterThan(0);
+  });
   for (const name of profiles) {
-    it(`harness control: ${name} smoke history passes with the settling driver`, async () => {
-      await replay(name, true);
+    it(`${name} smoke history passes with the settling driver`, async () => {
+      await replayThroughCoordinator(name, smokeTracePath(name));
     });
-    it(`harness control: ${name} smoke history is recorded against a driver that skips settlement`, async () => {
-      try { await replay(name, false); undetected.push(name); }
-      catch (error) {
-        // Only an observation mismatch counts as detection. A driver or
-        // binding crash would be a harness defect, not settlement evidence.
-        if ((error as { code?: string }).code !== "ERR_ASSERTION") throw error;
-        detected.push(name);
-      }
+    it(`${name} smoke history fails a driver that skips settlement by settlement violation, never by mismatch`, async () => {
+      const outcome = await replayThroughCoordinator(name, smokeTracePath(name), new ReplayCoordinator(), { settle: false })
+        .then(() => "passed", (cause: unknown) => String(cause));
+      expect(outcome).toMatch(/Settlement violation: \d+ runnable task\(s\) at observation/);
+      expect(outcome).not.toMatch(/Observation mismatch/);
+      expect(outcome).not.toMatch(/expected:[\s\S]*actual:/);
     });
   }
-  it(`harness control: skipping settlement is detected by at least ${minimumDetectingProfiles} profiles`, () => {
-    expect(profiles.length).toBeGreaterThanOrEqual(minimumDetectingProfiles);
-    expect(detected.length, `detected by ${JSON.stringify(detected)}; undetected by ${JSON.stringify(undetected)}`)
-      .toBeGreaterThanOrEqual(minimumDetectingProfiles);
-  });
 });

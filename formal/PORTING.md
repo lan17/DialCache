@@ -33,7 +33,7 @@ API names, threading model, internal storage, or scheduling implementation.
 | External effects | Hold/release actual policy, Redis read/write, serialization, and decoding operations by their invocation IDs. A held operation cannot finish until its external release or specified failure. |
 | Clock control | Control wall time and elapsed time separately. Advance or shift only the specified clock; follow the profile's timer-delivery rule. Preserve fractional units in the local-clock profile. |
 | Storage inputs | Seed the specified bytes/value/TTL or execute invalidation. The adapter must expose the requested atomic primary snapshot and maintenance result. |
-| Settle | After every command, bring the implementation to quiescence under the `causally-ready-v1` contract: every task spawned by the implementation or the driver has finished or is blocked on a driver-owned gate, a driver-owned timer that is not yet due, or a driver-owned scope gate, and nothing is runnable. This obligation falls on the library as well as the test: it must expose its detached scheduling to the test executor (Go's `Defer` hook drained under `synctest.Wait`, the Node fake-timer microtask queue drained by `advanceTimersByTimeAsync(0)`) so the driver reaches quiescence without guessing turn counts or advancing deadline time. Both ports include a no-settle control: [formal-settlement-control.test.ts](../test/formal-settlement-control.test.ts) skips the TypeScript drain, and [settlement_control_replay_test.go](../go/settlement_control_replay_test.go) reports the Go observation held before the drain; each must fail the observation assertions of every behavior-driver-backed smoke history (currently all eight). A third port carries an equivalent control against its own driver. |
+| Settle | After every command, bring the implementation to quiescence under the `causally-ready-v1` contract: every task spawned by the implementation or the driver has finished or is blocked on a driver-owned gate, a driver-owned timer that is not yet due, or a driver-owned scope gate, and nothing is runnable. This obligation falls on the library as well as the test: it must expose its detached scheduling to the test executor (Go's `Defer` hook drained under `synctest.Wait`, the Node fake-timer microtask queue drained by `advanceTimersByTimeAsync(0)`) so the driver reaches quiescence without guessing turn counts or advancing deadline time. The coordinator checks this contract by name on every behavior `observe` through the driver's settlement receipt, rules R1 to R5 in the [trace and observation contract](#trace-and-observation-contract); a failed rule is a `Settlement violation`, an infrastructure error that earns no comparison credit. Both ports include a no-settle control: [formal-settlement-control.test.ts](../test/formal-settlement-control.test.ts) skips the TypeScript drain, and [settlement_control_replay_test.go](../go/settlement_control_replay_test.go) reports the Go observation held before the drain; each must fail with a settlement violation, never an observation mismatch, on the smoke history of every behavior-driver profile. A third port carries an equivalent control against its own driver. |
 | Observe | Read actual caller outcomes, source/effect counts, event order, timestamps, values and error categories after the step. Collect observations independently of expected model state. |
 | Cleanup | Drain or release test-owned work, restore clock/fault hooks, and isolate the next history. Unfinished work must not silently leak into another history. |
 
@@ -57,16 +57,16 @@ timeouts fail the test. The coordinator performs no cache operations.
 | Request | Purpose |
 | --- | --- |
 | `profiles` | Discover supported profiles/actions and settlement contract |
-| `prepare` with `profile`, `path`, optional JSON-text `raw` | Validate the entire history; return a session ID, initialization fixture/setup, the `observation` definition every record of the session must satisfy, action names and step count |
-| `observe` with `session`, `index`, `settlement`, `observed`, `environment` | Assert the actual observation for this step; return the next external commands or final completion |
+| `prepare` with `profile`, `path`, optional JSON-text `raw` | Validate the entire history; return a session ID, initialization fixture/setup, the `observation` definition every record of the session must satisfy, the `receipt` definition every observe must carry (`settlementReceipt`, or `null` for core and local-clock), action names and step count |
+| `observe` with `session`, `index`, `settlement`, `observed`, `environment` and, on a behavior session, `receipt` | Check the settlement receipt, then assert the actual observation for this step; return the next external commands or final completion |
 | `discard` with `session` | Release an unfinished coordinator session after a failed or canceled native run |
 
 After `prepare`, create the native fixture, execute setup and report observation
 index zero. Execute the returned `inputs`, settle authorized work and report the
-next index. Validate each record locally against the `$defs` definition that
-`prepare` named before sending it, as the Go transport does; a shape defect is
-then attributed to the driver without a coordinator round trip, and the
-coordinator's own check remains the last line. The environment carries the driver's actual `wallMs` clock in epoch
+next index. Validate each observation and receipt locally against the `$defs`
+definitions that `prepare` named before sending them, as both transports do; a
+shape defect is then attributed to the driver without a coordinator round trip,
+and the coordinator's own check remains the last line. The environment carries the driver's actual `wallMs` clock in epoch
 milliseconds; behavior, effects and core drivers start it at
 `2026-09-08T12:00:00.000Z` (`1788868800000` ms) and move it only through clock
 commands, as the [observation contract](#observation-contract) describes.
@@ -130,6 +130,40 @@ barrier. Merely waiting a fixed amount of real time is insufficient. Timer
 delivery follows the command's explicit clock policy: a silent clock shift must
 not deliver a timer that the history deliberately holds. Do not release held
 work, advance virtual time, or poll expectations to obtain a matching snapshot.
+
+The coordinator checks that contract on every behavior `observe` through the
+driver's settlement receipt, in this order, before comparing the observation:
+
+- R1 presence and shape. A behavior session (feature profiles and effects)
+  sends a `receipt` satisfying `$defs/settlementReceipt` with every observe;
+  core and local-clock sessions send none. Failures: `Missing settlement
+  receipt`, `Unexpected settlement receipt`, `Malformed settlement receipt at
+  receipt.<path>`.
+- R2 quiescence. `runnable` is 0: the driver took its snapshot, ran one more
+  zero-time drain of its controlled executor, and that drain ran nothing and
+  changed nothing.
+- R3 monotonic clock. `elapsedMs` equals the sum of every `advance` command's
+  `ms` plus `loaders × sourceWorkMs` plus `comparisons × comparisonMs`, the
+  fixture work consumed inside callbacks, read from the driver's own
+  observation counters.
+- R4 wall clock. `environment.wallMs` equals `1788868800000` plus every
+  `advance` and `shiftWall` `ms` plus the same fixture work. A core session
+  carries no receipt but is held to this rule with `advanceWall` as its clock
+  command; the local-clock driver reports the real process clock, which no
+  rule constrains.
+- R5 held gates. `held` equals the gates the schedule leaves open: loaders
+  begun minus loaders resolved or rejected; for each effect kind, operations
+  started while its hold fault was on minus those released by name; scopes
+  opened minus closed, setup included.
+
+A violated rule fails as `Settlement violation: <rule>`, an infrastructure
+error without comparison markers, so an unsettled driver never earns mutation
+credit: both mutation runners fail the lane on one instead of counting it as a
+detection. The rules read only the commands the coordinator issued and the
+driver's public counters, so a library fault that starts an extra source moves
+the counters, the ledger and the driver's clock together, passes here, and
+fails the observation comparison where the mutation lanes credit it. Timer
+delivery (R6) is enforced by the next observation, not by the receipt.
 
 Exact observations describe the profile's controlled schedule. Preserve required
 causal order and invocation ownership. An unrelated native event order can only
@@ -213,6 +247,26 @@ Behavior, effects and core drivers start their controlled wall clock at
 marker cutoffs are computed relative to that epoch. The local-clock driver
 reports its real process clock, which no mapping consumes. `seed.ageMs`
 (signed), `seed.ttlMs` and `invalidate.futureBufferMs` are whole milliseconds.
+
+Every observe of a behavior session also carries the driver's settlement
+receipt, `$defs/settlementReceipt`, describing the same instant as `observed`:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `elapsedMs` | nonnegative integer | The driver's controlled monotonic clock in whole milliseconds, moved only by `advance` commands and the fixture's `sourceWorkMs`/`comparisonMs` work, never by settling |
+| `runnable` | nonnegative integer | What one zero-time drain of the controlled executor found after the snapshot: 0 when nothing ran and neither the observation nor the pending-timer count changed; otherwise the driver's count of what it found |
+| `held` | seven nonnegative integers | `loaders` not yet resolved or rejected; `reads`, `writes`, `dumps`, `loads`, `policies` held by a fault and not yet released by name; `scopes` opened and not closed, setup included |
+
+The TypeScript driver ([behavior-driver.ts](../test/formal/behavior-driver.ts))
+takes its snapshot after the settle drain, drains the fake-timer queue once
+more at zero time, and reports 1 if the observation changed plus the change in
+the pending fake-timer count. The Go driver
+([behavior_driver_test.go](../go/behavior_driver_test.go)) snapshots under its
+lock, waits for every goroutine in the `synctest` bubble to block, and reports
+the deferred functions found plus 1 if the observation changed. Gates the
+library abandons, such as a read aborted by its deadline, stay registered until
+their release command. Validate the receipt locally against the definition
+`prepare` named, as both transports do, before sending it.
 
 [coordinated-replay.ts](../test/formal/coordinated-replay.ts) replays any
 profile's history through the coordinator with the TypeScript drivers exactly as
@@ -454,11 +508,16 @@ every required label names at least one history of the bound corpus.
 
 ## Current limitations for a third port
 
-The `causally-ready-v1` settlement contract is defined in prose, in the
-[trace and observation contract](#trace-and-observation-contract) and the
-`Settle` row above; no machine-checkable definition exists. Its executable
-controls are the TypeScript and Go no-settle tests, each written against its
-own driver, so a third port writes its own the same way.
+The coordinator checks the `causally-ready-v1` settlement contract through the
+settlement receipt on every behavior observe, so a third port's driver is held
+to rules R1 to R5 from its first replay. What the coordinator still cannot
+check: `runnable` is the driver's own attestation, verified by one zero-time
+drain rather than by inspecting the executor; timer delivery (R6) is checked
+only through the next observation; core sessions are held to the wall-clock
+rule alone and local-clock sessions to none; and the completion document
+remains the evidence that the whole corpus passed. Each port also keeps a
+no-settle control against its own driver, so a third port writes one the same
+way.
 
 Node 24 is required as test tooling: the coordinator and the witness evaluator
 are Node scripts that a port's test run spawns, and the completion checker and
@@ -471,7 +530,10 @@ coordinator keeps the predictions and the assertion logic in one place.
 Start with keys/frames and core traversal; add profile mappings until the full
 shared inventory passes. Preserve one failing history as the reproduction unit:
 report profile, action index, input, expected/actual observations and command.
-Automatic shrinking is not currently supplied.
+Automatic shrinking is not currently supplied. Carry a no-settle control
+against the port's own driver: skipping the settle step must fail the smoke
+history of every behavior-driver profile with a settlement violation, never an
+observation mismatch.
 
 Before accepting a port, also run its native API/value/clock/exporter checks,
 real Redis/Valkey/Cluster protocol and bidirectional interoperability tests,

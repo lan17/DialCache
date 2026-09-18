@@ -73,6 +73,18 @@ it("requires executed assertions and distinguishes detection from infrastructure
     expect(alone.execution).toEqual({ reason: "passed", collectionErrors: [], unhandledErrors: ["unhandled probe"] });
     expect(alone.evaluate).toThrow(/infrastructure\/import error, not evidence of detection/);
 
+    // A settlement violation is the driver failing its own contract, not the
+    // library failing a comparison: infrastructure, even beside a real mismatch.
+    const unsettled = run(`import { it } from "vitest";
+      it("unsettled driver", () => { throw new Error("formal/scope-smoke.itf.json step 4 action beginCall: Settlement violation: 1 runnable task(s) at observation"); });`);
+    expect(unsettled.status).toBe(1);
+    expect(unsettled.execution).toEqual({ reason: "failed", collectionErrors: [], unhandledErrors: [] });
+    expect(unsettled.evaluate).toThrow(/infrastructure\/import error, not evidence of detection/);
+    const violated = { testResults: [{ assertionResults: [
+      { status: "failed", fullName: "wrong value", failureMessages: ["Observation mismatch\nexpected: 1\nactual: 2"] },
+      { status: "failed", fullName: "unsettled", failureMessages: ["Error: step 1 action beginCall: Settlement violation: read gates held 0, schedule requires 1\n    at replay"] }] }] };
+    expect(() => evaluateSemanticTestReport(violated, { reason: "failed", collectionErrors: [], unhandledErrors: [] }, 1)).toThrow(/infrastructure\/import error, not evidence of detection/);
+
     for (const empty of [run(passingSource, "^no-matching-test$"),
       run('import { it } from "vitest"; it.skip("skipped assertion", () => { throw new Error("must remain skipped"); });')]) {
       expect(empty.status).toBe(0);

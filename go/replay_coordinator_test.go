@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -24,9 +25,11 @@ import (
 
 const replaySettlement = "causally-ready-v1"
 
-// Observation definitions a prepare result may name. Every observation the
-// driver reports is validated against the named definition before it is sent.
-var replayObservationDefinitions = map[string]bool{"behaviorObservation": true, "coreObservation": true, "localClockObservation": true}
+// Record definitions a prepare result may name, by kind: the observation
+// definition every record the driver reports must satisfy, and the receipt
+// definition a behavior session carries with each observation. Both are
+// validated locally against the named definition before they are sent.
+var replayRecordDefinitions = map[string]string{"behaviorObservation": "observation", "coreObservation": "observation", "localClockObservation": "observation", "settlementReceipt": "receipt"}
 
 func readReplaySchema() (obj, error) {
 	raw, err := os.ReadFile("../formal/replay/protocol.schema.json")
@@ -189,11 +192,24 @@ func (c *replayCoordinator) prepare(profile, path string, raw []byte) (obj, erro
 	if err != nil {
 		return nil, err
 	}
-	if behaviorKeys(result) != "actions,fixture,observation,session,settlement,setup,steps" || result["settlement"] != replaySettlement || bs(result["session"]) == "" || !replayIndex(result["steps"], 2) {
+	// The receipt member names the definition every observe of the session
+	// must carry, or is null for a session whose driver reports none.
+	keys := behaviorKeys(result)
+	if keys != "actions,fixture,observation,receipt,session,settlement,setup,steps" || result["settlement"] != replaySettlement || bs(result["session"]) == "" || !replayIndex(result["steps"], 2) {
 		return nil, fmt.Errorf("malformed replay preparation")
 	}
-	if definition := bs(result["observation"]); !replayObservationDefinitions[definition] || bm(c.schema["$defs"])[definition] == nil {
-		return nil, fmt.Errorf("malformed replay observation definition %q", definition)
+	observation := bs(result["observation"])
+	if replayRecordDefinitions[observation] != "observation" || bm(c.schema["$defs"])[observation] == nil {
+		return nil, fmt.Errorf("malformed replay observation definition %q", observation)
+	}
+	// Only a behavior session may require a receipt: core and local-clock
+	// commands are awaited request/response and their drivers have no
+	// controlled executor to attest.
+	if receipt := result["receipt"]; receipt != nil {
+		definition := bs(receipt)
+		if replayRecordDefinitions[definition] != "receipt" || bm(c.schema["$defs"])[definition] == nil || observation != "behaviorObservation" {
+			return nil, fmt.Errorf("malformed replay receipt definition %q", definition)
+		}
 	}
 	if _, ok := result["fixture"].(map[string]any); !ok {
 		return nil, fmt.Errorf("malformed replay fixture")
@@ -215,9 +231,15 @@ func (c *replayCoordinator) prepare(profile, path string, raw []byte) (obj, erro
 	return result, nil
 }
 func (c *replayCoordinator) replay(d *behaviorDriver, prepared obj, monitors ...func() error) error {
-	return c.execute(prepared, d.apply, d.observation, d.clock.WallMS, monitors...)
+	return c.executeWithReceipt(prepared, d.apply, d.observation, d.clock.WallMS, d.receipt, monitors...)
 }
+
+// execute runs a session whose driver reports no settlement receipt: core and
+// local-clock, whose commands are awaited request/response.
 func (c *replayCoordinator) execute(prepared obj, apply func(obj) error, observation func() obj, wallMS func() int64, monitors ...func() error) error {
+	return c.executeWithReceipt(prepared, apply, observation, wallMS, nil, monitors...)
+}
+func (c *replayCoordinator) executeWithReceipt(prepared obj, apply func(obj) error, observation func() obj, wallMS func() int64, receipt func() obj, monitors ...func() error) error {
 	session := bs(prepared["session"])
 	complete := false
 	defer func() {
@@ -225,6 +247,13 @@ func (c *replayCoordinator) execute(prepared obj, apply func(obj) error, observa
 			_, _ = c.call(obj{"op": "discard", "session": session})
 		}
 	}()
+	// The receipt travels exactly when the session names its definition. A
+	// driver with nothing to report on such a session is a harness defect.
+	definitions := bm(c.schema["$defs"])
+	receiptDefinition := bs(prepared["receipt"])
+	if receiptDefinition != "" && receipt == nil {
+		return fmt.Errorf("replay session requires a %s receipt the driver does not report", receiptDefinition)
+	}
 	for _, input := range ba(prepared["setup"]) {
 		if err := apply(bm(input)); err != nil {
 			return err
@@ -239,10 +268,18 @@ func (c *replayCoordinator) execute(prepared obj, apply func(obj) error, observa
 		// A malformed record is a driver defect. Attribute it here, before the
 		// coordinator sees it, so no round trip or session state is spent on it.
 		observed := observation()
-		if err := replayObservationError(observed, bs(prepared["observation"]), bm(c.schema["$defs"])); err != nil {
+		if err := replayRecordError(observed, bs(prepared["observation"]), "observation", definitions); err != nil {
 			return err
 		}
-		result, err := c.call(obj{"op": "observe", "session": session, "index": index, "settlement": replaySettlement, "observed": observed, "environment": obj{"wallMs": wallMS()}})
+		request := obj{"op": "observe", "session": session, "index": index, "settlement": replaySettlement, "observed": observed, "environment": obj{"wallMs": wallMS()}}
+		if receiptDefinition != "" {
+			attested := receipt()
+			if err := replayRecordError(attested, receiptDefinition, "receipt", definitions); err != nil {
+				return err
+			}
+			request["receipt"] = attested
+		}
+		result, err := c.call(request)
 		if err != nil {
 			return err
 		}
@@ -270,29 +307,30 @@ func replayIndex(value any, minimum int64) bool {
 	return ok && n >= float64(minimum) && n <= 9007199254740991 && n == float64(int64(n))
 }
 
-// replayObservationError validates one driver observation against the $defs
-// definition the prepare result named. It checks the wire encoding, so Go
-// integers, typed slices and nested maps are judged exactly as the coordinator
-// decodes them. The diagnostic never carries expected/actual comparison
-// markers: a shape defect is infrastructure evidence, not a mutation detection.
-func replayObservationError(observed any, definition string, definitions obj) error {
+// replayRecordError validates one driver record, an observation or a receipt,
+// against the $defs definition of that kind the prepare result named. It checks
+// the wire encoding, so Go integers, typed slices and nested maps are judged
+// exactly as the coordinator decodes them. The diagnostic never carries
+// expected/actual comparison markers: a shape defect is infrastructure
+// evidence, not a mutation detection.
+func replayRecordError(record any, definition, kind string, definitions obj) error {
 	target, ok := definitions[definition].(map[string]any)
-	if !ok || !replayObservationDefinitions[definition] {
-		return fmt.Errorf("unknown replay observation definition %q", definition)
+	if !ok || replayRecordDefinitions[definition] != kind {
+		return fmt.Errorf("unknown replay %s definition %q", kind, definition)
 	}
-	raw, err := json.Marshal(observed)
+	raw, err := json.Marshal(record)
 	if err != nil {
-		return fmt.Errorf("driver produced an unencodable %s observation: %w", definition, err)
+		return fmt.Errorf("driver produced an unencodable %s %s: %w", definition, kind, err)
 	}
 	var decoded any
 	if err := json.Unmarshal(raw, &decoded); err != nil {
-		return fmt.Errorf("driver produced an unencodable %s observation: %w", definition, err)
+		return fmt.Errorf("driver produced an unencodable %s %s: %w", definition, kind, err)
 	}
 	// Name the record's keys, never its values: a value could carry the
 	// expected/actual markers the mutation lane reads as comparison evidence.
 	if !matchesReplaySchema(decoded, target, definitions) {
 		keys, _ := decoded.(map[string]any)
-		return fmt.Errorf("driver produced a malformed %s observation: keys [%s]", definition, behaviorKeys(keys))
+		return fmt.Errorf("driver produced a malformed %s %s: keys [%s]", definition, kind, behaviorKeys(keys))
 	}
 	return nil
 }
@@ -550,7 +588,7 @@ func TestReplayCoordinatorRejectsPrematureCompletionAndEmptyCommands(t *testing.
 			applied := 0
 			// A well-formed core observation passes the local shape check, so the
 			// coordinator's malformed reply is what execution must reject.
-			err := coordinator.execute(obj{"session": "1", "setup": []any{}, "steps": float64(2), "observation": "coreObservation"}, func(obj) error { applied++; return nil }, healthyCoreObservation, func() int64 { return 0 })
+			err := coordinator.execute(obj{"session": "1", "setup": []any{}, "steps": float64(2), "observation": "coreObservation", "receipt": nil}, func(obj) error { applied++; return nil }, healthyCoreObservation, func() int64 { return 0 })
 			if err == nil || applied != 0 {
 				t.Fatalf("malformed reply advanced execution: err=%v, commands=%d", err, applied)
 			}
@@ -567,6 +605,25 @@ func healthyCoreObservation() obj {
 	return observed
 }
 
+// healthySettlementReceipt is the all-zero record $defs/settlementReceipt
+// accepts: a driver with nothing runnable, no gate held and its clock unmoved.
+func healthySettlementReceipt() obj {
+	held := obj{}
+	for _, field := range strings.Fields("loaders reads writes dumps loads policies scopes") {
+		held[field] = int64(0)
+	}
+	return obj{"elapsedMs": int64(0), "runnable": int64(0), "held": held}
+}
+
+// standInCoordinator starts a Node program that runs `body` for every parsed
+// request line in place of the shared coordinator. Test controls only;
+// production replay always uses the shared coordinator.
+func standInCoordinator(t *testing.T, body string) *replayCoordinator {
+	t.Helper()
+	program := "require('readline').createInterface({input:process.stdin}).on('line', line => { const request=JSON.parse(line); " + body + " });"
+	return startReplayCoordinator(t, exec.Command("node", "-e", program), time.Second, false)
+}
+
 func TestReplayTransportValidatesObservationsLocally(t *testing.T) {
 	schema, err := readReplaySchema()
 	if err != nil {
@@ -575,8 +632,9 @@ func TestReplayTransportValidatesObservationsLocally(t *testing.T) {
 	definitions := bm(schema["$defs"])
 	behavior := emptyBehaviorObservation(obj{"observe": []any{}})
 	local := emptyBehaviorObservation(obj{})
-	for definition, observed := range map[string]obj{"behaviorObservation": behavior, "coreObservation": healthyCoreObservation(), "localClockObservation": local} {
-		if err := replayObservationError(observed, definition, definitions); err != nil {
+	receipt := healthySettlementReceipt()
+	for definition, record := range map[string]obj{"behaviorObservation": behavior, "coreObservation": healthyCoreObservation(), "localClockObservation": local, "settlementReceipt": receipt} {
+		if err := replayRecordError(record, definition, replayRecordDefinitions[definition], definitions); err != nil {
 			t.Fatalf("well-formed %s rejected: %v", definition, err)
 		}
 	}
@@ -590,9 +648,18 @@ func TestReplayTransportValidatesObservationsLocally(t *testing.T) {
 		delete(changed, field)
 		return changed
 	}
+	withHeld := func(field string, value any) obj {
+		changed := bm(bclone(receipt))
+		if value == nil {
+			delete(bm(changed["held"]), field)
+		} else {
+			bm(changed["held"])[field] = value
+		}
+		return changed
+	}
 	for name, control := range map[string]struct {
 		definition string
-		observed   any
+		record     any
 	}{
 		"string counter":         {"behaviorObservation", with(behavior, "loaders", "1")},
 		"pending call value":     {"behaviorObservation", with(behavior, "calls", []any{obj{"status": "value"}})},
@@ -606,13 +673,24 @@ func TestReplayTransportValidatesObservationsLocally(t *testing.T) {
 		"events on local clock":  {"localClockObservation", with(local, "events", []any{})},
 		"non-object observation": {"behaviorObservation", []any{}},
 		"nil observation":        {"coreObservation", nil},
+		"string runnable":        {"settlementReceipt", with(receipt, "runnable", "0")},
+		"negative elapsed":       {"settlementReceipt", with(receipt, "elapsedMs", int64(-1))},
+		"fractional elapsed":     {"settlementReceipt", with(receipt, "elapsedMs", 0.5)},
+		"missing held":           {"settlementReceipt", without(receipt, "held")},
+		"negative held gate":     {"settlementReceipt", withHeld("reads", int64(-1))},
+		"missing held gate":      {"settlementReceipt", withHeld("scopes", nil)},
+		"unknown held gate":      {"settlementReceipt", withHeld("timers", int64(0))},
+		"unknown receipt member": {"settlementReceipt", with(receipt, "wallMs", int64(0))},
+		"non-object receipt":     {"settlementReceipt", []any{}},
+		"nil receipt":            {"settlementReceipt", nil},
 	} {
 		t.Run(name, func(t *testing.T) {
-			err := replayObservationError(control.observed, control.definition, definitions)
+			kind := replayRecordDefinitions[control.definition]
+			err := replayRecordError(control.record, control.definition, kind, definitions)
 			if err == nil {
-				t.Fatalf("malformed %s accepted: %s", control.definition, bjson(control.observed))
+				t.Fatalf("malformed %s accepted: %s", control.definition, bjson(control.record))
 			}
-			if !strings.HasPrefix(err.Error(), "driver produced a malformed "+control.definition+" observation: ") {
+			if !strings.HasPrefix(err.Error(), "driver produced a malformed "+control.definition+" "+kind+": ") {
 				t.Fatalf("shape defect lacks the driver attribution: %v", err)
 			}
 			if matched, _ := regexp.MatchString(`expected:[\s\S]*actual:`, err.Error()); matched {
@@ -620,19 +698,24 @@ func TestReplayTransportValidatesObservationsLocally(t *testing.T) {
 			}
 		})
 	}
-	for _, definition := range []string{"", "invented", "observedEvent", "command"} {
-		if err := replayObservationError(behavior, definition, definitions); err == nil || !strings.Contains(err.Error(), "unknown replay observation definition") {
-			t.Fatalf("definition %q accepted: %v", definition, err)
+	for _, definition := range []string{"", "invented", "observedEvent", "command", "settlementReceipt"} {
+		if err := replayRecordError(behavior, definition, "observation", definitions); err == nil || !strings.Contains(err.Error(), "unknown replay observation definition") {
+			t.Fatalf("observation definition %q accepted: %v", definition, err)
+		}
+	}
+	for _, definition := range []string{"", "invented", "behaviorObservation", "command"} {
+		if err := replayRecordError(receipt, definition, "receipt", definitions); err == nil || !strings.Contains(err.Error(), "unknown replay receipt definition") {
+			t.Fatalf("receipt definition %q accepted: %v", definition, err)
 		}
 	}
 
+	// The stand-in exits nonzero if an observe request ever arrives, which the
+	// transport's cleanup reports as a process failure.
+	exitOnObserve := "if (request.op === 'observe') process.exit(3); process.stdout.write(JSON.stringify({version:1,id:request.id,ok:true,result:{complete:true,steps:2}})+'\\n');"
 	t.Run("rejected before any request reaches the coordinator", func(t *testing.T) {
-		// The stand-in exits nonzero if an observe request ever arrives, which
-		// the transport's cleanup reports as a process failure.
-		program := "require('readline').createInterface({input:process.stdin}).on('line', line => { const request=JSON.parse(line); if (request.op === 'observe') process.exit(3); process.stdout.write(JSON.stringify({version:1,id:request.id,ok:true,result:{complete:true,steps:2}})+'\\n'); });"
-		coordinator := startReplayCoordinator(t, exec.Command("node", "-e", program), time.Second, false)
+		coordinator := standInCoordinator(t, exitOnObserve)
 		applied := 0
-		prepared := obj{"session": "1", "setup": []any{obj{"op": "bumpSource"}}, "steps": float64(2), "observation": "coreObservation"}
+		prepared := obj{"session": "1", "setup": []any{obj{"op": "bumpSource"}}, "steps": float64(2), "observation": "coreObservation", "receipt": nil}
 		err := coordinator.execute(prepared, func(obj) error { applied++; return nil }, func() obj { return with(healthyCoreObservation(), "redisReads", "many") }, func() int64 { return 0 })
 		if err == nil || !strings.Contains(err.Error(), "driver produced a malformed coreObservation observation") {
 			t.Fatalf("malformed observation was not attributed to the driver: %v", err)
@@ -641,11 +724,86 @@ func TestReplayTransportValidatesObservationsLocally(t *testing.T) {
 			t.Fatalf("setup must run before the first observation: applied=%d", applied)
 		}
 	})
+	t.Run("malformed receipt rejected before any request reaches the coordinator", func(t *testing.T) {
+		coordinator := standInCoordinator(t, exitOnObserve)
+		applied := 0
+		prepared := obj{"session": "1", "setup": []any{obj{"op": "begin"}}, "steps": float64(2), "observation": "behaviorObservation", "receipt": "settlementReceipt"}
+		err := coordinator.executeWithReceipt(prepared, func(obj) error { applied++; return nil }, func() obj { return behavior }, func() int64 { return 0 }, func() obj { return withHeld("loaders", int64(-1)) })
+		if err == nil || !strings.HasPrefix(err.Error(), "driver produced a malformed settlementReceipt receipt: keys [") {
+			t.Fatalf("malformed receipt was not attributed to the driver: %v", err)
+		}
+		if matched, _ := regexp.MatchString(`expected:[\s\S]*actual:`, err.Error()); matched {
+			t.Fatalf("receipt defect acquired comparison markers: %v", err)
+		}
+		if applied != 1 {
+			t.Fatalf("setup must run before the first observation: applied=%d", applied)
+		}
+	})
+	t.Run("a session that names a receipt needs a driver that reports one", func(t *testing.T) {
+		coordinator := standInCoordinator(t, exitOnObserve)
+		prepared := obj{"session": "1", "setup": []any{obj{"op": "begin"}}, "steps": float64(2), "observation": "behaviorObservation", "receipt": "settlementReceipt"}
+		applied := 0
+		err := coordinator.execute(prepared, func(obj) error { applied++; return nil }, func() obj { return behavior }, func() int64 { return 0 })
+		if err == nil || !strings.Contains(err.Error(), "requires a settlementReceipt receipt") || applied != 0 {
+			t.Fatalf("receipt-less driver ran a session that names a receipt: err=%v, commands=%d", err, applied)
+		}
+	})
+	t.Run("receipt travels exactly when the session names it", func(t *testing.T) {
+		session := obj{"session": "1", "setup": []any{obj{"op": "begin"}}, "steps": float64(2), "observation": "behaviorObservation"}
+		for name, prepared := range map[string]obj{"named": with(session, "receipt", "settlementReceipt"), "null": with(session, "receipt", nil)} {
+			t.Run(name, func(t *testing.T) {
+				// The stand-in exits nonzero when an observe request carries the
+				// receipt member against what the session names.
+				expected := strconv.FormatBool(prepared["receipt"] != nil)
+				coordinator := standInCoordinator(t, "if (request.op === 'observe' && Object.hasOwn(request, 'receipt') !== "+expected+") process.exit(3); const result = request.index === 0 ? {complete:false,index:1,inputs:[{op:'begin'}]} : {complete:true,steps:2}; process.stdout.write(JSON.stringify({version:1,id:request.id,ok:true,result})+'\\n');")
+				applied := 0
+				err := coordinator.executeWithReceipt(prepared, func(obj) error { applied++; return nil }, func() obj { return behavior }, func() int64 { return 0 }, healthySettlementReceipt)
+				if err != nil || applied != 2 {
+					t.Fatalf("receipt transport disagreed with the session: err=%v, commands=%d", err, applied)
+				}
+			})
+		}
+	})
 	t.Run("prepare rejects an unknown observation definition", func(t *testing.T) {
-		program := "require('readline').createInterface({input:process.stdin}).on('line', line => { const request=JSON.parse(line); process.stdout.write(JSON.stringify({version:1,id:request.id,ok:true,result:{session:'1',settlement:'causally-ready-v1',observation:'observedEvent',fixture:{},setup:[],actions:['init','outsideCall'],steps:2}})+'\\n'); });"
-		coordinator := startReplayCoordinator(t, exec.Command("node", "-e", program), time.Second, false)
+		coordinator := standInCoordinator(t, "process.stdout.write(JSON.stringify({version:1,id:request.id,ok:true,result:{session:'1',settlement:'causally-ready-v1',observation:'observedEvent',receipt:null,fixture:{},setup:[],actions:['init','outsideCall'],steps:2}})+'\\n');")
 		if _, err := coordinator.prepare("core", "control.itf.json", nil); err == nil || !strings.Contains(err.Error(), "malformed replay observation definition") {
 			t.Fatalf("unknown observation definition accepted: %v", err)
+		}
+	})
+	t.Run("prepare rejects a receipt definition the session cannot carry", func(t *testing.T) {
+		for name, members := range map[string]string{
+			"unknown definition":     "observation:'behaviorObservation',receipt:'observedEvent'",
+			"observation as receipt": "observation:'behaviorObservation',receipt:'behaviorObservation'",
+			"non-string definition":  "observation:'behaviorObservation',receipt:1",
+			"receipt on core":        "observation:'coreObservation',receipt:'settlementReceipt'",
+			"receipt on local clock": "observation:'localClockObservation',receipt:'settlementReceipt'",
+		} {
+			t.Run(name, func(t *testing.T) {
+				coordinator := standInCoordinator(t, "process.stdout.write(JSON.stringify({version:1,id:request.id,ok:true,result:{session:'1',settlement:'causally-ready-v1',"+members+",fixture:{},setup:[],actions:['init','outsideCall'],steps:2}})+'\\n');")
+				if _, err := coordinator.prepare("core", "control.itf.json", nil); err == nil || !strings.Contains(err.Error(), "malformed replay receipt definition") {
+					t.Fatalf("receipt definition accepted: %v", err)
+				}
+			})
+		}
+	})
+	t.Run("prepare rejects a session that omits the receipt member", func(t *testing.T) {
+		coordinator := standInCoordinator(t, "process.stdout.write(JSON.stringify({version:1,id:request.id,ok:true,result:{session:'1',settlement:'causally-ready-v1',observation:'coreObservation',fixture:{},setup:[],actions:['init','outsideCall'],steps:2}})+'\\n');")
+		if _, err := coordinator.prepare("core", "control.itf.json", nil); err == nil || !strings.Contains(err.Error(), "malformed replay preparation") {
+			t.Fatalf("preparation without a receipt member accepted: %v", err)
+		}
+	})
+	t.Run("prepare accepts a behavior session that names or nulls its receipt", func(t *testing.T) {
+		for name, members := range map[string]string{"named": "receipt:'settlementReceipt',", "null": "receipt:null,"} {
+			t.Run(name, func(t *testing.T) {
+				coordinator := standInCoordinator(t, "process.stdout.write(JSON.stringify({version:1,id:request.id,ok:true,result:{session:'1',settlement:'causally-ready-v1',observation:'behaviorObservation',"+members+"fixture:{},setup:[],actions:['init','beginCall'],steps:2}})+'\\n');")
+				prepared, err := coordinator.prepare("layers", "control.itf.json", nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if named := prepared["receipt"] != nil; named != (name == "named") {
+					t.Fatalf("prepare reported receipt %v for %s", prepared["receipt"], name)
+				}
+			})
 		}
 	})
 }
@@ -677,7 +835,7 @@ func TestReplayCoordinatorMutationEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, mode := range []string{"baseline", "observation", "malformed", "missing-file", "unknown-action"} {
+	for _, mode := range []string{"baseline", "observation", "malformed", "missing-file", "unknown-action", "settlement"} {
 		t.Run(mode, func(t *testing.T) {
 			var trace obj
 			if err := json.Unmarshal(original, &trace); err != nil {
@@ -709,11 +867,18 @@ func TestReplayCoordinatorMutationEvidence(t *testing.T) {
 			command := exec.CommandContext(ctx, "go", "tool", "test2json", "-t", "-p", "github.com/lan17/DialCache/go", executable,
 				"-test.v=test2json", "-test.run=^TestCoreConformance$", "-test.count=1")
 			for _, value := range os.Environ() {
-				if !strings.HasPrefix(value, "DIALCACHE_") {
+				if !strings.HasPrefix(value, "DIALCACHE_") && !(mode == "settlement" && strings.HasPrefix(value, "PATH=")) {
 					command.Env = append(command.Env, value)
 				}
 			}
 			command.Env = append(command.Env, "DIALCACHE_MBT_TRACE_FILE="+path)
+			if mode == "settlement" {
+				// The native replay resolves node through PATH and uses it for
+				// the coordinator alone, so a wrapper first on PATH can stand in
+				// for the coordinator's replies while the replay, transport and
+				// driver stay the real ones.
+				command.Env = append(command.Env, "PATH="+settlementViolationNode(t)+string(os.PathListSeparator)+os.Getenv("PATH"))
+			}
 			var stderr bytes.Buffer
 			command.Stderr = &stderr
 			events, runError := command.Output()
@@ -753,6 +918,18 @@ catch(error) { console.log(JSON.stringify({valid:false, error:error.message})); 
 				if result["valid"] != true || measurement["state"] != "detected" || kind != "observation-mismatch" {
 					t.Fatalf("real replay mismatch was not credited: %s\n%s", output, events)
 				}
+			case "settlement":
+				// A settlement violation is the coordinator's verdict on the
+				// driver's receipt, never comparison evidence about the cache.
+				if !bytes.Contains(events, []byte("Settlement violation")) {
+					t.Fatalf("control did not fail through a settlement violation: %s", events)
+				}
+				if result["valid"] != false || !regexp.MustCompile(`replay failure lacks observation|[Ss]ettlement violation`).MatchString(bs(result["error"])) {
+					t.Fatalf("settlement violation was credited: %s\n%s", output, events)
+				}
+				if matched, _ := regexp.Match(`expected:[\s\S]*actual:`, events); matched {
+					t.Fatalf("settlement violation acquired comparison markers: %s", events)
+				}
 			default:
 				if result["valid"] != false || !strings.Contains(bs(result["error"]), "replay failure lacks observation") {
 					t.Fatalf("infrastructure failure was credited: %s\n%s", output, events)
@@ -763,4 +940,42 @@ catch(error) { console.log(JSON.stringify({valid:false, error:error.message})); 
 			}
 		})
 	}
+}
+
+// settlementViolationNode writes a directory whose `node` runs the shared
+// coordinator behind a proxy that turns every observe acknowledgement into the
+// settlement violation the coordinator raises for a receipt that fails a rule,
+// and runs any other program unchanged. Only the wire replies change.
+func settlementViolationNode(t *testing.T) string {
+	t.Helper()
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory := t.TempDir()
+	proxy := filepath.Join(directory, "settlement-violation-proxy.mjs")
+	program := `import { spawn } from "node:child_process";
+import { createInterface } from "node:readline";
+const coordinator = spawn(process.execPath, [process.argv[2]], { stdio: ["pipe", "pipe", "inherit"] });
+const operations = new Map();
+createInterface({ input: process.stdin })
+  .on("line", line => { const request = JSON.parse(line); operations.set(request.id, request.op); coordinator.stdin.write(line + "\n"); })
+  .on("close", () => coordinator.stdin.end());
+createInterface({ input: coordinator.stdout }).on("line", line => {
+  const response = JSON.parse(line);
+  if (operations.get(response.id) === "observe") {
+    delete response.result;
+    Object.assign(response, { ok: false, error: "control.itf.json step 0 action init: Settlement violation: 1 runnable task(s) at observation" });
+  }
+  process.stdout.write(JSON.stringify(response) + "\n");
+});
+`
+	if err := os.WriteFile(proxy, []byte(program), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	wrapper := "#!/bin/sh\ncase \"$1\" in\n*/coordinator.mjs) exec \"" + node + "\" \"" + proxy + "\" \"$1\" ;;\n*) exec \"" + node + "\" \"$@\" ;;\nesac\n"
+	if err := os.WriteFile(filepath.Join(directory, "node"), []byte(wrapper), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return directory
 }

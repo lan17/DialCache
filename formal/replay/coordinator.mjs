@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { profileActions, bindTrace } from "./bindings.mjs";
 import { parseJSON, replayLines } from "./validation.mjs";
 import { assertSchema, schemaViolation } from "./schema.mjs";
+import { SettlementLedger } from "./settlement.mjs";
 
 export const protocolVersion = 1;
 export const settlement = "causally-ready-v1";
@@ -33,11 +34,17 @@ export class ReplayCoordinator {
       const binding = bindTrace(request.profile, parseJSON(raw), request.path);
       const { trace } = binding;
       const session = String(++this.#nextSession);
-      this.#sessions.set(session, { binding, trace, index: 0 });
-      // `observation` names the $defs definition the driver's records must
-      // satisfy, so a port can validate them locally before each round trip.
+      // A session with a controlled wall clock keeps a settlement ledger of the
+      // commands it issued: a behavior session's receipts are checked against
+      // the schedule the driver actually ran, the core session's wall clock
+      // alone. The local-clock driver reports the real process clock.
+      const ledger = binding.wallClock === "controlled" ? new SettlementLedger(binding.fixture, binding.setup) : undefined;
+      this.#sessions.set(session, { binding, trace, index: 0, ledger });
+      // `observation` and `receipt` name the $defs definitions the driver's
+      // records must satisfy, so a port can validate them locally before each
+      // round trip; a null receipt means the session carries none.
       return {
-        session, settlement, observation: binding.observation, fixture: binding.fixture, setup: binding.setup,
+        session, settlement, observation: binding.observation, receipt: binding.receipt, fixture: binding.fixture, setup: binding.setup,
         actions: trace.steps.map(step => step.action), steps: trace.steps.length,
       };
     }
@@ -48,13 +55,29 @@ export class ReplayCoordinator {
 
     const session = this.#sessions.get(request.session);
     if (!session) throw new Error("Unknown replay session");
-    const { binding, trace, index } = session;
+    const { binding, trace, index, ledger } = session;
     try {
       if (request.index !== index) throw new Error("Duplicate or skipped replay observation");
       // A malformed observation is a driver or transport defect, never
       // comparison evidence: report it as a plain infrastructure error.
       const malformed = schemaViolation(request.observed, binding.observation, "observed");
       if (malformed !== undefined) throw new Error(`Malformed replay observation: ${binding.observation} at ${malformed}`);
+      // The settlement receipt is checked before the observation is compared,
+      // so an unsettled driver fails by name and never earns comparison credit.
+      // `binding.receipt` alone decides whether an observe must carry one; its
+      // shape is validated separately from the request so the path names the
+      // receipt member. A session without a receipt but with a controlled wall
+      // clock (core) is held to the wall-clock rule alone.
+      if (Object.hasOwn(request, "receipt")) {
+        if (binding.receipt === null) throw new Error("Unexpected settlement receipt");
+        const shape = schemaViolation(request.receipt, binding.receipt, "receipt");
+        if (shape !== undefined) throw new Error(`Malformed settlement receipt at ${shape}`);
+        ledger.assert(request.receipt, request.observed, request.environment);
+      } else if (binding.receipt !== null) {
+        throw new Error("Missing settlement receipt");
+      } else {
+        ledger?.assertWallClock(request.observed, request.environment);
+      }
       try {
         binding.assert(index, request.observed);
       } catch (cause) {
@@ -76,6 +99,7 @@ export class ReplayCoordinator {
       const inputs = binding.commands(nextIndex, request.observed, request.environment);
       for (const input of inputs) assertSchema(input, "command");
       if (inputs.length === 0) throw new Error("Replay action produced no command");
+      ledger?.issue(inputs);
       session.index = nextIndex;
       return { complete: false, index: nextIndex, inputs };
     } catch (cause) {
