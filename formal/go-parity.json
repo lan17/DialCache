@@ -8,39 +8,23 @@
     "counts": "Inventory counts establish accounting completeness only; they are not semantic coverage percentages or proof of parity."
   },
   "inputs": {
-    "semanticCasesSha256": "49a67a7eaafb4691cf1d0c2091e64157ebaf1c41ece467f8cf738d3b5f69706d",
+    "semanticCasesSha256": "f57bae3d0f5b3bf1a9dcc77c5a5f85a567ef31347ac602bcf9e5c1163d9617f5",
     "executionSha256": "64a128ba1c0da5622611d21e0130919d8f0b61c3e731ebd552cdd3fac3c4330f",
-    "sourceAuditSha256": "37b935d24746bf60b70779ed2236687b1b1753f523b3ecfb47839882dcf2c0f1",
+    "sourceAuditSha256": "e62e8d03ac774709fc72090df6a208dbdd77e1089e6d4a2edff747e2cb80a64b",
     "quintCaseAuditSha256": "82e2f0c2ca1858dda843d448c724535a5e7bf4d72067e48459244583ae053255",
     "featureCoverageSha256": "56eedfa865682db6ad8e73b8673c7dac1c30d301e9bce3390246d6994aba9dcb",
-    "coverageWitnessesSha256": "8fc8ab123150fdec059f5b75f84172d39af80d08d7a4211fa88c63c5a3f2874b",
+    "coverageWitnessesSha256": "7af7916b26c4cf11bddc546fc0f72688de6a3a1e726245eeea2661fdc9c3fcc0",
     "profilesSha256": "b8fa4f399a163bc8793bf76b6ba3503a415fcf3c8509cf98d964e4f067e6660f"
   },
   "inventory": {
     "behavioralCases": 240,
-    "withRequiredGeneratedWitnesses": 225,
-    "withoutRequiredGeneratedWitnesses": [
-      "C09.insertion-age",
-      "C13.remote-last-writer",
-      "C16.null-inherits",
-      "C16.ttl-implies-ramp",
-      "C17.library-defaults",
-      "C16.explicit-null-leaf",
-      "C31.local-only-publication",
-      "C20.invalid-coalesce",
-      "C20.invalid-request-local",
-      "C06.absent-distinct-from-text",
-      "C24.independent-source-budgets",
-      "C16.runtime-enables-coalescing",
-      "C19.exact-serving-cohort",
-      "C16.reenable-default-coalescing",
-      "C17.explicit-feature-kill-switch"
-    ],
+    "withRequiredGeneratedWitnesses": 240,
+    "withoutRequiredGeneratedWitnesses": [],
     "wireCases": 22,
     "sourceFiles": 27,
     "sourceDeclarations": 772,
     "casesWithScheduledChecks": 262,
-    "requiredWitnesses": 435,
+    "requiredWitnesses": 440,
     "casesWithQuintRegressionReplay": 168,
     "casesWithQuintGeneratedVectors": 22,
     "withoutModelDrivenReplay": [],
@@ -49,7 +33,7 @@
     "scheduledRegressions": 419,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
-    "caseReferencedWitnesses": 285,
+    "caseReferencedWitnesses": 306,
     "exportedRegressionHistories": 252
   },
   "profiles": [
@@ -1857,12 +1841,18 @@
         "formal/dialcache-policy-conformance.qnt:remoteHitStartsFullLocalInsertionTtlTest",
         "formal/dialcache-policy-conformance.qnt:remoteHitWarmsLocalForTheReplysLocalTtlTest"
       ],
-      "requiredGenerated": [],
+      "requiredGenerated": [
+        {
+          "profile": "policy",
+          "witness": "remote-hit-local-ttl-outlives-remote-freshness",
+          "model": "formal/dialcache-policy-conformance.qnt"
+        }
+      ],
       "fixedRegressions": [
         "nearly expired remote hit warms local for its full insertion TTL"
       ],
       "vectorEvidence": [],
-      "status": "executable-quint-regression",
+      "status": "executable-generated",
       "gaps": [],
       "evidence": {
         "typescript": ".formal-traces/ts-replay.json",
@@ -2158,12 +2148,18 @@
         "formal/dialcache-policy-conformance.qnt:independentRemotePublicationUsesLastCompletionTest",
         "formal/dialcache-runtime-boundaries-conformance.qnt:remoteHitPromotesIntoNewlyEnabledLocalLayerTest"
       ],
-      "requiredGenerated": [],
+      "requiredGenerated": [
+        {
+          "profile": "policy",
+          "witness": "independent-remote-last-completion-probed",
+          "model": "formal/dialcache-policy-conformance.qnt"
+        }
+      ],
       "fixedRegressions": [
         "independent remote publication is last writer wins"
       ],
       "vectorEvidence": [],
-      "status": "executable-quint-regression",
+      "status": "executable-generated",
       "gaps": [],
       "evidence": {
         "typescript": ".formal-traces/ts-replay.json",
@@ -2273,12 +2269,18 @@
         "formal/dialcache-runtime-policy.qnt:nullProviderRetainsEveryBaselineLeafTest",
         "formal/dialcache-runtime-boundaries-conformance.qnt:nullProviderInheritsConfiguredServingAndDefaultSharingTest"
       ],
-      "requiredGenerated": [],
+      "requiredGenerated": [
+        {
+          "profile": "runtime-boundaries",
+          "witness": "null-provider-inherits-serving-and-sharing",
+          "model": "formal/dialcache-runtime-boundaries-conformance.qnt"
+        }
+      ],
       "fixedRegressions": [
         "null provider inherits operation defaults"
       ],
       "vectorEvidence": [],
-      "status": "executable-quint-regression",
+      "status": "executable-generated",
       "gaps": [],
       "evidence": {
         "typescript": ".formal-traces/ts-replay.json",
@@ -2350,12 +2352,23 @@
         "formal/dialcache-runtime-boundaries-conformance.qnt:runtimeLocalTtlAddsEarlierLayerToRemoteFixtureTest",
         "formal/dialcache-runtime-boundaries-conformance.qnt:runtimeLocalTtlEnablesSharingWithoutRemoteTtlTest"
       ],
-      "requiredGenerated": [],
+      "requiredGenerated": [
+        {
+          "profile": "runtime-boundaries",
+          "witness": "runtime-ttl-implies-ramp:local",
+          "model": "formal/dialcache-runtime-boundaries-conformance.qnt"
+        },
+        {
+          "profile": "runtime-boundaries",
+          "witness": "runtime-ttl-implies-ramp:remote",
+          "model": "formal/dialcache-runtime-boundaries-conformance.qnt"
+        }
+      ],
       "fixedRegressions": [
         "runtime TTLs without ramps enable both serving layers"
       ],
       "vectorEvidence": [],
-      "status": "executable-quint-regression",
+      "status": "executable-generated",
       "gaps": [],
       "evidence": {
         "typescript": ".formal-traces/ts-replay.json",
@@ -2389,12 +2402,18 @@
         "formal/dialcache-runtime-policy.qnt:omittedPolicyUsesLibraryDefaultsTest",
         "formal/dialcache-runtime-boundaries-conformance.qnt:omittedRampAndSharingUseLibraryDefaultsTest"
       ],
-      "requiredGenerated": [],
+      "requiredGenerated": [
+        {
+          "profile": "runtime-boundaries",
+          "witness": "default-ramp-and-sharing",
+          "model": "formal/dialcache-runtime-boundaries-conformance.qnt"
+        }
+      ],
       "fixedRegressions": [
         "library defaults disable request memo recovery and shadow while sharing active work"
       ],
       "vectorEvidence": [],
-      "status": "executable-quint-regression",
+      "status": "executable-generated",
       "gaps": [],
       "evidence": {
         "typescript": ".formal-traces/ts-replay.json",
@@ -9467,12 +9486,18 @@
         "formal/dialcache-core.qnt:invalidBooleanOverlayBypassesAndPreservesMemoTest",
         "formal/dialcache-runtime-boundaries-conformance.qnt:explicitNullCoalesceBypassesWithoutReplacingRemoteTest"
       ],
-      "requiredGenerated": [],
+      "requiredGenerated": [
+        {
+          "profile": "runtime-boundaries",
+          "witness": "bypass-preserves-cache:null-coalesce",
+          "model": "formal/dialcache-runtime-boundaries-conformance.qnt"
+        }
+      ],
       "fixedRegressions": [
         "null coalesce leaf bypasses caching without replacing retained entries"
       ],
       "vectorEvidence": [],
-      "status": "executable-quint-regression",
+      "status": "executable-generated",
       "gaps": [],
       "evidence": {
         "typescript": ".formal-traces/ts-replay.json",
@@ -9499,12 +9524,18 @@
         "formal/dialcache-core.qnt:trackedWithoutRemoteStillPublishesLocalTest",
         "formal/dialcache-layers-conformance.qnt:trackedWithoutRemotePublishesReusableLocalTest"
       ],
-      "requiredGenerated": [],
+      "requiredGenerated": [
+        {
+          "profile": "layers",
+          "witness": "tracked-local-only-hit",
+          "model": "formal/dialcache-layers-conformance.qnt"
+        }
+      ],
       "fixedRegressions": [
         "tracked local-only calls publish and reuse source values"
       ],
       "vectorEvidence": [],
-      "status": "executable-quint-regression",
+      "status": "executable-generated",
       "gaps": [],
       "evidence": {
         "typescript": ".formal-traces/ts-replay.json",
@@ -9927,14 +9958,20 @@
         "formal/dialcache-runtime-boundaries-conformance.qnt:invalidCoalesceBypassesWithoutReplacingRemoteTest",
         "formal/dialcache-runtime-boundaries-conformance.qnt:invalidBooleanLeavesBypassAllCaching"
       ],
-      "requiredGenerated": [],
+      "requiredGenerated": [
+        {
+          "profile": "runtime-boundaries",
+          "witness": "bypass-preserves-cache:invalid-coalesce",
+          "model": "formal/dialcache-runtime-boundaries-conformance.qnt"
+        }
+      ],
       "fixedRegressions": [
         "invalid runtime coalesce bypasses all cache layers"
       ],
       "vectorEvidence": [],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintDefinitions": [],
-      "status": "executable-quint-regression",
+      "status": "executable-generated",
       "gaps": [],
       "quintReplays": [
         "runtime-boundaries/invalidCoalesceBypassesWithoutReplacingRemoteTest"
@@ -9961,14 +9998,20 @@
         "formal/dialcache-runtime-boundaries-conformance.qnt:invalidRequestLocalBypassesWithoutReplacingRemoteTest",
         "formal/dialcache-runtime-boundaries-conformance.qnt:invalidBooleanLeavesBypassAllCaching"
       ],
-      "requiredGenerated": [],
+      "requiredGenerated": [
+        {
+          "profile": "runtime-boundaries",
+          "witness": "bypass-preserves-cache:invalid-request-local",
+          "model": "formal/dialcache-runtime-boundaries-conformance.qnt"
+        }
+      ],
       "fixedRegressions": [
         "invalid runtime requestLocal bypasses all cache layers"
       ],
       "vectorEvidence": [],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintDefinitions": [],
-      "status": "executable-quint-regression",
+      "status": "executable-generated",
       "gaps": [],
       "quintReplays": [
         "runtime-boundaries/invalidRequestLocalBypassesWithoutReplacingRemoteTest"
@@ -10136,14 +10179,30 @@
         "formal/dialcache-runtime-boundaries-conformance.qnt:localAbsenceAndLiteralTextStayDistinctTest",
         "formal/dialcache-runtime-boundaries-conformance.qnt:remoteAbsenceAndLiteralTextStayDistinctTest"
       ],
-      "requiredGenerated": [],
+      "requiredGenerated": [
+        {
+          "profile": "runtime-boundaries",
+          "witness": "absent-distinct-from-text:request",
+          "model": "formal/dialcache-runtime-boundaries-conformance.qnt"
+        },
+        {
+          "profile": "runtime-boundaries",
+          "witness": "absent-distinct-from-text:local",
+          "model": "formal/dialcache-runtime-boundaries-conformance.qnt"
+        },
+        {
+          "profile": "runtime-boundaries",
+          "witness": "absent-distinct-from-text:remote",
+          "model": "formal/dialcache-runtime-boundaries-conformance.qnt"
+        }
+      ],
       "fixedRegressions": [
         "literal undefined string is distinct from absent result"
       ],
       "vectorEvidence": [],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintDefinitions": [],
-      "status": "executable-quint-regression",
+      "status": "executable-generated",
       "gaps": [],
       "quintReplays": [
         "runtime-boundaries/requestAbsenceAndLiteralTextStayDistinctTest",
@@ -10175,7 +10234,18 @@
         "formal/dialcache-independent-connection.qnt:independentSourceOriginsMatchContract",
         "formal/dialcache-independent-connection.qnt:independentSourceMatchesTimerContract"
       ],
-      "requiredGenerated": [],
+      "requiredGenerated": [
+        {
+          "profile": "independent",
+          "witness": "later-source-survives-earlier-deadline",
+          "model": "formal/dialcache-independent-conformance.qnt"
+        },
+        {
+          "profile": "independent",
+          "witness": "later-source-expires-at-own-deadline",
+          "model": "formal/dialcache-independent-conformance.qnt"
+        }
+      ],
       "fixedRegressions": [
         "uncoalesced callers have independent source deadlines"
       ],
@@ -10185,7 +10255,7 @@
         "formal/dialcache-independent-conformance.qnt:startSource",
         "formal/dialcache-independent-conformance.qnt:tick"
       ],
-      "status": "executable-quint-regression",
+      "status": "executable-generated",
       "gaps": [],
       "quintReplays": [
         "independent/staggeredSourceStartsKeepIndependentBudgetsTest",
@@ -10912,14 +10982,25 @@
         "formal/dialcache-runtime-boundaries-conformance.qnt:inheritedFalseKeepsIndependentMemoizingSourcesTest",
         "formal/dialcache-runtime-boundaries-conformance.qnt:inheritedDisabledSharingNeverJoins"
       ],
-      "requiredGenerated": [],
+      "requiredGenerated": [
+        {
+          "profile": "runtime-boundaries",
+          "witness": "runtime-enables-sharing",
+          "model": "formal/dialcache-runtime-boundaries-conformance.qnt"
+        },
+        {
+          "profile": "runtime-boundaries",
+          "witness": "inherited-false-request-last-writer",
+          "model": "formal/dialcache-runtime-boundaries-conformance.qnt"
+        }
+      ],
       "fixedRegressions": [
         "runtime coalescing override enables sharing over a disabled default"
       ],
       "vectorEvidence": [],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintDefinitions": [],
-      "status": "executable-quint-regression",
+      "status": "executable-generated",
       "gaps": [],
       "quintReplays": [
         "runtime-boundaries/runtimeTrueEnablesSharingOverFalseDefaultTest",
@@ -11323,7 +11404,18 @@
         "formal/dialcache-runtime-boundaries-conformance.qnt:remoteCohortEqualityBypassesBeforeAboveSampleCachesTest",
         "formal/dialcache-runtime-boundaries-conformance.qnt:equalAndLowerCohortsNeverTraverse"
       ],
-      "requiredGenerated": [],
+      "requiredGenerated": [
+        {
+          "profile": "runtime-boundaries",
+          "witness": "exact-serving-cohort:local",
+          "model": "formal/dialcache-runtime-boundaries-conformance.qnt"
+        },
+        {
+          "profile": "runtime-boundaries",
+          "witness": "exact-serving-cohort:remote",
+          "model": "formal/dialcache-runtime-boundaries-conformance.qnt"
+        }
+      ],
       "fixedRegressions": [
         "local cohort excludes equality and admits just above its exact sample",
         "remote cohort excludes equality and admits just above its exact sample"
@@ -11331,7 +11423,7 @@
       "vectorEvidence": [],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintDefinitions": [],
-      "status": "executable-quint-regression",
+      "status": "executable-generated",
       "gaps": [],
       "quintReplays": [
         "runtime-boundaries/localCohortEqualityBypassesBeforeAboveSampleCachesTest",
@@ -12272,14 +12364,20 @@
         "formal/dialcache-runtime-policy.qnt:reenablingDisabledBaselineKeepsDefaultCoalescingTest",
         "formal/dialcache-runtime-boundaries-conformance.qnt:disabledBaselineRampedUpKeepsDefaultSharingTest"
       ],
-      "requiredGenerated": [],
+      "requiredGenerated": [
+        {
+          "profile": "runtime-boundaries",
+          "witness": "disabled-baseline-default-sharing",
+          "model": "formal/dialcache-runtime-boundaries-conformance.qnt"
+        }
+      ],
       "fixedRegressions": [
         "runtime ramp up over disabled baseline preserves default coalescing"
       ],
       "vectorEvidence": [],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintDefinitions": [],
-      "status": "executable-quint-regression",
+      "status": "executable-generated",
       "gaps": [],
       "quintReplays": [
         "runtime-boundaries/disabledBaselineRampedUpKeepsDefaultSharingTest"
@@ -12305,14 +12403,20 @@
         "formal/dialcache-runtime-policy.qnt:explicitOffReplacesInheritedFeaturesTest",
         "formal/dialcache-runtime-boundaries-conformance.qnt:fullFeatureKillSwitchKeepsOmittedSharingAndRetainedMemoTest"
       ],
-      "requiredGenerated": [],
+      "requiredGenerated": [
+        {
+          "profile": "runtime-boundaries",
+          "witness": "full-feature-kill-switch",
+          "model": "formal/dialcache-runtime-boundaries-conformance.qnt"
+        }
+      ],
       "fixedRegressions": [
         "explicit feature kill switches bypass and preserve request memo for reenablement"
       ],
       "vectorEvidence": [],
       "scopeAudit": "formal/quint-case-audit.json",
       "quintDefinitions": [],
-      "status": "executable-quint-regression",
+      "status": "executable-generated",
       "gaps": [],
       "quintReplays": [
         "runtime-boundaries/fullFeatureKillSwitchKeepsOmittedSharingAndRetainedMemoTest"
@@ -18311,7 +18415,7 @@
   ],
   "reviewedTestAndDocumentationAudit": {
     "path": "formal/source-audit.json",
-    "sha256": "37b935d24746bf60b70779ed2236687b1b1753f523b3ecfb47839882dcf2c0f1",
+    "sha256": "e62e8d03ac774709fc72090df6a208dbdd77e1089e6d4a2edff747e2cb80a64b",
     "sourceFiles": 44,
     "status": "reviewed-applicability-not-execution",
     "limitations": "These rows review Go applicability for the public documentation and ordinary test files in source-audit.json sources, inheriting their C/W/E/B/X classifications. They map subjects to native artifacts without claiming one Go test per TypeScript assertion or turning documentation counts into executed coverage. The same audit hash also binds reviewedGuides for formal and Go documentation; those guide reviews are freshness/scope records, not additional behavioral applicability rows. Per-case Quint and replay evidence is recorded separately.",

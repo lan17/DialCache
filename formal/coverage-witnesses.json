@@ -15,7 +15,9 @@
     "recovery:miss",
     "recovery:deserialization_error",
     "source-deadline",
-    "failed-recovery-keeps-source-error"
+    "failed-recovery-keeps-source-error",
+    "later-source-survives-earlier-deadline",
+    "later-source-expires-at-own-deadline"
   ],
   "layers": [
     "absent-remote-maintenance-preserves-local",
@@ -43,7 +45,8 @@
     "local-hit-stops-remote-and-source",
     "request-hit-stops-lower-traversal",
     "source-publication-probed-in-all-three-layers",
-    "tracked-remote-disabled-local-hit"
+    "tracked-remote-disabled-local-hit",
+    "tracked-local-only-hit"
   ],
   "admission": [
     "outcome:match",
@@ -191,7 +194,9 @@
     "sparse-empty-provider-inherits-local-hit",
     "sparse-empty-provider-inherits-remote-hit",
     "uncoalesced-local-settled-hit",
-    "uncoalesced-remote-settled-hit"
+    "uncoalesced-remote-settled-hit",
+    "remote-hit-local-ttl-outlives-remote-freshness",
+    "independent-remote-last-completion-probed"
   ],
   "shadow": [
     "outcome:match",

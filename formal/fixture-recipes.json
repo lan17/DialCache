@@ -2735,6 +2735,35 @@
           "projection": "policy-observations"
         }
       ]
+    },
+    {
+      "path": "test/fixtures/layers-witnesses.json",
+      "model": "formal/dialcache-layers-conformance.qnt",
+      "format": "named-map",
+      "recipes": [
+        {
+          "id": "trackedWithoutRemotePublishesReusableLocalTest",
+          "regression": "trackedWithoutRemotePublishesReusableLocalTest",
+          "projection": "observations"
+        }
+      ]
+    },
+    {
+      "path": "test/fixtures/independent-witnesses.json",
+      "model": "formal/dialcache-independent-conformance.qnt",
+      "format": "named-map",
+      "recipes": [
+        {
+          "id": "staggeredSourceStartsKeepIndependentBudgetsTest",
+          "regression": "staggeredSourceStartsKeepIndependentBudgetsTest",
+          "projection": "independent"
+        },
+        {
+          "id": "staggeredSourcesExpireAtTheirOwnDeadlineTest",
+          "regression": "staggeredSourcesExpireAtTheirOwnDeadlineTest",
+          "projection": "independent"
+        }
+      ]
     }
   ]
 }

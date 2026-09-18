@@ -1,0 +1,1785 @@
+{
+  "staggeredSourceStartsKeepIndependentBudgetsTest": {
+    "source": {
+      "model": "formal/dialcache-independent-conformance.qnt",
+      "recipe": "formal/fixture-recipes.json#test/fixtures/independent-witnesses.json/staggeredSourceStartsKeepIndependentBudgetsTest"
+    },
+    "states": [
+      {
+        "input": {
+          "choice": {
+            "#bigint": "-1"
+          },
+          "name": "init"
+        },
+        "mbt::actionTaken": "init",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
+        "s": {
+          "o": {
+            "calls": [],
+            "classifications": {
+              "#bigint": "0"
+            },
+            "comparisons": {
+              "#bigint": "0"
+            },
+            "dumps": {
+              "#bigint": "0"
+            },
+            "invalidations": {
+              "#bigint": "0"
+            },
+            "loaders": {
+              "#bigint": "0"
+            },
+            "loads": {
+              "#bigint": "0"
+            },
+            "maintenance": [],
+            "policyCalls": {
+              "#bigint": "0"
+            },
+            "reads": {
+              "#bigint": "0"
+            },
+            "recovery": [],
+            "shadow": [],
+            "sourceScopes": [],
+            "writeTtls": [],
+            "writes": {
+              "#bigint": "0"
+            }
+          },
+          "io": {
+            "aborted": [],
+            "budgets": [],
+            "sourceErrors": []
+          }
+        }
+      },
+      {
+        "input": {
+          "choice": {
+            "#bigint": "-1"
+          },
+          "name": "invalidate"
+        },
+        "mbt::actionTaken": "invalidate",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
+        "s": {
+          "o": {
+            "calls": [],
+            "classifications": {
+              "#bigint": "0"
+            },
+            "comparisons": {
+              "#bigint": "0"
+            },
+            "dumps": {
+              "#bigint": "0"
+            },
+            "invalidations": {
+              "#bigint": "1"
+            },
+            "loaders": {
+              "#bigint": "0"
+            },
+            "loads": {
+              "#bigint": "0"
+            },
+            "maintenance": [
+              "ok"
+            ],
+            "policyCalls": {
+              "#bigint": "0"
+            },
+            "reads": {
+              "#bigint": "0"
+            },
+            "recovery": [],
+            "shadow": [],
+            "sourceScopes": [],
+            "writeTtls": [],
+            "writes": {
+              "#bigint": "0"
+            }
+          },
+          "io": {
+            "aborted": [],
+            "budgets": [],
+            "sourceErrors": []
+          }
+        }
+      },
+      {
+        "input": {
+          "choice": {
+            "#bigint": "-1"
+          },
+          "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
+        "s": {
+          "o": {
+            "calls": [
+              {
+                "#bigint": "0"
+              }
+            ],
+            "classifications": {
+              "#bigint": "0"
+            },
+            "comparisons": {
+              "#bigint": "0"
+            },
+            "dumps": {
+              "#bigint": "0"
+            },
+            "invalidations": {
+              "#bigint": "1"
+            },
+            "loaders": {
+              "#bigint": "0"
+            },
+            "loads": {
+              "#bigint": "0"
+            },
+            "maintenance": [
+              "ok"
+            ],
+            "policyCalls": {
+              "#bigint": "1"
+            },
+            "reads": {
+              "#bigint": "1"
+            },
+            "recovery": [],
+            "shadow": [],
+            "sourceScopes": [],
+            "writeTtls": [],
+            "writes": {
+              "#bigint": "0"
+            }
+          },
+          "io": {
+            "aborted": [],
+            "budgets": [
+              {
+                "#bigint": "5"
+              }
+            ],
+            "sourceErrors": [
+              {
+                "#bigint": "0"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "input": {
+          "choice": {
+            "#bigint": "0"
+          },
+          "name": "releaseRead"
+        },
+        "mbt::actionTaken": "releaseRead",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "0"
+            }
+          }
+        },
+        "s": {
+          "o": {
+            "calls": [
+              {
+                "#bigint": "0"
+              }
+            ],
+            "classifications": {
+              "#bigint": "0"
+            },
+            "comparisons": {
+              "#bigint": "0"
+            },
+            "dumps": {
+              "#bigint": "0"
+            },
+            "invalidations": {
+              "#bigint": "1"
+            },
+            "loaders": {
+              "#bigint": "1"
+            },
+            "loads": {
+              "#bigint": "0"
+            },
+            "maintenance": [
+              "ok"
+            ],
+            "policyCalls": {
+              "#bigint": "1"
+            },
+            "reads": {
+              "#bigint": "1"
+            },
+            "recovery": [],
+            "shadow": [],
+            "sourceScopes": [],
+            "writeTtls": [],
+            "writes": {
+              "#bigint": "0"
+            }
+          },
+          "io": {
+            "aborted": [],
+            "budgets": [
+              {
+                "#bigint": "5"
+              }
+            ],
+            "sourceErrors": [
+              {
+                "#bigint": "0"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "input": {
+          "choice": {
+            "#bigint": "5"
+          },
+          "name": "advance"
+        },
+        "mbt::actionTaken": "advance",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "5"
+            }
+          }
+        },
+        "s": {
+          "o": {
+            "calls": [
+              {
+                "#bigint": "0"
+              }
+            ],
+            "classifications": {
+              "#bigint": "0"
+            },
+            "comparisons": {
+              "#bigint": "0"
+            },
+            "dumps": {
+              "#bigint": "0"
+            },
+            "invalidations": {
+              "#bigint": "1"
+            },
+            "loaders": {
+              "#bigint": "1"
+            },
+            "loads": {
+              "#bigint": "0"
+            },
+            "maintenance": [
+              "ok"
+            ],
+            "policyCalls": {
+              "#bigint": "1"
+            },
+            "reads": {
+              "#bigint": "1"
+            },
+            "recovery": [],
+            "shadow": [],
+            "sourceScopes": [],
+            "writeTtls": [],
+            "writes": {
+              "#bigint": "0"
+            }
+          },
+          "io": {
+            "aborted": [],
+            "budgets": [
+              {
+                "#bigint": "5"
+              }
+            ],
+            "sourceErrors": [
+              {
+                "#bigint": "0"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "input": {
+          "choice": {
+            "#bigint": "-1"
+          },
+          "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
+        "s": {
+          "o": {
+            "calls": [
+              {
+                "#bigint": "0"
+              },
+              {
+                "#bigint": "0"
+              }
+            ],
+            "classifications": {
+              "#bigint": "0"
+            },
+            "comparisons": {
+              "#bigint": "0"
+            },
+            "dumps": {
+              "#bigint": "0"
+            },
+            "invalidations": {
+              "#bigint": "1"
+            },
+            "loaders": {
+              "#bigint": "1"
+            },
+            "loads": {
+              "#bigint": "0"
+            },
+            "maintenance": [
+              "ok"
+            ],
+            "policyCalls": {
+              "#bigint": "2"
+            },
+            "reads": {
+              "#bigint": "2"
+            },
+            "recovery": [],
+            "shadow": [],
+            "sourceScopes": [],
+            "writeTtls": [],
+            "writes": {
+              "#bigint": "0"
+            }
+          },
+          "io": {
+            "aborted": [],
+            "budgets": [
+              {
+                "#bigint": "5"
+              },
+              {
+                "#bigint": "5"
+              }
+            ],
+            "sourceErrors": [
+              {
+                "#bigint": "0"
+              },
+              {
+                "#bigint": "0"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "input": {
+          "choice": {
+            "#bigint": "1"
+          },
+          "name": "releaseRead"
+        },
+        "mbt::actionTaken": "releaseRead",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "1"
+            }
+          }
+        },
+        "s": {
+          "o": {
+            "calls": [
+              {
+                "#bigint": "0"
+              },
+              {
+                "#bigint": "0"
+              }
+            ],
+            "classifications": {
+              "#bigint": "0"
+            },
+            "comparisons": {
+              "#bigint": "0"
+            },
+            "dumps": {
+              "#bigint": "0"
+            },
+            "invalidations": {
+              "#bigint": "1"
+            },
+            "loaders": {
+              "#bigint": "2"
+            },
+            "loads": {
+              "#bigint": "0"
+            },
+            "maintenance": [
+              "ok"
+            ],
+            "policyCalls": {
+              "#bigint": "2"
+            },
+            "reads": {
+              "#bigint": "2"
+            },
+            "recovery": [],
+            "shadow": [],
+            "sourceScopes": [],
+            "writeTtls": [],
+            "writes": {
+              "#bigint": "0"
+            }
+          },
+          "io": {
+            "aborted": [],
+            "budgets": [
+              {
+                "#bigint": "5"
+              },
+              {
+                "#bigint": "5"
+              }
+            ],
+            "sourceErrors": [
+              {
+                "#bigint": "0"
+              },
+              {
+                "#bigint": "0"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "input": {
+          "choice": {
+            "#bigint": "5"
+          },
+          "name": "advance"
+        },
+        "mbt::actionTaken": "advance",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "5"
+            }
+          }
+        },
+        "s": {
+          "o": {
+            "calls": [
+              {
+                "#bigint": "4"
+              },
+              {
+                "#bigint": "0"
+              }
+            ],
+            "classifications": {
+              "#bigint": "1"
+            },
+            "comparisons": {
+              "#bigint": "0"
+            },
+            "dumps": {
+              "#bigint": "0"
+            },
+            "invalidations": {
+              "#bigint": "1"
+            },
+            "loaders": {
+              "#bigint": "2"
+            },
+            "loads": {
+              "#bigint": "0"
+            },
+            "maintenance": [
+              "ok"
+            ],
+            "policyCalls": {
+              "#bigint": "2"
+            },
+            "reads": {
+              "#bigint": "2"
+            },
+            "recovery": [
+              "miss"
+            ],
+            "shadow": [],
+            "sourceScopes": [],
+            "writeTtls": [],
+            "writes": {
+              "#bigint": "0"
+            }
+          },
+          "io": {
+            "aborted": [],
+            "budgets": [
+              {
+                "#bigint": "5"
+              },
+              {
+                "#bigint": "5"
+              }
+            ],
+            "sourceErrors": [
+              {
+                "#bigint": "0"
+              },
+              {
+                "#bigint": "0"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "input": {
+          "choice": {
+            "#bigint": "1"
+          },
+          "name": "advance"
+        },
+        "mbt::actionTaken": "advance",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "1"
+            }
+          }
+        },
+        "s": {
+          "o": {
+            "calls": [
+              {
+                "#bigint": "4"
+              },
+              {
+                "#bigint": "0"
+              }
+            ],
+            "classifications": {
+              "#bigint": "1"
+            },
+            "comparisons": {
+              "#bigint": "0"
+            },
+            "dumps": {
+              "#bigint": "0"
+            },
+            "invalidations": {
+              "#bigint": "1"
+            },
+            "loaders": {
+              "#bigint": "2"
+            },
+            "loads": {
+              "#bigint": "0"
+            },
+            "maintenance": [
+              "ok"
+            ],
+            "policyCalls": {
+              "#bigint": "2"
+            },
+            "reads": {
+              "#bigint": "2"
+            },
+            "recovery": [
+              "miss"
+            ],
+            "shadow": [],
+            "sourceScopes": [],
+            "writeTtls": [],
+            "writes": {
+              "#bigint": "0"
+            }
+          },
+          "io": {
+            "aborted": [],
+            "budgets": [
+              {
+                "#bigint": "5"
+              },
+              {
+                "#bigint": "5"
+              }
+            ],
+            "sourceErrors": [
+              {
+                "#bigint": "0"
+              },
+              {
+                "#bigint": "0"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "input": {
+          "choice": {
+            "#bigint": "4"
+          },
+          "name": "resolveLoader"
+        },
+        "mbt::actionTaken": "resolveLoader",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "4"
+            }
+          }
+        },
+        "s": {
+          "o": {
+            "calls": [
+              {
+                "#bigint": "4"
+              },
+              {
+                "#bigint": "2"
+              }
+            ],
+            "classifications": {
+              "#bigint": "1"
+            },
+            "comparisons": {
+              "#bigint": "0"
+            },
+            "dumps": {
+              "#bigint": "1"
+            },
+            "invalidations": {
+              "#bigint": "1"
+            },
+            "loaders": {
+              "#bigint": "2"
+            },
+            "loads": {
+              "#bigint": "0"
+            },
+            "maintenance": [
+              "ok"
+            ],
+            "policyCalls": {
+              "#bigint": "2"
+            },
+            "reads": {
+              "#bigint": "2"
+            },
+            "recovery": [
+              "miss"
+            ],
+            "shadow": [],
+            "sourceScopes": [],
+            "writeTtls": [
+              {
+                "#bigint": "5000"
+              }
+            ],
+            "writes": {
+              "#bigint": "1"
+            }
+          },
+          "io": {
+            "aborted": [],
+            "budgets": [
+              {
+                "#bigint": "5"
+              },
+              {
+                "#bigint": "5"
+              }
+            ],
+            "sourceErrors": [
+              {
+                "#bigint": "0"
+              },
+              {
+                "#bigint": "0"
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "staggeredSourcesExpireAtTheirOwnDeadlineTest": {
+    "source": {
+      "model": "formal/dialcache-independent-conformance.qnt",
+      "recipe": "formal/fixture-recipes.json#test/fixtures/independent-witnesses.json/staggeredSourcesExpireAtTheirOwnDeadlineTest"
+    },
+    "states": [
+      {
+        "input": {
+          "choice": {
+            "#bigint": "-1"
+          },
+          "name": "init"
+        },
+        "mbt::actionTaken": "init",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
+        "s": {
+          "o": {
+            "calls": [],
+            "classifications": {
+              "#bigint": "0"
+            },
+            "comparisons": {
+              "#bigint": "0"
+            },
+            "dumps": {
+              "#bigint": "0"
+            },
+            "invalidations": {
+              "#bigint": "0"
+            },
+            "loaders": {
+              "#bigint": "0"
+            },
+            "loads": {
+              "#bigint": "0"
+            },
+            "maintenance": [],
+            "policyCalls": {
+              "#bigint": "0"
+            },
+            "reads": {
+              "#bigint": "0"
+            },
+            "recovery": [],
+            "shadow": [],
+            "sourceScopes": [],
+            "writeTtls": [],
+            "writes": {
+              "#bigint": "0"
+            }
+          },
+          "io": {
+            "aborted": [],
+            "budgets": [],
+            "sourceErrors": []
+          }
+        }
+      },
+      {
+        "input": {
+          "choice": {
+            "#bigint": "-1"
+          },
+          "name": "invalidate"
+        },
+        "mbt::actionTaken": "invalidate",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
+        "s": {
+          "o": {
+            "calls": [],
+            "classifications": {
+              "#bigint": "0"
+            },
+            "comparisons": {
+              "#bigint": "0"
+            },
+            "dumps": {
+              "#bigint": "0"
+            },
+            "invalidations": {
+              "#bigint": "1"
+            },
+            "loaders": {
+              "#bigint": "0"
+            },
+            "loads": {
+              "#bigint": "0"
+            },
+            "maintenance": [
+              "ok"
+            ],
+            "policyCalls": {
+              "#bigint": "0"
+            },
+            "reads": {
+              "#bigint": "0"
+            },
+            "recovery": [],
+            "shadow": [],
+            "sourceScopes": [],
+            "writeTtls": [],
+            "writes": {
+              "#bigint": "0"
+            }
+          },
+          "io": {
+            "aborted": [],
+            "budgets": [],
+            "sourceErrors": []
+          }
+        }
+      },
+      {
+        "input": {
+          "choice": {
+            "#bigint": "-1"
+          },
+          "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
+        "s": {
+          "o": {
+            "calls": [
+              {
+                "#bigint": "0"
+              }
+            ],
+            "classifications": {
+              "#bigint": "0"
+            },
+            "comparisons": {
+              "#bigint": "0"
+            },
+            "dumps": {
+              "#bigint": "0"
+            },
+            "invalidations": {
+              "#bigint": "1"
+            },
+            "loaders": {
+              "#bigint": "0"
+            },
+            "loads": {
+              "#bigint": "0"
+            },
+            "maintenance": [
+              "ok"
+            ],
+            "policyCalls": {
+              "#bigint": "1"
+            },
+            "reads": {
+              "#bigint": "1"
+            },
+            "recovery": [],
+            "shadow": [],
+            "sourceScopes": [],
+            "writeTtls": [],
+            "writes": {
+              "#bigint": "0"
+            }
+          },
+          "io": {
+            "aborted": [],
+            "budgets": [
+              {
+                "#bigint": "5"
+              }
+            ],
+            "sourceErrors": [
+              {
+                "#bigint": "0"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "input": {
+          "choice": {
+            "#bigint": "0"
+          },
+          "name": "releaseRead"
+        },
+        "mbt::actionTaken": "releaseRead",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "0"
+            }
+          }
+        },
+        "s": {
+          "o": {
+            "calls": [
+              {
+                "#bigint": "0"
+              }
+            ],
+            "classifications": {
+              "#bigint": "0"
+            },
+            "comparisons": {
+              "#bigint": "0"
+            },
+            "dumps": {
+              "#bigint": "0"
+            },
+            "invalidations": {
+              "#bigint": "1"
+            },
+            "loaders": {
+              "#bigint": "1"
+            },
+            "loads": {
+              "#bigint": "0"
+            },
+            "maintenance": [
+              "ok"
+            ],
+            "policyCalls": {
+              "#bigint": "1"
+            },
+            "reads": {
+              "#bigint": "1"
+            },
+            "recovery": [],
+            "shadow": [],
+            "sourceScopes": [],
+            "writeTtls": [],
+            "writes": {
+              "#bigint": "0"
+            }
+          },
+          "io": {
+            "aborted": [],
+            "budgets": [
+              {
+                "#bigint": "5"
+              }
+            ],
+            "sourceErrors": [
+              {
+                "#bigint": "0"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "input": {
+          "choice": {
+            "#bigint": "5"
+          },
+          "name": "advance"
+        },
+        "mbt::actionTaken": "advance",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "5"
+            }
+          }
+        },
+        "s": {
+          "o": {
+            "calls": [
+              {
+                "#bigint": "0"
+              }
+            ],
+            "classifications": {
+              "#bigint": "0"
+            },
+            "comparisons": {
+              "#bigint": "0"
+            },
+            "dumps": {
+              "#bigint": "0"
+            },
+            "invalidations": {
+              "#bigint": "1"
+            },
+            "loaders": {
+              "#bigint": "1"
+            },
+            "loads": {
+              "#bigint": "0"
+            },
+            "maintenance": [
+              "ok"
+            ],
+            "policyCalls": {
+              "#bigint": "1"
+            },
+            "reads": {
+              "#bigint": "1"
+            },
+            "recovery": [],
+            "shadow": [],
+            "sourceScopes": [],
+            "writeTtls": [],
+            "writes": {
+              "#bigint": "0"
+            }
+          },
+          "io": {
+            "aborted": [],
+            "budgets": [
+              {
+                "#bigint": "5"
+              }
+            ],
+            "sourceErrors": [
+              {
+                "#bigint": "0"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "input": {
+          "choice": {
+            "#bigint": "-1"
+          },
+          "name": "beginCall"
+        },
+        "mbt::actionTaken": "beginCall",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "None",
+            "value": {
+              "#tup": []
+            }
+          }
+        },
+        "s": {
+          "o": {
+            "calls": [
+              {
+                "#bigint": "0"
+              },
+              {
+                "#bigint": "0"
+              }
+            ],
+            "classifications": {
+              "#bigint": "0"
+            },
+            "comparisons": {
+              "#bigint": "0"
+            },
+            "dumps": {
+              "#bigint": "0"
+            },
+            "invalidations": {
+              "#bigint": "1"
+            },
+            "loaders": {
+              "#bigint": "1"
+            },
+            "loads": {
+              "#bigint": "0"
+            },
+            "maintenance": [
+              "ok"
+            ],
+            "policyCalls": {
+              "#bigint": "2"
+            },
+            "reads": {
+              "#bigint": "2"
+            },
+            "recovery": [],
+            "shadow": [],
+            "sourceScopes": [],
+            "writeTtls": [],
+            "writes": {
+              "#bigint": "0"
+            }
+          },
+          "io": {
+            "aborted": [],
+            "budgets": [
+              {
+                "#bigint": "5"
+              },
+              {
+                "#bigint": "5"
+              }
+            ],
+            "sourceErrors": [
+              {
+                "#bigint": "0"
+              },
+              {
+                "#bigint": "0"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "input": {
+          "choice": {
+            "#bigint": "1"
+          },
+          "name": "releaseRead"
+        },
+        "mbt::actionTaken": "releaseRead",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "1"
+            }
+          }
+        },
+        "s": {
+          "o": {
+            "calls": [
+              {
+                "#bigint": "0"
+              },
+              {
+                "#bigint": "0"
+              }
+            ],
+            "classifications": {
+              "#bigint": "0"
+            },
+            "comparisons": {
+              "#bigint": "0"
+            },
+            "dumps": {
+              "#bigint": "0"
+            },
+            "invalidations": {
+              "#bigint": "1"
+            },
+            "loaders": {
+              "#bigint": "2"
+            },
+            "loads": {
+              "#bigint": "0"
+            },
+            "maintenance": [
+              "ok"
+            ],
+            "policyCalls": {
+              "#bigint": "2"
+            },
+            "reads": {
+              "#bigint": "2"
+            },
+            "recovery": [],
+            "shadow": [],
+            "sourceScopes": [],
+            "writeTtls": [],
+            "writes": {
+              "#bigint": "0"
+            }
+          },
+          "io": {
+            "aborted": [],
+            "budgets": [
+              {
+                "#bigint": "5"
+              },
+              {
+                "#bigint": "5"
+              }
+            ],
+            "sourceErrors": [
+              {
+                "#bigint": "0"
+              },
+              {
+                "#bigint": "0"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "input": {
+          "choice": {
+            "#bigint": "5"
+          },
+          "name": "advance"
+        },
+        "mbt::actionTaken": "advance",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "5"
+            }
+          }
+        },
+        "s": {
+          "o": {
+            "calls": [
+              {
+                "#bigint": "4"
+              },
+              {
+                "#bigint": "0"
+              }
+            ],
+            "classifications": {
+              "#bigint": "1"
+            },
+            "comparisons": {
+              "#bigint": "0"
+            },
+            "dumps": {
+              "#bigint": "0"
+            },
+            "invalidations": {
+              "#bigint": "1"
+            },
+            "loaders": {
+              "#bigint": "2"
+            },
+            "loads": {
+              "#bigint": "0"
+            },
+            "maintenance": [
+              "ok"
+            ],
+            "policyCalls": {
+              "#bigint": "2"
+            },
+            "reads": {
+              "#bigint": "2"
+            },
+            "recovery": [
+              "miss"
+            ],
+            "shadow": [],
+            "sourceScopes": [],
+            "writeTtls": [],
+            "writes": {
+              "#bigint": "0"
+            }
+          },
+          "io": {
+            "aborted": [],
+            "budgets": [
+              {
+                "#bigint": "5"
+              },
+              {
+                "#bigint": "5"
+              }
+            ],
+            "sourceErrors": [
+              {
+                "#bigint": "0"
+              },
+              {
+                "#bigint": "0"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "input": {
+          "choice": {
+            "#bigint": "1"
+          },
+          "name": "advance"
+        },
+        "mbt::actionTaken": "advance",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "1"
+            }
+          }
+        },
+        "s": {
+          "o": {
+            "calls": [
+              {
+                "#bigint": "4"
+              },
+              {
+                "#bigint": "0"
+              }
+            ],
+            "classifications": {
+              "#bigint": "1"
+            },
+            "comparisons": {
+              "#bigint": "0"
+            },
+            "dumps": {
+              "#bigint": "0"
+            },
+            "invalidations": {
+              "#bigint": "1"
+            },
+            "loaders": {
+              "#bigint": "2"
+            },
+            "loads": {
+              "#bigint": "0"
+            },
+            "maintenance": [
+              "ok"
+            ],
+            "policyCalls": {
+              "#bigint": "2"
+            },
+            "reads": {
+              "#bigint": "2"
+            },
+            "recovery": [
+              "miss"
+            ],
+            "shadow": [],
+            "sourceScopes": [],
+            "writeTtls": [],
+            "writes": {
+              "#bigint": "0"
+            }
+          },
+          "io": {
+            "aborted": [],
+            "budgets": [
+              {
+                "#bigint": "5"
+              },
+              {
+                "#bigint": "5"
+              }
+            ],
+            "sourceErrors": [
+              {
+                "#bigint": "0"
+              },
+              {
+                "#bigint": "0"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "input": {
+          "choice": {
+            "#bigint": "1"
+          },
+          "name": "advance"
+        },
+        "mbt::actionTaken": "advance",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "1"
+            }
+          }
+        },
+        "s": {
+          "o": {
+            "calls": [
+              {
+                "#bigint": "4"
+              },
+              {
+                "#bigint": "0"
+              }
+            ],
+            "classifications": {
+              "#bigint": "1"
+            },
+            "comparisons": {
+              "#bigint": "0"
+            },
+            "dumps": {
+              "#bigint": "0"
+            },
+            "invalidations": {
+              "#bigint": "1"
+            },
+            "loaders": {
+              "#bigint": "2"
+            },
+            "loads": {
+              "#bigint": "0"
+            },
+            "maintenance": [
+              "ok"
+            ],
+            "policyCalls": {
+              "#bigint": "2"
+            },
+            "reads": {
+              "#bigint": "2"
+            },
+            "recovery": [
+              "miss"
+            ],
+            "shadow": [],
+            "sourceScopes": [],
+            "writeTtls": [],
+            "writes": {
+              "#bigint": "0"
+            }
+          },
+          "io": {
+            "aborted": [],
+            "budgets": [
+              {
+                "#bigint": "5"
+              },
+              {
+                "#bigint": "5"
+              }
+            ],
+            "sourceErrors": [
+              {
+                "#bigint": "0"
+              },
+              {
+                "#bigint": "0"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "input": {
+          "choice": {
+            "#bigint": "1"
+          },
+          "name": "advance"
+        },
+        "mbt::actionTaken": "advance",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "1"
+            }
+          }
+        },
+        "s": {
+          "o": {
+            "calls": [
+              {
+                "#bigint": "4"
+              },
+              {
+                "#bigint": "0"
+              }
+            ],
+            "classifications": {
+              "#bigint": "1"
+            },
+            "comparisons": {
+              "#bigint": "0"
+            },
+            "dumps": {
+              "#bigint": "0"
+            },
+            "invalidations": {
+              "#bigint": "1"
+            },
+            "loaders": {
+              "#bigint": "2"
+            },
+            "loads": {
+              "#bigint": "0"
+            },
+            "maintenance": [
+              "ok"
+            ],
+            "policyCalls": {
+              "#bigint": "2"
+            },
+            "reads": {
+              "#bigint": "2"
+            },
+            "recovery": [
+              "miss"
+            ],
+            "shadow": [],
+            "sourceScopes": [],
+            "writeTtls": [],
+            "writes": {
+              "#bigint": "0"
+            }
+          },
+          "io": {
+            "aborted": [],
+            "budgets": [
+              {
+                "#bigint": "5"
+              },
+              {
+                "#bigint": "5"
+              }
+            ],
+            "sourceErrors": [
+              {
+                "#bigint": "0"
+              },
+              {
+                "#bigint": "0"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "input": {
+          "choice": {
+            "#bigint": "1"
+          },
+          "name": "advance"
+        },
+        "mbt::actionTaken": "advance",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "1"
+            }
+          }
+        },
+        "s": {
+          "o": {
+            "calls": [
+              {
+                "#bigint": "4"
+              },
+              {
+                "#bigint": "0"
+              }
+            ],
+            "classifications": {
+              "#bigint": "1"
+            },
+            "comparisons": {
+              "#bigint": "0"
+            },
+            "dumps": {
+              "#bigint": "0"
+            },
+            "invalidations": {
+              "#bigint": "1"
+            },
+            "loaders": {
+              "#bigint": "2"
+            },
+            "loads": {
+              "#bigint": "0"
+            },
+            "maintenance": [
+              "ok"
+            ],
+            "policyCalls": {
+              "#bigint": "2"
+            },
+            "reads": {
+              "#bigint": "2"
+            },
+            "recovery": [
+              "miss"
+            ],
+            "shadow": [],
+            "sourceScopes": [],
+            "writeTtls": [],
+            "writes": {
+              "#bigint": "0"
+            }
+          },
+          "io": {
+            "aborted": [],
+            "budgets": [
+              {
+                "#bigint": "5"
+              },
+              {
+                "#bigint": "5"
+              }
+            ],
+            "sourceErrors": [
+              {
+                "#bigint": "0"
+              },
+              {
+                "#bigint": "0"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "input": {
+          "choice": {
+            "#bigint": "1"
+          },
+          "name": "advance"
+        },
+        "mbt::actionTaken": "advance",
+        "mbt::nondetPicks": {
+          "choice": {
+            "tag": "Some",
+            "value": {
+              "#bigint": "1"
+            }
+          }
+        },
+        "s": {
+          "o": {
+            "calls": [
+              {
+                "#bigint": "4"
+              },
+              {
+                "#bigint": "4"
+              }
+            ],
+            "classifications": {
+              "#bigint": "2"
+            },
+            "comparisons": {
+              "#bigint": "0"
+            },
+            "dumps": {
+              "#bigint": "0"
+            },
+            "invalidations": {
+              "#bigint": "1"
+            },
+            "loaders": {
+              "#bigint": "2"
+            },
+            "loads": {
+              "#bigint": "0"
+            },
+            "maintenance": [
+              "ok"
+            ],
+            "policyCalls": {
+              "#bigint": "2"
+            },
+            "reads": {
+              "#bigint": "2"
+            },
+            "recovery": [
+              "miss",
+              "miss"
+            ],
+            "shadow": [],
+            "sourceScopes": [],
+            "writeTtls": [],
+            "writes": {
+              "#bigint": "0"
+            }
+          },
+          "io": {
+            "aborted": [],
+            "budgets": [
+              {
+                "#bigint": "5"
+              },
+              {
+                "#bigint": "5"
+              }
+            ],
+            "sourceErrors": [
+              {
+                "#bigint": "0"
+              },
+              {
+                "#bigint": "0"
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

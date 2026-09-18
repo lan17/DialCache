@@ -147,7 +147,9 @@
         "recovery:miss": 386,
         "recovery:deserialization_error": 64,
         "source-deadline": 373,
-        "failed-recovery-keeps-source-error": 36
+        "failed-recovery-keeps-source-error": 36,
+        "later-source-survives-earlier-deadline": 11,
+        "later-source-expires-at-own-deadline": 20
       }
     },
     "layers": {
@@ -179,7 +181,8 @@
         "local-hit-stops-remote-and-source": 244,
         "request-hit-stops-lower-traversal": 307,
         "source-publication-probed-in-all-three-layers": 3,
-        "tracked-remote-disabled-local-hit": 17
+        "tracked-remote-disabled-local-hit": 17,
+        "tracked-local-only-hit": 69
       }
     },
     "local-clock": {
@@ -252,7 +255,9 @@
         "sparse-empty-provider-inherits-local-hit": 119,
         "sparse-empty-provider-inherits-remote-hit": 70,
         "uncoalesced-local-settled-hit": 104,
-        "uncoalesced-remote-settled-hit": 39
+        "uncoalesced-remote-settled-hit": 39,
+        "remote-hit-local-ttl-outlives-remote-freshness": 0,
+        "independent-remote-last-completion-probed": 0
       }
     },
     "recovery": {
@@ -359,7 +364,7 @@
         "reenabled-default-sharing": 0,
         "bypass-preserves-cache:false-request-leaf": 0,
         "bypass-preserves-cache:invalid-coalesce": 10,
-        "bypass-preserves-cache:invalid-request-local": 8,
+        "bypass-preserves-cache:invalid-request-local": 7,
         "bypass-preserves-cache:null-coalesce": 10,
         "bypass-preserves-cache:null-request-local": 8,
         "runtime-ttl-implies-ramp:local": 0,
