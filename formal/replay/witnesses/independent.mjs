@@ -1,6 +1,10 @@
 import { createWitnessRecorder } from "./recorder.mjs";
+import { profiles } from "../features.mjs";
 
-const SOURCE_BUDGET_MS = 10, DEADLINE_ERROR = 4;
+// The source budget is the profile's declared fallback deadline, the input
+// every driver is built from; the classifier keeps no copy of its own.
+const SOURCE_BUDGET_MS = profiles.independent.fixture.fallbackTimeoutMs, DEADLINE_ERROR = 4;
+if (typeof SOURCE_BUDGET_MS !== "number") throw new Error("The independent profile must declare a numeric fallbackTimeoutMs");
 const settled = value => value === 1 || value === 2;
 
 // Independent-call witnesses: public results, read IO and recovery outcomes,
@@ -9,7 +13,7 @@ const settled = value => value === 1 || value === 2;
 export function independentWitnesses(histories, recorder = createWitnessRecorder()) {
   for (const { path, steps, predictions: states } of histories) {
     recorder.enter(path);
-    sourceBudgetWitnesses(path, steps, recorder);
+    independentSourceDeadlineWitnesses(path, steps, recorder);
     const recovered = new Map();
     for (const [i, step] of steps.entries()) {
       recorder.step(i);
@@ -65,7 +69,7 @@ export function independentWitnesses(histories, recorder = createWitnessRecorder
 // later-source-expires-at-own-deadline: such a B expires exactly at its own
 // later deadline after A expired at an earlier step. Two deadlines in one
 // advance, or sources started at one instant, credit neither label.
-export function sourceBudgetWitnesses(path, steps, recorder) {
+export function independentSourceDeadlineWitnesses(path, steps, recorder) {
   let now = 0;
   const beginNow = [], budgets = [], sources = [], loads = [], expired = new Map(), survives = [], ownDeadline = [];
   const staggered = (earlier, source) => earlier.startedAt < source.startedAt && source.startedAt < earlier.deadline;

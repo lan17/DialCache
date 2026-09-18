@@ -16,7 +16,9 @@ export function evaluateSemanticTestReport(data, execution, exitCode, label = 'c
   const assertions = data.testResults.flatMap(file => file.assertionResults);
   const failed = assertions.filter(test => test.status === 'failed');
   const passed = assertions.filter(test => test.status === 'passed').length;
-  const violation = failed.flatMap(test => test.failureMessages).find(message => /Settlement violation/.test(message));
+  // The rule texts, not the bare phrase: a test that quotes the phrase in an
+  // expectation prints it into its failure message when it fails.
+  const violation = failed.flatMap(test => test.failureMessages).find(message => /Settlement violation: (?:\d+ runnable|monotonic clock|wall clock|\w+ gates held)/.test(message));
   const infrastructure = violation !== undefined
     || failed.some(test => test.failureMessages.some(message => /(?:Test|Hook) timed out in/.test(message)));
   const { unhandledErrors } = execution;

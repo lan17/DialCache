@@ -4,10 +4,8 @@ export interface Binding {
   setup: Array<Record<string, unknown>>;
   /** protocol.schema.json definition that every observation for this binding must satisfy. */
   observation: "behaviorObservation" | "coreObservation" | "localClockObservation";
-  /** protocol.schema.json definition of the settlement receipt each observation carries, or null when the driver sends none. */
-  receipt: "settlementReceipt" | null;
-  /** Whether the driver's reported wall clock follows the schedule (controlled) or is the real process clock, which no rule constrains. */
-  wallClock: "controlled" | "process";
+  /** How the coordinator checks causally-ready-v1 for the session: by settlement receipt, by the controlled wall clock alone (core), or not at all (local-clock). */
+  settlement: "receipt" | "wallClock" | "none";
   commands(index: number, observed: unknown, environment: { wallMs: number }): Array<Record<string, unknown>>;
   assert(index: number, observed: unknown): void;
 }

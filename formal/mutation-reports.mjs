@@ -129,6 +129,19 @@ export function goDetection(mutations) {
 // The record of a cohort the measurement could not run for a mutant.
 export const crashedCohort = reason => ({ state: 'crashed', reason, passed: 0, failed: 0, failingTests: [] });
 
+// Portable evidence is the generated and fixed replay cohorts together. A
+// component the measurement could not run leaves portable unmeasured as well,
+// as a noncompiling mutant does: the other component alone is not portable
+// evidence, and a crashed cohort is never a detection.
+export function portableCohort(generated, fixed) {
+  for (const [name, component] of Object.entries({ generated, fixed })) {
+    if (component.state === 'crashed') return crashedCohort(`${name}: ${component.reason}`);
+  }
+  return { state: generated.failed + fixed.failed > 0 ? 'detected' : 'survived',
+    passed: generated.passed + fixed.passed, failed: generated.failed + fixed.failed,
+    failingTests: [...generated.failingTests, ...fixed.failingTests], components: ['generated', 'fixed'] };
+}
+
 // One rule for both ports: the port's own unit suite is informational for a
 // mutant, so when its evaluation throws (a synctest bubble panicking on a
 // goroutine the fault leaves blocked, an unhandled rejection with no failed
@@ -140,7 +153,11 @@ export const crashedCohort = reason => ({ state: 'crashed', reason, passed: 0, f
 // failure keep the strict rule: their throw fails the measurement.
 export function classifyCohort({ baseline, cohort }, evaluate) {
   try { return evaluate(); } catch (error) {
-    if (baseline) throw error;
+    if (baseline) {
+      // A baseline that violates settlement fails the measurement; name the rule so the log alone says why.
+      if (error.settlementViolation !== undefined) error.message += ` (settlement violation: ${error.settlementViolation})`;
+      throw error;
+    }
     if (error.settlementViolation !== undefined) return crashedCohort(`settlement violation: ${error.settlementViolation}`);
     if (cohort !== 'ordinary') throw error;
     return crashedCohort(error.message);

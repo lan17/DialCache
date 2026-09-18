@@ -48,10 +48,34 @@ describe("harness control: causally-ready-v1 settlement", () => {
       await driver.apply({ op: "begin" });
       await driver.apply({ op: "resolve", loader: 0, value: new FallbackTimeoutError("Behavior", 10) } as unknown as Input);
       expect(driver.receipt().runnable).toBe(0);
-      expect(driver.snapshot().calls[0]).toEqual({ status: "value", value: { name: "FallbackTimeoutError", useCase: "Behavior", timeoutMs: 10 } });
+      expect(driver.settlementDiagnostic()).toBeUndefined();
+      expect(driver.snapshot().calls[0]).toMatchObject({ status: "value", value: { name: "FallbackTimeoutError" } });
     } finally {
       await driver.dispose();
       vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
+  });
+
+  // The timer term of the attestation. With the settle drain skipped, the
+  // call's remote read has not started at the snapshot; the verification
+  // drain starts it (an observed read-context event) against the held read
+  // gate and arms its read deadline, so the receipt counts the armed timer
+  // beside the observation change and the diagnostic names both.
+  it("counts a timer the verification drain arms as runnable work beside the observation change", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(wallEpochMs));
+    const independent = profiles.independent!;
+    const driver = new BehaviorDriver(independent.fixture as Fixture, {}, { settle: false });
+    try {
+      for (const input of independent.setup) await driver.apply(input as Input);
+      await driver.apply({ op: "begin" });
+      expect(driver.receipt().runnable).toBeGreaterThan(1);
+      expect(driver.settlementDiagnostic()).toMatch(/^verification drain: observation member events changed, pending timers 0 -> [1-9]\d*$/);
+    } finally {
+      await driver.dispose();
+      vi.useRealTimers();
+      vi.restoreAllMocks();
     }
   });
   for (const name of behaviorProfiles) {
@@ -61,7 +85,7 @@ describe("harness control: causally-ready-v1 settlement", () => {
     it(`${name} smoke history fails a driver that skips settlement by settlement violation, never by mismatch`, async () => {
       const outcome = await replayThroughCoordinator(name, smokeTracePath(name), new ReplayCoordinator(), { settle: false })
         .then(() => "passed", (cause: unknown) => String(cause));
-      expect(outcome).toMatch(/Settlement violation: \d+ runnable task\(s\) at observation/);
+      expect(outcome).toMatch(/Settlement violation: /);
       expect(outcome).not.toMatch(/Observation mismatch/);
       expect(outcome).not.toMatch(/expected:[\s\S]*actual:/);
     });

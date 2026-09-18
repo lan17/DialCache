@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { checkSemanticCoverage } from './check-semantic-coverage.mjs';
 import { evaluateSemanticTestReport } from './semantic-reporter.mjs';
 import { checkMutantAnchors, mutantsForPort, readMutantCatalog } from './execution.mjs';
-import { classifyCohort, fingerprintFiles, finishPartial, gateDetections, languages, noncompilingResult, selectMutations, selectionDirectory, selectionFromArguments } from './mutation-reports.mjs';
+import { classifyCohort, fingerprintFiles, finishPartial, gateDetections, languages, noncompilingResult, portableCohort, selectMutations, selectionDirectory, selectionFromArguments } from './mutation-reports.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const language = languages.ts;
@@ -55,11 +55,6 @@ const cohorts = {
 // Generated and fixed cohorts select disjoint protocol rows. Their union
 // measures the full portable suite without replaying any history or vector
 // twice. Keep both component reports, including every failing assertion.
-function portableResult({ generated, fixed }) {
-  return { state: generated.failed + fixed.failed > 0 ? 'detected' : 'survived',
-    passed: generated.passed + fixed.passed, failed: generated.failed + fixed.failed,
-    failingTests: [...generated.failingTests, ...fixed.failingTests], components: ['generated', 'fixed'] };
-}
 // Every shard anchors the whole catalog in the port text before measuring, so
 // a stale anchor anywhere fails each shard the same way it fails the single
 // run; the originals restore the workspace after each mutant.
@@ -137,7 +132,7 @@ try {
     console.log(`baseline ${cohort}: ${report.baselines[cohort].passed} passed`);
     save();
   }
-  report.baselines.portable = portableResult(report.baselines);
+  report.baselines.portable = portableCohort(report.baselines.generated, report.baselines.fixed);
   // The shared language-neutral evaluator produces the baseline witness
   // evidence over the unmodified corpus; the TypeScript suite only checks the gate.
   const evaluated = spawnSync(process.execPath, [resolve(root, 'formal/witnesses.mjs'), 'evaluate', '--profile', 'all', '--out', resolve(output, 'witnesses')],
@@ -176,7 +171,7 @@ try {
       }
       const result = { id: mutation.id, case: mutation.case, description: mutation.description, cohorts: {} };
       for (const cohort of Object.keys(cohorts)) result.cohorts[cohort] = run(mutation.id, cohort, false);
-      result.cohorts.portable = portableResult(result.cohorts);
+      result.cohorts.portable = portableCohort(result.cohorts.generated, result.cohorts.fixed);
       report.mutations.push(result);
       console.log(`${mutation.id}: ${Object.entries(result.cohorts).map(([name, run]) => `${name}=${run.state}`).join(', ')}`);
       save();

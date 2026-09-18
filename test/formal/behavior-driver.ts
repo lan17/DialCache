@@ -102,6 +102,11 @@ function deferred<T>() {
 type Gate = ReturnType<typeof deferred<void>>;
 type Scope = { instance: string; run: <T>(fn: () => T) => T; gate: Gate; lifetime: Promise<void> };
 
+// The first observation member whose encoding differs between two snapshots.
+function firstDifference(before: Record<string, unknown>, after: Record<string, unknown>): string {
+  return Object.keys(after).find(key => JSON.stringify(after[key]) !== JSON.stringify(before[key])) ?? "(none)";
+}
+
 // Only external effects are gated. We never access DialCache's maps, flights,
 // or resolved policy, and no expected observation is passed to this class.
 export class BehaviorDriver {
@@ -111,6 +116,7 @@ export class BehaviorDriver {
   private reported: Observation;
   private settlement: SettlementReceipt = { elapsedMs: 0, runnable: 0,
     held: { loaders: 0, reads: 0, writes: 0, dumps: 0, loads: 0, policies: 0, scopes: 0 } };
+  private diagnostic: string | undefined;
   // Independent event journal for bounded contract monitors. Entries come
   // only from external callbacks, settlements, and public diagnostics.
   private readonly history: EffectsContractEvent[] = [];
@@ -447,8 +453,14 @@ export class BehaviorDriver {
     // work the settle step left behind and the receipt reports it.
     const timers = vi.getTimerCount();
     await vi.advanceTimersByTimeAsync(0);
-    const changed = JSON.stringify(this.observed) === reported ? 0 : 1;
-    this.settlement = { elapsedMs, runnable: changed + Math.abs(vi.getTimerCount() - timers), held };
+    const after = JSON.stringify(this.observed);
+    const changed = after === reported ? 0 : 1;
+    const timerDelta = Math.abs(vi.getTimerCount() - timers);
+    this.settlement = { elapsedMs, runnable: changed + timerDelta, held };
+    // For the harness message only, never for the wire: what the drain did.
+    this.diagnostic = changed + timerDelta === 0 ? undefined : `verification drain: ${changed
+      ? `observation member ${firstDifference(JSON.parse(reported) as Record<string, unknown>, JSON.parse(after) as Record<string, unknown>)} changed`
+      : "observation unchanged"}, pending timers ${timers} -> ${vi.getTimerCount()}`;
     assertPublicationCausality(this.causalHistory);
   }
 
@@ -462,6 +474,10 @@ export class BehaviorDriver {
   snapshot(): Observation { return structuredClone(this.reported); }
 
   receipt(): SettlementReceipt { return structuredClone(this.settlement); }
+
+  // What the verification drain found when the receipt reports runnable work,
+  // for the harness failure message; the receipt itself stays a closed record.
+  settlementDiagnostic(): string | undefined { return this.diagnostic; }
 
   contractHistory(): readonly EffectsContractEvent[] { return structuredClone(this.history); }
 

@@ -52,7 +52,11 @@ match each response's version and ID. Responses contain `ok: true` and `result`,
 or `ok: false` and an error. [protocol.schema.json](./replay/protocol.schema.json)
 defines the message, command, observation, fixture and environment shapes.
 Malformed input, unknown commands, mismatched IDs, process failure and transport
-timeouts fail the test. The coordinator performs no cache operations.
+timeouts fail the test. The coordinator performs no cache operations. The schema
+file, not the version constant, is the compatibility unit: `version: 1` has
+stayed while members were added to the `prepare` result (`observation`,
+`receipt`), and a transport that pins exact member sets, as the Go one does,
+moves with the coordinator.
 
 | Request | Purpose |
 | --- | --- |
@@ -155,10 +159,10 @@ driver's settlement receipt, in this order, before comparing the observation:
   begun minus loaders resolved or rejected; for each effect kind, operations
   started while its hold fault was on minus those released by name; scopes
   opened minus closed, setup included. Hold faults are attributed per
-  observation interval: a command that turns a hold on or off must precede
-  every effect-starting command of its interval, setup included, and the
-  ledger refuses any other schedule as an infrastructure error, not as a
-  violation.
+  observation interval, so a command that turns a hold on or off leads its
+  interval (every current mapping and setup does); the ledger refuses any
+  other schedule as its own limit, an infrastructure error, never as a
+  violation by the driver.
 
 A violated rule fails as `Settlement violation: <rule>`, an infrastructure
 error without comparison markers, so an unsettled driver never earns mutation
@@ -522,9 +526,12 @@ check: `runnable` is the driver's own attestation, verified by one zero-time
 drain rather than by inspecting the executor; timer delivery (R6) is checked
 only through the next observation; core sessions are held to the wall-clock
 rule alone and local-clock sessions to none; and the completion document
-remains the evidence that the whole corpus passed. Each port also keeps a
-no-settle control against its own driver, so a third port writes one the same
-way.
+remains the evidence that the whole corpus passed. In the Node driver a
+zero-delay timer or immediate the library schedules while a fake-timer tick is
+in progress becomes due one millisecond later, so such work stays parked until
+the next advance and `runnable` truthfully reads 0; the cross-port replay shows
+no history lands observable work there. Each port also keeps a no-settle
+control against its own driver, so a third port writes one the same way.
 
 Node 24 is required as test tooling: the coordinator and the witness evaluator
 are Node scripts that a port's test run spawns, and the completion checker and

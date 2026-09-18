@@ -1288,18 +1288,18 @@
     },
     {
       "path": "formal/PORTING.md",
-      "sha256": "42c22a7356108b8ed0d8890a482e33a46185d797e9e0d2a0df2a173b8ba323ba",
+      "sha256": "66d28fdfea23c72e34baa9b79e423c3a16ffa758a4b425a3d5086390e2fa30d7",
       "entries": [
         {"line":1,"title":"Implementing another DialCache port"},
         {"line":14,"title":"What a port supplies"},
         {"line":45,"title":"Shared coordinator protocol"},
-        {"line":84,"title":"Trace and observation contract"},
-        {"line":185,"title":"Observation contract"},
-        {"line":283,"title":"Generated fixtures and fast local tests"},
-        {"line":318,"title":"Complete corpus and reusable acceptance checks"},
-        {"line":426,"title":"Witness evidence"},
-        {"line":516,"title":"Current limitations for a third port"},
-        {"line":535,"title":"New-port acceptance"}
+        {"line":88,"title":"Trace and observation contract"},
+        {"line":189,"title":"Observation contract"},
+        {"line":287,"title":"Generated fixtures and fast local tests"},
+        {"line":322,"title":"Complete corpus and reusable acceptance checks"},
+        {"line":430,"title":"Witness evidence"},
+        {"line":520,"title":"Current limitations for a third port"},
+        {"line":542,"title":"New-port acceptance"}
       ],
       "review": {
         "kind": "tooling-guide",

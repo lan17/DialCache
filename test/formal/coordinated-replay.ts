@@ -28,6 +28,7 @@ interface CoordinatedDriver {
   apply(command: Record<string, unknown>): Promise<void>;
   observe(): unknown;
   receipt(): SettlementReceipt | undefined;
+  settlementDiagnostic?(): string | undefined;
   wallMs(): number;
   dispose(): Promise<void>;
 }
@@ -55,13 +56,13 @@ export async function replayThroughCoordinator(profile: string, path: string, co
   try {
     for (const command of prepared.setup) await driver.apply(command);
     for (let index = 0; ; index++) {
-      const result = request<Observed>({
+      const result = observe<Observed>(driver, () => request<Observed>({
         op: "observe", session: prepared.session, index, settlement,
         observed: parseJSON(JSON.stringify(driver.observe())), environment: { wallMs: driver.wallMs() },
         // A driver without a receipt reports undefined, which the JSON round
         // trip drops; the coordinator alone decides whether one was required.
         receipt: driver.receipt(),
-      });
+      }));
       if (result.complete) {
         complete = true;
         return { steps: result.steps };
@@ -73,6 +74,16 @@ export async function replayThroughCoordinator(profile: string, path: string, co
     // driver failure so the coordinator can be reused for another trace.
     if (!complete) { try { request({ op: "discard", session: prepared.session }); } catch { /* Already released. */ } }
     await driver.dispose();
+  }
+}
+
+// A settlement violation names the rule; the driver's own account of what its
+// verification drain found makes the failure diagnosable from the message.
+function observe<T>(driver: CoordinatedDriver, send: () => T): T {
+  try { return send(); } catch (cause) {
+    const diagnostic = driver.settlementDiagnostic?.();
+    if (diagnostic === undefined || !/Settlement violation/.test(String(cause))) throw cause;
+    throw new Error(`${(cause as Error).message}\n${diagnostic}`, { cause });
   }
 }
 
@@ -96,6 +107,7 @@ class CoordinatedBehaviorDriver implements CoordinatedDriver {
   apply(command: Record<string, unknown>): Promise<void> { return this.driver.apply(command as Input); }
   observe(): Observation { return this.driver.snapshot(); }
   receipt(): SettlementReceipt { return this.driver.receipt(); }
+  settlementDiagnostic(): string | undefined { return this.driver.settlementDiagnostic(); }
   wallMs(): number { return Date.now(); }
   async dispose(): Promise<void> {
     try { await this.driver.dispose(); } finally { vi.useRealTimers(); vi.restoreAllMocks(); }

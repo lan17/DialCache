@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { Readable } from "node:stream";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { bindTrace, profileActions } from "../formal/replay/bindings.mjs";
 import { ReplayCoordinator, settlement } from "../formal/replay/coordinator.mjs";
@@ -15,7 +15,7 @@ import { assertSchema, schema, schemaViolation } from "../formal/replay/schema.m
 import { SettlementLedger, wallEpochMs, type SettlementReceipt } from "../formal/replay/settlement.mjs";
 import { parseJSON, replayLines } from "../formal/replay/validation.mjs";
 import { replaySources } from "../formal/replay/sources.mjs";
-import type { Fixture } from "./formal/behavior-driver.js";
+import { BehaviorDriver, type Fixture, type Input } from "./formal/behavior-driver.js";
 import { replayThroughCoordinator, smokeTracePath } from "./formal/coordinated-replay.js";
 
 type Raw = { states: Array<Record<string, unknown> & { s: Record<string, unknown> }> };
@@ -35,11 +35,11 @@ function replaySession(raw: Raw, profile = "core") {
   // The same ledger the coordinator keeps derives what each observe must
   // carry: a behavior session its receipt and wall clock, core its wall clock
   // alone, local-clock nothing. Tests override `fields` to tamper.
-  const ledger = binding.wallClock === "controlled" ? new SettlementLedger(binding.fixture, binding.setup) : undefined;
+  const ledger = binding.settlement === "none" ? undefined : new SettlementLedger(binding.fixture, binding.setup);
   const settlementFields = (observed: unknown): Record<string, unknown> => {
     if (ledger === undefined) return {};
     const fields = { environment: { wallMs: ledger.wallMs(observed) } };
-    return binding.receipt === null ? fields : { ...fields, receipt: ledger.expected(observed) };
+    return binding.settlement === "receipt" ? { ...fields, receipt: ledger.expected(observed) } : fields;
   };
   const observe = (index: number, observed: unknown, fields = settlementFields(observed)) => {
     const result = request({ op: "observe", session: prepared.session, index, settlement, observed, environment, ...fields });
@@ -293,10 +293,9 @@ describe("settlement receipt contract", () => {
   it("names the receipt definition per binding, in prepare and in the schema", () => {
     for (const profile of Object.keys(profileActions())) {
       const binding = bindTrace(profile, smoke(profile), profile);
-      expect(binding.receipt).toBe(profile === "core" || profile === "local-clock" ? null : "settlementReceipt");
-      expect(binding.wallClock).toBe(profile === "local-clock" ? "process" : "controlled");
+      expect(binding.settlement).toBe(profile === "local-clock" ? "none" : profile === "core" ? "wallClock" : "receipt");
       const { prepared } = replaySession(smoke(profile), profile);
-      expect(prepared.receipt).toBe(binding.receipt);
+      expect(prepared.receipt).toBe(binding.settlement === "receipt" ? "settlementReceipt" : null);
       const response = (receipt: unknown) => roundtrip({ version: 1, id: 1, ok: true, result: { ...prepared, receipt } });
       expect(() => assertSchema(response(prepared.receipt), "response")).not.toThrow();
       expect(() => assertSchema(response("behaviorObservation"), "response")).toThrow(/^Malformed replay response/);
@@ -445,12 +444,57 @@ describe("settlement receipt contract", () => {
       receipts.push(...carried.map(request => request.receipt as SettlementReceipt));
     }
     // The coordinator accepted each one, so every receipt satisfied R2 to R5;
-    // the schedules exercised them with time and gates in play.
+    // the schedules exercised them with time and gates in play. No committed
+    // smoke history carries a fixture work sentinel; the driver checks below
+    // cover the work terms of R3 and R4.
     expect(receipts.every(receipt => receipt.runnable === 0)).toBe(true);
     expect(receipts.some(receipt => receipt.elapsedMs > 0)).toBe(true);
     expect(receipts.some(receipt => receipt.held.loaders > 0)).toBe(true);
     expect(receipts.some(receipt => receipt.held.scopes > 0)).toBe(true);
     expect(receipts.some(receipt => receipt.held.reads > 0 || receipt.held.loads > 0 || receipt.held.policies > 0)).toBe(true);
+  });
+});
+
+describe("fixture work on the receipt clocks", () => {
+  // The two elapsed-time sentinels are consumed inside callbacks the driver
+  // owns: the source callback for sourceWorkMs, the shadow comparator for
+  // comparisonMs. The ledger predicts the same movement from public counters.
+  async function settled(choice: number, commands: Input[]) {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(wallEpochMs));
+    const shadow = profiles.shadow!;
+    const fixture = (shadow.fixture as (choice: number) => Fixture)(choice);
+    const driver = new BehaviorDriver(fixture, {}, {});
+    const ledger = new SettlementLedger(fixture, shadow.setup);
+    try {
+      for (const input of shadow.setup) await driver.apply(input as Input);
+      for (const command of commands) await driver.apply(command);
+      ledger.issue(commands);
+      const observed = driver.snapshot();
+      ledger.assert(driver.receipt(), observed, { wallMs: Date.now() });
+      return { observed, receipt: driver.receipt(), wallMs: Date.now() };
+    } finally {
+      await driver.dispose();
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
+  }
+
+  it("moves both clocks by the source work the fixture declares", async () => {
+    const { observed, receipt, wallMs } = await settled(11, [{ op: "begin" }, { op: "resolve", loader: 0, value: 1 }]);
+    expect(observed.loaders).toBe(1);
+    expect(receipt.elapsedMs).toBe(9);
+    expect(wallMs).toBe(wallEpochMs + 9);
+  });
+
+  it("moves both clocks by the comparison work the fixture declares", async () => {
+    // A dark remote: the source answers the call, the shadow read and decode
+    // are released by name, and the comparison runs when the decode lands.
+    const { observed, receipt, wallMs } = await settled(9, [{ op: "seed", value: 1, ageMs: 0 }, { op: "begin" }, { op: "resolve", loader: 0, value: 1 },
+      { op: "release", effect: "read", index: 0 }, { op: "release", effect: "load", index: 0 }]);
+    expect(observed.comparisons).toBe(1);
+    expect(receipt.elapsedMs).toBe(10);
+    expect(wallMs).toBe(wallEpochMs + 10);
   });
 });
 

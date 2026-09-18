@@ -5,7 +5,7 @@ import { resolve, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { checkMutantAnchors, mutantsForPort, readMutantCatalog } from './execution.mjs';
-import { classifyCohort, fingerprintFiles, finishPartial, gateDetections, languages, noncompilingResult, selectMutations, selectionDirectory, selectionFromArguments } from './mutation-reports.mjs';
+import { classifyCohort, fingerprintFiles, finishPartial, gateDetections, languages, noncompilingResult, portableCohort, selectMutations, selectionDirectory, selectionFromArguments } from './mutation-reports.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -92,7 +92,7 @@ export function evaluateGoTestEvents(lines, exitCode) {
       // travels with the error so the runner records a mutant's cohort against
       // it by name (mutation-reports.mjs classifyCohort) instead of crediting
       // or discounting it.
-      const violation = /[^\n]*Settlement violation[^\n]*/.exec(output);
+      const violation = /[^\n]*Settlement violation: (?:\d+ runnable|monotonic clock|wall clock|\w+ gates held)[^\n]*/.exec(output);
       if (violation !== null) {
         const error = new Error(`settlement violation under mutation is not comparison evidence: ${name}`);
         error.settlementViolation = violation[0].trim();
@@ -115,11 +115,6 @@ export function evaluateGoTestEvents(lines, exitCode) {
   return { state: failed ? 'detected' : 'survived', passed: leaves.length - failed, failed,
     failingTests: failedLeaves, assertionKinds, assertionEvidence: Object.fromEntries(failedLeaves.map(name => [name, outputs.get(name)])),
     executedTests: leaves };
-}
-
-function union(generated, fixed) {
-  return { state: generated.failed + fixed.failed ? 'detected' : 'survived', passed: generated.passed + fixed.passed,
-    failed: generated.failed + fixed.failed, failingTests: [...generated.failingTests, ...fixed.failingTests], components: ['generated', 'fixed'] };
 }
 
 // --shard=<index>/<count> measures a contiguous slice of the catalog after the
@@ -236,7 +231,7 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}
       report.baselines[cohort] = run('baseline', cohort, true);
       console.log(`baseline ${cohort}: ${report.baselines[cohort].passed} passing leaf tests`); save();
     }
-    report.baselines.portable = union(report.baselines.generated, report.baselines.fixed);
+    report.baselines.portable = portableCohort(report.baselines.generated, report.baselines.fixed);
     for (const mutation of selected) {
       const editedPaths = new Set();
       try {
@@ -255,7 +250,7 @@ export function measureGoSemantics({ shard = { index: 1, count: 1 }, only } = {}
         }
         const result = { id: mutation.id, case: mutation.case, description: mutation.description, cohorts: {} };
         for (const cohort of Object.keys(cohorts)) result.cohorts[cohort] = run(mutation.id, cohort, false);
-        result.cohorts.portable = union(result.cohorts.generated, result.cohorts.fixed);
+        result.cohorts.portable = portableCohort(result.cohorts.generated, result.cohorts.fixed);
         report.mutations.push(result);
         console.log(`${mutation.id}: ${Object.entries(result.cohorts).map(([name, value]) => `${name}=${value.state}(${value.failed})`).join(', ')}`); save();
       } finally { for (const path of editedPaths) writeFileSync(resolve(workspace, path), originals.get(path)); }

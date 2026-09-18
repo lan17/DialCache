@@ -73,7 +73,7 @@ async function replay(trace: Trace, harness: { settle?: boolean } = {}) {
       // violation is the driver's own infrastructure failure and must never
       // carry the expected/actual markers the mutation lanes credit.
       try { ledger.assert(driver.receipt(), observed, { wallMs: Date.now() }); }
-      catch (cause) { throw new Error(`${context}: ${(cause as Error).message}`, { cause }); }
+      catch (cause) { throw new Error([`${context}: ${(cause as Error).message}`, driver.settlementDiagnostic()].filter(Boolean).join("\n"), { cause }); }
       try {
         // Check C23/C25/C26 directly on observed history, independently of
         // expected Quint phases, timestamps, and outcome predictions.

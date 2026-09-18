@@ -28,6 +28,7 @@ const shared = await import(new URL("../formal/mutation-reports.mjs", import.met
   typescriptDetection(mutations: Mutation[], cases: { id: string; vectors: unknown[] }[]): Record<string, unknown>;
   classifyCohort<T>(selection: { baseline: boolean; cohort: string }, evaluate: () => T): T | Cohort;
   crashedCohort(reason: string): Cohort;
+  portableCohort(generated: Cohort, fixed: Cohort): Cohort;
   noncompilingResult(mutation: CatalogEntry, cohorts: string[], reason: string): Mutation;
   gateDetections(language: Language, report: Report, entries: CatalogEntry[], options?: { directory?: string; summarize?: boolean }): void;
   languages: { ts: Language; go: Language };
@@ -41,7 +42,7 @@ const merge = await import(new URL("../formal/merge-mutation-reports.mjs", impor
 const { challengesByMutant } = await import(new URL("../formal/execution.mjs", import.meta.url).href) as {
   challengesByMutant(manifest: { challenges: Array<{ id: string; nativeMutants?: { mutant?: string } }> }): Map<string, string[]>;
 };
-const { parseShard, parseOnly, selectionFromArguments, partitionMutations, selectMutations, selectionDirectory, fingerprintFiles, requiredDetectionRegressions, goDetection, typescriptDetection, gateDetections, languages, classifyCohort, crashedCohort, noncompilingResult } = shared;
+const { parseShard, parseOnly, selectionFromArguments, partitionMutations, selectMutations, selectionDirectory, fingerprintFiles, requiredDetectionRegressions, goDetection, typescriptDetection, gateDetections, languages, classifyCohort, crashedCohort, noncompilingResult, portableCohort } = shared;
 const { canonical, mergeShardReports, readShardReports, mergeMutationReports } = merge;
 
 const repo = new URL("../", import.meta.url);
@@ -306,7 +307,12 @@ describe("mutation shard merge", () => {
     const violation = "trace_11.itf.json step 25 action beginCall choice 0: Settlement violation: 1 runnable task(s) at observation";
     const violated = () => { throw Object.assign(new Error("M37/generated: infrastructure/import error"), { settlementViolation: violation }); };
     for (const cohort of ["ordinary", "generated", "fixed"]) expect(classifyCohort({ baseline: false, cohort }, violated), cohort).toEqual(crashedCohort(`settlement violation: ${violation}`));
-    expect(() => classifyCohort({ baseline: true, cohort: "generated" }, violated)).toThrow(/infrastructure\/import error/);
+    expect(() => classifyCohort({ baseline: true, cohort: "generated" }, violated)).toThrow(/infrastructure\/import error \(settlement violation: trace_11/);
+    // Portable is unmeasured whenever one of its components is, in both runners.
+    const detected: Cohort = { state: "detected", passed: 2, failed: 1, failingTests: ["t"] };
+    expect(portableCohort(crashedCohort(`settlement violation: ${violation}`), detected)).toEqual(crashedCohort(`generated: settlement violation: ${violation}`));
+    expect(portableCohort(detected, crashedCohort("panic"))).toEqual(crashedCohort("fixed: panic"));
+    expect(portableCohort(measured as Cohort, detected)).toEqual({ state: "detected", passed: 5, failed: 1, failingTests: ["t"], components: ["generated", "fixed"] });
     // A noncompiling mutant is recorded with every cohort crashed, so the gate names it.
     const entry: CatalogEntry = { id: "M03", case: "c", description: "d", requiredDetections: ["generated", "portable"] };
     const result = noncompilingResult(entry, ["ordinary", "generated", "fixed", "portable"], "M03: noncompiling mutant");

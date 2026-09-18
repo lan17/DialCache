@@ -39,7 +39,7 @@ async function replay(profile: Profile, trace: Trace, harness: { settle?: boolea
       // violation is the driver's own infrastructure failure and must never
       // carry the expected/actual markers the mutation lanes credit.
       try { ledger.assert(driver.receipt(), observed, { wallMs: Date.now() }); }
-      catch (cause) { throw new Error(`${context}: ${(cause as Error).message}`, { cause }); }
+      catch (cause) { throw new Error([`${context}: ${(cause as Error).message}`, driver.settlementDiagnostic()].filter(Boolean).join("\n"), { cause }); }
       try { assertFeatureObservation(profile, step, observed); } catch (cause) { throw mismatch(cause); }
     }
   } finally { await driver.dispose(); }

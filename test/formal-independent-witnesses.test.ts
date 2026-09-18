@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { parseTrace, profiles } from "../formal/replay/features.mjs";
-import { sourceBudgetWitnesses } from "../formal/replay/witnesses/independent.mjs";
+import { independentSourceDeadlineWitnesses } from "../formal/replay/witnesses/independent.mjs";
 import { standaloneRecorder } from "../formal/replay/witnesses/recorder.mjs";
 
 type Integer = { "#bigint": string };
@@ -26,7 +26,7 @@ function history(name: string): State[] {
 }
 function witnesses(name: string, states: State[]) {
   const recorder = standaloneRecorder(name);
-  sourceBudgetWitnesses(name, parseTrace({ states }, name, independent).steps, recorder);
+  independentSourceDeadlineWitnesses(name, parseTrace({ states }, name, independent).steps, recorder);
   return { labels: recorder.labels(), provenance: recorder.provenance() };
 }
 const integer = (value: number): Integer => ({ "#bigint": String(value) });
@@ -87,6 +87,30 @@ describe("independent source-budget witnesses from inputs and public observation
     const states = history(name);
     resettle(states, nth(states, "advance", 1), 0, 3);
     expect(witnesses("probe", states).labels.size).toBe(0);
+  });
+
+  // The independence clauses: the later source must have started inside the
+  // earlier budget, and its own deadline must be delivered by the advance that
+  // crosses it. Start the later source at the earlier deadline instead.
+  it.each([[staggeredExpire, ownDeadline], [staggeredSettle, survives]])("does not credit a later source that starts at the earlier deadline: %s", (name, label) => {
+    const states = history(name);
+    const first = nth(states, "advance");
+    rechoose(first, 10);
+    resettle(states, first, 0, 4);
+    expect(witnesses("probe", states).labels.has(label)).toBe(false);
+  });
+
+  it("does not credit an own-deadline error that surfaces after the crossing advance", () => {
+    const states = history(staggeredExpire);
+    const crossing = states.at(-1)!;
+    crossing.s.o.calls = [integer(4), integer(0)];
+    const late = structuredClone(crossing);
+    late.input = { name: "policy", choice: integer(0) };
+    late["mbt::actionTaken"] = "policy";
+    rechoose(late, 0);
+    late.s.o.calls = [integer(4), integer(4)];
+    states.push(late);
+    expect(witnesses("probe", states).labels.has(ownDeadline)).toBe(false);
   });
 
   it("credits neither label when both sources start at one instant and expire in one advance", () => {
