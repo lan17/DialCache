@@ -343,6 +343,7 @@ pub fn protocol_groups(selection: &str) -> BTreeMap<String, Vec<Value>> {
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
     use super::*;
 
     #[test]

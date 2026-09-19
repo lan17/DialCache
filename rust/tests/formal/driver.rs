@@ -43,6 +43,8 @@ pub fn install_panic_hook() {
     }));
 }
 
+type ComparatorFn = Box<dyn Fn(&Val, &Val) -> bool + Send + Sync>;
+
 /// The N-th controlled source failure.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("source failure {0}")]
@@ -176,10 +178,7 @@ impl Shared {
     }
 
     fn raw(&mut self, key: &str, elapsed_ms: i64) -> Option<Vec<u8>> {
-        let expired = match self.values.get(key) {
-            None => return None,
-            Some(item) => item.expires <= elapsed_ms,
-        };
+        let expired = self.values.get(key)?.expires <= elapsed_ms;
         if expired {
             self.values.remove(key);
             return None;
@@ -722,7 +721,7 @@ impl Driver {
             .and_then(Value::as_str)
             .map(str::to_string);
         let comparison_ms = number(self.fixture.get("comparisonMs"));
-        let comparator: Box<dyn Fn(&Val, &Val) -> bool + Send + Sync> = match comparator_mode {
+        let comparator: ComparatorFn = match comparator_mode {
             None => Box::new(|a: &Val, b: &Val| a == b),
             Some(mode) => {
                 let shared = shared.clone();
