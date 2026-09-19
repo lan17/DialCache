@@ -269,8 +269,9 @@ function shadowHistory(steps, path) {
 // loader's start while its deadline is pending; a caller's maximum while its
 // read is held, its snapshot retained or its refill authorized; its recovery
 // flag while it is pending; its refill authority once a loader has started;
-// its error while it decodes a candidate. The instant a loader settled, a
-// decode's value and a candidate's stamps and fence are not compared.
+// its error, the outcome its flight recorded, while it decodes a candidate.
+// The instant a loader settled, a decode's value and a candidate's stamps and
+// fence are not compared.
 const publicChannels = ["o", "io"];
 const carriesPrivateState = predictions => predictions !== undefined
   && predictions.some(state => Object.keys(state).some(field => !publicChannels.includes(field)));
@@ -293,7 +294,7 @@ function modelView(state, context) {
       ...(read !== undefined ? { maxAge: read.ttls.retentionMs } : snapshot !== undefined ? { maxAge: snapshot.maximum } : authority.retentionMs > 0 ? { maxAge: authority.retentionMs } : {}),
       ...(result === CALL_PENDING ? { canRecover: snapshot !== undefined } : {}),
       ...(source >= 0 ? { canWrite: authority.retentionMs > 0 } : {}),
-      ...(phase === RECOVERY_DECODE ? { error: snapshot.error } : {}) };
+      ...(phase === RECOVERY_DECODE ? { error: authority.result } : {}) };
   });
   const readViews = Array.from({ length: o.reads }, (_, index) => {
     const held = reads.find(read => read.read === index);

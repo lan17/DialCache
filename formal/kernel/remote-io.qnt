@@ -5,9 +5,11 @@ module remote_io {
   // remote layer unobserved (`serving::judgeRelease`) and, when the traversal
   // reaches it, dispatches a read (counted then, its budget on the drivers'
   // io channel) and registers the caller's flight, so a follower released
-  // while the read is pending joins it through the registries; `settleRead`
-  // observes the frame with the state current at settlement and either holds
-  // a decode (counted then) or starts the flight's loader with the authority
+  // while the read is pending joins it through the registries; a traversal
+  // that starts a source without the remote layer starts it at once, under
+  // the next loader ordinal. `settleRead` observes the frame with the state
+  // current at settlement (`remote_frames::observe`) and either holds a
+  // decode (counted then) or starts the flight's loader with the authority
   // that read fixed (`serving::authority`: refill denied after a failed or
   // expired read, the fence the read observed, `remote_frames::fenceFor`);
   // `settleLoad` completes the flight from a decoded frame, warming local
@@ -18,15 +20,18 @@ module remote_io {
   // accept (`recovery`), in which case a recovery decode is held and the
   // flight stays pending and joinable.
   //
-  // A flight is one `sources` record from its read dispatch to its
-  // completion; `loaders` maps the drivers' loader ordinal (`o.loaders`) to
-  // the flight it runs for, so `sources.length()` counts flights and
-  // `loaders.length() == o.loaders`, and a flight whose decode failed restarts
-  // a loader under a new ordinal. Held reads and decodes are pending-only
-  // records: a settled one leaves nothing behind. A read whose deadline was
-  // delivered owns nothing (`flight` NO_OWNER) and stays until its late reply
-  // drains. The adapter's read fault is per release (`failed`), so
-  // `readFailed` stays false in a held profile.
+  // A flight is one `sources` record from its start (a read dispatch, or a
+  // source started at admission or at a release without the remote layer) to
+  // its completion; `loaders` maps the drivers' loader ordinal (`o.loaders`)
+  // to the flight it runs for, so `sources.length()` counts flights and
+  // `loaders.length() == o.loaders`: a source that starts as a new flight
+  // takes the next ordinal (`mapLoader`), a loader started later for a held
+  // read's flight maps itself (`startLoader`), and a flight whose decode
+  // failed restarts a loader under a new ordinal. Held reads and decodes are
+  // pending-only records: a settled one leaves nothing behind. A read whose
+  // deadline was delivered owns nothing (`flight` NO_OWNER) and stays until
+  // its late reply drains. The adapter's read fault is per release
+  // (`failed`), so `readFailed` stays false in a held profile.
   //
   // The io channel (BEHAVIOR.md, `readIO`) is a mandatory field written by
   // the transitions that have each fact in hand: `budgets` one row per
@@ -50,8 +55,8 @@ module remote_io {
   // is written with and the recovery maximum).
   type HeldRead = { read: int, flight: int, ttls: Ttls }
   // A held decode: the drivers' index, its flight, the TTLs in force (a
-  // recovery decode carries no local TTL and warms nothing), the bytes and
-  // whether it is a recovery decode.
+  // recovery decode carries none, `NO_TTLS`: it warms nothing and its maximum
+  // is the snapshot's), the bytes and whether it is a recovery decode.
   type HeldLoad = { load: int, flight: int, ttls: Ttls, value: int, recovery: bool }
   type IO = { budgets: List[int], aborted: List[int], sourceErrors: List[int] }
   pure val NO_IO: IO = { budgets: List(), aborted: List(), sourceErrors: List() }
@@ -67,17 +72,19 @@ module remote_io {
   pure def latestLoader(state: Held[r], flight: int): int =
     state.loaders.indices().fold(NO_OWNER, (latest, ordinal) =>
       if (state.loaders.nth(ordinal) == flight and ordinal > latest) ordinal else latest)
+  // A source a step started as a new flight (the latest `sources` record)
+  // runs its loader at once, under the drivers' next ordinal: the mapping of
+  // a started source, stated once for admission and release.
+  pure def mapLoader(before: Held[r], after: Held[r]): Held[r] =
+    if (after.o.loaders > before.o.loaders) { loaders: after.loaders.append(after.sources.length() - 1), ...after } else after
 
   // -- Admission -----------------------------------------------------------------
 
   // Every caller has an io row for the error identity it may return; a
-  // bypass source started at admission runs its loader at once, under the
-  // next ordinal.
+  // bypass source started at admission takes the next ordinal.
   pure def admit(state: Held[r], layout: Serving::Layout, call: Call): Held[r] = {
     val admitted = Serving::admit(state, layout, call)
-    val recorded = { io: { sourceErrors: admitted.io.sourceErrors.append(0), ...admitted.io }, ...admitted }
-    if (Serving::participating(state, layout, call)) recorded
-    else { loaders: recorded.loaders.append(recorded.sources.length() - 1), ...recorded }
+    mapLoader(state, { io: { sourceErrors: admitted.io.sourceErrors.append(0), ...admitted.io }, ...admitted })
   }
 
   // -- Release: the traversal up to the remote layer -----------------------------
@@ -100,13 +107,16 @@ module remote_io {
     }
   }
   // The release judged with the remote layer unobserved: a traversal that
-  // reaches it dispatches the read; one that does not is the layered release.
+  // reaches the remote layer dispatches the read; one that starts a source
+  // without it (a reply without the remote layer, or the bypass reply of a
+  // scope closed since admission) starts the source at once, under the next
+  // ordinal; one that serves or joins is the layered release.
   pure def release(state: Held[r], layout: Serving::Layout, policyCall: int, resolved: Resolution, ttls: Ttls, budget: int): Held[r] = {
     val judged = Serving::judgeRelease(state, layout, policyCall, resolved, ttls, false)
     val applied = Serving::applyRelease(state, layout, judged, policyCall, ttls)
     match judged.decision.outcome {
       | Starts => if (judged.effective.layers.remote) dispatchRead(applied, layout, judged, ttls, budget)
-        else Serving::startSource(applied, layout, judged.caller, judged.call, judged.decision.slot, judged.open, judged.effective, ttls, false)
+        else mapLoader(applied, Serving::startSource(applied, layout, judged.caller, judged.call, judged.decision.slot, judged.open, judged.effective, ttls, false))
       | JoinsRequest(_) => applied
       | JoinsProcess(_) => applied
       | ServesMemo(_) => applied
@@ -142,21 +152,14 @@ module remote_io {
 
   // -- Read settlement -----------------------------------------------------------------
 
-  // The read judged once with the state current at settlement: the record,
-  // its flight's key, whether the adapter found a frame and the value a fresh
-  // one serves. A read that owns nothing observes nothing.
-  type ReadSettlement = { held: HeldRead, key: int, visible: bool, value: int }
-  pure def judgeRead(state: Held[r], layout: Serving::Layout, read: int, failed: bool): ReadSettlement = {
-    val held = heldRead(state, read)
-    if (not(owning(held))) { held: held, key: NO_OWNER, visible: false, value: NO_VALUE }
-    else {
-      val key = state.sources.nth(held.flight).key
-      val visible = not(failed) and Remote::visible(state, key, layout.operationsPerEntity)
-      {
-        held: held, key: key, visible: visible,
-        value: if (visible) Remote::readableFrame(state, key, layout.operationsPerEntity, held.ttls.freshMs) else NO_VALUE
-      }
-    }
+  // A read that owns its traversal, judged once with the state current at
+  // settlement: its flight's key, whether the adapter found a frame and the
+  // value a fresh one serves.
+  type ReadSettlement = { key: int, visible: bool, value: int }
+  pure def judgeRead(state: Held[r], layout: Serving::Layout, held: HeldRead, failed: bool): ReadSettlement = {
+    val key = state.sources.nth(held.flight).key
+    val observed = Remote::observe(state, key, layout.operationsPerEntity, held.ttls.freshMs, failed)
+    { key: key, visible: observed.visible, value: observed.value }
   }
   // A settled read that still owns its traversal: a frame the read judged
   // fresh is held for decoding; anything else starts the flight's loader with
@@ -164,15 +167,16 @@ module remote_io {
   // read first retaining the flight's snapshot under the classifier in force.
   // A read expired by its deadline drains without effect.
   pure def settleRead(state: Held[r], layout: Serving::Layout, read: int, failed: bool, classifier: int): Held[r] = {
-    val judged = judgeRead(state, layout, read, failed)
-    val held = judged.held
+    val held = heldRead(state, read)
     val settled = { reads: state.reads.select(other => other.read != read), ...state }
     if (not(owning(held))) settled
-    else if (judged.value > NO_VALUE) holdLoad(settled, held.flight, held.ttls, judged.value, false)
     else {
-      val retained = if (failed) settled
-        else Recovery::retain(settled, held.flight, judged.key, layout.operationsPerEntity, judged.visible, held.ttls, classifier)
-      startLoader(retained, layout, held.flight, held.ttls, not(failed), judged.visible)
+      val judged = judgeRead(state, layout, held, failed)
+      if (judged.value > NO_VALUE) holdLoad(settled, held.flight, held.ttls, judged.value, false)
+      else {
+        val retained = if (failed) settled else Recovery::retain(settled, held.flight, judged.key, judged.visible, held.ttls, classifier)
+        startLoader(retained, layout, held.flight, held.ttls, not(failed), judged.visible)
+      }
     }
   }
   // A read whose deadline is delivered: recorded as aborted, disowned (its
@@ -203,16 +207,17 @@ module remote_io {
   // snapshot completes with the error, unclassified; one with a snapshot is
   // classified once and holds a recovery decode while the candidate's age
   // allows, its callers pending and its flight joinable, else completes with
-  // the error, reporting a miss when recovery was allowed.
+  // the error, reporting a miss when recovery was allowed. A deadline error
+  // is a timeout for the recovery rules, as is a propagated timeout the
+  // profile names (`timeout`).
   pure def failed(state: Held[r], layout: Serving::Layout, flight: int, error: int, timeout: bool): Held[r] = {
     val recorded = Flights::recordResult(state, flight, error)
     val snapshot = Recovery::retainedFor(recorded, flight)
     if (snapshot.flight == NO_OWNER) complete(recorded, layout, flight, error)
     else {
-      val classified = Recovery::classified(recorded, flight, error)
-      val recovers = Recovery::mayRecover(snapshot, timeout)
-      if (recovers and Recovery::validCandidate(classified, snapshot))
-        holdLoad(classified, flight, { localMs: 0, freshMs: 0, retentionMs: snapshot.maximum }, snapshot.candidate, true)
+      val classified = Recovery::classified(recorded, snapshot)
+      val recovers = Recovery::mayRecover(snapshot, timeout or error == DEADLINE_ERROR)
+      if (recovers and Recovery::validCandidate(classified, snapshot)) holdLoad(classified, flight, NO_TTLS, snapshot.candidate, true)
       else complete(if (recovers) Recovery::recordOutcome(classified, "miss") else classified, layout, flight, error)
     }
   }
@@ -228,13 +233,16 @@ module remote_io {
   // (warming local storage for the reply's local TTL) or, failed, starts the
   // flight's loader with refill allowed and no fence (the frame it decoded was
   // visible); a recovery decode rechecks the candidate's age and completes the
-  // flight with the candidate or the loader's own error, never publishing.
+  // flight with the candidate or, when it does not serve, with the outcome the
+  // flight's source recorded (its loader's own error), never publishing.
   pure def settleLoad(state: Held[r], layout: Serving::Layout, load: int, failed: bool): Held[r] = {
     val held = heldLoad(state, load)
     val settled = { loads: state.loads.select(other => other.load != load), ...state }
     if (held.recovery) {
-      val outcome = Recovery::recovered(settled, Recovery::retainedFor(settled, held.flight), failed)
-      complete(Recovery::recordOutcome(settled, outcome.label), layout, held.flight, outcome.value)
+      val snapshot = Recovery::retainedFor(settled, held.flight)
+      val outcome = Recovery::recovered(settled, snapshot, failed)
+      complete(Recovery::recordOutcome(settled, outcome.label), layout, held.flight,
+        if (outcome.served) snapshot.candidate else settled.sources.nth(held.flight).result)
     } else if (failed) startLoader(settled, layout, held.flight, held.ttls, true, true)
     else finish(Serving::warm(settled, layout, state.sources.nth(held.flight), held.value, held.ttls.localMs), layout, held.flight, held.value)
   }

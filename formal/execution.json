@@ -786,7 +786,8 @@
         "independentRecoveryAtCapturedAgeBoundaryTest",
         "independentRecoveriesServeDistinctAcquiredSnapshotsTest",
         "freshDecodeFailureCannotRecoverTest",
-        "visibleStaleMissCarriesNoFenceAndRefillsTest"
+        "visibleStaleMissCarriesNoFenceAndRefillsTest",
+        "readExpiryStartsItsLoaderAtTheReadsDueInstantTest"
       ],
       "profile": "independent",
       "generate": {
@@ -807,7 +808,8 @@
         "acceptedFreshDecodeSurvivesOtherInvalidationTest",
         "recoveryPolicyIsCapturedPerCallerTest",
         "freshDecodeFailureCannotRecoverTest",
-        "visibleStaleMissCarriesNoFenceAndRefillsTest"
+        "visibleStaleMissCarriesNoFenceAndRefillsTest",
+        "readExpiryStartsItsLoaderAtTheReadsDueInstantTest"
       ]
     },
     {
@@ -1493,12 +1495,12 @@
       "source": "formal/kernel/deadlines.qnt",
       "model": "formal/dialcache-source-connection.qnt",
       "invariant": "sourceOriginsMatchContract",
-      "before": "started: state.started.append(state.now),",
-      "after": "started: state.started.append(0),",
+      "before": "at: state.now + budget }), ...state }",
+      "after": "at: budget }), ...state }",
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M33",
-        "text": "Same native fault as source-deadline-epoch: M33 judges a source settlement against a budget anchored at the clock origin rather than the source start, which is kernel/deadlines.qnt stamp appending 0 instead of the current time to started, so that reached measures the budget from the origin. source-budgets/heldPolicyDoesNotSpendSourceBudgetTest is the expected evidence in both ports."
+        "text": "Same native fault as source-deadline-epoch: M33 judges a source settlement against a budget anchored at the clock origin rather than the source start, which is kernel/deadlines.qnt due registering a deadline at the bare budget instead of the current instant plus the budget, so deliver expires a source, and arrival rejects its late result, at the origin plus its budget. source-budgets/heldPolicyDoesNotSpendSourceBudgetTest is the expected evidence in both ports."
       }
     },
     {
@@ -1600,15 +1602,15 @@
     {
       "id": "independent-wrong-recovered-value",
       "contract": "C43",
-      "source": "formal/kernel/recovery.qnt",
+      "source": "formal/kernel/remote-io.qnt",
       "model": "formal/dialcache-independent-connection.qnt",
       "invariant": "independentRecoveryMatchesContract",
-      "before": "value: if (valid) snapshot.candidate else snapshot.error",
-      "after": "value: if (valid) VALUE_TWO else snapshot.error",
+      "before": "if (outcome.served) snapshot.candidate else settled.sources.nth(held.flight).result)",
+      "after": "if (outcome.served) VALUE_TWO else settled.sources.nth(held.flight).result)",
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M41",
-        "text": "M41 is the native twin of kernel/recovery.qnt recovered serving a constant other than the retained candidate: both ports decode the retained candidate and then serve an undefined or zero value, the only wrong constant expressible for a generic value type. independent/independentRecoveriesServeDistinctAcquiredSnapshotsTest and recovery/coalescedRecoveryClassifiesAndDecodesOnceTest are the expected evidence."
+        "text": "M41 is the native twin of kernel/remote-io.qnt settleLoad completing a served recovery with a constant other than the retained candidate: both ports decode the retained candidate and then serve an undefined or zero value, the only wrong constant expressible for a generic value type. independent/independentRecoveriesServeDistinctAcquiredSnapshotsTest and recovery/coalescedRecoveryClassifiesAndDecodesOnceTest are the expected evidence."
       }
     },
     {
@@ -1661,6 +1663,7 @@
       "invariant": "independentSourceOriginsMatchContract",
       "before": "at: state.now + budget }), ...state }",
       "after": "at: budget }), ...state }",
+      "measures": "Repeats the profile-source-wrong-clock fault against the independent connection: the same deadline mutation, reached through the held read and loader deadlines instead of the local source list, must also be caught by that monitor's origins clause.",
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M33",
@@ -2196,6 +2199,33 @@
       "invariant": "independentSourceOriginsMatchContract",
       "before": "val moved = Clock::advance(current, earliestDue(current, target) - current.now)",
       "after": "val moved = Clock::advance(current, target - current.now)",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "readExpiryStartsItsLoaderAtTheReadsDueInstantTest",
+        "model": "formal/dialcache-independent-conformance.qnt",
+        "failure": "s.o.calls == List(DEADLINE_ERROR) and s.io.aborted == List(0) and s.o.loaders == 1 and s.o.loads == 0 and s.now == 1000",
+        "family": "deadline-delivery-instant",
+        "profiles": [
+          "formal/dialcache-independent-connection.qnt",
+          "independent"
+        ],
+        "exclusions": {
+          "core": "Does not compose the deadlines module: its sources have no budget and its own deadline delivery is stated in its own text.",
+          "effects": "Does not compose the deadlines module: its sources have no budget and its own deadline delivery is stated in its own text.",
+          "recovery": "Does not compose the deadlines module: its sources have no budget and its own deadline delivery is stated in its own text.",
+          "policy": "Does not compose the deadlines module: its sources have no budget.",
+          "shadow": "Does not compose the deadlines module: its sources have no budget and its own deadline delivery is stated in its own text.",
+          "scope": "Does not compose the deadlines module: its sources have no budget.",
+          "admission": "Does not compose the deadlines module: its sources have no budget and its own deadline delivery is stated in its own text.",
+          "layers": "Does not compose the deadlines module: its sources have no budget.",
+          "recovery-read": "Does not compose the deadlines module: its sources have no budget and its own deadline delivery is stated in its own text.",
+          "local-failure": "Does not compose the deadlines module: its sources have no budget and its own deadline delivery is stated in its own text.",
+          "runtime-boundaries": "Does not compose the deadlines module: its sources have no budget.",
+          "shadow-layers": "Does not compose the deadlines module: its sources have no budget and its own deadline delivery is stated in its own text.",
+          "local-clock": "Does not compose the deadlines module: its sources have no budget and its own deadline delivery is stated in its own text.",
+          "source-budgets": "Composes the budgeted local lifecycle, whose deliveries inside one advance complete the same sources with the same deadline error whichever instants the fold visits, and no delivery there starts further bounded work; only its private settledAt history sees the instant."
+        }
+      },
       "nativeMutants": {
         "kind": "model-only",
         "text": "The fault makes kernel/deadlines.qnt deliver move the clocks straight to the advance's target instead of visiting each due instant, so a deadline is delivered at the end of the advance rather than at its own instant: a loader a read expiry starts is stamped at the wrong instant and its deadline registered from there, which the monitor's origins clause (the read's own due instant plus the budget) rejects. The former text measured this rule through the settledAt it stamped at expiry, which the held shape does not carry. Neither port records when a deadline error settled (TypeScript src/internal/deadline.ts withMonotonicDeadline rejects on the timer or on a late result; Go go/deadline.go awaitDeadline returns its timeout error), and the nearest observable, the fallback duration metric, is emitted for every outcome, so an edit there would be a different, broader fault."
@@ -2375,7 +2405,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M26",
-        "text": "M26 is the native twin of kernel/flights.qnt settleSource leaving processFlights unchanged instead of clearing the settled index: neither port removes a settled process flight from the registry, so later same-key callers join finished work. Joiners get the settled flight's stale outcome rather than stranding, since a blocked follower would deadlock synctest; source-budgets/defaultSourceBudgetExpiresAtSixtySecondsTest and policy/independentCompletionKeepsRegisteredLeaderTest are the evidence."
+        "text": "M26 is the native twin of kernel/flights.qnt forgetSource leaving processFlights unchanged instead of clearing the settled index: neither port removes a settled process flight from the registry, so later same-key callers join finished work. Joiners get the settled flight's stale outcome rather than stranding, since a blocked follower would deadlock synctest; source-budgets/defaultSourceBudgetExpiresAtSixtySecondsTest and policy/independentCompletionKeepsRegisteredLeaderTest are the evidence."
       }
     },
     {
@@ -2688,7 +2718,6 @@
     "layers-process-flight-crosses-instance",
     "layers-late-memo-into-closed-scope",
     "independent-fresh-frame-retained",
-    "independent-deadline-settles-at-start",
     "recovery-read-inclusive-maximum",
     "recovery-read-recovery-warms-local",
     "local-failure-write-fault-publishes",

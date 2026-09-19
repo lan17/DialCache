@@ -1177,9 +1177,6 @@
               "created": {
                 "#bigint": "99000"
               },
-              "error": {
-                "#bigint": "0"
-              },
               "flight": {
                 "#bigint": "0"
               },
@@ -1449,9 +1446,6 @@
               },
               "created": {
                 "#bigint": "99000"
-              },
-              "error": {
-                "#bigint": "0"
               },
               "flight": {
                 "#bigint": "0"
@@ -1731,9 +1725,6 @@
               "created": {
                 "#bigint": "99000"
               },
-              "error": {
-                "#bigint": "0"
-              },
               "flight": {
                 "#bigint": "0"
               },
@@ -1923,7 +1914,7 @@
                   "#bigint": "0"
                 },
                 "retentionMs": {
-                  "#bigint": "5000"
+                  "#bigint": "0"
                 }
               },
               "value": {
@@ -2024,9 +2015,6 @@
               },
               "created": {
                 "#bigint": "99000"
-              },
-              "error": {
-                "#bigint": "3"
               },
               "flight": {
                 "#bigint": "0"
@@ -2217,7 +2205,7 @@
                   "#bigint": "0"
                 },
                 "retentionMs": {
-                  "#bigint": "5000"
+                  "#bigint": "0"
                 }
               },
               "value": {
@@ -2320,9 +2308,6 @@
               },
               "created": {
                 "#bigint": "99000"
-              },
-              "error": {
-                "#bigint": "3"
               },
               "flight": {
                 "#bigint": "0"
@@ -4213,9 +4198,6 @@
               },
               "created": {
                 "#bigint": "99010"
-              },
-              "error": {
-                "#bigint": "0"
               },
               "flight": {
                 "#bigint": "3"
@@ -7311,9 +7293,6 @@
               "created": {
                 "#bigint": "100015"
               },
-              "error": {
-                "#bigint": "0"
-              },
               "flight": {
                 "#bigint": "5"
               },
@@ -7585,7 +7564,7 @@
                   "#bigint": "0"
                 },
                 "retentionMs": {
-                  "#bigint": "2000"
+                  "#bigint": "0"
                 }
               },
               "value": {
@@ -7693,9 +7672,6 @@
               },
               "created": {
                 "#bigint": "100015"
-              },
-              "error": {
-                "#bigint": "3"
               },
               "flight": {
                 "#bigint": "5"

@@ -21,12 +21,15 @@ module recovery {
   // classified once (the classifications count instruments every classifier
   // but the built-in timeout-only default); recovery is allowed by ALLOW, or
   // by TIMEOUT_ONLY for a timeout (a delivered or late deadline, or a
-  // propagated timeout the profile names); DENY and ERROR never recover. A
-  // recovery decode is held while the candidate's age still allows it
+  // propagated timeout the profile names; `remote_io::failed` decides which
+  // errors are timeouts); DENY never recovers, and a profile decodes a
+  // classifier that throws to DENY, as the implementations do. A recovery
+  // decode is held while the candidate's age still allows it
   // (`cache_rules.recoveryAgeAllowed`, no fresh lower bound: a wall rollback
   // may make it fresh again) and its settlement rechecks the same; the served
-  // value is the candidate, the returned error otherwise the loader's own. A
-  // recovered value completes its flight without publication.
+  // value is the candidate, and a flight that does not serve it completes with
+  // the outcome its source recorded (`remote_io::settleLoad`). A recovered
+  // value completes its flight without publication.
   import cache_rules.* from "../cache-rules"
   import conformance_observations.* from "../conformance-observations"
   import encodings.* from "./encodings"
@@ -40,13 +43,11 @@ module recovery {
   pure val TIMEOUT_ONLY = 0
   pure val ALLOW = 1
   pure val DENY = 2
-  pure val ERROR = 3
 
   // Per recoverable flight: the candidate (0 when none), the frame's stamp at
-  // the read, the maximum admitted for it, the classifier in force and the
-  // error its loader returned (CALL_PENDING until it fails).
-  type Snapshot = { flight: int, candidate: int, created: int, maximum: int, classifier: int, error: int }
-  pure val NO_SNAPSHOT: Snapshot = { flight: NO_OWNER, candidate: NO_VALUE, created: 0, maximum: 0, classifier: NONE, error: CALL_PENDING }
+  // the read, the maximum admitted for it and the classifier in force.
+  type Snapshot = { flight: int, candidate: int, created: int, maximum: int, classifier: int }
+  pure val NO_SNAPSHOT: Snapshot = { flight: NO_OWNER, candidate: NO_VALUE, created: 0, maximum: 0, classifier: NONE }
   type Recovering[r] = Remote::Frames[{ o: Observation, retained: List[Snapshot] | r }]
 
   pure def retainedFor(state: Recovering[r], flight: int): Snapshot = {
@@ -61,7 +62,7 @@ module recovery {
   // At read settlement, for a read that completed without serving: the
   // snapshot of the flight under the classifier in force, with the visible
   // frame as its candidate when its age lies in [freshness, maximum).
-  pure def retain(state: Recovering[r], flight: int, key: int, operationsPerEntity: int, visible: bool, ttls: Ttls, classifier: int): Recovering[r] =
+  pure def retain(state: Recovering[r], flight: int, key: int, visible: bool, ttls: Ttls, classifier: int): Recovering[r] =
     if (classifier == NONE) state else {
       val created = state.created.nth(key)
       val stale = visible and retainedAgeAllowed(created, Clock::wallOf(state), ttls.freshMs, ttls.retentionMs)
@@ -70,34 +71,25 @@ module recovery {
         candidate: if (stale) state.remoteValues.nth(key) else NO_VALUE,
         created: created,
         maximum: ttls.retentionMs,
-        classifier: classifier,
-        error: CALL_PENDING
+        classifier: classifier
       })
     }
 
-  // Classification at loader failure.
+  // Classification at loader failure, for the snapshot the flight retained.
   pure def classifies(snapshot: Snapshot): bool = snapshot.classifier != TIMEOUT_ONLY
   pure def mayRecover(snapshot: Snapshot, timeout: bool): bool =
     snapshot.classifier == ALLOW or (snapshot.classifier == TIMEOUT_ONLY and timeout)
   pure def validCandidate(state: Recovering[r], snapshot: Snapshot): bool =
     snapshot.candidate > NO_VALUE and recoveryAgeAllowed(snapshot.created, Clock::wallOf(state), snapshot.maximum)
-  // The classification counted and the loader's error recorded on the snapshot.
-  pure def classified(state: Recovering[r], flight: int, error: int): Recovering[r] = {
-    val snapshot = retainedFor(state, flight)
-    if (snapshot.flight == NO_OWNER) state else replace({
-      o: { classifications: state.o.classifications + (if (classifies(snapshot)) 1 else 0), ...state.o },
-      ...state
-    }, { error: error, ...snapshot })
-  }
+  // The classification counted.
+  pure def classified(state: Recovering[r], snapshot: Snapshot): Recovering[r] =
+    { o: { classifications: state.o.classifications + (if (classifies(snapshot)) 1 else 0), ...state.o }, ...state }
   pure def recordOutcome(state: Recovering[r], label: str): Recovering[r] =
     { o: { recovery: state.o.recovery.append(label), ...state.o }, ...state }
-  // What a recovery decode settles to: the label and the value the flight completes with.
-  type Recovered = { label: str, value: int }
+  // What a recovery decode settles to: the label and whether the candidate serves.
+  type Recovered = { label: str, served: bool }
   pure def recovered(state: Recovering[r], snapshot: Snapshot, failed: bool): Recovered = {
-    val valid = not(failed) and validCandidate(state, snapshot)
-    {
-      label: if (failed) "deserialization_error" else if (valid) "served" else "miss",
-      value: if (valid) snapshot.candidate else snapshot.error
-    }
+    val served = not(failed) and validCandidate(state, snapshot)
+    { label: if (failed) "deserialization_error" else if (served) "served" else "miss", served: served }
   }
 }

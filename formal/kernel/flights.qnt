@@ -77,8 +77,6 @@ module flights {
     requestFlights: state.requestFlights.foldl(List(), (out, owner) => out.append(if (owner == index) NO_OWNER else owner)),
     ...state
   }
-  pure def settleSource(state: Registry[r, p], index: int, result: int): Registry[r, p] =
-    forgetSource(recordResult(state, index, result), index)
   pure def ownedBy(state: Registry[r, p], index: int): Set[int] =
     state.owners.indices().filter(call => state.owners.nth(call) == index)
 

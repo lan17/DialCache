@@ -298,17 +298,19 @@ module serving {
     val open = participating(state, layout, call)
     val effective = if (open) gated(resolved, ttls) else BYPASS
     val layers = effective.layers
+    // The read is made when the traversal may reach the remote layer; a read
+    // not made, like a failed one, observes nothing.
     val reads = observed and layers.remote and not(state.readFailed)
     val localValue = if (layers.local) Local::localValue(state, call.instance, call.key, layout.keysPerInstance) else NO_VALUE
-    val remoteValue = if (reads) Remote::readableFrame(state, call.key, layout.operationsPerEntity, ttls.freshMs) else NO_VALUE
+    val remote = Remote::observe(state, call.key, layout.operationsPerEntity, ttls.freshMs, not(reads))
     {
       caller: held.caller,
       call: call,
       open: open,
       effective: effective,
-      remoteValue: remoteValue,
-      visible: reads and Remote::visible(state, call.key, layout.operationsPerEntity),
-      decision: decide(state, layout, call, effective, localValue, remoteValue)
+      remoteValue: remote.value,
+      visible: remote.visible,
+      decision: decide(state, layout, call, effective, localValue, remote.value)
     }
   }
   pure def layeredRelease(state: Served[r], layout: Layout, policyCall: int, resolved: Resolution, ttls: Ttls): LayeredRelease =

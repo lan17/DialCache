@@ -58,9 +58,15 @@ module remote_frames {
   // A frame the adapter returns: present, retained and (tracked) fence-cleared, whatever its age.
   pure def visible(state: Frames[r], key: int, operationsPerEntity: int): bool =
     state.remoteValues.nth(key) > NO_VALUE and retained(state, key) and fenceCleared(state, key, operationsPerEntity)
-  // A frame the traversal serves: visible and fresh for the reply's freshness.
-  pure def readableFrame(state: Frames[r], key: int, operationsPerEntity: int, freshMs: int): int =
-    if (visible(state, key, operationsPerEntity) and fresh(state, key, freshMs)) state.remoteValues.nth(key) else NO_VALUE
+  // What one remote read observes, judged once for the atomic release and the
+  // held read settlement: a failed read observes nothing; otherwise whether
+  // the adapter returned a frame (`visible`) and the value the traversal
+  // serves, the frame's when it is also fresh for the reply's freshness.
+  type Observed = { visible: bool, value: int }
+  pure def observe(state: Frames[r], key: int, operationsPerEntity: int, freshMs: int, failed: bool): Observed = {
+    val seen = not(failed) and visible(state, key, operationsPerEntity)
+    { visible: seen, value: if (seen and fresh(state, key, freshMs)) state.remoteValues.nth(key) else NO_VALUE }
+  }
   pure def missFence(state: Frames[r], key: int, operationsPerEntity: int): int =
     if (state.tracked) state.watermark.nth(entityOf(key, operationsPerEntity)) else NO_FENCE
   // The fence a refill carries: the watermark a tracked read observed when it

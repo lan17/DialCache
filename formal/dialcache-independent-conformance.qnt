@@ -349,4 +349,12 @@ module dialcache_independent_conformance {
     .then(resolveWith(2))
     .expect(s.o.calls == List(VALUE_TWO) and s.o.writes == 1 and s.o.writeTtls == List(LONG_RETENTION_MS))
     .then(beginCall).then(readAt(1)).expect(s.o.loads == 1 and s.o.loaders == 1)
+  // A read left pending expires inside one long advance and starts its loader
+  // at the read's own due instant, so the loader's deadline, measured from
+  // there, is delivered inside the same advance: the caller completes with a
+  // deadline error, the read is aborted and its loader counted before the
+  // advance ends. Delivering at the advance's end instead would leave the
+  // caller pending with its loader due after the advance.
+  run readExpiryStartsItsLoaderAtTheReadsDueInstantTest = init.then(beginCall).then(advanceBy(1000))
+    .expect(s.o.calls == List(DEADLINE_ERROR) and s.io.aborted == List(0) and s.o.loaders == 1 and s.o.loads == 0 and s.now == 1000)
 }

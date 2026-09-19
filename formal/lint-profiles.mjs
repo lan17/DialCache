@@ -11,12 +11,14 @@
 //   decoding. A comparison, branch, arithmetic or collection operator over
 //   cache state, or a non-library definition applied to cache state, is rule
 //   logic in the profile and is reported with the chain action -> helper ->
-//   ... -> the definition that computes it. A lambda a profile hands to a
+//   ... -> the definition that computes it. An operator a profile hands to a
 //   kernel definition is rule logic the library would run where the walk
 //   cannot follow it (the kernel's own folds take their expiry only from
-//   kernel modules), so it is reported at the call. profile-lint-baseline.json
-//   records each profile's count: a composed profile has zero and the other
-//   counts are the migration work list.
+//   kernel modules), so it is reported at the call whatever its spelling: a
+//   lambda literal, a parametrized profile definition passed by name, a
+//   let-bound lambda, or a helper's operator parameter forwarded to the call.
+//   profile-lint-baseline.json records each profile's count: a composed
+//   profile has zero and the other counts are the migration work list.
 // - Witness isolation: no definition reachable from a cache guard, a cache
 //   assignment, the profile's init or step, an input-choice domain (the
 //   expression of a `nondet ... .oneOf()`), an observation projection (the
@@ -280,10 +282,23 @@ export function lintComposition(index, { kernelModules = [] } = {}) {
     const key = `${node.key}|${detail}`;
     if (!violations.has(key)) violations.set(key, { definition: node.label, detail, chain });
   };
+  // An argument that denotes an operator rather than a value: a lambda
+  // literal; a name resolving to a parametrized non-kernel definition (a
+  // profile `def` or a let-bound lambda, both a `def` whose expr is a lambda);
+  // or a parameter of the walked body that was bound to such an argument
+  // (`operators`). A kernel definition passed by name is the library's own.
+  const operatorArgument = (argument, operators) => {
+    if (argument.kind === 'lambda') return true;
+    if (argument.kind !== 'name') return false;
+    const declaration = resolveTarget(index, argument);
+    if (declaration === undefined) return operators.has(argument.name);
+    return declaration.kind === 'def' && !isKernel(declaration) && declaration.expr?.kind === 'lambda';
+  };
   // Walks one expression; returns whether its value carries cache state.
-  // `tainted` maps parameter and let names of the walked body to state taint.
-  const walk = (expr, { node, chain, tainted, variable }) => {
-    const again = child => walk(child, { node, chain, tainted, variable });
+  // `tainted` maps parameter and let names of the walked body to state taint;
+  // `operators` names the parameters of the body bound to operator arguments.
+  const walk = (expr, { node, chain, tainted, operators = new Set(), variable }) => {
+    const again = child => walk(child, { node, chain, tainted, operators, variable });
     switch (expr.kind) {
       case 'int': case 'str': case 'bool': return false;
       case 'name': {
@@ -295,36 +310,35 @@ export function lintComposition(index, { kernelModules = [] } = {}) {
         if (declaration.qualifier === 'nondet') return false;
         if (declaration.owner === node.key && !tainted.has(expr.name)) return again(declaration.expr);
         if (declaration.owner === node.key) return tainted.get(expr.name) === true;
-        return isKernel(declaration) ? false : callProfile(declaration, [], { node, chain, variable });
+        return isKernel(declaration) ? false : callProfile(declaration, [], [], { node, chain, variable });
       }
       case 'lambda': {
         const inner = new Map(tainted);
         for (const parameter of expr.params) inner.set(parameter.name, false);
-        return walk(expr.expr, { node, chain, tainted: inner, variable });
+        return walk(expr.expr, { node, chain, tainted: inner, operators, variable });
       }
       case 'let': {
         const inner = new Map(tainted);
         inner.set(expr.opdef.name, expr.opdef.qualifier === 'nondet' ? false : again(expr.opdef.expr));
         // (the name case answers the same for a nondet reached without this map)
-        return walk(expr.expr, { node, chain, tainted: inner, variable });
+        return walk(expr.expr, { node, chain, tainted: inner, operators, variable });
       }
       case 'app': break;
       default: return false;
     }
     const declaration = resolveTarget(index, expr);
     const stateful = expr.args.map(again);
+    const passesOperator = expr.args.map(argument => operatorArgument(argument, operators));
     if (declaration) {
       if (isKernel(declaration)) {
         if (declaration.kind === 'def') transitions.add(index.labelOf(declaration.module, declaration.name));
-        for (const argument of expr.args) {
-          if (argument.kind === 'lambda') report(node, chain, `lambda passed to ${index.labelOf(declaration.module, declaration.name)} in the value of ${variable}`);
-        }
+        if (passesOperator.some(Boolean)) report(node, chain, `operator passed to ${index.labelOf(declaration.module, declaration.name)} in the value of ${variable}`);
         return true;
       }
       // A definition bound inside this body: its lambda parameters take the
       // arguments' taint like a top-level helper's do.
-      if (declaration.owner === node.key) return applyBody(declaration.expr, stateful, { node, chain, variable, tainted });
-      if (isProfile(declaration)) return callProfile(declaration, stateful, { node, chain, variable });
+      if (declaration.owner === node.key) return applyBody(declaration.expr, stateful, passesOperator, { node, chain, variable, tainted });
+      if (isProfile(declaration)) return callProfile(declaration, stateful, passesOperator, { node, chain, variable });
       if (stateful.some(Boolean)) report(node, chain, `${index.labelOf(declaration.module, declaration.name)} applied to cache state in the value of ${variable}`);
       return stateful.some(Boolean);
     }
@@ -333,20 +347,25 @@ export function lintComposition(index, { kernelModules = [] } = {}) {
     return stateful.some(Boolean);
   };
   // A body applied to arguments: its lambda parameters take the arguments'
-  // taint; a parameterless body is a value walked as it stands.
-  const applyBody = (body, stateful, { node, chain, variable, tainted }) => {
+  // taint, and those bound to operator arguments are operators inside it; a
+  // parameterless body is a value walked as it stands.
+  const applyBody = (body, stateful, passesOperator, { node, chain, variable, tainted }) => {
     const parameters = body.kind === 'lambda' ? body.params : [];
     const inner = new Map(tainted ?? []);
-    parameters.forEach((parameter, position) => inner.set(parameter.name, stateful[position] === true));
-    return walk(body.kind === 'lambda' ? body.expr : body, { node, chain, tainted: inner, variable });
+    const operators = new Set();
+    parameters.forEach((parameter, position) => {
+      inner.set(parameter.name, stateful[position] === true);
+      if (passesOperator[position] === true) operators.add(parameter.name);
+    });
+    return walk(body.kind === 'lambda' ? body.expr : body, { node, chain, tainted: inner, operators, variable });
   };
   // A profile definition applied to arguments: its body is walked with each
   // parameter tainted by its argument. A parameterless definition is a value.
-  const callProfile = (declaration, stateful, { node, chain, variable }) => {
+  const callProfile = (declaration, stateful, passesOperator, { node, chain, variable }) => {
     const target = index.nodes.get(declaration.owner);
     if (!target) return stateful.some(Boolean);
     reachable.add(target.key);
-    return applyBody(target.expr, stateful, { node: target, chain: [...chain, target.label], variable });
+    return applyBody(target.expr, stateful, passesOperator, { node: target, chain: [...chain, target.label], variable });
   };
   // A wrapper that applies a parametrized action decides what that action
   // assigns: each argument is walked where it is written (rule logic in an

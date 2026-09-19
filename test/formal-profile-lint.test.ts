@@ -42,7 +42,8 @@ const fixtureNames = [
   "kernel", "kernel-leaky", "library", "profile-clean", "profile-thick", "profile-nested-let", "profile-lambda-assign", "profile-shadow",
   "profile-witness-choice", "profile-witness-projection", "profile-witness-guard", "profile-witness-deep", "profile-witness-domain",
   "profile-witness-input", "profile-witness-match", "composition-clean", "composition-thick", "composition-nondet-inline",
-  "composition-action-argument", "composition-wiring-passes", "composition-lambda-argument",
+  "composition-action-argument", "composition-wiring-passes", "composition-lambda-argument", "composition-named-operator-argument",
+  "composition-lambda-through-helper",
 ];
 // Quint's effect checker rejects an operator constant that reads a variable
 // (QNT201), so this route can only be shown on the parsed IR; the lint must
@@ -185,7 +186,25 @@ describe.skipIf(!quintAvailable)("profile lint over synthetic kernel instances",
     // The lambda's body composes a library transition; the lambda itself is the violation.
     expect(report.composition.libraryTransitions).toEqual(["library::bump", "library::repeat"]);
     expect(report.composition.violations).toEqual([
-      { definition: "bumpWrapper", detail: "lambda passed to library::repeat in the value of s", chain: ["bumpWrapper"] },
+      { definition: "bumpWrapper", detail: "operator passed to library::repeat in the value of s", chain: ["bumpWrapper"] },
+    ]);
+  }, quintTimeout);
+
+  it("reports a parametrized profile definition passed to a kernel definition by name", async () => {
+    const report = await lintModel(fixture("composition-named-operator-argument"), { kernelModules: ["library"] });
+    expect(report.composition.libraryTransitions).toEqual(["library::bump", "library::repeat"]);
+    // The operator's own body reads only its parameters, which the walk cannot
+    // taint; the name handed to the fold is the violation.
+    expect(report.composition.violations).toEqual([
+      { definition: "bumpWrapper", detail: "operator passed to library::repeat in the value of s", chain: ["bumpWrapper"] },
+    ]);
+  }, quintTimeout);
+
+  it("reports a lambda forwarded to a kernel definition through a helper's operator parameter, in the helper", async () => {
+    const report = await lintModel(fixture("composition-lambda-through-helper"), { kernelModules: ["library"] });
+    expect(report.composition.libraryTransitions).toEqual(["library::bump", "library::repeat"]);
+    expect(report.composition.violations).toEqual([
+      { definition: "repeatWith", detail: "operator passed to library::repeat in the value of s", chain: ["bumpWrapper", "repeatWith"] },
     ]);
   }, quintTimeout);
 

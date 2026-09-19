@@ -35,10 +35,14 @@ module deadlines {
   //
   // A profile whose drivers bound sources composes the budgeted variants of
   // the local lifecycle; one whose drivers hold and bound remote reads and
-  // loaders composes the held variants. The fold's expiry is passed only by
-  // the two instantiations here; a profile never passes an operator to the
-  // library (the composition lint reports a lambda argument to a kernel
-  // definition).
+  // loaders composes the held variants. A profile whose callers run no
+  // source deadline (shadow-layers' callers) holds `sourceBudget` at
+  // UNBOUNDED, so the sources its releases start register none. The fold's
+  // expiry is passed only by the two instantiations here; a profile never
+  // passes an operator to the library (the composition lint reports any
+  // operator a profile passes to a kernel definition: a lambda, a
+  // parametrized profile definition by name, a let-bound lambda, or a
+  // helper's operator parameter forwarded to the call).
   import cache_rules.* from "../cache-rules"
   import conformance_observations.* from "../conformance-observations"
   import encodings.* from "./encodings"
@@ -164,18 +168,29 @@ module deadlines {
 
   // -- Budgeted variants of the held lifecycle ---------------------------------------
 
-  // A loader the step started (at admission for a bypass source, at read
-  // settlement, read expiry or a failed decode) is bounded from now under the
-  // budget its start resolved, and has work outstanding.
+  // A loader the step started (at admission for a bypass source, at a release
+  // without the remote layer, at read settlement, read expiry or a failed
+  // decode) is bounded from now under the budget its start resolved, and has
+  // work outstanding.
   pure def stampLoader(before: BudgetedHeld[r], after: BudgetedHeld[r], budget: int): BudgetedHeld[r] =
     if (after.o.loaders > before.o.loaders)
       due({ drained: after.drained.append(false), ...after }, SOURCE, after.loaders.length() - 1, budget)
     else after
-  // A read the step dispatched is bounded by the read budget in force.
+  // A bypass source started at admission takes the admission budget.
+  pure def admit(state: BudgetedHeld[r], layout: Serving::Layout, call: Call): BudgetedHeld[r] =
+    stampLoader(state, RemoteIO::admit(state, layout, call), admissionBudget(state, call))
+  // A read the release dispatched is bounded by the read budget in force; a
+  // source the release started without the remote layer (under the reply, or
+  // the bypass reply of a scope closed since admission) is bounded by the
+  // configured source budget, as every release-started source is.
+  pure def release(state: BudgetedHeld[r], layout: Serving::Layout, policyCall: int, resolved: Resolution, ttls: Ttls, budget: int): BudgetedHeld[r] = {
+    val released = RemoteIO::release(state, layout, policyCall, resolved, ttls, budget)
+    stampLoader(state, if (released.o.reads > state.o.reads) due(released, READ, state.o.reads, budget) else released, state.sourceBudget)
+  }
+  // An immediate policy reply: admission and the held release in one step.
   pure def begin(state: BudgetedHeld[r], layout: Serving::Layout, call: Call, resolved: Resolution, ttls: Ttls, budget: int): BudgetedHeld[r] = {
-    val begun = RemoteIO::begin(state, layout, call, resolved, ttls, budget)
-    val read = if (begun.o.reads > state.o.reads) due(begun, READ, state.o.reads, budget) else begun
-    stampLoader(state, read, if (Serving::participating(state, layout, call)) state.sourceBudget else admissionBudget(state, call))
+    val admitted = admit(state, layout, call)
+    if (Serving::participating(state, layout, call)) release(admitted, layout, state.o.policyCalls, resolved, ttls, budget) else admitted
   }
   // A read whose deadline is delivered: the loader its expiry starts is bounded from now.
   pure def expireRead(state: BudgetedHeld[r], layout: Serving::Layout, read: int): BudgetedHeld[r] =
@@ -190,20 +205,21 @@ module deadlines {
   // A failed fresh decode's restart is a loader start like any other.
   pure def settleLoad(state: BudgetedHeld[r], layout: Serving::Layout, load: int, failed: bool): BudgetedHeld[r] =
     stampLoader(state, RemoteIO::settleLoad(state, layout, load, failed), state.sourceBudget)
-  // A loader's result arriving after its deadline is a deadline error (a
-  // timeout for the recovery rules); a loader whose deadline already
-  // completed its flight drains without effect.
+  // A loader's result arriving after its deadline is a deadline error; a
+  // loader whose deadline already completed its flight drains without effect.
+  // `timeout` is the profile's propagated timeout, passed through; which
+  // errors are timeouts for the recovery rules is `remote_io::failed`'s.
   pure def settleLoader(state: BudgetedHeld[r], layout: Serving::Layout, ordinal: int, value: int, timeout: bool): BudgetedHeld[r] = {
     val outcome = arrival(state, ordinal, state.sources.nth(state.loaders.nth(ordinal)).result, value)
     val retired = retire(state, ordinal)
     if (outcome == CALL_PENDING) retired
-    else RemoteIO::settleLoader(retired, layout, ordinal, outcome, timeout or outcome == DEADLINE_ERROR)
+    else RemoteIO::settleLoader(retired, layout, ordinal, outcome, timeout)
   }
   // A delivered loader deadline completes the flight with a deadline error
   // (classified for recovery where the flight retained a snapshot); its
   // external work is not drained.
   pure def expireLoader(state: BudgetedHeld[r], layout: Serving::Layout, ordinal: int): BudgetedHeld[r] =
-    RemoteIO::settleLoader(state, layout, ordinal, DEADLINE_ERROR, true)
+    RemoteIO::settleLoader(state, layout, ordinal, DEADLINE_ERROR, false)
   pure def advance(state: BudgetedHeld[r], layout: Serving::Layout, ms: int): BudgetedHeld[r] =
     deliver(state, ms, (current, d) => if (d.kind == READ) expireRead(current, layout, d.index) else expireLoader(current, layout, d.index))
 }

@@ -4020,13 +4020,13 @@
     },
     {
       "case": "C32.grouped-invalidation",
-      "reference": "formal/kernel/remote-frames.qnt:readableFrame",
+      "reference": "formal/kernel/remote-frames.qnt:observe",
       "kind": "helper",
       "scope": "Invalidation chooses an entity watermark; tracked reads index it by key/operations-per-entity, covering two operation variants without fencing the other entity."
     },
     {
       "case": "C32.untracked-unaffected",
-      "reference": "formal/kernel/remote-frames.qnt:readableFrame",
+      "reference": "formal/kernel/remote-frames.qnt:observe",
       "kind": "helper",
       "scope": "Untracked reads omit the watermark comparison while retaining ordinary cache presence checks."
     },

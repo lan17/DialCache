@@ -3,12 +3,15 @@ module dialcache_source_connection {
   import conformance_observations.* from "./conformance-observations"
   import cache_contract.* from "./cache-contract"
   import policy_gate as Gate from "./kernel/policy-gate"
+  import deadlines as Deadlines from "./kernel/deadlines"
 
   // The actual source-budgets transitions are the only executing machine.
   // Project each source-start event into an immutable reference record using
   // the preceding external clock and call/policy ownership, not the library's
-  // started or budgets records. This checks that their abstraction preserves
-  // source-relative time, owners and accepted outcomes on each step.
+  // started, budgets or deadline records. This checks that their abstraction
+  // preserves source-relative time (the recorded origin and, while a bounded
+  // source is pending, the instant its deadline is due), owners and accepted
+  // outcomes on each step.
   var sources: List[SourceExecution]
   var before: { now: int, calls: int, held: List[Gate::Held], registered: int, budget: int }
 
@@ -36,7 +39,9 @@ module dialcache_source_connection {
   val sourceOriginsMatchContract = observedSources.length() == profile::s.sources.length() and
     observedSources.indices().forall(index => {
       val reference = observedSources.nth(index)
-      profile::s.started.nth(index) == reference.started and profile::s.budgets.nth(index) == reference.budget
+      profile::s.started.nth(index) == reference.started and profile::s.budgets.nth(index) == reference.budget and
+        (profile::s.sources.nth(index).result != CALL_PENDING or reference.budget < 0 or
+          Deadlines::deadlineOf(profile::s, Deadlines::SOURCE, index) == reference.started + reference.budget)
     })
   val sourceOwnersMatchContract = observedSources.indices().forall(index => {
     val reference = observedSources.nth(index)

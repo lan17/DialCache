@@ -488,7 +488,6 @@ export const grandfatheredReproducerBacklog = Object.freeze([
   'layers-process-flight-crosses-instance',
   'layers-late-memo-into-closed-scope',
   'independent-fresh-frame-retained',
-  'independent-deadline-settles-at-start',
   'recovery-read-inclusive-maximum',
   'recovery-read-recovery-warms-local',
   'local-failure-write-fault-publishes',
