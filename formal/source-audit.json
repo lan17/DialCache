@@ -1287,7 +1287,7 @@
     },
     {
       "path": "formal/PORTING.md",
-      "sha256": "204d3c424f89c3014641e1027d464bacc7c6099ef3ee47ea373b30db92062841",
+      "sha256": "763f323d0d09fc3d584f5791f9bea232591c20aea16296d78fef3996d7510a82",
       "entries": [
         {"line":1,"title":"Implementing another DialCache port"},
         {"line":14,"title":"What a port supplies"},
@@ -1346,7 +1346,7 @@
     },
     {
       "path": "formal/README.md",
-      "sha256": "d612ebd99ef15cfe0540524163e5fb904bb416171909aa20b5df24894d3f242c",
+      "sha256": "fa1222a3b0ceb6516d9e111e58f334f14a5d15ea3e83d70720b9bf9f6906a821",
       "entries": [
         {"line":1,"title":"Executable DialCache specification"},
         {"line":7,"title":"Start with your task"},
@@ -1362,7 +1362,7 @@
     },
     {
       "path": "formal/SEMANTIC-COVERAGE.md",
-      "sha256": "36dfebb6bfe76998f42ae0880ba5f9a984e6c5cd4376c2aef55b189cf12cdc65",
+      "sha256": "89cf581c6701c05ffd946257def034716ddba9e42c6177cf63dea69234ea2059",
       "entries": [
         {"line":1,"title":"Measuring semantic coverage"},
         {"line":5,"title":"Evidence inventory"},
@@ -1371,7 +1371,7 @@
         {"line":110,"title":"Behavioral mutation comparison"},
         {"line":124,"title":"Recorded measurements"},
         {"line":130,"title":"Reproduction and CI"},
-        {"line":172,"title":"Model properties and cross-language execution"}
+        {"line":185,"title":"Model properties and cross-language execution"}
       ],
       "review": {
         "kind": "coverage-guide",
@@ -1501,15 +1501,15 @@
     },
     {
       "path": "formal/VALIDATION.md",
-      "sha256": "79d61df9534e7a1db8a1b4819076e7cc7a4e7aff43281756e9135d95f86e1308",
+      "sha256": "42143a8e6f9882ae782e894e0aca0712d73fc03502ff2cf9ce95708e060df395",
       "entries": [
         {"line":1,"title":"Validation and evidence"},
         {"line":7,"title":"Choosing a run"},
         {"line":67,"title":"Reading a completion report"},
         {"line":85,"title":"Mutation evidence"},
-        {"line":146,"title":"Exploratory runs"},
-        {"line":194,"title":"A retained sampling regression"},
-        {"line":231,"title":"Historical results"}
+        {"line":149,"title":"Exploratory runs"},
+        {"line":197,"title":"A retained sampling regression"},
+        {"line":234,"title":"Historical results"}
       ],
       "review": {
         "kind": "tooling-guide",

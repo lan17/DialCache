@@ -327,7 +327,9 @@ impl DialCacheBuilder {
     /// Validate the configuration and create the instance. Rejects a
     /// namespace containing `{` or `}`, a read budget outside
     /// `1..=2_147_483_647` ms, a zero shadow cap, an invalid compression
-    /// config, or a missing runtime when the `tokio` feature is off.
+    /// config, or no usable runtime: with the `tokio` feature, no tokio
+    /// runtime is current and none was supplied through `runtime` or
+    /// `runtime_arc`; without it, no runtime was supplied.
     pub fn build(self) -> Result<DialCache, ConfigError> {
         if self.namespace.contains(['{', '}']) {
             return Err(ConfigError::invalid(

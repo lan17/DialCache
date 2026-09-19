@@ -10,7 +10,7 @@ const replayTests = ['test/formal-conformance.test.ts', 'test/formal-effects.tes
 const aggregateTargets = {
   check: ['check-ts', 'check-go', 'check-rust', 'docs', 'audit'],
   formal: ['formal-check', 'formal-generate', 'formal-ts', 'formal-go', 'formal-rust'],
-  mutations: ['mutations-ts', 'mutations-go'],
+  mutations: ['mutations-ts', 'mutations-go', 'mutations-rust'],
   integration: ['integration-ts', 'integration-go', 'integration-rust'],
   ci: ['check', 'package-floor', 'formal', 'model-check', 'integration', 'mutations'],
 };
@@ -31,13 +31,15 @@ export const targetDescriptions = {
   'fixtures-check': 'Recompute every committed model-derived artifact with pinned Quint',
   'kernel-fixtures': 'Typecheck the kernel library fixtures (test/fixtures/kernel) and run every run they declare',
   differential: 'Check the composition lint baseline, then replay every composed profile against its reference corpus (merge base with DIFFERENTIAL_REFERENCE, default origin/main) in both directions',
-  explore: 'Explore a new recorded seed and replay both ports in an isolated source snapshot',
+  explore: 'Explore a new recorded seed and replay every port in an isolated source snapshot',
   'model-check': 'Symbolically verify the scheduled finite rules with pinned Quint/Apalache (Java 21)',
-  mutations: 'Measure TypeScript and Go semantic mutations over the generated corpus and shared witness evidence',
+  mutations: 'Measure TypeScript, Go and Rust semantic mutations over the generated corpus and shared witness evidence',
   'mutations-ts': 'Measure TypeScript semantic mutations over the generated corpus (MUTATION_SHARD=<index>/<count> measures one shard)',
   'mutations-go': 'Measure Go semantic mutations over the generated corpus and shared witness evidence (MUTATION_SHARD=<index>/<count> measures one shard)',
+  'mutations-rust': 'Measure Rust semantic mutations over the generated corpus and shared witness evidence (MUTATION_SHARD=<index>/<count> measures one shard)',
   'mutations-merge-ts': 'Merge TypeScript mutation shards into the complete report; refuses inconsistent or missing shards',
   'mutations-merge-go': 'Merge Go mutation shards into the complete report; refuses inconsistent or missing shards',
+  'mutations-merge-rust': 'Merge Rust mutation shards into the complete report; refuses inconsistent or missing shards',
   integration: 'Run real TypeScript, Go and Rust Redis/Valkey/Cluster integration checks',
   'integration-ts': 'Run TypeScript real integration checks',
   'integration-go': 'Run Go real integration and interoperability checks with race detection',
@@ -55,12 +57,12 @@ export function expandTargets(target) {
 // its catalog; the merge target later assembles the complete report. Only the
 // two leaf lanes accept it: an aggregate that silently ignored it would run the
 // complete measurement the caller did not ask for.
-const shardedTargets = ['mutations-ts', 'mutations-go'];
+const shardedTargets = ['mutations-ts', 'mutations-go', 'mutations-rust'];
 export function mutationShardArguments(target, environment = process.env) {
   const value = environment.MUTATION_SHARD;
   if (value === undefined) return [];
   if (!shardedTargets.includes(target)) {
-    if (expandTargets(target).some(name => shardedTargets.includes(name))) throw new Error(`MUTATION_SHARD=${value} applies only to make mutations-ts and make mutations-go; unset it to run the complete measurement with make ${target}.`);
+    if (expandTargets(target).some(name => shardedTargets.includes(name))) throw new Error(`MUTATION_SHARD=${value} applies only to make mutations-ts, make mutations-go and make mutations-rust; unset it to run the complete measurement with make ${target}.`);
     return [];
   }
   // The measurement scripts parse the same value; one implementation decides
@@ -96,7 +98,6 @@ export function validationPlan(target, { directory = root, environment = process
   const node = (label, ...args) => ({ label, command: runnerNode, args });
   const pnpm = (label, ...args) => ({ label, command: 'corepack', args: ['pnpm', ...args] });
   const go = (label, ...args) => ({ label, command: 'go', args: ['-C', 'go', ...args] });
-  // Every step spawns from the repository root; the manifest path selects the crate.
   // Cargo runs inside rust/ so rustup resolves rust/rust-toolchain.toml; the
   // crate's tests locate the repository through CARGO_MANIFEST_DIR, not cwd.
   const cargo = (label, subcommand, ...args) => ({ label, command: 'cargo', args: [subcommand, ...args], cwd: 'rust' });
@@ -181,15 +182,17 @@ export function validationPlan(target, { directory = root, environment = process
       { ...node('Adapt Rust native assertion report', 'formal/conformance-adapters.mjs', 'rust', '.formal-traces/rust-replay.jsonl', reportPath('rust', 'context')), stdoutFile: reportPath('rust', 'completion') }, completion('rust')],
     'mutations-ts': [node('Measure TypeScript semantic mutations', 'formal/measure-semantics.mjs', ...shard)],
     'mutations-go': [node('Measure Go semantic mutations', 'formal/measure-go-semantics.mjs', ...shard)],
+    'mutations-rust': [node('Measure Rust semantic mutations', 'formal/measure-rust-semantics.mjs', ...shard)],
     // The merge needs neither Quint nor Go: it reads shard reports, checks
     // them against each other and this checkout, and writes the complete report.
     'mutations-merge-ts': [node('Merge TypeScript mutation shards', 'formal/merge-mutation-reports.mjs', 'ts')],
     'mutations-merge-go': [node('Merge Go mutation shards', 'formal/merge-mutation-reports.mjs', 'go')],
+    'mutations-merge-rust': [node('Merge Rust mutation shards', 'formal/merge-mutation-reports.mjs', 'rust')],
     'integration-ts': [pnpm('Run TypeScript Redis/Valkey/Cluster integrations', 'test:integration')],
     'integration-go': [{ ...go('Run Go Redis/Valkey/Cluster and TypeScript interoperability', 'test', '-race', '-tags', 'integration', '-count=1', '-run', '^TestRedisIntegration$', '-json', './...'), stdoutFile: '.formal-traces/go-integration.jsonl' }],
-    // The Rust integration binary skips itself unless this variable is set, so
-    // a plain cargo test never needs Docker.
-    'integration-rust': [{ ...cargo('Run Rust Redis/Valkey/Cluster integrations', 'test', '--all-features', '--test', 'redis_integration'), env: { DIALCACHE_RUST_INTEGRATION: '1' } }],
+    // The Rust integration tests are #[ignore]d, so a plain cargo test reports
+    // them as ignored and never needs Docker; this lane runs exactly them.
+    'integration-rust': [cargo('Run Rust Redis/Valkey/Cluster integrations', 'test', '--all-features', '--test', 'redis_integration', '--', '--ignored')],
     'package-floor': [{ label: 'Require a built package for floor checks', requireFile: 'dist/index.js', failureHint: 'Build first with make check-ts, or run make ci with NODE22_BIN set.' },
       { label: 'Check Node 22.15 zstd round trip and output ceiling', command: node22, args: ['--eval', floorSmoke], env: { PATH: floorEnvironment(environment, node22).PATH } },
       { label: 'Check packed package on Node 22.15', command: node22, args: ['scripts/test-package.mjs'], env: { PATH: floorEnvironment(environment, node22).PATH } }],
@@ -214,7 +217,7 @@ export function checkPrerequisites(target, { directory = root, environment = pro
     const version = probe('go', ['version'], { directory, environment });
     if (!/^go version go1\.27\.1\s/.test(version)) throw new Error(`Validation requires Go 1.27.1; found ${version}. Put the pinned Go toolchain on PATH.`);
   }
-  if (targets.some(name => ['check-rust', 'smoke', 'formal-rust', 'integration-rust'].includes(name))) {
+  if (targets.some(name => ['check-rust', 'smoke', 'formal-rust', 'integration-rust', 'mutations-rust', 'explore'].includes(name))) {
     const version = probe('cargo', ['--version'], { directory: resolve(directory, 'rust'), environment });
     if (!/^cargo 1\.98\.1(?:\s|$)/.test(version)) throw new Error(`Validation requires cargo 1.98.1; found ${version}. Install Rust 1.98.1 (rustup reads rust/rust-toolchain.toml) and put it on PATH.`);
   }

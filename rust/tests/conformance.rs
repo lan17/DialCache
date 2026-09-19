@@ -4,8 +4,10 @@
 //!
 //! Without selectors it replays the committed smoke histories. With the
 //! `DIALCACHE_*_TRACE_DIR` selectors it replays the complete generated corpus
-//! and writes the JSONL report named by `DIALCACHE_RUST_REPORT`. Node 24 must
-//! be on `PATH` for the coordinator.
+//! and writes the JSONL report named by `DIALCACHE_RUST_REPORT`.
+//! `DIALCACHE_RUST_SUITE=generated|fixed` runs only the Quint-generated
+//! evidence or only the fixed scenarios (the mutation measurement's cohorts).
+//! Node 24 must be on `PATH` for the coordinator.
 
 #![allow(dead_code)]
 
@@ -99,13 +101,20 @@ fn run() -> Result<bool, String> {
         failures: 0,
         coverage_failures: Vec::new(),
     };
-    run.core()?;
-    run.effects()?;
-    run.features()?;
-    run.local_clock()?;
-    run.scenarios()?;
+    let suite = run.selection.suite;
+    if suite.runs_generated() {
+        run.core()?;
+        run.effects()?;
+        run.features()?;
+        run.local_clock()?;
+    }
+    if suite.runs_fixed() {
+        run.scenarios()?;
+    }
     run.protocol_vectors()?;
-    run.witnesses()?;
+    if suite.runs_generated() {
+        run.witnesses()?;
+    }
     for (profile, expected) in &run.profile_actions {
         let selected_full = match profile.as_str() {
             "core" => run.selection.core.is_directory(),

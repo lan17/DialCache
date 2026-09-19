@@ -263,7 +263,7 @@ from the repository root:
 make check         # Fast native checks and committed smoke; not full acceptance.
 make formal        # Quint model/corpus checks, then prepared TS, Go and Rust replay.
 make model-check   # Separate finite symbolic checks; requires Java 21 and tar.
-make mutations     # Measures both fault catalogs over the generated corpus.
+make mutations     # Measures every fault catalog over the generated corpus.
 make integration   # Real-server interoperability; requires Docker.
 ```
 

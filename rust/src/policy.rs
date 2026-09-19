@@ -390,7 +390,9 @@ pub struct ResolvedShadow {
     /// was omitted or malformed.
     pub log_mismatches: bool,
     /// The shadow ramp leaf was present but invalid: shadow work is off and a
-    /// `config_resolution` error is emitted on the remote layer.
+    /// `config_resolution` error is emitted on the remote layer whenever a
+    /// shadow job would otherwise have been scheduled (a remote hit or a
+    /// ramped-down remote).
     pub config_error: bool,
     /// Recorded only if a job is admitted.
     pub logging_config_error: bool,

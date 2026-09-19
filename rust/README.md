@@ -150,8 +150,9 @@ or distribution and a namespace.
 for `ConnectionManager`, `MultiplexedConnection` and cluster connections,
 routing tracked reads to slot primaries and sharing the invalidation script
 and frame codec with the other ports. The `redis_integration` test replays
-every invalidation vector against real Redis, Valkey and Cluster servers when
-`DIALCACHE_RUST_INTEGRATION=1` is set and Docker is available.
+every invalidation vector against real Redis, Valkey and Cluster servers; its
+tests are `#[ignore]`d, and `make integration-rust` runs them where Docker is
+available.
 
 ## Validation and reproducing a trace
 
@@ -165,7 +166,14 @@ make check-rust        # fmt, clippy, unit tests, protocol vectors, fixed scenar
 make integration-rust  # Real Redis, Valkey and Cluster servers through Docker, plus every invalidation vector
 make formal            # Quint model checks, full corpus, then TypeScript, Go and Rust replay
 make formal-rust       # Complete prepared Rust replay of the generated corpus
+make mutations-rust    # Measure the Rust fault catalog (formal/rust-mutations.json) against the replay
 ```
+
+`make mutations-rust` applies each catalogued single-site fault to an isolated
+copy of the crate and requires the conformance harness to detect it
+(`DIALCACHE_RUST_SUITE=generated` for the Quint-generated evidence,
+`DIALCACHE_RUST_SUITE=fixed` for the fixed scenarios); see
+[SEMANTIC-COVERAGE.md](../formal/SEMANTIC-COVERAGE.md).
 
 Without overrides, `cargo test --all-features --test conformance` replays the
 committed smoke histories, every fixed scenario and every protocol vector.

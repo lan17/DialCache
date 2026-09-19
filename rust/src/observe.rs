@@ -236,7 +236,10 @@ pub struct OutcomeLabels {
 /// sizes report bytes.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Event {
-    /// One lookup of an enabled cache layer, emitted before its result is known.
+    /// One lookup of an enabled cache layer, hit or miss. Emitted before the
+    /// result for the remote layer and after it for the request-local and
+    /// process-local layers; a layer whose read failed emits `Error` and
+    /// `Disabled` instead.
     Request {
         /// The layer that was looked up.
         labels: Labels,
@@ -344,10 +347,13 @@ pub enum Event {
         seconds: f64,
     },
     /// Time until the source settled or its deadline elapsed, once per
-    /// source invocation.
+    /// source invocation that served the caller (shadow re-validation runs
+    /// the source without it).
     Fallback {
-        /// The deepest layer traversed before the source ran, or
-        /// [`Layer::Noop`] when caching was bypassed.
+        /// [`Layer::RequestLocal`] when the request memo was consulted,
+        /// [`Layer::Remote`] when the remote layer was consulted, otherwise
+        /// [`Layer::Local`] (even with the local layer disabled), and
+        /// [`Layer::Noop`] only when the call bypassed caching.
         labels: Labels,
         /// Elapsed time from invoking the source until it settled or its
         /// deadline fired.
@@ -437,8 +443,10 @@ pub struct ShadowMismatchDetails {
 pub enum LogLevel {
     /// Verbose diagnostics; no [`LogEvent`] maps here today.
     Debug,
-    /// A fail-open diagnostic: the call still produced a result from another
-    /// layer or the source.
+    /// A diagnostic on a path where the cache itself added no failure: a
+    /// layer failed open and the call went on to another layer or the
+    /// source, or an explicit invalidation or a recovery decode failed and
+    /// the operation reports that failure.
     Warn,
     /// A whole path is broken: key construction or the process-local store.
     Error,

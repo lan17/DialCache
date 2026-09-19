@@ -167,7 +167,8 @@ export function nativeExplorationResult(language, text, context, directory, pack
       if (entry) failed.push(entry); else otherFailures.push(record.id);
     }
     const finish = records.at(-1);
-    if (finish?.kind !== 'finish' || (finish.status === 'failed') !== (failed.length + otherFailures.length > 0)) throw new Error('Rust report status disagrees with its case records.');
+    if (finish?.kind !== 'finish') throw new Error('Rust report has no finish record: the harness crashed or timed out before completing.');
+    if ((finish.status === 'failed') !== (failed.length + otherFailures.length > 0)) throw new Error('Rust report status disagrees with its case records.');
     checkRustReplay(records.map(record => JSON.stringify(record.kind === 'case' ? { ...record, status: 'passed', message: undefined }
       : record.kind === 'finish' ? { ...record, status: 'passed', failed: 0 } : record)).join('\n'), inventory);
     startedAt = records[0]?.startedAt; finishedAt = finish.finishedAt;

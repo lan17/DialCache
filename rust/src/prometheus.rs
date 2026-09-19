@@ -11,8 +11,11 @@
 //! series. The `prometheus` crate reports a duplicate registration without a
 //! handle to the existing collector, so a second `new` for the same registry
 //! and prefix is a [`PrometheusError::Conflict`], as is an externally
-//! registered collector under one of the DialCache names; the constructor
-//! then leaves the registry as it found it.
+//! registered collector under one of the DialCache names. A failed
+//! constructor unregisters every collector it had registered, so no series is
+//! left behind; the `prometheus` crate nevertheless remembers each such name
+//! with the DialCache schema for the registry's lifetime, so only a collector
+//! with the same schema can take that name later.
 
 use std::fmt;
 use std::sync::Arc;
@@ -206,6 +209,8 @@ pub enum PrometheusError {
     /// A collector with this name is already registered: by another observer
     /// (clone that observer instead of constructing a second one), by someone
     /// else, or with another schema. Use a unique prefix or another registry.
+    /// The collectors registered before the collision were unregistered
+    /// again; their names stay bound to the DialCache schema in that registry.
     Conflict {
         /// The fully qualified collector name that collided.
         name: String,

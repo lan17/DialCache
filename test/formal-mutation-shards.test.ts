@@ -19,12 +19,12 @@ const shared = await import(new URL("../formal/mutation-reports.mjs", import.met
   shardFromArguments(argv: string[]): Shard;
   partitionMutations<T>(mutations: T[], shard: Shard): T[];
   shardDirectory(output: string, shard: Shard): string;
-  fingerprintFiles(directory: string, paths: string[]): { files: number; sha256: string };
+  fingerprintFiles(directory: string, paths: string[], options?: { exclude?: string[] }): { files: number; sha256: string };
   requiredDetectionRegressions(entries: CatalogEntry[], results: Mutation[]): string[];
   goDetection(mutations: Mutation[]): Record<string, unknown>;
   typescriptDetection(mutations: Mutation[], cases: { id: string; vectors: unknown[] }[]): Record<string, unknown>;
   gateDetections(language: Language, report: Report, entries: CatalogEntry[], options?: { directory?: string; summarize?: boolean }): void;
-  languages: { ts: Language; go: Language };
+  languages: { ts: Language; go: Language; rust: Language & { exclude: string[] } };
 };
 const merge = await import(new URL("../formal/merge-mutation-reports.mjs", import.meta.url).href) as {
   canonical(value: unknown): string;
@@ -414,13 +414,52 @@ describe("mutation shard merge over a shard directory", () => {
     writeShards(lost, join(directory, ".formal-traces/go-semantic/shards"));
     expect(() => mergeMutationReports("go", { directory })).toThrow(/Lost required detections: M11\/generated/);
     expect(readReport(".formal-traces/go-semantic/report.json")).toMatchObject({ complete: false, requiredDetectionRegressions: ["M11/generated"], error: expect.stringContaining("M11/generated") });
-    expect(() => mergeMutationReports("rust", { directory })).toThrow(/Expected language ts or go/);
+    expect(() => mergeMutationReports("zig", { directory })).toThrow(/Expected language ts, go or rust/);
     expect(() => mergeMutationReports("go", { directory, shardsDirectory: "nowhere" })).toThrow(/no shard directory/);
     expect(readReport(".formal-traces/go-semantic/report.json")).toMatchObject({ complete: false, error: expect.stringContaining("no shard directory") });
     // The command line rejects a bad language before touching any report directory.
     const { spawnSync } = await import("node:child_process");
-    const usage = spawnSync(process.execPath, [new URL("../formal/merge-mutation-reports.mjs", import.meta.url).pathname, "rust"], { encoding: "utf8" });
+    const usage = spawnSync(process.execPath, [new URL("../formal/merge-mutation-reports.mjs", import.meta.url).pathname, "zig"], { encoding: "utf8" });
     expect(usage.status).toBe(2);
-    expect(usage.stderr).toMatch(/Usage: node formal\/merge-mutation-reports.mjs <ts\|go>/);
+    expect(usage.stderr).toMatch(/Usage: node formal\/merge-mutation-reports.mjs <ts\|go\|rust>/);
   });
 });
+
+describe("Rust mutation language", () => {
+  let directory: string;
+  beforeEach(() => { directory = mkdtempSync(join(tmpdir(), "dialcache-rust-mutation-language-")); });
+  afterEach(() => rmSync(directory, { recursive: true, force: true }));
+  const put = (path: string, text: string) => { mkdirSync(join(directory, path, ".."), { recursive: true }); writeFileSync(join(directory, path), text); };
+
+  it("fingerprints the crate sources and files without the build directory", () => {
+    for (const path of ["formal/rust-mutations.json", "test/a.test.ts", "src/a.ts", "go/redis_adapter.go", "rust/Cargo.toml", "rust/Cargo.lock", "rust/src/lib.rs", "rust/tests/conformance.rs"]) put(path, path);
+    const clean = fingerprintFiles(directory, languages.rust.inputs, { exclude: languages.rust.exclude });
+    put("rust/target/release/deps/libdialcache.rlib", "build output");
+    put("rust/target/semantic/report.json", "{}");
+    expect(fingerprintFiles(directory, languages.rust.inputs, { exclude: languages.rust.exclude })).toEqual(clean);
+    expect(clean.files).toBe(8);
+    // Without the exclusion the build output would count, so the exclusion is what keeps a checkout and its workspace copy equal.
+    expect(fingerprintFiles(directory, languages.rust.inputs).files).toBe(10);
+    expect(fingerprintFiles(directory, ["rust/Cargo.toml"])).toEqual(fingerprintFiles(directory, ["rust/Cargo.toml"], { exclude: ["rust/target"] }));
+    expect(fingerprintFiles(directory, ["rust/Cargo.toml"]).files).toBe(1);
+  });
+
+  it("merges Rust shards with the same four-cohort strictness as Go and renders the Rust report", () => {
+    const catalogSha256 = sha256(readRepo("formal/go-mutations.json"));
+    const inputs = { files: 3, sha256: "dd".repeat(32) };
+    const single = { ...goSingleReport(catalogSha256, inputs), cargo: "cargo 1.98.1 (797e8a9bc 2026-08-05)" } as Report;
+    delete (single as Record<string, unknown>).go;
+    const merged = mergeShardReports(languages.rust, goShardReports(single, 3), { catalog: goCatalog, catalogSha256, inputs });
+    gateDetections(languages.rust, merged, goCatalog.mutations);
+    expect(merged.complete).toBe(true);
+    expect(merged.detection).toEqual(goDetection(single.mutations));
+    expect(merged.requiredDetectionRegressions).toEqual([]);
+    expect(languages.rust.output).toBe(".formal-traces/rust-semantic");
+    expect(languages.rust.catalog).toBe("formal/rust-mutations.json");
+    const markdown = languages.rust.markdown(merged);
+    expect(markdown).toContain("# Rust semantic mutation measurement");
+    expect(markdown).toContain("| M01 | C45.maximum-age-exclusive | survived | detected | detected | detected |");
+    expect(markdown).toContain("Merged from 3 shards");
+  });
+});
+

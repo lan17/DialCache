@@ -93,23 +93,38 @@ async fn a_source_deadline_returns_a_timeout_and_leaves_the_source_running() {
         .build()
         .expect("explicit handle");
     let calls = Arc::new(AtomicUsize::new(0));
+    let release = Arc::new(tokio::sync::Notify::new());
+    let settled = Arc::new(tokio::sync::Notify::new());
     let request = cache.enable_guard();
+    // The source waits for an explicit release, so the deadline result never
+    // races a second timer on a slow runner.
+    let load = {
+        let (calls, release, settled) = (calls.clone(), release.clone(), settled.clone());
+        move |_: Scope| {
+            let (calls, release, settled) = (calls.clone(), release.clone(), settled.clone());
+            Box::pin(async move {
+                release.notified().await;
+                calls.fetch_add(1, Ordering::SeqCst);
+                settled.notify_one();
+                Ok::<u64, dialcache::BoxError>(1)
+            }) as futures::future::BoxFuture<'static, Result<u64, dialcache::BoxError>>
+        }
+    };
     let error = cache
         .get_or_load(
             request.scope(),
             operation("slow").budget(SourceBudget::Millis(20)),
-            source(&calls, Duration::from_millis(150), 1),
+            load,
         )
         .await
         .expect_err("deadline");
     assert!(error.is_fallback_timeout(), "unexpected error: {error}");
     assert_eq!(calls.load(Ordering::SeqCst), 0);
-    tokio::time::sleep(Duration::from_millis(300)).await;
-    assert_eq!(
-        calls.load(Ordering::SeqCst),
-        1,
-        "the deadline cancelled the source"
-    );
+    release.notify_one();
+    tokio::time::timeout(Duration::from_secs(5), settled.notified())
+        .await
+        .expect("the deadline cancelled the source");
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
 }
 
 #[tokio::test]

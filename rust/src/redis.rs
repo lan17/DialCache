@@ -441,11 +441,14 @@ mod tests {
         args: Vec<Vec<u8>>,
     }
 
-    /// Replays scripted replies in order; a missing reply means "hang".
+    /// Replays scripted replies in order. A dispatch beyond the script fails
+    /// with a client error so a test that expected no dispatch fails loudly;
+    /// [`Scripted::hanging`] makes it wait forever instead.
     #[derive(Default)]
     struct Scripted {
         calls: Mutex<Vec<Call>>,
         replies: Mutex<VecDeque<RedisResult<Value>>>,
+        hang_when_exhausted: bool,
     }
 
     impl Scripted {
@@ -453,6 +456,16 @@ mod tests {
             Arc::new(Scripted {
                 calls: Mutex::new(Vec::new()),
                 replies: Mutex::new(replies.into_iter().collect()),
+                hang_when_exhausted: false,
+            })
+        }
+
+        /// A connection whose replies never arrive, for cancellation tests.
+        fn hanging() -> Arc<Self> {
+            Arc::new(Scripted {
+                calls: Mutex::new(Vec::new()),
+                replies: Mutex::new(VecDeque::new()),
+                hang_when_exhausted: true,
             })
         }
 
@@ -471,7 +484,14 @@ mod tests {
             self.calls.lock().push(Call { primary, args });
             match self.replies.lock().pop_front() {
                 Some(reply) => future::ready(reply).boxed(),
-                None => future::pending().boxed(),
+                // A dispatch beyond the script is a test failure, not a hang,
+                // unless the test asked for a reply that never arrives.
+                None if self.hang_when_exhausted => future::pending().boxed(),
+                None => future::ready(Err(redis::RedisError::from((
+                    redis::ErrorKind::Io,
+                    "unexpected dispatch beyond the scripted replies",
+                ))))
+                .boxed(),
             }
         }
     }
@@ -855,7 +875,7 @@ mod tests {
 
     #[test]
     fn read_honors_cancellation_before_and_during_the_wait() {
-        let connection = Scripted::with(vec![]);
+        let connection = Scripted::hanging();
         let adapter = RedisAdapter::new(connection.clone());
         let cancelled = ReadContext {
             timeout_ms: 50,

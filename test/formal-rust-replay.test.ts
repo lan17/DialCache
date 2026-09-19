@@ -165,11 +165,11 @@ describe("Rust validation lanes", () => {
     expect(smoke.filter(step => step.command === "cargo")).toHaveLength(1);
   });
 
-  it("runs the real-server integration binary only through the integration lane, opted in by its environment variable", () => {
+  it("runs the real-server integration binary only through the integration lane, which selects its ignored tests", () => {
     const lane = validationPlan("integration-rust", { directory });
-    expect(lane).toEqual([{ label: "Run Rust Redis/Valkey/Cluster integrations", command: "cargo", args: ["test", "--all-features", "--test", "redis_integration"], cwd: "rust", env: { DIALCACHE_RUST_INTEGRATION: "1" } }]);
+    expect(lane).toEqual([{ label: "Run Rust Redis/Valkey/Cluster integrations", command: "cargo", args: ["test", "--all-features", "--test", "redis_integration", "--", "--ignored"], cwd: "rust" }]);
     expect(validationPlan("integration", { directory })).toEqual(["integration-ts", "integration-go", "integration-rust"].flatMap(target => validationPlan(target, { directory })));
-    for (const target of ["check-rust", "smoke", "formal-rust"]) expect(validationPlan(target, { directory }).some(step => step.env?.DIALCACHE_RUST_INTEGRATION), target).toBe(false);
+    for (const target of ["check-rust", "smoke", "formal-rust"]) expect(validationPlan(target, { directory }).some(step => step.args?.includes("--ignored")), target).toBe(false);
   });
 
   it("probes the pinned cargo exactly for the Rust lanes", async () => {
@@ -189,8 +189,8 @@ describe("Rust validation lanes", () => {
       const environment = { ...process.env, PATH: `${join(temporary, "bin")}${delimiter}${process.env.PATH ?? ""}` };
       const options = { directory: temporary, environment, nodeVersion: "v24.20.0" };
       tool("cargo", 'console.error("cargo: command not found"); process.exit(127)');
-      for (const target of ["check-rust", "formal-rust", "smoke", "check", "integration-rust"]) expect(() => checkPrerequisites(target, options), target).toThrow(/Cannot run cargo/);
-      for (const target of ["check-ts", "check-go", "formal-ts", "formal-go", "mutations", "audit"]) expect(() => checkPrerequisites(target, options), target).not.toThrow();
+      for (const target of ["check-rust", "formal-rust", "smoke", "check", "integration-rust", "mutations-rust", "mutations", "explore"]) expect(() => checkPrerequisites(target, options), target).toThrow(/Cannot run cargo/);
+      for (const target of ["check-ts", "check-go", "formal-ts", "formal-go", "mutations-ts", "mutations-go", "mutations-merge-rust", "audit"]) expect(() => checkPrerequisites(target, options), target).not.toThrow();
       tool("cargo", 'console.log("cargo 1.97.0 (abcdef 2026-06-01)")');
       expect(() => checkPrerequisites("check-rust", options)).toThrow(/requires cargo 1\.98\.1; found cargo 1\.97\.0/);
       tool("cargo", 'console.log("cargo 1.98.10 (abcdef 2026-06-01)")');

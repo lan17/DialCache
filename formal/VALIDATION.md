@@ -11,7 +11,7 @@ lists tool prerequisites and focused reproduction commands.
 | Routine implementation checks | `make check` | Native tests, coverage, package, docs and source audits |
 | Full portable acceptance | `make formal` | Rust model checks, generated histories, TS replay, shared witness evaluation, Go replay, exact completion inventories; no Java |
 | Finite symbolic rules | `make model-check` | Scheduled bounded checks with checksummed standalone Apalache; requires Java 21, `tar` and pinned Quint |
-| Challenge implementation assertions | `make mutations` | Compiling semantic faults tested against both completed ports |
+| Challenge implementation assertions | `make mutations` | Compiling semantic faults tested against every completed port |
 | Real server behavior | `make integration` | Redis, Valkey, Cluster and cross-language interoperability |
 | Explore another schedule sample | `make explore` | Separate source snapshot, recorded random seed, both-port replay |
 | Check composed profiles against their previous text | `make differential` | Lint baseline, then both-direction replay against the merge base with `origin/main`; fails on any disagreement or trace growth above the model's bound |
@@ -118,11 +118,14 @@ not the catalog exactly once in order. Only the merged report is complete
 evidence; a shard report is never `complete`. Shard budgets are 30 minutes
 (TypeScript) and 40 (Go): the baselines plus four or five mutants, doubled for a
 slow runner. The Go mutation runner still bounds each `go test` invocation at
-8 minutes to catch a hung mutant, not to pace a slow runner. Locally,
+8 minutes to catch a hung mutant, not to pace a slow runner. The Rust lane
+(`make mutations-rust`, 45-minute shard budget) compiles each mutant in
+release mode and replays the generated cohort in about a minute; its runner
+bounds each cargo invocation at 25 minutes. Locally,
 `MUTATION_SHARD=1/3 make mutations-ts` (then `2/3` and `3/3`) reproduces one
 shard under `.formal-traces/semantic/shards/1-of-3/`, and
 `make mutations-merge-ts` assembles the report that an unsharded
-`make mutations-ts` writes; the Go targets mirror this.
+`make mutations-ts` writes; the Go and Rust targets mirror this.
 
 The workflow's `formal-full` aggregate job retains a small `formal-summary` artifact for 90
 days: both completion and context reports, the Go replay summary, the model

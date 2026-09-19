@@ -130,11 +130,11 @@ scheduled model with the Rust evaluator, the public regressions and the model
 mutation challenges. `make formal-generate` runs generation, fixture
 recomputation and the shared witness evaluation; `make formal-ts`,
 `make formal-go` and `make formal-rust` then complete each port's replay
-against that exact corpus. `make mutations-ts` and `make mutations-go` split
-the fault campaigns (the Rust port has no mutation lane yet). The parity and
-mutation lanes depend only on the generated corpus and shared witness evidence,
-so hosted CI runs all five in parallel and none of them waits for the model
-check, which runs beside generation; the aggregate requires every lane.
+against that exact corpus. `make mutations-ts`, `make mutations-go` and
+`make mutations-rust` split the fault campaigns. The parity and mutation lanes
+depend only on the generated corpus and shared witness evidence, so hosted CI
+runs all six in parallel and none of them waits for the model check, which
+runs beside generation; the aggregate requires every lane.
 `make fixtures-check` recomputes committed artifacts; after an intentional model
 edit, update them with `node formal/generate-artifacts.mjs --write` first.
 `make ci` includes the separate symbolic checks after `make formal`, as well as

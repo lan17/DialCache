@@ -24,7 +24,8 @@ jobs:
       - uses: ./.github/actions/setup-validation
         with:
           go: "true"
-      - name: Audit contracts and replay committed Quint smoke in both ports
+          rust: "true"
+      - name: Audit contracts and replay committed Quint smoke in every port
         run: make audit smoke
       - name: Detect changes requiring fresh Quint artifact generation
         id: fixture-scope

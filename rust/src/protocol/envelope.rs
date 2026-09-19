@@ -77,10 +77,12 @@ pub struct CompressionWriteResult {
 /// What [`decompress_payload`] produced from a stored payload.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompressionReadResult {
-    /// The decoded payload, or the input unchanged when it passed through or
-    /// zstd rejected it.
+    /// The decoded payload; the input with its `0x00` escape prefix removed
+    /// when it was escaped raw output; or the input unchanged when it passed
+    /// through untouched or zstd rejected it.
     pub payload: Payload,
-    /// `None` when the payload passed through untouched.
+    /// `None` when no zstd envelope was involved: the payload passed through
+    /// untouched or only had its escape prefix removed.
     pub outcome: Option<CompressionOutcome>,
 }
 

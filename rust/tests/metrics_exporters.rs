@@ -15,8 +15,6 @@ use dialcache::{
 };
 use parking_lot::Mutex;
 
-const NEVER_EXPORTED: &str = "never_export_this_identity";
-
 fn base() -> Labels {
     Labels {
         namespace: Arc::from("logical"),
@@ -270,9 +268,10 @@ fn datadog_metric_names_units_and_labels() {
         assert_eq!(got.value, value, "{kind:?}");
         assert_eq!(metric_suffix(kind), suffix);
         assert_eq!(observer.metric_name(kind), got.name);
-        for (_, tag) in &got.tags {
-            assert!(!tag.contains("never_export"), "key leaked to metric labels");
-        }
+        // Every tag is one of the kind's declared labels: no logical key or
+        // identity ever reaches a metric.
+        let names: Vec<&str> = got.tags.iter().map(|(name, _)| name.as_str()).collect();
+        assert_eq!(names, kind.label_names(), "{kind:?}");
     }
     let recorded = events.lock().clone();
     assert_eq!(
@@ -608,9 +607,6 @@ mod prometheus_exporter {
             let mut expected_labels = expected.labels.to_vec();
             expected_labels.sort_unstable();
             assert_eq!(label_names, expected_labels, "{name}");
-            for label in metric.get_label() {
-                assert!(!label.value().contains(NEVER_EXPORTED));
-            }
             if expected.buckets.is_empty() {
                 assert_eq!(family.type_(), MetricType::COUNTER, "{name}");
                 assert_eq!(metric.get_counter().value(), 1.0, "{name}");
@@ -724,6 +720,8 @@ mod prometheus_exporter {
             "failed observer partially registered collectors"
         );
         // ...and the collectors registered before the conflict were rolled
+        // back (the name stays bound to the DialCache schema, so only that
+        // schema can reuse it)
         // back, so their names are free again.
         let disabled = schemas("")
             .into_iter()

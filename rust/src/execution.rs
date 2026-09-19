@@ -429,10 +429,16 @@ impl Execution {
         });
         let result = self.clone().shared(Layer::RequestLocal).await;
         if let Ok(value) = &result {
-            let mut state = owner.state.lock();
-            if state.live {
-                state.memo.insert(self.keys.logical.clone(), value.clone());
-            }
+            let displaced = {
+                let mut state = owner.state.lock();
+                if state.live {
+                    state.memo.insert(self.keys.logical.clone(), value.clone())
+                } else {
+                    None
+                }
+            };
+            // A replaced memo value drops here, outside the lock.
+            drop(displaced);
         }
         result
     }

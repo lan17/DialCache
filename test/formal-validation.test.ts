@@ -177,18 +177,18 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     expect(ts.some(step => step.args?.[0] === "formal/witnesses.mjs" || step.args?.[0] === "formal/run-models.mjs")).toBe(false);
   });
 
-  it("lets Go parity and both mutation measurements run off the generated corpus without completion checks", () => {
+  it("lets Go parity and every mutation measurement run off the generated corpus without completion checks", () => {
     const isCompletionCheck = (step: Step) => step.args?.[0] === "formal/conformance.mjs" && step.args[1] === "check";
     const go = validationPlan("formal-go", { directory });
     expect(go[0]!.remove).toEqual([".formal-traces/go-completion.json"]);
     expect(go.some(step => step.args?.some(argument => argument.startsWith(".formal-traces/ts-")))).toBe(false);
     expect(go.filter(isCompletionCheck).map(step => step.args)).toEqual([["formal/conformance.mjs", "check", ".formal-traces/go-completion.json", ".formal-traces/go-context.json"]]);
     expect(go.some(step => step.args?.[0] === "formal/witnesses.mjs" || step.args?.[0] === "formal/run-models.mjs")).toBe(false);
-    for (const [target, script] of [["mutations-ts", "formal/measure-semantics.mjs"], ["mutations-go", "formal/measure-go-semantics.mjs"]] as const) {
+    for (const [target, script] of [["mutations-ts", "formal/measure-semantics.mjs"], ["mutations-go", "formal/measure-go-semantics.mjs"], ["mutations-rust", "formal/measure-rust-semantics.mjs"]] as const) {
       expect(validationPlan(target, { directory }).map(step => step.args)).toEqual([[script]]);
     }
     const all = validationPlan("mutations", { directory });
-    expect(all.map(step => step.args?.[0])).toEqual(["formal/measure-semantics.mjs", "formal/measure-go-semantics.mjs"]);
+    expect(all.map(step => step.args?.[0])).toEqual(["formal/measure-semantics.mjs", "formal/measure-go-semantics.mjs", "formal/measure-rust-semantics.mjs"]);
     expect(all.some(isCompletionCheck)).toBe(false);
     expect(all.some(step => step.remove || step.args?.[0] === "formal/run-models.mjs")).toBe(false);
   });
@@ -199,6 +199,7 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
       { label: "Measure TypeScript semantic mutations", command: process.execPath, args: ["formal/measure-semantics.mjs", "--shard=2/3"] },
     ]);
     expect(validationPlan("mutations-go", { directory, environment: sharded }).map(step => step.args)).toEqual([["formal/measure-go-semantics.mjs", "--shard=2/3"]]);
+    expect(validationPlan("mutations-rust", { directory, environment: sharded }).map(step => step.args)).toEqual([["formal/measure-rust-semantics.mjs", "--shard=2/3"]]);
     // Unset, the plan is exactly today's complete measurement.
     expect(validationPlan("mutations-ts", { directory, environment }).map(step => step.args)).toEqual([["formal/measure-semantics.mjs"]]);
     for (const value of ["0/3", "4/3", "1/0", "a/b", "1", "01/3", "1/3/", " 1/3", ""]) {
@@ -206,9 +207,9 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
     }
     // The aggregates stay unsharded and refuse to ignore the variable silently; unrelated targets ignore it.
     for (const target of ["mutations", "ci"]) {
-      expect(() => validationPlan(target, { directory, environment: sharded }), target).toThrow(/MUTATION_SHARD=2\/3 applies only to make mutations-ts and make mutations-go/);
+      expect(() => validationPlan(target, { directory, environment: sharded }), target).toThrow(/MUTATION_SHARD=2\/3 applies only to make mutations-ts, make mutations-go and make mutations-rust/);
     }
-    for (const target of ["check", "formal", "formal-ts", "mutations-merge-ts", "mutations-merge-go"]) {
+    for (const target of ["check", "formal", "formal-ts", "mutations-merge-ts", "mutations-merge-go", "mutations-merge-rust"]) {
       expect(validationPlan(target, { directory, environment: sharded }), target).toEqual(validationPlan(target, { directory, environment }));
     }
     // The runner's environment cleaning removes replay selectors, not the shard.

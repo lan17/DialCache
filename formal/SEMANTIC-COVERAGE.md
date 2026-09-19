@@ -133,23 +133,36 @@ Use the [shared Make targets and pinned prerequisites](./README.md#generating-an
 
 ```sh
 make formal        # Regenerate and complete prepared TS and Go replay.
-make mutations     # Measure both fault catalogs over the generated corpus.
+make mutations     # Measure every fault catalog over the generated corpus.
 ```
 
-`make mutations-ts` and `make mutations-go` depend only on the corpus produced
-by `make formal-generate` and its shared witness evidence, not on either port's
-completion report. Hosted CI runs both mutation lanes in parallel with both
-parity lanes off one generation job; the aggregate requires all of them. Each
-report records the source, corpus and witness fingerprints it measured. Raw
-measurement programs remain `measure-semantics.mjs` and
-`measure-go-semantics.mjs`; the Make targets supply the pinned prerequisite
+`make mutations-ts`, `make mutations-go` and `make mutations-rust` depend only
+on the corpus produced by `make formal-generate` and its shared witness
+evidence, not on any port's completion report. Hosted CI runs the three
+mutation lanes in parallel with the three parity lanes off one generation job;
+the aggregate requires all of them. Each report records the source, corpus and
+witness fingerprints it measured. Raw measurement programs remain
+`measure-semantics.mjs`, `measure-go-semantics.mjs` and
+`measure-rust-semantics.mjs`; the Make targets supply the pinned prerequisite
 checks used by hosted full validation.
+
+The Rust catalog [`rust-mutations.json`](./rust-mutations.json) names the same
+13 contract cases. Its ordinary cohort is the crate's unit tests plus every
+native integration test that is not harness infrastructure, a negative
+control, a protocol vector suite or a real-server test; its generated cohort
+is the conformance harness with `DIALCACHE_RUST_SUITE=generated` over the
+complete corpus, witness evidence and Quint-generated vectors; its fixed
+cohort is the harness with `DIALCACHE_RUST_SUITE=fixed` over the fixed
+scenarios and checked-in vectors. Each mutant is compiled in release mode in
+an isolated copy of the crate; dependencies build once and are shared through
+`rust/target/semantic`.
 
 Hosted runs shard each lane three ways with `MUTATION_SHARD=<index>/<count>`.
 A shard reruns the compile check, every unmodified baseline and the witness
 evaluation before its contiguous slice of the catalog, and writes an incomplete
 report under `shards/<index>-of-<count>/`. `make mutations-merge-ts` and
-`make mutations-merge-go` (`merge-mutation-reports.mjs`) assemble the complete
+`make mutations-merge-go` and `make mutations-merge-rust`
+(`merge-mutation-reports.mjs`) assemble the complete
 report from those shards and refuse any inconsistency: a missing or duplicated
 shard, a shard that failed or claims completion, differing fingerprints or
 baseline results, or mutations that do not cover the catalog exactly once in
@@ -167,7 +180,7 @@ The runner clears inherited trace selectors, uses the complete generated directo
 
 Each catalog entry's `requiredDetections` is a regression gate. The local mutation target and full workflow fail if a required fault survives. Newly detected faults remain visible as improvements; update the required set after inspecting the result. Source edits must match exactly once, so implementation drift requires reviewing the mutation rather than silently skipping it.
 
-To expand assurance, add a test/doc-derived case and precise executable evidence, require a generated witness where appropriate, then add a representative fault for a previously unchallenged rule. Preserve gaps until execution closes them. Keep code coverage, source accounting, case evidence, and mutation detection as separate measurements. The current Go suite requires every shared profile, exported regression, fixed scenario and protocol case registered by the manifests, with an equivalent fault catalog in `go-mutations.json`. Broader interaction histories and larger domains remain separate assurance work.
+To expand assurance, add a test/doc-derived case and precise executable evidence, require a generated witness where appropriate, then add a representative fault for a previously unchallenged rule. Preserve gaps until execution closes them. Keep code coverage, source accounting, case evidence, and mutation detection as separate measurements. The current Go and Rust suites require every shared profile, exported regression, fixed scenario and protocol case registered by the manifests, with equivalent fault catalogs in `go-mutations.json` and `rust-mutations.json`. Broader interaction histories and larger domains remain separate assurance work.
 
 ## Model properties and cross-language execution
 

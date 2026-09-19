@@ -64,6 +64,32 @@ pub enum ProtocolCorpus {
     Fixed,
 }
 
+/// Which halves of the suite a run executes (`DIALCACHE_RUST_SUITE`).
+///
+/// The mutation measurement runs the Quint-generated evidence and the fixed
+/// supplement as separate cohorts; a normal run executes both.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Suite {
+    /// Generated histories, witness evidence and fixed scenarios (the default and `all`).
+    All,
+    /// Generated histories and witness evidence only: no fixed scenarios.
+    Generated,
+    /// Fixed scenarios only: no histories and no witness evidence.
+    Fixed,
+}
+
+impl Suite {
+    /// Whether generated histories and witness evidence run.
+    pub fn runs_generated(self) -> bool {
+        self != Suite::Fixed
+    }
+
+    /// Whether the fixed scenarios run.
+    pub fn runs_fixed(self) -> bool {
+        self != Suite::Generated
+    }
+}
+
 /// The environment-driven selection of what one conformance run replays.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Selection {
@@ -79,6 +105,8 @@ pub struct Selection {
     pub witness_evidence_dir: Option<PathBuf>,
     /// `DIALCACHE_PROTOCOL_CORPUS`.
     pub protocol_corpus: ProtocolCorpus,
+    /// `DIALCACHE_RUST_SUITE`.
+    pub suite: Suite,
     /// `DIALCACHE_RUST_REPORT`: JSONL assertion report path.
     pub report: Option<PathBuf>,
     /// `DIALCACHE_BEHAVIOR_SCENARIO`: substring filter on scenario names.
@@ -97,6 +125,12 @@ impl Selection {
             Some("generated") => ProtocolCorpus::Generated,
             Some("fixed") => ProtocolCorpus::Fixed,
             Some(other) => return Err(format!("unknown protocol corpus selection {other}")),
+        };
+        let suite = match optional("DIALCACHE_RUST_SUITE").as_deref() {
+            None | Some("all") => Suite::All,
+            Some("generated") => Suite::Generated,
+            Some("fixed") => Suite::Fixed,
+            Some(other) => return Err(format!("unknown suite selection {other}")),
         };
         Ok(Selection {
             core: TraceSource::from_env(
@@ -117,6 +151,7 @@ impl Selection {
             feature_profile: optional("DIALCACHE_FEATURE_PROFILE"),
             witness_evidence_dir: optional("DIALCACHE_WITNESS_EVIDENCE_DIR").map(PathBuf::from),
             protocol_corpus,
+            suite,
             report: optional("DIALCACHE_RUST_REPORT").map(PathBuf::from),
             behavior_scenario: optional("DIALCACHE_BEHAVIOR_SCENARIO"),
         })
