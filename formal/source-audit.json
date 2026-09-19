@@ -1533,13 +1533,13 @@
     },
     {
       "path": "go/README.md",
-      "sha256": "84675260b43d435417cf62b6317dc29a86482c1a35869a63291e9237a3d34596",
+      "sha256": "140db370a74ebeb63b10479f2df3097a4b9519a09a57f1114016da4f9fb63e2a",
       "entries": [
         {"line":1,"title":"DialCache for Go"},
         {"line":19,"title":"Use"},
-        {"line":76,"title":"Configuration and effects"},
-        {"line":128,"title":"Values, codecs and observability"},
-        {"line":170,"title":"Validation and reproducing a trace"}
+        {"line":85,"title":"Configuration and effects"},
+        {"line":140,"title":"Values, codecs and observability"},
+        {"line":184,"title":"Validation and reproducing a trace"}
       ],
       "review": {
         "kind": "contract-guide",

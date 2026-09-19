@@ -5,12 +5,13 @@ import (
 	"errors"
 	"testing"
 	"testing/synctest"
+	"time"
 )
 
 func TestCachedRegistrationAndCapturedDefaults(t *testing.T) {
-	c := New(Options[int]{})
+	c := MustNew()
 	ramp := float64(100)
-	op := Operation{Identity: Identity{UseCase: "bound", KeyType: "id"}, Policy: Policy{LocalTTLMS: 1000, LocalRamp: &ramp}}
+	op := Operation[int]{Identity: Identity{UseCase: "bound", KeyType: "id"}, Policy: Policy{LocalTTL: time.Duration(1000) * time.Millisecond, LocalRamp: &ramp}}
 	keyCalls, sourceCalls := 0, 0
 	key := func(id int) (Identity, error) {
 		keyCalls++
@@ -31,7 +32,7 @@ func TestCachedRegistrationAndCapturedDefaults(t *testing.T) {
 	if v, e := bound(context.Background(), 7); e != nil || v != 7 || keyCalls != 0 {
 		t.Fatalf("disabled invocation built key: %v %v %d", v, e, keyCalls)
 	}
-	err = c.Enable(context.Background(), func(ctx context.Context) error {
+	err = c.WithEnabled(context.Background(), func(ctx context.Context) error {
 		v, e := bound(ctx, 1)
 		if e != nil || v != 1 {
 			t.Fatalf("first: %v %v", v, e)
@@ -56,14 +57,14 @@ func TestCachedRegistrationAndCapturedDefaults(t *testing.T) {
 
 func TestProcessCoalescingInspectionTracksLiveOwnership(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		c := New(Options[int]{})
-		op := Operation{Identity: Identity{UseCase: "inspect", KeyType: "id", ID: "1"}, Policy: Policy{LocalTTLMS: 1000}}
+		c := MustNew()
+		op := Operation[int]{Identity: Identity{UseCase: "inspect", KeyType: "id", ID: "1"}, Policy: Policy{LocalTTL: time.Duration(1000) * time.Millisecond}}
 		release := make(chan struct{})
 		finished := make(chan struct{}, 2)
 		invoke := func() {
 			defer func() { finished <- struct{}{} }()
-			_ = c.Enable(context.Background(), func(ctx context.Context) error {
-				_, e := c.GetOrLoad(ctx, op, func(context.Context) (int, error) { <-release; return 1, nil })
+			_ = c.WithEnabled(context.Background(), func(ctx context.Context) error {
+				_, e := GetOrLoad(ctx, c, op, func(context.Context) (int, error) { <-release; return 1, nil })
 				return e
 			})
 		}
@@ -72,14 +73,14 @@ func TestProcessCoalescingInspectionTracksLiveOwnership(t *testing.T) {
 		go invoke()
 		synctest.Wait()
 		state := c.GetCoalescingState().Process
-		if state.ActiveLeaders != 1 || state.ActiveFollowers != 1 || state.OldestLeaderAgeMS == nil {
+		if state.ActiveLeaders != 1 || state.ActiveFollowers != 1 {
 			t.Fatalf("live snapshot=%+v", state)
 		}
 		close(release)
 		<-finished
 		<-finished
 		state = c.GetCoalescingState().Process
-		if state.ActiveLeaders != 0 || state.ActiveFollowers != 0 || state.OldestLeaderAgeMS != nil {
+		if state.ActiveLeaders != 0 || state.ActiveFollowers != 0 || state.OldestLeaderAge != 0 {
 			t.Fatalf("settled snapshot=%+v", state)
 		}
 	})

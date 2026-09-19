@@ -460,7 +460,7 @@ func testMixedLanguage(t *testing.T, environment redisEnvironment) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err = adapter.Write(context.Background(), key, Frame{CreatedAtMS: stamp, Payload: compressed.Payload.Bytes, Binary: compressed.Payload.Binary}, 60000); err != nil {
+		if err = adapter.Write(context.Background(), key, Frame{CreatedAtMS: stamp, Payload: compressed.Payload.Bytes, Binary: compressed.Payload.Binary}, time.Minute); err != nil {
 			t.Fatal(err)
 		}
 		reads = append(reads, map[string]any{"op": "read", "key": key, "watermark": "{go-ts-interop}:watermark"})
@@ -479,7 +479,7 @@ func testMixedLanguage(t *testing.T, environment redisEnvironment) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err = adapter.Write(context.Background(), key, Frame{CreatedAtMS: stamp, Payload: compressed.Payload.Bytes, Binary: compressed.Payload.Binary}, 60000); err != nil {
+		if err = adapter.Write(context.Background(), key, Frame{CreatedAtMS: stamp, Payload: compressed.Payload.Bytes, Binary: compressed.Payload.Binary}, time.Minute); err != nil {
 			t.Fatal(err)
 		}
 		reads = append(reads, map[string]any{"op": "read", "key": key, "watermark": "{go-ts-interop}:watermark", "binary": true})
@@ -532,7 +532,7 @@ func testMixedLanguage(t *testing.T, environment redisEnvironment) {
 		t.Fatal("TS invalidation did not fence Go frame", got, err)
 	}
 	key := reads[0]["key"].(string)
-	if err = adapter.Write(context.Background(), key, Frame{CreatedAtMS: stamp + 101, Payload: []byte("1")}, 60000); err != nil {
+	if err = adapter.Write(context.Background(), key, Frame{CreatedAtMS: stamp + 101, Payload: []byte("1")}, time.Minute); err != nil {
 		t.Fatal(err)
 	}
 	results = runTypeScript(t, environment, []map[string]any{{"op": "read", "key": key, "watermark": watermark}})
@@ -590,7 +590,7 @@ func testPrimaryRead(t *testing.T, environment redisEnvironment) {
 		t.Fatal(err)
 	}
 	frame := Frame{CreatedAtMS: 2000, Payload: []byte{0, 1, 255}, Binary: true}
-	if err := adapter.Write(context.Background(), key, frame, 10000); err != nil {
+	if err := adapter.Write(context.Background(), key, frame, 10*time.Second); err != nil {
 		t.Fatal(err)
 	}
 	encoded, _ := EncodeFrame(frame)

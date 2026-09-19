@@ -8,14 +8,17 @@ import (
 )
 
 type execution[T any] struct {
-	cache                     *Cache[T]
+	cache                     *Cache
 	ctx                       context.Context
-	op                        Operation
+	op                        Operation[T]
 	key, remoteKey, watermark string
 	policy                    ResolvedPolicy
 	load                      func(context.Context) (T, error)
 	timedOut                  atomic.Bool
 }
+
+// ms converts a whole-millisecond duration to the wire and clock unit.
+func ms(d time.Duration) int64 { return int64(d / time.Millisecond) }
 
 func (x *execution[T]) labels(layer string) map[string]any {
 	d := map[string]any{"cacheNamespace": x.op.Identity.Namespace, "useCase": x.op.Identity.UseCase, "keyType": x.op.Identity.KeyType}
@@ -35,11 +38,9 @@ func (x *execution[T]) event(kind, layer string, extra map[string]any) {
 	}
 	if n, ok := d["seconds"].(float64); ok {
 		e.Seconds = n
-
 	}
 	if n, ok := d["bytes"].(int64); ok {
 		e.Bytes = n
-
 	}
 	if outcome, ok := d["outcome"].(string); ok {
 		e.Outcome = outcome
@@ -50,7 +51,7 @@ func (x *execution[T]) errorEvent(layer, kind string, inFallback bool) {
 	x.event("error", layer, map[string]any{"error": kind, "inFallback": inFallback})
 }
 func (x *execution[T]) elapsed(start time.Duration) float64 {
-	n := elapsedNow(x.cache.options.Clock) - start
+	n := elapsedNow(x.cache.settings.clock) - start
 	if n < 0 {
 		n = 0
 	}
@@ -64,24 +65,20 @@ func (x *execution[T]) duration(kind, layer string, start time.Duration, extra m
 	x.event(kind, layer, extra)
 }
 
-func (c *Cache[T]) GetOrLoad(ctx context.Context, op Operation, load func(context.Context) (T, error)) (T, error) {
+// GetOrLoad executes one inline loader through the cache chain without
+// registering its use case. Outside an enabled scope it calls load directly.
+// Returned in-memory values are shared and must be treated as immutable.
+func GetOrLoad[T any](ctx context.Context, c *Cache, op Operation[T], load func(context.Context) (T, error)) (T, error) {
 	var zero T
-	if err := ValidatePolicy(op.Policy); err != nil {
+	if c == nil || load == nil {
+		return zero, errors.Join(ErrInvalidOperation, errors.New("GetOrLoad requires a cache and a source"))
+	}
+	if err := validateOperation(op); err != nil {
 		return zero, err
 	}
 	op.Policy = SnapshotPolicy(op.Policy)
-	if op.FallbackTimeoutMS != nil && (*op.FallbackTimeoutMS < 1 || *op.FallbackTimeoutMS > MaxDeadlineMS) {
-		return zero, errors.New("invalid fallback deadline")
-	}
-	if op.FallbackTimeoutMS != nil {
-		budget := *op.FallbackTimeoutMS
-		op.FallbackTimeoutMS = &budget
-	}
-	if op.Identity.UseCase == "watermark" {
-		return zero, errors.New("reserved use case: watermark")
-	}
 	if op.Identity.Namespace == "" {
-		op.Identity.Namespace = c.options.Namespace
+		op.Identity.Namespace = c.settings.namespace
 	}
 	x := &execution[T]{cache: c, ctx: ctx, op: op, load: load}
 	if !c.IsEnabled(ctx) {
@@ -93,15 +90,15 @@ func (c *Cache[T]) GetOrLoad(ctx context.Context, op Operation, load func(contex
 		// Computed identities are cache plumbing: invalid results fail open,
 		// while invalid static operation metadata is rejected above.
 		if err == nil && identity.UseCase == "watermark" {
-			err = errors.New("reserved use case: watermark")
+			err = ErrReservedUseCase
 		}
 		if err != nil {
-			c.options.Logger.Error("Could not construct DialCache key", err)
+			c.settings.logger.Error("Could not construct DialCache key", err)
 			x.errorEvent("noop", "key_construction", false)
 			return x.source("noop")
 		}
 		if identity.Namespace == "" {
-			identity.Namespace = c.options.Namespace
+			identity.Namespace = c.settings.namespace
 		}
 		op.Identity = identity
 	}
@@ -111,20 +108,20 @@ func (c *Cache[T]) GetOrLoad(ctx context.Context, op Operation, load func(contex
 	x.op = op
 	key, remoteKey, watermark, err := op.Identity.Keys()
 	if err != nil {
-		c.options.Logger.Error("Could not construct DialCache key", err)
+		c.settings.logger.Error("Could not construct DialCache key", err)
 		x.errorEvent("noop", "key_construction", false)
 		return x.source("noop")
 	}
 	x.key, x.remoteKey, x.watermark = key, remoteKey, watermark
-	var overlay any
-	if c.options.PolicyProvider != nil {
-		overlay, err = callSafely(func() (any, error) { return c.options.PolicyProvider(ctx, op.Identity) })
+	var overlay RuntimePolicy
+	if c.settings.policyProvider != nil {
+		overlay, err = callSafely(func() (RuntimePolicy, error) { return c.settings.policyProvider(ctx, op.Identity) })
 	}
 	if err == nil {
-		x.policy, err = ResolvePolicy(op.Policy, overlay, op.Identity, PolicyDefaults{RemoteReadTimeoutMS: c.options.RemoteReadTimeoutMS})
+		x.policy, err = ResolvePolicy(op.Policy, overlay, op.Identity, PolicyDefaults{RemoteReadTimeout: c.settings.remoteReadTimeout})
 	}
 	if err != nil {
-		c.options.Logger.Warn("Could not resolve DialCache key config", err)
+		c.settings.logger.Warn("Could not resolve DialCache key config", err)
 		x.errorEvent("noop", "config_resolution", false)
 		x.event("disabled", "noop", map[string]any{"reason": "config_error"})
 		return x.source("noop")
@@ -136,20 +133,26 @@ func (c *Cache[T]) GetOrLoad(ctx context.Context, op Operation, load func(contex
 	if !x.policy.RequestLocal {
 		return x.shared("local")
 	}
-	state, _ := ctx.Value(c).(scopeState[T])
+	state, _ := ctx.Value(c).(scopeState)
 	run := func() (T, error) {
-		start := elapsedNow(c.options.Clock)
+		start := elapsedNow(c.settings.clock)
 		c.mu.Lock()
-		v, found := state.owner.memo[key]
+		raw, found := state.owner.memo[key]
 		live := state.owner.live
 		c.mu.Unlock()
 		x.event("request", "request_local", nil)
 		x.duration("get", "request_local", start, nil)
 		if live && found {
-			return v, nil
+			if v, ok := assertValue[T](raw); ok {
+				return v, nil
+			}
+			// A memo shared with another value type is a programming error;
+			// treat it as a miss with no decisive cause and refill it.
+			x.event("miss", "request_local", map[string]any{"reason": "unclassified"})
+		} else {
+			x.event("miss", "request_local", map[string]any{"reason": "value_absent"})
 		}
-		x.event("miss", "request_local", map[string]any{"reason": "value_absent"})
-		v, err = x.shared("request_local")
+		v, err := x.shared("request_local")
 		if err == nil {
 			c.mu.Lock()
 			if state.owner.live {
@@ -165,12 +168,12 @@ func (c *Cache[T]) GetOrLoad(ctx context.Context, op Operation, load func(contex
 	return x.singleFlight(state.owner.flights, state.owner, "request_local", run)
 }
 
-func (x *execution[T]) singleFlight(flights map[string]*flight[T], owner *scope[T], label string, run func() (T, error)) (T, error) {
+func (x *execution[T]) singleFlight(flights map[string]*flight, owner *scope, label string, run func() (T, error)) (T, error) {
 	c := x.cache
 	// Read the clock before taking the lock. The caller-supplied clock is the
 	// only external code on this path; a panic from it must not leave c.mu
 	// held, or the scope cleanup in Enable would deadlock.
-	started := elapsedNow(c.options.Clock)
+	started := elapsedNow(c.settings.clock)
 	c.mu.Lock()
 	if owner != nil && !owner.live {
 		c.mu.Unlock()
@@ -181,19 +184,33 @@ func (x *execution[T]) singleFlight(flights map[string]*flight[T], owner *scope[
 		c.mu.Unlock()
 		x.event("coalesced", "", map[string]any{"scope": label})
 		<-f.done
-		return f.value, f.err
+		return followerResult[T](f)
 	}
-	f := &flight[T]{done: make(chan struct{}), started: started}
+	f := &flight{done: make(chan struct{}), started: started}
 	flights[x.key] = f
 	c.mu.Unlock()
-	f.value, f.err = callSafely(run)
+	value, err := callSafely(run)
+	f.value, f.err = value, err
 	c.mu.Lock()
 	if flights[x.key] == f {
 		delete(flights, x.key)
 	}
 	close(f.done)
 	c.mu.Unlock()
-	return f.value, f.err
+	return value, err
+}
+
+// followerResult hands a leader's settled result to a follower. A leader of
+// another value type under the same key is a programming error.
+func followerResult[T any](f *flight) (T, error) {
+	var zero T
+	if f.err != nil {
+		return zero, f.err
+	}
+	if v, ok := assertValue[T](f.value); ok {
+		return v, nil
+	}
+	return zero, ErrValueType
 }
 
 func (x *execution[T]) layer(layer string, r ResolvedLayer) {
@@ -211,13 +228,17 @@ func (x *execution[T]) shared(fallbackLayer string) (T, error) {
 	run := func() (T, error) {
 		localMiss := false
 		if p.Local.Enabled {
-			start := elapsedNow(c.options.Clock)
+			start := elapsedNow(c.settings.clock)
 			item, readErr := callSafely(func() (localResult[T], error) {
-				value, found := c.localGet(x.key)
-				return localResult[T]{value, found}, nil
+				raw, found := c.localGet(x.key)
+				if !found {
+					return localResult[T]{}, nil
+				}
+				value, ok := assertValue[T](raw)
+				return localResult[T]{value: value, found: ok, mismatch: !ok}, nil
 			})
 			if readErr != nil {
-				c.options.Logger.Error("Error getting value from local cache", readErr)
+				c.settings.logger.Error("Error getting value from local cache", readErr)
 				x.errorEvent("local", "cache_read", false)
 				x.event("disabled", "local", map[string]any{"reason": "config_error"})
 			} else {
@@ -227,11 +248,15 @@ func (x *execution[T]) shared(fallbackLayer string) (T, error) {
 					return item.value, nil
 				}
 				localMiss = true
-				x.event("miss", "local", map[string]any{"reason": "value_absent"})
+				reason := "value_absent"
+				if item.mismatch {
+					reason = "unclassified"
+				}
+				x.event("miss", "local", map[string]any{"reason": reason})
 			}
 			fallbackLayer = "local"
 		}
-		if c.options.Remote == nil {
+		if c.settings.remote == nil {
 			v, e := x.source(fallbackLayer)
 			if e == nil && localMiss {
 				x.putLocal(v)
@@ -262,7 +287,7 @@ func (x *execution[T]) shared(fallbackLayer string) (T, error) {
 		}
 		v, err := x.source("remote")
 		if err != nil {
-			if remote.kind != "error" && remote.kind != "decode_error" && p.StaleOnErrorMaxAgeMS > 0 && x.canRecover(err) {
+			if remote.kind != "error" && remote.kind != "decode_error" && p.StaleOnErrorMaxAge > 0 && x.canRecover(err) {
 				if value, ok := x.recover(remote.frame); ok {
 					return value, nil
 				}
@@ -271,7 +296,7 @@ func (x *execution[T]) shared(fallbackLayer string) (T, error) {
 		}
 		if remote.kind != "error" {
 			if _, writeErr := x.putRemote(v, remote.fence, "remote", nil); writeErr != nil {
-				c.options.Logger.Warn("Error putting value in Redis cache", writeErr)
+				c.settings.logger.Warn("Error putting value in Redis cache", writeErr)
 			}
 		}
 		if localMiss && !x.op.Identity.Tracked {
@@ -286,43 +311,48 @@ func (x *execution[T]) shared(fallbackLayer string) (T, error) {
 		return run()
 	}
 	// Remote admission is decided before joining, while traversal belongs to the leader.
-	if p.Remote.Enabled && c.options.Remote != nil && p.Coalesce {
+	if p.Remote.Enabled && c.settings.remote != nil && p.Coalesce {
 		return x.singleFlight(c.flights, nil, "process", run)
 	}
 	return run()
 }
 
 type localResult[T any] struct {
-	value T
-	found bool
+	value    T
+	found    bool
+	mismatch bool
 }
 
 func (x *execution[T]) putLocal(value T) {
 	_, err := callSafely(func() (struct{}, error) {
-		x.cache.localPut(x.key, value, x.policy.Local.TTLMS)
+		x.cache.localPut(x.key, value, ms(x.policy.Local.TTL))
 		return struct{}{}, nil
 	})
 	if err != nil {
-		x.cache.options.Logger.Warn("Error putting value in local cache", err)
+		x.cache.settings.logger.Warn("Error putting value in local cache", err)
 		x.errorEvent("local", "cache_write", false)
 	}
 }
 
+// budget is the source deadline in whole milliseconds; negative disables it.
 func (x *execution[T]) budget() int64 {
-	if x.op.UnboundedFallback {
+	switch {
+	case x.op.SourceTimeout == NoTimeout:
 		return -1
+	case x.op.SourceTimeout == 0:
+		return ms(DefaultSourceTimeout)
+	default:
+		return ms(x.op.SourceTimeout)
 	}
-	if x.op.FallbackTimeoutMS != nil {
-		return *x.op.FallbackTimeoutMS
-	}
-	return 60000
 }
 func (x *execution[T]) source(layer string) (T, error) {
-	clock := x.cache.options.Clock
+	clock := x.cache.settings.clock
 	start := elapsedNow(clock)
 	budget := x.budget()
 	p := startPending(func() (T, error) { return x.load(x.ctx) })
-	v, err := awaitDeadline(clock, p, start, budget, func() error { return &FallbackTimeoutError{UseCase: x.op.Identity.UseCase, TimeoutMS: budget} }, func() { x.timedOut.Store(true) })
+	v, err := awaitDeadline(clock, p, start, budget, func() error {
+		return &FallbackTimeoutError{UseCase: x.op.Identity.UseCase, Timeout: time.Duration(budget) * time.Millisecond}
+	}, func() { x.timedOut.Store(true) })
 	if err != nil {
 		x.errorEvent(layer, "fallback", true)
 	}
@@ -338,12 +368,13 @@ type remoteValue[T any] struct {
 }
 
 func (x *execution[T]) rawRead() (*pending[ReadResult], *pending[ReadResult]) {
-	ctx, cancel := context.WithCancel(context.WithValue(context.WithoutCancel(x.ctx), readBudgetKey{}, x.policy.RemoteReadTimeoutMS))
-	clock := x.cache.options.Clock
+	timeout := x.policy.RemoteReadTimeout
+	ctx, cancel := context.WithCancel(context.WithValue(context.WithoutCancel(x.ctx), readBudgetKey{}, timeout))
+	clock := x.cache.settings.clock
 	start := elapsedNow(clock)
-	raw := startPending(func() (ReadResult, error) { return x.cache.options.Remote.Read(ctx, x.remoteKey, x.watermark) })
+	raw := startPending(func() (ReadResult, error) { return x.cache.settings.remote.Read(ctx, x.remoteKey, x.watermark) })
 	bounded := startPending(func() (ReadResult, error) {
-		r, e := awaitDeadline(clock, raw, start, x.policy.RemoteReadTimeoutMS, func() error { return &RemoteReadTimeoutError{TimeoutMS: x.policy.RemoteReadTimeoutMS} }, cancel)
+		r, e := awaitDeadline(clock, raw, start, ms(timeout), func() error { return &RemoteReadTimeoutError{Timeout: timeout} }, cancel)
 		if e != nil {
 			return r, e
 		}
@@ -356,7 +387,7 @@ func (x *execution[T]) frameAge(frame *Frame, layer string) (int64, bool) {
 	if frame == nil || frame.CreatedAtMS > MaxSafeInteger {
 		return 0, false
 	}
-	age := x.cache.options.Clock.WallMS() - int64(frame.CreatedAtMS)
+	age := x.cache.settings.clock.WallMS() - int64(frame.CreatedAtMS)
 	if age < 0 {
 		x.event("futureOffset", layer, map[string]any{"seconds": float64(-age) / 1000})
 		return age, false
@@ -364,14 +395,14 @@ func (x *execution[T]) frameAge(frame *Frame, layer string) (int64, bool) {
 	return age, true
 }
 func (x *execution[T]) readServing() remoteValue[T] {
-	start := elapsedNow(x.cache.options.Clock)
+	start := elapsedNow(x.cache.settings.clock)
 	x.event("request", "remote", nil)
 	defer x.duration("get", "remote", start, nil)
 	p, _ := x.rawRead()
 	<-p.done
 	r, err := p.result.value, p.result.err
 	if err != nil {
-		x.cache.options.Logger.Warn("Error getting value from Redis cache", err)
+		x.cache.settings.logger.Warn("Error getting value from Redis cache", err)
 		kind := "cache_read"
 		var timeout *RemoteReadTimeoutError
 		if errors.As(err, &timeout) {
@@ -389,15 +420,15 @@ func (x *execution[T]) readServing() remoteValue[T] {
 		x.event("miss", "remote", map[string]any{"reason": "unclassified"})
 		return remoteValue[T]{kind: "miss"}
 	}
-	maxAge := x.policy.Remote.TTLMS
-	if x.policy.StaleOnErrorMaxAgeMS > 0 {
-		maxAge = x.policy.StaleOnErrorMaxAgeMS
+	maxAge := ms(x.policy.Remote.TTL)
+	if x.policy.StaleOnErrorMaxAge > 0 {
+		maxAge = ms(x.policy.StaleOnErrorMaxAge)
 	}
 	if age >= maxAge {
 		x.event("miss", "remote", map[string]any{"reason": "expired"})
 		return remoteValue[T]{kind: "miss"}
 	}
-	if age >= x.policy.Remote.TTLMS {
+	if age >= ms(x.policy.Remote.TTL) {
 		x.event("miss", "remote", map[string]any{"reason": "expired"})
 		return remoteValue[T]{kind: "retained", frame: &r.Frame}
 	}
@@ -411,13 +442,13 @@ func (x *execution[T]) readServing() remoteValue[T] {
 
 func (x *execution[T]) decode(frame Frame, layer string) (T, error) {
 	payload := Payload{Bytes: frame.Payload, Binary: frame.Binary}
-	decompressStarted := elapsedNow(x.cache.options.Clock)
+	decompressStarted := elapsedNow(x.cache.settings.clock)
 	expanded := DecompressPayload(payload)
 	if expanded.Outcome != "passthrough" {
 		x.event("compression", layer, map[string]any{"outcome": expanded.Outcome})
 		x.duration("compressionDuration", layer, decompressStarted, map[string]any{"operation": "decompress"})
 	}
-	start := elapsedNow(x.cache.options.Clock)
+	start := elapsedNow(x.cache.settings.clock)
 	value, err := callSafely(func() (T, error) {
 		if codec, ok := x.codec().(ContextCodec[T]); ok {
 			return codec.DecodeContext(x.ctx, expanded.Payload)
@@ -431,7 +462,7 @@ func (x *execution[T]) decode(frame Frame, layer string) (T, error) {
 	return value, err
 }
 func (x *execution[T]) putRemote(value T, fence *uint64, layer string, allowed func() bool) (bool, error) {
-	clock := x.cache.options.Clock
+	clock := x.cache.settings.clock
 	if !x.op.Identity.Tracked {
 		fence = nil
 	}
@@ -459,9 +490,9 @@ func (x *execution[T]) putRemote(value T, fence *uint64, layer string, allowed f
 		return false, err
 	}
 	x.event("size", layer, map[string]any{"bytes": int64(len(payload.Bytes))})
-	if !x.cache.options.DisableCompression {
+	if compression := x.cache.settings.compression; compression != nil {
 		compressStarted := elapsedNow(clock)
-		compressed, compressionErr := CompressPayload(payload, *x.cache.options.Compression)
+		compressed, compressionErr := CompressPayload(payload, *compression)
 		if compressionErr != nil {
 			x.errorEvent(layer, "compression", false)
 			return false, compressionErr
@@ -488,16 +519,16 @@ func (x *execution[T]) putRemote(value T, fence *uint64, layer string, allowed f
 	if fence != nil && uint64(stamp) <= *fence {
 		return false, nil
 	}
-	ttl := x.policy.Remote.TTLMS
-	if x.policy.StaleOnErrorMaxAgeMS > 0 {
-		ttl = x.policy.StaleOnErrorMaxAgeMS
+	ttl := x.policy.Remote.TTL
+	if x.policy.StaleOnErrorMaxAge > 0 {
+		ttl = x.policy.StaleOnErrorMaxAge
 	}
-	if x.op.Identity.Tracked && ttl > 3600000 {
-		ttl = 3600000
+	if x.op.Identity.Tracked && ttl > time.Hour {
+		ttl = time.Hour
 		x.errorEvent(layer, "tracked_ttl_clamped", false)
 	}
 	_, err = callSafely(func() (struct{}, error) {
-		return struct{}{}, x.cache.options.Remote.Write(x.ctx, x.remoteKey, Frame{CreatedAtMS: uint64(stamp), Binary: payload.Binary, Payload: payload.Bytes}, ttl)
+		return struct{}{}, x.cache.settings.remote.Write(x.ctx, x.remoteKey, Frame{CreatedAtMS: uint64(stamp), Binary: payload.Binary, Payload: payload.Bytes}, ttl)
 	})
 	if err != nil {
 		x.errorEvent(layer, "cache_write", false)
@@ -507,7 +538,7 @@ func (x *execution[T]) putRemote(value T, fence *uint64, layer string, allowed f
 }
 
 func (x *execution[T]) writeTimestamp(layer string) (int64, error) {
-	stamp := x.cache.options.Clock.WallMS()
+	stamp := x.cache.settings.clock.WallMS()
 	if stamp < 0 || uint64(stamp) > MaxSafeInteger {
 		x.errorEvent(layer, "cache_write", false)
 		return 0, errors.New("invalid Redis write timestamp")
@@ -518,7 +549,7 @@ func (x *execution[T]) writeTimestamp(layer string) (int64, error) {
 func (x *execution[T]) canRecover(err error) bool {
 	predicate := x.op.ShouldRecover
 	if predicate == nil {
-		predicate = x.cache.options.ShouldRecover
+		predicate = x.cache.settings.shouldRecover
 	}
 	if predicate == nil {
 		var deadline *FallbackTimeoutError
@@ -526,7 +557,7 @@ func (x *execution[T]) canRecover(err error) bool {
 	}
 	ok, e := callSafely(func() (bool, error) { return predicate(err) })
 	if e != nil {
-		x.cache.options.Logger.Warn("DialCache stale recovery predicate threw; recovery was denied", e)
+		x.cache.settings.logger.Warn("DialCache stale recovery predicate threw; recovery was denied", e)
 	}
 	return e == nil && ok
 }
@@ -534,7 +565,7 @@ func (x *execution[T]) recoveryEvent(outcome string, age *int64) {
 	d := x.labels("")
 	d["outcome"] = outcome
 	e := Event{Kind: "staleRecovery", Key: x.key, Data: d, Outcome: outcome}
-	if cb := x.cache.options.RecoveryOutcome; cb != nil {
+	if cb := x.cache.settings.recoveryOutcome; cb != nil {
 		func() { defer func() { recover() }(); cb(e) }()
 	}
 	x.cache.emit(e)
@@ -548,8 +579,9 @@ func (x *execution[T]) recover(frame *Frame) (T, bool) {
 		x.recoveryEvent("miss", nil)
 		return zero, false
 	}
+	maxAge := ms(x.policy.StaleOnErrorMaxAge)
 	age, valid := x.frameAge(frame, "remote")
-	if !valid || age >= x.policy.StaleOnErrorMaxAgeMS {
+	if !valid || age >= maxAge {
 		x.recoveryEvent("miss", nil)
 		return zero, false
 	}
@@ -559,7 +591,7 @@ func (x *execution[T]) recover(frame *Frame) (T, bool) {
 		return zero, false
 	}
 	age, valid = x.frameAge(frame, "remote")
-	if !valid || age >= x.policy.StaleOnErrorMaxAgeMS {
+	if !valid || age >= maxAge {
 		x.recoveryEvent("miss", nil)
 		return zero, false
 	}

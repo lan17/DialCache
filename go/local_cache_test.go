@@ -29,15 +29,15 @@ func (c *stepClock) advance(ms int64) { c.wall += ms; c.elapsed += ms }
 // localOnlyLoader returns a loader over one local-only cache. Each source call
 // returns its ordinal, so a hit repeats the earlier ordinal and a miss returns
 // a fresh one; the expected values below come only from these public results.
-func localOnlyLoader(t *testing.T, cache *Cache[int]) func(id string, ttlMS int64) int {
+func localOnlyLoader(t *testing.T, cache *Cache) func(id string, ttlMS int64) int {
 	t.Helper()
 	sources := 0
 	return func(id string, ttlMS int64) int {
-		op := Operation{Identity: Identity{KeyType: "lru", ID: id, UseCase: "local"}, Policy: Policy{LocalTTLMS: ttlMS}}
+		op := Operation[int]{Identity: Identity{KeyType: "lru", ID: id, UseCase: "local"}, Policy: Policy{LocalTTL: time.Duration(ttlMS) * time.Millisecond}}
 		var value int
-		if err := cache.Enable(context.Background(), func(ctx context.Context) error {
+		if err := cache.WithEnabled(context.Background(), func(ctx context.Context) error {
 			var err error
-			value, err = cache.GetOrLoad(ctx, op, func(context.Context) (int, error) { sources++; return sources, nil })
+			value, err = GetOrLoad(ctx, cache, op, func(context.Context) (int, error) { sources++; return sources, nil })
 			return err
 		}); err != nil {
 			t.Fatal(err)
@@ -48,7 +48,7 @@ func localOnlyLoader(t *testing.T, cache *Cache[int]) func(id string, ttlMS int6
 
 func TestLocalEvictionIsLeastRecentlyUsedWithReadPromotion(t *testing.T) {
 	clock := &stepClock{}
-	load := localOnlyLoader(t, New[int](Options[int]{Clock: clock, LocalCapacity: 2}))
+	load := localOnlyLoader(t, MustNew(WithClock(clock), WithLocalCapacity(2)))
 	const ttl = int64(60000)
 	if load("a", ttl) != 1 || load("b", ttl) != 2 {
 		t.Fatal("initial fills did not reach the source in order")
@@ -79,7 +79,7 @@ func TestLocalEvictionIgnoresExpiryOfNewerEntries(t *testing.T) {
 	// entry keeps its position. Both ports must choose the same victim so a
 	// shared history observes the same later hits and misses.
 	clock := &stepClock{}
-	load := localOnlyLoader(t, New[int](Options[int]{Clock: clock, LocalCapacity: 2}))
+	load := localOnlyLoader(t, MustNew(WithClock(clock), WithLocalCapacity(2)))
 	if load("a", 60000) != 1 || load("b", 1000) != 2 {
 		t.Fatal("initial fills did not reach the source in order")
 	}
@@ -97,7 +97,7 @@ func TestLocalReadFailureDoesNotPromoteTheEntry(t *testing.T) {
 	// A failed local read is isolated and served from the source. It must not
 	// reorder the LRU: in TypeScript the fault precedes any lru-cache access.
 	clock := &stepClock{}
-	load := localOnlyLoader(t, New[int](Options[int]{Clock: clock, LocalCapacity: 2}))
+	load := localOnlyLoader(t, MustNew(WithClock(clock), WithLocalCapacity(2)))
 	const ttl = int64(60000)
 	if load("a", ttl) != 1 || load("b", ttl) != 2 {
 		t.Fatal("initial fills did not reach the source in order")
@@ -115,7 +115,7 @@ func TestLocalReadFailureDoesNotPromoteTheEntry(t *testing.T) {
 
 func TestLocalExpiryIsCheckedOnReadWithoutRenewal(t *testing.T) {
 	clock := &stepClock{}
-	load := localOnlyLoader(t, New[int](Options[int]{Clock: clock, LocalCapacity: 2}))
+	load := localOnlyLoader(t, MustNew(WithClock(clock), WithLocalCapacity(2)))
 	if load("a", 1000) != 1 {
 		t.Fatal("initial fill did not reach the source")
 	}
@@ -137,16 +137,16 @@ func TestLocalStorageConcurrentChurnIsRaceFree(t *testing.T) {
 	// Exercised under -race: simplelru is not goroutine-safe, so every access
 	// must stay under the cache mutex. The capacity bound itself is structural.
 	const capacity, keys, workers = 100, 2000, 8
-	cache := New[int](Options[int]{LocalCapacity: capacity})
+	cache := MustNew(WithLocalCapacity(capacity))
 	var wg sync.WaitGroup
 	for worker := 0; worker < workers; worker++ {
 		wg.Add(1)
 		go func(worker int) {
 			defer wg.Done()
 			for i := 0; i < keys; i++ {
-				op := Operation{Identity: Identity{KeyType: "churn", ID: strconv.Itoa((worker*7 + i) % keys), UseCase: "local"}, Policy: Policy{LocalTTLMS: 60000, DisableCoalescing: true}}
-				if err := cache.Enable(context.Background(), func(ctx context.Context) error {
-					_, err := cache.GetOrLoad(ctx, op, func(context.Context) (int, error) { return i, nil })
+				op := Operation[int]{Identity: Identity{KeyType: "churn", ID: strconv.Itoa((worker*7 + i) % keys), UseCase: "local"}, Policy: Policy{LocalTTL: time.Duration(60000) * time.Millisecond, Coalesce: Ptr(false)}}
+				if err := cache.WithEnabled(context.Background(), func(ctx context.Context) error {
+					_, err := GetOrLoad(ctx, cache, op, func(context.Context) (int, error) { return i, nil })
 					return err
 				}); err != nil {
 					t.Error(err)
@@ -172,7 +172,7 @@ func benchmarkKeys(first, count int) []string {
 // evict the least recently used entry, on the process-local storage.
 func BenchmarkLocalPutEviction(b *testing.B) {
 	const capacity = 10000
-	cache := New[int](Options[int]{LocalCapacity: capacity})
+	cache := MustNew(WithLocalCapacity(capacity))
 	for i := 0; i < capacity; i++ {
 		cache.localPut(strconv.Itoa(i), i, 60000)
 	}
@@ -188,14 +188,14 @@ func BenchmarkLocalPutEviction(b *testing.B) {
 // evicts, including key construction, policy resolution and diagnostics.
 func BenchmarkLocalMissAtCapacity(b *testing.B) {
 	const capacity = 10000
-	cache := New[int](Options[int]{LocalCapacity: capacity})
-	operation := func(id string) Operation {
-		return Operation{Identity: Identity{KeyType: "bench", ID: id, UseCase: "local"}, Policy: Policy{LocalTTLMS: 60000}}
+	cache := MustNew(WithLocalCapacity(capacity))
+	operation := func(id string) Operation[int] {
+		return Operation[int]{Identity: Identity{KeyType: "bench", ID: id, UseCase: "local"}, Policy: Policy{LocalTTL: time.Duration(60000) * time.Millisecond}}
 	}
 	source := func(context.Context) (int, error) { return 1, nil }
-	if err := cache.Enable(context.Background(), func(ctx context.Context) error {
+	if err := cache.WithEnabled(context.Background(), func(ctx context.Context) error {
 		for i := 0; i < capacity; i++ {
-			if _, err := cache.GetOrLoad(ctx, operation(strconv.Itoa(i)), source); err != nil {
+			if _, err := GetOrLoad(ctx, cache, operation(strconv.Itoa(i)), source); err != nil {
 				return err
 			}
 		}
@@ -203,7 +203,7 @@ func BenchmarkLocalMissAtCapacity(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			if _, err := cache.GetOrLoad(ctx, operation(keys[i]), source); err != nil {
+			if _, err := GetOrLoad(ctx, cache, operation(keys[i]), source); err != nil {
 				return err
 			}
 		}

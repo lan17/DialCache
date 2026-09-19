@@ -589,13 +589,13 @@
           "test": "TestCachedRegistrationAndCapturedDefaults",
           "path": "go/bindings_test.go",
           "scope": "Duplicate Cached registration rejects; mutated caller-owned ramp does not alter the captured default; disabled calls skip the key selector and dynamic key failure fails open.",
-          "sha256": "2bd84fa77e7de519ba4f2e9aeb78970e5195911ed525045d84a931c7acab17a3"
+          "sha256": "a3a9f7200700d54c58311bd9f012a1da18c6b9fec353ae97a110ee77c7f2f1a1"
         },
         {
           "test": "TestReservedIdentityValidationBoundary",
           "path": "go/identity_boundary_test.go",
           "scope": "Static reserved use cases reject before callbacks; computed invalid identity skips policy/cache work and preserves source success/error in enabled and disabled calls.",
-          "sha256": "2fcf3c57bc71a582123285b5ca5311c4fb49436f6dda2d1d4fd8bd46e90924fd"
+          "sha256": "ebd328cca89b2856e6954efa0895c57072471a80856bf623c41d6c1495303b61"
         }
       ],
       "adaptation": "Registration and validation timing are externally visible binding contracts, distinct from per-invocation policy semantics.",
@@ -643,31 +643,25 @@
           "test": "TestInlineFallbackDeadlineSnapshot",
           "path": "go/api_boundary_test.go",
           "scope": "Per-invocation fallback deadline remains captured while the policy provider or initial remote read is pending.",
-          "sha256": "0424b4a182c609e7a5fdacaf248c8b7c1ef977ed05607e52815388eadd75ab9b"
-        },
-        {
-          "test": "TestInvalidOperationCodecFailsOpenWithoutDefaultSubstitution",
-          "path": "go/api_boundary_test.go",
-          "scope": "Malformed operation codec fails open without substituting the instance/default codec or writing invalid data.",
-          "sha256": "0424b4a182c609e7a5fdacaf248c8b7c1ef977ed05607e52815388eadd75ab9b"
+          "sha256": "89b23524111ef2a2519c6bde19f015fe19565658fcd78774d7a9b4f5594e349f"
         },
         {
           "path": "go/feature_boundary_test.go",
           "test": "TestCachedRegistrationAfterInlineUseCase",
           "scope": "Inline calls do not reserve registration; a later compatible Cached wrapper sees the same entry, duplicate wrapper registration rejects, and inline reuse continues.",
-          "sha256": "f7d071b12ec7f03cb0d5a0a7fe68438038b2fdd78337336e472d72d3585c6d8f"
+          "sha256": "84b3a4b9d2e43b75df4d1565edf66245db26739f3162a56d9c62ff24a499c5c6"
         },
         {
           "path": "go/feature_boundary_test.go",
           "test": "TestInlineOperationCodecOverridesDefaultOnReadAndWrite",
-          "scope": "Public inline calls select a valid operation codec over the instance default for both Encode and Decode; exact stored text/binary bytes, source/read/write counts and unused-codec counters distinguish override from fallback.",
-          "sha256": "f7d071b12ec7f03cb0d5a0a7fe68438038b2fdd78337336e472d72d3585c6d8f"
+          "scope": "Public inline calls select a valid operation codec over the JSONCodec default for both Encode and Decode; exact stored text/binary bytes, source/read/write counts and codec call counters distinguish override from the default.",
+          "sha256": "84b3a4b9d2e43b75df4d1565edf66245db26739f3162a56d9c62ff24a499c5c6"
         },
         {
           "path": "go/feature_boundary_test.go",
           "test": "TestInlinePolicySnapshotsMutableRampPerInvocation",
           "scope": "While the first GetOrLoad waits at a provider barrier, mutating the caller-owned default ramp cannot revoke its captured policy; later calls see rampdown and reenablement reuses the first value without an extra source.",
-          "sha256": "f7d071b12ec7f03cb0d5a0a7fe68438038b2fdd78337336e472d72d3585c6d8f"
+          "sha256": "84b3a4b9d2e43b75df4d1565edf66245db26739f3162a56d9c62ff24a499c5c6"
         }
       ],
       "adaptation": "A global registration rule accidentally applied to inline calls would reject valid API usage.",
@@ -703,7 +697,7 @@
           "test": "TestReservedIdentityValidationBoundary",
           "path": "go/identity_boundary_test.go",
           "scope": "Static reserved use cases reject before callbacks; computed invalid identity skips policy/cache work and preserves source success/error in enabled and disabled calls.",
-          "sha256": "2fcf3c57bc71a582123285b5ca5311c4fb49436f6dda2d1d4fd8bd46e90924fd"
+          "sha256": "ebd328cca89b2856e6954efa0895c57072471a80856bf623c41d6c1495303b61"
         }
       ],
       "adaptation": "Static misuse and invocation-time plumbing failure have different validation and fallback obligations.",
@@ -776,13 +770,13 @@
           "test": "TestPolicyStaticValidation",
           "path": "go/policy_test.go",
           "scope": "Malformed option types and combinations reject; the maximum supported remote TTL/read budget is accepted and fractional-second static TTL is rejected.",
-          "sha256": "8f1d96879b606726d836ec8fb7475a1ddddfcbcdd69f625dc4589e8497fff61d"
+          "sha256": "e0fbb4bc16d2700fafd39034cf1a82221eff0e65614253daf1161e6a0c542228"
         },
         {
           "test": "TestRuntimePolicyFailureScopes",
           "path": "go/policy_test.go",
           "scope": "Malformed invocation-wide leaves fail resolution; invalid layer/recovery leaves retain the other active layers and their failure categories.",
-          "sha256": "8f1d96879b606726d836ec8fb7475a1ddddfcbcdd69f625dc4589e8497fff61d"
+          "sha256": "e0fbb4bc16d2700fafd39034cf1a82221eff0e65614253daf1161e6a0c542228"
         }
       ],
       "adaptation": "Native number and optional-value encodings differ; each binding must distinguish absent, explicitly disabled, malformed, and boundary values.",
@@ -836,7 +830,7 @@
           "test": "TestPolicySparseResolutionAndSnapshots",
           "path": "go/policy_test.go",
           "scope": "Nested runtime leaves merge independently, omitted leaves inherit, and captured nested pointer-valued defaults survive caller mutation.",
-          "sha256": "8f1d96879b606726d836ec8fb7475a1ddddfcbcdd69f625dc4589e8497fff61d"
+          "sha256": "e0fbb4bc16d2700fafd39034cf1a82221eff0e65614253daf1161e6a0c542228"
         }
       ],
       "adaptation": "Eager defaulting can erase inherited leaves even when ordinary effective-policy examples pass.",
@@ -889,14 +883,14 @@
         {
           "test": "TestInstanceCapacitySafeIntegerBounds",
           "path": "go/api_boundary_test.go",
-          "scope": "On 64-bit Go, local and shadow capacity construction rejects values above the safe-integer maximum and accepts the exact maximum without proportional allocation.",
-          "sha256": "0424b4a182c609e7a5fdacaf248c8b7c1ef977ed05607e52815388eadd75ab9b"
+          "scope": "On 64-bit Go, WithLocalCapacity and WithShadowCapacity above the safe-integer maximum return ErrInvalidOption from New, and the exact maximum constructs without eager allocation.",
+          "sha256": "89b23524111ef2a2519c6bde19f015fe19565658fcd78774d7a9b4f5594e349f"
         },
         {
           "path": "go/feature_boundary_test.go",
           "test": "TestCapacityConstructionOmissionAndBounds",
-          "scope": "Go zero-valued capacity options resolve to local 10000 and shadow 1; explicit LocalCapacitySet zero retains no settled values, whereas omitted local zero reuses entries; negative capacities panic at construction.",
-          "sha256": "f7d071b12ec7f03cb0d5a0a7fe68438038b2fdd78337336e472d72d3585c6d8f"
+          "scope": "Omitted options resolve to local 10000 and shadow 1; WithLocalCapacity(0) retains no settled value while coalescing continues; negative local and shadow capacities return ErrInvalidOption from New.",
+          "sha256": "84b3a4b9d2e43b75df4d1565edf66245db26739f3162a56d9c62ff24a499c5c6"
         }
       ],
       "adaptation": "TypeScript explicit zero shadow capacity rejects. In Go, zero ShadowMaxInFlight denotes omission and selects the default capacity of one; LocalCapacitySet distinguishes explicit zero local storage from an omitted default.",
@@ -939,13 +933,13 @@
           "test": "TestNestedDisablePreservesMemoAndOutsideDoesNotShare",
           "path": "go/cache_test.go",
           "scope": "Nested reenablement reuses the outer request memo while disabled/outside calls load independently.",
-          "sha256": "5992ae0b963227eede25fcf25bb99082a0b42abcb4df0bf0302e067b61a6917a"
+          "sha256": "fda50bd19147894c1d750f6e2d2e99a456faa9621e1485d6c60c897fa82f85bc"
         },
         {
           "test": "TestClosedScopeCannotPublishIntoReplacement",
           "path": "go/cache_test.go",
           "scope": "Late closed-scope source completion cannot overwrite replacement-scope memo; reusing the closed context bypasses caching.",
-          "sha256": "5992ae0b963227eede25fcf25bb99082a0b42abcb4df0bf0302e067b61a6917a"
+          "sha256": "fda50bd19147894c1d750f6e2d2e99a456faa9621e1485d6c60c897fa82f85bc"
         }
       ],
       "adaptation": "TS AsyncLocalStorage and explicit Go context are different language mechanisms implementing the same scope rules.",
@@ -1023,7 +1017,7 @@
           "test": "TestLoggerFailuresPreserveSourceAndMaintenanceResults",
           "path": "go/api_boundary_test.go",
           "scope": "Failing native loggers preserve original source values/errors and explicit invalidation errors.",
-          "sha256": "0424b4a182c609e7a5fdacaf248c8b7c1ef977ed05607e52815388eadd75ab9b"
+          "sha256": "89b23524111ef2a2519c6bde19f015fe19565658fcd78774d7a9b4f5594e349f"
         },
         {
           "test": "TestObserverIsolationAndBoundedNativeJSONLogs",
@@ -1097,43 +1091,43 @@
           "test": "TestPreciseSourceDeadline",
           "path": "go/clock_precision_test.go",
           "scope": "Fractional native elapsed starts preserve source budget just before its boundary and reject settlement at the boundary.",
-          "sha256": "2fb513f60bf67d84ec036fcaf8e4e09ef7e8f0092f6488ccd6c63086234604ce"
+          "sha256": "9f1ce7aa4d137cb291f531fbd29d8ea46b77525ed70e304818210685cee4e394"
         },
         {
           "test": "TestPreciseRemoteReadDeadline",
           "path": "go/clock_precision_test.go",
           "scope": "Fractional native elapsed starts preserve the remote-read budget and cancel at the effective boundary.",
-          "sha256": "2fb513f60bf67d84ec036fcaf8e4e09ef7e8f0092f6488ccd6c63086234604ce"
+          "sha256": "9f1ce7aa4d137cb291f531fbd29d8ea46b77525ed70e304818210685cee4e394"
         },
         {
           "test": "TestPreciseShadowDeadline",
           "path": "go/clock_precision_test.go",
           "scope": "Served and dark shadow budgets preserve fractional elapsed time and suppress publication after the boundary.",
-          "sha256": "2fb513f60bf67d84ec036fcaf8e4e09ef7e8f0092f6488ccd6c63086234604ce"
+          "sha256": "9f1ce7aa4d137cb291f531fbd29d8ea46b77525ed70e304818210685cee4e394"
         },
         {
           "test": "TestLocalInsertionExpiryUsesWholeMilliseconds",
           "path": "go/clock_precision_test.go",
           "scope": "A local entry inserted at 0.7ms is hit at 999.9ms and missed at 1000ms, matching the TypeScript whole-millisecond monotonic expiry boundary.",
-          "sha256": "2fb513f60bf67d84ec036fcaf8e4e09ef7e8f0092f6488ccd6c63086234604ce"
+          "sha256": "9f1ce7aa4d137cb291f531fbd29d8ea46b77525ed70e304818210685cee4e394"
         },
         {
           "test": "TestPreciseDeadlineRechecksEarlyTimer",
           "path": "go/clock_precision_test.go",
           "scope": "An early native timer callback rechecks elapsed deadline and schedules remaining time.",
-          "sha256": "2fb513f60bf67d84ec036fcaf8e4e09ef7e8f0092f6488ccd6c63086234604ce"
+          "sha256": "9f1ce7aa4d137cb291f531fbd29d8ea46b77525ed70e304818210685cee4e394"
         },
         {
           "test": "TestPreciseLocalTTLAcceptsLargeIntegerClockOrigin",
           "path": "go/clock_precision_test.go",
           "scope": "Large supported integer elapsed origins preserve local TTL without duration overflow.",
-          "sha256": "2fb513f60bf67d84ec036fcaf8e4e09ef7e8f0092f6488ccd6c63086234604ce"
+          "sha256": "9f1ce7aa4d137cb291f531fbd29d8ea46b77525ed70e304818210685cee4e394"
         },
         {
           "path": "go/clock_precision_test.go",
           "test": "TestDefaultInstancesShareLocalMillisecondGrid",
           "scope": "Default instances constructed 0.4ms apart use the same monotonic millisecond grid: same-time insertion hits just before the common boundary and reloads in both instances at equality; default elapsed time remains nonnegative.",
-          "sha256": "2fb513f60bf67d84ec036fcaf8e4e09ef7e8f0092f6488ccd6c63086234604ce"
+          "sha256": "9f1ce7aa4d137cb291f531fbd29d8ea46b77525ed70e304818210685cee4e394"
         }
       ],
       "adaptation": "Quint integer time matches the local-cache clock contract. Native source/read/shadow elapsed budgets retain separate fractional precision. Default instances share a whole-millisecond grid; custom clocks may supply their own consistent origins.",
@@ -1168,7 +1162,7 @@
           "path": "go/feature_boundary_test.go",
           "test": "TestBorrowedReferencesSurviveFollowersAndCacheHits",
           "scope": "Map and pointer identities survive leader/follower returns and request/local cache hits; local reuse also crosses enabled request scopes without another source call.",
-          "sha256": "f7d071b12ec7f03cb0d5a0a7fe68438038b2fdd78337336e472d72d3585c6d8f"
+          "sha256": "84b3a4b9d2e43b75df4d1565edf66245db26739f3162a56d9c62ff24a499c5c6"
         }
       ],
       "adaptation": "Object identity is observable in TS and pointer/slice/map aliasing is observable in Go, but JSON trace projection does not measure it.",
@@ -1312,7 +1306,7 @@
           "path": "go/feature_boundary_test.go",
           "test": "TestDefaultShadowComparatorNativeValueBoundaries",
           "scope": "The same ten native value corners execute through public cache shadow validation with the default comparator; exact source/decode/read/write and terminal outcome counts are asserted.",
-          "sha256": "f7d071b12ec7f03cb0d5a0a7fe68438038b2fdd78337336e472d72d3585c6d8f"
+          "sha256": "84b3a4b9d2e43b75df4d1565edf66245db26739f3162a56d9c62ff24a499c5c6"
         }
       ],
       "adaptation": "Native default deep equality includes value-domain conventions; custom comparator result/error semantics remain portable C50.",
@@ -1600,19 +1594,19 @@
           "test": "TestProcessCoalescingInspectionTracksLiveOwnership",
           "path": "go/bindings_test.go",
           "scope": "One process leader and follower appear in a live snapshot with nonnil age; settlement clears counts and age.",
-          "sha256": "2bd84fa77e7de519ba4f2e9aeb78970e5195911ed525045d84a931c7acab17a3"
+          "sha256": "a3a9f7200700d54c58311bd9f012a1da18c6b9fec353ae97a110ee77c7f2f1a1"
         },
         {
           "test": "TestPreciseCoalescingAge",
           "path": "go/clock_precision_test.go",
           "scope": "Reported oldest process-flight age is computed from elapsed interval before rounding, across fractional native clock origins.",
-          "sha256": "2fb513f60bf67d84ec036fcaf8e4e09ef7e8f0092f6488ccd6c63086234604ce"
+          "sha256": "9f1ce7aa4d137cb291f531fbd29d8ea46b77525ed70e304818210685cee4e394"
         },
         {
           "path": "go/feature_boundary_test.go",
           "test": "TestCoalescingInspectionSeparatesKeysInstancesAndRequestWork",
           "scope": "Two keys aggregate leaders and followers with distinct start ages; settling the oldest source selects the remaining age, source rejection cleans up, another instance stays isolated, and request-only sharing never appears in process inspection.",
-          "sha256": "f7d071b12ec7f03cb0d5a0a7fe68438038b2fdd78337336e472d72d3585c6d8f"
+          "sha256": "84b3a4b9d2e43b75df4d1565edf66245db26739f3162a56d9c62ff24a499c5c6"
         }
       ],
       "adaptation": "Inspection is a public diagnostic feature not currently represented by portable event traces.",
@@ -1708,7 +1702,7 @@
           "path": "go/feature_boundary_test.go",
           "test": "TestCompressionConstructionDefaultsAndExplicitDisable",
           "scope": "New rejects invalid enabled compression; documented 4096-byte/level-3 defaults select raw versus compressed writes at the serialized byte boundary; explicit disable preserves a large raw JSON write without compression outcomes.",
-          "sha256": "f7d071b12ec7f03cb0d5a0a7fe68438038b2fdd78337336e472d72d3585c6d8f"
+          "sha256": "84b3a4b9d2e43b75df4d1565edf66245db26739f3162a56d9c62ff24a499c5c6"
         }
       ],
       "adaptation": "Node native zstd availability is a binding prerequisite; Go embeds a compressor dependency and has no equivalent optional runtime availability flag.",
@@ -1795,7 +1789,7 @@
           "test": "TestBinaryCodecRemoteRoundTripPreservesBytesAndTag",
           "path": "go/cache_test.go",
           "scope": "A custom binary codec crosses remote publication/read with exact invalid-UTF8 bytes and binary tag, reusing one source result.",
-          "sha256": "5992ae0b963227eede25fcf25bb99082a0b42abcb4df0bf0302e067b61a6917a"
+          "sha256": "fda50bd19147894c1d750f6e2d2e99a456faa9621e1485d6c60c897fa82f85bc"
         }
       ],
       "adaptation": "A copied observer result and a retained raw payload have different ownership; unexpected mutation changes later recovery/shadow behavior.",
@@ -1881,7 +1875,7 @@
           "test": "TestRedisIntegration",
           "path": "go/redis_integration_test.go",
           "scope": "Real Redis, Valkey and Cluster run exact invalidation vectors, mixed TS/Go data exchange and complete-frame primary-read assertions.",
-          "sha256": "45d854bc6feae418bccd0aba95df2565d6fbcbc01d4150f64c3dd0001ad0b0bb"
+          "sha256": "125d5960bc669457a9bc119931d9443c1564d867a259870e22cf37e085cc520a"
         },
         {
           "test": "TestRedisAdapterReadsAndBoundaries",
@@ -1941,7 +1935,7 @@
           "path": "go/feature_boundary_test.go",
           "test": "TestRedisAdapterSurfacesInvalidationRetryError",
           "scope": "A NOSCRIPT EVALSHA rejection causes exactly one EVAL with unchanged logical arguments; terminal EVAL error identity and existing cause are returned unchanged, without attaching the earlier NOSCRIPT error.",
-          "sha256": "f7d071b12ec7f03cb0d5a0a7fe68438038b2fdd78337336e472d72d3585c6d8f"
+          "sha256": "84b3a4b9d2e43b75df4d1565edf66245db26739f3162a56d9c62ff24a499c5c6"
         }
       ],
       "adaptation": "Retry is allowed for every command rejection, not only NOSCRIPT; idempotent watermark advancement makes ambiguous response loss safe.",
@@ -1976,7 +1970,7 @@
           "path": "go/feature_boundary_test.go",
           "test": "TestRedisAdapterForwardsReadContextCancellation",
           "scope": "Hooked GET and tracked MGET receive the supplied cancellation channel and context metadata; cancelling after dispatch returns context.Canceled through the adapter.",
-          "sha256": "f7d071b12ec7f03cb0d5a0a7fe68438038b2fdd78337336e472d72d3585c6d8f"
+          "sha256": "84b3a4b9d2e43b75df4d1565edf66245db26739f3162a56d9c62ff24a499c5c6"
         }
       ],
       "adaptation": "Native context options are integration mechanics; C56 generated histories check cooperative cancellation consequences.",
@@ -2028,7 +2022,7 @@
           "test": "TestRedisIntegration",
           "path": "go/redis_integration_test.go",
           "scope": "Real Redis, Valkey and Cluster run exact invalidation vectors, mixed TS/Go data exchange and complete-frame primary-read assertions.",
-          "sha256": "45d854bc6feae418bccd0aba95df2565d6fbcbc01d4150f64c3dd0001ad0b0bb"
+          "sha256": "125d5960bc669457a9bc119931d9443c1564d867a259870e22cf37e085cc520a"
         }
       ],
       "adaptation": "Real-server dispatch, Lua semantics, topology and mixed-language data are outside an in-memory conformance driver.",

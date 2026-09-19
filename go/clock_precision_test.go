@@ -26,20 +26,20 @@ func TestPreciseSourceDeadline(t *testing.T) {
 					sourceFinished := make(chan struct{})
 					defer func() { <-sourceFinished }()
 					var measured float64
-					cache := New[int](Options[int]{Observe: func(event Event) {
+					cache := MustNew(WithObserver(func(event Event) {
 						if event.Kind == "fallback" {
 							measured = event.Seconds
 						}
-					}})
+					}))
 					time.Sleep(700 * time.Microsecond)
 					budget := int64(1)
-					op := Operation{Identity: Identity{KeyType: "clock", ID: "one", UseCase: "source"}, Policy: Policy{RequestLocal: true}, FallbackTimeoutMS: &budget}
+					op := Operation[int]{Identity: Identity{KeyType: "clock", ID: "one", UseCase: "source"}, Policy: Policy{RequestLocal: true}, SourceTimeout: time.Duration(budget) * time.Millisecond}
 					problem := errors.New("source failure")
 					started := time.Now()
 					var value int
-					err := cache.Enable(context.Background(), func(ctx context.Context) error {
+					err := cache.WithEnabled(context.Background(), func(ctx context.Context) error {
 						var err error
-						value, err = cache.GetOrLoad(ctx, op, func(context.Context) (int, error) {
+						value, err = GetOrLoad(ctx, cache, op, func(context.Context) (int, error) {
 							defer close(sourceFinished)
 							time.Sleep(work)
 							if rejected {
@@ -80,15 +80,15 @@ func TestPreciseRemoteReadDeadline(t *testing.T) {
 					time.Sleep(work)
 					return ReadResult{Kind: "hit", Frame: Frame{CreatedAtMS: uint64(time.Now().UnixMilli()), Payload: []byte("7")}}, nil
 				}}
-				cache := New[any](Options[any]{Remote: remote, RemoteReadTimeoutMS: 1})
+				cache := MustNew(WithRemote(remote), WithRemoteReadTimeout(time.Duration(1)*time.Millisecond))
 				time.Sleep(700 * time.Microsecond)
-				op := Operation{Identity: Identity{KeyType: "clock", ID: "one", UseCase: "read"}, Policy: Policy{RemoteTTLMS: 60000}}
+				op := Operation[any]{Identity: Identity{KeyType: "clock", ID: "one", UseCase: "read"}, Policy: Policy{RemoteTTL: time.Duration(60000) * time.Millisecond}}
 				var sourceCalls int
 				var value any
 				started := time.Now()
-				err := cache.Enable(context.Background(), func(ctx context.Context) error {
+				err := cache.WithEnabled(context.Background(), func(ctx context.Context) error {
 					var err error
-					value, err = cache.GetOrLoad(ctx, op, func(context.Context) (any, error) { sourceCalls++; return 9, nil })
+					value, err = GetOrLoad(ctx, cache, op, func(context.Context) (any, error) { sourceCalls++; return 9, nil })
 					return err
 				})
 				if err != nil {
@@ -123,15 +123,15 @@ func TestPreciseShadowDeadline(t *testing.T) {
 						}
 						return ReadResult{Kind: "hit", Frame: Frame{CreatedAtMS: uint64(time.Now().UnixMilli()), Payload: []byte("7")}}, nil
 					}, write: func(Frame) error { writes.Add(1); return nil }}
-					cache := New[any](Options[any]{Remote: remote, ShadowOutcome: func(event Event) { outcomes <- event.Outcome }})
+					cache := MustNew(WithRemote(remote), WithShadowOutcomes(func(event Event) { outcomes <- event.Outcome }))
 					time.Sleep(700 * time.Microsecond)
 					budget, full, zero := int64(1), float64(100), float64(0)
-					op := Operation{Identity: Identity{KeyType: "clock", ID: "one", UseCase: "shadow"}, Policy: Policy{RemoteTTLMS: 60000, Shadow: &ShadowPolicy{Ramp: &full}}, FallbackTimeoutMS: &budget}
+					op := Operation[any]{Identity: Identity{KeyType: "clock", ID: "one", UseCase: "shadow"}, Policy: Policy{RemoteTTL: time.Duration(60000) * time.Millisecond, Shadow: &ShadowPolicy{Ramp: &full}}, SourceTimeout: time.Duration(budget) * time.Millisecond}
 					if dark {
 						op.Policy.RemoteRamp = &zero
 					}
-					err := cache.Enable(context.Background(), func(ctx context.Context) error {
-						_, err := cache.GetOrLoad(ctx, op, func(context.Context) (any, error) { time.Sleep(work); return float64(7), nil })
+					err := cache.WithEnabled(context.Background(), func(ctx context.Context) error {
+						_, err := GetOrLoad(ctx, cache, op, func(context.Context) (any, error) { time.Sleep(work); return float64(7), nil })
 						return err
 					})
 					if !(dark && work >= time.Millisecond) && err != nil {
@@ -158,15 +158,15 @@ func TestPreciseShadowDeadline(t *testing.T) {
 
 func TestLocalInsertionExpiryUsesWholeMilliseconds(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		cache := New[int](Options[int]{Clock: systemClock{origin: time.Now()}})
+		cache := MustNew(WithClock(systemClock{origin: time.Now()}))
 		time.Sleep(700 * time.Microsecond)
-		op := Operation{Identity: Identity{KeyType: "clock", ID: "one", UseCase: "local"}, Policy: Policy{LocalTTLMS: 1000}}
+		op := Operation[int]{Identity: Identity{KeyType: "clock", ID: "one", UseCase: "local"}, Policy: Policy{LocalTTL: time.Duration(1000) * time.Millisecond}}
 		sources := 0
 		call := func() int {
 			var value int
-			if err := cache.Enable(context.Background(), func(ctx context.Context) error {
+			if err := cache.WithEnabled(context.Background(), func(ctx context.Context) error {
 				var err error
-				value, err = cache.GetOrLoad(ctx, op, func(context.Context) (int, error) { sources++; return sources, nil })
+				value, err = GetOrLoad(ctx, cache, op, func(context.Context) (int, error) { sources++; return sources, nil })
 				return err
 			}); err != nil {
 				t.Fatal(err)
@@ -193,25 +193,25 @@ func TestDefaultInstancesShareLocalMillisecondGrid(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		// Align the external schedule to the native default clock's next tick.
 		// Expected results below come only from public calls, not cache state.
-		probe := New[int](Options[int]{})
-		elapsed := elapsedNow(probe.options.Clock)
+		probe := MustNew()
+		elapsed := elapsedNow(probe.settings.clock)
 		if elapsed < 0 {
 			t.Fatal("default clock started with negative elapsed time")
 		}
 		phase := elapsed % time.Millisecond
 		time.Sleep(time.Millisecond - phase)
-		first := New[int](Options[int]{})
+		first := MustNew()
 		time.Sleep(400 * time.Microsecond)
-		second := New[int](Options[int]{})
+		second := MustNew()
 		time.Sleep(300 * time.Microsecond)
-		caches := []*Cache[int]{first, second}
+		caches := []*Cache{first, second}
 		sources := []int{0, 0}
-		op := Operation{Identity: Identity{KeyType: "clock", ID: "one", UseCase: "shared-grid"}, Policy: Policy{LocalTTLMS: 1000}}
+		op := Operation[int]{Identity: Identity{KeyType: "clock", ID: "one", UseCase: "shared-grid"}, Policy: Policy{LocalTTL: time.Duration(1000) * time.Millisecond}}
 		call := func(index int) int {
 			var value int
-			if err := caches[index].Enable(context.Background(), func(ctx context.Context) error {
+			if err := caches[index].WithEnabled(context.Background(), func(ctx context.Context) error {
 				var err error
-				value, err = caches[index].GetOrLoad(ctx, op, func(context.Context) (int, error) { sources[index]++; return sources[index], nil })
+				value, err = GetOrLoad(ctx, caches[index], op, func(context.Context) (int, error) { sources[index]++; return sources[index], nil })
 				return err
 			}); err != nil {
 				t.Fatal(err)
@@ -240,13 +240,13 @@ func TestDefaultInstancesShareLocalMillisecondGrid(t *testing.T) {
 
 func TestPreciseCoalescingAge(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		cache := New[int](Options[int]{})
+		cache := MustNew()
 		time.Sleep(700 * time.Microsecond)
 		started, release, done := make(chan struct{}), make(chan struct{}), make(chan error, 1)
-		op := Operation{Identity: Identity{KeyType: "clock", ID: "one", UseCase: "coalescing"}, Policy: Policy{LocalTTLMS: 1000}}
+		op := Operation[int]{Identity: Identity{KeyType: "clock", ID: "one", UseCase: "coalescing"}, Policy: Policy{LocalTTL: time.Duration(1000) * time.Millisecond}}
 		go func() {
-			done <- cache.Enable(context.Background(), func(ctx context.Context) error {
-				_, err := cache.GetOrLoad(ctx, op, func(context.Context) (int, error) { close(started); <-release; return 7, nil })
+			done <- cache.WithEnabled(context.Background(), func(ctx context.Context) error {
+				_, err := GetOrLoad(ctx, cache, op, func(context.Context) (int, error) { close(started); <-release; return 7, nil })
 				return err
 			})
 		}()
@@ -257,8 +257,8 @@ func TestPreciseCoalescingAge(t *testing.T) {
 		if err := <-done; err != nil {
 			t.Fatal(err)
 		}
-		if state.ActiveLeaders != 1 || state.OldestLeaderAgeMS == nil || *state.OldestLeaderAgeMS != 0 {
-			t.Fatalf("submillisecond leader age was rounded before subtraction: %+v", state)
+		if state.ActiveLeaders != 1 || state.OldestLeaderAge != 350*time.Microsecond {
+			t.Fatalf("submillisecond leader age lost precision: %+v", state)
 		}
 	})
 }
@@ -281,11 +281,11 @@ func (c *earlyPrecisionTimer) AfterFunc(ms int64, f func()) Timer {
 func TestPreciseDeadlineRechecksEarlyTimer(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		clock := &earlyPrecisionTimer{origin: time.Now()}
-		cache := New[int](Options[int]{Clock: clock})
+		cache := MustNew(WithClock(clock))
 		budget := int64(1)
-		op := Operation{Identity: Identity{KeyType: "clock", ID: "one", UseCase: "timer"}, Policy: Policy{RequestLocal: true}, FallbackTimeoutMS: &budget}
-		if err := cache.Enable(context.Background(), func(ctx context.Context) error {
-			value, err := cache.GetOrLoad(ctx, op, func(context.Context) (int, error) { time.Sleep(350 * time.Microsecond); return 7, nil })
+		op := Operation[int]{Identity: Identity{KeyType: "clock", ID: "one", UseCase: "timer"}, Policy: Policy{RequestLocal: true}, SourceTimeout: time.Duration(budget) * time.Millisecond}
+		if err := cache.WithEnabled(context.Background(), func(ctx context.Context) error {
+			value, err := GetOrLoad(ctx, cache, op, func(context.Context) (int, error) { time.Sleep(350 * time.Microsecond); return 7, nil })
 			if err == nil && value != 7 {
 				t.Fatalf("source value=%d", value)
 			}
@@ -308,11 +308,11 @@ func TestPreciseClockPreservesIntegerClockCompatibility(t *testing.T) {
 	for _, work := range []int64{9, 10} {
 		clock := &integerPrecisionClock{}
 		clock.now.Store(100000)
-		cache := New[int](Options[int]{Clock: clock})
+		cache := MustNew(WithClock(clock))
 		budget := int64(10)
-		op := Operation{Identity: Identity{KeyType: "clock", ID: "one", UseCase: "legacy"}, Policy: Policy{RequestLocal: true}, FallbackTimeoutMS: &budget}
-		err := cache.Enable(context.Background(), func(ctx context.Context) error {
-			value, err := cache.GetOrLoad(ctx, op, func(context.Context) (int, error) { clock.now.Add(work); return 7, nil })
+		op := Operation[int]{Identity: Identity{KeyType: "clock", ID: "one", UseCase: "legacy"}, Policy: Policy{RequestLocal: true}, SourceTimeout: time.Duration(budget) * time.Millisecond}
+		err := cache.WithEnabled(context.Background(), func(ctx context.Context) error {
+			value, err := GetOrLoad(ctx, cache, op, func(context.Context) (int, error) { clock.now.Add(work); return 7, nil })
 			if err == nil && value != 7 {
 				t.Fatalf("source value=%d", value)
 			}
@@ -334,14 +334,14 @@ func TestPreciseLocalTTLAcceptsLargeIntegerClockOrigin(t *testing.T) {
 	// before a duration representation wraps, while millisecond values remain
 	// valid. Expiry must compare elapsed age, not an absolute summed cutoff.
 	clock.now.Store(9_223_372_036_800)
-	cache := New[int](Options[int]{Clock: clock})
-	op := Operation{Identity: Identity{KeyType: "clock", ID: "one", UseCase: "large-origin"}, Policy: Policy{LocalTTLMS: 1000}}
+	cache := MustNew(WithClock(clock))
+	op := Operation[int]{Identity: Identity{KeyType: "clock", ID: "one", UseCase: "large-origin"}, Policy: Policy{LocalTTL: time.Duration(1000) * time.Millisecond}}
 	sources := 0
 	call := func() int {
 		var value int
-		if err := cache.Enable(context.Background(), func(ctx context.Context) error {
+		if err := cache.WithEnabled(context.Background(), func(ctx context.Context) error {
 			var err error
-			value, err = cache.GetOrLoad(ctx, op, func(context.Context) (int, error) { sources++; return sources, nil })
+			value, err = GetOrLoad(ctx, cache, op, func(context.Context) (int, error) { sources++; return sources, nil })
 			return err
 		}); err != nil {
 			t.Fatal(err)
