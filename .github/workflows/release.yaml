@@ -244,8 +244,27 @@ jobs:
             exit 1
           fi
 
+          # The Go module in go/ is released on the same commit as go/v<version>.
+          # A module in a subdirectory takes that directory as its tag prefix,
+          # and from major 2 its path must carry the major as a suffix.
+          go_module="$(awk '$1 == "module" { print $2; exit }' go/go.mod)"
+          go_major="${release_version%%.*}"
+          expected_go_module="github.com/$GITHUB_REPOSITORY/go"
+          if (( go_major >= 2 )); then
+            expected_go_module="$expected_go_module/v$go_major"
+          fi
+          if [[ "$go_module" != "$expected_go_module" ]]; then
+            echo "Expected go/go.mod to declare module $expected_go_module for release $release_version; got $go_module" >&2
+            exit 1
+          fi
+          if git rev-parse --verify --quiet "refs/tags/go/v$release_version" >/dev/null; then
+            echo "Go module tag go/v$release_version already exists" >&2
+            exit 1
+          fi
+
           echo "release_commit=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
           echo "release_version=$release_version" >> "$GITHUB_OUTPUT"
+          echo "go_module=$go_module" >> "$GITHUB_OUTPUT"
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - name: Resolve publish release
@@ -298,20 +317,13 @@ jobs:
       - name: Tag the Go module
         env:
           GH_TOKEN: ${{ github.token }}
+          GO_MODULE: ${{ steps.source.outputs.go_module }}
           RELEASE_COMMIT: ${{ steps.source.outputs.release_commit }}
           RELEASE_VERSION: ${{ steps.source.outputs.release_version }}
         run: |
-          # Go has no package registry: a module version is a Git tag, and a
-          # module in a subdirectory takes that directory as its tag prefix.
-          # Tag the commit the npm package was released from so both ports
-          # share one version number and one release commit.
-          module_path="$(awk '$1 == "module" { print $2; exit }' go/go.mod)"
-          expected_path="github.com/$GITHUB_REPOSITORY/go"
-          if [[ "$module_path" != "$expected_path" ]]; then
-            echo "Expected go/go.mod to declare module $expected_path; got $module_path" >&2
-            exit 1
-          fi
-
+          # Go has no package registry: a module version is a Git tag. The
+          # module path and the absent tag were verified before any release
+          # side effect, so this step only creates and publishes the tag.
           tag="go/v$RELEASE_VERSION"
           existing="$(git rev-parse --verify --quiet "refs/tags/$tag^{commit}" || true)"
           if [[ -n "$existing" && "$existing" != "$RELEASE_COMMIT" ]]; then
@@ -324,24 +336,28 @@ jobs:
               -c "credential.helper=!f() { echo username=x-access-token; echo \"password=\$GH_TOKEN\"; }; f" \
               push "https://github.com/$GITHUB_REPOSITORY.git" "refs/tags/$tag"
           fi
-          echo "Tagged Go module $module_path as $tag" >> "$GITHUB_STEP_SUMMARY"
+          echo "Tagged Go module $GO_MODULE as $tag" >> "$GITHUB_STEP_SUMMARY"
 
-          # Ask the public module proxy for the version now so the proxy, the
-          # checksum database and pkg.go.dev record it before the first
-          # consumer asks. Best effort: the tag is the release, and the proxy
-          # fetches on demand. Uppercase path letters are escaped as !lowercase.
+          # Ask the public module proxy and the checksum database for the
+          # version now, so they record it before the first consumer asks and
+          # pkg.go.dev picks it up from the proxy index. Best effort: the tag
+          # is the release, and both services fetch on demand. Uppercase path
+          # letters are escaped as ! followed by the lowercase letter.
           escaped=""
-          for (( i = 0; i < ${#module_path}; i++ )); do
-            ch="${module_path:i:1}"
+          for (( i = 0; i < ${#GO_MODULE}; i++ )); do
+            ch="${GO_MODULE:i:1}"
             if [[ "$ch" == [[:upper:]] ]]; then
               escaped+="!$(printf '%s' "$ch" | tr '[:upper:]' '[:lower:]')"
             else
               escaped+="$ch"
             fi
           done
-          if curl -sSf --retry 5 --retry-all-errors --retry-delay 15 \
-              "https://proxy.golang.org/$escaped/@v/v$RELEASE_VERSION.info" >/dev/null; then
-            echo "proxy.golang.org recorded $module_path@v$RELEASE_VERSION" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "::warning::proxy.golang.org has not recorded $module_path@v$RELEASE_VERSION yet; the first go get will."
-          fi
+          warm() {
+            if curl -sSf --retry 5 --retry-all-errors --retry-delay 15 "$2" >/dev/null; then
+              echo "$1 recorded $GO_MODULE@v$RELEASE_VERSION" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "::warning::$1 has not recorded $GO_MODULE@v$RELEASE_VERSION yet; the first go get will."
+            fi
+          }
+          warm proxy.golang.org "https://proxy.golang.org/$escaped/@v/v$RELEASE_VERSION.info"
+          warm sum.golang.org "https://sum.golang.org/lookup/$escaped@v$RELEASE_VERSION"

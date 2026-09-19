@@ -229,28 +229,33 @@ The merge triggers the publish job. Before any release side effect, it verifies:
 - the release commit subject;
 - the one-file diff;
 - the package version;
-- the absent tag; and
+- the absent npm and Go tags;
+- the Go module path for the release major; and
 - Semantic Release's independently calculated version and commit.
 
 It then reruns the package checks and asks Semantic Release to:
 
 1. create the matching Git tag;
-2. publish the public npm package with provenance;
-3. publish the GitHub release; and
-4. tag the same commit `go/vX.Y.Z` for the Go module.
+2. publish the public npm package with provenance; and
+3. publish the GitHub release.
+
+Finally the workflow tags the same commit `go/vX.Y.Z` for the Go module.
 
 Go has no package registry. A module version is a Git tag that `go get`
 resolves through the public module proxy, and a module in a subdirectory
 takes that directory as its tag prefix, so
 `go get github.com/lan17/DialCache/go@vX.Y.Z` resolves the tag `go/vX.Y.Z`.
-The workflow creates that tag after Semantic Release succeeds, checks that
-`go/go.mod` declares the repository module path, and requests the version
-from `proxy.golang.org` so the proxy, the checksum database and pkg.go.dev
-record it before the first consumer asks. Both ports therefore share one
-version number and one release commit. A fetched version is immutable:
-never move or delete a tag, and retract a bad version with a `retract`
-directive in `go/go.mod`. If the step fails after the npm publication,
-create the tag by hand:
+Both ports therefore share one version number and one release commit from
+the first tagged release onward; earlier npm versions have no Go tag. After
+pushing the tag, the workflow requests the version from `proxy.golang.org`
+and `sum.golang.org` so the proxy and the checksum database record it, and
+pkg.go.dev follows the proxy index. A fetched version is immutable: never
+move or delete a tag. To withdraw a bad version, add a `retract` directive
+to `go/go.mod` and publish a newer version that carries it; the retraction
+takes effect only once that newer version exists. From 2.0.0 the module
+path must gain a `/v2` suffix before the release, and the pre-flight check
+rejects a release whose major does not match `go/go.mod`. If the tag step
+fails after the npm publication, create the tag by hand:
 
 ```sh
 git tag go/vX.Y.Z vX.Y.Z

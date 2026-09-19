@@ -21,9 +21,9 @@ and the [feature and corner-case map](../formal/FEATURE-COVERAGE.md).
 The module requires Go 1.25 or later; CI pins the toolchain. Applications own
 their Redis client and its connection, retry and resource budgets.
 
-Each release tags the commit that publishes npm version `X.Y.Z` as `go/vX.Y.Z`,
-so one version number names one behavior contract in both languages. Install
-a release with `go get github.com/lan17/DialCache/go@vX.Y.Z`.
+Releases tag the commit that publishes npm version `X.Y.Z` as `go/vX.Y.Z`, so
+one version number names one behavior contract in both languages; npm versions
+before the first Go tag have none. Install one with `go get github.com/lan17/DialCache/go@vX.Y.Z`.
 
 ```go
 import (
