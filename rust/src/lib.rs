@@ -12,6 +12,7 @@
 pub mod cancel;
 pub mod clock;
 pub mod codec;
+pub mod datadog;
 mod deadline;
 mod engine;
 pub mod error;
@@ -20,10 +21,13 @@ mod flight;
 pub mod identity;
 pub mod limits;
 pub mod local;
+pub mod metrics;
 pub mod observe;
 pub mod operation;
 pub mod policy;
 pub mod preview;
+#[cfg(feature = "prometheus")]
+pub mod prometheus;
 pub mod protocol;
 pub mod remote;
 pub mod runtime;
@@ -33,9 +37,14 @@ mod shadow;
 pub mod testing;
 mod use_case;
 
+#[cfg(feature = "prometheus")]
+pub use self::prometheus::{CollectorSchema, PrometheusError, PrometheusObserver};
 pub use cancel::CancelToken;
 pub use clock::{Clock, SystemClock};
 pub use codec::{Codec, FromSync, JsonCodec, Payload, SyncCodec};
+pub use datadog::{
+    DatadogError, DatadogObserver, DatadogOptions, DogStatsdClient, ObservationMetricType,
+};
 pub use engine::{
     CoalescingState, DialCache, DialCacheBuilder, PolicyProvider, ProcessCoalescingState,
     ScopeGuard,
@@ -43,6 +52,7 @@ pub use engine::{
 pub use error::{BoxError, ConfigError, Error, FallbackTimeout, RemoteReadTimeout, SharedError};
 pub use identity::{normalize_args, ArgValue, Identity, IdentityError, Keys};
 pub use local::{LocalEntry, LocalStore, LruLocalStore, StoredValue};
+pub use metrics::MetricKind;
 pub use observe::{Event, Labels, LogEvent, LogLevel, Logger, Observer, ShadowMismatchDetails};
 pub use operation::{Comparator, Operation, Preview, RecoveryPredicate, SourceBudget};
 pub use policy::{
