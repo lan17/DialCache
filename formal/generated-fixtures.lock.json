@@ -23,7 +23,7 @@
     "formal/dialcache-source-budgets-conformance.qnt": "bee0b564a12de2b5c857a9f377df5c693c83e19252e88fe92cae5624cf8b91f8",
     "formal/execution.json": "64a128ba1c0da5622611d21e0130919d8f0b61c3e731ebd552cdd3fac3c4330f",
     "formal/execution.mjs": "b666129fd5ffe7d07b0288a2484adfe811548b367ac306da68ae991d979868cf",
-    "formal/fixture-recipes.json": "a602c9541b462b3007e0ca9b6dcb0e2f3c7e4d84f1f9ee4d0aa1eaa6ef128a66",
+    "formal/fixture-recipes.json": "64c0d2004cf037d9f3b12b93fc9a304d596add7d5f0ffe99e8f0f816ed910ba0",
     "formal/generated-fixtures.mjs": "fcef898e1125686589a69c8065d8f883ac5aeb2a469ba7e260e95c6a9a9a78ed",
     "formal/kernel/calls.qnt": "856c2d7249ea053aaf3a18bb5d235350b5d35e1100f4b4421efa20aceba9767f",
     "formal/kernel/clock.qnt": "e46ce9026e6e5ab1b358b0287e8ba5b5904a064e78355c0abbd1554562bb47a4",
@@ -74,6 +74,7 @@
     "test/fixtures/source-budgets-witnesses.json": "d1a9a0156102d805da4f11f6ec3d1c81950aac73681c34cc0eee15a4174a8df1",
     "test/fixtures/policy-witnesses.json": "c95fe80fa5897ee5bbdac9d9c99f64d4c5f8945fc78341bb1ff5a3ecb41541c2",
     "test/fixtures/layers-witnesses.json": "e40424109419ed4cc2d4b2e137ec0e504903889412f31ae39e46508d55b9c1cb",
-    "test/fixtures/independent-witnesses.json": "7a01019124bbe902f5b92850e61f403dbe60105a281ca6fc932f9b6e255c5dad"
+    "test/fixtures/independent-witnesses.json": "a11c74ddd093c5b260a1e6ffa7ef564dbf1be9799d5382b5ddb14e35a4e0ce7d",
+    "test/fixtures/independent-shadow-witnesses.json": "79ca3c8ddeaba73b96b1eb8ff2b8d80cac4617701dd79127dc666945ccdc5a7e"
   }
 }

@@ -186,7 +186,7 @@ the classifiers alone, as the policy composition did (its `modelView` maps the
 shadow to the layered shape). The classifiers still reading private
 predictions, to migrate the same way (layers is already composed and still
 owes this):
-`effects.mjs`, `independent.mjs`, `layers.mjs`, `recovery.mjs` (the scope and
+`effects.mjs`, `layers.mjs`, `recovery.mjs` (the scope and
 wall-rollback rules), `recovery-shadow.mjs`, `shadow.mjs`, and the scope and
 layers rules of `runtime.mjs`.
 

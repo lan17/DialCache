@@ -208,6 +208,43 @@
         "sourceErrors": true
       }
     },
+    "independent-shadow": {
+      "calls": true,
+      "created": true,
+      "expires": true,
+      "frame": true,
+      "io": {
+        "aborted": true,
+        "budgets": true,
+        "sourceErrors": true
+      },
+      "loads": true,
+      "maxAge": true,
+      "now": true,
+      "o": {
+        "calls": true,
+        "classifications": true,
+        "comparisons": true,
+        "dumps": true,
+        "invalidations": true,
+        "loaders": true,
+        "loads": true,
+        "maintenance": true,
+        "policyCalls": true,
+        "reads": true,
+        "recovery": true,
+        "shadow": true,
+        "sourceScopes": true,
+        "writeTtls": true,
+        "writes": true
+      },
+      "readBudget": true,
+      "reads": true,
+      "sources": true,
+      "timers": true,
+      "wall": true,
+      "watermark": true
+    },
     "recovery-read": {
       "acceptedFresh": true,
       "acceptedMaximum": true,
@@ -2762,6 +2799,266 @@
           "id": "staggeredSourcesExpireAtTheirOwnDeadlineTest",
           "regression": "staggeredSourcesExpireAtTheirOwnDeadlineTest",
           "projection": "independent"
+        },
+        {
+          "id": "independentReadDeadlinesStartSeparateSourcesTest",
+          "regression": "independentReadDeadlinesStartSeparateSourcesTest",
+          "projection": "independent"
+        },
+        {
+          "id": "timedOutReadCannotAffectAnotherCallTest",
+          "regression": "timedOutReadCannotAffectAnotherCallTest",
+          "projection": "independent"
+        },
+        {
+          "id": "readFailureCannotBorrowAnotherCallsRefillTest",
+          "regression": "readFailureCannotBorrowAnotherCallsRefillTest",
+          "projection": "independent"
+        },
+        {
+          "id": "independentRecoveryAtCapturedAgeBoundaryTest",
+          "regression": "independentRecoveryAtCapturedAgeBoundaryTest",
+          "projection": "independent"
+        },
+        {
+          "id": "independentRecoveriesServeDistinctAcquiredSnapshotsTest",
+          "regression": "independentRecoveriesServeDistinctAcquiredSnapshotsTest",
+          "projection": "independent"
+        },
+        {
+          "id": "acquiredFreshDecodeSurvivesInvalidation",
+          "actions": [
+            [
+              "init",
+              -1
+            ],
+            [
+              "seed",
+              0
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releaseRead",
+              0
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "releaseLoad",
+              0
+            ]
+          ],
+          "projection": "independent"
+        },
+        {
+          "id": "lateSourceDoesNotAffectOtherCall",
+          "actions": [
+            [
+              "init",
+              -1
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releaseRead",
+              0
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "advance",
+              10
+            ],
+            [
+              "rejectLoader",
+              0
+            ]
+          ],
+          "projection": "independent"
+        },
+        {
+          "id": "failedRecoveryKeepsSourceError",
+          "actions": [
+            [
+              "init",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releaseRead",
+              0
+            ],
+            [
+              "rejectLoader",
+              0
+            ],
+            [
+              "failLoad",
+              0
+            ]
+          ],
+          "projection": "independent"
+        }
+      ]
+    },
+    {
+      "path": "test/fixtures/independent-shadow-witnesses.json",
+      "model": "formal/dialcache-independent-conformance.qnt",
+      "format": "named-map",
+      "recipes": [
+        {
+          "id": "shadowWalk",
+          "actions": [
+            [
+              "init",
+              -1
+            ],
+            [
+              "policy",
+              1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "policy",
+              2
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releaseRead",
+              0
+            ],
+            [
+              "failRead",
+              1
+            ],
+            [
+              "advance",
+              5
+            ],
+            [
+              "rejectLoader",
+              0
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "releaseLoad",
+              0
+            ],
+            [
+              "advance",
+              5
+            ],
+            [
+              "releaseRead",
+              2
+            ],
+            [
+              "seed",
+              2
+            ],
+            [
+              "resolveLoader",
+              5
+            ],
+            [
+              "rejectLoader",
+              1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releaseRead",
+              3
+            ],
+            [
+              "resolveLoader",
+              8
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releaseRead",
+              4
+            ],
+            [
+              "invalidate",
+              -1
+            ],
+            [
+              "advance",
+              1000
+            ],
+            [
+              "advance",
+              5
+            ],
+            [
+              "failLoad",
+              1
+            ],
+            [
+              "seed",
+              1
+            ],
+            [
+              "beginCall",
+              -1
+            ],
+            [
+              "releaseRead",
+              5
+            ],
+            [
+              "rejectLoader",
+              5
+            ],
+            [
+              "failLoad",
+              2
+            ],
+            [
+              "advance",
+              10
+            ],
+            [
+              "invalidate",
+              -1
+            ]
+          ],
+          "projection": "independent-shadow"
         }
       ]
     }
