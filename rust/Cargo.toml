@@ -1,0 +1,43 @@
+[package]
+name = "dialcache"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+license = "MIT"
+description = "Explicitly enabled, layered caching with runtime rollout, request coalescing, tracked invalidation, stale recovery and shadow validation. Rust port of DialCache."
+repository = "https://github.com/lan17/DialCache"
+keywords = ["cache", "redis", "async"]
+categories = ["caching"]
+publish = false
+
+[features]
+default = ["tokio"]
+tokio = ["dep:tokio"]
+redis = ["dep:redis", "dep:sha1", "dep:hex"]
+prometheus = ["dep:prometheus"]
+
+[dependencies]
+futures = "0.3"
+parking_lot = "0.12"
+lru = "0.18"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+zstd = "0.14"
+zstd-safe = "7"
+thiserror = "2"
+log = "0.4"
+tokio = { version = "1", features = ["rt", "time"], optional = true }
+redis = { version = "1", features = ["tokio-comp", "cluster-async", "script"], optional = true }
+sha1 = { version = "0.11", optional = true }
+hex = { version = "0.4", optional = true }
+prometheus = { version = "0.14", optional = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+hex = "0.4"
+serde_json = "1"
+
+[[test]]
+name = "conformance"
+path = "tests/conformance.rs"
+harness = false
