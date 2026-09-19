@@ -332,15 +332,24 @@ module dialcache_independent_conformance {
     .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO) and s.o.recovery == List("served", "served")
       and s.o.reads == 2 and s.o.loaders == 2 and s.o.loads == 2 and s.o.dumps == 0 and s.o.writes == 0)
 
-  // A fresh hit retains nothing: when its decode fails (here under a
-  // watermark raised since the read), the loader it starts cannot recover,
-  // and a rejection completes with the source error and the loader's
-  // identity, unclassified.
+  // A fresh hit retains nothing: when its decode fails, the loader it starts
+  // cannot recover, and a rejection completes with the source error and the
+  // loader's identity, unclassified.
   run freshDecodeFailureCannotRecoverTest = init.then(seedWith(0)).then(beginCall).then(readAt(0))
     .expect(s.o.loads == 1 and s.o.loaders == 0)
-    .then(invalidate).then(failLoadAt(0)).expect(s.o.loaders == 1 and s.o.calls == List(CALL_PENDING))
+    .then(failLoadAt(0)).expect(s.o.loaders == 1 and s.o.calls == List(CALL_PENDING))
     .then(rejectAt(0))
     .expect(s.o.calls == List(SOURCE_ERROR) and s.o.classifications == 0 and s.o.recovery == List() and s.io.sourceErrors == List(1))
+  // The loader a failed fresh decode starts carries no fence (C58): the frame
+  // the read accepted had cleared the watermark, so a watermark raised since
+  // the read does not fence its refill. The loader's value replaces the frame
+  // with the reply's retention and the caller completes with it.
+  run freshDecodeFailureRefillsUnfencedUnderARaisedWatermarkTest = init.then(seedWith(0)).then(beginCall).then(readAt(0))
+    .then(invalidate).then(failLoadAt(0))
+    .expect(s.o.loaders == 1 and s.sources.nth(0).fence == NO_FENCE and s.watermark.nth(0) == Clock::wallOf(s))
+    .then(resolveWith(2))
+    .expect(s.o.calls == List(VALUE_TWO) and s.o.writes == 1 and s.o.writeTtls == List(LONG_RETENTION_MS)
+      and s.remoteValues == List(VALUE_TWO) and s.o.recovery == List())
   // A visible frame the read declined as stale carries no fence (C58): the
   // frame itself cleared the watermark, so its miss refills unfenced, and the
   // refill is fresh for the next caller's read.

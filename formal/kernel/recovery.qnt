@@ -45,7 +45,9 @@ module recovery {
   pure val DENY = 2
 
   // Per recoverable flight: the candidate (0 when none), the frame's stamp at
-  // the read, the maximum admitted for it and the classifier in force.
+  // the read, the maximum admitted for it and the classifier in force. A
+  // flight retains at most once (its one held read settles once) and `drop`
+  // runs at its completion, so the list holds one snapshot per flight.
   type Snapshot = { flight: int, candidate: int, created: int, maximum: int, classifier: int }
   pure val NO_SNAPSHOT: Snapshot = { flight: NO_OWNER, candidate: NO_VALUE, created: 0, maximum: 0, classifier: NONE }
   type Recovering[r] = Remote::Frames[{ o: Observation, retained: List[Snapshot] | r }]
@@ -54,8 +56,6 @@ module recovery {
     val found = state.retained.select(snapshot => snapshot.flight == flight)
     if (found.length() == 0) NO_SNAPSHOT else found.nth(0)
   }
-  pure def replace(state: Recovering[r], snapshot: Snapshot): Recovering[r] =
-    { retained: state.retained.select(other => other.flight != snapshot.flight).append(snapshot), ...state }
   pure def drop(state: Recovering[r], flight: int): Recovering[r] =
     { retained: state.retained.select(other => other.flight != flight), ...state }
 
@@ -66,13 +66,13 @@ module recovery {
     if (classifier == NONE) state else {
       val created = state.created.nth(key)
       val stale = visible and retainedAgeAllowed(created, Clock::wallOf(state), ttls.freshMs, ttls.retentionMs)
-      replace(state, {
+      { retained: state.retained.append({
         flight: flight,
         candidate: if (stale) state.remoteValues.nth(key) else NO_VALUE,
         created: created,
         maximum: ttls.retentionMs,
         classifier: classifier
-      })
+      }), ...state }
     }
 
   // Classification at loader failure, for the snapshot the flight retained.

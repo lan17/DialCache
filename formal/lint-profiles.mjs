@@ -15,12 +15,15 @@
 //   kernel definition is rule logic the library would run where the walk
 //   cannot follow it (the kernel's own folds take their expiry only from
 //   kernel modules), so an argument in a parameter position the kernel
-//   definition declares with an operator type is reported at the call unless
-//   it names a kernel definition, following `def x = <name>` aliases and
-//   let-bound names: the judgment is the declared position, not the
-//   argument's spelling. profile-lint-baseline.json records each profile's
-//   count: a composed profile has zero and the other counts are the migration
-//   work list.
+//   definition declares with an operator type (spelled inline or through a
+//   type alias, followed through alias chains to the typedef) is reported at
+//   the call unless it names a kernel definition, following `def x = <name>`
+//   aliases and let-bound names: the judgment is the declared position, not
+//   the argument's spelling. The callee is resolved the same way, so a kernel
+//   definition applied through a profile alias is judged as the kernel's
+//   application and recorded as its transition. profile-lint-baseline.json
+//   records each profile's count: a composed profile has zero and the other
+//   counts are the migration work list.
 // - Witness isolation: no definition reachable from a cache guard, a cache
 //   assignment, the profile's init or step, an input-choice domain (the
 //   expression of a `nondet ... .oneOf()`), an observation projection (the
@@ -34,7 +37,10 @@
 // type is the declaration's `typeAnnotation`, an `oper` whose `args` are the
 // parameter types for a parametrized definition (every kernel definition
 // declares one, as does the constructor Quint synthesizes for a sum type's
-// variant); `x' = e` is an
+// variant); a parameter typed through a type alias is recorded as a `const`
+// type naming the alias (wrapped in an `app` whose `ctor` is that `const` when
+// the alias takes type parameters), and the table maps the `const`'s id to the
+// `typedef` declaration whose `type` is the aliased type; `x' = e` is an
 // `app` with opcode `assign` and arguments `[name x, e]`; `nondet c = D.oneOf()`
 // is a `let` whose `opdef` has qualifier `nondet`; `import M(C = e) as K` is an
 // `instance` declaration with `overrides: [[{ name }, e]]`; `K::x` resolves to
@@ -122,6 +128,7 @@ export function indexModules(parsed, { main } = {}) {
   const mainModule = main ?? modules.at(-1);
   if (!modules.includes(mainModule)) throw new Error(`Module ${mainModule} is not in the parsed set (${modules.join(', ')})`);
   const declarations = new Map();
+  const typedefs = new Map();
   const graphNodes = new Map();
   const instances = [];
   const labelOf = (module, name) => module === mainModule ? name : `${module}::${name}`;
@@ -144,6 +151,9 @@ export function indexModules(parsed, { main } = {}) {
           protoName: declaration.protoName, overrides });
         continue;
       }
+      // A type declaration: the aliased type (undefined for an uninterpreted
+      // type), consulted when a kernel parameter is typed through the alias.
+      if (declaration.kind === 'typedef') { typedefs.set(declaration.id, { id: declaration.id, name: declaration.name, module: module.name, type: declaration.type }); continue; }
       if (declaration.kind !== 'def' && declaration.kind !== 'var' && declaration.kind !== 'const') continue;
       const key = String(declaration.id);
       register(declaration, module.name, key);
@@ -158,7 +168,7 @@ export function indexModules(parsed, { main } = {}) {
       throw new Error(`Lookup table entry ${id} resolves to undeclared ${target.kind} ${target.name} (id ${target.id})`);
     }
   }
-  return { modules, main: mainModule, declarations, nodes: graphNodes, instances, table: parsed.table,
+  return { modules, main: mainModule, declarations, typedefs, nodes: graphNodes, instances, table: parsed.table,
     tableSize: Object.keys(parsed.table).length, labelOf, effectCache: new Map() };
 }
 
@@ -288,6 +298,25 @@ export function lintComposition(index, { kernelModules = [] } = {}) {
     const key = `${node.key}|${detail}`;
     if (!violations.has(key)) violations.set(key, { definition: node.label, detail, chain });
   };
+  // Whether a declared type is an operator type: spelled inline, or a type
+  // alias (`type Step[r] = (Counter[r], int) => Counter[r]`, recorded as a
+  // `const` type name, applied to its arguments when the alias takes type
+  // parameters) whose typedef resolves to one through the lookup table,
+  // following alias chains. An alias the table does not resolve is an error
+  // here, not a position silently taken for a value.
+  const isOperatorType = (type, declaration, seen = new Set()) => {
+    if (type.kind === 'oper') return true;
+    const alias = type.kind === 'const' ? type : type.kind === 'app' && type.ctor?.kind === 'const' ? type.ctor : undefined;
+    if (alias === undefined) return false;
+    const target = index.table[alias.id];
+    const typedef = target?.kind === 'typedef' ? index.typedefs.get(target.id) : undefined;
+    if (typedef === undefined) {
+      throw new Error(`Kernel definition ${index.labelOf(declaration.module, declaration.name)} declares the parameter type ${alias.name}, which resolves to no type declaration; the composition rule judges operator positions from declared parameter types`);
+    }
+    // An uninterpreted type or a cyclic alias names no operator.
+    if (typedef.type === undefined || seen.has(typedef.id)) return false;
+    return isOperatorType(typedef.type, declaration, seen.add(typedef.id));
+  };
   // The parameter positions a kernel definition declares with an operator
   // type. The judgment needs the declared type: a kernel definition without
   // one is an error here, not a position silently taken for a value.
@@ -296,19 +325,24 @@ export function lintComposition(index, { kernelModules = [] } = {}) {
       throw new Error(`Kernel definition ${index.labelOf(declaration.module, declaration.name)} declares no type; the composition rule judges operator positions from declared parameter types`);
     }
     const type = declaration.typeAnnotation;
-    return type?.kind === 'oper' ? type.args.flatMap((argument, position) => argument.kind === 'oper' ? [position] : []) : [];
+    return type?.kind === 'oper' ? type.args.flatMap((argument, position) => isOperatorType(argument, declaration) ? [position] : []) : [];
   };
-  // Whether an argument names a kernel definition, following `def x = <name>`
-  // aliases and let-bound names (both a `def` whose expr is a `name`). A
-  // lambda literal, a lambda parameter (a helper's forwarded operator) and a
-  // profile definition, aliased or not, do not.
-  const namesKernelDefinition = (argument, seen = new Set()) => {
-    if (argument.kind !== 'name') return false;
-    const declaration = resolveTarget(index, argument);
-    if (declaration?.kind !== 'def' || seen.has(declaration.id)) return false;
-    if (isKernel(declaration)) return true;
-    return declaration.expr?.kind === 'name' && namesKernelDefinition(declaration.expr, seen.add(declaration.id));
+  // The kernel definition a declaration is, directly or through `def x =
+  // <name>` aliases and let-bound names (both a `def` whose expr is a `name`);
+  // undefined for a lambda parameter, a profile definition with a body of its
+  // own, and a chain that ends outside the kernel. Both sides of a call are
+  // resolved this way: the callee, so a kernel definition applied through a
+  // profile alias is judged as the kernel's application, and each argument in
+  // an operator position, so a kernel definition passed under an alias is
+  // accepted while a lambda literal, a lambda parameter (a helper's forwarded
+  // operator) and a profile definition, aliased or not, are not.
+  const resolveKernel = (declaration, seen = new Set()) => {
+    if (declaration === undefined) return undefined;
+    if (isKernel(declaration)) return declaration;
+    if (declaration.kind !== 'def' || declaration.expr?.kind !== 'name' || seen.has(declaration.id)) return undefined;
+    return resolveKernel(resolveTarget(index, declaration.expr), seen.add(declaration.id));
   };
+  const namesKernelDefinition = argument => argument.kind === 'name' && resolveKernel(resolveTarget(index, argument))?.kind === 'def';
   // Walks one expression; returns whether its value carries cache state.
   // `tainted` maps parameter and let names of the walked body to state taint.
   const walk = (expr, { node, chain, tainted, variable }) => {
@@ -343,12 +377,16 @@ export function lintComposition(index, { kernelModules = [] } = {}) {
     const declaration = resolveTarget(index, expr);
     const stateful = expr.args.map(again);
     if (declaration) {
-      if (isKernel(declaration)) {
-        const label = index.labelOf(declaration.module, declaration.name);
-        if (declaration.kind === 'def') transitions.add(label);
+      // The kernel definition applied, named directly or through an alias:
+      // its transition is recorded and its positions judged against the
+      // arguments as written.
+      const kernelDefinition = resolveKernel(declaration);
+      if (kernelDefinition) {
+        const label = index.labelOf(kernelDefinition.module, kernelDefinition.name);
+        if (kernelDefinition.kind === 'def') transitions.add(label);
         // An operator position filled by anything but a kernel definition is
         // rule logic the library would run where the walk cannot follow it.
-        if (operatorPositions(declaration).some(position => !namesKernelDefinition(expr.args[position]))) report(node, chain, `operator passed to ${label} in the value of ${variable}`);
+        if (operatorPositions(kernelDefinition).some(position => !namesKernelDefinition(expr.args[position]))) report(node, chain, `operator passed to ${label} in the value of ${variable}`);
         return true;
       }
       // A definition bound inside this body: its lambda parameters take the

@@ -44,6 +44,7 @@ const fixtureNames = [
   "profile-witness-input", "profile-witness-match", "composition-clean", "composition-thick", "composition-nondet-inline",
   "composition-action-argument", "composition-wiring-passes", "composition-lambda-argument", "composition-named-operator-argument",
   "composition-lambda-through-helper", "composition-aliased-operator-argument", "composition-let-bound-operator-argument",
+  "library-alias", "composition-alias-typed-operator-position", "composition-aliased-callee", "composition-aliased-transition",
 ];
 // Quint's effect checker rejects an operator constant that reads a variable
 // (QNT201), so this route can only be shown on the parsed IR; the lint must
@@ -224,6 +225,34 @@ describe.skipIf(!quintAvailable)("profile lint over synthetic kernel instances",
     expect(report.composition.violations).toEqual([
       { definition: "repeatWith", detail: "operator passed to library::repeat in the value of s", chain: ["bumpWrapper", "repeatWith"] },
     ]);
+  }, quintTimeout);
+
+  it("judges a position declared through a type alias, or a chain of aliases, as the operator position it resolves to", async () => {
+    const report = await lintModel(fixture("composition-alias-typed-operator-position"), { kernelModules: ["library_alias"] });
+    expect(report.composition.libraryTransitions).toEqual(["library_alias::bump", "library_alias::repeatChained", "library_alias::repeatVia"]);
+    // Quint records `each: Step[r]` as the alias name, not as an operator type;
+    // the typedef it resolves to is the operator type, so the lambda is reported
+    // like one passed to an inline-typed position, and the kernel's step passes.
+    expect(report.composition.violations).toEqual([
+      { definition: "bumpWrapper", detail: "operator passed to library_alias::repeatVia in the value of s", chain: ["bumpWrapper"] },
+      { definition: "chainedWrapper", detail: "operator passed to library_alias::repeatChained in the value of s", chain: ["chainedWrapper"] },
+    ]);
+  }, quintTimeout);
+
+  it("judges a kernel definition applied through a profile alias as the kernel's application", async () => {
+    const report = await lintModel(fixture("composition-aliased-callee"), { kernelModules: ["library"] });
+    // The callee `repeatAlias` resolves to `library::repeat`: the transition is
+    // recorded under the kernel's name and the lambda in its operator position is reported.
+    expect(report.composition.libraryTransitions).toEqual(["library::bump", "library::repeat"]);
+    expect(report.composition.violations).toEqual([
+      { definition: "bumpWrapper", detail: "operator passed to library::repeat in the value of s", chain: ["bumpWrapper"] },
+    ]);
+  }, quintTimeout);
+
+  it("records a kernel transition applied through a profile alias with wiring-only arguments and reports nothing", async () => {
+    const report = await lintModel(fixture("composition-aliased-transition"), { kernelModules: ["library"] });
+    expect(report.composition.libraryTransitions).toEqual(["library::bump", "library::repeat"]);
+    expect(report.composition.violations).toEqual([]);
   }, quintTimeout);
 
   it("accepts the wiring the rule admits by design: a record literal over a library result, a chosen input passed through, and a kernel definition in an operator position by name or alias", async () => {

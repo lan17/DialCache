@@ -786,6 +786,7 @@
         "independentRecoveryAtCapturedAgeBoundaryTest",
         "independentRecoveriesServeDistinctAcquiredSnapshotsTest",
         "freshDecodeFailureCannotRecoverTest",
+        "freshDecodeFailureRefillsUnfencedUnderARaisedWatermarkTest",
         "visibleStaleMissCarriesNoFenceAndRefillsTest",
         "readExpiryStartsItsLoaderAtTheReadsDueInstantTest"
       ],
@@ -808,6 +809,7 @@
         "acceptedFreshDecodeSurvivesOtherInvalidationTest",
         "recoveryPolicyIsCapturedPerCallerTest",
         "freshDecodeFailureCannotRecoverTest",
+        "freshDecodeFailureRefillsUnfencedUnderARaisedWatermarkTest",
         "visibleStaleMissCarriesNoFenceAndRefillsTest",
         "readExpiryStartsItsLoaderAtTheReadsDueInstantTest"
       ]

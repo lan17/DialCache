@@ -9,7 +9,7 @@
   },
   "inputs": {
     "semanticCasesSha256": "f009de0239f532b698704c9a661096684abf5f6aadb10b390e7766ee63100351",
-    "executionSha256": "e965033475b48bd6e46f5850a0af8f4270a0139ae721d9fe95f7fd8174be4214",
+    "executionSha256": "51a6ad5790bd2822641d70265c19c56509e3b9969ff3838a51e995ae846180eb",
     "sourceAuditSha256": "bc8c204854994e669fe15e900251886be0b429084ce1cfccce5926025ad41c0e",
     "quintCaseAuditSha256": "f6b9a00a53d8876eb03dd100cb228c9c1e8f871180818230f0844f271ac65b43",
     "featureCoverageSha256": "56eedfa865682db6ad8e73b8673c7dac1c30d301e9bce3390246d6994aba9dcb",
@@ -30,11 +30,11 @@
     "withoutModelDrivenReplay": [],
     "quintModels": 32,
     "scheduledInvariants": 217,
-    "scheduledRegressions": 422,
+    "scheduledRegressions": 423,
     "quintGeneratedProtocolVectors": 1343,
     "quintGeneratedInvalidationVectors": 288,
     "caseReferencedWitnesses": 306,
-    "exportedRegressionHistories": 258
+    "exportedRegressionHistories": 259
   },
   "profiles": [
     {
@@ -345,6 +345,7 @@
         "acceptedFreshDecodeSurvivesOtherInvalidationTest",
         "recoveryPolicyIsCapturedPerCallerTest",
         "freshDecodeFailureCannotRecoverTest",
+        "freshDecodeFailureRefillsUnfencedUnderARaisedWatermarkTest",
         "visibleStaleMissCarriesNoFenceAndRefillsTest",
         "readExpiryStartsItsLoaderAtTheReadsDueInstantTest"
       ],
