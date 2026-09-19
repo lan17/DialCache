@@ -3,7 +3,7 @@
 //! Quint-generated frame and envelope artifacts).
 
 // TODO(integrator): switch to `formal/fixtures.rs` and delete `formal/fixtures_tmp.rs`.
-#[path = "formal/fixtures_tmp.rs"]
+#[path = "formal/fixtures.rs"]
 mod fixtures;
 #[path = "formal/frame_vectors.rs"]
 mod frame_vectors;

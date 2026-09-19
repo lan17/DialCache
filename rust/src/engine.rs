@@ -25,9 +25,9 @@ use crate::operation::{downcast_value, erase_load, ErasedOperation, Operation, R
 use crate::policy::RuntimePolicy;
 use crate::protocol::CompressionConfig;
 use crate::remote::{InvalidateRequest, Remote};
+use crate::runtime::Runtime;
 use crate::scope::{Owner, Scope};
 use crate::shadow::ShadowFlight;
-use crate::runtime::Runtime;
 
 /// Resolves a sparse runtime policy overlay once per enabled call.
 pub type PolicyProvider = Arc<
@@ -452,7 +452,11 @@ impl DialCache {
     /// ```
     pub fn enable_guard(&self) -> ScopeGuard {
         let owner = Owner::new();
-        let scope = Scope { cache_id: self.core.id, owner: Some(owner.clone()), enabled: true };
+        let scope = Scope {
+            cache_id: self.core.id,
+            owner: Some(owner.clone()),
+            enabled: true,
+        };
         ScopeGuard { scope, owner }
     }
 

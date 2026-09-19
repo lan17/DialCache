@@ -273,15 +273,22 @@ async fn source_with_budget(
         |message| Err(Error::Panic(message)),
     );
     let use_case = labels.use_case.to_string();
-    let result = await_deadline(clock.as_ref(), core.runtime.as_ref(), &pending, start, budget, || {
-        if let Some(flag) = timed_out {
-            flag.store(true, Ordering::SeqCst);
-        }
-        Err(Error::FallbackTimeout(Arc::new(FallbackTimeout {
-            use_case,
-            timeout_ms: budget.unwrap_or(0),
-        })))
-    })
+    let result = await_deadline(
+        clock.as_ref(),
+        core.runtime.as_ref(),
+        &pending,
+        start,
+        budget,
+        || {
+            if let Some(flag) = timed_out {
+                flag.store(true, Ordering::SeqCst);
+            }
+            Err(Error::FallbackTimeout(Arc::new(FallbackTimeout {
+                use_case,
+                timeout_ms: budget.unwrap_or(0),
+            })))
+        },
+    )
     .await;
     if result.is_err() {
         core.emit(Event::Error {
@@ -645,13 +652,20 @@ impl Execution {
         let use_case = self.labels.use_case.to_string();
         let waited = raw.clone();
         let bounded = Box::pin(async move {
-            let result = await_deadline(clock.as_ref(), runtime.as_ref(), &waited, start, Some(timeout_ms), || {
-                cancel.cancel();
-                Err(Arc::new(RemoteReadTimeout {
-                    use_case,
-                    timeout_ms,
-                }) as SharedError)
-            })
+            let result = await_deadline(
+                clock.as_ref(),
+                runtime.as_ref(),
+                &waited,
+                start,
+                Some(timeout_ms),
+                || {
+                    cancel.cancel();
+                    Err(Arc::new(RemoteReadTimeout {
+                        use_case,
+                        timeout_ms,
+                    }) as SharedError)
+                },
+            )
             .await;
             result.map(|read| normalize_read_result(read, tracked))
         });

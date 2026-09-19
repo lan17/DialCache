@@ -35,7 +35,9 @@ impl SystemClock {
         let process = *PROCESS_ORIGIN.get_or_init(Instant::now);
         let now = Instant::now();
         let phase = now.saturating_duration_since(process).as_nanos() % 1_000_000;
-        let origin = now.checked_sub(Duration::from_nanos(phase as u64)).unwrap_or(now);
+        let origin = now
+            .checked_sub(Duration::from_nanos(phase as u64))
+            .unwrap_or(now);
         SystemClock { origin }
     }
 }

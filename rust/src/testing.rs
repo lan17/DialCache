@@ -25,7 +25,10 @@ pub const WALL_EPOCH_MS: i64 = 1_788_868_800_000;
 
 impl std::fmt::Debug for VirtualClock {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("VirtualClock").field("wall_ms", &self.wall_ms()).field("elapsed", &self.elapsed()).finish()
+        f.debug_struct("VirtualClock")
+            .field("wall_ms", &self.wall_ms())
+            .field("elapsed", &self.elapsed())
+            .finish()
     }
 }
 
@@ -81,7 +84,9 @@ impl VirtualClock {
     /// The earliest live timer due at or before `target_ns` scheduler time.
     fn pop_due(&self, target_ns: u128) -> Option<Arc<TimerState>> {
         let mut state = self.state.lock();
-        state.timers.retain(|t| !t.cancelled.load(Ordering::SeqCst) && !t.fired.load(Ordering::SeqCst));
+        state
+            .timers
+            .retain(|t| !t.cancelled.load(Ordering::SeqCst) && !t.fired.load(Ordering::SeqCst));
         let mut best: Option<usize> = None;
         for (index, timer) in state.timers.iter().enumerate() {
             if timer.at_ns <= target_ns {
@@ -114,7 +119,11 @@ impl VirtualClock {
 
     pub fn pending_timers(&self) -> usize {
         let state = self.state.lock();
-        state.timers.iter().filter(|t| !t.cancelled.load(Ordering::SeqCst) && !t.fired.load(Ordering::SeqCst)).count()
+        state
+            .timers
+            .iter()
+            .filter(|t| !t.cancelled.load(Ordering::SeqCst) && !t.fired.load(Ordering::SeqCst))
+            .count()
     }
 }
 
@@ -190,7 +199,11 @@ pub struct StepRuntime {
 
 impl StepRuntime {
     pub fn new(clock: Arc<VirtualClock>) -> Arc<Self> {
-        Arc::new(StepRuntime { queues: Mutex::new(Queues::default()), spawned: AtomicU64::new(0), clock })
+        Arc::new(StepRuntime {
+            queues: Mutex::new(Queues::default()),
+            spawned: AtomicU64::new(0),
+            clock,
+        })
     }
 
     /// Tasks handed over so far, immediate and deferred.
@@ -201,7 +214,9 @@ impl StepRuntime {
 
 impl std::fmt::Debug for StepRuntime {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("StepRuntime").field("spawned", &self.spawned()).finish()
+        f.debug_struct("StepRuntime")
+            .field("spawned", &self.spawned())
+            .finish()
     }
 }
 
@@ -232,7 +247,9 @@ pub struct TestExecutor {
 
 impl std::fmt::Debug for TestExecutor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("TestExecutor").field("wall_ms", &self.clock.wall_ms()).finish()
+        f.debug_struct("TestExecutor")
+            .field("wall_ms", &self.clock.wall_ms())
+            .finish()
     }
 }
 
@@ -242,7 +259,12 @@ impl TestExecutor {
         let local = pool.spawner();
         let clock = VirtualClock::new(wall_ms);
         let runtime = StepRuntime::new(clock.clone());
-        TestExecutor { pool, local, clock, runtime }
+        TestExecutor {
+            pool,
+            local,
+            clock,
+            runtime,
+        }
     }
 
     /// Run a future to completion on the pool, draining detached work.

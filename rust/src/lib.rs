@@ -36,14 +36,22 @@ mod use_case;
 pub use cancel::CancelToken;
 pub use clock::{Clock, SystemClock};
 pub use codec::{Codec, FromSync, JsonCodec, Payload, SyncCodec};
-pub use engine::{CoalescingState, DialCache, DialCacheBuilder, PolicyProvider, ProcessCoalescingState, ScopeGuard};
+pub use engine::{
+    CoalescingState, DialCache, DialCacheBuilder, PolicyProvider, ProcessCoalescingState,
+    ScopeGuard,
+};
 pub use error::{BoxError, ConfigError, Error, FallbackTimeout, RemoteReadTimeout, SharedError};
 pub use identity::{normalize_args, ArgValue, Identity, IdentityError, Keys};
 pub use local::{LocalEntry, LocalStore, LruLocalStore, StoredValue};
 pub use observe::{Event, Labels, LogEvent, LogLevel, Logger, Observer, ShadowMismatchDetails};
 pub use operation::{Comparator, Operation, Preview, RecoveryPredicate, SourceBudget};
-pub use policy::{Policy, PolicyDefaults, PolicyError, ResolvedPolicy, RuntimePolicy, ShadowPolicy};
-pub use remote::{Frame, InvalidateRequest, MissReason, ReadContext, ReadRequest, ReadResult, Remote, WriteRequest};
+pub use policy::{
+    Policy, PolicyDefaults, PolicyError, ResolvedPolicy, RuntimePolicy, ShadowPolicy,
+};
+pub use remote::{
+    Frame, InvalidateRequest, MissReason, ReadContext, ReadRequest, ReadResult, Remote,
+    WriteRequest,
+};
 pub use runtime::Runtime;
 #[cfg(feature = "tokio")]
 pub use runtime::TokioRuntime;

@@ -22,7 +22,9 @@ pub(crate) struct Owner {
 
 impl fmt::Debug for Owner {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Owner").field("live", &self.is_live()).finish()
+        f.debug_struct("Owner")
+            .field("live", &self.is_live())
+            .finish()
     }
 }
 
