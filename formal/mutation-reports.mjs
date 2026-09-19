@@ -2,11 +2,12 @@ import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { challengesByMutant, mutantCatalogPath, mutantIdPattern, mutantPorts } from './execution.mjs';
 
 // Shared by measure-semantics.mjs, measure-go-semantics.mjs and
-// merge-mutation-reports.mjs: the shard partition, the input fingerprint, the
-// detection summary and the required-detection gate. One implementation keeps
-// a merged report exactly as strict as a single-process one.
+// merge-mutation-reports.mjs: the catalog selection, the input fingerprint,
+// the detection summary and the required-detection gate. One implementation
+// keeps a merged report exactly as strict as a single-process one.
 const root = fileURLToPath(new URL('../', import.meta.url));
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 
@@ -19,13 +20,27 @@ export function parseShard(value) {
   return { index: Number(match[1]), count: Number(match[2]) };
 }
 
-export function shardFromArguments(argv) {
-  let value;
+// --only=<id>,<id> names distinct catalog mutants for a partial measurement.
+export function parseOnly(value) {
+  if (value === undefined) return undefined;
+  const ids = value.split(',');
+  if (ids.some(id => !mutantIdPattern.test(id)) || new Set(ids).size !== ids.length) throw new Error(`Expected <id>,<id> naming distinct mutant ids; got ${JSON.stringify(value)}`);
+  return ids;
+}
+
+// A measurement selects the whole catalog, one shard of it, or the named
+// mutants. A shard is evidence once every shard is merged; a partial run of
+// named mutants is a local iteration aid and never complete evidence, so the
+// two exclude each other.
+export function selectionFromArguments(argv) {
+  let shard, only;
   for (const argument of argv) {
-    if (!argument.startsWith('--shard=') || value !== undefined) throw new Error(`Usage: --shard=<index>/<count>; unexpected argument ${argument}`);
-    value = argument.slice('--shard='.length);
+    if (argument.startsWith('--shard=') && shard === undefined) shard = argument.slice('--shard='.length);
+    else if (argument.startsWith('--only=') && only === undefined) only = argument.slice('--only='.length);
+    else throw new Error(`Usage: --shard=<index>/<count> or --only=<id>,<id>; unexpected argument ${argument}`);
   }
-  return parseShard(value);
+  if (shard !== undefined && only !== undefined) throw new Error('--shard and --only exclude each other: a partial run is never merged');
+  return { shard: parseShard(shard), only: parseOnly(only) };
 }
 
 // A contiguous slice of the catalog in catalog order; the first
@@ -37,9 +52,19 @@ export function partitionMutations(mutations, { index, count }) {
   return mutations.slice(start, start + base + (index <= extra ? 1 : 0));
 }
 
-// Shards from separate jobs land in one tree without colliding; the single
-// run keeps today's location.
-export function shardDirectory(output, shard) {
+// The catalog entries one measurement runs, in catalog order.
+export function selectMutations(mutations, { shard, only }) {
+  if (only === undefined) return partitionMutations(mutations, shard);
+  const unknown = only.filter(id => !mutations.some(mutation => mutation.id === id));
+  if (unknown.length) throw new Error(`Unknown mutation ids: ${unknown.join(', ')}`);
+  return mutations.filter(mutation => only.includes(mutation.id));
+}
+
+// Shards from separate jobs land in one tree without colliding, a partial run
+// lands beside them without touching the complete report, and the single run
+// keeps today's location.
+export function selectionDirectory(output, { shard, only }) {
+  if (only !== undefined) return resolve(output, 'partial');
   return shard.count === 1 ? output : resolve(output, 'shards', `${shard.index}-of-${shard.count}`);
 }
 
@@ -70,27 +95,102 @@ export function requiredDetectionRegressions(entries, results) {
   });
 }
 
+// A cohort the measurement could not run (a noncompiling mutant, or the port's
+// own suite crashing under it) is outside the measured total and listed apart
+// from survivors; it is never a detection.
+const unmeasured = (mutations, cohort) => mutations.filter(m => m.cohorts[cohort].state === 'crashed').map(m => m.id);
 export function typescriptDetection(mutations, cases) {
-  const comparisons = ['ordinary', 'generated', 'portable'];
+  const comparisons = mutantPorts.typescript.cohorts;
   const score = selected => Object.fromEntries(comparisons.map(cohort => {
-    const detected = selected.filter(m => m.cohorts[cohort].state === 'detected');
-    const ordinary = selected.filter(m => m.cohorts.ordinary.state === 'detected');
-    return [cohort, { detected: detected.length, total: selected.length,
+    const measured = selected.filter(m => m.cohorts[cohort].state !== 'crashed');
+    const detected = measured.filter(m => m.cohorts[cohort].state === 'detected');
+    const ordinary = measured.filter(m => m.cohorts.ordinary.state === 'detected');
+    const crashed = unmeasured(selected, cohort);
+    return [cohort, { detected: detected.length, total: measured.length,
       ordinaryParity: { detected: ordinary.filter(m => m.cohorts[cohort].state === 'detected').length, total: ordinary.length },
-      survivors: selected.filter(m => m.cohorts[cohort].state === 'survived').map(m => m.id) }];
+      survivors: measured.filter(m => m.cohorts[cohort].state === 'survived').map(m => m.id), ...(crashed.length ? { crashed } : {}) }];
   }));
   const protocol = m => cases.find(c => c.id === m.case).vectors.length > 0;
   return { all: score(mutations), behavioral: score(mutations.filter(m => !protocol(m))), protocol: score(mutations.filter(protocol)) };
 }
 
 export function goDetection(mutations) {
-  return Object.fromEntries(['ordinary', 'generated', 'fixed', 'portable'].map(cohort => [cohort, {
-    detected: mutations.filter(m => m.cohorts[cohort].state === 'detected').length, total: mutations.length,
-    survivors: mutations.filter(m => m.cohorts[cohort].state === 'survived').map(m => m.id),
-  }]));
+  return Object.fromEntries(mutantPorts.go.cohorts.map(cohort => {
+    const measured = mutations.filter(m => m.cohorts[cohort].state !== 'crashed');
+    const crashed = unmeasured(mutations, cohort);
+    return [cohort, {
+      detected: measured.filter(m => m.cohorts[cohort].state === 'detected').length, total: measured.length,
+      survivors: measured.filter(m => m.cohorts[cohort].state === 'survived').map(m => m.id),
+      ...(crashed.length ? { crashed } : {}),
+    }];
+  }));
 }
 
-function typescriptMarkdown(report) {
+// The record of a cohort the measurement could not run for a mutant.
+export const crashedCohort = reason => ({ state: 'crashed', reason, passed: 0, failed: 0, failingTests: [] });
+
+// Portable evidence is the generated and fixed replay cohorts together. A
+// component the measurement could not run leaves portable unmeasured as well,
+// as a noncompiling mutant does: the other component alone is not portable
+// evidence, and a crashed cohort is never a detection.
+export function portableCohort(generated, fixed) {
+  for (const [name, component] of Object.entries({ generated, fixed })) {
+    if (component.state === 'crashed') return crashedCohort(`${name}: ${component.reason}`);
+  }
+  return { state: generated.failed + fixed.failed > 0 ? 'detected' : 'survived',
+    passed: generated.passed + fixed.passed, failed: generated.failed + fixed.failed,
+    failingTests: [...generated.failingTests, ...fixed.failingTests], components: ['generated', 'fixed'] };
+}
+
+// One rule for both ports: the port's own unit suite is informational for a
+// mutant, so when its evaluation throws (a synctest bubble panicking on a
+// goroutine the fault leaves blocked, an unhandled rejection with no failed
+// assertion) the cohort is recorded as crashed and the run continues. A
+// settlement violation under a mutant is the driver failing its own contract,
+// never comparison evidence; it is recorded as a crashed cohort naming the
+// first violating history and rule, so the gate fails by mutant id while the
+// rest of the shard is measured. The baseline and every other replay-cohort
+// failure keep the strict rule: their throw fails the measurement.
+export function classifyCohort({ baseline, cohort }, evaluate) {
+  try { return evaluate(); } catch (error) {
+    if (baseline) {
+      // A baseline that violates settlement fails the measurement; name the rule so the log alone says why.
+      if (error.settlementViolation !== undefined) error.message += ` (settlement violation: ${error.settlementViolation})`;
+      throw error;
+    }
+    if (error.settlementViolation !== undefined) return crashedCohort(`settlement violation: ${error.settlementViolation}`);
+    if (cohort !== 'ordinary') throw error;
+    return crashedCohort(error.message);
+  }
+}
+
+// A mutant that does not compile is recorded with every cohort crashed, so
+// the gate names the mutant and the rest of the shard is still measured.
+export function noncompilingResult(mutation, cohorts, reason) {
+  return { id: mutation.id, case: mutation.case, description: mutation.description, cohorts: Object.fromEntries(cohorts.map(cohort => [cohort, crashedCohort(reason)])) };
+}
+
+// A partial (--only) run reports its lost required detections and stops: it
+// is not gated and never completes, so the complete report is untouched.
+export function finishPartial(report, selected, { output, save }) {
+  const lost = requiredDetectionRegressions(selected, report.mutations);
+  save();
+  console.log(lost.length ? `Lost required detections (a partial run is not gated): ${lost.join(', ')}` : 'Every required detection of the selected mutants held');
+  console.log(`Partial measurement of ${selected.map(m => m.id).join(', ')}: ${output}/report.json; measure the complete catalog for evidence`);
+  // An authoring loop should notice a lost detection without reading the log.
+  if (lost.length) process.exitCode = 1;
+  return report;
+}
+
+// The model challenges each mutant is the native twin of, from the execution
+// manifest of the checkout the report describes.
+function challengesColumn(directory) {
+  const index = challengesByMutant(JSON.parse(readFileSync(resolve(directory, 'formal/execution.json'), 'utf8')));
+  return id => (index.get(id) ?? []).join(', ') || 'none';
+}
+
+function typescriptMarkdown(report, directory = root) {
+  const challenges = challengesColumn(directory);
   return ['# Semantic coverage measurement', '',
     `Completed in ${report.elapsedSeconds}s. Inventory and mutation counts describe named cases, not universal semantic completeness.`, '',
     ...shardsMarkdown(report),
@@ -98,17 +198,18 @@ function typescriptMarkdown(report) {
     '| --- | ---: | ---: | ---: |',
     ...['cases', 'behavioral', 'protocol'].map(scope => { const c = report.declaredCoverage[scope]; return `| ${scope} | ${c.total} | ${c.portable} | ${c.generated} |`; }), '',
     'Protocol references include invalidation vectors exercised separately by integration CI. Model references are a conservative named-property subset, not total model coverage.', '',
-    '| Mutation | Case | Ordinary | Generated | Full portable |', '| --- | --- | --- | --- | --- |',
-    ...report.mutations.map(m => `| ${m.id} | ${m.case} | ${m.cohorts.ordinary.state} | ${m.cohorts.generated.state} | ${m.cohorts.portable.state} |`), '',
-    'Full JSON includes exact input/corpus hashes, cohort counts, reached witnesses, behavioral/protocol scores, and failing test names. Adjacent JSON/log files retain assertion diagnostics and trace paths.', ''].join('\n');
+    '| Mutation | Case | Challenges | Ordinary | Generated | Full portable |', '| --- | --- | --- | --- | --- | --- |',
+    ...report.mutations.map(m => `| ${m.id} | ${m.case} | ${challenges(m.id)} | ${m.cohorts.ordinary.state} | ${m.cohorts.generated.state} | ${m.cohorts.portable.state} |`), '',
+    'Challenges are the model property challenges whose fault the mutant injects natively (nativeMutants in formal/execution.json). Full JSON includes exact input/corpus hashes, cohort counts, reached witnesses, behavioral/protocol scores, and failing test names. Adjacent JSON/log files retain assertion diagnostics and trace paths.', ''].join('\n');
 }
 
-function goMarkdown(report) {
+function goMarkdown(report, directory = root) {
+  const challenges = challengesColumn(directory);
   return ['# Go semantic mutation measurement', '', `Completed in ${report.elapsedSeconds}s. Counts measure this named fault catalog and exact corpus, not universal equivalence.`, '',
     ...shardsMarkdown(report),
-    '| Mutation | Contract case | Ordinary | Quint generated | Fixed supplement | Full portable |', '| --- | --- | --- | --- | --- | --- |',
-    ...report.mutations.map(m => `| ${m.id} | ${m.case} | ${m.cohorts.ordinary.state} | ${m.cohorts.generated.state} | ${m.cohorts.fixed.state} | ${m.cohorts.portable.state} |`), '',
-    'Full JSON records snapshot/corpus/witness fingerprints, selected tests, actual passing/failing leaf counts, and assertion diagnostics. Compilation errors, crashes, timeouts, missing witnesses, and skipped executions cannot count as detections.', ''].join('\n');
+    '| Mutation | Contract case | Challenges | Ordinary | Quint generated | Fixed supplement | Full portable |', '| --- | --- | --- | --- | --- | --- | --- |',
+    ...report.mutations.map(m => `| ${m.id} | ${m.case} | ${challenges(m.id)} | ${m.cohorts.ordinary.state} | ${m.cohorts.generated.state} | ${m.cohorts.fixed.state} | ${m.cohorts.portable.state} |`), '',
+    'Challenges are the model property challenges whose fault the mutant injects natively (nativeMutants in formal/execution.json). Full JSON records snapshot/corpus/witness fingerprints, selected tests, actual passing/failing leaf counts, and assertion diagnostics. Compilation errors, crashes, timeouts, missing witnesses, and skipped executions cannot count as detections.', ''].join('\n');
 }
 
 // Only a merged report carries `shards`; the single run's markdown is unchanged.
@@ -122,10 +223,10 @@ function shardsMarkdown(report) {
 // report records the regression list (the Go report does; the TypeScript
 // report only fails on it).
 export const languages = {
-  ts: { name: 'TypeScript', output: '.formal-traces/semantic', catalog: 'formal/semantic-mutations.json', inputs: ['src', 'test', 'formal'],
+  ts: { name: 'TypeScript', port: 'typescript', output: '.formal-traces/semantic', catalog: mutantCatalogPath, inputs: ['src', 'test', 'formal'],
     detection: (mutations, directory) => typescriptDetection(mutations, JSON.parse(readFileSync(resolve(directory, 'formal/semantic-cases.json'), 'utf8')).cases),
     markdown: typescriptMarkdown, recordsRegressions: false },
-  go: { name: 'Go', output: '.formal-traces/go-semantic', catalog: 'formal/go-mutations.json', inputs: ['formal', 'go', 'test', 'src'],
+  go: { name: 'Go', port: 'go', output: '.formal-traces/go-semantic', catalog: mutantCatalogPath, inputs: ['formal', 'go', 'test', 'src'],
     detection: mutations => goDetection(mutations), markdown: goMarkdown, recordsRegressions: true },
 };
 

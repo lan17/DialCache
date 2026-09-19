@@ -160,4 +160,10 @@ module dialcache_local_failure_conformance {
     .then(fault(1)).then(begin(0)).then(rejectLoader).then(fault(0)).then(begin(2))
     .expect(s.o.calls == List(VALUE_ONE, SOURCE_ERROR, VALUE_ONE)
       and s.o.loaders == 2 and s.o.writes == 1)
+
+  // A rejected source seeds nothing: the next call on an empty store reads
+  // remote again and starts its own source.
+  run rejectedSourceDoesNotSeedLocalTest = init
+    .then(begin(2)).then(rejectLoader).then(begin(2))
+    .expect(s.o.calls == List(SOURCE_ERROR, CALL_PENDING) and s.o.loaders == 2 and s.o.reads == 2)
 }

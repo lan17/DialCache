@@ -142,6 +142,10 @@
               "type": "object",
               "description": "The driver's complete current observation, encoded per profile: $defs/behaviorObservation for every feature profile and for effects, $defs/coreObservation for core, $defs/localClockObservation for local-clock. The prepare result names the session's definition in `observation`; ports should validate each record against that definition locally before sending it, so a shape defect is attributed to the driver without a coordinator round trip. The coordinator validates it again before any comparison and reports a violation as 'Malformed replay observation: <definition> at <path>', so a shape error is an infrastructure failure, never an observation mismatch."
             },
+            "receipt": {
+              "type": "object",
+              "description": "The driver's settlement receipt for this observation, required on every observe of a behavior session (feature profiles and effects) and never sent on core and local-clock sessions, whose commands are awaited request/response. It is validated against $defs/settlementReceipt after `observed` passes its shape check; a missing, unexpected or malformed receipt is reported as 'Missing settlement receipt', 'Unexpected settlement receipt' or 'Malformed settlement receipt at receipt.<path>', all infrastructure errors. Ports should validate it locally against the definition the prepare result names before sending."
+            },
             "environment": {
               "type": "object",
               "properties": {
@@ -230,6 +234,13 @@
                       ],
                       "description": "The $defs definition every observation of this session must satisfy: behaviorObservation for feature profiles and effects, coreObservation for core, localClockObservation for local-clock. Ports validate each observed record against it locally before sending."
                     },
+                    "receipt": {
+                      "enum": [
+                        "settlementReceipt",
+                        null
+                      ],
+                      "description": "The $defs definition of the settlement receipt every observe of this session must carry: settlementReceipt for feature profiles and effects, whose drivers run a controlled executor; null for core and local-clock, whose commands are awaited request/response and which never send one. Ports validate each receipt against it locally before sending."
+                    },
                     "fixture": {
                       "$ref": "#/$defs/fixture"
                     },
@@ -254,6 +265,7 @@
                     "session",
                     "settlement",
                     "observation",
+                    "receipt",
                     "fixture",
                     "setup",
                     "actions",
@@ -2011,6 +2023,81 @@
         "writeTtls",
         "shadow",
         "recovery"
+      ],
+      "additionalProperties": false
+    },
+    "settlementReceipt": {
+      "type": "object",
+      "description": "Settlement receipt of a behavior driver (feature profiles and effects), sent as the `receipt` member of every observe request of the session and describing the same instant as `observed`. The coordinator checks it before any observation comparison, in this order: `runnable` must be 0 (R2); `elapsedMs` must equal the sum of every advance command's ms plus observed.loaders x fixture.sourceWorkMs plus observed.comparisons x fixture.comparisonMs (R3); environment.wallMs must equal 1788868800000 plus every advance and shiftWall ms plus the same fixture work (R4); `held` must equal the gates the schedule leaves open (R5). A failed rule is reported as 'Settlement violation: ...', an infrastructure error without comparison markers, never an observation mismatch. Core sessions carry no receipt and are held to R4 alone, with advanceWall as their clock command; the local-clock driver reports the real process clock, which no rule constrains. Timer-delivery policy is enforced by the next observation, not by the receipt (R6).",
+      "properties": {
+        "elapsedMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "The driver's controlled monotonic clock in whole milliseconds when the reported observation was taken; moved only by advance commands and by the sourceWorkMs/comparisonMs fixture work, never by settling."
+        },
+        "runnable": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "What one zero-time verification drain of the driver's controlled executor found after the reported snapshot: 0 when nothing ran and no observation field or pending-timer count changed; otherwise the driver's count of what it found (Node: 1 if the observation changed plus the absolute fake-timer count delta; Go: deferred functions dispatched plus 1 if the observation changed)."
+        },
+        "held": {
+          "type": "object",
+          "description": "Controlled external gates still unsettled at the reported snapshot: loaders not yet resolved or rejected, held adapter operations per kind that no release command settled (gates the library abandons, such as deadline-aborted reads, stay registered until their release), and scopes opened but not closed, setup included.",
+          "properties": {
+            "loaders": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "reads": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "writes": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "dumps": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "loads": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "policies": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "scopes": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "loaders",
+            "reads",
+            "writes",
+            "dumps",
+            "loads",
+            "policies",
+            "scopes"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "elapsedMs",
+        "runnable",
+        "held"
       ],
       "additionalProperties": false
     },

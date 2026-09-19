@@ -90,7 +90,7 @@ export async function measureModelProperties({ only, concurrency = resolveConcur
     sources: Object.fromEntries([...sources].map(([path, source]) => [path, createHash('sha256').update(source).digest('hex')])),
     catalogSha256: createHash('sha256').update(readFileSync(resolve(root, 'formal/execution.json'))).digest('hex'),
     catalog: manifest.challenges.length, reproducers: manifest.challenges.filter(challenge => challenge.reproducer).length,
-    reproducerBacklog: manifest.reproducerBacklog.length, challenges: [] };
+    reproducerBacklog: manifest.reproducerBacklog.length, nativeMutantBacklog: manifest.nativeMutantBacklog.length, challenges: [] };
   const save = () => writeFileSync(resolve(output, 'report.json'), JSON.stringify(report, null, 2) + '\n');
   save();
   async function execute(args) {

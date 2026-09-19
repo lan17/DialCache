@@ -2,7 +2,9 @@ package dialcache
 
 import (
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -10,28 +12,53 @@ import (
 
 // Harness control for the causally-ready-v1 settlement contract (PORTING.md),
 // the Go counterpart of test/formal-settlement-control.test.ts. It replays the
-// committed smoke history of every behaviorDriver-backed profile through the
-// shared coordinator twice: once with the settling driver, which must pass,
-// and once with a driver that reports the observation it held before its
-// end-of-apply drain, which must be caught by the coordinator's observation
-// assertions. If it were not, the contract would be unenforced and a port
-// could pass without ever settling. The unsettled driver drains after its
-// snapshot, so every command starts settled and a failure can only be an
-// observation mismatch, never a missing gate. The test also runs on one
-// scheduler thread so the goroutines a command starts cannot run before that
-// snapshot; detection then does not depend on scheduling, which is what makes
-// the floor below a pin rather than a probability. The core and local-clock
-// profiles use other drivers and are not covered.
+// committed smoke history of every behaviorDriver-backed profile the
+// coordinator lists through the shared coordinator twice: once with the
+// settling driver, which must pass, and once with a driver that skips the
+// settle drain and so reports the observation it held before it. The
+// coordinator must reject that replay through the settlement receipt, as a
+// `Settlement violation`, and never through an observation comparison: the
+// receipt's verification drain finds the work the driver skipped (runnable
+// above zero), or its held gates disagree with the command schedule. Were the
+// receipt not to catch it, the contract would rest on incidental mismatches and
+// a port could pass without ever settling. The unsettled driver still drains
+// after its snapshot, so every command starts settled and no failure can be a
+// missing gate. The test runs on one scheduler thread so the goroutines a
+// command starts cannot run before the snapshot; detection then does not
+// depend on scheduling, which is what makes the floor a pin rather than a
+// probability. Core and local-clock use awaited drivers, carry no receipt and
+// are not covered.
+//
+// Measured with the receipt probe at 76ba3ef, the unsettled replay is rejected
+// at the first step whose drain does work: shadow-layers 2, local-failure 1,
+// independent 4, scope 1, policy 1, runtime-boundaries 2, recovery 1,
+// source-budgets 1, layers 1, recovery-read 5, admission 1, shadow 1,
+// effects 5. The test logs the step it observes for each profile.
 //
 // The file name ends in _replay_test.go so measure-go-semantics.mjs keeps this
 // control out of the ordinary mutation cohort: it is evidence about the
 // harness, not about the cache, and must earn no detection credit.
-var settlementControlProfiles = []string{"independent", "layers", "admission", "scope", "recovery", "policy", "shadow", "effects"}
 
-// Pinned with the TypeScript control: observed before the drain, all eight
-// smoke histories fail an observation comparison. Lower it only with a written
-// reason, together with the TypeScript floor; it must stay at least one.
-const settlementControlMinimumDetections = 8
+// settlementControlProfiles lists every profile the coordinator serves through
+// the behaviorDriver, so a new profile joins the control without an edit here.
+func settlementControlProfiles(t *testing.T, coordinator *replayCoordinator) []string {
+	t.Helper()
+	info, err := coordinator.call(obj{"op": "profiles"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	profiles := []string{}
+	for name := range bm(info["profiles"]) {
+		if name != "core" && name != "local-clock" {
+			profiles = append(profiles, name)
+		}
+	}
+	sort.Strings(profiles)
+	if len(profiles) == 0 {
+		t.Fatal("the coordinator lists no behavior-driver profile")
+	}
+	return profiles
+}
 
 // replaySettlementControl runs one smoke history and returns the replay error,
 // if any, instead of failing the test: the caller decides what the error means.
@@ -55,13 +82,16 @@ func replaySettlementControl(t *testing.T, coordinator *replayCoordinator, profi
 	return result
 }
 
+var settlementViolationStep = regexp.MustCompile(` step (\d+) action `)
+
 func TestHarnessControlNoSettle(t *testing.T) {
 	requireRegistry(t)
 	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(1))
 	coordinator := newReplayCoordinator(t)
+	profiles := settlementControlProfiles(t, coordinator)
 	detected := []string{}
 	undetected := []string{}
-	for _, profile := range settlementControlProfiles {
+	for _, profile := range profiles {
 		requireBehaviorProfile(t, profile)
 		t.Run(profile+"/settling", func(t *testing.T) {
 			if err := replaySettlementControl(t, coordinator, profile, true); err != nil {
@@ -70,26 +100,37 @@ func TestHarnessControlNoSettle(t *testing.T) {
 		})
 		t.Run(profile+"/no-settle", func(t *testing.T) {
 			err := replaySettlementControl(t, coordinator, profile, false)
-			if err == nil {
+			switch {
+			case err == nil:
 				undetected = append(undetected, profile)
-				return
+			case strings.Contains(err.Error(), "Observation mismatch"):
+				// An observation mismatch means the receipt let an unsettled
+				// observation through and the comparison caught it by chance.
+				t.Fatalf("skipping settlement in %s was caught by observation comparison, not by the settlement receipt: %v", profile, err)
+			case !strings.Contains(err.Error(), "Settlement violation"):
+				// A driver, transport or binding crash is a harness defect,
+				// not settlement evidence.
+				t.Fatalf("skipping settlement in %s failed without settlement evidence: %v", profile, err)
+			case !strings.Contains(err.Error(), "verification drain:"):
+				// The driver's account of what its verification drain found
+				// travels with the violation, so the failure is diagnosable.
+				t.Fatalf("skipping settlement in %s failed without the driver's drain diagnostic: %v", profile, err)
+			default:
+				detected = append(detected, profile)
+				step := "?"
+				if match := settlementViolationStep.FindStringSubmatch(err.Error()); match != nil {
+					step = match[1]
+				}
+				t.Logf("%s: settlement violation at step %s", profile, step)
 			}
-			// Only an observation mismatch counts as detection. A driver,
-			// transport or binding crash would be a harness defect, not
-			// settlement evidence.
-			if !strings.Contains(err.Error(), "Observation mismatch") {
-				t.Fatalf("skipping settlement in %s failed without observation evidence: %v", profile, err)
-			}
-			detected = append(detected, profile)
 		})
 	}
-	if len(settlementControlProfiles) < settlementControlMinimumDetections {
-		t.Fatalf("the control covers %d profiles, fewer than its floor of %d", len(settlementControlProfiles), settlementControlMinimumDetections)
+	// The floor is the whole list: the receipt must catch skipped settlement on
+	// every behavior smoke history, which is what a third port's control must
+	// show as well.
+	if len(undetected) > 0 || len(detected) != len(profiles) {
+		t.Fatalf("skipping settlement was detected by %d of %d profiles\ndetected: %s\nundetected: %s",
+			len(detected), len(profiles), strings.Join(detected, ", "), strings.Join(undetected, ", "))
 	}
-	if len(detected) < settlementControlMinimumDetections {
-		t.Fatalf("skipping settlement was detected by %d profiles, below the floor of %d\ndetected: %s\nundetected: %s",
-			len(detected), settlementControlMinimumDetections, strings.Join(detected, ", "), strings.Join(undetected, ", "))
-	}
-	t.Logf("harness control: skipping settlement detected by %d/%d profiles (%s); undetected: [%s]",
-		len(detected), len(settlementControlProfiles), strings.Join(detected, ", "), strings.Join(undetected, ", "))
+	t.Logf("harness control: skipping settlement detected as a settlement violation by all %d profiles (%s)", len(detected), strings.Join(detected, ", "))
 }

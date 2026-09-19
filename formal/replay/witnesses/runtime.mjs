@@ -8,17 +8,57 @@ const successful = value => value !== undefined && value > 0 && value !== 3 && v
 // schedule; a later public call must expose retained values, skipped work, or
 // independent work. It neither drives implementations nor adds a behavioral
 // oracle. (The policy and scope profiles' runtime rules live in policy.mjs and
-// scope.mjs; policy.mjs reads no private predictions.)
+// scope.mjs; policy.mjs reads no private predictions.) The tracked local-only
+// rule reads the parsed inputs and public observations only.
 export function runtimeWitnesses(profile, histories, recorder = createWitnessRecorder()) {
   if (profile !== "layers") return recorder.labels();
-  for (const { path, states, predictions } of histories) {
+  for (const { path, steps, states, predictions } of histories) {
     recorder.enter(path);
+    // Excerpt fixtures carry raw states without parsed steps.
+    if (steps !== undefined) trackedLocalOnlyWitnesses(path, steps, recorder);
     // Published smoke fixtures deliberately retain only public observations.
     if (states[0]?.s?.sources === undefined) continue;
-    const steps = predictions.map((s, index) => ({ s, input: index === 0 ? undefined : explicitInput(states[index], `${path} step ${index}`) }));
-    layersWitnesses(steps, recorder);
+    const predicted = predictions.map((s, index) => ({ s, input: index === 0 ? undefined : explicitInput(states[index], `${path} step ${index}`) }));
+    layersWitnesses(predicted, recorder);
   }
   return recorder.labels();
+}
+
+// Tracked reads without a remote adapter (init choice 5: tracked = fixture % 2,
+// remote available = fixture < 4). A source a caller starts while the local
+// layer is on publishes its settled value to the caller's (instance, key). A
+// later caller in a fresh context (3 or 4, so no request memo) on the same
+// instance and key that returns that value without starting a source or
+// reading was served by that local publication: the fixture has no remote and
+// a joined flight leaves the caller pending. The model keeps reads and writes
+// at zero here; anything else is a contradiction, not a schedule.
+const localLayerOn = policy => policy === 0 || policy === 1 || policy === 3;
+function trackedLocalOnlyWitnesses(path, steps, recorder) {
+  if (steps[0].choice !== 5) return;
+  let policy = 0;
+  // Source indices follow o.loaders; a start outside beginCall stays
+  // unattributed so later indices still line up.
+  const sources = [], published = new Map();
+  for (let i = 1; i < steps.length; i++) {
+    recorder.step(i);
+    const { action, choice, expected: current } = steps[i], prior = steps[i - 1].expected;
+    if (current.reads !== 0 || current.writes !== 0) throw new Error(`${path} step ${i}: adapter effects in the fixture without a remote adapter`);
+    if (action === "policy") policy = choice;
+    if (action === "resolveLoader") {
+      const source = sources[Math.floor((choice - 1) / 2)];
+      if (source?.localOn) published.set(source.identity, (choice - 1) % 2 + 1);
+    }
+    if (action !== "beginCall") {
+      for (let started = current.loaders - prior.loaders; started > 0; started--) sources.push(undefined);
+      continue;
+    }
+    const context = Math.floor(choice / 4), key = choice % 4;
+    const identity = (context === 2 || context === 4 ? 1 : 0) * 4 + key;
+    if (current.loaders > prior.loaders) sources.push({ identity, localOn: localLayerOn(policy) });
+    const value = current.calls.at(-1);
+    if (context >= 3 && current.loaders === prior.loaders && current.reads === prior.reads && successful(value)
+      && localLayerOn(policy) && published.get(identity) === value) recorder.credit("tracked-local-only-hit");
+  }
 }
 
 function layersWitnesses(steps, recorder) {
@@ -87,7 +127,7 @@ function layersWitnesses(steps, recorder) {
     }
     if (localHit) {
       recorder.credit("local-hit-stops-remote-and-source");
-      if (trackedLocalOnly.get(identity) === value) recorder.credit(before.remoteAvailable ? "tracked-remote-disabled-local-hit" : "tracked-local-only-hit");
+      if (before.remoteAvailable && trackedLocalOnly.get(identity) === value) recorder.credit("tracked-remote-disabled-local-hit");
     }
     if (starts && before.sources.some(source => source.key === key && source.instance !== instance && source.result === 0)) {
       recorder.credit("different-instances-own-distinct-flights");

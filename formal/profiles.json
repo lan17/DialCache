@@ -337,6 +337,8 @@
     "formal/replay/protocol.schema.json",
     "formal/replay/schema.d.mts",
     "formal/replay/schema.mjs",
+    "formal/replay/settlement.d.mts",
+    "formal/replay/settlement.mjs",
     "formal/replay/sources.d.mts",
     "formal/replay/sources.mjs",
     "formal/replay/validation.d.mts",

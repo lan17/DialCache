@@ -1,5 +1,7 @@
 import { emptyObservation } from "../../formal/replay/observation.mjs";
 export { emptyObservation } from "../../formal/replay/observation.mjs";
+import type { SettlementReceipt } from "../../formal/replay/settlement.mjs";
+export type { SettlementReceipt } from "../../formal/replay/settlement.mjs";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { performance } from "node:perf_hooks";
 
@@ -100,10 +102,21 @@ function deferred<T>() {
 type Gate = ReturnType<typeof deferred<void>>;
 type Scope = { instance: string; run: <T>(fn: () => T) => T; gate: Gate; lifetime: Promise<void> };
 
+// The first observation member whose encoding differs between two snapshots.
+function firstDifference(before: Record<string, unknown>, after: Record<string, unknown>): string {
+  return Object.keys(after).find(key => JSON.stringify(after[key]) !== JSON.stringify(before[key])) ?? "(none)";
+}
+
 // Only external effects are gated. We never access DialCache's maps, flights,
 // or resolved policy, and no expected observation is passed to this class.
 export class BehaviorDriver {
   private readonly observed: Observation;
+  // The observation reported for the last applied input and the settlement
+  // receipt attesting the same instant; see the tail of `apply`.
+  private reported: Observation;
+  private settlement: SettlementReceipt = { elapsedMs: 0, runnable: 0,
+    held: { loaders: 0, reads: 0, writes: 0, dumps: 0, loads: 0, policies: 0, scopes: 0 } };
+  private diagnostic: string | undefined;
   // Independent event journal for bounded contract monitors. Entries come
   // only from external callbacks, settlements, and public diagnostics.
   private readonly history: EffectsContractEvent[] = [];
@@ -135,6 +148,7 @@ export class BehaviorDriver {
   constructor(private readonly fixture: Fixture, private readonly overrides: DialCacheConfig = {},
     private readonly harness: { settle?: boolean } = {}) {
     this.observed = emptyObservation(fixture);
+    this.reported = emptyObservation(fixture);
     if (fixture.localFaultInjection) {
       // Native binding for the model's fallible local-storage boundary. These
       // hooks inject an exception only; successful calls still use real storage.
@@ -416,9 +430,37 @@ export class BehaviorDriver {
       }
       default: { const unknown: never = input; throw new Error(`Unknown input: ${JSON.stringify(unknown)}`); }
     }
-    // Drain ready executor work while unresolved external gates remain held.
-    // No guessed number of Promise turns and no advancing deadline time.
+    // Settle: drain ready executor work while unresolved external gates remain
+    // held. No guessed number of Promise turns and no advancing deadline time.
     if (this.harness.settle !== false) await vi.advanceTimersByTimeAsync(0);
+    // Report this instant: the observation, the controlled monotonic clock and
+    // the gates still held, all from the driver's own bookkeeping. The snapshot
+    // is the JSON encoding that crosses the wire: a value the library hands
+    // back is recorded by reference, and a structured clone of an Error keeps
+    // fewer members than JSON does, so comparing the two encodings would report
+    // a change no task made.
+    const reported = JSON.stringify(this.observed);
+    this.reported = JSON.parse(reported) as Observation;
+    const elapsedMs = performance.now();
+    const held = {
+      loaders: this.loaders.filter(gate => !gate.settled).length,
+      reads: this.effects.read.size, writes: this.effects.write.size, dumps: this.effects.dump.size,
+      loads: this.effects.load.size, policies: this.effects.policy.size,
+      scopes: [...this.scopes.values()].filter(scope => !scope.gate.settled).length,
+    };
+    // Verify quiescence: one more zero-time drain must run nothing. Anything
+    // it changes, in the observation or the pending fake timers, is runnable
+    // work the settle step left behind and the receipt reports it.
+    const timers = vi.getTimerCount();
+    await vi.advanceTimersByTimeAsync(0);
+    const after = JSON.stringify(this.observed);
+    const changed = after === reported ? 0 : 1;
+    const timerDelta = Math.abs(vi.getTimerCount() - timers);
+    this.settlement = { elapsedMs, runnable: changed + timerDelta, held };
+    // For the harness message only, never for the wire: what the drain did.
+    this.diagnostic = changed + timerDelta === 0 ? undefined : `verification drain: ${changed
+      ? `observation member ${firstDifference(JSON.parse(reported) as Record<string, unknown>, JSON.parse(after) as Record<string, unknown>)} changed`
+      : "observation unchanged"}, pending timers ${timers} -> ${vi.getTimerCount()}`;
     assertPublicationCausality(this.causalHistory);
   }
 
@@ -426,7 +468,16 @@ export class BehaviorDriver {
     if (this.fixture.observe?.includes(event)) this.observed.events!.push({ event, ...fields });
   }
 
-  snapshot(): Observation { return structuredClone(this.observed); }
+  // The observation reported for the last applied input. The receipt describes
+  // the same instant, so the commands derived from a snapshot and the checks
+  // run on its receipt agree on what the driver had done.
+  snapshot(): Observation { return structuredClone(this.reported); }
+
+  receipt(): SettlementReceipt { return structuredClone(this.settlement); }
+
+  // What the verification drain found when the receipt reports runnable work,
+  // for the harness failure message; the receipt itself stays a closed record.
+  settlementDiagnostic(): string | undefined { return this.diagnostic; }
 
   contractHistory(): readonly EffectsContractEvent[] { return structuredClone(this.history); }
 
