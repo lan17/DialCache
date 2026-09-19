@@ -452,13 +452,13 @@ replay does. The TypeScript suite runs the same evaluator over the histories
 it parsed for replay and writes no evidence. The Go replay also checks that
 every required label names at least one history of the bound corpus.
 
-## Current limitations for a third port
+## Current limitations for a further port
 
 The `causally-ready-v1` settlement contract is defined in prose, in the
 [trace and observation contract](#trace-and-observation-contract) and the
 `Settle` row above; no machine-checkable definition exists. Its executable
-controls are the TypeScript and Go no-settle tests, each written against its
-own driver, so a third port writes its own the same way.
+controls are the TypeScript, Go and Rust no-settle tests, each written against
+its own driver, so a further port writes its own the same way.
 
 Node 24 is required as test tooling: the coordinator and the witness evaluator
 are Node scripts that a port's test run spawns, and the completion checker and

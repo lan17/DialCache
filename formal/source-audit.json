@@ -1287,7 +1287,7 @@
     },
     {
       "path": "formal/PORTING.md",
-      "sha256": "ae7780bea1efc026232b3b48af92bce6f40df9591d6fc633c9c6130cea1ebd5f",
+      "sha256": "9280203fd477f26f728e8334a8541a8755f0977c32913b7db08cea0256077c25",
       "entries": [
         {"line":1,"title":"Implementing another DialCache port"},
         {"line":14,"title":"What a port supplies"},
@@ -1297,7 +1297,7 @@
         {"line":222,"title":"Generated fixtures and fast local tests"},
         {"line":257,"title":"Complete corpus and reusable acceptance checks"},
         {"line":365,"title":"Witness evidence"},
-        {"line":455,"title":"Current limitations for a third port"},
+        {"line":455,"title":"Current limitations for a further port"},
         {"line":469,"title":"New-port acceptance"}
       ],
       "review": {
@@ -1346,7 +1346,7 @@
     },
     {
       "path": "formal/README.md",
-      "sha256": "0317648114092eae71371cff05fe40d049be4f66f87002074fa1b6fef46f53a1",
+      "sha256": "408c23982e53874489d1aa804c7ece96b7f487cf7e0a4a07552fcf914ca015d7",
       "entries": [
         {"line":1,"title":"Executable DialCache specification"},
         {"line":7,"title":"Start with your task"},

@@ -1,7 +1,7 @@
 # Executable DialCache specification
 
-Quint defines the portable contracts that TypeScript, Go and future ports must
-preserve. Native drivers execute external commands against the real libraries;
+Quint defines the portable contracts that TypeScript, Go, Rust and future ports
+must preserve. Native drivers execute external commands against the real libraries;
 generated expectations stay in the test coordinator.
 
 ## Start with your task
@@ -61,7 +61,7 @@ The verification models emphasize individual ownership or safety boundaries:
 | [dialcache-shadow-validation.qnt](./dialcache-shadow-validation.qnt) | Diagnostic C0/source/C1 work and fills |
 | [dialcache-redis-protocol.qnt](./dialcache-redis-protocol.qnt) | Frame/fence validation order |
 
-Conformance profiles expose external commands that both language drivers replay:
+Conformance profiles expose external commands that every language driver replays:
 
 | Profile | Behavior and interactions |
 | --- | --- |
@@ -115,7 +115,7 @@ downloads its pinned solver archive.
 ```sh
 make help          # Targets and prerequisites.
 make check         # Native checks, package, docs and inventories.
-make smoke         # Committed Quint-derived histories in both ports.
+make smoke         # Committed Quint-derived histories in every port.
 make formal        # Rust model checks, full corpus and both-port completion.
 make differential  # Replay composed profiles' reference corpus through the working tree.
 make model-check   # Separate finite symbolic checks; Java 21 and tar required.
@@ -148,7 +148,7 @@ keeps a separate source snapshot, seed, corpus and diagnostic replay evidence. S
 [VALIDATION.md](./VALIDATION.md) for CI policy and report interpretation.
 
 Scheduled named public-action Quint regressions exercise their declared
-boundaries independently of sampling. Both ports replay those histories and the
+boundaries independently of sampling. Every port replays those histories and the
 complete sampled corpus; required witness coverage is checked across their
 union. A model regression reaches implementations only when registered for
 replay in `execution.json`, and the manifest validator requires every

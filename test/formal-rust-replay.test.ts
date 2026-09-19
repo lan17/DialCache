@@ -86,7 +86,8 @@ describe("Rust replay report gate", () => {
     expect(() => checkRustReplay(withCases(records => { records.shift(); }), inventory)).toThrow(/precedes the start record/);
     expect(() => checkRustReplay(withCases(records => { records.splice(1, 0, start()); }), inventory)).toThrow(/Duplicate or misplaced Rust start record/);
     expect(() => checkRustReplay(withCases(records => { records[0] = { ...start(), implementation: "go" }; }), inventory)).toThrow(/Unsupported Rust start record/);
-    expect(() => checkRustReplay(encode(completed()).replace("\n", "\n{not json\n"), inventory)).toThrow("Invalid Rust JSON record at line 2");
+    const [firstLine, ...rest] = encode(completed()).split("\n");
+    expect(() => checkRustReplay([firstLine, "{not json", ...rest].join("\n"), inventory)).toThrow("Invalid Rust JSON record at line 2");
     expect(() => checkRustReplay(withCases(records => { records[1] = { kind: "note", id: "x" }; }), inventory)).toThrow(/Unsupported Rust replay record kind: note/);
     expect(() => checkRustReplay("", inventory)).toThrow(/Empty Rust replay report/);
   });
