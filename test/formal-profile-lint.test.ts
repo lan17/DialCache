@@ -43,7 +43,7 @@ const fixtureNames = [
   "profile-witness-choice", "profile-witness-projection", "profile-witness-guard", "profile-witness-deep", "profile-witness-domain",
   "profile-witness-input", "profile-witness-match", "composition-clean", "composition-thick", "composition-nondet-inline",
   "composition-action-argument", "composition-wiring-passes", "composition-lambda-argument", "composition-named-operator-argument",
-  "composition-lambda-through-helper",
+  "composition-lambda-through-helper", "composition-aliased-operator-argument", "composition-let-bound-operator-argument",
 ];
 // Quint's effect checker rejects an operator constant that reads a variable
 // (QNT201), so this route can only be shown on the parsed IR; the lint must
@@ -208,9 +208,27 @@ describe.skipIf(!quintAvailable)("profile lint over synthetic kernel instances",
     ]);
   }, quintTimeout);
 
-  it("accepts the wiring the rule admits by design: a record literal over a library result and a chosen input passed through", async () => {
+  it("reports a profile operator handed to a kernel definition through an alias definition", async () => {
+    const report = await lintModel(fixture("composition-aliased-operator-argument"), { kernelModules: ["library"] });
+    expect(report.composition.libraryTransitions).toEqual(["library::bump", "library::repeat"]);
+    // `alias` is a name whose definition is the name `hook`: neither is a lambda, so the
+    // judgment is the operator-typed position, not the argument's spelling.
+    expect(report.composition.violations).toEqual([
+      { definition: "bumpWrapper", detail: "operator passed to library::repeat in the value of s", chain: ["bumpWrapper"] },
+    ]);
+  }, quintTimeout);
+
+  it("reports a helper's operator parameter forwarded under a let-bound name, in the helper", async () => {
+    const report = await lintModel(fixture("composition-let-bound-operator-argument"), { kernelModules: ["library"] });
+    expect(report.composition.libraryTransitions).toEqual(["library::bump", "library::repeat"]);
+    expect(report.composition.violations).toEqual([
+      { definition: "repeatWith", detail: "operator passed to library::repeat in the value of s", chain: ["bumpWrapper", "repeatWith"] },
+    ]);
+  }, quintTimeout);
+
+  it("accepts the wiring the rule admits by design: a record literal over a library result, a chosen input passed through, and a kernel definition in an operator position by name or alias", async () => {
     const report = await lintModel(fixture("composition-wiring-passes"), { kernelModules: ["library"] });
-    expect(report.composition.libraryTransitions).toEqual(["library::bump"]);
+    expect(report.composition.libraryTransitions).toEqual(["library::bump", "library::repeat"]);
     expect(report.composition.violations).toEqual([]);
   }, quintTimeout);
 

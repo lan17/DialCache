@@ -332,12 +332,13 @@ module dialcache_independent_conformance {
     .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO) and s.o.recovery == List("served", "served")
       and s.o.reads == 2 and s.o.loaders == 2 and s.o.loads == 2 and s.o.dumps == 0 and s.o.writes == 0)
 
-  // A fresh hit retains nothing: when its decode fails, the loader it starts
-  // cannot recover, and a rejection completes with the source error and the
-  // loader's identity, unclassified.
+  // A fresh hit retains nothing: when its decode fails (here under a
+  // watermark raised since the read), the loader it starts cannot recover,
+  // and a rejection completes with the source error and the loader's
+  // identity, unclassified.
   run freshDecodeFailureCannotRecoverTest = init.then(seedWith(0)).then(beginCall).then(readAt(0))
     .expect(s.o.loads == 1 and s.o.loaders == 0)
-    .then(failLoadAt(0)).expect(s.o.loaders == 1 and s.o.calls == List(CALL_PENDING))
+    .then(invalidate).then(failLoadAt(0)).expect(s.o.loaders == 1 and s.o.calls == List(CALL_PENDING))
     .then(rejectAt(0))
     .expect(s.o.calls == List(SOURCE_ERROR) and s.o.classifications == 0 and s.o.recovery == List() and s.io.sourceErrors == List(1))
   // A visible frame the read declined as stale carries no fence (C58): the

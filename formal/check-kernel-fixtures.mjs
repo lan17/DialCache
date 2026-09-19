@@ -17,37 +17,31 @@ export function kernelFixtures(directory = root) {
     .map(name => `${fixtureDirectory}/${name}`);
 }
 
-// Every run a fixture declares; `quint test` runs only those whose name ends
-// in Test unless told otherwise, so the declared names are matched explicitly.
-// Declared runs matched per `quint test` invocation.
-export const RUNS_PER_INVOCATION = 12;
-
+// Every run a fixture declares. `quint test` selects the runs whose name ends
+// in Test, the convention the scheduled regressions also keep
+// (execution.mjs), so a declared name without the suffix is rejected here
+// rather than silently skipped by the selection.
 export function declaredRuns(source) {
-  return [...source.matchAll(/^\s*run\s+(\w+)/gm)].map(match => match[1]);
+  const runs = [...source.matchAll(/^\s*run\s+(\w+)/gm)].map(match => match[1]);
+  const unselected = runs.filter(name => !name.endsWith('Test'));
+  if (unselected.length) throw new Error(`Kernel fixture runs must end in Test: ${unselected.join(', ')}`);
+  return runs;
 }
 
+// One `quint test` per fixture under the default selection; the declared
+// count is the completeness guard.
 async function checkFixture(model, { settings, seed, directory, timeoutMs }) {
   const runs = declaredRuns(readFileSync(resolve(directory, model), 'utf8'));
   if (!runs.length) throw new Error(`${model} declares no runs`);
   const typecheck = await spawnBuffered('quint', ['typecheck', model], { cwd: directory, timeoutMs });
   if (typecheck.status !== 0) throw new CommandFailure(`typecheck of ${model} failed (exit ${typecheck.status}):\n${typecheck.stderr}${typecheck.stdout}`, typecheck);
-  // The declared names are matched in batches: one alternation over a large
-  // fixture makes an argument long enough for some hosts to refuse the process.
-  let log = '', passing = 0, durationMs = typecheck.durationMs;
-  for (let start = 0; start < runs.length; start += RUNS_PER_INVOCATION) {
-    const batch = runs.slice(start, start + RUNS_PER_INVOCATION);
-    const test = await spawnBuffered('quint', ['test', model, `--backend=${settings.backend}`, '--max-samples=1', `--seed=${seed}`,
-      `--match=^(${batch.join('|')})$`], { cwd: directory, timeoutMs });
-    const output = test.stdout + test.stderr;
-    const passed = Number(/(\d+) passing/.exec(output)?.[1] ?? NaN);
-    log += output;
-    durationMs += test.durationMs;
-    if (test.status !== 0 || passed !== batch.length) {
-      throw new CommandFailure(`runs of ${model} failed (exit ${test.status}, ${passed} of ${batch.length} declared runs in the batch passed):\n${log}`, test);
-    }
-    passing += passed;
+  const test = await spawnBuffered('quint', ['test', model, `--backend=${settings.backend}`, '--max-samples=1', `--seed=${seed}`], { cwd: directory, timeoutMs });
+  const log = test.stdout + test.stderr;
+  const passing = Number(/(\d+) passing/.exec(log)?.[1] ?? NaN);
+  if (test.status !== 0 || passing !== runs.length) {
+    throw new CommandFailure(`runs of ${model} failed (exit ${test.status}, ${passing} of ${runs.length} declared runs passed):\n${log}`, test);
   }
-  return { model, runs: passing, log, durationMs };
+  return { model, runs: passing, log, durationMs: typecheck.durationMs + test.durationMs };
 }
 
 export async function checkKernelFixtures({ directory = root, manifest = readExecution(), seed = process.env.QUINT_SEED || manifest.settings.seed, timeoutMs = 300_000 } = {}) {

@@ -437,3 +437,11 @@ describe("full formal workflow shape", () => {
     expect(String(upload.with!.path)).toContain("**/replay-*/quint-test.log");
   });
 });
+
+describe("kernel fixture checker", () => {
+  it("lists a fixture's declared runs and rejects a name quint test would not select", async () => {
+    const { declaredRuns } = await import(new URL("../formal/check-kernel-fixtures.mjs", import.meta.url).href) as { declaredRuns(source: string): string[] };
+    expect(declaredRuns("module m {\n  run firstTest = init\n  run secondTest = init.then(step)\n}\n")).toEqual(["firstTest", "secondTest"]);
+    expect(() => declaredRuns("module m {\n  run firstTest = init\n  run probe = init\n}\n")).toThrow(/Kernel fixture runs must end in Test: probe/);
+  });
+});

@@ -125,11 +125,6 @@ module remote_io {
       | ServesRemote(_) => applied
     }
   }
-  // An immediate policy reply: admission and the held release in one step.
-  pure def begin(state: Held[r], layout: Serving::Layout, call: Call, resolved: Resolution, ttls: Ttls, budget: int): Held[r] = {
-    val admitted = admit(state, layout, call)
-    if (Serving::participating(state, layout, call)) release(admitted, layout, state.o.policyCalls, resolved, ttls, budget) else admitted
-  }
 
   // -- Loaders and decodes ---------------------------------------------------------
 

@@ -26,7 +26,13 @@ module deadlines {
   // the current instant before moving, as the implementations' timers fire
   // when the clock next runs; a deadline registered at or before the current
   // instant during a round (a zero budget started by a delivery) is likewise
-  // delivered at the next visited instant. An expired source completes every
+  // delivered at the next visited instant. A zero budget registered at a
+  // settlement step outside a round is also delivered at the next instant the
+  // following advance visits, where the implementations fire a 0 ms timer
+  // before the clock moves: an open design point for a budgeted recovery
+  // composition, unreachable in every scheduled profile today (independent's
+  // source budget is 10 ms; the local shape makes no clock judgment at
+  // expiry). An expired source completes every
   // caller it owns with DEADLINE_ERROR; a result arriving after its deadline
   // is a deadline error (`arrival`); work whose deadline already completed
   // its callers drains once, when the result arrives. `drained` is per loader
@@ -39,10 +45,10 @@ module deadlines {
   // source deadline (shadow-layers' callers) holds `sourceBudget` at
   // UNBOUNDED, so the sources its releases start register none. The fold's
   // expiry is passed only by the two instantiations here; a profile never
-  // passes an operator to the library (the composition lint reports any
-  // operator a profile passes to a kernel definition: a lambda, a
-  // parametrized profile definition by name, a let-bound lambda, or a
-  // helper's operator parameter forwarded to the call).
+  // passes an operator to the library (the composition lint reports an
+  // argument in a parameter position a kernel definition declares with an
+  // operator type, `expire` here, unless it names a kernel definition,
+  // following aliases and let-bound names).
   import cache_rules.* from "../cache-rules"
   import conformance_observations.* from "../conformance-observations"
   import encodings.* from "./encodings"

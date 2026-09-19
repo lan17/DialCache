@@ -11,18 +11,24 @@
 // of a scope closed between admission and release; a failed read denying only
 // its own refill; a visible stale frame carrying no fence while an absent one
 // carries the watermark; a failed fresh decode restarting a loader without
-// recovery; a read expiry inside an advance starting a loader whose own
+// recovery, unfenced under a watermark raised since the read so its refill
+// writes; a read expiry inside an advance starting a loader whose own
 // deadline the same advance delivers, the late replies draining afterwards,
 // also under a zero source budget; an undelivered read deadline cancelling on
 // arrival; a late result settling as a deadline error and recovering; a
 // delivered loader deadline holding a recovery decode; a failed recovery
 // decode completing with the loader's own error; an overdue deadline
 // delivered at the next visited instant; the timeout-only, DENY and NONE
-// classifiers; a recovery decode released at exactly the captured maximum; a
-// held decode and an untracked loader warming local storage for the reply's
-// local TTL while a tracked loader waits for a validated read; a bypass
-// admission source taking an ordinal. Every step keeps the drivers' loader
-// ordinals aligned with the flights they run for (`ordinalsMatchLoaders`).
+// classifiers, a deadline error counting as a timeout for the timeout-only
+// one whether delivered (`deliveredDeadlineIsATimeoutForTimeoutOnlyTest`) or
+// arriving late (`lateResultIsATimeoutForTimeoutOnlyTest`); a recovery decode
+// released at exactly the captured maximum; a held decode and an untracked
+// loader warming local storage for the reply's local TTL while a tracked
+// loader waits for a validated read, and warming nothing under a reply that
+// leaves the local layer off (`replyWithoutLocalLayerWarmsNothingTest`); a
+// bypass admission source taking an ordinal. Every step keeps the drivers'
+// loader ordinals aligned with the flights they run for
+// (`ordinalsMatchLoaders`).
 module held_remote {
   import conformance_observations.* from "../../../formal/conformance-observations"
   import encodings.* from "../../../formal/kernel/encodings"
@@ -194,13 +200,20 @@ module held_remote {
     .then(settle(1, VALUE_TWO)).expect(s.o.calls == List(CALL_PENDING, VALUE_TWO) and s.o.writes == 0)
     .then(settle(0, VALUE_TWO)).expect(s.o.calls == List(VALUE_TWO, VALUE_TWO) and s.o.writes == 1 and s.o.writeTtls == List(TTLS.retentionMs))
   // A failed fresh decode starts a loader on the same flight with refill
-  // allowed, unfenced and without a snapshot; its ordinary error completes
-  // the flight unclassified with the loader's identity.
-  run failedFreshDecodeRestartsWithoutRecoveryTest = init.then(seed(VALUE_ONE, 0)).then(begin(0, ALONE)).then(read(0, false)).then(load(0, true))
-    .expect(s.o.loaders == 1 and s.loaders == List(0) and s.sources.nth(0).retentionMs == TTLS.retentionMs and s.sources.nth(0).fence == NO_FENCE
-      and s.retained == List() and Deadlines::bounded(s, Deadlines::SOURCE, 0))
-    .then(settle(0, SOURCE_ERROR))
-    .expect(s.o.calls == List(SOURCE_ERROR) and s.o.classifications == 0 and s.o.recovery == List() and s.io.sourceErrors == List(1))
+  // allowed, unfenced (the frame it decoded was visible) and without a
+  // snapshot: under a watermark raised between the read and the decode, its
+  // refill still writes at the invalidation's own wall instant, where a miss
+  // fence would refuse it. Its ordinary error completes the flight
+  // unclassified with the loader's identity.
+  run failedFreshDecodeRestartsWithoutRecoveryTest = init.then(seed(VALUE_ONE, 0)).then(begin(0, ALONE)).then(read(0, false)).then(invalidate).then(load(0, true))
+    .expect(s.o.loaders == 1 and s.loaders == List(0) and s.watermark == List(100000) and s.sources.nth(0).retentionMs == TTLS.retentionMs
+      and s.sources.nth(0).fence == NO_FENCE and s.retained == List() and Deadlines::bounded(s, Deadlines::SOURCE, 0))
+    .then(settle(0, VALUE_TWO))
+    .expect(s.o.calls == List(VALUE_TWO) and s.o.writes == 1 and s.remoteValues == List(VALUE_TWO) and s.io.sourceErrors == List(0))
+    .then(advance(1)).then(seed(VALUE_ONE, 0)).then(begin(0, ALONE)).then(read(1, false)).then(load(1, true))
+    .expect(s.o.loaders == 2 and s.loaders == List(0, 1) and s.retained == List())
+    .then(settle(1, SOURCE_ERROR))
+    .expect(s.o.calls == List(VALUE_TWO, SOURCE_ERROR) and s.o.classifications == 0 and s.o.recovery == List() and s.io.sourceErrors == List(0, 2))
   // A read deadline delivered inside an advance aborts the read, starts a
   // loader with refill denied at that instant, and the same advance delivers
   // that loader's own deadline; the expired read stays until its late reply
@@ -240,6 +253,20 @@ module held_remote {
     .expect(s.o.calls == List(SOURCE_ERROR, CALL_PENDING) and s.o.classifications == 0 and s.o.loads == 1)
     .then(load(0, false))
     .expect(s.o.calls == List(SOURCE_ERROR, VALUE_ONE) and s.o.recovery == List("served") and s.io.sourceErrors == List(1, 0))
+  // A deadline error is a timeout for the recovery rules: under the
+  // timeout-only classifier a delivered loader deadline holds a recovery
+  // decode, uncounted, and the candidate serves.
+  run deliveredDeadlineIsATimeoutForTimeoutOnlyTest = init.then(begin(0, ALONE)).then(readWith(0, false, Recovery::TIMEOUT_ONLY)).then(advance(SOURCE_BUDGET))
+    .expect(s.now == SOURCE_BUDGET and s.o.calls == List(CALL_PENDING) and s.o.loads == 1 and s.o.classifications == 0
+      and s.sources.nth(0).result == DEADLINE_ERROR and Deadlines::pending(s, 0))
+    .then(load(0, false))
+    .expect(s.o.calls == List(VALUE_ONE) and s.o.recovery == List("served") and s.o.classifications == 0 and s.io.sourceErrors == List(0))
+  // So does a result arriving after a deadline the clock passed undelivered.
+  run lateResultIsATimeoutForTimeoutOnlyTest = init.then(begin(0, ALONE)).then(readWith(0, false, Recovery::TIMEOUT_ONLY)).then(jump(SOURCE_BUDGET)).then(settle(0, VALUE_TWO))
+    .expect(s.o.calls == List(CALL_PENDING) and s.o.loads == 1 and s.o.classifications == 0 and s.sources.nth(0).result == DEADLINE_ERROR
+      and s.o.writes == 0 and not(Deadlines::pending(s, 0)))
+    .then(load(0, false))
+    .expect(s.o.calls == List(VALUE_ONE) and s.o.recovery == List("served") and s.o.classifications == 0 and s.io.sourceErrors == List(0))
   // A recovery decode released at exactly the captured maximum misses and
   // keeps the loader's error and identity.
   run recoveryAtCapturedMaximumMissesTest = init.then(begin(0, ALONE)).then(read(0, false)).then(settle(0, SOURCE_ERROR))
@@ -326,6 +353,17 @@ module held_remote {
     .expect(s.o.calls == List(VALUE_TWO) and s.o.writes == 1 and s.localValues == List(VALUE_TWO))
     .then(beginWith(1, WITH_LOCAL, LOCAL_TTLS))
     .expect(s.o.calls == List(VALUE_TWO, VALUE_TWO) and s.o.reads == 1)
+  // A reply that leaves the local layer off resolves its held read to a zero
+  // local TTL whatever the policy's (`effectiveTtls`): neither the held fresh
+  // decode nor the untracked loader of the next miss warms local storage.
+  run replyWithoutLocalLayerWarmsNothingTest = untrackedLocalInit.then(seed(VALUE_TWO, 0)).then(beginWith(0, ALONE, LOCAL_TTLS))
+    .expect(RemoteIO::heldRead(s, 0).ttls == { localMs: 0, freshMs: LOCAL_TTLS.freshMs, retentionMs: LOCAL_TTLS.retentionMs })
+    .then(read(0, false)).then(load(0, false))
+    .expect(s.o.calls == List(VALUE_TWO) and s.o.loaders == 0 and s.localValues == List(NO_VALUE))
+    .then(advance(1000)).then(beginWith(1, ALONE, LOCAL_TTLS)).then(read(1, false))
+    .expect(s.o.loaders == 1 and s.sources.nth(1).localMs == 0 and s.sources.nth(1).retentionMs == LOCAL_TTLS.retentionMs)
+    .then(settle(0, VALUE_ONE))
+    .expect(s.o.calls == List(VALUE_TWO, VALUE_ONE) and s.o.writes == 1 and s.localValues == List(NO_VALUE))
   // A loader started by a read expiry under a zero source budget is due at
   // the instant it starts and is delivered inside the same advance, at the
   // next instant the fold visits.
