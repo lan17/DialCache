@@ -9,6 +9,7 @@ type Step = {
   label: string;
   command?: string;
   args?: string[];
+  cwd?: string;
   env?: NodeJS.ProcessEnv;
   stdoutFile?: string;
   requireEmptyStdout?: boolean;

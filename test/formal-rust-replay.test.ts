@@ -6,7 +6,7 @@ type Summary = {
   quintRegressions: Record<string, number>; quintRegressionTraces: number; fixedScenarios: number; protocolVectors: number;
   witnessProfiles: string[]; executedCases: number;
 };
-type Step = { label: string; command?: string; args?: string[]; env?: NodeJS.ProcessEnv; stdoutFile?: string; remove?: string[] };
+type Step = { label: string; command?: string; args?: string[]; cwd?: string; env?: NodeJS.ProcessEnv; stdoutFile?: string; remove?: string[] };
 type Record_ = Record<string, unknown>;
 
 const { checkRustReplay } = await import(new URL("../formal/check-rust-replay.mjs", import.meta.url).href) as {
