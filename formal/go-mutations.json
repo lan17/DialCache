@@ -9,8 +9,8 @@
       "edits": [
         {
           "path": "go/engine.go",
-          "before": "age, valid = x.frameAge(frame, \"remote\")\n\tif !valid || age >= x.policy.StaleOnErrorMaxAgeMS {",
-          "after": "age, valid = x.frameAge(frame, \"remote\")\n\tif !valid || age > x.policy.StaleOnErrorMaxAgeMS {"
+          "before": "age, valid = x.frameAge(frame, \"remote\")\n\tif !valid || age >= maxAge {",
+          "after": "age, valid = x.frameAge(frame, \"remote\")\n\tif !valid || age > maxAge {"
         }
       ],
       "requiredDetections": [
@@ -185,8 +185,8 @@
       "edits": [
         {
           "path": "go/policy.go",
-          "before": "resolved := ResolvedPolicy{Coalesce: true, RemoteReadTimeoutMS: defaults.RemoteReadTimeoutMS}",
-          "after": "resolved := ResolvedPolicy{Coalesce: true, RemoteReadTimeoutMS: defaults.RemoteReadTimeoutMS, Shadow: ResolvedShadow{LogMismatches: true}}"
+          "before": "resolved := ResolvedPolicy{Coalesce: true, RemoteReadTimeout: defaults.RemoteReadTimeout}",
+          "after": "resolved := ResolvedPolicy{Coalesce: true, RemoteReadTimeout: defaults.RemoteReadTimeout, Shadow: ResolvedShadow{LogMismatches: true}}"
         }
       ],
       "requiredDetections": [

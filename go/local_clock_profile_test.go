@@ -14,16 +14,16 @@ import (
 func replayLocalClockTrace(coordinator *replayCoordinator, prepared obj) error {
 	// Normalize only the test environment's phase. The driver uses real default
 	// instances, so an injected integer clock cannot hide a construction-grid bug.
-	probe := New[int](Options[int]{})
-	elapsed := elapsedNow(probe.options.Clock)
+	probe := MustNew()
+	elapsed := elapsedNow(probe.settings.clock)
 	if elapsed < 0 {
 		return fmt.Errorf("default clock started with negative elapsed time")
 	}
 	time.Sleep(time.Millisecond - elapsed%time.Millisecond)
-	var caches [2]*Cache[int]
+	var caches [2]*Cache
 	var sources atomic.Int64
 	actual := emptyBehaviorObservation(obj{})
-	op := Operation{Identity: Identity{KeyType: "clock", ID: "one", UseCase: "QuintLocalGrid"}, Policy: Policy{LocalTTLMS: 1000}}
+	op := Operation[int]{Identity: Identity{KeyType: "clock", ID: "one", UseCase: "QuintLocalGrid"}, Policy: Policy{LocalTTL: time.Duration(1000) * time.Millisecond}}
 	apply := func(input obj) error {
 		instance := bn(input["instance"])
 		switch input["op"] {
@@ -31,7 +31,7 @@ func replayLocalClockTrace(coordinator *replayCoordinator, prepared obj) error {
 			if instance < 0 || instance >= int64(len(caches)) || caches[instance] != nil {
 				return fmt.Errorf("invalid/duplicate instance")
 			}
-			caches[instance] = New[int](Options[int]{})
+			caches[instance] = MustNew()
 		case "advanceTicks":
 			ticks := bn(input["ticks"])
 			if ticks <= 0 {
@@ -44,9 +44,9 @@ func replayLocalClockTrace(coordinator *replayCoordinator, prepared obj) error {
 			}
 			cache := caches[instance]
 			var value int
-			err := cache.Enable(context.Background(), func(ctx context.Context) error {
+			err := cache.WithEnabled(context.Background(), func(ctx context.Context) error {
 				var err error
-				value, err = cache.GetOrLoad(ctx, op, func(context.Context) (int, error) { sources.Add(1); return int(bn(input["offered"])), nil })
+				value, err = GetOrLoad(ctx, cache, op, func(context.Context) (int, error) { sources.Add(1); return int(bn(input["offered"])), nil })
 				return err
 			})
 			if err != nil {

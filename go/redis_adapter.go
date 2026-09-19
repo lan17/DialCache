@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -102,8 +103,8 @@ func redisBulk(raw any) ([]byte, error) {
 
 // Write performs exactly one native SET of the complete frame. It neither
 // reads nor modifies the entity watermark. A provided timestamp is exact.
-func (adapter *RedisAdapter) Write(ctx context.Context, key string, frame Frame, ttlMS int64) error {
-	return adapter.WriteMilliseconds(ctx, key, frame, float64(ttlMS))
+func (adapter *RedisAdapter) Write(ctx context.Context, key string, frame Frame, ttl time.Duration) error {
+	return adapter.WriteMilliseconds(ctx, key, frame, float64(ttl)/float64(time.Millisecond))
 }
 func (adapter *RedisAdapter) WriteMilliseconds(ctx context.Context, key string, frame Frame, ttlMS float64) error {
 	ttl, err := CeilSupportedCacheTTLMS(ttlMS)

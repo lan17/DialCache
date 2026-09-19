@@ -28,12 +28,12 @@ func TestBorrowedReferencesSurviveFollowersAndCacheHits(t *testing.T) {
 					if kind == "map" {
 						original = map[string]int{"value": 7}
 					}
-					cache := New(Options[any]{})
-					op := Operation{Identity: Identity{KeyType: "item", ID: "borrowed", UseCase: "get"}}
+					cache := MustNew()
+					op := Operation[any]{Identity: Identity{KeyType: "item", ID: "borrowed", UseCase: "get"}}
 					if layer == "request" {
 						op.Policy.RequestLocal = true
 					} else {
-						op.Policy.LocalTTLMS = 60000
+						op.Policy.LocalTTL = time.Minute
 					}
 					var calls atomic.Int32
 					release := make(chan struct{})
@@ -51,13 +51,13 @@ func TestBorrowedReferencesSurviveFollowersAndCacheHits(t *testing.T) {
 							t.Fatalf("%s result was copied or failed: %v", kind, err)
 						}
 					}
-					if err := cache.Enable(context.Background(), func(ctx context.Context) error {
+					if err := cache.WithEnabled(context.Background(), func(ctx context.Context) error {
 						results := make(chan struct {
 							value any
 							err   error
 						}, 2)
 						invoke := func() {
-							value, err := cache.GetOrLoad(ctx, op, load)
+							value, err := GetOrLoad(ctx, cache, op, load)
 							results <- struct {
 								value any
 								err   error
@@ -75,15 +75,15 @@ func TestBorrowedReferencesSurviveFollowersAndCacheHits(t *testing.T) {
 							result := <-results
 							assertBorrowed(result.value, result.err)
 						}
-						value, err := cache.GetOrLoad(ctx, op, load)
+						value, err := GetOrLoad(ctx, cache, op, load)
 						assertBorrowed(value, err)
 						return nil
 					}); err != nil {
 						t.Fatal(err)
 					}
 					if layer == "local" {
-						if err := cache.Enable(context.Background(), func(ctx context.Context) error {
-							value, err := cache.GetOrLoad(ctx, op, load)
+						if err := cache.WithEnabled(context.Background(), func(ctx context.Context) error {
+							value, err := GetOrLoad(ctx, cache, op, load)
 							assertBorrowed(value, err)
 							return nil
 						}); err != nil {
@@ -100,10 +100,10 @@ func TestBorrowedReferencesSurviveFollowersAndCacheHits(t *testing.T) {
 }
 
 func TestCachedRegistrationAfterInlineUseCase(t *testing.T) {
-	cache := New(Options[int]{})
-	op := Operation{Identity: Identity{KeyType: "item", ID: "same", UseCase: "inlineThenCached"}, Policy: Policy{LocalTTLMS: 60000}}
-	if err := cache.Enable(context.Background(), func(ctx context.Context) error {
-		value, err := cache.GetOrLoad(ctx, op, func(context.Context) (int, error) { return 7, nil })
+	cache := MustNew()
+	op := Operation[int]{Identity: Identity{KeyType: "item", ID: "same", UseCase: "inlineThenCached"}, Policy: Policy{LocalTTL: time.Duration(60000) * time.Millisecond}}
+	if err := cache.WithEnabled(context.Background(), func(ctx context.Context) error {
+		value, err := GetOrLoad(ctx, cache, op, func(context.Context) (int, error) { return 7, nil })
 		if err != nil || value != 7 {
 			t.Fatalf("inline call failed: %v %v", value, err)
 		}
@@ -121,12 +121,12 @@ func TestCachedRegistrationAfterInlineUseCase(t *testing.T) {
 	if _, err := Cached(cache, op, selector, loader); err == nil {
 		t.Fatal("wrapper registration did not reserve the use case")
 	}
-	if err := cache.Enable(context.Background(), func(ctx context.Context) error {
+	if err := cache.WithEnabled(context.Background(), func(ctx context.Context) error {
 		value, err := bound(ctx, "same")
 		if err != nil || value != 7 || calls != 0 {
 			t.Fatalf("registered wrapper lost compatible inline entry: %v %v calls=%d", value, err, calls)
 		}
-		value, err = cache.GetOrLoad(ctx, op, func(context.Context) (int, error) { return 10, nil })
+		value, err = GetOrLoad(ctx, cache, op, func(context.Context) (int, error) { return 10, nil })
 		if err != nil || value != 7 {
 			t.Fatalf("registration prevented later inline reuse: %v %v", value, err)
 		}
@@ -251,11 +251,11 @@ func TestDefaultShadowComparatorNativeValueBoundaries(t *testing.T) {
 					reads.Add(1)
 					return ReadResult{Kind: "hit", Frame: frame}, nil
 				}, write: func(Frame) error { writes.Add(1); return nil }}
-				cache := New(Options[any]{Remote: remote, Codec: featureValueCodec{test.cached, &decodes}, ShadowOutcome: func(event Event) { outcomes <- event.Outcome }})
+				cache := MustNew(WithRemote(remote), WithShadowOutcomes(func(event Event) { outcomes <- event.Outcome }))
 				full := float64(100)
-				op := Operation{Identity: Identity{KeyType: "item", ID: "same", UseCase: "nativeComparator"}, Policy: Policy{RemoteTTLMS: 60000, Shadow: &ShadowPolicy{Ramp: &full}}}
-				if err := cache.Enable(context.Background(), func(ctx context.Context) error {
-					_, err := cache.GetOrLoad(ctx, op, func(context.Context) (any, error) { sources.Add(1); return test.source, nil })
+				op := Operation[any]{Identity: Identity{KeyType: "item", ID: "same", UseCase: "nativeComparator"}, Policy: Policy{RemoteTTL: time.Duration(60000) * time.Millisecond, Shadow: &ShadowPolicy{Ramp: &full}}, Codec: featureValueCodec{test.cached, &decodes}}
+				if err := cache.WithEnabled(context.Background(), func(ctx context.Context) error {
+					_, err := GetOrLoad(ctx, cache, op, func(context.Context) (any, error) { sources.Add(1); return test.source, nil })
 					return err
 				}); err != nil {
 					t.Fatal(err)
@@ -295,7 +295,7 @@ func (source *featureInspectionSource) load(context.Context) (string, error) {
 
 func TestCoalescingInspectionSeparatesKeysInstancesAndRequestWork(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		first, second := New(Options[string]{}), New(Options[string]{})
+		first, second := MustNew(), MustNew()
 		firstSource := &featureInspectionSource{release: make(chan struct{}), value: "first"}
 		sourceError := errors.New("second key failed")
 		secondSource := &featureInspectionSource{release: make(chan struct{}), err: sourceError}
@@ -308,15 +308,15 @@ func TestCoalescingInspectionSeparatesKeysInstancesAndRequestWork(t *testing.T) 
 			value string
 			err   error
 		}
-		operation := func(id string) Operation {
-			return Operation{Identity: Identity{KeyType: "item", ID: id, UseCase: "inspection"}, Policy: Policy{LocalTTLMS: 60000}}
+		operation := func(id string) Operation[string] {
+			return Operation[string]{Identity: Identity{KeyType: "item", ID: id, UseCase: "inspection"}, Policy: Policy{LocalTTL: time.Duration(60000) * time.Millisecond}}
 		}
-		startProcess := func(cache *Cache[string], id string, source *featureInspectionSource, count int) <-chan result {
+		startProcess := func(cache *Cache, id string, source *featureInspectionSource, count int) <-chan result {
 			completed := make(chan result, count)
 			for i := 0; i < count; i++ {
 				go func() {
-					_ = cache.Enable(context.Background(), func(ctx context.Context) error {
-						value, err := cache.GetOrLoad(ctx, operation(id), source.load)
+					_ = cache.WithEnabled(context.Background(), func(ctx context.Context) error {
+						value, err := GetOrLoad(ctx, cache, operation(id), source.load)
 						completed <- result{value, err}
 						return nil
 					})
@@ -324,11 +324,15 @@ func TestCoalescingInspectionSeparatesKeysInstancesAndRequestWork(t *testing.T) 
 			}
 			return completed
 		}
-		assertState := func(cache *Cache[string], leaders, followers int, ageMS *int64) {
+		assertState := func(cache *Cache, leaders, followers int, ageMS *int64) {
 			t.Helper()
 			got := cache.GetCoalescingState().Process
-			if got.ActiveLeaders != leaders || got.ActiveFollowers != followers || !reflect.DeepEqual(got.OldestLeaderAgeMS, ageMS) {
-				t.Fatalf("inspection = %+v age=%v, want leaders=%d followers=%d age=%v", got, got.OldestLeaderAgeMS, leaders, followers, ageMS)
+			var wantAge time.Duration
+			if ageMS != nil {
+				wantAge = time.Duration(*ageMS) * time.Millisecond
+			}
+			if got.ActiveLeaders != leaders || got.ActiveFollowers != followers || got.OldestLeaderAge != wantAge {
+				t.Fatalf("inspection = %+v age=%v, want leaders=%d followers=%d age=%v", got, got.OldestLeaderAge, leaders, followers, ageMS)
 			}
 		}
 		assertResults := func(completed <-chan result, count int, value string, err error) {
@@ -352,13 +356,13 @@ func TestCoalescingInspectionSeparatesKeysInstancesAndRequestWork(t *testing.T) 
 		requestResults := make(chan result, 2)
 		requestScopeDone := make(chan error, 1)
 		go func() {
-			requestScopeDone <- second.Enable(context.Background(), func(ctx context.Context) error {
+			requestScopeDone <- second.WithEnabled(context.Background(), func(ctx context.Context) error {
 				op := operation("request")
 				op.Policy = Policy{RequestLocal: true}
 				settled := make(chan result, 2)
 				for i := 0; i < 2; i++ {
 					go func() {
-						value, err := second.GetOrLoad(ctx, op, requestSource.load)
+						value, err := GetOrLoad(ctx, second, op, requestSource.load)
 						settled <- result{value, err}
 					}()
 				}
@@ -455,19 +459,19 @@ func TestInlineOperationCodecOverridesDefaultOnReadAndWrite(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			clock := &manualClock{wall: 1700000000000}
 			remote := &memoryRemote{clock: clock, values: make(map[string]remoteEntry), watermarks: make(map[string]string)}
-			defaultCodec := &featureTaggedCodec{tag: "default"}
 			operationCodec := &featureTaggedCodec{tag: "operation", binary: true}
-			cache := New(Options[int]{Clock: clock, Remote: remote, Codec: defaultCodec, DisableCompression: true})
-			op := Operation{Identity: Identity{Namespace: "urn", KeyType: "item", ID: "same", UseCase: "inlineCodec"}, Policy: Policy{RemoteTTLMS: 60000}}
-			selected, unused := defaultCodec, operationCodec
+			cache := MustNew(WithClock(clock), WithRemote(remote), WithoutCompression())
+			op := Operation[int]{Identity: Identity{Namespace: "urn", KeyType: "item", ID: "same", UseCase: "inlineCodec"}, Policy: Policy{RemoteTTL: time.Duration(60000) * time.Millisecond}}
+			// Without an operation codec the JSON default stores the bare number.
+			wantPayload, wantCodecCalls := "7", int32(0)
 			if override {
 				op.Codec = operationCodec
-				selected, unused = operationCodec, defaultCodec
+				wantPayload, wantCodecCalls = "operation:7", 1
 			}
 			var sources atomic.Int32
 			for i := 0; i < 2; i++ {
-				if err := cache.Enable(context.Background(), func(ctx context.Context) error {
-					value, err := cache.GetOrLoad(ctx, op, func(context.Context) (int, error) { sources.Add(1); return 7, nil })
+				if err := cache.WithEnabled(context.Background(), func(ctx context.Context) error {
+					value, err := GetOrLoad(ctx, cache, op, func(context.Context) (int, error) { sources.Add(1); return 7, nil })
 					if err != nil || value != 7 {
 						t.Fatalf("inline codec result: value=%d error=%v", value, err)
 					}
@@ -476,8 +480,8 @@ func TestInlineOperationCodecOverridesDefaultOnReadAndWrite(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if sources.Load() != 1 || selected.encodes.Load() != 1 || selected.decodes.Load() != 1 || unused.encodes.Load() != 0 || unused.decodes.Load() != 0 {
-				t.Fatalf("codec selection effects: sources=%d selected=%d/%d unused=%d/%d", sources.Load(), selected.encodes.Load(), selected.decodes.Load(), unused.encodes.Load(), unused.decodes.Load())
+			if sources.Load() != 1 || operationCodec.encodes.Load() != wantCodecCalls || operationCodec.decodes.Load() != wantCodecCalls {
+				t.Fatalf("codec selection effects: sources=%d operation codec=%d/%d", sources.Load(), operationCodec.encodes.Load(), operationCodec.decodes.Load())
 			}
 			_, remoteKey, _, err := op.Identity.Keys()
 			if err != nil {
@@ -488,7 +492,7 @@ func TestInlineOperationCodecOverridesDefaultOnReadAndWrite(t *testing.T) {
 			reads, writes := remote.reads, remote.writes
 			remote.mu.Unlock()
 			frame := DecodeFrame(stored, false, nil)
-			if frame.Kind != "hit" || string(frame.Frame.Payload) != name+":7" || frame.Frame.Binary != override || reads != 2 || writes != 1 {
+			if frame.Kind != "hit" || string(frame.Frame.Payload) != wantPayload || frame.Frame.Binary != override || reads != 2 || writes != 1 {
 				t.Fatalf("wrong native publication: frame=%+v reads=%d writes=%d", frame, reads, writes)
 			}
 		})
@@ -501,24 +505,24 @@ func TestInlinePolicySnapshotsMutableRampPerInvocation(t *testing.T) {
 	finishProvider := func() { once.Do(func() { close(release) }) }
 	defer finishProvider()
 	var policies, sources atomic.Int32
-	cache := New(Options[int]{PolicyProvider: func(context.Context, Identity) (any, error) {
+	cache := MustNew(WithPolicyProvider(func(context.Context, Identity) (RuntimePolicy, error) {
 		if policies.Add(1) == 1 {
 			close(entered)
 			<-release
 		}
 		return nil, nil
-	}})
+	}))
 	ramp := float64(100)
-	op := Operation{Identity: Identity{KeyType: "item", ID: "same", UseCase: "inlinePolicy"}, Policy: Policy{LocalTTLMS: 60000, LocalRamp: &ramp}}
+	op := Operation[int]{Identity: Identity{KeyType: "item", ID: "same", UseCase: "inlinePolicy"}, Policy: Policy{LocalTTL: time.Duration(60000) * time.Millisecond, LocalRamp: &ramp}}
 	type result struct {
 		value int
 		err   error
 	}
 	invoke := func() result {
 		var got result
-		got.err = cache.Enable(context.Background(), func(ctx context.Context) error {
+		got.err = cache.WithEnabled(context.Background(), func(ctx context.Context) error {
 			var err error
-			got.value, err = cache.GetOrLoad(ctx, op, func(context.Context) (int, error) { return int(sources.Add(1)), nil })
+			got.value, err = GetOrLoad(ctx, cache, op, func(context.Context) (int, error) { return int(sources.Add(1)), nil })
 			return err
 		})
 		return got
@@ -553,12 +557,9 @@ func TestCompressionConstructionDefaultsAndExplicitDisable(t *testing.T) {
 	}
 	for _, invalid := range []CompressionConfig{{ThresholdBytes: -1, Level: 3}, {ThresholdBytes: 1, Level: 23}} {
 		t.Run(fmt.Sprintf("invalid threshold=%d level=%d", invalid.ThresholdBytes, invalid.Level), func(t *testing.T) {
-			defer func() {
-				if recover() == nil {
-					t.Fatal("invalid enabled compression did not reject at construction")
-				}
-			}()
-			_ = New(Options[any]{Compression: &invalid})
+			if _, err := New(WithCompression(invalid)); !errors.Is(err, ErrInvalidOption) {
+				t.Fatalf("invalid enabled compression did not reject at construction: %v", err)
+			}
 		})
 	}
 	for _, test := range []struct {
@@ -584,16 +585,20 @@ func TestCompressionConstructionDefaultsAndExplicitDisable(t *testing.T) {
 				frame = Frame{CreatedAtMS: written.CreatedAtMS, Binary: written.Binary, Payload: append([]byte{}, written.Payload...)}
 				return nil
 			}}
-			cache := New(Options[string]{Remote: remote, DisableCompression: test.disabled, Observe: func(event Event) {
+			opts := []Option{WithRemote(remote), WithObserver(func(event Event) {
 				if event.Kind == "compression" {
 					mu.Lock()
 					outcomes = append(outcomes, event.Outcome)
 					mu.Unlock()
 				}
-			}})
-			op := Operation{Identity: Identity{KeyType: "item", ID: "same", UseCase: "compressionDefaults"}, Policy: Policy{RemoteTTLMS: 60000}}
-			if err := cache.Enable(context.Background(), func(ctx context.Context) error {
-				got, err := cache.GetOrLoad(ctx, op, func(context.Context) (string, error) { return value, nil })
+			})}
+			if test.disabled {
+				opts = append(opts, WithoutCompression())
+			}
+			cache := MustNew(opts...)
+			op := Operation[string]{Identity: Identity{KeyType: "item", ID: "same", UseCase: "compressionDefaults"}, Policy: Policy{RemoteTTL: time.Duration(60000) * time.Millisecond}}
+			if err := cache.WithEnabled(context.Background(), func(ctx context.Context) error {
+				got, err := GetOrLoad(ctx, cache, op, func(context.Context) (string, error) { return value, nil })
 				if err != nil || got != value {
 					t.Fatalf("compression changed source result: %v", err)
 				}
@@ -625,30 +630,35 @@ func TestCompressionConstructionDefaultsAndExplicitDisable(t *testing.T) {
 
 func TestCapacityConstructionOmissionAndBounds(t *testing.T) {
 	for _, explicitZero := range []bool{false, true} {
-		name := "zero options mean omission"
+		name := "omitted options keep the defaults"
 		if explicitZero {
 			name = "explicit local zero disables settled storage"
 		}
 		t.Run(name, func(t *testing.T) {
-			cache := New(Options[int]{LocalCapacity: 0, LocalCapacitySet: explicitZero, ShadowMaxInFlight: 0})
-			// Go's zero-valued integer options are omission. The explicit local
-			// presence bit permits zero storage; shadow has no explicit-zero mode.
+			// Omitted options keep the documented defaults. WithLocalCapacity(0)
+			// disables storage while retaining coalescing; shadow capacity has no
+			// zero mode and rejects it at construction.
+			var opts []Option
+			if explicitZero {
+				opts = append(opts, WithLocalCapacity(0))
+			}
+			cache := MustNew(opts...)
 			wantCapacity := 10000
 			if explicitZero {
 				wantCapacity = 0
 			}
-			if cache.options.LocalCapacity != wantCapacity || cache.options.ShadowMaxInFlight != 1 {
-				t.Fatalf("wrong native construction defaults: local=%d shadow=%d", cache.options.LocalCapacity, cache.options.ShadowMaxInFlight)
+			if cache.settings.localCapacity != wantCapacity || cache.settings.shadowCapacity != 1 {
+				t.Fatalf("wrong native construction defaults: local=%d shadow=%d", cache.settings.localCapacity, cache.settings.shadowCapacity)
 			}
-			op := Operation{Identity: Identity{KeyType: "item", ID: "same", UseCase: "capacityBinding"}, Policy: Policy{LocalTTLMS: 60000}}
+			op := Operation[int]{Identity: Identity{KeyType: "item", ID: "same", UseCase: "capacityBinding"}, Policy: Policy{LocalTTL: time.Duration(60000) * time.Millisecond}}
 			var sources atomic.Int32
 			for call := 1; call <= 2; call++ {
 				want := 1
 				if explicitZero {
 					want = call
 				}
-				if err := cache.Enable(context.Background(), func(ctx context.Context) error {
-					value, err := cache.GetOrLoad(ctx, op, func(context.Context) (int, error) { return int(sources.Add(1)), nil })
+				if err := cache.WithEnabled(context.Background(), func(ctx context.Context) error {
+					value, err := GetOrLoad(ctx, cache, op, func(context.Context) (int, error) { return int(sources.Add(1)), nil })
 					if err != nil || value != want {
 						t.Fatalf("capacity binding result=%d error=%v, want %d", value, err, want)
 					}
@@ -667,19 +677,16 @@ func TestCapacityConstructionOmissionAndBounds(t *testing.T) {
 		})
 	}
 	for _, test := range []struct {
-		name    string
-		options Options[any]
+		name   string
+		option Option
 	}{
-		{"negative local", Options[any]{LocalCapacity: -1}},
-		{"negative shadow", Options[any]{ShadowMaxInFlight: -1}},
+		{"negative local", WithLocalCapacity(-1)},
+		{"negative shadow", WithShadowCapacity(-1)},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			defer func() {
-				if recover() == nil {
-					t.Fatal("invalid capacity did not reject at construction")
-				}
-			}()
-			_ = New(test.options)
+			if _, err := New(test.option); !errors.Is(err, ErrInvalidOption) {
+				t.Fatalf("invalid capacity did not reject at construction: %v", err)
+			}
 		})
 	}
 }
