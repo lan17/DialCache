@@ -4,22 +4,21 @@ use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::num::NonZeroUsize;
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 
 use futures::future::BoxFuture;
 use parking_lot::Mutex;
 
 use crate::clock::Clock;
-use crate::error::{BoxError, ConfigError, Error, SharedError};
+use crate::error::{BoxError, ConfigError, Error};
 use crate::flight::{start_pending, Flight, Settled, ValueResult};
 use crate::identity::Identity;
 use crate::limits::{
     DEFAULT_LOCAL_CAPACITY, DEFAULT_REMOTE_READ_TIMEOUT_MS, DEFAULT_SHADOW_MAX_IN_FLIGHT,
     MAX_DEADLINE_MS, MAX_SAFE_INTEGER, MAX_SUPPORTED_DURATION_MS, WATERMARK_USE_CASE,
 };
-use crate::local::{LocalEntry, LocalStore, LruLocalStore, StoredValue};
+use crate::local::{LocalEntry, LocalRead, LocalStore, LruLocalStore, StoredValue};
 use crate::observe::{Event, Labels, Layer, LogEvent, Logger, Observer, OutcomeLabels};
 use crate::operation::{downcast_value, erase_load, ErasedOperation, Operation, RecoveryPredicate};
 use crate::policy::RuntimePolicy;
@@ -87,13 +86,21 @@ impl Core {
         // Read the clock before taking the lock: it is the only external code
         // on this path, and a failure must not poison shared state.
         let now_ms = self.clock.elapsed_ms();
-        let mut state = self.state.lock();
-        match state.local.as_mut() {
-            None => Ok(None),
-            Some(local) => catch_unwind(AssertUnwindSafe(|| local.get(key, now_ms)))
-                .unwrap_or_else(|payload| {
-                    Err(crate::flight::panic_message(payload).to_string().into())
-                }),
+        let read = {
+            let mut state = self.state.lock();
+            match state.local.as_mut() {
+                None => return Ok(None),
+                Some(local) => catch_unwind(AssertUnwindSafe(|| local.get(key, now_ms)))
+                    .unwrap_or_else(|payload| {
+                        Err(crate::flight::panic_message(payload).to_string().into())
+                    }),
+            }
+        };
+        // An expired entry drops here, outside the lock: a value's destructor
+        // may call back into the cache.
+        match read? {
+            LocalRead::Live(value) => Ok(Some(value)),
+            LocalRead::Absent | LocalRead::Expired(_) => Ok(None),
         }
     }
 
@@ -104,20 +111,25 @@ impl Core {
         ttl_ms: u64,
     ) -> Result<(), BoxError> {
         let now_ms = self.clock.elapsed_ms();
-        let mut state = self.state.lock();
-        match state.local.as_mut() {
-            None => Ok(()),
-            Some(local) => {
-                let entry = LocalEntry {
-                    value,
-                    inserted_ms: now_ms,
-                    ttl_ms: ttl_ms.min(i64::MAX as u64) as i64,
-                };
-                catch_unwind(AssertUnwindSafe(|| local.put(key.to_string(), entry))).unwrap_or_else(
-                    |payload| Err(crate::flight::panic_message(payload).to_string().into()),
-                )
+        let displaced = {
+            let mut state = self.state.lock();
+            match state.local.as_mut() {
+                None => return Ok(()),
+                Some(local) => {
+                    let entry = LocalEntry {
+                        value,
+                        inserted_ms: now_ms,
+                        ttl_ms: ttl_ms.min(i64::MAX as u64) as i64,
+                    };
+                    catch_unwind(AssertUnwindSafe(|| local.put(key.to_string(), entry)))
+                        .unwrap_or_else(|payload| {
+                            Err(crate::flight::panic_message(payload).to_string().into())
+                        })
+                }
             }
-        }
+        };
+        // The displaced entry drops here, outside the lock.
+        displaced.map(|_| ())
     }
 }
 
@@ -389,7 +401,7 @@ fn default_clock() -> Result<Arc<dyn Clock>, ConfigError> {
 
 #[cfg(feature = "tokio")]
 fn default_runtime() -> Result<Arc<dyn Runtime>, ConfigError> {
-    Ok(Arc::new(crate::runtime::TokioRuntime))
+    Ok(Arc::new(crate::runtime::TokioRuntime::current()?))
 }
 
 #[cfg(not(feature = "tokio"))]
@@ -461,20 +473,17 @@ impl DialCache {
     }
 
     /// Open the outermost enabled scope for `f`. The scope closes when the
-    /// returned future completes; retained clones then pass through.
+    /// returned future completes, is dropped before completion, or unwinds;
+    /// retained clones then pass through.
     pub async fn enable<F, Fut, R>(&self, f: F) -> R
     where
         F: FnOnce(Scope) -> Fut,
         Fut: Future<Output = R>,
     {
-        let owner = Owner::new();
-        let scope = Scope {
-            cache_id: self.core.id,
-            owner: Some(owner.clone()),
-            enabled: true,
-        };
+        let guard = self.enable_guard();
+        let scope = guard.scope().clone();
         let result = f(scope).await;
-        owner.close();
+        drop(guard);
         result
     }
 
@@ -686,12 +695,10 @@ impl DialCache {
         if operation.identity.namespace.is_empty() {
             operation.identity.namespace = self.core.namespace.to_string();
         }
+        // A scope owned by another instance disables this call but still
+        // reaches the source, so nested calls on its own instance keep caching.
         let core = self.core.clone();
-        let scope = if scope.cache_id == core.id {
-            scope.clone()
-        } else {
-            Scope::outside()
-        };
+        let scope = scope.clone();
         let pending: Settled<ValueResult> = start_pending(
             core.runtime.clone().as_ref(),
             crate::execution::run(core, scope, Arc::new(operation)),
@@ -738,11 +745,3 @@ pub(crate) fn outcome_labels(identity: &Identity) -> OutcomeLabels {
         key_type: Arc::from(identity.key_type.as_str()),
     }
 }
-
-#[allow(dead_code)]
-pub(crate) fn shared_error(error: BoxError) -> SharedError {
-    Arc::from(error)
-}
-
-#[allow(dead_code)]
-pub(crate) struct Unused(AtomicBool, Duration);

@@ -53,7 +53,7 @@ pub use engine::{
 };
 pub use error::{BoxError, ConfigError, Error, FallbackTimeout, RemoteReadTimeout, SharedError};
 pub use identity::{normalize_args, ArgValue, Identity, IdentityError, Keys};
-pub use local::{LocalEntry, LocalStore, LruLocalStore, StoredValue};
+pub use local::{LocalEntry, LocalRead, LocalStore, LruLocalStore, StoredValue};
 pub use metrics::MetricKind;
 pub use observe::{Event, Labels, LogEvent, LogLevel, Logger, Observer, ShadowMismatchDetails};
 pub use operation::{Comparator, Operation, Preview, RecoveryPredicate, SourceBudget};

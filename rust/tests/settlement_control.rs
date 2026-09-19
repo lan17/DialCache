@@ -10,7 +10,7 @@ use formal::inventory::repo_path;
 use formal::transport::Coordinator;
 use serde_json::Value;
 
-const BEHAVIOR_SMOKE: [&str; 14] = [
+const BEHAVIOR_SMOKE: [&str; 13] = [
     "effects",
     "admission",
     "independent",
@@ -24,7 +24,6 @@ const BEHAVIOR_SMOKE: [&str; 14] = [
     "shadow",
     "shadow-layers",
     "source-budgets",
-    "effects",
 ];
 
 fn replay(coordinator: &mut Coordinator, profile: &str, skip_settle: bool) -> Result<(), String> {
@@ -54,9 +53,7 @@ fn replay(coordinator: &mut Coordinator, profile: &str, skip_settle: bool) -> Re
 fn unsettled_observations_fail_every_behavior_smoke_history() {
     install_panic_hook();
     let mut coordinator = Coordinator::spawn().expect("coordinator");
-    let mut profiles: Vec<&str> = BEHAVIOR_SMOKE.to_vec();
-    profiles.dedup();
-    for profile in profiles {
+    for profile in BEHAVIOR_SMOKE {
         replay(&mut coordinator, profile, false)
             .unwrap_or_else(|e| panic!("{profile} settled replay must pass: {e}"));
         let unsettled = replay(&mut coordinator, profile, true);

@@ -119,13 +119,16 @@ describe("Rust replay report gate", () => {
 
 describe("Rust validation lanes", () => {
   const directory = "/checkout";
-  it("checks formatting, clippy and default tests from the repository root through the crate manifest", () => {
+  it("checks formatting, clippy and default tests from inside the crate so rustup honors its toolchain pin", () => {
     expect(validationPlan("check-rust", { directory }).map(step => [step.command, ...step.args!])).toEqual([
-      ["cargo", "fmt", "--manifest-path", "rust/Cargo.toml", "--check"],
-      ["cargo", "clippy", "--manifest-path", "rust/Cargo.toml", "--all-targets", "--all-features", "--", "-D", "warnings"],
-      ["cargo", "test", "--manifest-path", "rust/Cargo.toml", "--all-features"],
+      ["cargo", "fmt", "--check"],
+      ["cargo", "clippy", "--all-targets", "--all-features", "--", "-D", "warnings"],
+      ["cargo", "test", "--all-features"],
     ]);
-    for (const step of validationPlan("check-rust", { directory })) expect(step.env, step.label).toBeUndefined();
+    for (const step of validationPlan("check-rust", { directory })) {
+      expect(step.env, step.label).toBeUndefined();
+      expect(step.cwd, step.label).toBe("rust");
+    }
     expect(validationPlan("check", { directory })).toEqual(["check-ts", "check-go", "check-rust", "docs", "audit"].flatMap(target => validationPlan(target, { directory })));
   });
 
@@ -134,7 +137,8 @@ describe("Rust validation lanes", () => {
     expect(plan[0]).toEqual({ label: "Invalidate prior rust completion", remove: [".formal-traces/rust-completion.json"] });
     expect(plan[1]!.args).toEqual(["formal/conformance.mjs", "prepare", "rust", ".formal-traces/rust-context.json"]);
     const replay = plan[2]!;
-    expect([replay.command, ...replay.args!]).toEqual(["cargo", "test", "--manifest-path", "rust/Cargo.toml", "--release", "--all-features", "--test", "conformance"]);
+    expect([replay.command, ...replay.args!]).toEqual(["cargo", "test", "--release", "--all-features", "--test", "conformance"]);
+    expect(replay.cwd).toBe("rust");
     expect(replay.env).toEqual({
       DIALCACHE_MBT_TRACE_DIR: "/checkout/.formal-traces/conformance",
       DIALCACHE_EFFECTS_TRACE_DIR: "/checkout/.formal-traces/effects",
@@ -157,8 +161,15 @@ describe("Rust validation lanes", () => {
 
   it("adds the smoke conformance run in default mode with no corpus selectors", () => {
     const smoke = validationPlan("smoke", { directory });
-    expect(smoke.at(-1)).toEqual({ label: "Replay committed Rust fixtures", command: "cargo", args: ["test", "--manifest-path", "rust/Cargo.toml", "--all-features", "--test", "conformance"] });
+    expect(smoke.at(-1)).toEqual({ label: "Replay committed Rust fixtures", command: "cargo", args: ["test", "--all-features", "--test", "conformance"], cwd: "rust" });
     expect(smoke.filter(step => step.command === "cargo")).toHaveLength(1);
+  });
+
+  it("runs the real-server integration binary only through the integration lane, opted in by its environment variable", () => {
+    const lane = validationPlan("integration-rust", { directory });
+    expect(lane).toEqual([{ label: "Run Rust Redis/Valkey/Cluster integrations", command: "cargo", args: ["test", "--all-features", "--test", "redis_integration"], cwd: "rust", env: { DIALCACHE_RUST_INTEGRATION: "1" } }]);
+    expect(validationPlan("integration", { directory })).toEqual(["integration-ts", "integration-go", "integration-rust"].flatMap(target => validationPlan(target, { directory })));
+    for (const target of ["check-rust", "smoke", "formal-rust"]) expect(validationPlan(target, { directory }).some(step => step.env?.DIALCACHE_RUST_INTEGRATION), target).toBe(false);
   });
 
   it("probes the pinned cargo exactly for the Rust lanes", async () => {
@@ -167,7 +178,7 @@ describe("Rust validation lanes", () => {
     const { delimiter, join } = await import("node:path");
     const temporary = mkdtempSync(join(tmpdir(), "dialcache-rust-prereq-"));
     try {
-      for (const path of ["bin", "formal", "node_modules/typescript"]) mkdirSync(join(temporary, path), { recursive: true });
+      for (const path of ["bin", "formal", "node_modules/typescript", "rust"]) mkdirSync(join(temporary, path), { recursive: true });
       writeFileSync(join(temporary, "package.json"), '{"packageManager":"pnpm@10.33.0"}');
       writeFileSync(join(temporary, "node_modules/typescript/package.json"), "{}");
       writeFileSync(join(temporary, "formal/generated-fixtures.lock.json"), '{"quintVersion":"0.32.0"}');
@@ -178,7 +189,7 @@ describe("Rust validation lanes", () => {
       const environment = { ...process.env, PATH: `${join(temporary, "bin")}${delimiter}${process.env.PATH ?? ""}` };
       const options = { directory: temporary, environment, nodeVersion: "v24.20.0" };
       tool("cargo", 'console.error("cargo: command not found"); process.exit(127)');
-      for (const target of ["check-rust", "formal-rust", "smoke", "check"]) expect(() => checkPrerequisites(target, options), target).toThrow(/Cannot run cargo/);
+      for (const target of ["check-rust", "formal-rust", "smoke", "check", "integration-rust"]) expect(() => checkPrerequisites(target, options), target).toThrow(/Cannot run cargo/);
       for (const target of ["check-ts", "check-go", "formal-ts", "formal-go", "mutations", "audit"]) expect(() => checkPrerequisites(target, options), target).not.toThrow();
       tool("cargo", 'console.log("cargo 1.97.0 (abcdef 2026-06-01)")');
       expect(() => checkPrerequisites("check-rust", options)).toThrow(/requires cargo 1\.98\.1; found cargo 1\.97\.0/);

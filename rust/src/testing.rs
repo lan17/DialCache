@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 use std::time::Duration;
 
-use crate::clock::Clock;
+use crate::clock::{Clock, SystemClock};
 use crate::runtime::Runtime;
 use futures::executor::{LocalPool, LocalSpawner};
 use futures::future::BoxFuture;
@@ -362,44 +362,21 @@ impl TestExecutor {
     }
 }
 
-/// A clock aligned to the shared millisecond grid of a [`VirtualClock`], the
-/// way [`SystemClock`](crate::SystemClock) aligns to the process grid.
-/// Instances constructed at different fractional times share one grid.
-pub struct VirtualGridClock {
-    base: Arc<VirtualClock>,
-    origin_ns: u128,
-}
-
-impl std::fmt::Debug for VirtualGridClock {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("VirtualGridClock")
-            .field("origin_ns", &self.origin_ns)
-            .finish()
-    }
-}
-
-impl VirtualGridClock {
-    pub fn new(base: Arc<VirtualClock>) -> Self {
-        let now_ns = base.state.lock().elapsed_ns;
-        VirtualGridClock {
-            base,
-            origin_ns: crate::clock::grid_origin_ns(now_ns),
-        }
-    }
-}
-
-impl Clock for VirtualGridClock {
-    fn wall_ms(&self) -> i64 {
-        self.base.wall_ms()
-    }
-
-    fn elapsed(&self) -> Duration {
-        let ns = self
-            .base
-            .state
-            .lock()
-            .elapsed_ns
-            .saturating_sub(self.origin_ns);
-        Duration::from_nanos(ns.min(u64::MAX as u128) as u64)
-    }
+/// The production [`SystemClock`] built over a [`VirtualClock`].
+///
+/// Its origin aligns to the shared millisecond grid of the virtual elapsed
+/// reading exactly as default instances align to the process grid, so
+/// instances constructed at different fractional virtual times share one
+/// expiry grid and the default alignment itself is what a controlled history
+/// exercises.
+pub fn grid_clock(base: &Arc<VirtualClock>) -> SystemClock {
+    let monotonic = base.clone();
+    let wall = base.clone();
+    SystemClock::with_sources(
+        move || {
+            let ns = monotonic.state.lock().elapsed_ns;
+            Duration::from_nanos(ns.min(u64::MAX as u128) as u64)
+        },
+        move || wall.wall_ms(),
+    )
 }

@@ -5,7 +5,7 @@
 
 NODE ?= node
 
-.PHONY: help check check-ts check-go check-rust docs audit smoke formal formal-check formal-generate formal-ts formal-go formal-rust fixtures-check kernel-fixtures differential mutations mutations-ts mutations-go mutations-merge-ts mutations-merge-go integration integration-ts integration-go package-floor ci explore model-check
+.PHONY: help check check-ts check-go check-rust docs audit smoke formal formal-check formal-generate formal-ts formal-go formal-rust fixtures-check kernel-fixtures differential mutations mutations-ts mutations-go mutations-merge-ts mutations-merge-go integration integration-ts integration-go integration-rust package-floor ci explore model-check
 
-help check check-ts check-go check-rust docs audit smoke formal formal-check formal-generate formal-ts formal-go formal-rust fixtures-check kernel-fixtures differential mutations mutations-ts mutations-go mutations-merge-ts mutations-merge-go integration integration-ts integration-go package-floor ci explore model-check:
+help check check-ts check-go check-rust docs audit smoke formal formal-check formal-generate formal-ts formal-go formal-rust fixtures-check kernel-fixtures differential mutations mutations-ts mutations-go mutations-merge-ts mutations-merge-go integration integration-ts integration-go integration-rust package-floor ci explore model-check:
 	$(NODE) formal/validation.mjs $@

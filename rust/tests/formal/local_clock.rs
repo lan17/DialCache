@@ -1,9 +1,10 @@
-//! The local-clock profile driver: default-aligned instances over a shared
-//! virtual grid, fractional environment ticks, immediate healthy sources.
+//! The local-clock profile driver: default instances whose production clock
+//! alignment runs over a shared virtual grid, fractional environment ticks,
+//! immediate healthy sources.
 
 use std::sync::Arc;
 
-use dialcache::testing::{TestExecutor, VirtualGridClock};
+use dialcache::testing::{grid_clock, TestExecutor};
 use dialcache::{DialCache, Identity, Operation, Policy};
 use parking_lot::Mutex;
 use serde_json::{json, Map, Value};
@@ -41,7 +42,7 @@ impl LocalClockDriver {
                     return Err("invalid/duplicate instance".to_string());
                 }
                 let cache = DialCache::builder()
-                    .clock(VirtualGridClock::new(self.exec.clock.clone()))
+                    .clock(grid_clock(&self.exec.clock))
                     .runtime_arc(self.exec.runtime.clone())
                     .build()
                     .map_err(|e| e.to_string())?;

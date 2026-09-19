@@ -88,8 +88,9 @@ pub const JSON_UNDEFINED_SENTINEL: &str = "__dialcache_json_undefined_v1__";
 ///
 /// Values written by TypeScript's default serializer decode as long as they
 /// are valid JSON for the destination type. The TypeScript `undefined`
-/// sentinel decodes as JSON `null`, so an `Option<T>` destination reads it as
-/// `None` and any other destination fails open to the source.
+/// sentinel decodes as JSON `null`: an `Option<T>` destination reads it as
+/// `None`, a destination that accepts `null` (such as `serde_json::Value`)
+/// decodes it, and any other destination fails open to the source.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct JsonCodec;
 

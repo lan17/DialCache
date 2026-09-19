@@ -103,9 +103,30 @@ pub(crate) fn panic_message(payload: Box<dyn std::any::Any + Send>) -> Arc<str> 
     }
 }
 
+/// The message settled into a cell whose detached task was dropped before it
+/// completed: the runtime shut down while the cache outlived it.
+pub(crate) const DROPPED_MESSAGE: &str =
+    "DialCache detached work was dropped before it settled (runtime shut down)";
+
+/// Settles the cell from `Drop` when the spawned task is dropped unpolled or
+/// mid-await, so waiters on another runtime never hang on a dead task.
+struct SettleOnDrop<T: Clone, P: FnOnce(Arc<str>) -> T> {
+    cell: Settled<T>,
+    on_panic: Option<P>,
+}
+
+impl<T: Clone, P: FnOnce(Arc<str>) -> T> Drop for SettleOnDrop<T, P> {
+    fn drop(&mut self) {
+        if let Some(on_panic) = self.on_panic.take() {
+            self.cell.settle(on_panic(Arc::from(DROPPED_MESSAGE)));
+        }
+    }
+}
+
 /// Start `work` as detached raw work. The returned cell settles with its
-/// result, or with `on_panic` when it panics. Callers that stop waiting keep
-/// no ownership of the work.
+/// result, with `on_panic` when it panics, and with `on_panic` and
+/// [`DROPPED_MESSAGE`] when the runtime drops the task before it completes.
+/// Callers that stop waiting keep no ownership of the work.
 pub(crate) fn start_pending<T, F>(
     runtime: &dyn Runtime,
     work: F,
@@ -116,13 +137,18 @@ where
     F: Future<Output = T> + Send + 'static,
 {
     let settled = Settled::new();
-    let cell = settled.clone();
+    let mut guard = SettleOnDrop {
+        cell: settled.clone(),
+        on_panic: Some(on_panic),
+    };
     runtime.spawn(Box::pin(async move {
         let outcome = match AssertUnwindSafe(work).catch_unwind().await {
             Ok(value) => value,
-            Err(payload) => on_panic(panic_message(payload)),
+            Err(payload) => (guard.on_panic.take().expect("armed guard"))(panic_message(payload)),
         };
-        cell.settle(outcome);
+        // Disarm before settling so the cell settles exactly once.
+        guard.on_panic = None;
+        guard.cell.settle(outcome);
     }));
     settled
 }

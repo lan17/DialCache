@@ -4,28 +4,21 @@
 //! [`Registry`] under the names, help text, label sets and histogram buckets
 //! of the TypeScript adapter, and feeds every [`Event`] to them.
 //!
-//! # Reuse
+//! # Sharing one registry
 //!
-//! Collectors are process-wide state: constructing a second observer for the
-//! same registry and prefix reuses the collectors the first one created, so
-//! observations from both accumulate in one series set. The `prometheus`
-//! crate reports a duplicate registration without a handle to the existing
-//! collector, so reuse is keyed by the registry's address and the prefix in a
-//! process-wide table. Pass the same [`Registry`] value each time, not a
-//! clone: a clone shares the registered collectors but has another address,
-//! and its construction fails as an externally owned duplicate.
-//!
-//! An externally registered collector with one of the DialCache names is
-//! reported as [`PrometheusError::Conflict`]; the constructor then leaves the
-//! registry as it found it.
+//! One observer owns one set of collectors. Instances that export to the same
+//! registry share the observer: it is `Clone`, and every clone feeds the same
+//! series. The `prometheus` crate reports a duplicate registration without a
+//! handle to the existing collector, so a second `new` for the same registry
+//! and prefix is a [`PrometheusError::Conflict`], as is an externally
+//! registered collector under one of the DialCache names; the constructor
+//! then leaves the registry as it found it.
 
-use std::collections::HashMap;
 use std::fmt;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 
 use ::prometheus::core::Collector;
 use ::prometheus::{HistogramOpts, HistogramVec, IntCounterVec, Opts, Registry};
-use parking_lot::Mutex;
 
 use crate::metrics::MetricKind;
 use crate::observe::{Event, Observer};
@@ -207,8 +200,9 @@ pub fn schemas(prefix: &str) -> Vec<CollectorSchema> {
 /// Construction failures of a [`PrometheusObserver`].
 #[derive(Debug)]
 pub enum PrometheusError {
-    /// A collector with this name is already registered by someone else, or
-    /// with another schema. Use a unique prefix or another registry.
+    /// A collector with this name is already registered: by another observer
+    /// (clone that observer instead of constructing a second one), by someone
+    /// else, or with another schema. Use a unique prefix or another registry.
     Conflict {
         name: String,
         source: ::prometheus::Error,
@@ -311,34 +305,13 @@ impl Group {
         }
         Ok(())
     }
-
-    /// Make sure every collector is registered on `registry`, accepting the
-    /// ones already there.
-    fn ensure_registered(&self, registry: &Registry, prefix: &str) -> Result<(), PrometheusError> {
-        for schema in schemas(prefix) {
-            match registry.register(self.vectors[schema.kind.index()].boxed()) {
-                Ok(()) | Err(::prometheus::Error::AlreadyReg) => {}
-                Err(source) => {
-                    return Err(PrometheusError::Conflict {
-                        name: schema.name,
-                        source,
-                    })
-                }
-            }
-        }
-        Ok(())
-    }
 }
 
-type GroupKey = (usize, String);
-
-/// Collector groups by registry address and prefix. Groups are retained for
-/// the process lifetime so a later observer for the same registry finds the
-/// collectors even after every earlier observer was dropped.
-static GROUPS: LazyLock<Mutex<HashMap<GroupKey, Arc<Group>>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
-
 /// Publishes DialCache diagnostics to Prometheus collectors.
+///
+/// Clones share the collectors; hand one observer to every instance that
+/// exports to the same registry.
+#[derive(Clone)]
 pub struct PrometheusObserver {
     group: Arc<Group>,
     prefix: String,
@@ -353,23 +326,12 @@ impl fmt::Debug for PrometheusObserver {
 }
 
 impl PrometheusObserver {
-    /// Create or reuse the DialCache collectors named `<prefix>dialcache_*`
-    /// on `registry`. See the module documentation for the reuse rule.
+    /// Register the DialCache collectors named `<prefix>dialcache_*` on
+    /// `registry`. Registering the same names twice on one registry is a
+    /// [`PrometheusError::Conflict`]: clone the observer instead.
     pub fn new(registry: &Registry, prefix: &str) -> Result<PrometheusObserver, PrometheusError> {
-        let key: GroupKey = (registry as *const Registry as usize, prefix.to_string());
-        let mut groups = GROUPS.lock();
-        let group = match groups.get(&key) {
-            Some(group) => {
-                group.ensure_registered(registry, prefix)?;
-                group.clone()
-            }
-            None => {
-                let group = Arc::new(Group::build(prefix)?);
-                group.register(registry, prefix)?;
-                groups.insert(key, group.clone());
-                group
-            }
-        };
+        let group = Arc::new(Group::build(prefix)?);
+        group.register(registry, prefix)?;
         Ok(PrometheusObserver {
             group,
             prefix: prefix.to_string(),

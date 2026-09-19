@@ -628,12 +628,13 @@ mod prometheus_exporter {
         }
     }
 
-    /// Port of TestPrometheusReuseAndConflictIsolation.
+    /// Port of TestPrometheusReuseAndConflictIsolation. Rust shares one
+    /// observer by cloning it rather than by re-registering the same names.
     #[test]
     fn reuse_and_conflict_isolation() {
         let registry = Registry::new();
         let first = PrometheusObserver::new(&registry, "test_").expect("first");
-        let second = PrometheusObserver::new(&registry, "test_").expect("second reuses");
+        let second = first.clone();
         first.observe(&metric_test_event(MetricKind::Request));
         second.observe(&metric_test_event(MetricKind::Request));
         first.observe(&metric_test_event(MetricKind::Get));
@@ -660,10 +661,10 @@ mod prometheus_exporter {
         }
         assert!(saw_counter && saw_histogram, "metrics not exported");
 
-        // Reuse survives dropping every earlier observer.
+        // Clones survive dropping the original observer.
+        let third = second.clone();
         drop(first);
         drop(second);
-        let third = PrometheusObserver::new(&registry, "test_").expect("third reuses");
         third.observe(&metric_test_event(MetricKind::Request));
         let requests = registry
             .gather()
@@ -671,6 +672,24 @@ mod prometheus_exporter {
             .find(|f| f.name() == "test_dialcache_request_counter")
             .expect("request family");
         assert_eq!(requests.get_metric()[0].get_counter().value(), 3.0);
+
+        // A second registration of the same names is a conflict that leaves
+        // the registry, and the shared series, untouched.
+        let duplicate = PrometheusObserver::new(&registry, "test_")
+            .expect_err("re-registered the same collectors");
+        match &duplicate {
+            PrometheusError::Conflict { name, .. } => {
+                assert_eq!(name, "test_dialcache_disabled_counter")
+            }
+            other => panic!("unexpected error {other}"),
+        }
+        third.observe(&metric_test_event(MetricKind::Request));
+        let requests = registry
+            .gather()
+            .into_iter()
+            .find(|f| f.name() == "test_dialcache_request_counter")
+            .expect("request family");
+        assert_eq!(requests.get_metric()[0].get_counter().value(), 4.0);
 
         // Another prefix on the same registry is an independent group.
         let other = PrometheusObserver::new(&registry, "other_").expect("other prefix");

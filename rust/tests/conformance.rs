@@ -168,8 +168,9 @@ impl Run {
         let full = self.selection.core.is_directory();
         for path in self.selection.core_paths()? {
             let id = inventory::trace_case_id("core", &path, full);
+            let started = formal::report::now_ms();
             let outcome = self.replay_core(&path);
-            self.record(&id, outcome)?;
+            self.record(&id, started, outcome)?;
         }
         Ok(())
     }
@@ -211,8 +212,9 @@ impl Run {
         let full = self.selection.effects.is_directory();
         for path in self.selection.effects_paths()? {
             let id = inventory::trace_case_id("effects", &path, full);
+            let started = formal::report::now_ms();
             let outcome = self.replay_behavior("effects", &path, true);
-            self.record(&id, outcome)?;
+            self.record(&id, started, outcome)?;
         }
         Ok(())
     }
@@ -238,8 +240,9 @@ impl Run {
             }
             for path in paths {
                 let id = inventory::trace_case_id(&name, &path, full);
+                let started = formal::report::now_ms();
                 let outcome = self.replay_behavior(&name, &path, false);
-                self.record(&id, outcome)?;
+                self.record(&id, started, outcome)?;
             }
         }
         Ok(())
@@ -259,6 +262,7 @@ impl Run {
         let full = self.selection.features.is_directory();
         for path in paths {
             let id = inventory::trace_case_id("local-clock", &path, full);
+            let started = formal::report::now_ms();
             let outcome = (|| {
                 let prepared = self.coordinator.prepare("local-clock", &path, None)?;
                 note_actions(&mut self.seen_actions, "local-clock", &prepared);
@@ -275,7 +279,7 @@ impl Run {
                     &mut [],
                 )
             })();
-            self.record(&id, outcome)?;
+            self.record(&id, started, outcome)?;
         }
         Ok(())
     }
@@ -297,8 +301,9 @@ impl Run {
             }
             matched += 1;
             let id = inventory::scenario_case_id(feature, name);
+            let started = formal::report::now_ms();
             let outcome = scenarios::replay_scenario(scenario);
-            self.record(&id, outcome)?;
+            self.record(&id, started, outcome)?;
         }
         if matched == 0 {
             return Err("no behavioral scenario matched".to_string());
@@ -332,8 +337,9 @@ impl Run {
             for vector in vectors {
                 let name = vector.get("name").and_then(Value::as_str).unwrap_or("");
                 let id = inventory::protocol_case_id(group, name);
+                let started = formal::report::now_ms();
                 let outcome = check(vector);
-                self.record(&id, outcome)?;
+                self.record(&id, started, outcome)?;
             }
         }
         Ok(())
@@ -361,15 +367,20 @@ impl Run {
         let root = repo_root();
         for (profile, paths) in profiles {
             let id = inventory::witness_case_id(&profile);
+            let started = formal::report::now_ms();
             let outcome =
                 formal::witness::check_witness_evidence(&root, &profile, &directory, &paths);
-            self.record(&id, outcome)?;
+            self.record(&id, started, outcome)?;
         }
         Ok(())
     }
 
-    fn record(&mut self, id: &str, outcome: Result<(), String>) -> Result<(), String> {
-        let started = formal::report::now_ms();
+    fn record(
+        &mut self,
+        id: &str,
+        started: i64,
+        outcome: Result<(), String>,
+    ) -> Result<(), String> {
         if let Err(message) = &outcome {
             self.failures += 1;
             eprintln!("FAIL {id}\n{message}");

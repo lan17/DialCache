@@ -44,3 +44,8 @@ serde_json = "1"
 name = "conformance"
 path = "tests/conformance.rs"
 harness = false
+
+[[test]]
+name = "redis_integration"
+path = "tests/redis_integration.rs"
+required-features = ["redis"]

@@ -1,6 +1,7 @@
 //! Cooperative cancellation for remote reads.
 
 use std::future::Future;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
@@ -57,8 +58,10 @@ impl CancelToken {
         for waker in wakers {
             waker.wake();
         }
+        // A callback belongs to an adapter; its panic must not become the
+        // outcome of the read that is being abandoned.
         for callback in callbacks {
-            callback();
+            let _ = catch_unwind(AssertUnwindSafe(callback));
         }
     }
 
@@ -74,7 +77,7 @@ impl CancelToken {
             }
         }
         if let Some(callback) = callback {
-            callback();
+            let _ = catch_unwind(AssertUnwindSafe(callback));
         }
     }
 

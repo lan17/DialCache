@@ -77,6 +77,8 @@ jobs:
           rust: "true"
       - name: Check Rust formatting, clippy and native tests including the smoke conformance run
         run: make check-rust
+      - name: Check real Redis, Valkey and Cluster integrations and invalidation vectors
+        run: make integration-rust
 
   # The existing required `test` status now requires every native language job.
   test:

@@ -44,10 +44,17 @@ impl Owner {
     }
 
     pub(crate) fn close(&self) {
-        let mut state = self.state.lock();
-        state.live = false;
-        state.memo.clear();
-        state.flights.clear();
+        let retired = {
+            let mut state = self.state.lock();
+            state.live = false;
+            (
+                std::mem::take(&mut state.memo),
+                std::mem::take(&mut state.flights),
+            )
+        };
+        // Memoized values drop here, outside the lock: a value's destructor
+        // may call back into the cache.
+        drop(retired);
     }
 }
 

@@ -45,7 +45,7 @@ describe("shared validation runner", () => {
 
   beforeEach(() => {
     directory = mkdtempSync(join(tmpdir(), "dialcache-validation-"));
-    for (const path of ["bin", "formal", "dist", "node_modules/typescript"]) mkdirSync(join(directory, path), { recursive: true });
+    for (const path of ["bin", "formal", "dist", "node_modules/typescript", "rust"]) mkdirSync(join(directory, path), { recursive: true });
     child = join(directory, "child.mjs");
     put("child.mjs", `import { appendFileSync } from 'node:fs';
 appendFileSync(process.env.RUNNER_EVENTS, JSON.stringify({ label: process.argv[2], cwd: process.cwd(),
@@ -85,6 +85,16 @@ process.exit(Number(process.argv[3] ?? 0));\n`);
       DIALCACHE_FEATURE_TRACE_DIR: join(directory, ".formal-traces/features"),
       DIALCACHE_WITNESS_EVIDENCE_DIR: join(directory, ".formal-traces/go-parity-witnesses"),
     });
+  });
+
+  it("runs a step inside its declared directory and every other step at the checkout root", async () => {
+    await run([
+      { label: "root", command: process.execPath, args: [child, "root"] },
+      { label: "crate", command: process.execPath, args: [child, "crate"], cwd: "rust" },
+    ]);
+    const [root, crate] = events();
+    expect(root!.cwd).toBe(realpathSync(directory));
+    expect(crate!.cwd).toBe(realpathSync(join(directory, "rust")));
   });
 
   it("stops at a failing child and preserves its partial native report without running later steps", async () => {

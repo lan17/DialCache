@@ -23,18 +23,51 @@ pub trait Runtime: Send + Sync + 'static {
     fn sleep(&self, duration: Duration) -> BoxFuture<'static, ()>;
 }
 
-/// Spawns onto the ambient tokio runtime and uses tokio timers.
+/// Spawns onto one tokio runtime, captured as a handle at construction, and
+/// uses that runtime's timers.
+///
+/// The default instance is [`TokioRuntime::current`], taken while the cache is
+/// built; [`DialCacheBuilder::build`](crate::DialCacheBuilder::build) fails
+/// with a configuration error outside a tokio context instead of panicking on
+/// first use. The runtime must have its time driver enabled (tokio's
+/// `enable_time` or `enable_all`), or the first deadline panics inside the
+/// detached work and surfaces as [`Error::Panic`](crate::Error::Panic).
 #[cfg(feature = "tokio")]
-#[derive(Debug, Clone, Copy, Default)]
-pub struct TokioRuntime;
+#[derive(Debug, Clone)]
+pub struct TokioRuntime {
+    handle: tokio::runtime::Handle,
+}
+
+#[cfg(feature = "tokio")]
+impl TokioRuntime {
+    /// The runtime of the current tokio context.
+    pub fn current() -> Result<Self, crate::error::ConfigError> {
+        tokio::runtime::Handle::try_current()
+            .map(Self::from_handle)
+            .map_err(|_| {
+                crate::error::ConfigError::invalid(
+                    "DialCache requires a tokio runtime: build the cache inside one, or \
+                     configure DialCacheBuilder::runtime with TokioRuntime::from_handle",
+                )
+            })
+    }
+
+    /// Use the runtime behind `handle`, whichever context later calls the cache.
+    pub fn from_handle(handle: tokio::runtime::Handle) -> Self {
+        TokioRuntime { handle }
+    }
+}
 
 #[cfg(feature = "tokio")]
 impl Runtime for TokioRuntime {
     fn spawn(&self, task: BoxFuture<'static, ()>) {
-        tokio::spawn(task);
+        self.handle.spawn(task);
     }
 
     fn sleep(&self, duration: Duration) -> BoxFuture<'static, ()> {
+        // Enter the captured runtime so the timer binds to its time driver
+        // rather than to whichever runtime happens to call the cache.
+        let _enter = self.handle.enter();
         Box::pin(tokio::time::sleep(duration))
     }
 }

@@ -12,8 +12,8 @@ use dialcache::protocol::{decode_frame, encode_frame, read_result_from_untrusted
 use dialcache::testing::{TestExecutor, VirtualClock};
 use dialcache::{
     BoxError, Codec, DialCache, Error, FallbackTimeout, Identity, InvalidateRequest, LocalEntry,
-    LocalStore, LruLocalStore, Operation, Payload, Policy, ReadContext, ReadRequest, ReadResult,
-    Remote, RuntimePolicy, Scope, SourceBudget, StoredValue, WriteRequest,
+    LocalRead, LocalStore, LruLocalStore, Operation, Payload, Policy, ReadContext, ReadRequest,
+    ReadResult, Remote, RuntimePolicy, Scope, SourceBudget, WriteRequest,
 };
 use futures::future::BoxFuture;
 use parking_lot::Mutex;
@@ -1501,23 +1501,23 @@ struct FaultStore {
 }
 
 impl LocalStore for FaultStore {
-    fn get(&mut self, key: &str, now_ms: i64) -> Result<Option<StoredValue>, BoxError> {
+    fn get(&mut self, key: &str, now_ms: i64) -> Result<LocalRead, BoxError> {
         if self.shared.lock().fault("localStorage") {
             return Err("controlled local storage failure".into());
         }
         match self.inner.as_mut() {
             Some(inner) => inner.get(key, now_ms),
-            None => Ok(None),
+            None => Ok(LocalRead::Absent),
         }
     }
 
-    fn put(&mut self, key: String, entry: LocalEntry) -> Result<(), BoxError> {
+    fn put(&mut self, key: String, entry: LocalEntry) -> Result<Option<LocalEntry>, BoxError> {
         if self.shared.lock().fault("localStorage") {
             return Err("controlled local storage failure".into());
         }
         match self.inner.as_mut() {
             Some(inner) => inner.put(key, entry),
-            None => Ok(()),
+            None => Ok(None),
         }
     }
 }

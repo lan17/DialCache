@@ -14,7 +14,7 @@ use crate::cancel::CancelToken;
 use crate::deadline::{await_deadline, seconds_since};
 use crate::engine::Core;
 use crate::error::{BoxError, Error, FallbackTimeout, RemoteReadTimeout, SharedError};
-use crate::flight::{panic_message, start_pending, Flight, Settled, ValueResult};
+use crate::flight::{panic_message, start_pending, Flight, Settled, ValueResult, DROPPED_MESSAGE};
 use crate::identity::{Identity, Keys};
 use crate::limits::{MAX_DECOMPRESSED_BYTES, MAX_SAFE_INTEGER, MAX_TRACKED_VALUE_TTL_MS};
 use crate::local::StoredValue;
@@ -36,6 +36,67 @@ pub(crate) type RawRead = Result<ReadResult, SharedError>;
 #[derive(Debug, thiserror::Error)]
 #[error("DialCache callback panicked: {0}")]
 pub(crate) struct PanicError(pub Arc<str>);
+
+/// The registered leader of one key in the request or process flight table.
+///
+/// Dropping it before [`Leader::finish`] means the leader's detached task was
+/// dropped unpolled (the runtime shut down while the cache outlived it); the
+/// flight is then unregistered and settled with an error so later callers,
+/// possibly on another runtime, start a fresh execution instead of joining a
+/// flight that can never complete.
+struct Leader {
+    core: Arc<Core>,
+    owner: Option<Arc<Owner>>,
+    key: String,
+    flight: Arc<Flight>,
+    settled: bool,
+}
+
+impl Leader {
+    fn unregister(&self) {
+        match &self.owner {
+            Some(owner) => {
+                let mut state = owner.state.lock();
+                if state
+                    .flights
+                    .get(&self.key)
+                    .is_some_and(|f| Arc::ptr_eq(f, &self.flight))
+                {
+                    state.flights.remove(&self.key);
+                }
+            }
+            None => {
+                let mut state = self.core.state.lock();
+                if state
+                    .flights
+                    .get(&self.key)
+                    .is_some_and(|f| Arc::ptr_eq(f, &self.flight))
+                {
+                    state.flights.remove(&self.key);
+                }
+            }
+        }
+    }
+
+    /// Unregister first, then settle: a caller arriving between the two
+    /// starts a new flight rather than joining a settled one.
+    fn finish(&mut self, result: ValueResult) {
+        self.settled = true;
+        self.unregister();
+        self.flight.result.settle(result);
+    }
+}
+
+impl Drop for Leader {
+    fn drop(&mut self) {
+        if !self.settled {
+            self.unregister();
+            self.flight
+                .result
+                .settle(Err(Error::Panic(Arc::from(DROPPED_MESSAGE))));
+        }
+    }
+}
 
 /// One admitted enabled call.
 pub(crate) struct Execution {
@@ -428,35 +489,18 @@ impl Execution {
                 Some(Err(flight)) => flight,
             }
         };
+        let mut leader = Leader {
+            core: self.core.clone(),
+            owner,
+            key,
+            flight,
+            settled: false,
+        };
         let result = match AssertUnwindSafe(run()).catch_unwind().await {
             Ok(result) => result,
             Err(payload) => Err(Error::Panic(panic_message(payload))),
         };
-        {
-            match &owner {
-                Some(owner) => {
-                    let mut state = owner.state.lock();
-                    if state
-                        .flights
-                        .get(&key)
-                        .is_some_and(|f| Arc::ptr_eq(f, &flight))
-                    {
-                        state.flights.remove(&key);
-                    }
-                }
-                None => {
-                    let mut state = self.core.state.lock();
-                    if state
-                        .flights
-                        .get(&key)
-                        .is_some_and(|f| Arc::ptr_eq(f, &flight))
-                    {
-                        state.flights.remove(&key);
-                    }
-                }
-            }
-            flight.result.settle(result.clone());
-        }
+        leader.finish(result.clone());
         result
     }
 

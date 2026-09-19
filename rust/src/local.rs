@@ -25,11 +25,29 @@ pub struct LocalEntry {
 /// against whole elapsed milliseconds, promotes on read and write, and never
 /// renews a TTL on read. Implementations must preserve those rules.
 pub trait LocalStore: Send + 'static {
-    /// Return a live entry's value, promoting it. Expired entries are removed
-    /// and reported as absent without promotion.
-    fn get(&mut self, key: &str, now_ms: i64) -> Result<Option<StoredValue>, BoxError>;
+    /// Read one key. A live entry is promoted and returned; an expired entry
+    /// is removed without promotion and handed back so the cache can drop it
+    /// outside its lock.
+    fn get(&mut self, key: &str, now_ms: i64) -> Result<LocalRead, BoxError>;
     /// Insert or replace an entry, promoting it and evicting at capacity.
-    fn put(&mut self, key: String, entry: LocalEntry) -> Result<(), BoxError>;
+    /// Returns the displaced entry (the replaced value or the evicted tail),
+    /// which the cache drops outside its lock.
+    fn put(&mut self, key: String, entry: LocalEntry) -> Result<Option<LocalEntry>, BoxError>;
+}
+
+/// The outcome of one [`LocalStore::get`].
+///
+/// Removed entries travel back to the cache instead of dropping inside the
+/// store, because a value's destructor may call back into the cache and the
+/// store runs under the cache's lock.
+#[derive(Debug)]
+pub enum LocalRead {
+    /// No entry under the key.
+    Absent,
+    /// The entry had expired and was removed.
+    Expired(LocalEntry),
+    /// A live entry, promoted.
+    Live(StoredValue),
 }
 
 /// The default LRU store.
@@ -55,23 +73,30 @@ impl LruLocalStore {
 }
 
 impl LocalStore for LruLocalStore {
-    fn get(&mut self, key: &str, now_ms: i64) -> Result<Option<StoredValue>, BoxError> {
+    fn get(&mut self, key: &str, now_ms: i64) -> Result<LocalRead, BoxError> {
         // Peek, check freshness, then promote: an expired entry leaves the LRU
         // order untouched apart from its own removal.
         let expired = match self.entries.peek(key) {
-            None => return Ok(None),
+            None => return Ok(LocalRead::Absent),
             Some(entry) => now_ms.saturating_sub(entry.inserted_ms) >= entry.ttl_ms,
         };
         if expired {
-            self.entries.pop(key);
-            return Ok(None);
+            return Ok(match self.entries.pop(key) {
+                Some(entry) => LocalRead::Expired(entry),
+                None => LocalRead::Absent,
+            });
         }
-        Ok(self.entries.get(key).map(|entry| entry.value.clone()))
+        Ok(match self.entries.get(key) {
+            Some(entry) => LocalRead::Live(entry.value.clone()),
+            None => LocalRead::Absent,
+        })
     }
 
-    fn put(&mut self, key: String, entry: LocalEntry) -> Result<(), BoxError> {
-        self.entries.put(key, entry);
-        Ok(())
+    fn put(&mut self, key: String, entry: LocalEntry) -> Result<Option<LocalEntry>, BoxError> {
+        Ok(self
+            .entries
+            .push(key, entry)
+            .map(|(_, displaced)| displaced))
     }
 }
 

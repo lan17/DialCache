@@ -116,11 +116,11 @@ downloads its pinned solver archive.
 make help          # Targets and prerequisites.
 make check         # Native checks, package, docs and inventories.
 make smoke         # Committed Quint-derived histories in every port.
-make formal        # Rust model checks, full corpus and both-port completion.
+make formal        # Quint model checks, full corpus and every port's completion.
 make differential  # Replay composed profiles' reference corpus through the working tree.
 make model-check   # Separate finite symbolic checks; Java 21 and tar required.
 make mutations     # Challenge assertions after full replay has passed.
-make integration   # Real Redis/Valkey/Cluster and interoperability.
+make integration   # Real Redis/Valkey/Cluster in every port and interoperability.
 make explore       # Fresh recorded seed in an isolated source snapshot.
 make ci NODE22_BIN=/absolute/path/to/node22/bin/node
 ```
@@ -128,12 +128,13 @@ make ci NODE22_BIN=/absolute/path/to/node22/bin/node
 `make formal-check` is the Quint evidence lane: it typechecks and runs every
 scheduled model with the Rust evaluator, the public regressions and the model
 mutation challenges. `make formal-generate` runs generation, fixture
-recomputation and the shared witness evaluation; `make formal-ts` and
-`make formal-go` then complete each port's replay against that exact corpus.
-`make mutations-ts` and `make mutations-go` split the fault campaigns. The
-parity and mutation lanes depend only on the generated corpus and shared witness
-evidence, so hosted CI runs all four in parallel and none of them waits for the
-model check, which runs beside generation; the aggregate requires every lane.
+recomputation and the shared witness evaluation; `make formal-ts`,
+`make formal-go` and `make formal-rust` then complete each port's replay
+against that exact corpus. `make mutations-ts` and `make mutations-go` split
+the fault campaigns (the Rust port has no mutation lane yet). The parity and
+mutation lanes depend only on the generated corpus and shared witness evidence,
+so hosted CI runs all five in parallel and none of them waits for the model
+check, which runs beside generation; the aggregate requires every lane.
 `make fixtures-check` recomputes committed artifacts; after an intentional model
 edit, update them with `node formal/generate-artifacts.mjs --write` first.
 `make ci` includes the separate symbolic checks after `make formal`, as well as

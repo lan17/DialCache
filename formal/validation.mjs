@@ -11,7 +11,7 @@ const aggregateTargets = {
   check: ['check-ts', 'check-go', 'check-rust', 'docs', 'audit'],
   formal: ['formal-check', 'formal-generate', 'formal-ts', 'formal-go', 'formal-rust'],
   mutations: ['mutations-ts', 'mutations-go'],
-  integration: ['integration-ts', 'integration-go'],
+  integration: ['integration-ts', 'integration-go', 'integration-rust'],
   ci: ['check', 'package-floor', 'formal', 'model-check', 'integration', 'mutations'],
 };
 export const targetDescriptions = {
@@ -38,9 +38,10 @@ export const targetDescriptions = {
   'mutations-go': 'Measure Go semantic mutations over the generated corpus and shared witness evidence (MUTATION_SHARD=<index>/<count> measures one shard)',
   'mutations-merge-ts': 'Merge TypeScript mutation shards into the complete report; refuses inconsistent or missing shards',
   'mutations-merge-go': 'Merge Go mutation shards into the complete report; refuses inconsistent or missing shards',
-  integration: 'Run real TypeScript and Go Redis/Valkey/Cluster integration checks',
+  integration: 'Run real TypeScript, Go and Rust Redis/Valkey/Cluster integration checks',
   'integration-ts': 'Run TypeScript real integration checks',
   'integration-go': 'Run Go real integration and interoperability checks with race detection',
+  'integration-rust': 'Run Rust real Redis/Valkey/Cluster integration checks and invalidation vector replay',
   'package-floor': 'Check zstd and the packed package on exact Node 22.15.0 (NODE22_BIN)',
   ci: 'Run check, package-floor, formal, model-check, integration and mutations in dependency order',
 };
@@ -96,7 +97,9 @@ export function validationPlan(target, { directory = root, environment = process
   const pnpm = (label, ...args) => ({ label, command: 'corepack', args: ['pnpm', ...args] });
   const go = (label, ...args) => ({ label, command: 'go', args: ['-C', 'go', ...args] });
   // Every step spawns from the repository root; the manifest path selects the crate.
-  const cargo = (label, subcommand, ...args) => ({ label, command: 'cargo', args: [subcommand, '--manifest-path', 'rust/Cargo.toml', ...args] });
+  // Cargo runs inside rust/ so rustup resolves rust/rust-toolchain.toml; the
+  // crate's tests locate the repository through CARGO_MANIFEST_DIR, not cwd.
+  const cargo = (label, subcommand, ...args) => ({ label, command: 'cargo', args: [subcommand, ...args], cwd: 'rust' });
   const reportPath = (language, suffix) => `.formal-traces/${language}-${suffix}.json`;
   const completion = language => ({ ...node(`Validate current ${language} completion`, 'formal/conformance.mjs', 'check', reportPath(language, 'completion'), reportPath(language, 'context')),
     failureHint: 'A current complete replay is required. Run make formal first; missing or stale reports cannot be reused.' });
@@ -184,6 +187,9 @@ export function validationPlan(target, { directory = root, environment = process
     'mutations-merge-go': [node('Merge Go mutation shards', 'formal/merge-mutation-reports.mjs', 'go')],
     'integration-ts': [pnpm('Run TypeScript Redis/Valkey/Cluster integrations', 'test:integration')],
     'integration-go': [{ ...go('Run Go Redis/Valkey/Cluster and TypeScript interoperability', 'test', '-race', '-tags', 'integration', '-count=1', '-run', '^TestRedisIntegration$', '-json', './...'), stdoutFile: '.formal-traces/go-integration.jsonl' }],
+    // The Rust integration binary skips itself unless this variable is set, so
+    // a plain cargo test never needs Docker.
+    'integration-rust': [{ ...cargo('Run Rust Redis/Valkey/Cluster integrations', 'test', '--all-features', '--test', 'redis_integration'), env: { DIALCACHE_RUST_INTEGRATION: '1' } }],
     'package-floor': [{ label: 'Require a built package for floor checks', requireFile: 'dist/index.js', failureHint: 'Build first with make check-ts, or run make ci with NODE22_BIN set.' },
       { label: 'Check Node 22.15 zstd round trip and output ceiling', command: node22, args: ['--eval', floorSmoke], env: { PATH: floorEnvironment(environment, node22).PATH } },
       { label: 'Check packed package on Node 22.15', command: node22, args: ['scripts/test-package.mjs'], env: { PATH: floorEnvironment(environment, node22).PATH } }],
@@ -208,9 +214,9 @@ export function checkPrerequisites(target, { directory = root, environment = pro
     const version = probe('go', ['version'], { directory, environment });
     if (!/^go version go1\.27\.1\s/.test(version)) throw new Error(`Validation requires Go 1.27.1; found ${version}. Put the pinned Go toolchain on PATH.`);
   }
-  if (targets.some(name => ['check-rust', 'smoke', 'formal-rust'].includes(name))) {
-    const version = probe('cargo', ['--version'], { directory, environment });
-    if (!/^cargo 1\.98\.1(?:\s|$)/.test(version)) throw new Error(`Validation requires cargo 1.98.1; found ${version}. Put the pinned Rust toolchain (rust/rust-toolchain.toml) on PATH.`);
+  if (targets.some(name => ['check-rust', 'smoke', 'formal-rust', 'integration-rust'].includes(name))) {
+    const version = probe('cargo', ['--version'], { directory: resolve(directory, 'rust'), environment });
+    if (!/^cargo 1\.98\.1(?:\s|$)/.test(version)) throw new Error(`Validation requires cargo 1.98.1; found ${version}. Install Rust 1.98.1 (rustup reads rust/rust-toolchain.toml) and put it on PATH.`);
   }
   if (targets.some(name => ['formal-check', 'formal-generate', 'fixtures-check', 'explore', 'model-check', 'differential'].includes(name))) {
     const requiredQuint = JSON.parse(readFileSync(resolve(directory, 'formal/generated-fixtures.lock.json'), 'utf8')).quintVersion;
@@ -331,7 +337,7 @@ export async function executeSteps(steps, { directory = root, environment = proc
     }
     try {
       await new Promise((resolveRun, reject) => {
-        const child = spawn(step.command, step.args, { cwd: directory, env: cleanEnvironment(baseEnvironment, step.env),
+        const child = spawn(step.command, step.args, { cwd: step.cwd ? resolve(directory, step.cwd) : directory, env: cleanEnvironment(baseEnvironment, step.env),
           stdio: ['inherit', output ?? (step.requireEmptyStdout ? 'pipe' : 'inherit'), 'inherit'] });
         let unexpectedOutput = '';
         if (step.requireEmptyStdout) child.stdout.on('data', data => { unexpectedOutput += data; });

@@ -11,6 +11,7 @@ use futures::FutureExt;
 use parking_lot::Mutex;
 
 use crate::deadline::{await_deadline, since};
+use crate::engine::Core;
 use crate::error::Error;
 use crate::execution::{Execution, RawRead};
 use crate::flight::{panic_message, start_pending, yield_deferred, Settled, ValueResult};
@@ -23,6 +24,27 @@ use crate::preview::{preview_key, preview_value};
 use crate::remote::{Frame, ReadResult};
 
 /// One admitted shadow job holding an instance slot.
+/// One held entry of the instance-wide shadow table. Dropping it frees the
+/// slot, so a job dropped unpolled at runtime shutdown cannot pin capacity.
+pub(crate) struct ShadowSlot {
+    core: Arc<Core>,
+    key: String,
+    flight: Arc<ShadowFlight>,
+}
+
+impl Drop for ShadowSlot {
+    fn drop(&mut self) {
+        let mut state = self.core.state.lock();
+        if state
+            .shadows
+            .get(&self.key)
+            .is_some_and(|f| Arc::ptr_eq(f, &self.flight))
+        {
+            state.shadows.remove(&self.key);
+        }
+    }
+}
+
 pub(crate) struct ShadowFlight {
     abandoned: AtomicBool,
     stop: Settled<()>,
@@ -121,12 +143,17 @@ impl Execution {
                 .insert(self.keys.logical.clone(), flight.clone());
             flight
         };
+        let slot = ShadowSlot {
+            core: self.core.clone(),
+            key: self.keys.logical.clone(),
+            flight: flight.clone(),
+        };
         if p.logging_config_error {
             self.error_event(Layer::Remote, ErrorKind::ConfigResolution, false);
         }
         let x = self.clone();
         self.core.runtime.defer(Box::pin(async move {
-            x.run_shadow(flight, frame, source, started).await
+            x.run_shadow(flight, frame, source, started, slot).await
         }));
     }
 
@@ -172,6 +199,7 @@ impl Execution {
         frame: Option<Frame>,
         source: Option<Settled<ValueResult>>,
         started: Duration,
+        slot: ShadowSlot,
     ) {
         let clock = self.core.clock.clone();
         let started = if source.is_none() {
@@ -208,22 +236,15 @@ impl Execution {
                     };
                     // Reads keep the slot after a read timeout; owned source, codec and
                     // write work already keeps this operation running until raw completion.
+                    // Dropping the slot frees it, whether the reads settled or the
+                    // runtime dropped this task first.
                     let pending = std::mem::take(&mut *reads.lock());
-                    let core = x.core.clone();
-                    let runtime = core.runtime.clone();
-                    let key = x.keys.logical.clone();
+                    let runtime = x.core.runtime.clone();
                     runtime.spawn(Box::pin(async move {
                         for read in pending {
                             let _ = read.wait().await;
                         }
-                        let mut state = core.state.lock();
-                        if state
-                            .shadows
-                            .get(&key)
-                            .is_some_and(|f| Arc::ptr_eq(f, &flight))
-                        {
-                            state.shadows.remove(&key);
-                        }
+                        drop(slot);
                     }));
                     verdict
                 }

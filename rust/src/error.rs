@@ -42,11 +42,17 @@ impl Error {
     }
 
     /// Whether this is a source deadline error: the library's own, or one a
-    /// source propagated from a nested cached call.
+    /// source propagated from a nested cached call, either as the bare
+    /// [`FallbackTimeout`] or boxed inside a nested [`Error`].
     pub fn is_fallback_timeout(&self) -> bool {
         match self {
             Error::FallbackTimeout(_) => true,
-            Error::Source(error) => error.downcast_ref::<FallbackTimeout>().is_some(),
+            Error::Source(error) => {
+                error.downcast_ref::<FallbackTimeout>().is_some()
+                    || error
+                        .downcast_ref::<Error>()
+                        .is_some_and(Error::is_fallback_timeout)
+            }
             _ => false,
         }
     }
