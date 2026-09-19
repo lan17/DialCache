@@ -42,7 +42,7 @@ const fixtureNames = [
   "kernel", "kernel-leaky", "library", "profile-clean", "profile-thick", "profile-nested-let", "profile-lambda-assign", "profile-shadow",
   "profile-witness-choice", "profile-witness-projection", "profile-witness-guard", "profile-witness-deep", "profile-witness-domain",
   "profile-witness-input", "profile-witness-match", "composition-clean", "composition-thick", "composition-nondet-inline",
-  "composition-action-argument", "composition-wiring-passes",
+  "composition-action-argument", "composition-wiring-passes", "composition-lambda-argument",
 ];
 // Quint's effect checker rejects an operator constant that reads a variable
 // (QNT201), so this route can only be shown on the parsed IR; the lint must
@@ -176,6 +176,16 @@ describe.skipIf(!quintAvailable)("profile lint over synthetic kernel instances",
       { definition: "bumpWrapper", detail: "igt over cache state in the value of the argument delta of bumpBy", chain: ["bumpWrapper"] },
       { definition: "bumpWrapper", detail: "ite over cache state in the value of the argument delta of bumpBy", chain: ["bumpWrapper"] },
       { definition: "scaleBy", detail: "imul over cache state in the value of s", chain: ["scaleWrapper", "scaleBy"] },
+    ]);
+  }, quintTimeout);
+
+  it("reports a lambda a profile hands to a kernel definition, whatever its body does", async () => {
+    const report = await lintModel(fixture("composition-lambda-argument"), { kernelModules: ["library"] });
+    expect(report.composition.publicActions).toEqual(["init", "bumpWrapper", "step"]);
+    // The lambda's body composes a library transition; the lambda itself is the violation.
+    expect(report.composition.libraryTransitions).toEqual(["library::bump", "library::repeat"]);
+    expect(report.composition.violations).toEqual([
+      { definition: "bumpWrapper", detail: "lambda passed to library::repeat in the value of s", chain: ["bumpWrapper"] },
     ]);
   }, quintTimeout);
 

@@ -66,12 +66,19 @@ module flights {
       if (slot / keysPerScope == context) out.replaceAt(slot, NO_OWNER) else out),
     ...state
   }
-  pure def settleSource(state: Registry[r, p], index: int, result: int): Registry[r, p] = {
-    sources: state.sources.replaceAt(index, { result: result, ...state.sources.nth(index) }),
+  // A source's outcome is recorded when its work settles or its deadline
+  // completes it; the registries forget the flight when it completes its
+  // callers: at once for a settlement, later for a flight that first recovers
+  // a retained value, which stays joinable until then.
+  pure def recordResult(state: Registry[r, p], index: int, result: int): Registry[r, p] =
+    { sources: state.sources.replaceAt(index, { result: result, ...state.sources.nth(index) }), ...state }
+  pure def forgetSource(state: Registry[r, p], index: int): Registry[r, p] = {
     processFlights: state.processFlights.foldl(List(), (out, owner) => out.append(if (owner == index) NO_OWNER else owner)),
     requestFlights: state.requestFlights.foldl(List(), (out, owner) => out.append(if (owner == index) NO_OWNER else owner)),
     ...state
   }
+  pure def settleSource(state: Registry[r, p], index: int, result: int): Registry[r, p] =
+    forgetSource(recordResult(state, index, result), index)
   pure def ownedBy(state: Registry[r, p], index: int): Set[int] =
     state.owners.indices().filter(call => state.owners.nth(call) == index)
 

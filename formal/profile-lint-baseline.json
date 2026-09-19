@@ -14,7 +14,9 @@
     "policy_gate",
     "policy_overlay",
     "receipts",
+    "recovery",
     "remote_frames",
+    "remote_io",
     "request_memo",
     "runtime_policy",
     "serving"

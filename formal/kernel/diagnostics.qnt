@@ -22,15 +22,19 @@ module diagnostics {
   // layer and records no fallback error.
   pure val NO_LAYER = ""
 
+  // The channel is row-polymorphic: a profile whose drivers compare more
+  // fields (shadow's configErrors and futureOffsets) carries them beside
+  // these four, which scope's descriptor parses exactly.
+  type Channel[q] = { warnings: int, ages: List[int], coalesced: List[str], fallbackErrors: List[str] | q }
   // Per source, parallel to the source records: the layer it is attributed to.
-  type Diagnosed[r] = { d: Diagnostics, sourceLayers: List[str] | r }
-  type DiagnosedRequest[r] = Serving::RequestServed[Diagnosed[r]]
+  type Diagnosed[r, q] = { d: Channel[q], sourceLayers: List[str] | r }
+  type DiagnosedRequest[r, q] = Serving::RequestServed[Diagnosed[r, q]]
 
-  pure def recordCoalesced(state: Diagnosed[r], scope: str): Diagnosed[r] =
+  pure def recordCoalesced(state: Diagnosed[r, q], scope: str): Diagnosed[r, q] =
     { d: { coalesced: state.d.coalesced.append(scope), ...state.d }, ...state }
-  pure def recordSourceLayer(state: Diagnosed[r], layer: str): Diagnosed[r] =
+  pure def recordSourceLayer(state: Diagnosed[r, q], layer: str): Diagnosed[r, q] =
     { sourceLayers: state.sourceLayers.append(layer), ...state }
-  pure def recordFallbackError(state: Diagnosed[r], layer: str): Diagnosed[r] =
+  pure def recordFallbackError(state: Diagnosed[r, q], layer: str): Diagnosed[r, q] =
     if (layer == NO_LAYER) state else { d: { fallbackErrors: state.d.fallbackErrors.append(layer), ...state.d }, ...state }
   // The layer a source started at release is attributed to: none once the
   // scope closed, the request memo when the call memoizes, else the shared
@@ -41,13 +45,13 @@ module diagnostics {
   // -- Diagnosed variants of the request-only traversal ------------------------
 
   // A caller that does not participate starts a bypass source at admission.
-  pure def admitRequest(state: DiagnosedRequest[r], layout: Serving::Layout, call: Call): DiagnosedRequest[r] = {
+  pure def admitRequest(state: DiagnosedRequest[r, q], layout: Serving::Layout, call: Call): DiagnosedRequest[r, q] = {
     val admitted = Serving::admitRequest(state, layout, call)
     if (Serving::participating(state, layout, call)) admitted else recordSourceLayer(admitted, NO_LAYER)
   }
   // The release judged once (Serving::requestRelease) labels what the same
   // release did to the state.
-  pure def releaseRequest(state: DiagnosedRequest[r], layout: Serving::Layout, policyCall: int, resolved: Resolution): DiagnosedRequest[r] = {
+  pure def releaseRequest(state: DiagnosedRequest[r, q], layout: Serving::Layout, policyCall: int, resolved: Resolution): DiagnosedRequest[r, q] = {
     val judged = Serving::requestRelease(state, layout, policyCall, resolved)
     val released = Serving::releaseRequest(state, layout, policyCall, resolved)
     match judged.decision.outcome {
@@ -61,7 +65,7 @@ module diagnostics {
       | ServesRemote(_) => released
     }
   }
-  pure def settleRequest(state: DiagnosedRequest[r], layout: Serving::Layout, index: int, value: int): DiagnosedRequest[r] =
+  pure def settleRequest(state: DiagnosedRequest[r, q], layout: Serving::Layout, index: int, value: int): DiagnosedRequest[r, q] =
     recordFallbackError(Serving::settleRequest(state, layout, index, value),
       if (value == SOURCE_ERROR) state.sourceLayers.nth(index) else NO_LAYER)
 }

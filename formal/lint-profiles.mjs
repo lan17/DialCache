@@ -11,9 +11,12 @@
 //   decoding. A comparison, branch, arithmetic or collection operator over
 //   cache state, or a non-library definition applied to cache state, is rule
 //   logic in the profile and is reported with the chain action -> helper ->
-//   ... -> the definition that computes it. profile-lint-baseline.json records
-//   each profile's count: a composed profile has zero and the other counts are
-//   the migration work list.
+//   ... -> the definition that computes it. A lambda a profile hands to a
+//   kernel definition is rule logic the library would run where the walk
+//   cannot follow it (the kernel's own folds take their expiry only from
+//   kernel modules), so it is reported at the call. profile-lint-baseline.json
+//   records each profile's count: a composed profile has zero and the other
+//   counts are the migration work list.
 // - Witness isolation: no definition reachable from a cache guard, a cache
 //   assignment, the profile's init or step, an input-choice domain (the
 //   expression of a `nondet ... .oneOf()`), an observation projection (the
@@ -313,6 +316,9 @@ export function lintComposition(index, { kernelModules = [] } = {}) {
     if (declaration) {
       if (isKernel(declaration)) {
         if (declaration.kind === 'def') transitions.add(index.labelOf(declaration.module, declaration.name));
+        for (const argument of expr.args) {
+          if (argument.kind === 'lambda') report(node, chain, `lambda passed to ${index.labelOf(declaration.module, declaration.name)} in the value of ${variable}`);
+        }
         return true;
       }
       // A definition bound inside this body: its lambda parameters take the

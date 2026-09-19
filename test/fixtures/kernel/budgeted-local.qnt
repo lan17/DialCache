@@ -42,7 +42,7 @@ module budgeted_local {
     closed: List[bool], memo: List[int], requestFlights: List[int], processFlights: List[int],
     localValues: List[int], localExpires: List[int], lru: List[List[int]],
     sources: List[Serving::LocalSource], owners: List[int], memoSlots: List[int], held: List[Gate::Held],
-    started: List[int], budgets: List[int], settledAt: List[int], drained: List[bool]
+    deadlines: List[Deadlines::Due], started: List[int], budgets: List[int], settledAt: List[int], drained: List[bool]
   }
   var s: State
   var input: { name: str, choice: int }
@@ -52,7 +52,7 @@ module budgeted_local {
       closed: List(false, false), memo: List(NO_VALUE, NO_VALUE), requestFlights: List(NO_OWNER, NO_OWNER), processFlights: List(NO_OWNER),
       localValues: List(NO_VALUE), localExpires: List(0), lru: List(List()),
       sources: List(), owners: List(), memoSlots: List(), held: List(),
-      started: List(), budgets: List(), settledAt: List(), drained: List() },
+      deadlines: List(), started: List(), budgets: List(), settledAt: List(), drained: List() },
     input' = { name: "init", choice: budget }
   }
   action init = initialize(BUDGET)
@@ -62,7 +62,7 @@ module budgeted_local {
       closed: List(false, false), memo: List(NO_VALUE, NO_VALUE, NO_VALUE, NO_VALUE), requestFlights: List(NO_OWNER, NO_OWNER, NO_OWNER, NO_OWNER),
       processFlights: List(NO_OWNER, NO_OWNER), localValues: List(NO_VALUE, NO_VALUE), localExpires: List(0, 0), lru: List(List()),
       sources: List(), owners: List(), memoSlots: List(), held: List(),
-      started: List(), budgets: List(), settledAt: List(), drained: List() },
+      deadlines: List(), started: List(), budgets: List(), settledAt: List(), drained: List() },
     input' = { name: "init", choice: 2 }
   }
   action admit(kind: int): bool = all {

@@ -35,6 +35,8 @@
     "formal/kernel/config-errors.qnt",
     "formal/kernel/receipts.qnt",
     "formal/kernel/diagnostics.qnt",
+    "formal/kernel/recovery.qnt",
+    "formal/kernel/remote-io.qnt",
     "formal/kernel/deadlines.qnt"
   ],
   "models": [
@@ -2416,8 +2418,8 @@
       "source": "formal/kernel/deadlines.qnt",
       "model": "formal/dialcache-source-budgets-conformance.qnt",
       "invariant": "acceptedSourceRespectsItsOwnStart",
-      "before": "not(sourceAcceptsAt(state.started.nth(index), state.now, state.budgets.nth(index)))",
-      "after": "state.budgets.nth(index) >= 0 and state.now > state.started.nth(index) + state.budgets.nth(index)",
+      "before": "pure def dueAt(now: int, d: Due): bool = not(deadlinePendingAt(now, d.at))",
+      "after": "pure def dueAt(now: int, d: Due): bool = now > d.at",
       "reproducer": {
         "kind": "exported-regression",
         "run": "defaultSourceBudgetExpiresAtSixtySecondsTest",
@@ -2446,7 +2448,7 @@
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M35",
-        "text": "Same native fault as source-inclusive-deadline: M35 accepts a settlement observed at exactly the elapsed deadline in both ports, which is kernel/deadlines.qnt reached replacing not sourceAcceptsAt with a strict comparison. The declared reproducer source-budgets/defaultSourceBudgetExpiresAtSixtySecondsTest cannot distinguish it: its advance delivers the timer at exactly 60000 ms and the unchanged timer path still times the source out; the effects jumpClock histories are the portable evidence."
+        "text": "Same native fault as source-inclusive-deadline: M35 accepts a settlement observed at exactly the elapsed deadline in both ports, which is kernel/deadlines.qnt dueAt replacing not deadlinePendingAt with a strict comparison. The declared reproducer source-budgets/defaultSourceBudgetExpiresAtSixtySecondsTest cannot distinguish it: its advance delivers the timer at exactly 60000 ms and the unchanged timer path still times the source out; the effects jumpClock histories are the portable evidence."
       }
     },
     {
