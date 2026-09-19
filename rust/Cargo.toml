@@ -29,7 +29,7 @@ zstd-safe = "7"
 thiserror = "2"
 log = "0.4"
 tokio = { version = "1", features = ["rt", "time"], optional = true }
-redis = { version = "1", features = ["tokio-comp", "cluster-async", "script"], optional = true }
+redis = { version = "1", features = ["tokio-comp", "cluster-async", "connection-manager", "script"], optional = true }
 sha1 = { version = "0.11", optional = true }
 hex = { version = "0.4", optional = true }
 prometheus = { version = "0.14", optional = true }

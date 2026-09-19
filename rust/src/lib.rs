@@ -29,6 +29,8 @@ pub mod preview;
 #[cfg(feature = "prometheus")]
 pub mod prometheus;
 pub mod protocol;
+#[cfg(feature = "redis")]
+pub mod redis;
 pub mod remote;
 pub mod runtime;
 mod scope;
@@ -57,6 +59,11 @@ pub use observe::{Event, Labels, LogEvent, LogLevel, Logger, Observer, ShadowMis
 pub use operation::{Comparator, Operation, Preview, RecoveryPredicate, SourceBudget};
 pub use policy::{
     Policy, PolicyDefaults, PolicyError, ResolvedPolicy, RuntimePolicy, ShadowPolicy,
+};
+#[cfg(feature = "redis")]
+pub use redis::{
+    invalidation_script_sha1, RedisAdapter, RedisConnection, RedisProtocolError,
+    RedisReadCancelled, INVALIDATION_SCRIPT,
 };
 pub use remote::{
     Frame, InvalidateRequest, MissReason, ReadContext, ReadRequest, ReadResult, Remote,
