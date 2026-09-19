@@ -4,8 +4,9 @@
 // the local-and-remote runs pass through local storage on the way. Exercises
 // the seams the scheduled profiles hold fixed (their replies carry constant
 // TTLs and their faults are off): a layer turned off by a zero TTL, each fault
-// along a refill with and without a local layer, and sources started under
-// different replies publishing with the TTLs each captured.
+// along a refill with and without a local layer, an invalidation under a write
+// fault, and sources started under different replies publishing with the TTLs
+// each captured.
 module frames_and_faults {
   import conformance_observations.* from "../../../formal/conformance-observations"
   import encodings.* from "../../../formal/kernel/encodings"
@@ -83,6 +84,10 @@ module frames_and_faults {
       else if (name == "dumpFault") { dumpFailed: failed, ...s }
       else { writeFailed: failed, ...s },
     input' = { name: name, choice: if (failed) 1 else 0 }
+  }
+  action invalidate = all {
+    s' = Serving::invalidate(s, 0),
+    input' = { name: "invalidate", choice: 0 }
   }
 
   // -- A zero TTL turns its layer off ------------------------------------------
@@ -190,6 +195,23 @@ module frames_and_faults {
     .then(settle(0, VALUE_ONE))
     .expect(s.o.calls == List(VALUE_ONE) and s.o.dumps == 1 and s.o.writes == 1 and s.o.writeTtls == List(RETENTION_MS)
       and s.remoteValues == List(NO_VALUE, NO_VALUE) and s.created == List(0, 0) and s.expires == List(0, 0))
+
+  // An invalidation under a write fault is counted and reports the mutation
+  // error, and the watermark does not move although the wall clock is ahead of
+  // it; once the fault clears, the next invalidation reports ok and raises the
+  // watermark to the wall clock.
+  run writeFaultInvalidationIsCountedAndKeepsTheWatermarkTest = trackedInit
+    .then(invalidate)
+    .then(elapse(1000))
+    .then(fault("writeFault", true))
+    .expect(not(Serving::maintains(s)) and Clock::wallOf(s) > s.watermark.nth(0))
+    .then(invalidate)
+    .expect(s.o.invalidations == 2 and s.o.maintenance == List("ok", "mutation_error") and s.watermark == List(INITIAL_TIME_MS))
+    .then(fault("writeFault", false))
+    .expect(Serving::maintains(s))
+    .then(invalidate)
+    .expect(s.o.invalidations == 3 and s.o.maintenance == List("ok", "mutation_error", "ok")
+      and s.watermark == List(INITIAL_TIME_MS + 1000))
 
   // -- Each source publishes with the TTLs of the reply that started it ----------
 

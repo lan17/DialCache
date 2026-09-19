@@ -6,12 +6,14 @@ module remote_frames {
   // reply resolved to (`cache_rules.freshAgeAllowed` on the wall clock, which
   // rejects a stamp from after a rollback) and, for a tracked reader, when its
   // stamp clears the entity's watermark (`cache_rules.fenceAllows`); an
-  // untracked reader ignores watermarks. A watermark never lowers: an
-  // invalidation raises it to the wall clock only when the wall clock is
+  // untracked reader ignores watermarks. An invalidation never lowers a
+  // watermark: it raises it to the wall clock only when the wall clock is
   // ahead, as the implementation's invalidation script keeps the larger of the
-  // current and the proposed watermark. A frame stamped at a wall clock of zero
-  // or below is never served to a tracked reader (`fenceAllows` is strict
-  // against the zero watermark), as the implementation treats a zero createdAt.
+  // current and the proposed watermark; a marker's expiry (modelled by the
+  // profile that composes it) lowers one to the zero baseline. A frame stamped
+  // at a wall clock of zero or below is never served to a tracked reader
+  // (`fenceAllows` is strict against the zero watermark), as the
+  // implementation treats a zero createdAt.
   //
   // A frame is visible when it is present, retained and (tracked) fence-cleared,
   // whatever its age: what the adapter returned a frame for. It serves when it

@@ -39,11 +39,11 @@
     "formal/kernel/policy-overlay.qnt": "67c21286676aa255034a2c8160a34d228bcfa8aaa8d7ab48c1f7eee461a0a0c5",
     "formal/kernel/receipts.qnt": "d754a146b1394d25eab6f9fb8f88b345dac0ca1b10d76cf2baa1ef73b2f986d5",
     "formal/kernel/recovery.qnt": "72f4942fc4383f5f7f0d0a1fb814fff3029dd43fedcee457f5fba5753b0ee87b",
-    "formal/kernel/remote-frames.qnt": "a27360950887933a686dffa1bb922d60470ce0660adc4f55e2da4b1b8c6a58f0",
+    "formal/kernel/remote-frames.qnt": "c59154961e78d8230cdd0a3087315f0b94cf0c29e4355cf30007e0c4cab4b5b2",
     "formal/kernel/remote-io.qnt": "f1823fb278e7da034d113813c0433234e2e029cc208b99fe6a8f88a334368656",
     "formal/kernel/request-memo.qnt": "e7897bfe9949a4d31b8138b35c32a7df0939e81e1f9c13739340a794a3d5073f",
     "formal/kernel/runtime-policy.qnt": "41ebb180f8b8b561d0db43b237abbee04e69613521436f6c624241cfece536ae",
-    "formal/kernel/serving.qnt": "4a7082bd49172c9e6dec1b6c8b6073e8bbdc0b75a9abaaf01a35010e0f931cc6",
+    "formal/kernel/serving.qnt": "30ee24c493672ecb7652c9b41cad2179d2805d61e20336f7dda0360d8dcb058b",
     "formal/profiles.json": "65a6b982a426fe74f39a6deb951fde65c7578ae270461c744c5142aeb0555d2d",
     "formal/wire-text.qnt": "c78f8c674f4e1470b0d2b605b209d82e3aab0e35fb4e0efae813247bf093eb27"
   },

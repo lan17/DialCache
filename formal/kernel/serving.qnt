@@ -498,11 +498,29 @@ module serving {
   pure def closeScope(state: Traversed[r, p], layout: Layout, context: int): Traversed[r, p] =
     Flights::forgetScope(Memo::closeScope(state, context, layout.keysPerScope), context, layout.keysPerScope)
 
-  // Maintenance: invalidating an entity raises its watermark; without remote
-  // storage the request reports the missing layer and changes nothing.
+  // Maintenance: invalidating an entity raises its watermark. The outcome is
+  // one rule of the write-fault switch, as the drivers classify it
+  // (`test/formal/behavior-driver.ts:373-381`, `go/behavior_driver_test.go:832-841`):
+  // without remote storage the request reports the missing layer and changes
+  // nothing, the adapter is never called (`src/dialcache.ts:573-577`,
+  // `go/cache.go:190-192`); under a write fault the invalidation is counted
+  // and reports the mutation error, and the watermark does not move, as the
+  // adapter counts it before its write fails (`test/formal/behavior-driver.ts:209-213`,
+  // `go/behavior_driver_test.go:1107-1111`); otherwise it is counted, reports
+  // ok and raises the watermark. `maintains` is whether an invalidation takes
+  // effect, the one judgment a marker lifetime (a profile that composes one
+  // stamps its marker only then) reads beside this outcome.
+  pure def maintains(state: Served[r]): bool = state.remoteAvailable and not(state.writeFailed)
   pure def invalidate(state: Served[r], entity: int): Served[r] =
     if (not(state.remoteAvailable)) {
       o: { maintenance: state.o.maintenance.append("missing_remote"), ...state.o },
+      ...state
+    } else if (state.writeFailed) {
+      o: {
+        invalidations: state.o.invalidations + 1,
+        maintenance: state.o.maintenance.append("mutation_error"),
+        ...state.o
+      },
       ...state
     } else {
       o: {
