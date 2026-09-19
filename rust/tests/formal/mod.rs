@@ -8,9 +8,14 @@
 //! per binary.
 #![allow(dead_code)]
 
+pub mod core_driver;
+pub mod driver;
+pub mod gate;
 pub mod inventory;
 pub mod json;
+pub mod local_clock;
 pub mod report;
+pub mod scenarios;
 pub mod schema;
 pub mod transport;
 pub mod witness;

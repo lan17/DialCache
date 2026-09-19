@@ -267,11 +267,22 @@ impl TestExecutor {
         }
     }
 
-    /// Run a future to completion on the pool, draining detached work.
-    pub fn block_on<R>(&mut self, future: impl Future<Output = R>) -> R {
-        let result = self.pool.run_until(future);
+    /// Run a future to completion on the pool, draining detached work as it
+    /// is spawned. Panics if the future stays blocked once nothing is runnable:
+    /// it would be waiting on a gate only the test can release.
+    pub fn block_on<R: 'static>(&mut self, future: impl Future<Output = R> + 'static) -> R {
+        let slot: std::rc::Rc<std::cell::RefCell<Option<R>>> =
+            std::rc::Rc::new(std::cell::RefCell::new(None));
+        let sink = slot.clone();
+        self.local
+            .spawn_local(async move {
+                let result = future.await;
+                *sink.borrow_mut() = Some(result);
+            })
+            .expect("pool accepts tasks");
         self.drain();
-        result
+        let result = slot.borrow_mut().take();
+        result.expect("block_on future stayed blocked on a test-owned gate")
     }
 
     /// Spawn driver-owned work onto the pool.
@@ -348,5 +359,47 @@ impl TestExecutor {
     pub fn advance_micros(&mut self, micros: i64) {
         self.clock.shift_ns(micros as i128 * 1_000, false);
         self.drain();
+    }
+}
+
+/// A clock aligned to the shared millisecond grid of a [`VirtualClock`], the
+/// way [`SystemClock`](crate::SystemClock) aligns to the process grid.
+/// Instances constructed at different fractional times share one grid.
+pub struct VirtualGridClock {
+    base: Arc<VirtualClock>,
+    origin_ns: u128,
+}
+
+impl std::fmt::Debug for VirtualGridClock {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("VirtualGridClock")
+            .field("origin_ns", &self.origin_ns)
+            .finish()
+    }
+}
+
+impl VirtualGridClock {
+    pub fn new(base: Arc<VirtualClock>) -> Self {
+        let now_ns = base.state.lock().elapsed_ns;
+        VirtualGridClock {
+            base,
+            origin_ns: crate::clock::grid_origin_ns(now_ns),
+        }
+    }
+}
+
+impl Clock for VirtualGridClock {
+    fn wall_ms(&self) -> i64 {
+        self.base.wall_ms()
+    }
+
+    fn elapsed(&self) -> Duration {
+        let ns = self
+            .base
+            .state
+            .lock()
+            .elapsed_ns
+            .saturating_sub(self.origin_ns);
+        Duration::from_nanos(ns.min(u64::MAX as u128) as u64)
     }
 }

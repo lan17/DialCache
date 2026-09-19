@@ -41,9 +41,14 @@ impl Error {
         }
     }
 
-    /// Whether this is the library's own source deadline error.
+    /// Whether this is a source deadline error: the library's own, or one a
+    /// source propagated from a nested cached call.
     pub fn is_fallback_timeout(&self) -> bool {
-        matches!(self, Error::FallbackTimeout(_))
+        match self {
+            Error::FallbackTimeout(_) => true,
+            Error::Source(error) => error.downcast_ref::<FallbackTimeout>().is_some(),
+            _ => false,
+        }
     }
 }
 

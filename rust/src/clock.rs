@@ -23,6 +23,13 @@ pub trait Clock: Send + Sync + 'static {
 
 static PROCESS_ORIGIN: OnceLock<Instant> = OnceLock::new();
 
+/// The origin of a clock constructed `now_ns` after the process origin so that
+/// its whole-millisecond readings fall on the process-wide grid: the nearest
+/// aligned instant at or before construction.
+pub fn grid_origin_ns(now_ns: u128) -> u128 {
+    now_ns - now_ns % 1_000_000
+}
+
 /// The default clock: system wall time and a monotonic origin aligned to the
 /// process-wide millisecond grid, so default instances share one local expiry grid.
 #[derive(Debug, Clone)]
@@ -34,7 +41,8 @@ impl SystemClock {
     pub fn new() -> Self {
         let process = *PROCESS_ORIGIN.get_or_init(Instant::now);
         let now = Instant::now();
-        let phase = now.saturating_duration_since(process).as_nanos() % 1_000_000;
+        let since_process = now.saturating_duration_since(process).as_nanos();
+        let phase = since_process - grid_origin_ns(since_process);
         let origin = now
             .checked_sub(Duration::from_nanos(phase as u64))
             .unwrap_or(now);
