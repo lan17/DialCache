@@ -9,11 +9,10 @@ module remote_frames {
   // untracked reader ignores watermarks. An invalidation never lowers a
   // watermark: it raises it to the wall clock only when the wall clock is
   // ahead, as the implementation's invalidation script keeps the larger of the
-  // current and the proposed watermark; a marker's expiry (modelled by the
-  // profile that composes it) lowers one to the zero baseline. A frame stamped
-  // at a wall clock of zero or below is never served to a tracked reader
-  // (`fenceAllows` is strict against the zero watermark), as the
-  // implementation treats a zero createdAt.
+  // current and the proposed watermark; only a marker's expiry lowers one, to
+  // the zero baseline (`markers`). A frame stamped at a wall clock of zero or
+  // below is never served to a tracked reader (`fenceAllows` is strict against
+  // the zero watermark), as the implementation treats a zero createdAt.
   //
   // A frame is visible when it is present, retained and (tracked) fence-cleared,
   // whatever its age: what the adapter returned a frame for. It serves when it

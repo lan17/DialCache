@@ -315,7 +315,7 @@
     },
     "recovery-read": {
       "sampledHistories": 256,
-      "corpusSha256": "2b830b52713f1d9b4dfca326aa40c2314baf7b428cf4ac23c203687b34194a57",
+      "corpusSha256": "e4f0bb5aa47d12bf2d9279eb21f6473cbf20c00c6f379cd1dfa7f47aa15a8a30",
       "labels": {
         "read-settlement-crosses-freshness-and-recovers": 0,
         "read-settlement-before-freshness-hits": 0,

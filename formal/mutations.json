@@ -465,7 +465,7 @@
       "id": "M15",
       "case": "C02.reenabled-memo",
       "description": "Evict the enclosing request's memo when a nested enable() completes",
-      "rationale": "TypeScript src/context.ts DialCacheContext.enable deletes the enclosing holder's request-local cache when a nested enable call completes, and Go go/cache.go Enable adds a memo-clearing defer on its not-owned branch. A completed nested scope therefore evicts the outer request's memo while the outer scope is still open; the TypeScript edit also drops the outer in-flight registry. A nested handle can only reach its own enclosing row, so the port evicts one outer row rather than every row. Detected by scope/nestedCloseAndDisabledBypassKeepOuterMemoTest step 11 in both ports.",
+      "rationale": "TypeScript src/context.ts DialCacheContext.enable deletes the enclosing holder's request-local cache when a nested enable call completes, and Go go/cache.go Enable's done closure clears the scope's memo on its not-owned branch. A completed nested scope therefore evicts the outer request's memo while the outer scope is still open; the TypeScript edit also drops the outer in-flight registry. A nested handle can only reach its own enclosing row, so the port evicts one outer row rather than every row. Detected by scope/nestedCloseAndDisabledBypassKeepOuterMemoTest step 11 in both ports.",
       "typescript": {
         "edits": [
           {
@@ -497,7 +497,7 @@
       "id": "M17",
       "case": "C05.local-hit-stops-traversal",
       "description": "Serve a local hit with a value the layer never stored while still skipping the loader",
-      "rationale": "TypeScript src/internal/local-cache.ts LocalCache.getWithResolvedConfig reports a hit whose value is undefined, and Go go/cache.go localGet returns the zero value with found set. The loader is still bypassed, so a local hit serves a value the layer never stored while loader counts stay unchanged. The Go runner records the ordinary (unit) cohort as crashed because TestBorrowedReferencesSurviveFollowersAndCacheHits dereferences the nil pointer a hit now returns inside its synctest bubble, a panic rather than a failed assertion; the generated cohort is the required detection. core/localValueSurvivesSourceChangeTest detects both ports.",
+      "rationale": "TypeScript src/internal/local-cache.ts LocalCache.getWithResolvedConfig reports a hit whose value is undefined, and Go go/engine.go shared builds its localResult literal without the asserted value, so a found entry serves the zero value. The loader is still bypassed, so a local hit serves a value the layer never stored while loader counts stay unchanged. The Go runner records the ordinary (unit) cohort as crashed because TestBorrowedReferencesSurviveFollowersAndCacheHits dereferences the nil pointer a hit now returns inside its synctest bubble, a panic rather than a failed assertion; the generated cohort is the required detection. core/localValueSurvivesSourceChangeTest detects both ports.",
       "typescript": {
         "edits": [
           {
@@ -879,7 +879,7 @@
       "id": "M28",
       "case": "C17.library-defaults",
       "description": "Default coalescing off when the static coalesce leaf is omitted while an explicit true still shares",
-      "rationale": "TypeScript src/dialcache.ts DialCache.getThroughSharedLayers and DialCache.getThroughRequestLocal treat coalescing as on only when the static leaf is explicitly true, and Go go/policy.go ParsePolicy sets DisableCoalescing when the static coalesce leaf is absent. An omitted leaf therefore defaults to no sharing while an explicit true still shares. Go ParsePolicy returns the zero Policy when the fixture supplies no static policy map at all, so that corner keeps coalescing on; both Go drivers pass the fixture's policy map through ParsePolicy, so an omitted leaf inside a supplied map resolves to no sharing. runtime-boundaries/omittedRampAndSharingUseLibraryDefaultsTest and source-budgets/lateFollowerUsesLeadersRemainingBudgetTest are the expected evidence.",
+      "rationale": "TypeScript src/dialcache.ts DialCache.getThroughSharedLayers and DialCache.getThroughRequestLocal treat coalescing as on only when the static leaf is explicitly true, and Go go/policy.go ParsePolicy sets Coalesce to false when the static coalesce leaf is absent. An omitted leaf therefore defaults to no sharing while an explicit true still shares. Go ParsePolicy returns the zero Policy when the fixture supplies no static policy map at all, so that corner keeps coalescing on; both Go drivers pass the fixture's policy map through ParsePolicy, so an omitted leaf inside a supplied map resolves to no sharing. runtime-boundaries/omittedRampAndSharingUseLibraryDefaultsTest and source-budgets/lateFollowerUsesLeadersRemainingBudgetTest are the expected evidence.",
       "typescript": {
         "edits": [
           {
@@ -1433,7 +1433,7 @@
       "id": "M45",
       "case": "C45.captured-policy",
       "description": "Admit calls with a recovery maximum one second larger than the configured policy",
-      "rationale": "TypeScript src/internal/runtime-config.ts resolveRemoteLayerConfigResult admits the call with a stale-on-error maximum one second larger than configured, and Go go/policy.go ResolvePolicy adds 1000 ms to the resolved StaleOnErrorMaxAgeMS. TypeScript config granularity is seconds, so one second is the smallest unit and Go mirrors it. recovery/maximumAgeAfterDecodePreservesSourceTest and independent/independentRecoveryAtCapturedAgeBoundaryTest are the expected evidence.",
+      "rationale": "TypeScript src/internal/runtime-config.ts resolveRemoteLayerConfigResult admits the call with a stale-on-error maximum one second larger than configured, and Go go/policy.go ResolvePolicy adds one second to the resolved StaleOnErrorMaxAge. TypeScript config granularity is seconds, so one second is the smallest unit and Go mirrors it. recovery/maximumAgeAfterDecodePreservesSourceTest and independent/independentRecoveryAtCapturedAgeBoundaryTest are the expected evidence.",
       "typescript": {
         "edits": [
           {
@@ -1778,6 +1778,36 @@
         "requiredDetections": [
           "generated",
           "portable"
+        ]
+      }
+    },
+    {
+      "id": "M56",
+      "case": "C37.physical-cap",
+      "description": "Write a tracked value for its full configured retention above the one-hour cap",
+      "rationale": "TypeScript src/internal/redis-cache.ts RedisCache.putWithLayer writes a tracked value with its configured TTL instead of the smaller of that and MAX_TRACKED_REDIS_VALUE_TTL_MS, and Go go/engine.go putRemote skips the one-hour clamp (tracked_ttl_clamped) for a tracked write. A tracked value is therefore retained for its full configured retention, which its watermark, kept for twice the cap, need not outlive. recovery-read/trackedPhysicalRetentionExpiresAtCapTest (write TTL 14400000 against 3600000) is the expected evidence in both ports.",
+      "typescript": {
+        "edits": [
+          {
+            "path": "src/internal/redis-cache.ts",
+            "before": "? Math.min(configuredTtlMs, MAX_TRACKED_REDIS_VALUE_TTL_MS)",
+            "after": "? configuredTtlMs"
+          }
+        ],
+        "requiredDetections": [
+          "generated"
+        ]
+      },
+      "go": {
+        "edits": [
+          {
+            "path": "go/engine.go",
+            "before": "if x.op.Identity.Tracked && ttl > time.Hour {",
+            "after": "if false {"
+          }
+        ],
+        "requiredDetections": [
+          "generated"
         ]
       }
     }

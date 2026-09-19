@@ -28,72 +28,6 @@
         }
       },
       "s": {
-        "acceptedFresh": {
-          "#bigint": "1000"
-        },
-        "acceptedMaximum": {
-          "#bigint": "5000"
-        },
-        "activeSource": {
-          "#bigint": "-1"
-        },
-        "canRecover": false,
-        "canWrite": false,
-        "candidate": {
-          "#bigint": "0"
-        },
-        "candidateCreated": {
-          "#bigint": "0"
-        },
-        "closed": [
-          false,
-          false
-        ],
-        "compression": [],
-        "created": {
-          "#bigint": "0"
-        },
-        "expires": {
-          "#bigint": "0"
-        },
-        "frame": {
-          "#bigint": "0"
-        },
-        "freshMs": {
-          "#bigint": "1000"
-        },
-        "io": {
-          "aborted": [],
-          "budgets": [],
-          "sourceErrors": []
-        },
-        "localExpires": {
-          "#bigint": "0"
-        },
-        "localValue": {
-          "#bigint": "0"
-        },
-        "localVersion": {
-          "#bigint": "0"
-        },
-        "markerExpires": {
-          "#bigint": "0"
-        },
-        "markers": [],
-        "maximumMs": {
-          "#bigint": "5000"
-        },
-        "memo": [
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          }
-        ],
-        "now": {
-          "#bigint": "0"
-        },
         "o": {
           "calls": [],
           "classifications": {
@@ -129,26 +63,13 @@
             "#bigint": "0"
           }
         },
-        "observedFence": {
-          "#bigint": "0"
+        "io": {
+          "aborted": [],
+          "budgets": [],
+          "sourceErrors": []
         },
-        "phase": {
-          "#bigint": "0"
-        },
-        "readReceipts": [],
-        "recoveryReceipts": [],
-        "scope": {
-          "#bigint": "2"
-        },
-        "tracked": true,
-        "wall": {
-          "#bigint": "1000000000"
-        },
-        "watermark": {
-          "#bigint": "0"
-        },
-        "writeFailed": false,
-        "writeReceipts": []
+        "markers": [],
+        "compression": []
       }
     },
     {
@@ -168,72 +89,6 @@
         }
       },
       "s": {
-        "acceptedFresh": {
-          "#bigint": "1000"
-        },
-        "acceptedMaximum": {
-          "#bigint": "5000"
-        },
-        "activeSource": {
-          "#bigint": "-1"
-        },
-        "canRecover": false,
-        "canWrite": false,
-        "candidate": {
-          "#bigint": "0"
-        },
-        "candidateCreated": {
-          "#bigint": "0"
-        },
-        "closed": [
-          false,
-          false
-        ],
-        "compression": [],
-        "created": {
-          "#bigint": "0"
-        },
-        "expires": {
-          "#bigint": "0"
-        },
-        "frame": {
-          "#bigint": "0"
-        },
-        "freshMs": {
-          "#bigint": "1000"
-        },
-        "io": {
-          "aborted": [],
-          "budgets": [],
-          "sourceErrors": []
-        },
-        "localExpires": {
-          "#bigint": "0"
-        },
-        "localValue": {
-          "#bigint": "0"
-        },
-        "localVersion": {
-          "#bigint": "0"
-        },
-        "markerExpires": {
-          "#bigint": "7200000"
-        },
-        "markers": [],
-        "maximumMs": {
-          "#bigint": "5000"
-        },
-        "memo": [
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          }
-        ],
-        "now": {
-          "#bigint": "0"
-        },
         "o": {
           "calls": [],
           "classifications": {
@@ -271,26 +126,13 @@
             "#bigint": "0"
           }
         },
-        "observedFence": {
-          "#bigint": "0"
+        "io": {
+          "aborted": [],
+          "budgets": [],
+          "sourceErrors": []
         },
-        "phase": {
-          "#bigint": "0"
-        },
-        "readReceipts": [],
-        "recoveryReceipts": [],
-        "scope": {
-          "#bigint": "2"
-        },
-        "tracked": true,
-        "wall": {
-          "#bigint": "1000000000"
-        },
-        "watermark": {
-          "#bigint": "1000000000"
-        },
-        "writeFailed": false,
-        "writeReceipts": []
+        "markers": [],
+        "compression": []
       }
     },
     {
@@ -310,81 +152,6 @@
         }
       },
       "s": {
-        "acceptedFresh": {
-          "#bigint": "1000"
-        },
-        "acceptedMaximum": {
-          "#bigint": "5000"
-        },
-        "activeSource": {
-          "#bigint": "-1"
-        },
-        "canRecover": false,
-        "canWrite": false,
-        "candidate": {
-          "#bigint": "0"
-        },
-        "candidateCreated": {
-          "#bigint": "0"
-        },
-        "closed": [
-          false,
-          false
-        ],
-        "compression": [],
-        "created": {
-          "#bigint": "0"
-        },
-        "expires": {
-          "#bigint": "0"
-        },
-        "frame": {
-          "#bigint": "0"
-        },
-        "freshMs": {
-          "#bigint": "1000"
-        },
-        "io": {
-          "aborted": [],
-          "budgets": [],
-          "sourceErrors": []
-        },
-        "localExpires": {
-          "#bigint": "0"
-        },
-        "localValue": {
-          "#bigint": "0"
-        },
-        "localVersion": {
-          "#bigint": "0"
-        },
-        "markerExpires": {
-          "#bigint": "7200000"
-        },
-        "markers": [
-          {
-            "cutoffMs": {
-              "#bigint": "0"
-            },
-            "ttlMs": {
-              "#bigint": "7200000"
-            }
-          }
-        ],
-        "maximumMs": {
-          "#bigint": "5000"
-        },
-        "memo": [
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          }
-        ],
-        "now": {
-          "#bigint": "0"
-        },
         "o": {
           "calls": [],
           "classifications": {
@@ -422,26 +189,22 @@
             "#bigint": "0"
           }
         },
-        "observedFence": {
-          "#bigint": "0"
+        "io": {
+          "aborted": [],
+          "budgets": [],
+          "sourceErrors": []
         },
-        "phase": {
-          "#bigint": "0"
-        },
-        "readReceipts": [],
-        "recoveryReceipts": [],
-        "scope": {
-          "#bigint": "2"
-        },
-        "tracked": true,
-        "wall": {
-          "#bigint": "1000000000"
-        },
-        "watermark": {
-          "#bigint": "1000000000"
-        },
-        "writeFailed": false,
-        "writeReceipts": []
+        "markers": [
+          {
+            "cutoffMs": {
+              "#bigint": "0"
+            },
+            "ttlMs": {
+              "#bigint": "7200000"
+            }
+          }
+        ],
+        "compression": []
       }
     },
     {
@@ -461,81 +224,6 @@
         }
       },
       "s": {
-        "acceptedFresh": {
-          "#bigint": "1000"
-        },
-        "acceptedMaximum": {
-          "#bigint": "5000"
-        },
-        "activeSource": {
-          "#bigint": "-1"
-        },
-        "canRecover": false,
-        "canWrite": false,
-        "candidate": {
-          "#bigint": "0"
-        },
-        "candidateCreated": {
-          "#bigint": "0"
-        },
-        "closed": [
-          false,
-          false
-        ],
-        "compression": [],
-        "created": {
-          "#bigint": "0"
-        },
-        "expires": {
-          "#bigint": "0"
-        },
-        "frame": {
-          "#bigint": "0"
-        },
-        "freshMs": {
-          "#bigint": "1000"
-        },
-        "io": {
-          "aborted": [],
-          "budgets": [],
-          "sourceErrors": []
-        },
-        "localExpires": {
-          "#bigint": "0"
-        },
-        "localValue": {
-          "#bigint": "0"
-        },
-        "localVersion": {
-          "#bigint": "0"
-        },
-        "markerExpires": {
-          "#bigint": "7200000"
-        },
-        "markers": [
-          {
-            "cutoffMs": {
-              "#bigint": "0"
-            },
-            "ttlMs": {
-              "#bigint": "7200000"
-            }
-          }
-        ],
-        "maximumMs": {
-          "#bigint": "5000"
-        },
-        "memo": [
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          }
-        ],
-        "now": {
-          "#bigint": "1"
-        },
         "o": {
           "calls": [],
           "classifications": {
@@ -573,26 +261,22 @@
             "#bigint": "0"
           }
         },
-        "observedFence": {
-          "#bigint": "0"
+        "io": {
+          "aborted": [],
+          "budgets": [],
+          "sourceErrors": []
         },
-        "phase": {
-          "#bigint": "0"
-        },
-        "readReceipts": [],
-        "recoveryReceipts": [],
-        "scope": {
-          "#bigint": "2"
-        },
-        "tracked": true,
-        "wall": {
-          "#bigint": "1000000001"
-        },
-        "watermark": {
-          "#bigint": "1000000000"
-        },
-        "writeFailed": false,
-        "writeReceipts": []
+        "markers": [
+          {
+            "cutoffMs": {
+              "#bigint": "0"
+            },
+            "ttlMs": {
+              "#bigint": "7200000"
+            }
+          }
+        ],
+        "compression": []
       }
     },
     {
@@ -612,81 +296,6 @@
         }
       },
       "s": {
-        "acceptedFresh": {
-          "#bigint": "1000"
-        },
-        "acceptedMaximum": {
-          "#bigint": "5000"
-        },
-        "activeSource": {
-          "#bigint": "-1"
-        },
-        "canRecover": false,
-        "canWrite": false,
-        "candidate": {
-          "#bigint": "0"
-        },
-        "candidateCreated": {
-          "#bigint": "0"
-        },
-        "closed": [
-          false,
-          false
-        ],
-        "compression": [],
-        "created": {
-          "#bigint": "0"
-        },
-        "expires": {
-          "#bigint": "0"
-        },
-        "frame": {
-          "#bigint": "0"
-        },
-        "freshMs": {
-          "#bigint": "7200000"
-        },
-        "io": {
-          "aborted": [],
-          "budgets": [],
-          "sourceErrors": []
-        },
-        "localExpires": {
-          "#bigint": "0"
-        },
-        "localValue": {
-          "#bigint": "0"
-        },
-        "localVersion": {
-          "#bigint": "0"
-        },
-        "markerExpires": {
-          "#bigint": "7200000"
-        },
-        "markers": [
-          {
-            "cutoffMs": {
-              "#bigint": "0"
-            },
-            "ttlMs": {
-              "#bigint": "7200000"
-            }
-          }
-        ],
-        "maximumMs": {
-          "#bigint": "14400000"
-        },
-        "memo": [
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          }
-        ],
-        "now": {
-          "#bigint": "1"
-        },
         "o": {
           "calls": [],
           "classifications": {
@@ -724,26 +333,22 @@
             "#bigint": "0"
           }
         },
-        "observedFence": {
-          "#bigint": "0"
+        "io": {
+          "aborted": [],
+          "budgets": [],
+          "sourceErrors": []
         },
-        "phase": {
-          "#bigint": "0"
-        },
-        "readReceipts": [],
-        "recoveryReceipts": [],
-        "scope": {
-          "#bigint": "2"
-        },
-        "tracked": true,
-        "wall": {
-          "#bigint": "1000000001"
-        },
-        "watermark": {
-          "#bigint": "1000000000"
-        },
-        "writeFailed": false,
-        "writeReceipts": []
+        "markers": [
+          {
+            "cutoffMs": {
+              "#bigint": "0"
+            },
+            "ttlMs": {
+              "#bigint": "7200000"
+            }
+          }
+        ],
+        "compression": []
       }
     },
     {
@@ -763,89 +368,6 @@
         }
       },
       "s": {
-        "acceptedFresh": {
-          "#bigint": "7200000"
-        },
-        "acceptedMaximum": {
-          "#bigint": "14400000"
-        },
-        "activeSource": {
-          "#bigint": "-1"
-        },
-        "canRecover": false,
-        "canWrite": false,
-        "candidate": {
-          "#bigint": "0"
-        },
-        "candidateCreated": {
-          "#bigint": "0"
-        },
-        "closed": [
-          false,
-          false
-        ],
-        "compression": [],
-        "created": {
-          "#bigint": "0"
-        },
-        "expires": {
-          "#bigint": "0"
-        },
-        "frame": {
-          "#bigint": "0"
-        },
-        "freshMs": {
-          "#bigint": "7200000"
-        },
-        "io": {
-          "aborted": [],
-          "budgets": [
-            {
-              "#bigint": "30000000"
-            }
-          ],
-          "sourceErrors": [
-            {
-              "#bigint": "0"
-            }
-          ]
-        },
-        "localExpires": {
-          "#bigint": "0"
-        },
-        "localValue": {
-          "#bigint": "0"
-        },
-        "localVersion": {
-          "#bigint": "0"
-        },
-        "markerExpires": {
-          "#bigint": "7200000"
-        },
-        "markers": [
-          {
-            "cutoffMs": {
-              "#bigint": "0"
-            },
-            "ttlMs": {
-              "#bigint": "7200000"
-            }
-          }
-        ],
-        "maximumMs": {
-          "#bigint": "14400000"
-        },
-        "memo": [
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          }
-        ],
-        "now": {
-          "#bigint": "1"
-        },
         "o": {
           "calls": [
             {
@@ -887,26 +409,30 @@
             "#bigint": "0"
           }
         },
-        "observedFence": {
-          "#bigint": "0"
+        "io": {
+          "aborted": [],
+          "budgets": [
+            {
+              "#bigint": "30000000"
+            }
+          ],
+          "sourceErrors": [
+            {
+              "#bigint": "0"
+            }
+          ]
         },
-        "phase": {
-          "#bigint": "1"
-        },
-        "readReceipts": [],
-        "recoveryReceipts": [],
-        "scope": {
-          "#bigint": "2"
-        },
-        "tracked": true,
-        "wall": {
-          "#bigint": "1000000001"
-        },
-        "watermark": {
-          "#bigint": "1000000000"
-        },
-        "writeFailed": false,
-        "writeReceipts": []
+        "markers": [
+          {
+            "cutoffMs": {
+              "#bigint": "0"
+            },
+            "ttlMs": {
+              "#bigint": "7200000"
+            }
+          }
+        ],
+        "compression": []
       }
     },
     {
@@ -926,89 +452,6 @@
         }
       },
       "s": {
-        "acceptedFresh": {
-          "#bigint": "7200000"
-        },
-        "acceptedMaximum": {
-          "#bigint": "14400000"
-        },
-        "activeSource": {
-          "#bigint": "0"
-        },
-        "canRecover": true,
-        "canWrite": true,
-        "candidate": {
-          "#bigint": "0"
-        },
-        "candidateCreated": {
-          "#bigint": "0"
-        },
-        "closed": [
-          false,
-          false
-        ],
-        "compression": [],
-        "created": {
-          "#bigint": "0"
-        },
-        "expires": {
-          "#bigint": "0"
-        },
-        "frame": {
-          "#bigint": "0"
-        },
-        "freshMs": {
-          "#bigint": "7200000"
-        },
-        "io": {
-          "aborted": [],
-          "budgets": [
-            {
-              "#bigint": "30000000"
-            }
-          ],
-          "sourceErrors": [
-            {
-              "#bigint": "0"
-            }
-          ]
-        },
-        "localExpires": {
-          "#bigint": "0"
-        },
-        "localValue": {
-          "#bigint": "0"
-        },
-        "localVersion": {
-          "#bigint": "0"
-        },
-        "markerExpires": {
-          "#bigint": "7200000"
-        },
-        "markers": [
-          {
-            "cutoffMs": {
-              "#bigint": "0"
-            },
-            "ttlMs": {
-              "#bigint": "7200000"
-            }
-          }
-        ],
-        "maximumMs": {
-          "#bigint": "14400000"
-        },
-        "memo": [
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          }
-        ],
-        "now": {
-          "#bigint": "1"
-        },
         "o": {
           "calls": [
             {
@@ -1050,37 +493,30 @@
             "#bigint": "0"
           }
         },
-        "observedFence": {
-          "#bigint": "1000000000"
+        "io": {
+          "aborted": [],
+          "budgets": [
+            {
+              "#bigint": "30000000"
+            }
+          ],
+          "sourceErrors": [
+            {
+              "#bigint": "0"
+            }
+          ]
         },
-        "phase": {
-          "#bigint": "3"
-        },
-        "readReceipts": [
+        "markers": [
           {
-            "age": {
-              "#bigint": "1000000001"
+            "cutoffMs": {
+              "#bigint": "0"
             },
-            "freshDecode": false,
-            "freshMs": {
+            "ttlMs": {
               "#bigint": "7200000"
-            },
-            "validFrame": false
+            }
           }
         ],
-        "recoveryReceipts": [],
-        "scope": {
-          "#bigint": "2"
-        },
-        "tracked": true,
-        "wall": {
-          "#bigint": "1000000001"
-        },
-        "watermark": {
-          "#bigint": "1000000000"
-        },
-        "writeFailed": false,
-        "writeReceipts": []
+        "compression": []
       }
     },
     {
@@ -1100,89 +536,6 @@
         }
       },
       "s": {
-        "acceptedFresh": {
-          "#bigint": "7200000"
-        },
-        "acceptedMaximum": {
-          "#bigint": "14400000"
-        },
-        "activeSource": {
-          "#bigint": "0"
-        },
-        "canRecover": true,
-        "canWrite": true,
-        "candidate": {
-          "#bigint": "0"
-        },
-        "candidateCreated": {
-          "#bigint": "0"
-        },
-        "closed": [
-          false,
-          false
-        ],
-        "compression": [],
-        "created": {
-          "#bigint": "1000000001"
-        },
-        "expires": {
-          "#bigint": "3600001"
-        },
-        "frame": {
-          "#bigint": "2"
-        },
-        "freshMs": {
-          "#bigint": "7200000"
-        },
-        "io": {
-          "aborted": [],
-          "budgets": [
-            {
-              "#bigint": "30000000"
-            }
-          ],
-          "sourceErrors": [
-            {
-              "#bigint": "0"
-            }
-          ]
-        },
-        "localExpires": {
-          "#bigint": "0"
-        },
-        "localValue": {
-          "#bigint": "0"
-        },
-        "localVersion": {
-          "#bigint": "0"
-        },
-        "markerExpires": {
-          "#bigint": "7200000"
-        },
-        "markers": [
-          {
-            "cutoffMs": {
-              "#bigint": "0"
-            },
-            "ttlMs": {
-              "#bigint": "7200000"
-            }
-          }
-        ],
-        "maximumMs": {
-          "#bigint": "14400000"
-        },
-        "memo": [
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          }
-        ],
-        "now": {
-          "#bigint": "1"
-        },
         "o": {
           "calls": [
             {
@@ -1228,47 +581,30 @@
             "#bigint": "1"
           }
         },
-        "observedFence": {
-          "#bigint": "1000000000"
+        "io": {
+          "aborted": [],
+          "budgets": [
+            {
+              "#bigint": "30000000"
+            }
+          ],
+          "sourceErrors": [
+            {
+              "#bigint": "0"
+            }
+          ]
         },
-        "phase": {
-          "#bigint": "0"
-        },
-        "readReceipts": [
+        "markers": [
           {
-            "age": {
-              "#bigint": "1000000001"
+            "cutoffMs": {
+              "#bigint": "0"
             },
-            "freshDecode": false,
-            "freshMs": {
+            "ttlMs": {
               "#bigint": "7200000"
-            },
-            "validFrame": false
-          }
-        ],
-        "recoveryReceipts": [],
-        "scope": {
-          "#bigint": "2"
-        },
-        "tracked": true,
-        "wall": {
-          "#bigint": "1000000001"
-        },
-        "watermark": {
-          "#bigint": "1000000000"
-        },
-        "writeFailed": false,
-        "writeReceipts": [
-          {
-            "requested": {
-              "#bigint": "14400000"
-            },
-            "tracked": true,
-            "ttl": {
-              "#bigint": "3600000"
             }
           }
-        ]
+        ],
+        "compression": []
       }
     },
     {
@@ -1288,97 +624,6 @@
         }
       },
       "s": {
-        "acceptedFresh": {
-          "#bigint": "7200000"
-        },
-        "acceptedMaximum": {
-          "#bigint": "14400000"
-        },
-        "activeSource": {
-          "#bigint": "0"
-        },
-        "canRecover": true,
-        "canWrite": true,
-        "candidate": {
-          "#bigint": "0"
-        },
-        "candidateCreated": {
-          "#bigint": "0"
-        },
-        "closed": [
-          false,
-          false
-        ],
-        "compression": [],
-        "created": {
-          "#bigint": "1000000001"
-        },
-        "expires": {
-          "#bigint": "3600001"
-        },
-        "frame": {
-          "#bigint": "2"
-        },
-        "freshMs": {
-          "#bigint": "7200000"
-        },
-        "io": {
-          "aborted": [],
-          "budgets": [
-            {
-              "#bigint": "30000000"
-            }
-          ],
-          "sourceErrors": [
-            {
-              "#bigint": "0"
-            }
-          ]
-        },
-        "localExpires": {
-          "#bigint": "0"
-        },
-        "localValue": {
-          "#bigint": "0"
-        },
-        "localVersion": {
-          "#bigint": "0"
-        },
-        "markerExpires": {
-          "#bigint": "7200000"
-        },
-        "markers": [
-          {
-            "cutoffMs": {
-              "#bigint": "0"
-            },
-            "ttlMs": {
-              "#bigint": "7200000"
-            }
-          },
-          {
-            "cutoffMs": {
-              "#bigint": "0"
-            },
-            "ttlMs": {
-              "#bigint": "7199999"
-            }
-          }
-        ],
-        "maximumMs": {
-          "#bigint": "14400000"
-        },
-        "memo": [
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          }
-        ],
-        "now": {
-          "#bigint": "1"
-        },
         "o": {
           "calls": [
             {
@@ -1424,47 +669,38 @@
             "#bigint": "1"
           }
         },
-        "observedFence": {
-          "#bigint": "1000000000"
+        "io": {
+          "aborted": [],
+          "budgets": [
+            {
+              "#bigint": "30000000"
+            }
+          ],
+          "sourceErrors": [
+            {
+              "#bigint": "0"
+            }
+          ]
         },
-        "phase": {
-          "#bigint": "0"
-        },
-        "readReceipts": [
+        "markers": [
           {
-            "age": {
-              "#bigint": "1000000001"
+            "cutoffMs": {
+              "#bigint": "0"
             },
-            "freshDecode": false,
-            "freshMs": {
+            "ttlMs": {
               "#bigint": "7200000"
-            },
-            "validFrame": false
-          }
-        ],
-        "recoveryReceipts": [],
-        "scope": {
-          "#bigint": "2"
-        },
-        "tracked": true,
-        "wall": {
-          "#bigint": "1000000001"
-        },
-        "watermark": {
-          "#bigint": "1000000000"
-        },
-        "writeFailed": false,
-        "writeReceipts": [
+            }
+          },
           {
-            "requested": {
-              "#bigint": "14400000"
+            "cutoffMs": {
+              "#bigint": "0"
             },
-            "tracked": true,
-            "ttl": {
-              "#bigint": "3600000"
+            "ttlMs": {
+              "#bigint": "7199999"
             }
           }
-        ]
+        ],
+        "compression": []
       }
     },
     {
@@ -1484,103 +720,6 @@
         }
       },
       "s": {
-        "acceptedFresh": {
-          "#bigint": "7200000"
-        },
-        "acceptedMaximum": {
-          "#bigint": "14400000"
-        },
-        "activeSource": {
-          "#bigint": "0"
-        },
-        "canRecover": true,
-        "canWrite": true,
-        "candidate": {
-          "#bigint": "0"
-        },
-        "candidateCreated": {
-          "#bigint": "0"
-        },
-        "closed": [
-          false,
-          false
-        ],
-        "compression": [],
-        "created": {
-          "#bigint": "1000000001"
-        },
-        "expires": {
-          "#bigint": "3600001"
-        },
-        "frame": {
-          "#bigint": "2"
-        },
-        "freshMs": {
-          "#bigint": "7200000"
-        },
-        "io": {
-          "aborted": [],
-          "budgets": [
-            {
-              "#bigint": "30000000"
-            },
-            {
-              "#bigint": "30000000"
-            }
-          ],
-          "sourceErrors": [
-            {
-              "#bigint": "0"
-            },
-            {
-              "#bigint": "0"
-            }
-          ]
-        },
-        "localExpires": {
-          "#bigint": "0"
-        },
-        "localValue": {
-          "#bigint": "0"
-        },
-        "localVersion": {
-          "#bigint": "0"
-        },
-        "markerExpires": {
-          "#bigint": "7200000"
-        },
-        "markers": [
-          {
-            "cutoffMs": {
-              "#bigint": "0"
-            },
-            "ttlMs": {
-              "#bigint": "7200000"
-            }
-          },
-          {
-            "cutoffMs": {
-              "#bigint": "0"
-            },
-            "ttlMs": {
-              "#bigint": "7199999"
-            }
-          }
-        ],
-        "maximumMs": {
-          "#bigint": "14400000"
-        },
-        "memo": [
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          }
-        ],
-        "now": {
-          "#bigint": "1"
-        },
         "o": {
           "calls": [
             {
@@ -1629,47 +768,44 @@
             "#bigint": "1"
           }
         },
-        "observedFence": {
-          "#bigint": "1000000000"
-        },
-        "phase": {
-          "#bigint": "1"
-        },
-        "readReceipts": [
-          {
-            "age": {
-              "#bigint": "1000000001"
+        "io": {
+          "aborted": [],
+          "budgets": [
+            {
+              "#bigint": "30000000"
             },
-            "freshDecode": false,
-            "freshMs": {
+            {
+              "#bigint": "30000000"
+            }
+          ],
+          "sourceErrors": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ]
+        },
+        "markers": [
+          {
+            "cutoffMs": {
+              "#bigint": "0"
+            },
+            "ttlMs": {
               "#bigint": "7200000"
-            },
-            "validFrame": false
-          }
-        ],
-        "recoveryReceipts": [],
-        "scope": {
-          "#bigint": "2"
-        },
-        "tracked": true,
-        "wall": {
-          "#bigint": "1000000001"
-        },
-        "watermark": {
-          "#bigint": "1000000000"
-        },
-        "writeFailed": false,
-        "writeReceipts": [
+            }
+          },
           {
-            "requested": {
-              "#bigint": "14400000"
+            "cutoffMs": {
+              "#bigint": "0"
             },
-            "tracked": true,
-            "ttl": {
-              "#bigint": "3600000"
+            "ttlMs": {
+              "#bigint": "7199999"
             }
           }
-        ]
+        ],
+        "compression": []
       }
     },
     {
@@ -1689,103 +825,6 @@
         }
       },
       "s": {
-        "acceptedFresh": {
-          "#bigint": "7200000"
-        },
-        "acceptedMaximum": {
-          "#bigint": "14400000"
-        },
-        "activeSource": {
-          "#bigint": "0"
-        },
-        "canRecover": true,
-        "canWrite": true,
-        "candidate": {
-          "#bigint": "2"
-        },
-        "candidateCreated": {
-          "#bigint": "1000000001"
-        },
-        "closed": [
-          false,
-          false
-        ],
-        "compression": [],
-        "created": {
-          "#bigint": "1000000001"
-        },
-        "expires": {
-          "#bigint": "3600001"
-        },
-        "frame": {
-          "#bigint": "2"
-        },
-        "freshMs": {
-          "#bigint": "7200000"
-        },
-        "io": {
-          "aborted": [],
-          "budgets": [
-            {
-              "#bigint": "30000000"
-            },
-            {
-              "#bigint": "30000000"
-            }
-          ],
-          "sourceErrors": [
-            {
-              "#bigint": "0"
-            },
-            {
-              "#bigint": "0"
-            }
-          ]
-        },
-        "localExpires": {
-          "#bigint": "0"
-        },
-        "localValue": {
-          "#bigint": "0"
-        },
-        "localVersion": {
-          "#bigint": "0"
-        },
-        "markerExpires": {
-          "#bigint": "7200000"
-        },
-        "markers": [
-          {
-            "cutoffMs": {
-              "#bigint": "0"
-            },
-            "ttlMs": {
-              "#bigint": "7200000"
-            }
-          },
-          {
-            "cutoffMs": {
-              "#bigint": "0"
-            },
-            "ttlMs": {
-              "#bigint": "7199999"
-            }
-          }
-        ],
-        "maximumMs": {
-          "#bigint": "14400000"
-        },
-        "memo": [
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          }
-        ],
-        "now": {
-          "#bigint": "1"
-        },
         "o": {
           "calls": [
             {
@@ -1834,57 +873,44 @@
             "#bigint": "1"
           }
         },
-        "observedFence": {
-          "#bigint": "0"
-        },
-        "phase": {
-          "#bigint": "2"
-        },
-        "readReceipts": [
-          {
-            "age": {
-              "#bigint": "1000000001"
+        "io": {
+          "aborted": [],
+          "budgets": [
+            {
+              "#bigint": "30000000"
             },
-            "freshDecode": false,
-            "freshMs": {
-              "#bigint": "7200000"
-            },
-            "validFrame": false
-          },
-          {
-            "age": {
+            {
+              "#bigint": "30000000"
+            }
+          ],
+          "sourceErrors": [
+            {
               "#bigint": "0"
             },
-            "freshDecode": true,
-            "freshMs": {
-              "#bigint": "7200000"
-            },
-            "validFrame": true
-          }
-        ],
-        "recoveryReceipts": [],
-        "scope": {
-          "#bigint": "2"
+            {
+              "#bigint": "0"
+            }
+          ]
         },
-        "tracked": true,
-        "wall": {
-          "#bigint": "1000000001"
-        },
-        "watermark": {
-          "#bigint": "1000000000"
-        },
-        "writeFailed": false,
-        "writeReceipts": [
+        "markers": [
           {
-            "requested": {
-              "#bigint": "14400000"
+            "cutoffMs": {
+              "#bigint": "0"
             },
-            "tracked": true,
-            "ttl": {
-              "#bigint": "3600000"
+            "ttlMs": {
+              "#bigint": "7200000"
+            }
+          },
+          {
+            "cutoffMs": {
+              "#bigint": "0"
+            },
+            "ttlMs": {
+              "#bigint": "7199999"
             }
           }
-        ]
+        ],
+        "compression": []
       }
     },
     {
@@ -1904,103 +930,6 @@
         }
       },
       "s": {
-        "acceptedFresh": {
-          "#bigint": "7200000"
-        },
-        "acceptedMaximum": {
-          "#bigint": "14400000"
-        },
-        "activeSource": {
-          "#bigint": "0"
-        },
-        "canRecover": true,
-        "canWrite": true,
-        "candidate": {
-          "#bigint": "2"
-        },
-        "candidateCreated": {
-          "#bigint": "1000000001"
-        },
-        "closed": [
-          false,
-          false
-        ],
-        "compression": [],
-        "created": {
-          "#bigint": "1000000001"
-        },
-        "expires": {
-          "#bigint": "3600001"
-        },
-        "frame": {
-          "#bigint": "2"
-        },
-        "freshMs": {
-          "#bigint": "7200000"
-        },
-        "io": {
-          "aborted": [],
-          "budgets": [
-            {
-              "#bigint": "30000000"
-            },
-            {
-              "#bigint": "30000000"
-            }
-          ],
-          "sourceErrors": [
-            {
-              "#bigint": "0"
-            },
-            {
-              "#bigint": "0"
-            }
-          ]
-        },
-        "localExpires": {
-          "#bigint": "1001"
-        },
-        "localValue": {
-          "#bigint": "2"
-        },
-        "localVersion": {
-          "#bigint": "1"
-        },
-        "markerExpires": {
-          "#bigint": "7200000"
-        },
-        "markers": [
-          {
-            "cutoffMs": {
-              "#bigint": "0"
-            },
-            "ttlMs": {
-              "#bigint": "7200000"
-            }
-          },
-          {
-            "cutoffMs": {
-              "#bigint": "0"
-            },
-            "ttlMs": {
-              "#bigint": "7199999"
-            }
-          }
-        ],
-        "maximumMs": {
-          "#bigint": "14400000"
-        },
-        "memo": [
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          }
-        ],
-        "now": {
-          "#bigint": "1"
-        },
         "o": {
           "calls": [
             {
@@ -2049,57 +978,44 @@
             "#bigint": "1"
           }
         },
-        "observedFence": {
-          "#bigint": "0"
-        },
-        "phase": {
-          "#bigint": "0"
-        },
-        "readReceipts": [
-          {
-            "age": {
-              "#bigint": "1000000001"
+        "io": {
+          "aborted": [],
+          "budgets": [
+            {
+              "#bigint": "30000000"
             },
-            "freshDecode": false,
-            "freshMs": {
-              "#bigint": "7200000"
-            },
-            "validFrame": false
-          },
-          {
-            "age": {
+            {
+              "#bigint": "30000000"
+            }
+          ],
+          "sourceErrors": [
+            {
               "#bigint": "0"
             },
-            "freshDecode": true,
-            "freshMs": {
-              "#bigint": "7200000"
-            },
-            "validFrame": true
-          }
-        ],
-        "recoveryReceipts": [],
-        "scope": {
-          "#bigint": "2"
+            {
+              "#bigint": "0"
+            }
+          ]
         },
-        "tracked": true,
-        "wall": {
-          "#bigint": "1000000001"
-        },
-        "watermark": {
-          "#bigint": "1000000000"
-        },
-        "writeFailed": false,
-        "writeReceipts": [
+        "markers": [
           {
-            "requested": {
-              "#bigint": "14400000"
+            "cutoffMs": {
+              "#bigint": "0"
             },
-            "tracked": true,
-            "ttl": {
-              "#bigint": "3600000"
+            "ttlMs": {
+              "#bigint": "7200000"
+            }
+          },
+          {
+            "cutoffMs": {
+              "#bigint": "0"
+            },
+            "ttlMs": {
+              "#bigint": "7199999"
             }
           }
-        ]
+        ],
+        "compression": []
       }
     },
     {
@@ -2119,103 +1035,6 @@
         }
       },
       "s": {
-        "acceptedFresh": {
-          "#bigint": "7200000"
-        },
-        "acceptedMaximum": {
-          "#bigint": "14400000"
-        },
-        "activeSource": {
-          "#bigint": "0"
-        },
-        "canRecover": true,
-        "canWrite": true,
-        "candidate": {
-          "#bigint": "2"
-        },
-        "candidateCreated": {
-          "#bigint": "1000000001"
-        },
-        "closed": [
-          false,
-          false
-        ],
-        "compression": [],
-        "created": {
-          "#bigint": "1000000001"
-        },
-        "expires": {
-          "#bigint": "3600001"
-        },
-        "frame": {
-          "#bigint": "2"
-        },
-        "freshMs": {
-          "#bigint": "7200000"
-        },
-        "io": {
-          "aborted": [],
-          "budgets": [
-            {
-              "#bigint": "30000000"
-            },
-            {
-              "#bigint": "30000000"
-            }
-          ],
-          "sourceErrors": [
-            {
-              "#bigint": "0"
-            },
-            {
-              "#bigint": "0"
-            }
-          ]
-        },
-        "localExpires": {
-          "#bigint": "1001"
-        },
-        "localValue": {
-          "#bigint": "2"
-        },
-        "localVersion": {
-          "#bigint": "1"
-        },
-        "markerExpires": {
-          "#bigint": "7200000"
-        },
-        "markers": [
-          {
-            "cutoffMs": {
-              "#bigint": "0"
-            },
-            "ttlMs": {
-              "#bigint": "7200000"
-            }
-          },
-          {
-            "cutoffMs": {
-              "#bigint": "0"
-            },
-            "ttlMs": {
-              "#bigint": "7199999"
-            }
-          }
-        ],
-        "maximumMs": {
-          "#bigint": "14400000"
-        },
-        "memo": [
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          }
-        ],
-        "now": {
-          "#bigint": "1000"
-        },
         "o": {
           "calls": [
             {
@@ -2264,110 +1083,6 @@
             "#bigint": "1"
           }
         },
-        "observedFence": {
-          "#bigint": "0"
-        },
-        "phase": {
-          "#bigint": "0"
-        },
-        "readReceipts": [
-          {
-            "age": {
-              "#bigint": "1000000001"
-            },
-            "freshDecode": false,
-            "freshMs": {
-              "#bigint": "7200000"
-            },
-            "validFrame": false
-          },
-          {
-            "age": {
-              "#bigint": "0"
-            },
-            "freshDecode": true,
-            "freshMs": {
-              "#bigint": "7200000"
-            },
-            "validFrame": true
-          }
-        ],
-        "recoveryReceipts": [],
-        "scope": {
-          "#bigint": "2"
-        },
-        "tracked": true,
-        "wall": {
-          "#bigint": "1000001000"
-        },
-        "watermark": {
-          "#bigint": "1000000000"
-        },
-        "writeFailed": false,
-        "writeReceipts": [
-          {
-            "requested": {
-              "#bigint": "14400000"
-            },
-            "tracked": true,
-            "ttl": {
-              "#bigint": "3600000"
-            }
-          }
-        ]
-      }
-    },
-    {
-      "input": {
-        "choice": {
-          "#bigint": "-1"
-        },
-        "name": "observeMarker"
-      },
-      "mbt::actionTaken": "observeMarker",
-      "mbt::nondetPicks": {
-        "choice": {
-          "tag": "None",
-          "value": {
-            "#tup": []
-          }
-        }
-      },
-      "s": {
-        "acceptedFresh": {
-          "#bigint": "7200000"
-        },
-        "acceptedMaximum": {
-          "#bigint": "14400000"
-        },
-        "activeSource": {
-          "#bigint": "0"
-        },
-        "canRecover": true,
-        "canWrite": true,
-        "candidate": {
-          "#bigint": "2"
-        },
-        "candidateCreated": {
-          "#bigint": "1000000001"
-        },
-        "closed": [
-          false,
-          false
-        ],
-        "compression": [],
-        "created": {
-          "#bigint": "1000000001"
-        },
-        "expires": {
-          "#bigint": "3600001"
-        },
-        "frame": {
-          "#bigint": "2"
-        },
-        "freshMs": {
-          "#bigint": "7200000"
-        },
         "io": {
           "aborted": [],
           "budgets": [
@@ -2387,17 +1102,110 @@
             }
           ]
         },
-        "localExpires": {
-          "#bigint": "1001"
+        "markers": [
+          {
+            "cutoffMs": {
+              "#bigint": "0"
+            },
+            "ttlMs": {
+              "#bigint": "7200000"
+            }
+          },
+          {
+            "cutoffMs": {
+              "#bigint": "0"
+            },
+            "ttlMs": {
+              "#bigint": "7199999"
+            }
+          }
+        ],
+        "compression": []
+      }
+    },
+    {
+      "input": {
+        "choice": {
+          "#bigint": "-1"
         },
-        "localValue": {
-          "#bigint": "2"
+        "name": "observeMarker"
+      },
+      "mbt::actionTaken": "observeMarker",
+      "mbt::nondetPicks": {
+        "choice": {
+          "tag": "None",
+          "value": {
+            "#tup": []
+          }
+        }
+      },
+      "s": {
+        "o": {
+          "calls": [
+            {
+              "#bigint": "2"
+            },
+            {
+              "#bigint": "2"
+            }
+          ],
+          "classifications": {
+            "#bigint": "0"
+          },
+          "comparisons": {
+            "#bigint": "0"
+          },
+          "dumps": {
+            "#bigint": "1"
+          },
+          "invalidations": {
+            "#bigint": "1"
+          },
+          "loaders": {
+            "#bigint": "1"
+          },
+          "loads": {
+            "#bigint": "1"
+          },
+          "maintenance": [
+            "ok"
+          ],
+          "policyCalls": {
+            "#bigint": "2"
+          },
+          "reads": {
+            "#bigint": "2"
+          },
+          "recovery": [],
+          "shadow": [],
+          "sourceScopes": [],
+          "writeTtls": [
+            {
+              "#bigint": "3600000"
+            }
+          ],
+          "writes": {
+            "#bigint": "1"
+          }
         },
-        "localVersion": {
-          "#bigint": "1"
-        },
-        "markerExpires": {
-          "#bigint": "7200000"
+        "io": {
+          "aborted": [],
+          "budgets": [
+            {
+              "#bigint": "30000000"
+            },
+            {
+              "#bigint": "30000000"
+            }
+          ],
+          "sourceErrors": [
+            {
+              "#bigint": "0"
+            },
+            {
+              "#bigint": "0"
+            }
+          ]
         },
         "markers": [
           {
@@ -2425,119 +1233,7 @@
             }
           }
         ],
-        "maximumMs": {
-          "#bigint": "14400000"
-        },
-        "memo": [
-          {
-            "#bigint": "0"
-          },
-          {
-            "#bigint": "0"
-          }
-        ],
-        "now": {
-          "#bigint": "1000"
-        },
-        "o": {
-          "calls": [
-            {
-              "#bigint": "2"
-            },
-            {
-              "#bigint": "2"
-            }
-          ],
-          "classifications": {
-            "#bigint": "0"
-          },
-          "comparisons": {
-            "#bigint": "0"
-          },
-          "dumps": {
-            "#bigint": "1"
-          },
-          "invalidations": {
-            "#bigint": "1"
-          },
-          "loaders": {
-            "#bigint": "1"
-          },
-          "loads": {
-            "#bigint": "1"
-          },
-          "maintenance": [
-            "ok"
-          ],
-          "policyCalls": {
-            "#bigint": "2"
-          },
-          "reads": {
-            "#bigint": "2"
-          },
-          "recovery": [],
-          "shadow": [],
-          "sourceScopes": [],
-          "writeTtls": [
-            {
-              "#bigint": "3600000"
-            }
-          ],
-          "writes": {
-            "#bigint": "1"
-          }
-        },
-        "observedFence": {
-          "#bigint": "0"
-        },
-        "phase": {
-          "#bigint": "0"
-        },
-        "readReceipts": [
-          {
-            "age": {
-              "#bigint": "1000000001"
-            },
-            "freshDecode": false,
-            "freshMs": {
-              "#bigint": "7200000"
-            },
-            "validFrame": false
-          },
-          {
-            "age": {
-              "#bigint": "0"
-            },
-            "freshDecode": true,
-            "freshMs": {
-              "#bigint": "7200000"
-            },
-            "validFrame": true
-          }
-        ],
-        "recoveryReceipts": [],
-        "scope": {
-          "#bigint": "2"
-        },
-        "tracked": true,
-        "wall": {
-          "#bigint": "1000001000"
-        },
-        "watermark": {
-          "#bigint": "1000000000"
-        },
-        "writeFailed": false,
-        "writeReceipts": [
-          {
-            "requested": {
-              "#bigint": "14400000"
-            },
-            "tracked": true,
-            "ttl": {
-              "#bigint": "3600000"
-            }
-          }
-        ]
+        "compression": []
       }
     }
   ]

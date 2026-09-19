@@ -88,7 +88,7 @@ observations never select a command, effect index or source result.
 
 | Profile | Boundary and distinguishing public observations | Executable mapping |
 | --- | --- | --- |
-| `recovery-read` | Request/local/remote traversal, retained snapshots, held reads/decoding, compressed candidates, frame rejection and watermark lifetime. New public requests distinguish retained bytes from current Redis state. | [Fixture and actions](./replay/profiles/recovery-read.mjs) |
+| `recovery-read` | Request/local/remote traversal, retained snapshots, held reads/decoding, compressed candidates, frame rejection and watermark lifetime. New public requests distinguish retained bytes from current Redis state. Composed from the kernel library: the held remote traversal with its recovery snapshots and payload classes, the compression channel variants and the marker lifetime. | [Fixture and actions](./replay/profiles/recovery-read.mjs) |
 | `local-failure` | Local storage exceptions, accepted source outcomes and request-only reuse. A failed local read remains publication-ineligible even after the fault is cleared before source settlement. | [Fixture and actions](./replay/profiles/local-failure.mjs) |
 | `runtime-boundaries` | Exact serving cohort thresholds, leaf inheritance and validation, falsy/absent values, and feature toggles. Results and later layer reuse distinguish policy admission from mere policy input selection. | [Fixture and actions](./replay/profiles/runtime-boundaries.mjs) |
 | `shadow-layers` | Dark and served shadow work combined with request/local publication, independent caller sources, per-instance job capacity, captured fill policy and propagated source errors. | [Fixture and actions](./replay/profiles/shadow-layers.mjs) |

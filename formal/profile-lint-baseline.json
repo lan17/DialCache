@@ -4,6 +4,7 @@
   "kernelModules": [
     "calls",
     "clock",
+    "compression",
     "config_errors",
     "deadlines",
     "diagnostics",
@@ -11,6 +12,7 @@
     "flights",
     "layer_policy",
     "local_storage",
+    "markers",
     "payloads",
     "policy_gate",
     "policy_overlay",
@@ -126,8 +128,22 @@
       "id": "recovery-read",
       "model": "formal/dialcache-recovery-read-conformance.qnt",
       "module": "dialcache_recovery_read_conformance",
-      "libraryTransitions": [],
-      "compositionViolations": 80
+      "libraryTransitions": [
+        "compression::settleLoader",
+        "compression::settleRead",
+        "markers::advance",
+        "markers::invalidate",
+        "markers::observe",
+        "remote_frames::seedAged",
+        "remote_frames::storeFrame",
+        "remote_io::begin",
+        "remote_io::latestLoad",
+        "remote_io::latestOrdinal",
+        "remote_io::latestRead",
+        "remote_io::settleLoad",
+        "serving::closeScope"
+      ],
+      "compositionViolations": 0
     },
     {
       "id": "local-failure",

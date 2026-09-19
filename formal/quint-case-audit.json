@@ -1858,7 +1858,7 @@
     },
     {
       "case": "C22.freshness-after-read",
-      "reference": "formal/dialcache-recovery-read-conformance.qnt:freshnessUsesReadSettlement",
+      "reference": "formal/dialcache-recovery-connection.qnt:freshnessUsesReadSettlement",
       "kind": "invariant",
       "scope": "Read acquisition samples the settlement wall clock; a frame initially fresh becomes stale during the held read and subsequently recovers after source rejection."
     },
@@ -1900,7 +1900,7 @@
     },
     {
       "case": "C37.logical-age-unclamped",
-      "reference": "formal/dialcache-recovery-read-conformance.qnt:recoveredAgeUsesLogicalMaximum",
+      "reference": "formal/dialcache-recovery-connection.qnt:recoveryReturnMatchesAcquiredContract",
       "kind": "invariant",
       "scope": "An externally retained candidate older than the physical cap but younger than the captured logical maximum is served after source failure; no new write is credited."
     },
@@ -1924,7 +1924,7 @@
     },
     {
       "case": "C45.compressed-candidate",
-      "reference": "formal/dialcache-recovery-read-conformance.qnt:recoveredResultsNeverPublishShared",
+      "reference": "formal/dialcache-recovery-connection.qnt:recoveredResultsNeverPublishShared",
       "kind": "invariant",
       "scope": "The modeled input domain includes valid/corrupt compressed bytes; retained recovery either serves the decoded value with request-only publication or preserves the indexed original source error. Compression algorithm correctness remains vector/native evidence."
     },
@@ -1954,7 +1954,7 @@
     },
     {
       "case": "C43.request-memo",
-      "reference": "formal/dialcache-recovery-read-conformance.qnt:recoveredResultsNeverPublishShared",
+      "reference": "formal/dialcache-recovery-connection.qnt:recoveredResultsNeverPublishShared",
       "kind": "invariant",
       "scope": "A same-scope public probe reuses recovered value; another scope performs remote work, distinguishing request memo from local publication."
     },
@@ -2167,6 +2167,36 @@
       "reference": "formal/dialcache-recovery-read-conformance.qnt:laterInvalidationDoesNotRewriteObservedMissFenceTest",
       "kind": "regression",
       "scope": "A miss captures the absent watermark baseline before invalidation. Source publication still dispatches at the later watermark timestamp; a new request rejects that now-fenced write, proving both captured-refill authority and subsequent fence visibility."
+    },
+    {
+      "case": "C37.physical-cap",
+      "reference": "formal/dialcache-recovery-read-conformance.qnt:untrackedRetentionIsNotCappedTest",
+      "kind": "regression",
+      "scope": "The untracked twin of the cap: a 4 h policy retention is written in full, so the one-hour cap is a tracked-storage rule, not a write ceiling."
+    },
+    {
+      "case": "C43.request-memo",
+      "reference": "formal/dialcache-recovery-read-conformance.qnt:closingAnotherScopeKeepsThisScopesMemoTest",
+      "kind": "regression",
+      "scope": "A memo row belongs to its scope: closing another scope leaves this scope's memoized value, which a same-scope caller reuses without a read; the request-only publication of a recovered value rests on rows being per scope."
+    },
+    {
+      "case": "C09.fixed-local-ttl",
+      "reference": "formal/dialcache-recovery-read-conformance.qnt:localEntryExpiresAtItsInsertionTtlTest",
+      "kind": "regression",
+      "scope": "An untracked source warms the local slot for its 1 s insertion TTL; the transient caller hits at 999 ms and reads again at exactly 1000 ms, so the boundary is exclusive."
+    },
+    {
+      "case": "C38.value-work-does-not-extend-marker",
+      "reference": "formal/dialcache-recovery-read-conformance.qnt:expiredMarkerIsGoneTest",
+      "kind": "regression",
+      "scope": "A marker's lifetime ends at its two-hour floor: the probe reads no marker at that instant and the next invalidation stamps a fresh floor marker at the new cutoff, so an expired marker is neither read nor extended."
+    },
+    {
+      "case": "C33.reject-unsafe-before-decode",
+      "reference": "formal/dialcache-recovery-read-conformance.qnt:unsafeTimestampAtTheWatermarkStillRefillsTest",
+      "kind": "regression",
+      "scope": "An unsafe stamp above a watermark raised at the same instant is visible and never fresh: the read holds no decode and its miss refills unfenced with the policy retention."
     },
     {
       "case": "C42.allow-override",
@@ -4398,73 +4428,73 @@
     },
     {
       "case": "C22.freshness-after-read",
-      "reference": "formal/dialcache-recovery-read-conformance.qnt:releaseRead",
-      "kind": "transition",
+      "reference": "formal/kernel/remote-io.qnt:settleRead",
+      "kind": "helper",
       "scope": "Read acquisition samples the settlement wall clock; a frame initially fresh becomes stale during the held read and subsequently recovers after source rejection."
     },
     {
       "case": "C28.encoding-error-suppresses-refill",
-      "reference": "formal/dialcache-recovery-read-conformance.qnt:releaseRead",
-      "kind": "transition",
+      "reference": "formal/kernel/remote-io.qnt:settleRead",
+      "kind": "helper",
       "scope": "Unsupported encoding is classified after presence/fence checks and denies remote refill; source success remains visible, and untracked local publication remains eligible."
     },
     {
       "case": "C37.physical-cap",
-      "reference": "formal/dialcache-recovery-read-conformance.qnt:resolveLoader",
-      "kind": "transition",
+      "reference": "formal/kernel/remote-io.qnt:settleLoader",
+      "kind": "helper",
       "scope": "Native write TTL is capped at 3600000ms, and a public read at that physical deadline starts another source even with longer logical freshness."
     },
     {
       "case": "C37.logical-age-unclamped",
-      "reference": "formal/dialcache-recovery-read-conformance.qnt:validCandidate",
+      "reference": "formal/kernel/recovery.qnt:validCandidate",
       "kind": "helper",
       "scope": "An externally retained candidate older than the physical cap but younger than the captured logical maximum is served after source failure; no new write is credited."
     },
     {
       "case": "C38.value-work-does-not-extend-marker",
-      "reference": "formal/dialcache-recovery-read-conformance.qnt:observeMarker",
-      "kind": "transition",
+      "reference": "formal/kernel/markers.qnt:observe",
+      "kind": "helper",
       "scope": "External marker cutoff and TTL probes before/after ordinary tracked reads and value writes distinguish missing-marker creation, cutoff movement and lifetime extension. Controlled adapter observation, not a proof of native Redis internals."
     },
     {
       "case": "C45.compressed-candidate",
-      "reference": "formal/dialcache-recovery-read-conformance.qnt:releaseLoad",
-      "kind": "transition",
+      "reference": "formal/kernel/remote-io.qnt:settleLoad",
+      "kind": "helper",
       "scope": "The modeled input domain includes valid/corrupt compressed bytes; retained recovery either serves the decoded value with request-only publication or preserves the indexed original source error. Compression algorithm correctness remains vector/native evidence."
     },
     {
       "case": "C43.request-memo",
-      "reference": "formal/dialcache-recovery-read-conformance.qnt:complete",
+      "reference": "formal/kernel/remote-io.qnt:complete",
       "kind": "helper",
       "scope": "A same-scope public probe reuses recovered value; another scope performs remote work, distinguishing request memo from local publication."
     },
     {
       "case": "C44.retained-invalidation",
-      "reference": "formal/dialcache-recovery-read-conformance.qnt:validCandidate",
+      "reference": "formal/kernel/recovery.qnt:validCandidate",
       "kind": "helper",
       "scope": "A candidate acquired before invalidation recovers and memoizes in its request, while a new request must observe the fence and preserve its different source error."
     },
     {
       "case": "C03.late-recovery-publication",
-      "reference": "formal/dialcache-recovery-read-conformance.qnt:complete",
+      "reference": "formal/kernel/remote-io.qnt:complete",
       "kind": "helper",
       "scope": "Closing the attached request during held recovery decode permits the caller result but prevents request/local publication, distinguished by a new-scope read."
     },
     {
       "case": "C31.tracked-no-local-fill",
-      "reference": "formal/dialcache-recovery-read-conformance.qnt:resolveLoader",
-      "kind": "transition",
+      "reference": "formal/kernel/remote-io.qnt:settleLoader",
+      "kind": "helper",
       "scope": "Tracked source success memoizes in its request but requires remote read/decode before another scope can warm local; the subsequent transient caller reuses local."
     },
     {
       "case": "C29.maintenance-failure",
-      "reference": "formal/dialcache-recovery-read-conformance.qnt:invalidate",
-      "kind": "transition",
+      "reference": "formal/kernel/markers.qnt:invalidate",
+      "kind": "helper",
       "scope": "An explicit invalidation failure returns mutation_error while external marker probes preserve absence or prior cutoff and remaining lifetime."
     },
     {
       "case": "C59.compression-read-telemetry",
-      "reference": "formal/dialcache-recovery-read-conformance.qnt:startedCompression",
+      "reference": "formal/kernel/payloads.qnt:decodeOutcome",
       "kind": "helper",
       "scope": "Previously compressed inputs emit exact decompressed or fallback_raw diagnostics at decode start; later public completion distinguishes successful hit from source fallback while new compression writes remain disabled."
     },
@@ -4488,32 +4518,32 @@
     },
     {
       "case": "C44.retained-expiry",
-      "reference": "formal/dialcache-recovery-read-conformance.qnt:validCandidate",
+      "reference": "formal/kernel/recovery.qnt:validCandidate",
       "kind": "helper",
       "scope": "A call retains otherwise eligible bytes before their physical expiration; its recovery succeeds afterward, while a new request observes absence and preserves its own source error."
     },
     {
       "case": "C33.reject-unsafe-before-decode",
-      "reference": "formal/dialcache-recovery-read-conformance.qnt:releaseRead",
-      "kind": "transition",
+      "reference": "formal/kernel/remote-io.qnt:settleRead",
+      "kind": "helper",
       "scope": "A real frame with timestamp 2^53+1 and supported payload encoding never reaches the serializer; source refill remains allowed and is verified by a later public hit. Payload envelope decoding precedes core timestamp validation; this case does not assert timestamp validation before payload encoding checks."
     },
     {
       "case": "C33.reject-version-before-decode",
-      "reference": "formal/dialcache-recovery-read-conformance.qnt:releaseRead",
-      "kind": "transition",
+      "reference": "formal/kernel/remote-io.qnt:settleRead",
+      "kind": "helper",
       "scope": "Unsupported version-2 bytes never reach the serializer; source refill remains allowed and a subsequent independent request reads the new value."
     },
     {
       "case": "C45.recheck-before-decode",
-      "reference": "formal/dialcache-recovery-read-conformance.qnt:rejectLoader",
-      "kind": "transition",
+      "reference": "formal/kernel/remote-io.qnt:settleLoader",
+      "kind": "helper",
       "scope": "A compressed retained candidate acquired at M-1 reaches M before source rejection; the original source error survives without decompression/serializer work or shared publication."
     },
     {
       "case": "C34.observed-fence-snapshot",
-      "reference": "formal/dialcache-recovery-read-conformance.qnt:releaseRead",
-      "kind": "transition",
+      "reference": "formal/kernel/remote-io.qnt:settleRead",
+      "kind": "helper",
       "scope": "A miss captures the absent watermark baseline before invalidation. Source publication still dispatches at the later watermark timestamp; a new request rejects that now-fenced write, proving both captured-refill authority and subsequent fence visibility."
     },
     {
@@ -4980,13 +5010,13 @@
     },
     {
       "case": "C47.recovery-skips-shadow",
-      "reference": "formal/dialcache-recovery-read-conformance.qnt:releaseLoad",
-      "kind": "transition",
+      "reference": "formal/kernel/remote-io.qnt:settleLoad",
+      "kind": "helper",
       "scope": "With tracked stale bytes, a selected 100% shadow policy, installed outcome hook and available capacity, source failure recovers the retained value, including absence. Recovery and its same-request memo probe start no diagnostic source/read/job and publish no remote/local value; an independent request repeats source failure and recovery for the absence case."
     },
     {
       "case": "C47.recovery-skips-shadow",
-      "reference": "formal/dialcache-recovery-read-conformance.qnt:complete",
+      "reference": "formal/kernel/remote-io.qnt:complete",
       "kind": "helper",
       "scope": "With tracked stale bytes, a selected 100% shadow policy, installed outcome hook and available capacity, source failure recovers the retained value, including absence. Recovery and its same-request memo probe start no diagnostic source/read/job and publish no remote/local value; an independent request repeats source failure and recovery for the absence case."
     },

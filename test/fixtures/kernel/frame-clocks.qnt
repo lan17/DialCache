@@ -4,9 +4,10 @@
 // scheduled profiles hold fixed (their wall skew is 0 and their replies carry
 // constant TTLs): the retention and freshness boundaries, per-reply freshness,
 // writes and fences with the two clocks apart, unfenced refills at a wall
-// clock of zero, a watermark stamped with the wall clock that never lowers,
-// and the fence of an atomic miss (C58): none after a visible frame the read
-// declined, the watermark after a frame it fenced.
+// clock of zero, a watermark stamped with the wall clock that no invalidation
+// lowers (only a marker's expiry does, `markers`), and the fence of an atomic
+// miss (C58): none after a visible frame the read declined, the watermark
+// after a frame it fenced.
 module frame_clocks {
   import conformance_observations.* from "../../../formal/conformance-observations"
   import encodings.* from "../../../formal/kernel/encodings"
@@ -278,7 +279,7 @@ module frame_clocks {
     .then(settle(0, VALUE_TWO))
     .expect(s.o.calls == List(VALUE_TWO) and s.o.dumps == 0 and s.o.writes == 0 and s.remoteValues == List(VALUE_ONE, NO_VALUE))
 
-  // A watermark never lowers: an invalidation after a wall rollback keeps the
+  // An invalidation never lowers a watermark: one after a wall rollback keeps the
   // earlier watermark, its fenced refill is not stored, and once the wall
   // clock is past the frame's stamp again the frame is still fenced although
   // it is retained and fresh.

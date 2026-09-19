@@ -32,12 +32,14 @@
     "formal/kernel/policy-gate.qnt",
     "formal/kernel/runtime-policy.qnt",
     "formal/kernel/serving.qnt",
+    "formal/kernel/markers.qnt",
     "formal/kernel/policy-overlay.qnt",
     "formal/kernel/config-errors.qnt",
     "formal/kernel/receipts.qnt",
     "formal/kernel/diagnostics.qnt",
     "formal/kernel/recovery.qnt",
     "formal/kernel/remote-io.qnt",
+    "formal/kernel/compression.qnt",
     "formal/kernel/deadlines.qnt"
   ],
   "models": [
@@ -819,13 +821,14 @@
       "path": "formal/dialcache-recovery-read-conformance.qnt",
       "profile": "recovery-read",
       "invariants": [
-        "freshnessUsesReadSettlement",
-        "trackedWritesRespectPhysicalCap",
-        "recoveredResultsNeverPublishShared",
-        "recoveredAgeUsesLogicalMaximum",
         "closedContextsStayEmpty",
+        "selectedShadowNeverAdmitsRecoveredResults",
         "observationsHaveOwners",
-        "selectedShadowNeverAdmitsRecoveredResults"
+        "trackedWritesRespectPhysicalCap",
+        "effectsMatchOwners",
+        "completedCallsHaveNoActiveWork",
+        "oneExecution",
+        "expiredMarkersFenceNothing"
       ],
       "regressions": [
         "freshnessAfterHeldReadTest",
@@ -853,7 +856,12 @@
         "maximumAgeBeforeDecodeKeepsOriginalErrorTest",
         "laterInvalidationDoesNotRewriteObservedMissFenceTest",
         "recoveredAbsenceSkipsSelectedShadowTest",
-        "recoveredValueSkipsSelectedShadowTest"
+        "recoveredValueSkipsSelectedShadowTest",
+        "untrackedRetentionIsNotCappedTest",
+        "closingAnotherScopeKeepsThisScopesMemoTest",
+        "localEntryExpiresAtItsInsertionTtlTest",
+        "expiredMarkerIsGoneTest",
+        "unsafeTimestampAtTheWatermarkStillRefillsTest"
       ],
       "replayRegressions": [
         "freshnessAfterHeldReadTest",
@@ -881,7 +889,12 @@
         "maximumAgeBeforeDecodeKeepsOriginalErrorTest",
         "laterInvalidationDoesNotRewriteObservedMissFenceTest",
         "recoveredAbsenceSkipsSelectedShadowTest",
-        "recoveredValueSkipsSelectedShadowTest"
+        "recoveredValueSkipsSelectedShadowTest",
+        "untrackedRetentionIsNotCappedTest",
+        "closingAnotherScopeKeepsThisScopesMemoTest",
+        "localEntryExpiresAtItsInsertionTtlTest",
+        "expiredMarkerIsGoneTest",
+        "unsafeTimestampAtTheWatermarkStillRefillsTest"
       ],
       "generate": {
         "maxSamples": 1024,
@@ -1304,7 +1317,10 @@
       "path": "formal/dialcache-recovery-connection.qnt",
       "invariants": [
         "retainedSnapshotMatchesAcquisition",
-        "recoveryReturnMatchesAcquiredContract"
+        "recoveryReturnMatchesAcquiredContract",
+        "freshnessUsesReadSettlement",
+        "recoveredResultsNeverPublishShared",
+        "sourcesCarryCappedAdmittedRetention"
       ],
       "regressions": []
     },
@@ -1426,7 +1442,8 @@
         "family": "inclusive-expiry-boundary",
         "profiles": [
           "policy",
-          "source-budgets"
+          "source-budgets",
+          "recovery-read"
         ],
         "exclusions": {
           "core": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
@@ -1435,7 +1452,6 @@
           "shadow": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
           "admission": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
           "independent": "Composes local storage, but every reply leaves the local layer off and the capacity is 0, so the mutated lookup is never executed and no local entry is ever written.",
-          "recovery-read": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
           "local-failure": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
           "shadow-layers": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
           "local-clock": "Does not import the kernel library, so the mutated local storage is never executed; its own local expiry is stated in its own text.",
@@ -1522,29 +1538,83 @@
     {
       "id": "profile-recovery-wrong-snapshot",
       "contract": "C44",
-      "source": "formal/dialcache-recovery-read-conformance.qnt",
+      "source": "formal/kernel/recovery.qnt",
       "model": "formal/dialcache-recovery-connection.qnt",
       "invariant": "retainedSnapshotMatchesAcquisition",
-      "before": "candidateCreated: s.created,",
-      "after": "candidateCreated: s.created + 1,",
+      "before": "created: created,",
+      "after": "created: created + 1,",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "compressedRecoveryRechecksMaximumAfterDecodeTest",
+        "model": "formal/dialcache-recovery-read-conformance.qnt",
+        "failure": "s.o.calls == List(SOURCE_ERROR) and s.io.sourceErrors == List(1) and s.o.recovery == List(\"miss\") and s.o.dumps == 0 and s.o.writes == 0",
+        "family": "wrong-snapshot-stamp",
+        "profiles": [
+          "formal/dialcache-recovery-connection.qnt",
+          "recovery-read",
+          "independent"
+        ],
+        "exclusions": {
+          "core": "Does not import the kernel library, so the mutated candidate retention is never executed; its own snapshot capture is stated in its own text.",
+          "effects": "Does not import the kernel library, so the mutated candidate retention is never executed; its own snapshot capture is stated in its own text.",
+          "recovery": "Does not import the kernel library, so the mutated candidate retention is never executed; its own snapshot capture is stated in its own text.",
+          "shadow": "Does not import the kernel library, so the mutated candidate retention is never executed; its own snapshot capture is stated in its own text.",
+          "admission": "Does not import the kernel library, so the mutated candidate retention is never executed; its own snapshot capture is stated in its own text.",
+          "local-failure": "Does not import the kernel library, so the mutated candidate retention is never executed; its own snapshot capture is stated in its own text.",
+          "shadow-layers": "Does not import the kernel library, so the mutated candidate retention is never executed; its own snapshot capture is stated in its own text.",
+          "local-clock": "Does not import the kernel library, so the mutated candidate retention is never executed; its own snapshot capture is stated in its own text.",
+          "policy": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
+          "layers": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
+          "runtime-boundaries": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
+          "scope": "Composes the request-only projection, which has no remote layer and dispatches no held read.",
+          "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read."
+        }
+      },
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M43",
-        "text": "M43 is the native twin of dialcache-recovery-read-conformance.qnt releaseRead recording the candidate's creation one millisecond after the acquired frame, checked by dialcache-recovery-connection.qnt retainedSnapshotMatchesAcquisition: both ports retain the stale candidate with a timestamp one millisecond later than the frame they acquired. recovery/maximumAgeAfterDecodePreservesSourceTest and maximumAgeBeforeDecodePreservesSourceTest plus the millisecond diagnostic ages are the evidence."
+        "text": "M43 is the native twin of kernel/recovery.qnt retain stamping the retained candidate one millisecond after the acquired frame, checked by dialcache-recovery-connection.qnt retainedSnapshotMatchesAcquisition: both ports retain the stale candidate with a timestamp one millisecond later than the frame they acquired. recovery-read/compressedRecoveryRechecksMaximumAfterDecodeTest, recovery/maximumAgeAfterDecodePreservesSourceTest and the millisecond diagnostic ages are the evidence."
       }
     },
     {
       "id": "recovery-read-wrong-admission-policy",
       "contract": "C45",
-      "source": "formal/dialcache-recovery-read-conformance.qnt",
+      "source": "formal/kernel/remote-io.qnt",
       "model": "formal/dialcache-recovery-connection.qnt",
       "invariant": "retainedSnapshotMatchesAcquisition",
-      "before": "scope: context, acceptedFresh: s.freshMs, acceptedMaximum: s.maximumMs,",
-      "after": "scope: context, acceptedFresh: s.freshMs, acceptedMaximum: s.maximumMs + 1,",
+      "before": "ttls: effectiveTtls(judged.effective, ttls) }),",
+      "after": "ttls: { retentionMs: ttls.retentionMs + 1, ...effectiveTtls(judged.effective, ttls) } }),",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "compressedRecoveryRechecksMaximumAfterDecodeTest",
+        "model": "formal/dialcache-recovery-read-conformance.qnt",
+        "failure": "s.o.calls == List(SOURCE_ERROR) and s.io.sourceErrors == List(1) and s.o.recovery == List(\"miss\") and s.o.dumps == 0 and s.o.writes == 0",
+        "family": "wrong-admission-policy",
+        "profiles": [
+          "formal/dialcache-recovery-connection.qnt",
+          "recovery-read",
+          "independent"
+        ],
+        "exclusions": {
+          "core": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
+          "effects": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
+          "recovery": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
+          "shadow": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
+          "admission": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
+          "local-failure": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
+          "shadow-layers": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
+          "local-clock": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
+          "policy": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
+          "layers": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
+          "runtime-boundaries": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
+          "scope": "Composes the request-only projection, which has no remote layer and dispatches no held read.",
+          "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read."
+        }
+      },
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M45",
-        "text": "M45 is the native twin of dialcache-recovery-read-conformance.qnt beginIn capturing an accepted maximum one unit larger than the policy: both ports admit the call with a recovery maximum one second above the configured value, one second being the smallest configurable unit. recovery/maximumAgeAfterDecodePreservesSourceTest and independent/independentRecoveryAtCapturedAgeBoundaryTest are the expected evidence."
+        "text": "M45 is the native twin of kernel/remote-io.qnt dispatchRead recording a recovery maximum one unit above the reply's on the held read, checked by dialcache-recovery-connection.qnt retainedSnapshotMatchesAcquisition: both ports admit the call with a recovery maximum one second above the configured value, one second being the smallest configurable unit. recovery-read/compressedRecoveryRechecksMaximumAfterDecodeTest and independent/independentRecoveryAtCapturedAgeBoundaryTest are the evidence."
       }
     },
     {
@@ -1577,7 +1647,8 @@
         "family": "wrong-admission-policy",
         "profiles": [
           "formal/dialcache-independent-connection.qnt",
-          "independent"
+          "independent",
+          "recovery-read"
         ],
         "exclusions": {
           "core": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
@@ -1585,7 +1656,6 @@
           "recovery": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
           "shadow": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
           "admission": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
-          "recovery-read": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
           "local-failure": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
           "shadow-layers": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
           "local-clock": "Does not import the kernel library, so the mutated read dispatch is never executed; its own admission capture is stated in its own text.",
@@ -1717,7 +1787,8 @@
         "family": "inclusive-freshness-boundary",
         "profiles": [
           "policy",
-          "independent"
+          "independent",
+          "recovery-read"
         ],
         "exclusions": {
           "core": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
@@ -1725,7 +1796,6 @@
           "recovery": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
           "shadow": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
           "admission": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
-          "recovery-read": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
           "local-failure": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
           "shadow-layers": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
           "local-clock": "Does not import the kernel library, so the mutated freshness judgment is never executed; its own freshness rule is stated in its own text.",
@@ -2091,7 +2161,8 @@
         "family": "nested-close-evicts-outer-memo",
         "profiles": [
           "scope",
-          "layers"
+          "layers",
+          "recovery-read"
         ],
         "exclusions": {
           "core": "Composes no kernel module, so request_memo.closeScope is never executed.",
@@ -2101,7 +2172,6 @@
           "shadow": "Composes no kernel module, so request_memo.closeScope is never executed.",
           "admission": "Composes no kernel module, so request_memo.closeScope is never executed.",
           "independent": "Composes the layered traversal with persistentContexts 0 and no closeScope input, so request_memo.closeScope is never executed.",
-          "recovery-read": "Composes no kernel module, so request_memo.closeScope is never executed.",
           "local-failure": "Composes no kernel module, so request_memo.closeScope is never executed.",
           "runtime-boundaries": "One persistent scope owns the only memo row, so a close that clears every row clears exactly its own.",
           "shadow-layers": "Composes no kernel module, so request_memo.closeScope is never executed.",
@@ -2237,29 +2307,122 @@
     {
       "id": "recovery-read-inclusive-maximum",
       "contract": "C45",
-      "source": "formal/dialcache-recovery-read-conformance.qnt",
-      "model": "formal/dialcache-recovery-read-conformance.qnt",
-      "invariant": "recoveredAgeUsesLogicalMaximum",
-      "before": "recoveryAgeAllowed(x.candidateCreated, x.wall, x.acceptedMaximum)",
-      "after": "recoveryAgeAllowed(x.candidateCreated, x.wall, x.acceptedMaximum + 1)",
+      "source": "formal/kernel/recovery.qnt",
+      "model": "formal/dialcache-recovery-connection.qnt",
+      "invariant": "recoveryReturnMatchesAcquiredContract",
+      "before": "snapshot.maximum",
+      "after": "snapshot.maximum + 1",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "compressedRecoveryRechecksMaximumAfterDecodeTest",
+        "model": "formal/dialcache-recovery-read-conformance.qnt",
+        "failure": "s.o.calls == List(SOURCE_ERROR) and s.io.sourceErrors == List(1) and s.o.recovery == List(\"miss\") and s.o.dumps == 0 and s.o.writes == 0",
+        "family": "inclusive-maximum-boundary",
+        "profiles": [
+          "formal/dialcache-recovery-connection.qnt",
+          "recovery-read",
+          "independent"
+        ],
+        "exclusions": {
+          "core": "Does not import the kernel library, so the mutated recovery age check is never executed; its own maximum-age rule is stated in its own text.",
+          "effects": "Does not import the kernel library, so the mutated recovery age check is never executed; its own maximum-age rule is stated in its own text.",
+          "recovery": "Does not import the kernel library, so the mutated recovery age check is never executed; its own maximum-age rule is stated in its own text.",
+          "shadow": "Does not import the kernel library, so the mutated recovery age check is never executed; its own maximum-age rule is stated in its own text.",
+          "admission": "Does not import the kernel library, so the mutated recovery age check is never executed; its own maximum-age rule is stated in its own text.",
+          "local-failure": "Does not import the kernel library, so the mutated recovery age check is never executed; its own maximum-age rule is stated in its own text.",
+          "shadow-layers": "Does not import the kernel library, so the mutated recovery age check is never executed; its own maximum-age rule is stated in its own text.",
+          "local-clock": "Does not import the kernel library, so the mutated recovery age check is never executed; its own maximum-age rule is stated in its own text.",
+          "policy": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
+          "layers": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
+          "runtime-boundaries": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
+          "scope": "Composes the request-only projection, which has no remote layer and dispatches no held read.",
+          "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read."
+        }
+      },
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M01",
-        "text": "M01 makes the post-decode serving maximum inclusive in both ports, the observable site of dialcache-recovery-read-conformance.qnt validCandidate calling recoveryAgeAllowed with the accepted maximum plus one. validCandidate also gates the pre-decode step, but a pre-decode flip alone is masked in the ports by the post-decode recheck; recovery-read/compressedRecoveryRechecksMaximumAfterDecodeTest and witness recovery:exact-maximum-after-decode-rejects are the evidence."
+        "text": "M01 makes the post-decode serving maximum inclusive in both ports, the observable site of kernel/recovery.qnt validCandidate calling recoveryAgeAllowed with the snapshot's maximum plus one, checked by dialcache-recovery-connection.qnt recoveryReturnMatchesAcquiredContract; a pre-decode flip alone is masked in the ports by the post-decode recheck. recovery-read/compressedRecoveryRechecksMaximumAfterDecodeTest and witness recovery:exact-maximum-after-decode-rejects are the evidence."
       }
     },
     {
       "id": "recovery-read-recovery-warms-local",
       "contract": "C43",
-      "source": "formal/dialcache-recovery-read-conformance.qnt",
-      "model": "formal/dialcache-recovery-read-conformance.qnt",
+      "source": "formal/kernel/remote-io.qnt",
+      "model": "formal/dialcache-recovery-connection.qnt",
       "invariant": "recoveredResultsNeverPublishShared",
-      "before": "      localValue: if (served and not(recovery)) value else s.localValue,\n      localExpires: if (served and not(recovery)) s.now + LOCAL_TTL_MS else s.localExpires,\n      localVersion: s.localVersion + (if (served and not(recovery)) 1 else 0),",
-      "after": "      localValue: if (served) value else s.localValue,\n      localExpires: if (served) s.now + LOCAL_TTL_MS else s.localExpires,\n      localVersion: s.localVersion + (if (served) 1 else 0),",
+      "before": "complete(Recovery::recordOutcome(settled, outcome.label), layout, held.flight,",
+      "after": "complete(Recovery::recordOutcome(if (outcome.served) Serving::warm(settled, layout, settled.sources.nth(held.flight), Payloads::valueOf(snapshot.candidate), 1000) else settled, outcome.label), layout, held.flight,",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "untrackedCompressedRecoveryDoesNotWarmLocalTest",
+        "model": "formal/dialcache-recovery-read-conformance.qnt",
+        "failure": "s.o.calls == List(VALUE_ONE, CALL_PENDING) and s.o.reads == 2 and s.localValues == List(NO_VALUE) and s.o.dumps == 0 and s.o.writes == 0",
+        "family": "recovery-warms-local",
+        "profiles": [
+          "formal/dialcache-recovery-connection.qnt",
+          "recovery-read"
+        ],
+        "exclusions": {
+          "core": "Does not import the kernel library, so the mutated recovery-decode settlement is never executed; its own recovery publication rule is stated in its own text.",
+          "effects": "Does not import the kernel library, so the mutated recovery-decode settlement is never executed; its own recovery publication rule is stated in its own text.",
+          "recovery": "Does not import the kernel library, so the mutated recovery-decode settlement is never executed; its own recovery publication rule is stated in its own text.",
+          "shadow": "Does not import the kernel library, so the mutated recovery-decode settlement is never executed; its own recovery publication rule is stated in its own text.",
+          "admission": "Does not import the kernel library, so the mutated recovery-decode settlement is never executed; its own recovery publication rule is stated in its own text.",
+          "independent": "Composes the held remote lifecycle with a local capacity of 0 and replies that leave the local layer off, so the mutated warm stores nothing.",
+          "local-failure": "Does not import the kernel library, so the mutated recovery-decode settlement is never executed; its own recovery publication rule is stated in its own text.",
+          "shadow-layers": "Does not import the kernel library, so the mutated recovery-decode settlement is never executed; its own recovery publication rule is stated in its own text.",
+          "local-clock": "Does not import the kernel library, so the mutated recovery-decode settlement is never executed; its own recovery publication rule is stated in its own text.",
+          "policy": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
+          "layers": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
+          "runtime-boundaries": "Composes the atomic layered release (serving.release), which observes the remote frame at release and never dispatches a held read through remote_io.",
+          "scope": "Composes the request-only projection, which has no remote layer and dispatches no held read.",
+          "source-budgets": "Composes the local projection, which has no remote layer and dispatches no held read."
+        }
+      },
       "nativeMutants": {
         "kind": "mapped",
         "mutant": "M42",
-        "text": "M42 is the native twin of dialcache-recovery-read-conformance.qnt releaseLoad dropping the not-recovery condition from its local publication: both ports publish a recovered stale value into process-local storage. The recovery profile has no local TTL, so detection rests on the recovery-read profile; recovery-read/untrackedCompressedRecoveryDoesNotWarmLocalTest and compressedRecoveryMemoizesWithoutLocalPublicationTest are the expected evidence."
+        "text": "M42 is the native twin of kernel/remote-io.qnt settleLoad warming local storage with a served recovery candidate, checked by dialcache-recovery-connection.qnt recoveredResultsNeverPublishShared: both ports publish a recovered stale value into process-local storage. The recovery profile has no local TTL, so detection rests on the recovery-read profile; recovery-read/untrackedCompressedRecoveryDoesNotWarmLocalTest and compressedRecoveryMemoizesWithoutLocalPublicationTest are the expected evidence."
+      }
+    },
+    {
+      "id": "recovery-read-tracked-retention-uncapped",
+      "contract": "C37",
+      "source": "formal/kernel/serving.qnt",
+      "model": "formal/dialcache-recovery-read-conformance.qnt",
+      "invariant": "trackedWritesRespectPhysicalCap",
+      "before": "retentionMs: if (refills) Remote::physicalRetention(state, ttls.retentionMs) else 0",
+      "after": "retentionMs: if (refills) ttls.retentionMs else 0",
+      "reproducer": {
+        "kind": "exported-regression",
+        "run": "trackedPhysicalRetentionExpiresAtCapTest",
+        "failure": "s.o.writeTtls == List(3600000)",
+        "family": "tracked-retention-cap",
+        "profiles": [
+          "recovery-read"
+        ],
+        "exclusions": {
+          "core": "Does not import the kernel library, so the mutated refill authority is never executed; its own retention rule is stated in its own text.",
+          "effects": "Does not import the kernel library, so the mutated refill authority is never executed; its own retention rule is stated in its own text.",
+          "recovery": "Does not import the kernel library, so the mutated refill authority is never executed; its own retention rule is stated in its own text.",
+          "shadow": "Does not import the kernel library, so the mutated refill authority is never executed; its own retention rule is stated in its own text.",
+          "admission": "Does not import the kernel library, so the mutated refill authority is never executed; its own retention rule is stated in its own text.",
+          "independent": "Composes serving.authority, but its retentions (2000 and 5000 ms) are under the one-hour cap, so capped and raw retention coincide.",
+          "local-failure": "Does not import the kernel library, so the mutated refill authority is never executed; its own retention rule is stated in its own text.",
+          "shadow-layers": "Does not import the kernel library, so the mutated refill authority is never executed; its own retention rule is stated in its own text.",
+          "local-clock": "Does not import the kernel library, so the mutated refill authority is never executed; its own retention rule is stated in its own text.",
+          "policy": "Composes serving.authority, but every retention it resolves (2000, 4000 or 5000 ms) is under the one-hour cap, so capped and raw retention coincide.",
+          "layers": "Composes serving.authority, but its 60000 ms retention is under the one-hour cap, so capped and raw retention coincide.",
+          "runtime-boundaries": "Composes serving.authority, but its 120000 ms retention is written for an untracked entity, which the cap never applies to.",
+          "scope": "Composes the request-only projection, which never reaches serving.authority.",
+          "source-budgets": "Composes the local projection, which never reaches serving.authority."
+        }
+      },
+      "nativeMutants": {
+        "kind": "mapped",
+        "mutant": "M56",
+        "text": "M56 is the native twin of kernel/serving.qnt authority capturing a tracked refill's retention uncapped instead of through remote_frames.physicalRetention: both ports write a tracked value for its full configured retention above one hour instead of clamping it to the hour. recovery-read/trackedPhysicalRetentionExpiresAtCapTest (observed write TTL 14400000 against 3600000) is the expected evidence in both ports."
       }
     },
     {
@@ -2430,7 +2593,8 @@
           "formal/dialcache-stale-recovery.qnt",
           "recovery",
           "policy",
-          "shadow"
+          "shadow",
+          "recovery-read"
         ],
         "exclusions": {
           "core": "Evaluates no age judgment from cache-rules, so ageBeforeCeiling is unreachable.",
@@ -2439,7 +2603,6 @@
           "admission": "Uses only deadlinePendingAt from cache-rules; no age judgment is evaluated.",
           "layers": "Frames are stamped from a wall clock that only moves with the monotonic clock (no rollback input), so no history observes a future stamp.",
           "independent": "Seeds stamp frames at the wall minus a non-negative age and the clock only advances, so no history observes a future stamp.",
-          "recovery-read": "Seeds stamp frames at the wall minus a non-negative age and the wall only advances; the unsafe-timestamp seed is rejected as an unsupported frame before any age judgment, so no history observes a future stamp.",
           "local-failure": "Evaluates no age judgment from cache-rules, so ageBeforeCeiling is unreachable.",
           "runtime-boundaries": "Frames are stamped from a wall clock that only moves with the monotonic clock (no rollback input), so no history observes a future stamp.",
           "shadow-layers": "Remote frames are stamped from the monotonic job clock at write time or seeded at a non-negative age, so no history observes a future stamp.",
@@ -2542,7 +2705,7 @@
           "shadow": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
           "admission": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
           "independent": "Composes decide with coalesce false, so no process owner is ever looked up, and with no request memo and no local layer no layer value can precede a join.",
-          "recovery-read": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
+          "recovery-read": "One execution at a time: no caller is released while a flight is pending, so decide's join arms are never taken.",
           "local-failure": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
           "shadow-layers": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
           "local-clock": "Does not import the kernel library, so the mutated traversal order is never executed; its own order is stated in its own text.",
@@ -2580,7 +2743,7 @@
           "shadow": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
           "admission": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
           "independent": "Composes decide with coalesce false and registers its flights unshared, so the process registry never names an owner and the dropped conjunct changes no decision.",
-          "recovery-read": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
+          "recovery-read": "One execution at a time: no caller is released while a flight is pending, so decide's join arms are never taken.",
           "local-failure": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
           "shadow-layers": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
           "local-clock": "Does not import the kernel library, so the mutated join conjunct is never executed; its own coalescing rule is stated in its own text.",
@@ -2621,7 +2784,7 @@
           "admission": "Composes no kernel module, so serving.settleLocal is never executed.",
           "layers": "Composes the layered traversal: its sources settle through serving.settle, not the local projection.",
           "independent": "Composes the layered shape: its loaders settle through remote_io and serving.publish, never the local projection's settleLocal.",
-          "recovery-read": "Composes no kernel module, so serving.settleLocal is never executed.",
+          "recovery-read": "Composes the layered shape, which publishes through serving.publish, never serving.settleLocal.",
           "local-failure": "Composes no kernel module, so serving.settleLocal is never executed.",
           "runtime-boundaries": "Composes the layered traversal: its sources settle through serving.settle, not the local projection.",
           "shadow-layers": "Composes no kernel module, so serving.settleLocal is never executed.",
@@ -2660,7 +2823,7 @@
           "admission": "Composes no kernel module, so serving.settleLocal is never executed.",
           "layers": "Composes the layered traversal: its sources settle through serving.settle, not the local projection.",
           "independent": "Composes the layered shape: its loaders settle through remote_io and serving.publish, never the local projection's settleLocal.",
-          "recovery-read": "Composes no kernel module, so serving.settleLocal is never executed.",
+          "recovery-read": "Composes the layered shape, which publishes through serving.publish, never serving.settleLocal.",
           "local-failure": "Composes no kernel module, so serving.settleLocal is never executed.",
           "runtime-boundaries": "Composes the layered traversal: its sources settle through serving.settle, not the local projection.",
           "shadow-layers": "Composes no kernel module, so serving.settleLocal is never executed.",
@@ -2684,8 +2847,6 @@
     "fence-inclusive-timestamp",
     "profile-source-wrong-clock",
     "profile-source-wrong-owner",
-    "profile-recovery-wrong-snapshot",
-    "recovery-read-wrong-admission-policy",
     "legacy-recovery-wrong-snapshot",
     "independent-wrong-recovered-value",
     "effects-source-wrong-clock",
@@ -2721,8 +2882,6 @@
     "layers-process-flight-crosses-instance",
     "layers-late-memo-into-closed-scope",
     "independent-fresh-frame-retained",
-    "recovery-read-inclusive-maximum",
-    "recovery-read-recovery-warms-local",
     "local-failure-write-fault-publishes",
     "local-failure-source-error-published",
     "runtime-boundaries-inclusive-cohort",

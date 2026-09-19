@@ -243,61 +243,6 @@
       "sources": true,
       "ttls": true
     },
-    "recovery-read": {
-      "acceptedFresh": true,
-      "acceptedMaximum": true,
-      "activeSource": true,
-      "canRecover": true,
-      "canWrite": true,
-      "candidate": true,
-      "candidateCreated": true,
-      "closed": true,
-      "compression": true,
-      "created": true,
-      "expires": true,
-      "frame": true,
-      "freshMs": true,
-      "io": {
-        "aborted": true,
-        "budgets": true,
-        "sourceErrors": true
-      },
-      "localExpires": true,
-      "localValue": true,
-      "localVersion": true,
-      "markerExpires": true,
-      "markers": true,
-      "maximumMs": true,
-      "memo": true,
-      "now": true,
-      "o": {
-        "calls": true,
-        "classifications": true,
-        "comparisons": true,
-        "dumps": true,
-        "invalidations": true,
-        "loaders": true,
-        "loads": true,
-        "maintenance": true,
-        "policyCalls": true,
-        "reads": true,
-        "recovery": true,
-        "shadow": true,
-        "sourceScopes": true,
-        "writeTtls": true,
-        "writes": true
-      },
-      "observedFence": true,
-      "phase": true,
-      "readReceipts": true,
-      "recoveryReceipts": true,
-      "scope": true,
-      "tracked": true,
-      "wall": true,
-      "watermark": true,
-      "writeFailed": true,
-      "writeReceipts": true
-    },
     "local-failure": {
       "acceptedRemote": true,
       "failed": true,
@@ -607,7 +552,7 @@
       "writeFailed": true,
       "writeStamp": true
     },
-    "recovery-read-19": {
+    "recovery-read": {
       "o": {
         "calls": true,
         "classifications": true,
@@ -2228,122 +2173,122 @@
         {
           "id": "closedRequestCannotReceiveCompressedRecoveryTest",
           "regression": "closedRequestCannotReceiveCompressedRecoveryTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "compressedRecoveryMemoizesWithoutLocalPublicationTest",
           "regression": "compressedRecoveryMemoizesWithoutLocalPublicationTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "compressedRecoveryRechecksMaximumAfterDecodeTest",
           "regression": "compressedRecoveryRechecksMaximumAfterDecodeTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "corruptCompressedReadReportsRawFallbackTest",
           "regression": "corruptCompressedReadReportsRawFallbackTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "corruptCompressedRecoveryKeepsOriginalSourceErrorTest",
           "regression": "corruptCompressedRecoveryKeepsOriginalSourceErrorTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "failedInvalidationDoesNotCreateMarkerTest",
           "regression": "failedInvalidationDoesNotCreateMarkerTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "failedInvalidationPreservesExistingMarkerTest",
           "regression": "failedInvalidationPreservesExistingMarkerTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "freshCompressedReadReportsDecompressionTest",
           "regression": "freshCompressedReadReportsDecompressionTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "freshnessAfterHeldReadTest",
           "regression": "freshnessAfterHeldReadTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "heldReadJustBeforeFreshnessBoundaryStillHitsTest",
           "regression": "heldReadJustBeforeFreshnessBoundaryStillHitsTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "laterInvalidationDoesNotRewriteObservedMissFenceTest",
           "regression": "laterInvalidationDoesNotRewriteObservedMissFenceTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "maximumAgeBeforeDecodeKeepsOriginalErrorTest",
           "regression": "maximumAgeBeforeDecodeKeepsOriginalErrorTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "ordinaryValueWorkDoesNotCreateMarkerTest",
           "regression": "ordinaryValueWorkDoesNotCreateMarkerTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "ordinaryValueWorkDoesNotExtendMarkerTest",
           "regression": "ordinaryValueWorkDoesNotExtendMarkerTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "physicalCapDoesNotClampLogicalRecoveryTest",
           "regression": "physicalCapDoesNotClampLogicalRecoveryTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "retainedCompressedRecoverySurvivesInvalidationTest",
           "regression": "retainedCompressedRecoverySurvivesInvalidationTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "retainedSnapshotSurvivesPhysicalExpiryTest",
           "regression": "retainedSnapshotSurvivesPhysicalExpiryTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "trackedEncodingFailureSuppressesRefillTest",
           "regression": "trackedEncodingFailureSuppressesRefillTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "trackedPhysicalRetentionExpiresAtCapTest",
           "regression": "trackedPhysicalRetentionExpiresAtCapTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "trackedSourceNeedsRemoteValidationBeforeLocalReuseTest",
           "regression": "trackedSourceNeedsRemoteValidationBeforeLocalReuseTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "unsafeTimestampSkipsSerializerAndAllowsRefillTest",
           "regression": "unsafeTimestampSkipsSerializerAndAllowsRefillTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "unsupportedVersionSkipsSerializerAndAllowsRefillTest",
           "regression": "unsupportedVersionSkipsSerializerAndAllowsRefillTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "untrackedCompressedRecoveryDoesNotWarmLocalTest",
           "regression": "untrackedCompressedRecoveryDoesNotWarmLocalTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         },
         {
           "id": "untrackedEncodingFailureStillPublishesLocalTest",
           "regression": "untrackedEncodingFailureStillPublishesLocalTest",
-          "projection": "recovery-read-19"
+          "projection": "recovery-read"
         }
       ]
     },

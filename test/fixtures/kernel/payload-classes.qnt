@@ -18,9 +18,14 @@
 // written with the capped retention while the recovery snapshot keeps the
 // reply's maximum, an untracked refill is not capped, an atomic tracked
 // refill is, and a candidate older than the cap but inside the maximum still
-// serves. The held runs keep the drivers' loader ordinals aligned with the
-// flights they run for (`ordinalsMatchLoaders`); the atomic runs settle a
-// source by its index and hold no effect, so the loader map is not kept there.
+// serves. The compression channel (compression): the variants of the two
+// transitions that hold a decode report the outcome its payload code decodes
+// with, "decompressed" for a fresh compressed read and "fallback_raw" for a
+// corrupt recovery candidate at the loader's failure, nothing for an
+// uncompressed decode or a step that holds none. The held runs keep the
+// drivers' loader ordinals aligned with the flights they run for
+// (`ordinalsMatchLoaders`); the atomic runs settle a source by its index and
+// hold no effect, so the loader map is not kept there.
 module payload_classes {
   import conformance_observations.* from "../../../formal/conformance-observations"
   import encodings.* from "../../../formal/kernel/encodings"
@@ -31,6 +36,7 @@ module payload_classes {
   import recovery as Recovery from "../../../formal/kernel/recovery"
   import remote_frames as Remote from "../../../formal/kernel/remote-frames"
   import payloads as Payloads from "../../../formal/kernel/payloads"
+  import compression as Compression from "../../../formal/kernel/compression"
   import clock as Clock from "../../../formal/kernel/clock"
   import policy_gate as Gate from "../../../formal/kernel/policy-gate"
 
@@ -54,7 +60,8 @@ module payload_classes {
     localValues: List[int], localExpires: List[int], lru: List[List[int]],
     remoteValues: List[int], created: List[int], expires: List[int], watermark: List[int],
     sources: List[Serving::LayeredSource], owners: List[int], memoSlots: List[int], held: List[Gate::Held],
-    reads: List[RemoteIO::HeldRead], loads: List[RemoteIO::HeldLoad], loaders: List[int], retained: List[Recovery::Snapshot]
+    reads: List[RemoteIO::HeldRead], loads: List[RemoteIO::HeldLoad], loaders: List[int], retained: List[Recovery::Snapshot],
+    compression: List[str]
   }
   var s: State
   var input: { name: str, choice: int }
@@ -70,7 +77,8 @@ module payload_classes {
     localValues: List(NO_VALUE), localExpires: List(0), lru: List(List()),
     remoteValues: List(VALUE_ONE), created: List(WALL_SKEW_MS - 1000), expires: List(60000), watermark: List(0),
     sources: List(), owners: List(), memoSlots: List(), held: List(),
-    reads: List(), loads: List(), loaders: List(), retained: List()
+    reads: List(), loads: List(), loaders: List(), retained: List(),
+    compression: List()
   }
   action initialize(tracked: bool, capacity: int): bool = all {
     s' = initial(tracked, capacity), input' = { name: "init", choice: -1 }
@@ -102,6 +110,16 @@ module payload_classes {
   }.expect(ordinalsMatchLoaders)
   action settle(ordinal: int, value: int): bool = all {
     s' = RemoteIO::settleLoader(s, LAYOUT, ordinal, value, false),
+    input' = { name: "resolveLoader", choice: ordinal }
+  }.expect(ordinalsMatchLoaders)
+  // The same two settlements through the compression variants, which report
+  // the outcome of the decode a step holds.
+  action readReported(index: int): bool = all {
+    s' = Compression::settleRead(s, LAYOUT, index, false, Recovery::ALLOW),
+    input' = { name: "releaseRead", choice: index }
+  }.expect(ordinalsMatchLoaders)
+  action settleReported(ordinal: int, value: int): bool = all {
+    s' = Compression::settleLoader(s, LAYOUT, ordinal, value, false),
     input' = { name: "resolveLoader", choice: ordinal }
   }.expect(ordinalsMatchLoaders)
 
@@ -277,4 +295,37 @@ module payload_classes {
       and Payloads::valueOf(Payloads::UNSUPPORTED_ENCODING) == NO_VALUE
       and Payloads::readFails(Payloads::UNSUPPORTED_ENCODING) and not(Payloads::readFails(Payloads::CORRUPT_COMPRESSED))
       and Payloads::decodeFails(Payloads::CORRUPT_COMPRESSED) and not(Payloads::decodeFails(Payloads::COMPRESSED_ONE)))
+
+  // -- The compression channel -----------------------------------------------------
+
+  // A read that holds a fresh compressed frame's decode reports "decompressed"
+  // as the decode is held, once; the decode's settlement adds nothing, an
+  // uncompressed fresh frame's decode reports nothing, and a read that holds
+  // no decode (a stale frame's miss) reports nothing.
+  run freshCompressedReadReportsDecompressedTest = init.then(seed(Payloads::COMPRESSED_ONE, 0)).then(begin(0, ALONE)).then(readReported(0))
+    .expect(s.o.loads == 1 and s.compression == List("decompressed") and RemoteIO::latestLoad(s).value == Payloads::COMPRESSED_ONE)
+    .then(load(0))
+    .expect(s.o.calls == List(VALUE_ONE) and s.compression == List("decompressed"))
+    .then(seed(VALUE_TWO, 0)).then(begin(1, ALONE)).then(readReported(1))
+    .expect(s.o.loads == 2 and s.compression == List("decompressed"))
+    .then(load(1))
+    .expect(s.o.calls == List(VALUE_ONE, VALUE_TWO))
+    .then(seed(VALUE_TWO, 1000)).then(begin(0, ALONE)).then(readReported(2))
+    .expect(s.o.loads == 2 and s.o.loaders == 1 and s.compression == List("decompressed") and Recovery::retainedFor(s, 2).candidate == VALUE_TWO)
+  // A recovery decode's outcome is reported at the loader's failure that
+  // holds it, not at the read that retained the candidate: "fallback_raw" for
+  // a corrupt candidate, nothing for an uncompressed one; the failed recovery
+  // decode's settlement adds nothing.
+  run corruptRecoveryCandidateReportsFallbackRawAtTheLoadersFailureTest = init.then(begin(0, ALONE)).then(readReported(0)).then(settleReported(0, SOURCE_ERROR))
+    .expect(s.o.loads == 1 and RemoteIO::latestLoad(s).recovery and s.compression == List())
+    .then(load(0))
+    .expect(s.o.calls == List(VALUE_ONE) and s.o.recovery == List("served") and s.compression == List())
+    .then(seed(Payloads::CORRUPT_COMPRESSED, 1000)).then(begin(1, ALONE)).then(readReported(1))
+    .expect(s.o.loads == 1 and s.compression == List() and Recovery::retainedFor(s, 1).candidate == Payloads::CORRUPT_COMPRESSED)
+    .then(settleReported(1, SOURCE_ERROR))
+    .expect(s.o.loads == 2 and s.compression == List("fallback_raw") and RemoteIO::latestLoad(s).recovery
+      and RemoteIO::latestLoad(s).value == Payloads::CORRUPT_COMPRESSED)
+    .then(load(1))
+    .expect(s.o.calls == List(VALUE_ONE, SOURCE_ERROR) and s.o.recovery == List("served", "deserialization_error")
+      and s.compression == List("fallback_raw") and s.io.sourceErrors == List(0, 2))
 }
