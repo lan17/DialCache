@@ -10,9 +10,9 @@
   "inputs": {
     "semanticCasesSha256": "7054107347f57a452e17de99f74310553b7af4350363c674e70ff8184d0610be",
     "executionSha256": "feee09a3487deb2694f8784b7e8d2d0ee28050dae03ac43ac2613608ce5ab1c6",
-    "sourceAuditSha256": "4bd6d53038723b133a52e17303342c5a7f46c395f250073d2e1c55fd1d87ea33",
+    "sourceAuditSha256": "33a25f92da00ccbd2e17a8c39fe546a039b7ba38ff39f707b40a02bc93b0b8ef",
     "quintCaseAuditSha256": "dcb576948a68a066e43259d4bee2b3cdadbe82e657ae9af99e4b21ed7b95dbb3",
-    "featureCoverageSha256": "56eedfa865682db6ad8e73b8673c7dac1c30d301e9bce3390246d6994aba9dcb",
+    "featureCoverageSha256": "d238aee55d22387616cc05a6f55a14af227daa00b416dec7378a97b47ec093f9",
     "coverageWitnessesSha256": "8fc8ab123150fdec059f5b75f84172d39af80d08d7a4211fa88c63c5a3f2874b",
     "profilesSha256": "b8fa4f399a163bc8793bf76b6ba3503a415fcf3c8509cf98d964e4f067e6660f"
   },
@@ -12522,7 +12522,7 @@
     "nativeBindingAdaptations": [
       {
         "id": "B01",
-        "rationale": "One Go package exposes typed Cache/Operation/Policy APIs, generic Cached registration and concrete errors. Context callbacks replace JavaScript overloads and aliases; constructor validation panics, operation validation returns errors, and native option presence fields distinguish explicit zero from omission. TypeScript entry-point/typechecking tests remain language-specific; observable validation and failure consequences still require Go tests.",
+        "rationale": "One Go package exposes one non-generic Cache with generic Cached[T]/GetOrLoad[T] functions, a typed Operation[T] with a typed Codec and comparator, a time.Duration Policy with a typed or JSON-shaped runtime overlay, functional options and sentinel errors. Enable returns a scoped context and its close function, with callback helpers for the TypeScript shape; New returns ErrInvalidOption instead of panicking, operation validation returns errors, and functional options distinguish an omitted setting from an explicit zero or empty value. TypeScript entry-point/typechecking tests remain language-specific; observable validation and failure consequences still require Go tests.",
         "references": [
           "go/README.md",
           "go/api.go",
@@ -12820,7 +12820,7 @@
       ],
       "mappingReview": {
         "status": "reviewed-mapping-not-execution",
-        "rationale": "Static configuration and callback contracts map to typed Policy, Options and Operation. ParsePolicy exposes the seconds-based JSON input; pointer/presence fields preserve omission versus explicit false/zero. ResolvePolicy applies the sparse overlay and validated feature defaults.",
+        "rationale": "Static configuration and callback contracts map to typed time.Duration Policy, functional Option constructors and Operation[T]. ParsePolicy exposes the seconds-based JSON input; pointer leaves and functional options preserve omission versus explicit false/zero. ResolvePolicy applies the sparse overlay and validated feature defaults.",
         "nativeAdaptations": [
           "B01",
           "B02"
@@ -12836,17 +12836,17 @@
               "SnapshotPolicy",
               "ResolvePolicy"
             ],
-            "sha256": "199da9665701697ab6b90e00dbe9e5503cc210cd03015023a6e871b9620924b3"
+            "sha256": "bdedffc9a21ec47ca8660e1e116469ff7b14d96d56646d6f181bd59d11281e93"
           },
           {
             "path": "go/api.go",
             "symbols": [
-              "Options",
+              "Option",
               "Operation",
               "Logger",
               "RecoveryPredicate"
             ],
-            "sha256": "1df7adfb5ce827eb937660c904bc8a57d798beb4d1708d5dc06f0484abbdd667"
+            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
           }
         ]
       }
@@ -12855,8 +12855,7 @@
       "path": "src/context.ts",
       "sha256": "11ba0a9181aa8bdd171d668a3d2909843c5e44c775425141741413dfb80c9631",
       "candidateGoFiles": [
-        "go/cache.go",
-        "go/bindings.go"
+        "go/cache.go"
       ],
       "declarations": [
         {
@@ -13043,17 +13042,11 @@
               "scopeState",
               "Enable",
               "Disable",
-              "IsEnabled"
-            ],
-            "sha256": "b847ff2ec0d5f7e299d07616839d8089b3ef89ba1f96a25c38c263724ba19e3c"
-          },
-          {
-            "path": "go/bindings.go",
-            "symbols": [
+              "IsEnabled",
               "WithEnabled",
               "WithDisabled"
             ],
-            "sha256": "dac9d96d1e115c3fb7c261ebb0240c4a148a7a606828f955e980c88a2b6618cf"
+            "sha256": "ebe455e9e37f34ff2a96739dcc41ef17cd9309d05e7b38b5af16412cb1c6070c"
           }
         ]
       }
@@ -13392,7 +13385,7 @@
               "metricLabels",
               "metricValue"
             ],
-            "sha256": "6e63851e035aa78e4edd1560c28bdf3dd63622af219be0b7ae206d2f183d8656"
+            "sha256": "fd97d9f8bcf1c9c15c616c974bd3d658239813c33874a78ca8fbb516caf9e6cf"
           }
         ]
       }
@@ -14277,7 +14270,7 @@
               "IsEnabled",
               "Invalidate"
             ],
-            "sha256": "b847ff2ec0d5f7e299d07616839d8089b3ef89ba1f96a25c38c263724ba19e3c"
+            "sha256": "ebe455e9e37f34ff2a96739dcc41ef17cd9309d05e7b38b5af16412cb1c6070c"
           },
           {
             "path": "go/bindings.go",
@@ -14286,7 +14279,7 @@
               "GetCoalescingState",
               "codec"
             ],
-            "sha256": "dac9d96d1e115c3fb7c261ebb0240c4a148a7a606828f955e980c88a2b6618cf"
+            "sha256": "9bdd3c1c2639e9f888487adbece22c2e1eacaa465e5bb48f1a13e005629b2e32"
           },
           {
             "path": "go/engine.go",
@@ -14299,7 +14292,7 @@
               "putRemote",
               "recover"
             ],
-            "sha256": "21d52573a7390018ae0069c613a2370b833161c6b72aa5834b08e79e2a9b6330"
+            "sha256": "dec40ccf22a779219c2ab8f02a96d7cf342294083d836c8b45f67c14afcc69f3"
           },
           {
             "path": "go/deadline.go",
@@ -14316,16 +14309,16 @@
               "scheduleShadow",
               "runShadow"
             ],
-            "sha256": "4809a554ee5b39fb4ee5a2a0ef5660a3425b29385aeea8790f3ad5775bb220ce"
+            "sha256": "3224f4c9cab7dd5a7038bd8b0ccd03158209a486a814bcd0250041526760d81d"
           },
           {
             "path": "go/api.go",
             "symbols": [
-              "Options",
+              "Option",
               "Operation",
               "Event"
             ],
-            "sha256": "1df7adfb5ce827eb937660c904bc8a57d798beb4d1708d5dc06f0484abbdd667"
+            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
           },
           {
             "path": "go/logging.go",
@@ -14444,9 +14437,9 @@
               "FallbackTimeoutError",
               "RemoteReadTimeoutError",
               "CallbackPanicError",
-              "MissingRemoteError"
+              "ErrNoRemote"
             ],
-            "sha256": "1df7adfb5ce827eb937660c904bc8a57d798beb4d1708d5dc06f0484abbdd667"
+            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
           },
           {
             "path": "go/redis_adapter.go",
@@ -14454,7 +14447,7 @@
               "RedisPayloadError",
               "RedisProtocolError"
             ],
-            "sha256": "ebbc80c2b20aa926ede275dec3b6787eb9ab36b944182605db1279743b1b0cc3"
+            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
           }
         ]
       }
@@ -14481,33 +14474,33 @@
           {
             "path": "go/api.go",
             "symbols": [
-              "Options",
+              "Option",
               "Operation",
               "Codec",
               "Remote"
             ],
-            "sha256": "1df7adfb5ce827eb937660c904bc8a57d798beb4d1708d5dc06f0484abbdd667"
+            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
           },
           {
             "path": "go/bindings.go",
             "symbols": [
               "Cached"
             ],
-            "sha256": "dac9d96d1e115c3fb7c261ebb0240c4a148a7a606828f955e980c88a2b6618cf"
+            "sha256": "9bdd3c1c2639e9f888487adbece22c2e1eacaa465e5bb48f1a13e005629b2e32"
           },
           {
             "path": "go/cache.go",
             "symbols": [
               "New"
             ],
-            "sha256": "b847ff2ec0d5f7e299d07616839d8089b3ef89ba1f96a25c38c263724ba19e3c"
+            "sha256": "ebe455e9e37f34ff2a96739dcc41ef17cd9309d05e7b38b5af16412cb1c6070c"
           },
           {
             "path": "go/policy.go",
             "symbols": [
               "Policy"
             ],
-            "sha256": "199da9665701697ab6b90e00dbe9e5503cc210cd03015023a6e871b9620924b3"
+            "sha256": "bdedffc9a21ec47ca8660e1e116469ff7b14d96d56646d6f181bd59d11281e93"
           },
           {
             "path": "go/protocol.go",
@@ -14696,7 +14689,7 @@
               "remoteValue",
               "localResult"
             ],
-            "sha256": "21d52573a7390018ae0069c613a2370b833161c6b72aa5834b08e79e2a9b6330"
+            "sha256": "dec40ccf22a779219c2ab8f02a96d7cf342294083d836c8b45f67c14afcc69f3"
           }
         ]
       }
@@ -14966,7 +14959,7 @@
               "TimerClock",
               "DeferredExecutor"
             ],
-            "sha256": "1df7adfb5ce827eb937660c904bc8a57d798beb4d1708d5dc06f0484abbdd667"
+            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
           }
         ]
       }
@@ -15047,7 +15040,7 @@
               "policyTTLMS",
               "ValidatePolicy"
             ],
-            "sha256": "199da9665701697ab6b90e00dbe9e5503cc210cd03015023a6e871b9620924b3"
+            "sha256": "bdedffc9a21ec47ca8660e1e116469ff7b14d96d56646d6f181bd59d11281e93"
           }
         ]
       }
@@ -15132,7 +15125,7 @@
               "localGet",
               "localPut"
             ],
-            "sha256": "b847ff2ec0d5f7e299d07616839d8089b3ef89ba1f96a25c38c263724ba19e3c"
+            "sha256": "ebe455e9e37f34ff2a96739dcc41ef17cd9309d05e7b38b5af16412cb1c6070c"
           },
           {
             "path": "go/engine.go",
@@ -15140,11 +15133,11 @@
               "putLocal",
               "shared"
             ],
-            "sha256": "21d52573a7390018ae0069c613a2370b833161c6b72aa5834b08e79e2a9b6330"
+            "sha256": "dec40ccf22a779219c2ab8f02a96d7cf342294083d836c8b45f67c14afcc69f3"
           },
           {
             "path": "go/api.go",
-            "sha256": "1df7adfb5ce827eb937660c904bc8a57d798beb4d1708d5dc06f0484abbdd667",
+            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f",
             "symbols": [
               "systemClock",
               "newSystemClock"
@@ -15197,7 +15190,7 @@
             "symbols": [
               "ResolvePolicy"
             ],
-            "sha256": "199da9665701697ab6b90e00dbe9e5503cc210cd03015023a6e871b9620924b3"
+            "sha256": "bdedffc9a21ec47ca8660e1e116469ff7b14d96d56646d6f181bd59d11281e93"
           }
         ]
       }
@@ -15580,14 +15573,14 @@
               "canRecover",
               "recover"
             ],
-            "sha256": "21d52573a7390018ae0069c613a2370b833161c6b72aa5834b08e79e2a9b6330"
+            "sha256": "dec40ccf22a779219c2ab8f02a96d7cf342294083d836c8b45f67c14afcc69f3"
           },
           {
             "path": "go/shadow.go",
             "symbols": [
               "runShadow"
             ],
-            "sha256": "4809a554ee5b39fb4ee5a2a0ef5660a3425b29385aeea8790f3ad5775bb220ce"
+            "sha256": "3224f4c9cab7dd5a7038bd8b0ccd03158209a486a814bcd0250041526760d81d"
           },
           {
             "path": "go/codec.go",
@@ -15603,7 +15596,7 @@
               "Read",
               "Write"
             ],
-            "sha256": "ebbc80c2b20aa926ede275dec3b6787eb9ab36b944182605db1279743b1b0cc3"
+            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
           }
         ]
       }
@@ -15648,7 +15641,7 @@
             "symbols": [
               "Invalidate"
             ],
-            "sha256": "b847ff2ec0d5f7e299d07616839d8089b3ef89ba1f96a25c38c263724ba19e3c"
+            "sha256": "ebe455e9e37f34ff2a96739dcc41ef17cd9309d05e7b38b5af16412cb1c6070c"
           },
           {
             "path": "go/redis_adapter.go",
@@ -15657,7 +15650,7 @@
               "InvalidateDecimal",
               "InvalidationScript"
             ],
-            "sha256": "ebbc80c2b20aa926ede275dec3b6787eb9ab36b944182605db1279743b1b0cc3"
+            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
           }
         ]
       }
@@ -15840,7 +15833,7 @@
               "ValidateRedisInvalidationReply",
               "RedisProtocolError"
             ],
-            "sha256": "ebbc80c2b20aa926ede275dec3b6787eb9ab36b944182605db1279743b1b0cc3"
+            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
           }
         ]
       }
@@ -15891,7 +15884,7 @@
               "InvalidationScript",
               "InvalidateDecimal"
             ],
-            "sha256": "ebbc80c2b20aa926ede275dec3b6787eb9ab36b944182605db1279743b1b0cc3"
+            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
           }
         ]
       }
@@ -16106,7 +16099,7 @@
               "ResolvePolicy",
               "ValidatePolicy"
             ],
-            "sha256": "199da9665701697ab6b90e00dbe9e5503cc210cd03015023a6e871b9620924b3"
+            "sha256": "bdedffc9a21ec47ca8660e1e116469ff7b14d96d56646d6f181bd59d11281e93"
           }
         ]
       }
@@ -16220,7 +16213,7 @@
               "PreviewShadowLogJSON",
               "ShadowMismatchLogDetails"
             ],
-            "sha256": "6e63851e035aa78e4edd1560c28bdf3dd63622af219be0b7ae206d2f183d8656"
+            "sha256": "fd97d9f8bcf1c9c15c616c974bd3d658239813c33874a78ca8fbb516caf9e6cf"
           },
           {
             "path": "go/codec.go",
@@ -16910,10 +16903,10 @@
             "path": "go/api.go",
             "symbols": [
               "Event",
-              "Options",
+              "Option",
               "Logger"
             ],
-            "sha256": "1df7adfb5ce827eb937660c904bc8a57d798beb4d1708d5dc06f0484abbdd667"
+            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
           },
           {
             "path": "go/metrics.go",
@@ -16922,7 +16915,7 @@
               "FailureIsolatedObserver",
               "FailureIsolatedLogger"
             ],
-            "sha256": "6e63851e035aa78e4edd1560c28bdf3dd63622af219be0b7ae206d2f183d8656"
+            "sha256": "fd97d9f8bcf1c9c15c616c974bd3d658239813c33874a78ca8fbb516caf9e6cf"
           },
           {
             "path": "go/engine.go",
@@ -16931,14 +16924,14 @@
               "errorEvent",
               "duration"
             ],
-            "sha256": "21d52573a7390018ae0069c613a2370b833161c6b72aa5834b08e79e2a9b6330"
+            "sha256": "dec40ccf22a779219c2ab8f02a96d7cf342294083d836c8b45f67c14afcc69f3"
           },
           {
             "path": "go/shadow.go",
             "symbols": [
               "shadowEvent"
             ],
-            "sha256": "4809a554ee5b39fb4ee5a2a0ef5660a3425b29385aeea8790f3ad5775bb220ce"
+            "sha256": "3224f4c9cab7dd5a7038bd8b0ccd03158209a486a814bcd0250041526760d81d"
           }
         ]
       }
@@ -17101,7 +17094,7 @@
               "Write",
               "InvalidateDecimal"
             ],
-            "sha256": "ebbc80c2b20aa926ede275dec3b6787eb9ab36b944182605db1279743b1b0cc3"
+            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
           }
         ]
       }
@@ -17929,7 +17922,7 @@
               "Remote",
               "ReadBudget"
             ],
-            "sha256": "1df7adfb5ce827eb937660c904bc8a57d798beb4d1708d5dc06f0484abbdd667"
+            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
           },
           {
             "path": "go/protocol.go",
@@ -17946,7 +17939,7 @@
               "RedisPayloadError",
               "RedisProtocolError"
             ],
-            "sha256": "ebbc80c2b20aa926ede275dec3b6787eb9ab36b944182605db1279743b1b0cc3"
+            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
           }
         ]
       }
@@ -17979,7 +17972,7 @@
             "symbols": [
               "InvalidationScript"
             ],
-            "sha256": "ebbc80c2b20aa926ede275dec3b6787eb9ab36b944182605db1279743b1b0cc3"
+            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
           }
         ]
       }
@@ -18050,7 +18043,7 @@
               "Codec",
               "ContextCodec"
             ],
-            "sha256": "1df7adfb5ce827eb937660c904bc8a57d798beb4d1708d5dc06f0484abbdd667"
+            "sha256": "103a9b9fd955dcb3644295cd2e8cb41769f7b2ea0dce5cd61f97e452a2498c1f"
           },
           {
             "path": "go/codec.go",
@@ -18297,7 +18290,7 @@
               "Write",
               "InvalidateDecimal"
             ],
-            "sha256": "ebbc80c2b20aa926ede275dec3b6787eb9ab36b944182605db1279743b1b0cc3"
+            "sha256": "04bbefce516989c0f7e8066afd241884f37128b8ca45dbba80cc6b3ba19a57c1"
           }
         ]
       }
@@ -18305,7 +18298,7 @@
   ],
   "reviewedTestAndDocumentationAudit": {
     "path": "formal/source-audit.json",
-    "sha256": "4bd6d53038723b133a52e17303342c5a7f46c395f250073d2e1c55fd1d87ea33",
+    "sha256": "33a25f92da00ccbd2e17a8c39fe546a039b7ba38ff39f707b40a02bc93b0b8ef",
     "sourceFiles": 44,
     "status": "reviewed-applicability-not-execution",
     "limitations": "These rows review Go applicability for the public documentation and ordinary test files in source-audit.json sources, inheriting their C/W/E/B/X classifications. They map subjects to native artifacts without claiming one Go test per TypeScript assertion or turning documentation counts into executed coverage. The same audit hash also binds reviewedGuides for formal and Go documentation; those guide reviews are freshness/scope records, not additional behavioral applicability rows. Per-case Quint and replay evidence is recorded separately.",
@@ -18599,7 +18592,7 @@
       },
       {
         "path": "docs/maintainers.md",
-        "sha256": "149dbfcd060842f03ea660e4641ac96e0a693f8a55c77002a71fdab91b7c511a",
+        "sha256": "49ddcd2902baca3a667c1e25b355ff1f8cf8c810df623f3d6c806de70c5a3e63",
         "entries": 9,
         "contracts": [
           "B01",
@@ -19664,7 +19657,7 @@
       "boundary": "Public language binding",
       "existingTreatment": "API names/aliases, wrapper registration, exact construction/validation timing, generics/type guards, reserved/removed option diagnostics, native error classes, exported helper shapes, and package entry points remain TypeScript tests.",
       "goStatus": "reviewed-native-binding",
-      "goTreatment": "Go uses generic Cache[T], explicit contexts, error values, typed options and Cached with a typed argument struct. Static registration/reserved metadata is validated before execution; computed invalid identities fail open. Reviewed mappings and native binding tests retain observable consequences."
+      "goTreatment": "Go uses one non-generic Cache, explicit contexts returned by Enable, error values with errors.Is sentinels, functional options, time.Duration policy fields and generic Cached[T]/GetOrLoad[T] with a typed Operation[T]. Static registration/reserved metadata is validated before execution; computed invalid identities fail open. Reviewed mappings and native binding tests retain observable consequences."
     },
     {
       "id": "B02",

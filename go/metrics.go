@@ -10,7 +10,7 @@ import (
 // is never a metric label; exporting logical identities would add cardinality.
 type MetricsAdapter interface{ ObserveEvent(Event) error }
 
-// FailureIsolatedObserver adapts a fallible exporter to Options.Observe. Neither
+// FailureIsolatedObserver adapts a fallible exporter for WithObserver. Neither
 // a returned error nor a panic may replace a source result or start cache work.
 func FailureIsolatedObserver(observer func(Event) error) func(Event) {
 	if observer == nil {

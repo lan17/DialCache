@@ -28,8 +28,8 @@ func (c *integerFaultClock) ElapsedMS() int64 {
 // package's test binary until its timeout.
 func TestPanickingClockCannotDeadlockTheCache(t *testing.T) {
 	clock := &integerFaultClock{origin: time.Now()}
-	cache := New[int](Options[int]{Clock: clock, LocalCapacity: 2})
-	op := Operation{Identity: Identity{KeyType: "clock", ID: "one", UseCase: "local"}, Policy: Policy{LocalTTLMS: 1000}}
+	cache := MustNew(WithClock(clock), WithLocalCapacity(2))
+	op := Operation[int]{Identity: Identity{KeyType: "clock", ID: "one", UseCase: "local"}, Policy: Policy{LocalTTL: time.Duration(1000) * time.Millisecond}}
 	call := func() (value int, err error) {
 		done := make(chan struct{})
 		go func() {
@@ -39,9 +39,9 @@ func TestPanickingClockCannotDeadlockTheCache(t *testing.T) {
 					err = &CallbackPanicError{Value: p}
 				}
 			}()
-			err = cache.Enable(context.Background(), func(ctx context.Context) error {
+			err = cache.WithEnabled(context.Background(), func(ctx context.Context) error {
 				var loadErr error
-				value, loadErr = cache.GetOrLoad(ctx, op, func(context.Context) (int, error) { return 7, nil })
+				value, loadErr = GetOrLoad(ctx, cache, op, func(context.Context) (int, error) { return 7, nil })
 				return loadErr
 			})
 		}()

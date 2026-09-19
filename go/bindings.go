@@ -2,66 +2,67 @@ package dialcache
 
 import (
 	"context"
-	"errors"
+	"fmt"
+	"time"
 )
 
+// ProcessCoalescingState reports the process-scoped single-flight table.
 type ProcessCoalescingState struct {
-	ActiveLeaders     int
-	ActiveFollowers   int
-	OldestLeaderAgeMS *int64
+	ActiveLeaders   int
+	ActiveFollowers int
+	// OldestLeaderAge is zero when no leader is active.
+	OldestLeaderAge time.Duration
 }
 type CoalescingState struct{ Process ProcessCoalescingState }
 
-func (c *Cache[T]) GetCoalescingState() CoalescingState {
+// GetCoalescingState reports actual process leaders, followers and the
+// oldest leader's age for this instance.
+func (c *Cache) GetCoalescingState() CoalescingState {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	state := ProcessCoalescingState{ActiveLeaders: len(c.flights)}
 	for _, f := range c.flights {
 		state.ActiveFollowers += f.followers
-		age := (elapsedNow(c.options.Clock) - f.started).Milliseconds()
+		age := elapsedNow(c.settings.clock) - f.started
 		if age < 0 {
 			age = 0
 		}
-		if state.OldestLeaderAgeMS == nil || age > *state.OldestLeaderAgeMS {
-			copy := age
-			state.OldestLeaderAgeMS = &copy
+		if age > state.OldestLeaderAge {
+			state.OldestLeaderAge = age
 		}
 	}
 	return CoalescingState{Process: state}
 }
 
-func (c *Cache[T]) WithEnabled(ctx context.Context, f func(context.Context) error) error {
-	return c.Enable(ctx, f)
-}
-func (c *Cache[T]) WithDisabled(ctx context.Context, f func(context.Context) error) error {
-	return c.Disable(ctx, f)
-}
-
-// Cached binds a typed argument to an operation, preserving registration and
-// snapshot semantics while allowing each invocation to select its logical key.
-// An argument can be a scalar or a struct containing any number of source inputs.
-func Cached[T, Arg any](cache *Cache[T], op Operation, selectKey func(Arg) (Identity, error), source func(context.Context, Arg) (T, error)) (func(context.Context, Arg) (T, error), error) {
-	if selectKey == nil || source == nil {
-		return nil, errors.New("cached requires a key selector and source")
-	}
+func validateOperation[T any](op Operation[T]) error {
 	if err := ValidatePolicy(op.Policy); err != nil {
-		return nil, err
+		return err
+	}
+	if op.SourceTimeout != NoTimeout && (op.SourceTimeout < 0 || op.SourceTimeout > MaxDeadline || op.SourceTimeout%time.Millisecond != 0) {
+		return fmt.Errorf("%w: source timeout must be whole milliseconds up to %s, or NoTimeout", ErrInvalidOperation, MaxDeadline)
 	}
 	if op.Identity.UseCase == "watermark" {
-		return nil, errors.New("reserved use case: watermark")
+		return ErrReservedUseCase
 	}
-	if op.FallbackTimeoutMS != nil && (*op.FallbackTimeoutMS < 1 || *op.FallbackTimeoutMS > MaxDeadlineMS) {
-		return nil, errors.New("invalid fallback deadline")
+	return nil
+}
+
+// Cached registers a use case once and returns its typed read-through
+// function. The key selector runs only for an enabled call and supplies the
+// ID and Args; KeyType, UseCase, Tracked and Namespace come from op.Identity.
+// The static policy and source timeout are captured at registration.
+func Cached[T, Arg any](cache *Cache, op Operation[T], selectKey func(Arg) (Identity, error), source func(context.Context, Arg) (T, error)) (func(context.Context, Arg) (T, error), error) {
+	if cache == nil || selectKey == nil || source == nil {
+		return nil, fmt.Errorf("%w: Cached requires a cache, a key selector and a source", ErrInvalidOperation)
+	}
+	if err := validateOperation(op); err != nil {
+		return nil, err
 	}
 	op.Policy = SnapshotPolicy(op.Policy)
-	if op.FallbackTimeoutMS != nil {
-		n := *op.FallbackTimeoutMS
-		op.FallbackTimeoutMS = &n
-	}
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
 	if cache.registered[op.Identity.UseCase] {
-		return nil, errors.New("use case already registered: " + op.Identity.UseCase)
+		return nil, fmt.Errorf("%w: %s", ErrUseCaseRegistered, op.Identity.UseCase)
 	}
 	cache.registered[op.Identity.UseCase] = true
 	return func(ctx context.Context, arg Arg) (T, error) {
@@ -74,26 +75,25 @@ func Cached[T, Arg any](cache *Cache[T], op Operation, selectKey func(Arg) (Iden
 			key.Namespace = op.Identity.Namespace
 			return key, err
 		}
-		return cache.GetOrLoad(ctx, invocation, func(ctx context.Context) (T, error) { return source(ctx, arg) })
+		return GetOrLoad(ctx, cache, invocation, func(ctx context.Context) (T, error) { return source(ctx, arg) })
 	}, nil
 }
 
 func (x *execution[T]) codec() Codec[T] {
 	if x.op.Codec != nil {
-		if codec, ok := x.op.Codec.(Codec[T]); ok {
-			return codec
-		}
-		return invalidCodec[T]{}
+		return x.op.Codec
 	}
-	return x.cache.options.Codec
+	return JSONCodec[T]{}
 }
 
-type invalidCodec[T any] struct{}
-
-func (invalidCodec[T]) Encode(T) (Payload, error) {
-	return Payload{}, errors.New("operation codec does not implement Codec for this value type")
-}
-func (invalidCodec[T]) Decode(Payload) (T, error) {
+// assertValue converts a shared in-process value back to T. A stored nil is
+// a value only for an interface T, such as a JSON null cached through any;
+// for every other T it belongs to a differently typed operation.
+func assertValue[T any](raw any) (T, bool) {
 	var zero T
-	return zero, errors.New("operation codec does not implement Codec for this value type")
+	if raw == nil {
+		return zero, any(zero) == nil
+	}
+	value, ok := raw.(T)
+	return value, ok
 }
