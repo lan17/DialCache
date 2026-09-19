@@ -425,7 +425,8 @@ describe("full formal workflow shape", () => {
     const jobs = parse(readFileSync(new URL("../.github/workflows/formal.yaml", import.meta.url), "utf8")).jobs;
     const job = jobs.differential!;
     expect(job.if).toBe("github.event_name == 'pull_request'");
-    expect(job["timeout-minutes"]).toBe(30);
+    // Six composed profiles replaying both ways after a kernel change took about 35 minutes hosted.
+    expect(job["timeout-minutes"]).toBe(60);
     expect(job.steps.find(step => step.uses?.startsWith("actions/checkout"))!.with).toEqual({ "fetch-depth": 0 });
     expect(job.steps.some(step => step.uses === "./.github/actions/setup-quint")).toBe(true);
     const run = job.steps.find(step => step.run === "make differential")!;

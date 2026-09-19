@@ -48,11 +48,14 @@ jobs:
   # previous text generated, and vice versa, unless the manifest declares an
   # intended change. The reference is the merge base with the pull request's
   # base branch; a push to main has no reference. The step also checks the
-  # composition lint baseline.
+  # composition lint baseline. A kernel change replays every composed profile
+  # in both directions: six profiles took about 35 minutes on the hosted
+  # runner, five about 26; a change outside the kernel skips unchanged
+  # closures in under ten. Shard the lane before it approaches this budget.
   differential:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
