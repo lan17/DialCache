@@ -230,7 +230,7 @@
         {
           "path": "go/cache.go",
           "before": "\tc.local.Get(key)\n\treturn item.value, true",
-          "after": "\titem.insertedMS = c.options.Clock.ElapsedMS()\n\tc.local.Add(key, item)\n\treturn item.value, true"
+          "after": "\titem.insertedMS = c.settings.clock.ElapsedMS()\n\tc.local.Add(key, item)\n\treturn item.value, true"
         }
       ],
       "requiredDetections": [
