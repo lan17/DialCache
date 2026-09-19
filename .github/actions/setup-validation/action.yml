@@ -10,6 +10,9 @@ inputs:
   java:
     description: Install Java 21 for bounded symbolic model checking.
     default: "false"
+  rust:
+    description: Install the pinned Rust toolchain (rust/rust-toolchain.toml) with clippy and rustfmt.
+    default: "false"
 runs:
   using: composite
   steps:
@@ -35,3 +38,14 @@ runs:
       with:
         distribution: temurin
         java-version: "21"
+    # The toolchain pin matches rust/rust-toolchain.toml and the cargo 1.98.1
+    # prerequisite probe in formal/validation.mjs.
+    - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master 2026-09-12
+      if: inputs.rust == 'true'
+      with:
+        toolchain: 1.98.1
+        components: clippy, rustfmt
+    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      if: inputs.rust == 'true'
+      with:
+        workspaces: rust
