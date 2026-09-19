@@ -23,13 +23,32 @@ module remote_frames {
   // stamp (a held write stores the stamp captured when its dump was released;
   // an aged seed stamps the wall clock minus its age); `seedFrame` stamps the
   // wall clock now.
+  //
+  // A frame stores a payload code (`payloads`): the drivers' value codes
+  // decode to themselves, an enveloped class from 100 up says what its bytes
+  // do. `observe` judges the class once for both remote paths: a visible
+  // frame whose code fails the read (`Payloads::readFails`) fails the read
+  // like an adapter fault, and the value a fresh frame serves is what its
+  // code decodes to (`Payloads::valueOf`). A tracked write's physical
+  // retention is capped at one hour (`physicalRetention`); the logical
+  // maximum a recovery snapshot carries is not.
   import cache_rules.* from "../cache-rules"
   import encodings.* from "./encodings"
   import clock as Clock from "./clock"
+  import payloads as Payloads from "./payloads"
 
   type Frames[r] = {
     remoteValues: List[int], created: List[int], expires: List[int], watermark: List[int], tracked: bool, now: int, skew: int | r
   }
+
+  // A tracked write's retention is clamped to one hour so the entity's
+  // watermark, kept for twice that, outlives every frame it may fence
+  // (`src/internal/duration.ts:5`, `src/internal/redis-cache.ts:305-307`,
+  // `go/engine.go:495-497` `tracked_ttl_clamped`, `go/protocol.go:20`); an
+  // untracked write is retained for its full TTL.
+  pure val TRACKED_RETENTION_CAP_MS = 3600000
+  pure def physicalRetention(state: Frames[r], retentionMs: int): int =
+    if (state.tracked and retentionMs > TRACKED_RETENTION_CAP_MS) TRACKED_RETENTION_CAP_MS else retentionMs
 
   pure def entityOf(key: int, operationsPerEntity: int): int = key / operationsPerEntity
   // A write is stored with the stamp its writer captured and retained for its TTL.
@@ -59,13 +78,23 @@ module remote_frames {
   pure def visible(state: Frames[r], key: int, operationsPerEntity: int): bool =
     state.remoteValues.nth(key) > NO_VALUE and retained(state, key) and fenceCleared(state, key, operationsPerEntity)
   // What one remote read observes, judged once for the atomic release and the
-  // held read settlement: a failed read observes nothing; otherwise whether
-  // the adapter returned a frame (`visible`) and the value the traversal
-  // serves, the frame's when it is also fresh for the reply's freshness.
-  type Observed = { visible: bool, value: int }
+  // held read settlement: whether the read failed (the caller's fault, or a
+  // visible frame whose payload fails the read); a failed read observes
+  // nothing; otherwise whether the adapter returned a frame (`visible`), its
+  // payload code, and the value the traversal serves, what the code decodes
+  // to when the frame is also fresh for the reply's freshness.
+  type Observed = { visible: bool, failed: bool, payload: int, value: int }
   pure def observe(state: Frames[r], key: int, operationsPerEntity: int, freshMs: int, failed: bool): Observed = {
-    val seen = not(failed) and visible(state, key, operationsPerEntity)
-    { visible: seen, value: if (seen and fresh(state, key, freshMs)) state.remoteValues.nth(key) else NO_VALUE }
+    val present = not(failed) and visible(state, key, operationsPerEntity)
+    val code = if (present) state.remoteValues.nth(key) else NO_VALUE
+    val fails = failed or (present and Payloads::readFails(code))
+    val seen = present and not(fails)
+    {
+      visible: seen,
+      failed: fails,
+      payload: if (seen) code else NO_VALUE,
+      value: if (seen and fresh(state, key, freshMs)) Payloads::valueOf(code) else NO_VALUE
+    }
   }
   pure def missFence(state: Frames[r], key: int, operationsPerEntity: int): int =
     if (state.tracked) state.watermark.nth(entityOf(key, operationsPerEntity)) else NO_FENCE

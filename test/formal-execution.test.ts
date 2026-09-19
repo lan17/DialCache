@@ -60,7 +60,7 @@ const validate = (value: unknown, options?: Options) => validateExecution(value,
 
 describe("formal execution schedule", () => {
   it("accounts for all models, selected invariants, regressions, generated traces and challenges without Quint", () => {
-    expect(validate(manifest())).toEqual({ models: 32, libraries: 23, profiles: 15, invariants: 217, regressions: 423,
+    expect(validate(manifest())).toEqual({ models: 32, libraries: 24, profiles: 15, invariants: 217, regressions: 423,
       generatedTraces: 5280, exportedRegressionTraces: 259, vectorModels: 4, generatedVectors: 1631,
       challenges: 72, distinctFaults: 66, challengedModels: 32, waivedModels: 0, reproducers: 15, reproducerBacklog: 57,
       nativeMutants: { mapped: 62, unobservable: 2, modelOnly: 6, backlog: 2 }, unmappedMutants: 7 });

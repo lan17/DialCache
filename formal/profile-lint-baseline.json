@@ -11,6 +11,7 @@
     "flights",
     "layer_policy",
     "local_storage",
+    "payloads",
     "policy_gate",
     "policy_overlay",
     "receipts",
