@@ -40,7 +40,9 @@ pub struct LruLocalStore {
 impl LruLocalStore {
     /// A store holding at most `capacity` entries. Capacity must be positive.
     pub fn new(capacity: NonZeroUsize) -> Self {
-        LruLocalStore { entries: lru::LruCache::new(capacity) }
+        LruLocalStore {
+            entries: lru::LruCache::new(capacity),
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -70,5 +72,23 @@ impl LocalStore for LruLocalStore {
     fn put(&mut self, key: String, entry: LocalEntry) -> Result<(), BoxError> {
         self.entries.put(key, entry);
         Ok(())
+    }
+}
+
+impl std::fmt::Debug for LocalEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LocalEntry")
+            .field("inserted_ms", &self.inserted_ms)
+            .field("ttl_ms", &self.ttl_ms)
+            .finish_non_exhaustive()
+    }
+}
+
+impl std::fmt::Debug for LruLocalStore {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LruLocalStore")
+            .field("len", &self.entries.len())
+            .field("cap", &self.entries.cap())
+            .finish()
     }
 }

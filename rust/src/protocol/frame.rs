@@ -34,7 +34,11 @@ pub fn parse_watermark(raw: Option<&[u8]>) -> Option<Result<u64, ProtocolError>>
 /// Classify one raw read with the protocol's precedence: absent value,
 /// unsupported frame, tracked marker validity and zero stamp, fence,
 /// payload encoding, then a hit.
-pub fn decode_frame(raw: Option<&[u8]>, tracked: bool, watermark: Option<&[u8]>) -> Result<ReadResult, ProtocolError> {
+pub fn decode_frame(
+    raw: Option<&[u8]>,
+    tracked: bool,
+    watermark: Option<&[u8]>,
+) -> Result<ReadResult, ProtocolError> {
     let _ = (raw, tracked, watermark);
     todo!("decode_frame")
 }

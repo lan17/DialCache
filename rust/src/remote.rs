@@ -66,7 +66,10 @@ pub enum ReadResult {
 
 impl ReadResult {
     pub fn miss(reason: MissReason) -> Self {
-        ReadResult::Miss { reason, observed_watermark_ms: None }
+        ReadResult::Miss {
+            reason,
+            observed_watermark_ms: None,
+        }
     }
 
     pub fn is_miss(&self) -> bool {
@@ -120,7 +123,11 @@ pub struct InvalidateRequest {
 /// [`crate::protocol::decode_frame`] and [`crate::protocol::encode_frame`]
 /// for the wire format.
 pub trait Remote: Send + Sync + 'static {
-    fn read(&self, request: ReadRequest, context: ReadContext) -> BoxFuture<'_, Result<ReadResult, BoxError>>;
+    fn read(
+        &self,
+        request: ReadRequest,
+        context: ReadContext,
+    ) -> BoxFuture<'_, Result<ReadResult, BoxError>>;
     fn write(&self, request: WriteRequest) -> BoxFuture<'_, Result<(), BoxError>>;
     fn invalidate(&self, request: InvalidateRequest) -> BoxFuture<'_, Result<(), BoxError>>;
 }

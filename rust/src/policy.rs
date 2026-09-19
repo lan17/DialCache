@@ -55,7 +55,10 @@ impl Policy {
             stale_on_error_max_age_sec: Some(0),
             local_ramp: Some(0.0),
             remote_ramp: Some(0.0),
-            shadow: Some(ShadowPolicy { ramp: Some(0.0), log_mismatches: Some(false) }),
+            shadow: Some(ShadowPolicy {
+                ramp: Some(0.0),
+                log_mismatches: Some(false),
+            }),
             ..Policy::default()
         }
     }
@@ -159,7 +162,9 @@ pub struct PolicyDefaults {
 
 impl Default for PolicyDefaults {
     fn default() -> Self {
-        PolicyDefaults { remote_read_timeout_ms: DEFAULT_REMOTE_READ_TIMEOUT_MS }
+        PolicyDefaults {
+            remote_read_timeout_ms: DEFAULT_REMOTE_READ_TIMEOUT_MS,
+        }
     }
 }
 
@@ -217,6 +222,13 @@ pub fn resolve_policy(
     logical_key: &str,
     defaults: PolicyDefaults,
 ) -> Result<ResolvedPolicy, PolicyError> {
-    let _ = (base, overlay, logical_key, defaults, MAX_CACHE_TTL_SEC, MAX_DEADLINE_MS);
+    let _ = (
+        base,
+        overlay,
+        logical_key,
+        defaults,
+        MAX_CACHE_TTL_SEC,
+        MAX_DEADLINE_MS,
+    );
     todo!("resolve_policy")
 }

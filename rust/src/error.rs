@@ -45,10 +45,6 @@ impl Error {
     pub fn is_fallback_timeout(&self) -> bool {
         matches!(self, Error::FallbackTimeout(_))
     }
-
-    pub(crate) fn from_box(error: BoxError) -> Error {
-        Error::Source(Arc::from(error))
-    }
 }
 
 impl fmt::Display for Error {
@@ -58,7 +54,9 @@ impl fmt::Display for Error {
             Error::FallbackTimeout(timeout) => timeout.fmt(f),
             Error::Panic(message) => write!(f, "DialCache callback panicked: {message}"),
             Error::Config(error) => error.fmt(f),
-            Error::MissingRemote => f.write_str("DialCache invalidation requires a configured remote adapter"),
+            Error::MissingRemote => {
+                f.write_str("DialCache invalidation requires a configured remote adapter")
+            }
             Error::Remote(error) => write!(f, "DialCache remote maintenance failed: {error}"),
         }
     }

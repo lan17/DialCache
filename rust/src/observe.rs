@@ -137,27 +137,89 @@ pub struct OutcomeLabels {
 /// sizes report bytes.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Event {
-    Request { labels: Labels },
-    Miss { labels: Labels, reason: MissReason },
-    Disabled { labels: Labels, reason: DisabledReason },
-    Error { labels: Labels, error: ErrorKind, in_fallback: bool },
-    Invalidation { namespace: Arc<str>, key_type: Arc<str>, layer: Layer },
-    Coalesced { labels: OutcomeLabels, scope: CoalescingScope },
-    ShadowValidation { labels: OutcomeLabels, outcome: ShadowOutcome },
+    Request {
+        labels: Labels,
+    },
+    Miss {
+        labels: Labels,
+        reason: MissReason,
+    },
+    Disabled {
+        labels: Labels,
+        reason: DisabledReason,
+    },
+    Error {
+        labels: Labels,
+        error: ErrorKind,
+        in_fallback: bool,
+    },
+    Invalidation {
+        namespace: Arc<str>,
+        key_type: Arc<str>,
+        layer: Layer,
+    },
+    Coalesced {
+        labels: OutcomeLabels,
+        scope: CoalescingScope,
+    },
+    ShadowValidation {
+        labels: OutcomeLabels,
+        outcome: ShadowOutcome,
+    },
     /// Age in seconds of the validated value at a match or confirmed mismatch, clamped at zero.
-    ShadowValueAge { labels: OutcomeLabels, outcome: ShadowOutcome, seconds: f64 },
+    ShadowValueAge {
+        labels: OutcomeLabels,
+        outcome: ShadowOutcome,
+        seconds: f64,
+    },
     /// Positive offset in seconds of a frame dated after the observing clock.
-    FutureTimestampOffset { labels: Labels, seconds: f64 },
-    StaleRecovery { labels: OutcomeLabels, outcome: RecoveryOutcome },
-    StaleRecoveryValueAge { labels: OutcomeLabels, outcome: RecoveryOutcome, seconds: f64 },
-    Compression { labels: Labels, outcome: CompressionOutcome },
-    Get { labels: Labels, seconds: f64 },
-    Fallback { labels: Labels, seconds: f64 },
-    Serialization { labels: Labels, operation: SerializationOperation, seconds: f64 },
-    Size { labels: Labels, bytes: u64 },
-    StoredSize { labels: Labels, bytes: u64 },
-    CompressionRatio { labels: Labels, ratio: f64 },
-    CompressionDuration { labels: Labels, operation: CompressionOperation, seconds: f64 },
+    FutureTimestampOffset {
+        labels: Labels,
+        seconds: f64,
+    },
+    StaleRecovery {
+        labels: OutcomeLabels,
+        outcome: RecoveryOutcome,
+    },
+    StaleRecoveryValueAge {
+        labels: OutcomeLabels,
+        outcome: RecoveryOutcome,
+        seconds: f64,
+    },
+    Compression {
+        labels: Labels,
+        outcome: CompressionOutcome,
+    },
+    Get {
+        labels: Labels,
+        seconds: f64,
+    },
+    Fallback {
+        labels: Labels,
+        seconds: f64,
+    },
+    Serialization {
+        labels: Labels,
+        operation: SerializationOperation,
+        seconds: f64,
+    },
+    Size {
+        labels: Labels,
+        bytes: u64,
+    },
+    StoredSize {
+        labels: Labels,
+        bytes: u64,
+    },
+    CompressionRatio {
+        labels: Labels,
+        ratio: f64,
+    },
+    CompressionDuration {
+        labels: Labels,
+        operation: CompressionOperation,
+        seconds: f64,
+    },
 }
 
 /// Receives every public diagnostic. Failures (returned errors or panics)

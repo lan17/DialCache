@@ -21,11 +21,17 @@ pub struct Payload {
 
 impl Payload {
     pub fn text(text: impl Into<String>) -> Self {
-        Payload { bytes: text.into().into_bytes(), binary: false }
+        Payload {
+            bytes: text.into().into_bytes(),
+            binary: false,
+        }
     }
 
     pub fn binary(bytes: impl Into<Vec<u8>>) -> Self {
-        Payload { bytes: bytes.into(), binary: true }
+        Payload {
+            bytes: bytes.into(),
+            binary: true,
+        }
     }
 
     pub fn len(&self) -> usize {

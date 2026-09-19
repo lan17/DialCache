@@ -1,7 +1,9 @@
 //! Payload envelopes: escaping and zstd compression.
 
 use crate::codec::Payload;
-use crate::limits::{DEFAULT_COMPRESSION_THRESHOLD_BYTES, DEFAULT_ZSTD_LEVEL, MAX_DECOMPRESSED_BYTES};
+use crate::limits::{
+    DEFAULT_COMPRESSION_THRESHOLD_BYTES, DEFAULT_ZSTD_LEVEL, MAX_DECOMPRESSED_BYTES,
+};
 use crate::observe::CompressionOutcome;
 
 use super::frame::ProtocolError;
@@ -21,7 +23,10 @@ pub struct CompressionConfig {
 
 impl Default for CompressionConfig {
     fn default() -> Self {
-        CompressionConfig { threshold_bytes: DEFAULT_COMPRESSION_THRESHOLD_BYTES, level: DEFAULT_ZSTD_LEVEL }
+        CompressionConfig {
+            threshold_bytes: DEFAULT_COMPRESSION_THRESHOLD_BYTES,
+            level: DEFAULT_ZSTD_LEVEL,
+        }
     }
 }
 
@@ -65,7 +70,10 @@ pub fn compress_payload(
 }
 
 /// Reverse of [`compress_payload`], applied to every read.
-pub fn decompress_payload(payload: Payload, max_decompressed_bytes: usize) -> CompressionReadResult {
+pub fn decompress_payload(
+    payload: Payload,
+    max_decompressed_bytes: usize,
+) -> CompressionReadResult {
     let _ = (payload, max_decompressed_bytes);
     todo!("decompress_payload")
 }

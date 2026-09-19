@@ -22,7 +22,11 @@ pub struct Identity {
 }
 
 impl Identity {
-    pub fn new(key_type: impl Into<String>, id: impl Into<String>, use_case: impl Into<String>) -> Self {
+    pub fn new(
+        key_type: impl Into<String>,
+        id: impl Into<String>,
+        use_case: impl Into<String>,
+    ) -> Self {
         Identity {
             namespace: String::new(),
             key_type: key_type.into(),

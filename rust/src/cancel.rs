@@ -25,7 +25,9 @@ pub struct CancelToken {
 
 impl std::fmt::Debug for CancelToken {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CancelToken").field("cancelled", &self.is_cancelled()).finish()
+        f.debug_struct("CancelToken")
+            .field("cancelled", &self.is_cancelled())
+            .finish()
     }
 }
 
@@ -47,7 +49,10 @@ impl CancelToken {
                 return;
             }
             inner.cancelled = true;
-            (std::mem::take(&mut inner.wakers), std::mem::take(&mut inner.callbacks))
+            (
+                std::mem::take(&mut inner.wakers),
+                std::mem::take(&mut inner.callbacks),
+            )
         };
         for waker in wakers {
             waker.wake();
@@ -63,7 +68,9 @@ impl CancelToken {
         {
             let mut inner = self.inner.lock();
             if !inner.cancelled {
-                inner.callbacks.push(callback.take().expect("callback present"));
+                inner
+                    .callbacks
+                    .push(callback.take().expect("callback present"));
             }
         }
         if let Some(callback) = callback {
@@ -73,11 +80,14 @@ impl CancelToken {
 
     /// Completes once cancellation is requested.
     pub fn cancelled(&self) -> Cancelled {
-        Cancelled { token: self.clone() }
+        Cancelled {
+            token: self.clone(),
+        }
     }
 }
 
 /// Future returned by [`CancelToken::cancelled`].
+#[derive(Debug)]
 pub struct Cancelled {
     token: CancelToken,
 }
